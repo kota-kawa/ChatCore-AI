@@ -2,9 +2,10 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from services.async_utils import run_blocking
+from services.csrf import require_csrf
 from services.db import get_db_connection
 from services.request_models import (
     BookmarkCreateRequest,
@@ -19,7 +20,7 @@ from services.web import (
     validate_payload_model,
 )
 
-prompt_share_api_bp = APIRouter(prefix="/prompt_share/api")
+prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
 

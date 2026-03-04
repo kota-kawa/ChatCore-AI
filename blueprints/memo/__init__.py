@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from services.request_models import MemoCreateRequest
 from services.async_utils import run_blocking
+from services.csrf import require_csrf
 from services.db import Error, get_db_connection
 from services.web import (
     flash,
@@ -17,7 +18,7 @@ from services.web import (
     validate_payload_model,
 )
 
-memo_bp = APIRouter(prefix="/memo")
+memo_bp = APIRouter(prefix="/memo", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
 

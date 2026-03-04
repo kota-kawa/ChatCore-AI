@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from blueprints.auth import auth_bp
 from blueprints.memo import memo_bp
+from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
 from tests.helpers.app_helpers import build_session_test_app
 
 
@@ -25,6 +26,11 @@ class EndpointRoutesTestCase(unittest.TestCase):
     def _set_session(self, values):
         response = self.client.post("/_test/session", json=values)
         self.assertEqual(response.status_code, 200)
+
+    def _post_with_csrf(self, path, *, json):
+        csrf_token = "test-csrf-token"
+        self._set_session({CSRF_SESSION_KEY: csrf_token})
+        return self.client.post(path, json=json, headers={CSRF_HEADER_NAME: csrf_token})
 
     def test_current_user_endpoint_when_logged_out(self):
         response = self.client.get("/api/current_user")
@@ -75,16 +81,15 @@ class EndpointRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload["memos"][0]["created_at"], "2024-01-01 09:30")
 
     def test_memo_create_endpoint_validates_required_fields(self):
-        response = self.client.post(
-            "/memo/api",
-            json={"input_content": "hello", "ai_response": ""},
+        response = self._post_with_csrf(
+            "/memo/api", json={"input_content": "hello", "ai_response": ""}
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["status"], "fail")
 
     def test_memo_create_endpoint_success(self):
         with patch("blueprints.memo._insert_memo", return_value=42):
-            response = self.client.post(
+            response = self._post_with_csrf(
                 "/memo/api",
                 json={
                     "input_content": "hello",

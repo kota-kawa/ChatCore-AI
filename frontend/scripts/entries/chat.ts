@@ -1,3 +1,4 @@
+import "../core/csrf";
 import "../core/dom";
 import "../chat/message_utils";
 import "../chat/chat_ui";

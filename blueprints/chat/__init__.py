@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 import uuid
 
+from services.csrf import require_csrf
 from services.ephemeral_store import EphemeralChatStore
 
-chat_bp = APIRouter()
+chat_bp = APIRouter(dependencies=[Depends(require_csrf)])
 
 # エフェメラルチャットの有効期限（秒）
 # Expiration time for guest ephemeral chats (seconds).

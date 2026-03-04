@@ -12,6 +12,7 @@ from blueprints.chat import cleanup_ephemeral_chats
 from services.db import close_db_pool
 from services.default_tasks import ensure_default_tasks_seeded
 from services.default_shared_prompts import ensure_default_shared_prompts
+from services.csrf import get_or_create_csrf_token
 from services.runtime_config import get_session_secret_key, is_production_env
 from services.session_middleware import PermanentSessionMiddleware
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify
@@ -40,14 +41,10 @@ if not secret_key:
     )
 permanent_max_age = int(timedelta(days=30).total_seconds())
 
-# 本番/開発で Cookie 属性を切り替える
-# Switch cookie security attributes by environment.
-if is_production_env():
-    same_site = "none"
-    https_only = True
-else:
-    same_site = "lax"
-    https_only = False
+# SameSite は原則 Lax を採用し、HTTPS 時のみ Secure を有効化する
+# Prefer SameSite=Lax by default and toggle Secure only for HTTPS environments.
+same_site = "lax"
+https_only = is_production_env()
 
 
 def periodic_cleanup(stop_event: threading.Event) -> None:
@@ -111,6 +108,12 @@ app.add_middleware(
 
 app.state.session_secret = secret_key
 app.state.session_cookie = "session"
+
+
+@app.get("/api/csrf-token")
+async def issue_csrf_token(request: Request):
+    token = get_or_create_csrf_token(request)
+    return jsonify({"csrf_token": token})
 
 
 # 各 Router を読み込んでエンドポイント定義を登録可能にする

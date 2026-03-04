@@ -12,6 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from services.cache import get_redis_client
+from services.csrf import CSRF_SESSION_KEY
 
 HeaderCollection = list[tuple[bytes, bytes]] | tuple[tuple[bytes, bytes], ...]
 
@@ -110,6 +111,8 @@ class RedisSessionMiddleware:
             if session_id
             else {}
         )
+        if CSRF_SESSION_KEY not in session_data:
+            session_data[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
         scope["session"] = session_data
         scope["session_id"] = session_id
 

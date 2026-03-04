@@ -1,9 +1,10 @@
 import logging
 import time
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from services.async_utils import run_blocking
+from services.csrf import require_csrf
 from services.email_service import send_email
 from services.llm_daily_limit import consume_auth_email_daily_quota
 from services.request_models import AuthCodeRequest, EmailRequest
@@ -22,7 +23,7 @@ from services.web import (
     validate_payload_model,
 )
 
-verification_bp = APIRouter()
+verification_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
 VERIFICATION_CODE_TTL_SECONDS = 300

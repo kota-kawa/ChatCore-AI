@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from starlette.responses import RedirectResponse
 
 try:
@@ -28,6 +28,7 @@ from services.web import (
 )
 from services.request_models import AuthCodeRequest, EmailRequest
 from services.async_utils import run_blocking
+from services.csrf import require_csrf
 from services.users import (
     get_user_by_email,
     get_user_by_id,
@@ -68,7 +69,7 @@ GOOGLE_SCOPES = [
     "openid",
 ]
 
-auth_bp = APIRouter()
+auth_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
 LOGIN_VERIFICATION_CODE_TTL_SECONDS = 300
