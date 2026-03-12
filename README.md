@@ -1,6 +1,6 @@
 > 一番下に日本語版もあります
 
-# Chat-Core-AI
+# ChatCore-AI
 
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.133+-009688?logo=fastapi&logoColor=white)

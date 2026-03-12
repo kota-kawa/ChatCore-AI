@@ -6,11 +6,11 @@ from http.cookies import SimpleCookie
 from typing import Any
 
 from itsdangerous import BadSignature, URLSafeSerializer
-from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from services.async_utils import run_blocking
 from services.cache import get_redis_client
 from services.csrf import CSRF_SESSION_KEY
 
@@ -106,11 +106,7 @@ class RedisSessionMiddleware:
         # リクエスト受信時に Cookie から session_id を復元し、Redis からセッションを読み込む
         # Restore session_id from cookie and hydrate session data from Redis on request start.
         session_id = self._load_session_id(scope)
-        session_data = (
-            await run_in_threadpool(self._load_session, session_id)
-            if session_id
-            else {}
-        )
+        session_data = await run_blocking(self._load_session, session_id) if session_id else {}
         if CSRF_SESSION_KEY not in session_data:
             session_data[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
         scope["session"] = session_data
@@ -121,7 +117,7 @@ class RedisSessionMiddleware:
                 headers = MutableHeaders(scope=message)
                 # レスポンス直前に session の保存・削除と Cookie 更新を反映する
                 # Persist/delete session and update cookie right before sending response headers.
-                await run_in_threadpool(self._commit_session, scope, headers)
+                await run_blocking(self._commit_session, scope, headers)
             await send(message)
 
         return await self.app(scope, receive, send_wrapper)
