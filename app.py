@@ -39,7 +39,7 @@ if not secret_key:
     )
 permanent_max_age = int(timedelta(days=30).total_seconds())
 
-# SameSite は原則 Lax を採用し、HTTPS 時のみ Secure を有効化する
+# SameSite は原則 Lax を採用し、HTTPS の時のみ Secure を有効化する
 # Prefer SameSite=Lax by default and toggle Secure only for HTTPS environments.
 same_site = "lax"
 https_only = is_production_env()
