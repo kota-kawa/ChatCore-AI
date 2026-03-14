@@ -2,6 +2,49 @@
 // --------------------------------------------------
 // ※ DOMPurify が未ロードでも message_utils 側でテキスト描画にフォールバックする
 
+type StreamingBotMessageHandle = {
+  appendChunk: (chunk: string) => void;
+  complete: () => void;
+  showError: (message: string) => void;
+};
+
+function createBotMessageElements() {
+  if (!window.chatMessages) return null;
+  const wrapper = document.createElement("div");
+  wrapper.className = "message-wrapper bot-message-wrapper";
+
+  const msg = document.createElement("div");
+  msg.className = "bot-message";
+
+  const copyBtn = window.createCopyBtn
+    ? window.createCopyBtn(() => msg.dataset.fullText || "")
+    : document.createElement("button");
+
+  wrapper.append(copyBtn, msg);
+  window.chatMessages.appendChild(wrapper);
+  if (window.scrollMessageToBottom) {
+    window.scrollMessageToBottom();
+  } else if (window.scrollMessageToTop) {
+    window.scrollMessageToTop(wrapper);
+  }
+
+  return { wrapper, msg };
+}
+
+function renderBotMessage(wrapper: HTMLElement, msg: HTMLElement, raw: string) {
+  if (window.renderSanitizedHTML && window.formatLLMOutput) {
+    window.renderSanitizedHTML(msg, window.formatLLMOutput(raw));
+  } else {
+    window.setTextWithLineBreaks?.(msg, raw);
+  }
+
+  if (window.scrollMessageToBottom) {
+    window.scrollMessageToBottom();
+  } else if (window.scrollMessageToTop) {
+    window.scrollMessageToTop(wrapper);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // メッセージ描画
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,21 +79,9 @@ function renderUserMessage(text: string) {
 
 /* Bot メッセージをタイプアニメーションで描画 */
 function animateBotMessage(originalText: string) {
-  if (!window.chatMessages) return;
-  const wrapper = document.createElement("div");
-  wrapper.className = "message-wrapper bot-message-wrapper";
-
-  const msg = document.createElement("div");
-  msg.className = "bot-message";
-
-  const copyBtn = window.createCopyBtn ? window.createCopyBtn(() => msg.dataset.fullText || "") : document.createElement("button");
-  wrapper.append(copyBtn, msg);
-  window.chatMessages.appendChild(wrapper);
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.scrollMessageToTop) {
-    window.scrollMessageToTop(wrapper);
-  }
+  const elements = createBotMessageElements();
+  if (!elements) return;
+  const { wrapper, msg } = elements;
 
   let raw = "";
   let idx = 0;
@@ -62,18 +93,8 @@ function animateBotMessage(originalText: string) {
   const renderMarkdown = (force = false) => {
     const now = Date.now();
     if (!force && now - lastRenderAt < renderInterval) return;
-    if (window.renderSanitizedHTML && window.formatLLMOutput) {
-      window.renderSanitizedHTML(msg, window.formatLLMOutput(raw));
-    } else {
-      window.setTextWithLineBreaks?.(msg, raw);
-    }
+    renderBotMessage(wrapper, msg, raw);
     lastRenderAt = now;
-
-    if (window.scrollMessageToBottom) {
-      window.scrollMessageToBottom();
-    } else if (window.scrollMessageToTop) {
-      window.scrollMessageToTop(wrapper);
-    }
   };
 
   const typingTimer = setInterval(() => {
@@ -89,6 +110,58 @@ function animateBotMessage(originalText: string) {
     msg.dataset.fullText = raw;
     renderMarkdown();
   }, typingInterval);
+}
+
+function startStreamingBotMessage(): StreamingBotMessageHandle | null {
+  const elements = createBotMessageElements();
+  if (!elements) return null;
+  const { wrapper, msg } = elements;
+
+  let raw = "";
+  let lastRenderAt = 0;
+  let renderTimer: number | null = null;
+  const renderInterval = 60;
+  let isCompleted = false;
+
+  const renderMarkdown = (force = false) => {
+    if (renderTimer !== null) {
+      window.clearTimeout(renderTimer);
+      renderTimer = null;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastRenderAt < renderInterval) {
+      renderTimer = window.setTimeout(() => renderMarkdown(true), renderInterval - (now - lastRenderAt));
+      return;
+    }
+
+    renderBotMessage(wrapper, msg, raw);
+    lastRenderAt = now;
+  };
+
+  return {
+    appendChunk(chunkText: string) {
+      if (!chunkText || isCompleted) return;
+      raw += chunkText;
+      msg.dataset.fullText = raw;
+      renderMarkdown();
+    },
+    complete() {
+      if (isCompleted) return;
+      isCompleted = true;
+      msg.dataset.fullText = raw;
+      renderMarkdown(true);
+      if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(raw, "bot");
+    },
+    showError(message: string) {
+      if (!message) return;
+      raw = raw ? `${raw}\n\nエラー: ${message}` : `エラー: ${message}`;
+      msg.dataset.fullText = raw;
+      isCompleted = true;
+      renderMarkdown(true);
+      if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(raw, "bot");
+    }
+  };
 }
 
 /* ローカル／サーバ履歴共通描画 */
@@ -132,6 +205,7 @@ function displayMessage(text: string, sender: string) {
 // ---- window へ公開 ------------------------------
 window.renderUserMessage = renderUserMessage;
 window.animateBotMessage = animateBotMessage;
+window.startStreamingBotMessage = startStreamingBotMessage;
 window.displayMessage = displayMessage;
 
 export {};

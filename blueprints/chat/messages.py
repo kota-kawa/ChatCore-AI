@@ -2,10 +2,12 @@ import re
 import json
 import html
 import logging
+from collections.abc import Iterator
 from datetime import date
 from typing import Any
 
 from fastapi import Request
+from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
 from services.db import get_db_connection
@@ -17,9 +19,11 @@ from services.chat_service import (
 from services.llm_daily_limit import consume_llm_daily_quota
 from services.llm import (
     get_llm_response,
+    get_gemini_response_stream,
     GEMINI_DEFAULT_MODEL,
     LlmInvalidModelError,
     LlmServiceError,
+    is_gemini_model,
 )
 from services.request_models import ChatMessageRequest
 from services.web import (
@@ -61,6 +65,75 @@ BASE_SYSTEM_PROMPT = """
 
 回答は常に親切かつプロフェッショナルなトーンで、日本語で行ってください。
 """
+
+
+def _sse_event(event: str, payload: dict[str, Any]) -> bytes:
+    # SSE 形式で JSON ペイロードを1イベントとして返す
+    # Encode one JSON payload as an SSE event.
+    body = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
+
+
+def _iter_gemini_stream_events(
+    conversation_messages: list[dict[str, str]],
+    model: str,
+    *,
+    chat_room_id: str,
+    is_authenticated: bool,
+    sid: str | None,
+) -> Iterator[bytes]:
+    # Gemini 応答を SSE で配信し、配信完了後に履歴へ保存する
+    # Stream Gemini output via SSE and persist the final message on completion.
+    chunks: list[str] = []
+    try:
+        for chunk in get_gemini_response_stream(conversation_messages, model):
+            chunks.append(chunk)
+            yield _sse_event("chunk", {"text": chunk})
+    except LlmServiceError:
+        yield _sse_event("error", {"message": "内部エラーが発生しました。"})
+        return
+
+    bot_reply = "".join(chunks)
+
+    try:
+        if is_authenticated:
+            save_message_to_db(chat_room_id, bot_reply, "assistant")
+        elif sid is not None:
+            ephemeral_store.append_message(sid, chat_room_id, "assistant", bot_reply)
+    except Exception:
+        logger.exception("Failed to persist streamed Gemini response.")
+        yield _sse_event("error", {"message": "応答は生成されましたが、履歴保存に失敗しました。"})
+        return
+
+    yield _sse_event("done", {"response": bot_reply})
+
+
+def _build_gemini_stream_response(
+    conversation_messages: list[dict[str, str]],
+    model: str,
+    *,
+    chat_room_id: str,
+    is_authenticated: bool,
+    sid: str | None,
+) -> StreamingResponse:
+    # 同期ジェネレータを StreamingResponse でラップして SSE 配信する
+    # Wrap the sync generator with StreamingResponse for SSE delivery.
+
+    return StreamingResponse(
+        _iter_gemini_stream_events(
+            conversation_messages,
+            model,
+            chat_room_id=chat_room_id,
+            is_authenticated=is_authenticated,
+            sid=sid,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _fetch_prompt_data(task: str) -> dict[str, Any] | None:
@@ -155,6 +228,7 @@ async def chat(request: Request):
 
     match = re.match(r"【状況・作業環境】(.+)\n【リクエスト】(.+)", user_message)
 
+    sid = None
     if "user_id" in session:
         try:
             payload, status_code = await run_blocking(
@@ -255,6 +329,15 @@ async def chat(request: Request):
                 )
             },
             status_code=429,
+        )
+
+    if is_gemini_model(model):
+        return _build_gemini_stream_response(
+            conversation_messages,
+            model,
+            chat_room_id=chat_room_id,
+            is_authenticated="user_id" in session,
+            sid=sid,
         )
 
     try:

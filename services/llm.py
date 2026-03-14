@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Iterator
 
 from openai import OpenAI
 
@@ -112,12 +113,50 @@ def get_gemini_response(
         raise LlmProviderError("Google Gemini API call failed.") from exc
 
 
+def get_gemini_response_stream(
+    conversation_messages: ConversationMessages, model_name: str
+) -> Iterator[str]:
+    # Gemini のストリーム応答を逐次テキスト片として返す
+    # Yield Gemini response chunks incrementally.
+    if gemini_client is None:
+        raise LlmConfigurationError("Gemini_API_KEY が未設定です。")
+
+    stream = None
+    try:
+        stream = gemini_client.chat.completions.create(
+            model=model_name,
+            messages=conversation_messages,
+            max_tokens=LLM_MAX_TOKENS,
+            stream=True,
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = getattr(chunk.choices[0], "delta", None)
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
+    except Exception as exc:
+        logger.exception("Google Gemini streaming API call failed.")
+        raise LlmProviderError("Google Gemini streaming API call failed.") from exc
+    finally:
+        close = getattr(stream, "close", None)
+        if callable(close):
+            close()
+
+
+def is_gemini_model(model_name: str) -> bool:
+    # モデル名が Gemini 系かを判定する
+    # Check whether the selected model belongs to Gemini.
+    return model_name in VALID_GEMINI_MODELS
+
+
 def get_llm_response(
     conversation_messages: ConversationMessages, model_name: str
 ) -> str | None:
     # 指定モデル名でプロバイダを振り分け、不正モデルは例外として扱う
     # Route provider by model name and raise on invalid models.
-    if model_name in VALID_GEMINI_MODELS:
+    if is_gemini_model(model_name):
         return get_gemini_response(conversation_messages, model_name)
     if model_name in VALID_GROQ_MODELS:
         return get_groq_response(conversation_messages, model_name)

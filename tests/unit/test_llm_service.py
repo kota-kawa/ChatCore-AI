@@ -11,6 +11,21 @@ def _mock_openai_response(text):
     )
 
 
+def _mock_stream_chunk(text):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))]
+    )
+
+
+class _MockStream(list):
+    def __init__(self, *items):
+        super().__init__(items)
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
 class LlmServiceTestCase(unittest.TestCase):
     def test_get_llm_response_routes_to_groq(self):
         mock_groq = MagicMock()
@@ -67,6 +82,27 @@ class LlmServiceTestCase(unittest.TestCase):
                     [{"role": "user", "content": "hello"}],
                     "gemini-2.5-flash",
                 )
+
+    def test_get_gemini_response_stream_yields_chunks_and_closes_stream(self):
+        mock_gemini = MagicMock()
+        mock_stream = _MockStream(
+            _mock_stream_chunk("gemini"),
+            _mock_stream_chunk(None),
+            _mock_stream_chunk("-stream"),
+        )
+        mock_gemini.chat.completions.create.return_value = mock_stream
+
+        with patch.object(llm, "gemini_client", mock_gemini):
+            response = list(
+                llm.get_gemini_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    "gemini-2.5-flash",
+                )
+            )
+
+        self.assertEqual(response, ["gemini", "-stream"])
+        self.assertTrue(mock_stream.closed)
+        self.assertTrue(mock_gemini.chat.completions.create.call_args.kwargs["stream"])
 
 
 if __name__ == "__main__":

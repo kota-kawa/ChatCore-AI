@@ -2,6 +2,12 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 type HtmlTagProps = DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>;
 
+interface StreamingBotMessageHandle {
+  appendChunk: (chunk: string) => void;
+  complete: () => void;
+  showError: (message: string) => void;
+}
+
 declare global {
   interface Window {
     loggedIn?: boolean;
@@ -39,6 +45,7 @@ declare global {
     createCopyBtn?: (getText: () => string) => HTMLButtonElement;
     renderUserMessage?: (text: string) => void;
     animateBotMessage?: (text: string) => void;
+    startStreamingBotMessage?: () => StreamingBotMessageHandle | null;
     displayMessage?: (text: string, sender: string) => void;
     loadChatHistory?: () => void;
     loadLocalChatHistory?: () => void;
