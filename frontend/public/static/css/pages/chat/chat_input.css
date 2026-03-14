@@ -55,19 +55,107 @@
   color: #9aa7a1;
 }
 
-/* タイピングドット */
+/* Thinking インジケータ */
 .typing-indicator {
   display: inline-flex;
-  padding: 0.75rem;
-  background: rgba(25, 195, 125, 0.12);
-  border-radius: 14px;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 210px;
+  padding: 0.6rem 0.9rem 0.6rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08)),
+    rgba(10, 48, 31, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 24px rgba(8, 33, 23, 0.16);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
 }
 
-.typing-dot {
-  width: 8px;
-  height: 8px;
-  margin: 0 3px;
-  background: #ccc;
-  border-radius: 50%;
-  animation: typing 1.4s infinite ease-in-out;
+.typing-indicator__orb {
+  width: 0.72rem;
+  height: 0.72rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, #ecfff6 0%, #b4ffda 32%, #58f0aa 100%);
+  box-shadow:
+    0 0 0 0 rgba(186, 255, 221, 0.34),
+    0 0 18px rgba(151, 255, 206, 0.5);
+  animation: thinkingGlowPulse 1.8s ease-in-out infinite;
+}
+
+.typing-indicator__viewport {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 10%, #000 90%, transparent 100%);
+}
+
+.typing-indicator__track {
+  display: flex;
+  width: max-content;
+  gap: 1.15rem;
+  align-items: center;
+  white-space: nowrap;
+  color: rgba(248, 255, 252, 0.96);
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  animation: thinkingMarqueeRtl 5.6s linear infinite;
+}
+
+.typing-indicator__track span {
+  opacity: 0.96;
+}
+
+@keyframes thinkingMarqueeRtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-33.333% - 0.4rem));
+  }
+}
+
+@keyframes thinkingGlowPulse {
+  0%,
+  100% {
+    transform: scale(0.96);
+    box-shadow:
+      0 0 0 0 rgba(186, 255, 221, 0.24),
+      0 0 14px rgba(151, 255, 206, 0.38);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow:
+      0 0 0 10px rgba(186, 255, 221, 0),
+      0 0 22px rgba(151, 255, 206, 0.6);
+  }
+}
+
+@keyframes thinkingSweepRtl {
+  from {
+    transform: translateX(24%);
+  }
+  to {
+    transform: translateX(-132%);
+  }
+}
+
+@media (max-width: 768px) {
+  .typing-indicator {
+    min-width: 158px;
+    gap: 0.65rem;
+    padding: 0.48rem 0.72rem 0.48rem 0.58rem;
+  }
+
+  .typing-indicator__track {
+    gap: 0.88rem;
+    font-size: 0.59rem;
+    letter-spacing: 0.22em;
+  }
 }

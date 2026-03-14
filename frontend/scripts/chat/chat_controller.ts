@@ -6,6 +6,64 @@ type StreamEventPayload = {
   data: Record<string, unknown>;
 };
 
+type StreamingBotMessageHandle = {
+  appendChunk: (chunk: string) => void;
+  complete: () => void;
+  showError: (message: string) => void;
+};
+
+function createThinkingPlaceholder() {
+  if (!window.chatMessages) return null;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "message-wrapper bot-message-wrapper thinking-message-wrapper";
+
+  const thinking = document.createElement("div");
+  thinking.className = "thinking-message";
+  thinking.setAttribute("role", "status");
+  thinking.setAttribute("aria-live", "polite");
+  thinking.setAttribute("aria-label", "Thinking");
+
+  const header = document.createElement("div");
+  header.className = "thinking-message__header";
+
+  const label = document.createElement("span");
+  label.className = "thinking-message__label";
+  label.textContent = "Thinking";
+
+  const hint = document.createElement("span");
+  hint.className = "thinking-message__hint";
+  hint.textContent = "回答を準備中";
+
+  header.append(label, hint);
+
+  const rail = document.createElement("div");
+  rail.className = "thinking-message__rail";
+  rail.setAttribute("aria-hidden", "true");
+
+  const track = document.createElement("div");
+  track.className = "thinking-message__track";
+
+  ["Thinking", "Thinking", "Thinking"].forEach((text) => {
+    const segment = document.createElement("span");
+    segment.textContent = text;
+    track.appendChild(segment);
+  });
+
+  rail.appendChild(track);
+  thinking.append(header, rail);
+  wrapper.appendChild(thinking);
+  window.chatMessages.appendChild(wrapper);
+
+  if (window.scrollMessageToBottom) {
+    window.scrollMessageToBottom();
+  } else if (window.scrollMessageToTop) {
+    window.scrollMessageToTop(wrapper);
+  }
+
+  return wrapper;
+}
+
 function parseStreamEventBlock(block: string): StreamEventPayload | null {
   const lines = block
     .split(/\r?\n/)
@@ -40,14 +98,9 @@ function parseStreamEventBlock(block: string): StreamEventPayload | null {
   }
 }
 
-async function consumeStreamingChatResponse(response: Response) {
+async function consumeStreamingChatResponse(response: Response, thinkingWrap: HTMLElement | null) {
   if (!response.body) {
     throw new Error("ストリーム応答を受信できませんでした。");
-  }
-
-  const streamHandle = window.startStreamingBotMessage?.();
-  if (!streamHandle) {
-    throw new Error("ストリーム描画を開始できませんでした。");
   }
 
   const reader = response.body.getReader();
@@ -55,6 +108,33 @@ async function consumeStreamingChatResponse(response: Response) {
   let buffer = "";
   let completed = false;
   let streamError: string | null = null;
+  let streamHandle: StreamingBotMessageHandle | null = null;
+
+  const dismissThinkingState = () => {
+    window.hideTypingIndicator?.();
+    thinkingWrap?.remove();
+    thinkingWrap = null;
+  };
+
+  const ensureStreamHandle = () => {
+    if (streamHandle) return streamHandle;
+    dismissThinkingState();
+    streamHandle = window.startStreamingBotMessage?.() || null;
+    if (!streamHandle) {
+      throw new Error("ストリーム描画を開始できませんでした。");
+    }
+    return streamHandle;
+  };
+
+  const renderStreamError = (message: string) => {
+    dismissThinkingState();
+    const activeStreamHandle = streamHandle as StreamingBotMessageHandle | null;
+    if (activeStreamHandle !== null) {
+      activeStreamHandle.showError(message);
+      return;
+    }
+    window.renderBotMessageImmediate?.("エラー: " + message);
+  };
 
   while (true) {
     const { value, done } = await reader.read();
@@ -68,13 +148,23 @@ async function consumeStreamingChatResponse(response: Response) {
       if (!parsed) return;
 
       if (parsed.event === "chunk") {
-        streamHandle.appendChunk(typeof parsed.data.text === "string" ? parsed.data.text : "");
+        const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
+        if (!text) return;
+        ensureStreamHandle().appendChunk(text);
         return;
       }
 
       if (parsed.event === "done") {
         completed = true;
-        streamHandle.complete();
+        const responseText = typeof parsed.data.response === "string" ? parsed.data.response : "";
+        if (streamHandle) {
+          streamHandle.complete();
+        } else {
+          dismissThinkingState();
+          if (responseText) {
+            window.renderBotMessageImmediate?.(responseText);
+          }
+        }
         return;
       }
 
@@ -86,7 +176,7 @@ async function consumeStreamingChatResponse(response: Response) {
     });
 
     if (streamError) {
-      streamHandle.showError(streamError);
+      renderStreamError(streamError);
       break;
     }
 
@@ -94,7 +184,7 @@ async function consumeStreamingChatResponse(response: Response) {
   }
 
   if (!completed && !streamError) {
-    streamHandle.showError("ストリームが途中で終了しました。");
+    renderStreamError("ストリームが途中で終了しました。");
   }
 }
 
@@ -118,20 +208,8 @@ async function generateResponse(message: string, aiModel: string) {
   // ユーザーメッセージを即描画
   window.renderUserMessage?.(message);
 
-  // Bot 側スピナー
-  const spinnerWrap = document.createElement("div");
-  spinnerWrap.className = "message-wrapper bot-message-wrapper";
-  const spinner = document.createElement("div");
-  spinner.className = "bot-message";
-  spinner.innerHTML = '<div class="spinner"></div>';
-  spinnerWrap.appendChild(spinner);
-
-  window.chatMessages.appendChild(spinnerWrap);
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.scrollMessageToTop) {
-    window.scrollMessageToTop(spinnerWrap);
-  }
+  // Bot 側の Thinking プレースホルダー
+  const thinkingWrap = createThinkingPlaceholder();
 
   try {
     const response = await fetch("/api/chat", {
@@ -146,15 +224,13 @@ async function generateResponse(message: string, aiModel: string) {
     const contentType = response.headers.get("content-type") || "";
 
     if (contentType.includes("text/event-stream")) {
-      window.hideTypingIndicator?.();
-      spinnerWrap.remove();
-      await consumeStreamingChatResponse(response);
+      await consumeStreamingChatResponse(response, thinkingWrap);
       return;
     }
 
     const data = await response.json();
     window.hideTypingIndicator?.();
-    spinnerWrap.remove();
+    thinkingWrap?.remove();
     if (data && data.response) {
       window.renderBotMessageImmediate?.(data.response);
     } else if (data && data.error) {
@@ -164,7 +240,7 @@ async function generateResponse(message: string, aiModel: string) {
     }
   } catch (err) {
     window.hideTypingIndicator?.();
-    spinnerWrap.remove();
+    thinkingWrap?.remove();
     const errorMessage = err instanceof Error ? err.message : String(err);
     window.renderBotMessageImmediate?.("エラー: " + errorMessage);
   }

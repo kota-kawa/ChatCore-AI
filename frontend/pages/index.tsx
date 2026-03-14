@@ -130,10 +130,22 @@ const bodyMarkup = `
         <span>Chat Core</span>
       </div>
 
-      <div class="typing-indicator" id="typing-indicator" style="display: none;">
-        <div class="typing-dot"></div>
-        <div class="typing-dot" style="animation-delay: 0.2s"></div>
-        <div class="typing-dot" style="animation-delay: 0.4s"></div>
+      <div
+        class="typing-indicator"
+        id="typing-indicator"
+        style="display: none;"
+        role="status"
+        aria-live="polite"
+        aria-label="Thinking"
+      >
+        <span class="typing-indicator__orb" aria-hidden="true"></span>
+        <div class="typing-indicator__viewport" aria-hidden="true">
+          <div class="typing-indicator__track">
+            <span>Thinking</span>
+            <span>Thinking</span>
+            <span>Thinking</span>
+          </div>
+        </div>
       </div>
     </div>
     <div class="chat-main">
