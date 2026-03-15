@@ -113,7 +113,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   let isFinalized = false;
 
   const streamingScrollInterval = 72;
-  const markdownRefreshCharInterval = 50;
+  const markdownRefreshCharInterval = 25;
 
   const scrollStreamingViewport = (force = false) => {
     if (!window.chatMessages) return;

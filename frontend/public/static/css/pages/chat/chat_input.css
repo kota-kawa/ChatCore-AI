@@ -61,31 +61,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 10rem;
-  padding: 0.48rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 223, 150, 0.34);
-  background:
-    radial-gradient(circle at 18% 20%, rgba(255, 208, 112, 0.16), transparent 34%),
-    linear-gradient(135deg, rgba(54, 38, 18, 0.96), rgba(11, 17, 42, 0.98));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 245, 214, 0.1),
-    0 14px 34px rgba(6, 9, 24, 0.34);
-  backdrop-filter: blur(14px);
-  overflow: hidden;
-  isolation: isolate;
+  min-width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: visible;
+  isolation: auto;
 }
 
 .typing-indicator::before {
-  content: "";
-  position: absolute;
-  inset: auto 2% -76% -12%;
-  height: 144%;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(255, 201, 94, 0.3), transparent 72%);
-  filter: blur(12px);
-  animation: constellationPanelDrift 5.8s ease-in-out infinite;
-  pointer-events: none;
+  content: none;
+}
+
+.typing-indicator__label {
+  color: #5f6b66;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .typing-indicator__constellation {
@@ -289,13 +284,12 @@
 
 @media (max-width: 768px) {
   .typing-indicator {
-    min-width: 8.6rem;
-    padding: 0.38rem;
+    min-width: auto;
+    padding: 0;
   }
 
-  .typing-indicator__constellation {
-    --constellation-width: 7.2rem;
-    --constellation-height: 2.55rem;
+  .typing-indicator__label {
+    font-size: 0.85rem;
   }
 }
 
