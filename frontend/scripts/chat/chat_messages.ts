@@ -124,6 +124,9 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   let animationFrameId: number | null = null;
   let shouldForceMarkdownFlush = false;
   let lastMarkdownRenderAt = 0;
+  let lastTypingFrameAt: number | null = null;
+  let lastChunkReceivedAt: number | null = null;
+  let typingCharsPerMs = 0.042;
   let isProgrammaticScroll = false;
   let shouldStickToBottom = isScrollViewportNearBottom(scrollContainer);
   let isCompleted = false;
@@ -131,6 +134,11 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 
   const markdownRefreshCharInterval = 30;
   const markdownRefreshMaxDelayMs = 120;
+  const minTypingCharsPerMs = 0.016;
+  const maxTypingCharsPerMs = 0.22;
+  const typingRateSmoothing = 0.28;
+  const backlogSpeedupDivisor = 80;
+  const maxBacklogSpeedup = 4;
 
   const handleScroll = () => {
     if (isProgrammaticScroll) return;
@@ -169,12 +177,59 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     return true;
   };
 
-  const renderStreamingText = (forceMarkdown = false) => {
-    displayedRaw = receivedRaw;
+  const clamp = (value: number, min: number, max: number) => {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  };
+
+  const updateTypingRateFromChunk = (chunkText: string) => {
+    const chunkLength = chunkText.length;
+    if (chunkLength <= 0) return;
+
+    const now = performance.now();
+    if (lastChunkReceivedAt !== null) {
+      const elapsedMs = Math.max(16, now - lastChunkReceivedAt);
+      const observedCharsPerMs = chunkLength / elapsedMs;
+      typingCharsPerMs = clamp(
+        typingCharsPerMs * (1 - typingRateSmoothing) + observedCharsPerMs * typingRateSmoothing,
+        minTypingCharsPerMs,
+        maxTypingCharsPerMs
+      );
+    }
+    lastChunkReceivedAt = now;
+  };
+
+  const advanceDisplayedText = (frameNow: number, forceAll = false) => {
+    const pendingChars = receivedRaw.length - displayedRaw.length;
+    if (pendingChars <= 0) {
+      lastTypingFrameAt = frameNow;
+      return 0;
+    }
+
+    if (forceAll) {
+      displayedRaw = receivedRaw;
+      lastTypingFrameAt = frameNow;
+      return 0;
+    }
+
+    const previousFrameAt = lastTypingFrameAt ?? frameNow - 16;
+    const elapsedMs = clamp(frameNow - previousFrameAt, 16, 120);
+    lastTypingFrameAt = frameNow;
+
+    const speedup = Math.min(maxBacklogSpeedup, 1 + pendingChars / backlogSpeedupDivisor);
+    const charsToAdvance = Math.max(1, Math.floor(elapsedMs * typingCharsPerMs * speedup));
+    displayedRaw = receivedRaw.slice(0, displayedRaw.length + Math.min(pendingChars, charsToAdvance));
+    return receivedRaw.length - displayedRaw.length;
+  };
+
+  const renderStreamingText = (frameNow: number, forceMarkdown = false, forceAllChars = false) => {
+    const remainingChars = advanceDisplayedText(frameNow, forceAllChars);
     const refreshedMarkdown = refreshStreamingMarkdown(forceMarkdown);
     streamTail.textContent = displayedRaw.slice(formattedRaw.length);
     msg.dataset.fullText = displayedRaw;
     scrollStreamingViewport(refreshedMarkdown);
+    return remainingChars;
   };
 
   const finalizeMessage = () => {
@@ -196,13 +251,19 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 
   const scheduleAnimation = () => {
     if (animationFrameId !== null || isFinalized) return;
-    animationFrameId = window.requestAnimationFrame(() => {
+    animationFrameId = window.requestAnimationFrame((frameNow) => {
       animationFrameId = null;
-      renderStreamingText(shouldForceMarkdownFlush);
+      const forceAllChars = isCompleted;
+      const remainingChars = renderStreamingText(frameNow, shouldForceMarkdownFlush, forceAllChars);
       shouldForceMarkdownFlush = false;
 
       if (isCompleted) {
         finalizeMessage();
+        return;
+      }
+
+      if (remainingChars > 0) {
+        scheduleAnimation();
       }
     });
   };
@@ -211,6 +272,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     appendChunk(chunkText: string) {
       if (!chunkText || isCompleted) return;
       receivedRaw += chunkText;
+      updateTypingRateFromChunk(chunkText);
       shouldForceMarkdownFlush = false;
       scheduleAnimation();
     },
