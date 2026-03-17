@@ -42,6 +42,7 @@ declare global {
     setTextWithLineBreaks?: (element: HTMLElement, text: string) => void;
     scrollMessageToTop?: (element: HTMLElement) => void;
     scrollMessageToBottom?: () => void;
+    copyTextToClipboard?: (text: string) => Promise<void>;
     createCopyBtn?: (getText: () => string) => HTMLButtonElement;
     renderUserMessage?: (text: string) => void;
     renderBotMessageImmediate?: (text: string) => void;

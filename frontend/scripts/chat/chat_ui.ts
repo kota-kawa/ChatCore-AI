@@ -317,18 +317,43 @@ function ensureMarkedParser() {
               <div class="code-block-header">
                 <span class="code-block-lang">${language}</span>
                 <button class="code-block-copy-btn" onclick="
-                  const code = this.closest('.code-block-container').querySelector('code').innerText;
-                  navigator.clipboard.writeText(code).then(() => {
-                    const icon = this.querySelector('i');
+                  const codeElement = this.closest('.code-block-container')?.querySelector('code');
+                  const code = codeElement ? codeElement.innerText : '';
+                  const icon = this.querySelector('i');
+                  const textSpan = this.querySelector('span');
+                  const defaultLabel = textSpan ? (textSpan.dataset.defaultLabel || textSpan.innerText) : '';
+                  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
+                  const copyPromise = window.copyTextToClipboard
+                    ? window.copyTextToClipboard(code)
+                    : (navigator.clipboard && navigator.clipboard.writeText
+                      ? navigator.clipboard.writeText(code)
+                      : Promise.reject(new Error('Clipboard API unavailable')));
+                  copyPromise.then(() => {
                     if (icon) {
-                      icon.classList.replace('bi-clipboard', 'bi-check-lg');
-                      setTimeout(() => icon.classList.replace('bi-check-lg', 'bi-clipboard'), 2000);
+                      icon.classList.remove('bi-clipboard', 'bi-x-lg');
+                      icon.classList.add('bi-check-lg');
+                      setTimeout(() => {
+                        icon.classList.remove('bi-check-lg', 'bi-x-lg');
+                        icon.classList.add('bi-clipboard');
+                      }, 2000);
                     }
-                    const textSpan = this.querySelector('span');
                     if (textSpan) {
-                      const oldText = textSpan.innerText;
                       textSpan.innerText = 'Copied!';
-                      setTimeout(() => textSpan.innerText = oldText, 2000);
+                      setTimeout(() => textSpan.innerText = defaultLabel, 2000);
+                    }
+                  }).catch((error) => {
+                    console.error('Failed to copy code block.', error);
+                    if (icon) {
+                      icon.classList.remove('bi-clipboard', 'bi-check-lg');
+                      icon.classList.add('bi-x-lg');
+                      setTimeout(() => {
+                        icon.classList.remove('bi-check-lg', 'bi-x-lg');
+                        icon.classList.add('bi-clipboard');
+                      }, 2000);
+                    }
+                    if (textSpan) {
+                      textSpan.innerText = 'Failed';
+                      setTimeout(() => textSpan.innerText = defaultLabel, 2000);
                     }
                   });
                 ">

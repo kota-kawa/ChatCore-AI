@@ -54,6 +54,7 @@ chat-action-menu {
   position: relative;
   margin-bottom: 1rem;
   max-width: 85%;
+  isolation: isolate;
 }
 
 .message-wrapper--streaming {
@@ -395,6 +396,10 @@ chat-action-menu {
   border-radius: 999px;
   line-height: 1;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  z-index: 3;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .copy-btn:hover {
@@ -421,6 +426,22 @@ chat-action-menu {
 }
 
 .copy-btn:hover {
+  opacity: 1 !important;
+}
+
+.copy-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid rgba(25, 195, 125, 0.45);
+  outline-offset: 1px;
+}
+
+.copy-btn--success {
+  color: var(--primary-color, #19c37d);
+  opacity: 1 !important;
+}
+
+.copy-btn--error {
+  color: #dc2626;
   opacity: 1 !important;
 }
 
@@ -520,6 +541,10 @@ chat-action-menu {
 @media (max-width: 960px) {
   .chat-messages {
     padding-top: 3rem;
+  }
+
+  .copy-btn {
+    opacity: 0.8;
   }
 
   .bot-message-wrapper {

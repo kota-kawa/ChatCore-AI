@@ -178,17 +178,83 @@ function scrollMessageToBottom() {
   window.chatMessages.scrollTop = window.chatMessages.scrollHeight;
 }
 
+function setCopyButtonIcon(btn: HTMLButtonElement, iconClass: string) {
+  btn.innerHTML = `<i class="bi ${iconClass}"></i>`;
+}
+
+function copyTextWithExecCommand(text: string) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.setAttribute("readonly", "readonly");
+  textArea.setAttribute("aria-hidden", "true");
+  textArea.style.position = "fixed";
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.width = "1px";
+  textArea.style.height = "1px";
+  textArea.style.opacity = "0";
+  textArea.style.pointerEvents = "none";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  textArea.setSelectionRange(0, text.length);
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textArea);
+  }
+
+  return copied;
+}
+
+async function copyTextToClipboard(text: string) {
+  const clipboardWrite = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+  if (clipboardWrite) {
+    try {
+      await clipboardWrite(text);
+      return;
+    } catch (error) {
+      if (copyTextWithExecCommand(text)) return;
+      throw error;
+    }
+  }
+
+  if (copyTextWithExecCommand(text)) return;
+  throw new Error("Clipboard API is unavailable in this browser");
+}
+
 // 汎用コピーアイコン
 function createCopyBtn(getText: () => string) {
   const btn = document.createElement("button");
+  btn.type = "button";
   btn.className = "copy-btn";
-  btn.innerHTML = '<i class="bi bi-clipboard"></i>';
-  btn.addEventListener("click", () => {
-    navigator.clipboard.writeText(getText()).then(() => {
-      btn.innerHTML = '<i class="bi bi-check-lg"></i>';
-      setTimeout(() => (btn.innerHTML = '<i class="bi bi-clipboard"></i>'), 2000);
-    });
+  btn.setAttribute("aria-label", "メッセージをコピー");
+  btn.title = "コピー";
+  setCopyButtonIcon(btn, "bi-clipboard");
+
+  btn.addEventListener("click", async () => {
+    const text = getText();
+    try {
+      await copyTextToClipboard(text);
+      setCopyButtonIcon(btn, "bi-check-lg");
+      btn.classList.add("copy-btn--success");
+      btn.classList.remove("copy-btn--error");
+    } catch (error) {
+      console.error("Failed to copy chat message.", error);
+      setCopyButtonIcon(btn, "bi-x-lg");
+      btn.classList.add("copy-btn--error");
+      btn.classList.remove("copy-btn--success");
+    } finally {
+      window.setTimeout(() => {
+        setCopyButtonIcon(btn, "bi-clipboard");
+        btn.classList.remove("copy-btn--success", "copy-btn--error");
+      }, 2000);
+    }
   });
+
   return btn;
 }
 
@@ -198,6 +264,7 @@ window.setTextWithLineBreaks = setTextWithLineBreaks;
 // 既存呼び出し互換のために旧名も残す
 window.scrollMessageToBottom = scrollMessageToBottom;
 window.scrollMessageToTop = scrollMessageToBottom;
+window.copyTextToClipboard = copyTextToClipboard;
 window.createCopyBtn = createCopyBtn;
 
 export {};
