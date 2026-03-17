@@ -5,6 +5,9 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
 }
 
 .chat-messages {
@@ -17,6 +20,8 @@
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* メッセージラッパ */
@@ -39,6 +44,20 @@
   margin-right: auto;
   max-width: 92%;
   width: 92%;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .chat-messages {
+    padding-top: 4.75rem;
+  }
+
+  .message-wrapper,
+  .user-message-wrapper,
+  .bot-message-wrapper {
+    max-width: 100%;
+    width: 100%;
+  }
 }
 
 /* バブル */

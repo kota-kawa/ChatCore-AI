@@ -140,6 +140,7 @@ function switchChatRoom(roomId: string) {
   window.currentChatRoomId = roomId;
   localStorage.setItem("currentChatRoomId", roomId);
   window.showChatInterface?.();
+  window.closeChatSidebar?.();
   loadChatRooms();
   window.loadLocalChatHistory?.();
   window.loadChatHistory?.();

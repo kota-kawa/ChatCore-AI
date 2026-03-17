@@ -34,6 +34,7 @@ declare global {
     invalidateTasksCache?: () => void;
     initTaskOrderEditing?: () => void;
     showChatInterface?: () => void;
+    closeChatSidebar?: () => void;
     showTypingIndicator?: () => void;
     hideTypingIndicator?: () => void;
     formatLLMOutput?: (text: string) => string;
