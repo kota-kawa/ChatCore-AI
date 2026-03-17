@@ -11,6 +11,11 @@
   background: var(--surface-primary, #fff);
 }
 
+/* カスタム要素がフレックスレイアウトで場所を取らないようにする */
+chat-action-menu {
+  display: contents;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -493,6 +498,10 @@
 
 /* ─── タブレット (≤960px) ─── */
 @media (max-width: 960px) {
+  .chat-messages {
+    padding-top: 3rem;
+  }
+
   .bot-message-wrapper {
     max-width: 100%;
     width: 100%;
@@ -520,7 +529,7 @@
   .chat-messages {
     flex: 1;
     max-height: unset;
-    padding: 0.75rem 0.85rem;
+    padding: 2.6rem 0.85rem 0.75rem;
     gap: 0.15rem;
   }
 
