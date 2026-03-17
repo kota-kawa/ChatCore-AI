@@ -376,35 +376,48 @@ chat-action-menu {
 /* コピーアイコン */
 .copy-btn {
   position: absolute;
-  background: none;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.12);
   color: var(--text-secondary, #6b7280);
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   cursor: pointer;
   opacity: 0;
   transition:
     opacity var(--transition-normal, 0.2s ease),
-    color var(--transition-fast, 0.15s ease);
-  padding: 0.25rem;
-  border-radius: 4px;
+    color var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease);
+  padding: 0;
+  border-radius: 999px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
 }
 
 .copy-btn:hover {
+  background: rgba(255, 255, 255, 1);
   color: var(--text-dark, #1a1a1a);
 }
 
 .user-message-wrapper .copy-btn {
-  left: -1.8rem;
-  top: 0;
+  left: -2.25rem;
+  top: 0.05rem;
 }
 
 .bot-message-wrapper .copy-btn {
-  right: -1.8rem;
-  top: 0;
+  right: -2.25rem;
+  top: 0.05rem;
 }
 
 .message-wrapper:hover .copy-btn {
-  opacity: 0.6;
+  opacity: 0.72;
+}
+
+.message-wrapper:focus-within .copy-btn {
+  opacity: 0.72;
 }
 
 .copy-btn:hover {
@@ -412,7 +425,14 @@ chat-action-menu {
 }
 
 .message-wrapper--streaming .copy-btn {
+  opacity: 0;
   pointer-events: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .copy-btn {
+    opacity: 0.68;
+  }
 }
 
 /* ── Thinking / constellation ── (そのまま保持) */
@@ -514,13 +534,21 @@ chat-action-menu {
   /* コピーボタンをバブル内側に配置 */
   .user-message-wrapper .copy-btn {
     left: auto;
-    right: 0.5rem;
-    top: -1.5rem;
+    right: 0.45rem;
+    top: 0.35rem;
   }
 
   .bot-message-wrapper .copy-btn {
-    right: 0.5rem;
-    top: -1.5rem;
+    right: 0.45rem;
+    top: 0.35rem;
+  }
+
+  .user-message {
+    padding-right: 2.35rem;
+  }
+
+  .bot-message {
+    padding-right: 2.2rem;
   }
 }
 
@@ -615,19 +643,28 @@ chat-action-menu {
 
   /* コピーボタンをバブルの右上に小さく配置 */
   .copy-btn {
-    font-size: 1rem;
-    padding: 0.35rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.88rem;
   }
 
   .user-message-wrapper .copy-btn {
     left: auto;
-    right: 0.25rem;
-    top: -1.3rem;
+    right: 0.2rem;
+    top: 0.2rem;
   }
 
   .bot-message-wrapper .copy-btn {
-    right: 0.25rem;
-    top: -1.3rem;
+    right: 0.2rem;
+    top: 0.2rem;
+  }
+
+  .user-message {
+    padding-right: 2.15rem;
+  }
+
+  .bot-message {
+    padding-right: 2rem;
   }
 
   /* Thinking message */

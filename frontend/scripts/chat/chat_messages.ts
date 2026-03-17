@@ -8,6 +8,13 @@ type StreamingBotMessageHandle = {
   showError: (message: string) => void;
 };
 
+const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
+
+function isScrollViewportNearBottom(container: HTMLElement, thresholdPx = STICKY_SCROLL_BOTTOM_THRESHOLD_PX) {
+  const distanceToBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
+  return distanceToBottom <= thresholdPx;
+}
+
 function createBotMessageElements() {
   if (!window.chatMessages) return null;
   const wrapper = document.createElement("div");
@@ -39,12 +46,20 @@ function renderBotMessageContent(target: HTMLElement, raw: string) {
   }
 }
 
-function renderBotMessage(wrapper: HTMLElement, msg: HTMLElement, raw: string) {
+function renderBotMessage(
+  wrapper: HTMLElement,
+  msg: HTMLElement,
+  raw: string,
+  options: { scrollToBottom?: boolean } = {}
+) {
+  const { scrollToBottom = true } = options;
   renderBotMessageContent(msg, raw);
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.scrollMessageToTop) {
-    window.scrollMessageToTop(wrapper);
+  if (scrollToBottom) {
+    if (window.scrollMessageToBottom) {
+      window.scrollMessageToBottom();
+    } else if (window.scrollMessageToTop) {
+      window.scrollMessageToTop(wrapper);
+    }
   }
 }
 
@@ -92,8 +107,9 @@ function renderBotMessageImmediate(text: string) {
 
 function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   const elements = createBotMessageElements();
-  if (!elements) return null;
+  if (!elements || !window.chatMessages) return null;
   const { wrapper, msg } = elements;
+  const scrollContainer = window.chatMessages;
   wrapper.classList.add("message-wrapper--streaming");
   msg.classList.add("bot-message--streaming");
   const formattedContent = document.createElement("div");
@@ -106,64 +122,65 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   let displayedRaw = "";
   let formattedRaw = "";
   let animationFrameId: number | null = null;
-  let lastFrameAt: number | null = null;
-  let revealCarry = 0;
-  let lastScrollAt = 0;
+  let shouldForceMarkdownFlush = false;
+  let lastMarkdownRenderAt = 0;
+  let isProgrammaticScroll = false;
+  let shouldStickToBottom = isScrollViewportNearBottom(scrollContainer);
   let isCompleted = false;
   let isFinalized = false;
 
-  const streamingScrollInterval = 72;
-  const markdownRefreshCharInterval = 25;
+  const markdownRefreshCharInterval = 30;
+  const markdownRefreshMaxDelayMs = 120;
+
+  const handleScroll = () => {
+    if (isProgrammaticScroll) return;
+    shouldStickToBottom = isScrollViewportNearBottom(scrollContainer);
+  };
+
+  scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
 
   const scrollStreamingViewport = (force = false) => {
-    if (!window.chatMessages) return;
-    const now = performance.now();
-    if (!force && now - lastScrollAt < streamingScrollInterval) {
-      return;
-    }
-    lastScrollAt = now;
-    window.chatMessages.scrollTop = window.chatMessages.scrollHeight;
+    if (!force && !shouldStickToBottom) return;
+
+    isProgrammaticScroll = true;
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    isProgrammaticScroll = false;
+    shouldStickToBottom = true;
   };
 
   const refreshStreamingMarkdown = (force = false) => {
     const pendingMarkdownChars = displayedRaw.length - formattedRaw.length;
     if (pendingMarkdownChars <= 0) return false;
 
-    const chunkSize = force
-      ? pendingMarkdownChars
-      : Math.floor(pendingMarkdownChars / markdownRefreshCharInterval) * markdownRefreshCharInterval;
-    if (chunkSize <= 0) return false;
+    const now = performance.now();
+    const shouldFlush = force
+      || pendingMarkdownChars >= markdownRefreshCharInterval
+      || displayedRaw.endsWith("\n")
+      || displayedRaw.endsWith("。")
+      || displayedRaw.endsWith(".")
+      || now - lastMarkdownRenderAt >= markdownRefreshMaxDelayMs;
 
-    const nextFormattedIndex = getNextSafeIndex(displayedRaw, formattedRaw.length, chunkSize);
-    const nextFormattedRaw = displayedRaw.slice(0, nextFormattedIndex);
+    if (!shouldFlush) return false;
+
+    const nextFormattedRaw = displayedRaw;
     renderBotMessageContent(formattedContent, nextFormattedRaw);
     formattedRaw = nextFormattedRaw;
+    lastMarkdownRenderAt = now;
     return true;
   };
 
-  const renderStreamingText = (forceScroll = false) => {
-    const refreshedMarkdown = refreshStreamingMarkdown();
+  const renderStreamingText = (forceMarkdown = false) => {
+    displayedRaw = receivedRaw;
+    const refreshedMarkdown = refreshStreamingMarkdown(forceMarkdown);
     streamTail.textContent = displayedRaw.slice(formattedRaw.length);
     msg.dataset.fullText = displayedRaw;
-    scrollStreamingViewport(forceScroll || refreshedMarkdown);
-  };
-
-  const getNextSafeIndex = (text: string, start: number, charCount: number) => {
-    let index = start;
-    let remaining = charCount;
-
-    while (index < text.length && remaining > 0) {
-      const code = text.charCodeAt(index);
-      index += code >= 0xd800 && code <= 0xdbff && index + 1 < text.length ? 2 : 1;
-      remaining -= 1;
-    }
-
-    return index;
+    scrollStreamingViewport(refreshedMarkdown);
   };
 
   const finalizeMessage = () => {
     if (isFinalized) return;
     isFinalized = true;
+    scrollContainer.removeEventListener("scroll", handleScroll);
 
     if (animationFrameId !== null) {
       window.cancelAnimationFrame(animationFrameId);
@@ -173,45 +190,16 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     wrapper.classList.remove("message-wrapper--streaming");
     msg.classList.remove("bot-message--streaming");
     msg.dataset.fullText = receivedRaw;
-    renderBotMessage(wrapper, msg, receivedRaw);
+    renderBotMessage(wrapper, msg, receivedRaw, { scrollToBottom: shouldStickToBottom });
     if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(receivedRaw, "bot");
   };
 
   const scheduleAnimation = () => {
     if (animationFrameId !== null || isFinalized) return;
-    animationFrameId = window.requestAnimationFrame((timestamp) => {
+    animationFrameId = window.requestAnimationFrame(() => {
       animationFrameId = null;
-
-      const deltaMs = lastFrameAt === null ? 16 : Math.min(timestamp - lastFrameAt, 120);
-      lastFrameAt = timestamp;
-
-      const pendingChars = receivedRaw.length - displayedRaw.length;
-      if (pendingChars > 0) {
-        const charsPerSecond = isCompleted
-          ? Math.min(118, 22 + pendingChars * 0.4)
-          : Math.min(76, 14 + pendingChars * 0.2);
-        revealCarry += (deltaMs * charsPerSecond) / 1000;
-
-        const revealCount = Math.floor(revealCarry);
-        if (revealCount > 0) {
-          revealCarry = Math.max(0, revealCarry - revealCount);
-
-          const nextIndex = getNextSafeIndex(receivedRaw, displayedRaw.length, revealCount);
-          if (nextIndex > displayedRaw.length) {
-            displayedRaw = receivedRaw.slice(0, nextIndex);
-            renderStreamingText();
-          }
-        }
-      }
-
-      if (displayedRaw.length < receivedRaw.length) {
-        scheduleAnimation();
-        return;
-      }
-
-      revealCarry = 0;
-      lastFrameAt = null;
-      renderStreamingText(true);
+      renderStreamingText(shouldForceMarkdownFlush);
+      shouldForceMarkdownFlush = false;
 
       if (isCompleted) {
         finalizeMessage();
@@ -223,25 +211,20 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     appendChunk(chunkText: string) {
       if (!chunkText || isCompleted) return;
       receivedRaw += chunkText;
+      shouldForceMarkdownFlush = false;
       scheduleAnimation();
     },
     complete() {
       if (isCompleted) return;
       isCompleted = true;
-      if (displayedRaw.length >= receivedRaw.length) {
-        finalizeMessage();
-        return;
-      }
+      shouldForceMarkdownFlush = true;
       scheduleAnimation();
     },
     showError(message: string) {
       if (!message) return;
       receivedRaw = receivedRaw ? `${receivedRaw}\n\nエラー: ${message}` : `エラー: ${message}`;
       isCompleted = true;
-      if (displayedRaw.length >= receivedRaw.length) {
-        finalizeMessage();
-        return;
-      }
+      shouldForceMarkdownFlush = true;
       scheduleAnimation();
     }
   };
