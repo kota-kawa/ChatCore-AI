@@ -1,9 +1,16 @@
 import asyncio
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from blueprints.auth import google_callback
+import requests
+
+from blueprints.auth import (
+    GOOGLE_LOGIN_UNAVAILABLE_ERROR,
+    google_callback,
+    google_login,
+)
 from tests.helpers.request_helpers import build_request
 
 
@@ -32,7 +39,136 @@ def make_request():
     )
 
 
+def make_google_login_request():
+    return build_request(method="GET", path="/google-login", session={})
+
+
 class GoogleLoginFlowTestCase(unittest.TestCase):
+    def test_google_login_returns_503_when_dependency_is_missing(self):
+        request = make_google_login_request()
+
+        with patch("blueprints.auth.Flow", None):
+            response = asyncio.run(google_login(request))
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
+
+    def test_google_login_returns_503_when_oauth_settings_are_missing(self):
+        request = make_google_login_request()
+        fake_flow_class = Mock()
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch(
+                "blueprints.auth._google_client_config",
+                return_value={
+                    "web": {
+                        "client_id": "",
+                        "client_secret": "",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "redirect_uris": [],
+                        "javascript_origins": ["https://chatcore-ai.com"],
+                    }
+                },
+            ):
+                with patch(
+                    "blueprints.auth.url_for",
+                    return_value="https://chatcore-ai.com/google-callback",
+                ):
+                    response = asyncio.run(google_login(request))
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
+        fake_flow_class.from_client_config.assert_not_called()
+
+    def test_google_callback_redirects_to_login_when_dependency_is_missing(self):
+        request = make_request()
+
+        with patch("blueprints.auth.Flow", None):
+            with patch(
+                "blueprints.auth.frontend_login_url",
+                return_value="http://frontend/login",
+            ):
+                response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "http://frontend/login")
+
+    def test_google_login_returns_503_when_flow_initialization_fails(self):
+        request = make_google_login_request()
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.side_effect = ValueError("bad oauth config")
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch(
+                "blueprints.auth._google_client_config",
+                return_value={
+                    "web": {
+                        "client_id": "client-id",
+                        "client_secret": "client-secret",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "redirect_uris": [],
+                        "javascript_origins": ["https://chatcore-ai.com"],
+                    }
+                },
+            ):
+                with patch(
+                    "blueprints.auth.url_for",
+                    return_value="https://chatcore-ai.com/google-callback",
+                ):
+                    response = asyncio.run(google_login(request))
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
+
+    def test_google_callback_redirects_to_login_when_token_exchange_fails(self):
+        request = make_request()
+        fake_flow = FakeFlow()
+        fake_flow.fetch_token = Mock(side_effect=ValueError("invalid_grant"))
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.return_value = fake_flow
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                with patch(
+                    "blueprints.auth.frontend_login_url",
+                    return_value="http://frontend/login",
+                ):
+                    response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertNotIn("google_oauth_state", request.session)
+        self.assertNotIn("google_redirect_uri", request.session)
+
+    def test_google_callback_redirects_to_login_when_userinfo_fetch_fails(self):
+        request = make_request()
+        fake_flow = FakeFlow()
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.return_value = fake_flow
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                with patch(
+                    "blueprints.auth._fetch_google_user_info",
+                    side_effect=requests.RequestException("provider down"),
+                ):
+                    with patch(
+                        "blueprints.auth.frontend_login_url",
+                        return_value="http://frontend/login",
+                    ):
+                        response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertNotIn("user_id", request.session)
+
     def test_new_google_user_is_created_with_profile_fields(self):
         request = make_request()
         fake_flow = FakeFlow()

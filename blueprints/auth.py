@@ -1,4 +1,3 @@
-import copy
 import logging
 import os
 import time
@@ -14,6 +13,18 @@ try:
     from google_auth_oauthlib.flow import Flow
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
     Flow = None
+
+try:
+    from google.auth.exceptions import GoogleAuthError
+except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    class GoogleAuthError(Exception):
+        pass
+
+try:
+    from oauthlib.oauth2.rfc6749.errors import OAuth2Error
+except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    class OAuth2Error(Exception):
+        pass
 
 from services.web import (
     log_and_internal_server_error,
@@ -54,18 +65,7 @@ load_dotenv()
 if not is_production_env():
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-GOOGLE_CLIENT_CONFIG = {
-    "web": {
-        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-        "project_id": os.getenv("GOOGLE_PROJECT_ID", ""),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
-        "redirect_uris": [],
-        "javascript_origins": [os.getenv("GOOGLE_JS_ORIGIN", "https://chatcore-ai.com")],
-    }
-}
+GOOGLE_LOGIN_UNAVAILABLE_ERROR = "Googleログインを現在利用できません。"
 
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
@@ -78,6 +78,55 @@ logger = logging.getLogger(__name__)
 
 LOGIN_VERIFICATION_CODE_TTL_SECONDS = 300
 LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS = 5
+
+
+def _google_client_config() -> dict[str, Any]:
+    return {
+        "web": {
+            "client_id": (os.getenv("GOOGLE_CLIENT_ID") or "").strip(),
+            "project_id": os.getenv("GOOGLE_PROJECT_ID", ""),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": (os.getenv("GOOGLE_CLIENT_SECRET") or "").strip(),
+            "redirect_uris": [],
+            "javascript_origins": [os.getenv("GOOGLE_JS_ORIGIN", "https://chatcore-ai.com")],
+        }
+    }
+
+
+def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None:
+    web_config = client_config.get("web") if isinstance(client_config, dict) else None
+    if not isinstance(web_config, dict):
+        return "Google OAuth client config is invalid."
+
+    missing_keys: list[str] = []
+    client_id = web_config.get("client_id")
+    if not isinstance(client_id, str) or not client_id:
+        missing_keys.append("GOOGLE_CLIENT_ID")
+
+    client_secret = web_config.get("client_secret")
+    if not isinstance(client_secret, str) or not client_secret:
+        missing_keys.append("GOOGLE_CLIENT_SECRET")
+
+    if missing_keys:
+        return f"Missing required Google OAuth environment variables: {', '.join(missing_keys)}"
+
+    return None
+
+
+def _clear_google_oauth_session(session: dict[str, Any]) -> None:
+    session.pop("google_oauth_state", None)
+    session.pop("google_redirect_uri", None)
+
+
+def _google_login_unavailable_response() -> Any:
+    return jsonify({"error": GOOGLE_LOGIN_UNAVAILABLE_ERROR}, status_code=503)
+
+
+def _redirect_to_login_after_google_failure(session: dict[str, Any]) -> RedirectResponse:
+    _clear_google_oauth_session(session)
+    return RedirectResponse(frontend_login_url(), status_code=302)
 
 
 def _build_google_authorization_response(request: Request, redirect_uri: str) -> str:
@@ -139,8 +188,7 @@ async def api_current_user(request: Request):
         session.pop("login_temp_user_id", None)
         session.pop("login_verification_code_issued_at", None)
         session.pop("login_verification_code_attempts", None)
-        session.pop("google_oauth_state", None)
-        session.pop("google_redirect_uri", None)
+        _clear_google_oauth_session(session)
         set_session_permanent(session, False)
         return jsonify({"logged_in": False})
     else:
@@ -164,20 +212,39 @@ async def logout(request: Request):
 @auth_bp.get("/google-login", name="auth.google_login")
 async def google_login(request: Request):
     if Flow is None:
-        return jsonify({"error": "google-auth-oauthlib is required"}, status_code=500)
+        logger.error(
+            "Google login is unavailable because google-auth-oauthlib is not installed."
+        )
+        return _google_login_unavailable_response()
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI") or url_for(
         request, "auth.google_callback", _external=True
     )
-    client_config = copy.deepcopy(GOOGLE_CLIENT_CONFIG)
+    client_config = _google_client_config()
+    settings_error = _validate_google_oauth_settings(client_config)
+    if settings_error:
+        logger.error(
+            "Google login is unavailable due to configuration error: %s",
+            settings_error,
+        )
+        return _google_login_unavailable_response()
     client_config["web"]["redirect_uris"] = [redirect_uri]
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=GOOGLE_SCOPES,
-        redirect_uri=redirect_uri,
-    )
-    # OAuth state をセッション保存し、コールバックで照合する
-    # Persist OAuth state in session and verify it in callback.
-    authorization_url, state = flow.authorization_url(prompt="consent")
+    try:
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=GOOGLE_SCOPES,
+            redirect_uri=redirect_uri,
+        )
+        # OAuth state をセッション保存し、コールバックで照合する
+        # Persist OAuth state in session and verify it in callback.
+        authorization_url, state = flow.authorization_url(prompt="consent")
+    except (
+        GoogleAuthError,
+        OAuth2Error,
+        requests.RequestException,
+        ValueError,
+    ):
+        logger.exception("Failed to initialize Google OAuth authorization URL.")
+        return _google_login_unavailable_response()
     request.session["google_oauth_state"] = state
     request.session["google_redirect_uri"] = redirect_uri
     return RedirectResponse(authorization_url, status_code=302)
@@ -185,34 +252,68 @@ async def google_login(request: Request):
 
 @auth_bp.get("/google-callback", name="auth.google_callback")
 async def google_callback(request: Request):
-    if Flow is None:
-        return jsonify({"error": "google-auth-oauthlib is required"}, status_code=500)
     session = request.session
+    if Flow is None:
+        return _redirect_to_login_after_google_failure(session)
     state = session.get("google_oauth_state")
     if not state:
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return _redirect_to_login_after_google_failure(session)
     redirect_uri = session.get("google_redirect_uri") or os.getenv(
         "GOOGLE_REDIRECT_URI"
     )
     if not redirect_uri:
         redirect_uri = url_for(request, "auth.google_callback", _external=True)
-    client_config = copy.deepcopy(GOOGLE_CLIENT_CONFIG)
+    client_config = _google_client_config()
+    settings_error = _validate_google_oauth_settings(client_config)
+    if settings_error:
+        logger.error(
+            "Google OAuth callback aborted due to configuration error: %s",
+            settings_error,
+        )
+        return _redirect_to_login_after_google_failure(session)
     client_config["web"]["redirect_uris"] = [redirect_uri]
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=GOOGLE_SCOPES,
-        state=state,
-        redirect_uri=redirect_uri,
-    )
+    try:
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=GOOGLE_SCOPES,
+            state=state,
+            redirect_uri=redirect_uri,
+        )
+    except (
+        GoogleAuthError,
+        OAuth2Error,
+        requests.RequestException,
+        ValueError,
+    ):
+        logger.exception("Failed to initialize Google OAuth callback flow.")
+        return _redirect_to_login_after_google_failure(session)
     # コールバックURLから認可コードを交換し、アクセストークンを取得する
     # Exchange callback authorization response for access token.
     authorization_response = _build_google_authorization_response(request, redirect_uri)
-    await run_blocking(flow.fetch_token, authorization_response=authorization_response)
-    session.pop("google_oauth_state", None)
-    session.pop("google_redirect_uri", None)
+    try:
+        await run_blocking(flow.fetch_token, authorization_response=authorization_response)
+    except (
+        GoogleAuthError,
+        OAuth2Error,
+        requests.RequestException,
+        ValueError,
+    ):
+        logger.exception("Google OAuth token exchange failed.")
+        return RedirectResponse(frontend_login_url(), status_code=302)
+    finally:
+        _clear_google_oauth_session(session)
 
     credentials = flow.credentials
-    user_info = await run_blocking(_fetch_google_user_info, credentials.token)
+    access_token = getattr(credentials, "token", "")
+    if not isinstance(access_token, str) or not access_token:
+        logger.error("Google OAuth callback completed without an access token.")
+        return RedirectResponse(frontend_login_url(), status_code=302)
+
+    try:
+        user_info = await run_blocking(_fetch_google_user_info, access_token)
+    except requests.RequestException:
+        logger.exception("Failed to fetch Google user info.")
+        return RedirectResponse(frontend_login_url(), status_code=302)
     email = _clean_google_field(user_info, "email")
     google_user_id = _clean_google_field(user_info, "id")
     display_name = _clean_google_field(user_info, "name")

@@ -63,6 +63,9 @@ cd Chat-Core
 # FASTAPI_SECRET_KEY=xxxxx
 # SEND_ADDRESS=example@gmail.com
 # SEND_PASSWORD=app_password
+# GOOGLE_CLIENT_ID=xxxxx
+# GOOGLE_CLIENT_SECRET=xxxxx
+# GOOGLE_REDIRECT_URI=https://chatcore-ai.com/google-callback
 # ADMIN_PASSWORD_HASH=pbkdf2_sha256$...
 # POSTGRES_HOST=db
 # POSTGRES_USER=postgres
@@ -253,7 +256,10 @@ git clone https://github.com/kota-kawa/Chat-Core.git
 cd Chat-Core
 
 # 2) .env に必要な環境変数を設定
-# GROQ_API_KEY=xxxxx など
+# GROQ_API_KEY=xxxxx
+# GOOGLE_CLIENT_ID=xxxxx
+# GOOGLE_CLIENT_SECRET=xxxxx
+# GOOGLE_REDIRECT_URI=https://chatcore-ai.com/google-callback
 
 # 3) ビルド＆起動
 docker-compose up --build
