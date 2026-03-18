@@ -87,21 +87,6 @@ const bodyMarkup = `
         </select>
       </div>
 
-      <!-- 画面中央モーダル -->
-      <div
-        id="io-modal"
-        style="display: none;"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="taskDetailTitle"
-        aria-hidden="true"
-        tabindex="-1"
-      >
-        <div class="io-modal-content" id="io-modal-content">
-          <!-- JS で入出力例をここに挿入 -->
-        </div>
-      </div>
-
       <div class="task-selection-header">
         <p id="task-selection-text">実行したいタスクを選択（クリックで即実行）</p>
         <button id="openNewPromptModal" class="circle-button new-prompt-modal-btn" type="button" title="新しいプロンプトを投稿" style="display:none;">
@@ -119,6 +104,21 @@ const bodyMarkup = `
         </button>
       </div>
     </form>
+  </div>
+
+  <!-- タスク詳細モーダル（全画面オーバーレイを維持するため setup-container の外に配置） -->
+  <div
+    id="io-modal"
+    style="display: none;"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="taskDetailTitle"
+    aria-hidden="true"
+    tabindex="-1"
+  >
+    <div class="io-modal-content" id="io-modal-content">
+      <!-- JS で入出力例をここに挿入 -->
+    </div>
   </div>
 
   <div id="chat-container" style="display: none;">
