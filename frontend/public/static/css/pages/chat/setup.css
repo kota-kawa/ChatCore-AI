@@ -2,8 +2,22 @@
   最初の画面（フォーム、モーダル、タスク選択ヘッダー）のレイアウトと入力要素スタイル
 */
 #setup-container {
+  --setup-container-padding-y: 2.25rem;
+  --setup-container-padding-x: 2.4rem;
+  --setup-form-gap: 1.25rem;
+  --setup-title-font-size: 1.6rem;
+  --setup-title-margin-bottom: 1.5rem;
+  --setup-field-padding-y: 0.95rem;
+  --setup-field-padding-x: 1rem;
+  --setup-select-padding-right: 2.6rem;
+  --setup-task-gap: 1rem;
+  --setup-card-padding-y: 0.6rem;
+  --setup-card-padding-x: 0.8rem;
+  --setup-card-min-height: 68px;
+  --setup-card-font-size: 1.05rem;
+  --setup-toggle-size: 40px;
   background: var(--surface);
-  padding: 2.25rem 2.4rem;
+  padding: var(--setup-container-padding-y) var(--setup-container-padding-x);
   border-radius: 24px;
   border: 1px solid var(--border-soft);
   box-shadow: var(--shadow-strong);
@@ -26,16 +40,17 @@
 .setup-form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--setup-form-gap);
   position: relative;
   z-index: 1;
 }
 
 .setup-form h2 {
-  font-size: 1.6rem;
+  font-size: var(--setup-title-font-size);
   font-weight: 700;
   color: #0f5132;
   letter-spacing: 0.03em;
+  margin-bottom: var(--setup-title-margin-bottom) !important;
 }
 
 .form-group {
@@ -58,12 +73,16 @@
 .setup-form textarea,
 .setup-form select {
   width: 100%;
-  padding: 0.95rem 1rem;
+  padding: var(--setup-field-padding-y) var(--setup-field-padding-x);
   border: 1px solid #dfe9e5;
   border-radius: 14px;
   font-size: 1rem;
   background: rgba(255, 255, 255, 0.95);
   transition: border 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+#setup-info {
+  min-height: clamp(3.8rem, 12vh, 6rem);
 }
 
 .setup-form textarea:focus,
@@ -95,7 +114,7 @@
   border: 1px solid #dfe9e5;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.95);
-  padding: 0.95rem 2.6rem 0.95rem 1rem;
+  padding: var(--setup-field-padding-y) var(--setup-select-padding-right) var(--setup-field-padding-y) var(--setup-field-padding-x);
   text-align: left;
   font-size: 1rem;
   line-height: 1.4;
@@ -181,7 +200,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--setup-task-gap);
   min-height: 0;
 }
 
@@ -199,7 +218,7 @@
 /* カード本体のスタイル */
 .prompt-card {
   background: #ffffff;
-  padding: 0.6rem 0.8rem !important;
+  padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
   border-radius: 16px;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
@@ -208,8 +227,8 @@
   text-align: center;
   position: relative;
   overflow: visible;
-  min-height: 68px !important;
-  font-size: 1.05rem;
+  min-height: var(--setup-card-min-height) !important;
+  font-size: var(--setup-card-font-size);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
 }
 
@@ -250,7 +269,7 @@
 .task-header {
   flex: 1;
   min-width: 0;
-  font-size: 1.05rem;
+  font-size: var(--setup-card-font-size);
   line-height: 1.25;
   text-align: left;
   white-space: nowrap;
@@ -259,9 +278,9 @@
 }
 
 .task-detail-toggle {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: var(--setup-toggle-size);
+  height: var(--setup-toggle-size);
+  min-height: var(--setup-toggle-size);
   padding: 0 !important;
   line-height: 1 !important;
   border-radius: 999px;
@@ -273,6 +292,87 @@
 
 .task-detail-toggle i {
   font-size: 1.15rem;
+}
+
+#setup-container.setup-fit-compact {
+  --setup-container-padding-y: 1.45rem;
+  --setup-container-padding-x: 1.6rem;
+  --setup-form-gap: 0.75rem;
+  --setup-title-font-size: 1.4rem;
+  --setup-title-margin-bottom: 0.45rem;
+  --setup-field-padding-y: 0.68rem;
+  --setup-field-padding-x: 0.82rem;
+  --setup-select-padding-right: 2.3rem;
+  --setup-task-gap: 0.7rem;
+  --setup-card-padding-y: 0.5rem;
+  --setup-card-padding-x: 0.66rem;
+  --setup-card-min-height: 56px;
+  --setup-card-font-size: 0.96rem;
+  --setup-toggle-size: 34px;
+}
+
+#setup-container.setup-fit-compact #setup-info {
+  min-height: clamp(3.4rem, 10.5vh, 5.1rem);
+}
+
+#setup-container.setup-fit-compact .form-label {
+  font-size: 0.88rem;
+}
+
+#setup-container.setup-fit-compact .task-selection-header {
+  gap: 0.45rem;
+}
+
+#setup-container.setup-fit-compact .task-selection-header p#task-selection-text {
+  font-size: 0.9rem;
+}
+
+#setup-container.setup-fit-compact #openNewPromptModal,
+#setup-container.setup-fit-compact #edit-task-order-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+}
+
+#setup-container.setup-fit-tight {
+  --setup-container-padding-y: 1rem;
+  --setup-container-padding-x: 1.1rem;
+  --setup-form-gap: 0.5rem;
+  --setup-title-font-size: 1.24rem;
+  --setup-title-margin-bottom: 0.2rem;
+  --setup-field-padding-y: 0.52rem;
+  --setup-field-padding-x: 0.68rem;
+  --setup-select-padding-right: 2.1rem;
+  --setup-task-gap: 0.52rem;
+  --setup-card-padding-y: 0.42rem;
+  --setup-card-padding-x: 0.56rem;
+  --setup-card-min-height: 46px;
+  --setup-card-font-size: 0.9rem;
+  --setup-toggle-size: 30px;
+}
+
+#setup-container.setup-fit-tight #setup-info {
+  min-height: clamp(3rem, 8.8vh, 4.1rem);
+}
+
+#setup-container.setup-fit-tight .form-label {
+  font-size: 0.82rem;
+}
+
+#setup-container.setup-fit-tight .task-selection-header p#task-selection-text {
+  font-size: 0.82rem;
+}
+
+#setup-container.setup-fit-tight #openNewPromptModal,
+#setup-container.setup-fit-tight #edit-task-order-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 0.9rem;
+}
+
+#setup-container.setup-fit-tight .task-selection .task-wrapper {
+  flex: 0 0 calc(50% - 0.26rem);
+  max-width: calc(50% - 0.26rem);
 }
 
 /* モーダルの全体（背景部分含む） */
@@ -431,22 +531,24 @@
 /* ===== Mobile Responsive Styles ===== */
 @media (max-width: 768px) {
   #setup-container {
-    padding: 2rem 1.8rem;
+    --setup-container-padding-y: 2rem;
+    --setup-container-padding-x: 1.8rem;
   }
 
   .prompt-card {
-    font-size: 1.05rem;
-    min-height: 68px !important;
+    font-size: var(--setup-card-font-size);
+    min-height: var(--setup-card-min-height) !important;
   }
 }
 
 @media (max-width: 576px) {
   #setup-container {
-    padding: 1.8rem 1.5rem;
+    --setup-container-padding-y: 1.8rem;
+    --setup-container-padding-x: 1.5rem;
   }
 
   .task-selection {
-    gap: 0.8rem;
+    gap: var(--setup-task-gap);
   }
 
   .task-selection .task-wrapper {
@@ -456,10 +558,10 @@
 
   .prompt-card {
     height: auto;
-    min-height: 68px !important;
+    min-height: var(--setup-card-min-height) !important;
     max-height: none;
-    font-size: 1.02rem;
-    padding: 0.6rem 0.8rem !important;
+    font-size: var(--setup-card-font-size);
+    padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
     overflow: hidden;
   }
 
