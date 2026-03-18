@@ -139,14 +139,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         request = make_request()
 
         with patch("blueprints.auth.Flow", None):
-            with patch(
-                "blueprints.auth.frontend_login_url",
-                return_value="http://frontend/login",
-            ):
-                response = asyncio.run(google_callback(request))
+            response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
 
     def test_google_login_returns_503_when_flow_initialization_fails(self):
         request = make_google_login_request()
@@ -181,14 +177,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                 side_effect=valid_google_client_config,
             ):
                 with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                    with patch(
-                        "blueprints.auth.frontend_login_url",
-                        return_value="http://frontend/login",
-                    ):
-                        response = asyncio.run(google_callback(request))
+                    response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("google_oauth_state", request.session)
         self.assertNotIn("google_redirect_uri", request.session)
 
@@ -208,14 +200,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                         "blueprints.auth._fetch_google_user_info",
                         side_effect=requests.RequestException("provider down"),
                     ):
-                        with patch(
-                            "blueprints.auth.frontend_login_url",
-                            return_value="http://frontend/login",
-                        ):
-                            response = asyncio.run(google_callback(request))
+                        response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("user_id", request.session)
 
     def test_new_google_user_is_created_with_profile_fields(self):
@@ -261,13 +249,14 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                         with patch(
                                                             "blueprints.auth.frontend_url",
                                                             return_value="http://frontend/",
-                                                        ):
+                                                        ) as mock_frontend_url:
                                                             response = asyncio.run(
                                                                 google_callback(request)
                                                             )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/")
+        mock_frontend_url.assert_not_called()
         self.assertEqual(request.session["user_id"], 42)
         self.assertEqual(request.session["user_email"], "user@example.com")
         self.assertNotIn("google_oauth_state", request.session)
@@ -347,15 +336,12 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                             "email": "user@example.com",
                                                         },
                                                     ):
-                                                        with patch(
-                                                            "blueprints.auth.frontend_url",
-                                                            return_value="http://frontend/",
-                                                        ):
-                                                            response = asyncio.run(
-                                                                google_callback(request)
-                                                            )
+                                                        response = asyncio.run(
+                                                            google_callback(request)
+                                                        )
 
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/")
         self.assertEqual(request.session["user_id"], 7)
         mock_create.assert_not_called()
         mock_link.assert_called_once_with(7, "google-user-123", "user@example.com")
@@ -393,14 +379,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                             "blueprints.auth.get_user_by_google_id",
                             side_effect=Exception("DB connection error"),
                         ):
-                            with patch(
-                                "blueprints.auth.frontend_login_url",
-                                return_value="http://frontend/login",
-                            ):
-                                response = asyncio.run(google_callback(request))
+                            response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("user_id", request.session)
 
     def test_google_callback_redirects_to_login_when_create_user_returns_none(self):
@@ -428,14 +410,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                         with patch("blueprints.auth.get_user_by_google_id", return_value=None):
                             with patch("blueprints.auth.get_user_by_email", return_value=None):
                                 with patch("blueprints.auth.create_user", return_value=None):
-                                    with patch(
-                                        "blueprints.auth.frontend_login_url",
-                                        return_value="http://frontend/login",
-                                    ):
-                                        response = asyncio.run(google_callback(request))
+                                    response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("user_id", request.session)
 
     def test_rejects_google_login_when_email_is_not_verified(self):
@@ -458,15 +436,11 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                             "verified_email": False,
                         },
                     ):
-                        with patch(
-                            "blueprints.auth.frontend_login_url",
-                            return_value="http://frontend/login",
-                        ):
-                            with patch("blueprints.auth.create_user") as mock_create:
-                                response = asyncio.run(google_callback(request))
+                        with patch("blueprints.auth.create_user") as mock_create:
+                            response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "http://frontend/login")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         mock_create.assert_not_called()
         self.assertNotIn("user_id", request.session)
 

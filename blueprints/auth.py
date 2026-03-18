@@ -124,9 +124,51 @@ def _google_login_unavailable_response() -> Any:
     return jsonify({"error": GOOGLE_LOGIN_UNAVAILABLE_ERROR}, status_code=503)
 
 
-def _redirect_to_login_after_google_failure(session: dict[str, Any]) -> RedirectResponse:
+def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | None:
+    parts = urlsplit(reference_url)
+    if not parts.scheme or not parts.netloc:
+        return None
+
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return urlunsplit((parts.scheme, parts.netloc, normalized_path, "", ""))
+
+
+def _google_callback_redirect_target(
+    request: Request,
+    path: str,
+    *,
+    redirect_uri: str | None = None,
+) -> str:
+    session_redirect_uri = request.session.get("google_redirect_uri")
+    configured_redirect_uri = (os.getenv("GOOGLE_REDIRECT_URI") or "").strip()
+    references: tuple[str | None, ...] = (
+        redirect_uri,
+        session_redirect_uri if isinstance(session_redirect_uri, str) else None,
+        configured_redirect_uri or None,
+        str(request.url),
+    )
+    for reference in references:
+        if not isinstance(reference, str) or not reference:
+            continue
+        target = _build_absolute_url_from_reference(reference, path)
+        if target:
+            return target
+    return frontend_url(path)
+
+
+def _redirect_to_login_after_google_failure(
+    request: Request,
+    session: dict[str, Any],
+    *,
+    redirect_uri: str | None = None,
+) -> RedirectResponse:
+    target_url = _google_callback_redirect_target(
+        request,
+        "/login",
+        redirect_uri=redirect_uri,
+    )
     _clear_google_oauth_session(session)
-    return RedirectResponse(frontend_login_url(), status_code=302)
+    return RedirectResponse(target_url, status_code=302)
 
 
 def _build_google_authorization_response(request: Request, redirect_uri: str) -> str:
@@ -287,10 +329,10 @@ async def google_login(request: Request):
 async def google_callback(request: Request):
     session = request.session
     if Flow is None:
-        return _redirect_to_login_after_google_failure(session)
+        return _redirect_to_login_after_google_failure(request, session)
     state = session.get("google_oauth_state")
     if not state:
-        return _redirect_to_login_after_google_failure(session)
+        return _redirect_to_login_after_google_failure(request, session)
     redirect_uri = session.get("google_redirect_uri") or os.getenv(
         "GOOGLE_REDIRECT_URI"
     )
@@ -303,7 +345,21 @@ async def google_callback(request: Request):
             "Google OAuth callback aborted due to configuration error: %s",
             settings_error,
         )
-        return _redirect_to_login_after_google_failure(session)
+        return _redirect_to_login_after_google_failure(
+            request,
+            session,
+            redirect_uri=redirect_uri,
+        )
+    login_redirect_url = _google_callback_redirect_target(
+        request,
+        "/login",
+        redirect_uri=redirect_uri,
+    )
+    success_redirect_url = _google_callback_redirect_target(
+        request,
+        "/",
+        redirect_uri=redirect_uri,
+    )
     client_config["web"]["redirect_uris"] = [redirect_uri]
     try:
         flow = Flow.from_client_config(
@@ -319,7 +375,11 @@ async def google_callback(request: Request):
         ValueError,
     ):
         logger.exception("Failed to initialize Google OAuth callback flow.")
-        return _redirect_to_login_after_google_failure(session)
+        return _redirect_to_login_after_google_failure(
+            request,
+            session,
+            redirect_uri=redirect_uri,
+        )
     # コールバックURLから認可コードを交換し、アクセストークンを取得する
     # Exchange callback authorization response for access token.
     authorization_response = _build_google_authorization_response(request, redirect_uri)
@@ -332,7 +392,7 @@ async def google_callback(request: Request):
         ValueError,
     ):
         logger.exception("Google OAuth token exchange failed.")
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return RedirectResponse(login_redirect_url, status_code=302)
     finally:
         _clear_google_oauth_session(session)
 
@@ -340,20 +400,20 @@ async def google_callback(request: Request):
     access_token = getattr(credentials, "token", "")
     if not isinstance(access_token, str) or not access_token:
         logger.error("Google OAuth callback completed without an access token.")
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return RedirectResponse(login_redirect_url, status_code=302)
 
     try:
         user_info = await run_blocking(_fetch_google_user_info, access_token)
     except requests.RequestException:
         logger.exception("Failed to fetch Google user info.")
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return RedirectResponse(login_redirect_url, status_code=302)
     email = _clean_google_field(user_info, "email")
     google_user_id = _clean_google_field(user_info, "id")
     display_name = _clean_google_field(user_info, "name")
     picture = _clean_google_field(user_info, "picture")
     verified_email = bool(user_info.get("verified_email"))
     if not email or not google_user_id or not verified_email:
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return RedirectResponse(login_redirect_url, status_code=302)
 
     # ユーザー検索・作成（クリティカル：失敗時はログインを中断する）
     # User lookup / creation — abort login on failure.
@@ -373,7 +433,7 @@ async def google_callback(request: Request):
                         "Google OAuth callback: conflicting google_user_id for email %s",
                         email,
                     )
-                    return RedirectResponse(frontend_login_url(), status_code=302)
+                    return RedirectResponse(login_redirect_url, status_code=302)
                 user_id = user["id"]
                 await run_blocking(link_google_account, user_id, google_user_id, email)
                 should_mark_verified = not user.get("is_verified")
@@ -395,10 +455,10 @@ async def google_callback(request: Request):
                         "Google OAuth callback: user creation returned no id for email %s",
                         email,
                     )
-                    return RedirectResponse(frontend_login_url(), status_code=302)
+                    return RedirectResponse(login_redirect_url, status_code=302)
     except Exception:
         logger.exception("Google OAuth callback: unexpected error during user lookup/creation.")
-        return RedirectResponse(frontend_login_url(), status_code=302)
+        return RedirectResponse(login_redirect_url, status_code=302)
 
     # セッション確立（最優先：以降の補助処理が失敗してもログインは成立させる）
     # Establish session first — non-critical helpers must not block login.
@@ -436,7 +496,7 @@ async def google_callback(request: Request):
     except Exception:
         logger.exception("Google OAuth callback: failed to refresh email for user %s", user_id)
 
-    return RedirectResponse(frontend_url("/"), status_code=302)
+    return RedirectResponse(success_redirect_url, status_code=302)
 
 @auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")
 async def api_send_login_code(request: Request):
