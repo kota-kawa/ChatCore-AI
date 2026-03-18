@@ -3,6 +3,8 @@ import os
 
 logger = logging.getLogger(__name__)
 
+VALID_SESSION_SAMESITE_VALUES = {"lax", "strict", "none"}
+
 
 def get_runtime_env() -> str:
     # 新環境変数を優先しつつ、旧変数も後方互換として受け付ける
@@ -52,3 +54,27 @@ def get_session_secret_key() -> str | None:
         return legacy_secret
 
     return None
+
+
+def get_session_same_site() -> str:
+    # 本番では OAuth 戻りの互換性を優先して None を既定にし、
+    # 明示設定時は妥当な SameSite 値のみ受け付ける。
+    # Default to None in production for OAuth compatibility, while validating overrides.
+    configured = (os.getenv("FASTAPI_SESSION_SAMESITE") or "").strip().lower()
+    if not configured:
+        return "none" if is_production_env() else "lax"
+
+    if configured not in VALID_SESSION_SAMESITE_VALUES:
+        logger.warning(
+            "Invalid FASTAPI_SESSION_SAMESITE=%r. Falling back to the environment default.",
+            configured,
+        )
+        return "none" if is_production_env() else "lax"
+
+    if configured == "none" and not is_production_env():
+        logger.warning(
+            "FASTAPI_SESSION_SAMESITE=none requires HTTPS. Falling back to 'lax' outside production."
+        )
+        return "lax"
+
+    return configured

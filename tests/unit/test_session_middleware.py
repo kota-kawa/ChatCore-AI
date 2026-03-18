@@ -180,6 +180,39 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertEqual(payload["backend"], COOKIE_BACKEND)
         self.assertEqual(payload["data"]["foo"], "bar")
 
+    def test_session_cookie_can_use_samesite_none_with_secure(self):
+        async def app(scope, receive, send):
+            scope["session"]["foo"] = "bar"
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        with patch("services.session_middleware.get_redis_client", return_value=None):
+            middleware = PermanentSessionMiddleware(
+                app,
+                secret_key="secret",
+                max_age=60,
+                same_site="none",
+                https_only=True,
+            )
+            messages = []
+
+            async def send(message):
+                messages.append(message)
+
+            asyncio.run(middleware(make_scope(), receive, send))
+
+        header_values = [
+            value.decode("latin-1")
+            for message in messages
+            if message["type"] == "http.response.start"
+            for key, value in message["headers"]
+            if key.lower() == b"set-cookie"
+        ]
+        self.assertEqual(len(header_values), 1)
+        cookie_header = header_values[0].lower()
+        self.assertIn("samesite=none", cookie_header)
+        self.assertIn("secure", cookie_header)
+
 
 if __name__ == "__main__":
     unittest.main()

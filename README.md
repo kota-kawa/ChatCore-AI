@@ -183,6 +183,7 @@ Use BEM-style `kebab-case` class names and document purpose/dependencies at the 
 
 ## Production Notes
 - Set `FASTAPI_ENV=production` to enable secure cookie settings.
+- Google OAuth compatibility relies on `SameSite=None; Secure` session cookies in production. Override with `FASTAPI_SESSION_SAMESITE` only when your deployment topology requires it.
 - `GET /healthz` returns process liveness; `GET /readyz` checks DB readiness and reports Redis as optional/degraded when unavailable.
 - Logs default to structured JSON and include `X-Request-ID` correlation IDs.
 - Sessions prefer Redis when configured and automatically fall back to signed cookies when Redis is unavailable.

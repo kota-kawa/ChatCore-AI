@@ -16,7 +16,11 @@ from services.health import get_liveness_status, get_readiness_status
 from services.logging_config import configure_logging
 from services.csrf import get_or_create_csrf_token
 from services.request_context import RequestContextMiddleware
-from services.runtime_config import get_session_secret_key, is_production_env
+from services.runtime_config import (
+    get_session_same_site,
+    get_session_secret_key,
+    is_production_env,
+)
 from services.session_middleware import PermanentSessionMiddleware
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify
 
@@ -39,9 +43,9 @@ if not secret_key:
     )
 permanent_max_age = int(timedelta(days=30).total_seconds())
 
-# SameSite は原則 Lax を採用し、HTTPS の時のみ Secure を有効化する
-# Prefer SameSite=Lax by default and toggle Secure only for HTTPS environments.
-same_site = "lax"
+# SameSite は環境に応じて切り替え、HTTPS の時のみ Secure を有効化する
+# Select SameSite by runtime environment and enable Secure only on HTTPS deployments.
+same_site = get_session_same_site()
 https_only = is_production_env()
 
 
