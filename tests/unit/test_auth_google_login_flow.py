@@ -43,6 +43,20 @@ def make_google_login_request():
     return build_request(method="GET", path="/google-login", session={})
 
 
+def valid_google_client_config():
+    return {
+        "web": {
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": [],
+            "javascript_origins": ["https://chatcore-ai.com"],
+        }
+    }
+
+
 class GoogleLoginFlowTestCase(unittest.TestCase):
     def test_google_login_returns_503_when_dependency_is_missing(self):
         request = make_google_login_request()
@@ -105,17 +119,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
-                return_value={
-                    "web": {
-                        "client_id": "client-id",
-                        "client_secret": "client-secret",
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                        "redirect_uris": [],
-                        "javascript_origins": ["https://chatcore-ai.com"],
-                    }
-                },
+                side_effect=valid_google_client_config,
             ):
                 with patch(
                     "blueprints.auth.url_for",
@@ -135,12 +139,16 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class.from_client_config.return_value = fake_flow
 
         with patch("blueprints.auth.Flow", fake_flow_class):
-            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                with patch(
-                    "blueprints.auth.frontend_login_url",
-                    return_value="http://frontend/login",
-                ):
-                    response = asyncio.run(google_callback(request))
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth.frontend_login_url",
+                        return_value="http://frontend/login",
+                    ):
+                        response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "http://frontend/login")
@@ -154,16 +162,20 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class.from_client_config.return_value = fake_flow
 
         with patch("blueprints.auth.Flow", fake_flow_class):
-            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                with patch(
-                    "blueprints.auth._fetch_google_user_info",
-                    side_effect=requests.RequestException("provider down"),
-                ):
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
                     with patch(
-                        "blueprints.auth.frontend_login_url",
-                        return_value="http://frontend/login",
+                        "blueprints.auth._fetch_google_user_info",
+                        side_effect=requests.RequestException("provider down"),
                     ):
-                        response = asyncio.run(google_callback(request))
+                        with patch(
+                            "blueprints.auth.frontend_login_url",
+                            return_value="http://frontend/login",
+                        ):
+                            response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "http://frontend/login")
@@ -176,42 +188,46 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class.from_client_config.return_value = fake_flow
 
         with patch("blueprints.auth.Flow", fake_flow_class):
-            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                with patch(
-                    "blueprints.auth._fetch_google_user_info",
-                    return_value={
-                        "id": "google-user-123",
-                        "email": "user@example.com",
-                        "verified_email": True,
-                        "name": "Alice Example",
-                        "picture": "https://example.com/alice.png",
-                    },
-                ):
-                    with patch("blueprints.auth.get_user_by_google_id", return_value=None):
-                        with patch("blueprints.auth.get_user_by_email", return_value=None):
-                            with patch("blueprints.auth.create_user", return_value=42) as mock_create:
-                                with patch("blueprints.auth.link_google_account") as mock_link:
-                                    with patch(
-                                        "blueprints.auth.update_user_profile_from_google_if_unset"
-                                    ) as mock_profile_sync:
-                                        with patch("blueprints.auth.set_user_verified") as mock_verify:
-                                            with patch(
-                                                "blueprints.auth.copy_default_tasks_for_user"
-                                            ) as mock_copy_tasks:
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth._fetch_google_user_info",
+                        return_value={
+                            "id": "google-user-123",
+                            "email": "user@example.com",
+                            "verified_email": True,
+                            "name": "Alice Example",
+                            "picture": "https://example.com/alice.png",
+                        },
+                    ):
+                        with patch("blueprints.auth.get_user_by_google_id", return_value=None):
+                            with patch("blueprints.auth.get_user_by_email", return_value=None):
+                                with patch("blueprints.auth.create_user", return_value=42) as mock_create:
+                                    with patch("blueprints.auth.link_google_account") as mock_link:
+                                        with patch(
+                                            "blueprints.auth.update_user_profile_from_google_if_unset"
+                                        ) as mock_profile_sync:
+                                            with patch("blueprints.auth.set_user_verified") as mock_verify:
                                                 with patch(
-                                                    "blueprints.auth.get_user_by_id",
-                                                    return_value={
-                                                        "id": 42,
-                                                        "email": "user@example.com",
-                                                    },
-                                                ):
+                                                    "blueprints.auth.copy_default_tasks_for_user"
+                                                ) as mock_copy_tasks:
                                                     with patch(
-                                                        "blueprints.auth.frontend_url",
-                                                        return_value="http://frontend/",
+                                                        "blueprints.auth.get_user_by_id",
+                                                        return_value={
+                                                            "id": 42,
+                                                            "email": "user@example.com",
+                                                        },
                                                     ):
-                                                        response = asyncio.run(
-                                                            google_callback(request)
-                                                        )
+                                                        with patch(
+                                                            "blueprints.auth.frontend_url",
+                                                            return_value="http://frontend/",
+                                                        ):
+                                                            response = asyncio.run(
+                                                                google_callback(request)
+                                                            )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "http://frontend/")
@@ -256,47 +272,51 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         }
 
         with patch("blueprints.auth.Flow", fake_flow_class):
-            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                with patch(
-                    "blueprints.auth._fetch_google_user_info",
-                    return_value={
-                        "id": "google-user-123",
-                        "email": "user@example.com",
-                        "verified_email": True,
-                        "name": "Alice Example",
-                        "picture": "https://example.com/alice.png",
-                    },
-                ):
-                    with patch("blueprints.auth.get_user_by_google_id", return_value=None):
-                        with patch(
-                            "blueprints.auth.get_user_by_email",
-                            return_value=existing_user,
-                        ):
-                            with patch("blueprints.auth.create_user") as mock_create:
-                                with patch("blueprints.auth.link_google_account") as mock_link:
-                                    with patch(
-                                        "blueprints.auth.update_user_profile_from_google_if_unset"
-                                    ) as mock_profile_sync:
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth._fetch_google_user_info",
+                        return_value={
+                            "id": "google-user-123",
+                            "email": "user@example.com",
+                            "verified_email": True,
+                            "name": "Alice Example",
+                            "picture": "https://example.com/alice.png",
+                        },
+                    ):
+                        with patch("blueprints.auth.get_user_by_google_id", return_value=None):
+                            with patch(
+                                "blueprints.auth.get_user_by_email",
+                                return_value=existing_user,
+                            ):
+                                with patch("blueprints.auth.create_user") as mock_create:
+                                    with patch("blueprints.auth.link_google_account") as mock_link:
                                         with patch(
-                                            "blueprints.auth.set_user_verified"
-                                        ) as mock_verify:
+                                            "blueprints.auth.update_user_profile_from_google_if_unset"
+                                        ) as mock_profile_sync:
                                             with patch(
-                                                "blueprints.auth.copy_default_tasks_for_user"
-                                            ) as mock_copy_tasks:
+                                                "blueprints.auth.set_user_verified"
+                                            ) as mock_verify:
                                                 with patch(
-                                                    "blueprints.auth.get_user_by_id",
-                                                    return_value={
-                                                        "id": 7,
-                                                        "email": "user@example.com",
-                                                    },
-                                                ):
+                                                    "blueprints.auth.copy_default_tasks_for_user"
+                                                ) as mock_copy_tasks:
                                                     with patch(
-                                                        "blueprints.auth.frontend_url",
-                                                        return_value="http://frontend/",
+                                                        "blueprints.auth.get_user_by_id",
+                                                        return_value={
+                                                            "id": 7,
+                                                            "email": "user@example.com",
+                                                        },
                                                     ):
-                                                        response = asyncio.run(
-                                                            google_callback(request)
-                                                        )
+                                                        with patch(
+                                                            "blueprints.auth.frontend_url",
+                                                            return_value="http://frontend/",
+                                                        ):
+                                                            response = asyncio.run(
+                                                                google_callback(request)
+                                                            )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(request.session["user_id"], 7)
@@ -317,21 +337,25 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class.from_client_config.return_value = fake_flow
 
         with patch("blueprints.auth.Flow", fake_flow_class):
-            with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
-                with patch(
-                    "blueprints.auth._fetch_google_user_info",
-                    return_value={
-                        "id": "google-user-123",
-                        "email": "user@example.com",
-                        "verified_email": False,
-                    },
-                ):
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
                     with patch(
-                        "blueprints.auth.frontend_login_url",
-                        return_value="http://frontend/login",
+                        "blueprints.auth._fetch_google_user_info",
+                        return_value={
+                            "id": "google-user-123",
+                            "email": "user@example.com",
+                            "verified_email": False,
+                        },
                     ):
-                        with patch("blueprints.auth.create_user") as mock_create:
-                            response = asyncio.run(google_callback(request))
+                        with patch(
+                            "blueprints.auth.frontend_login_url",
+                            return_value="http://frontend/login",
+                        ):
+                            with patch("blueprints.auth.create_user") as mock_create:
+                                response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "http://frontend/login")
