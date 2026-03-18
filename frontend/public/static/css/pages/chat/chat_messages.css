@@ -28,7 +28,6 @@ chat-action-menu {
   gap: 0.25rem;
   min-width: 0;
   min-height: 0;
-  scroll-behavior: smooth;
 }
 
 /* スクロールバーを上品に */
@@ -537,6 +536,47 @@ chat-action-menu {
   }
 }
 
+/* Scroll to bottom ボタン (ストリーミング中にユーザーが上へスクロールした時に表示) */
+.scroll-to-bottom-btn {
+  position: absolute;
+  bottom: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-secondary, #6b7280);
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(8px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+  opacity: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  color: var(--text-dark, #1a1a1a);
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.16);
+}
+
+.scroll-to-bottom-btn--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(8px);
+}
+
 /* ─── タブレット (≤960px) ─── */
 @media (max-width: 960px) {
   .chat-messages {
@@ -690,6 +730,10 @@ chat-action-menu {
 
   .bot-message {
     padding-right: 2rem;
+  }
+
+  .scroll-to-bottom-btn {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   /* Thinking message */

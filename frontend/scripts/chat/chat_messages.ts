@@ -146,6 +146,39 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   let isCompleted = false;
   let isFinalized = false;
 
+  // Scroll-to-bottom ボタン (ユーザーが上へスクロールした時に表示)
+  let scrollToBottomBtn: HTMLButtonElement | null = null;
+  const chatArea = scrollContainer.closest(".chat-area");
+  if (chatArea) {
+    chatArea.querySelector(".scroll-to-bottom-btn")?.remove();
+    scrollToBottomBtn = document.createElement("button");
+    scrollToBottomBtn.type = "button";
+    scrollToBottomBtn.className = "scroll-to-bottom-btn scroll-to-bottom-btn--hidden";
+    scrollToBottomBtn.setAttribute("aria-label", "最下部へスクロール");
+    scrollToBottomBtn.innerHTML = '<i class="bi bi-chevron-down"></i>';
+    chatArea.appendChild(scrollToBottomBtn);
+
+    scrollToBottomBtn.addEventListener("click", () => {
+      shouldStickToBottom = true;
+      isProgrammaticScroll = true;
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      isProgrammaticScroll = false;
+      updateScrollToBottomVisibility();
+    });
+  }
+
+  const updateScrollToBottomVisibility = () => {
+    if (!scrollToBottomBtn) return;
+    if (shouldStickToBottom) {
+      scrollToBottomBtn.classList.add("scroll-to-bottom-btn--hidden");
+    } else {
+      scrollToBottomBtn.classList.remove("scroll-to-bottom-btn--hidden");
+    }
+  };
+
+  // 初期状態: ボトムにいなければボタンを表示
+  if (!shouldStickToBottom) updateScrollToBottomVisibility();
+
   const markdownRefreshCharInterval = 30;
   const markdownRefreshMaxDelayMs = 120;
   const minTypingCharsPerMs = 0.016;
@@ -157,17 +190,17 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   const handleScroll = () => {
     if (isProgrammaticScroll) return;
     shouldStickToBottom = getShouldStickToBottom(scrollContainer);
+    updateScrollToBottomVisibility();
   };
 
   scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
 
-  const scrollStreamingViewport = (force = false) => {
-    if (!force && !shouldStickToBottom) return;
+  const scrollStreamingViewport = () => {
+    if (!shouldStickToBottom) return;
 
     isProgrammaticScroll = true;
     scrollContainer.scrollTop = scrollContainer.scrollHeight;
     isProgrammaticScroll = false;
-    shouldStickToBottom = true;
   };
 
   const refreshStreamingMarkdown = (force = false) => {
@@ -242,7 +275,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     const refreshedMarkdown = refreshStreamingMarkdown(forceMarkdown);
     streamTail.textContent = displayedRaw.slice(formattedRaw.length);
     msg.dataset.fullText = displayedRaw;
-    scrollStreamingViewport(refreshedMarkdown);
+    scrollStreamingViewport();
     return remainingChars;
   };
 
@@ -250,6 +283,8 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     if (isFinalized) return;
     isFinalized = true;
     scrollContainer.removeEventListener("scroll", handleScroll);
+    scrollToBottomBtn?.remove();
+    scrollToBottomBtn = null;
 
     if (animationFrameId !== null) {
       window.cancelAnimationFrame(animationFrameId);
