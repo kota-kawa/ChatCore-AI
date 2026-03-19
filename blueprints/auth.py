@@ -228,7 +228,10 @@ def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
         timeout=10,
     )
     response.raise_for_status()
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as e:
+        raise requests.RequestException(f"Invalid JSON response: {e}") from e
 
 
 def _clean_google_field(user_info: dict[str, Any], key: str) -> str:
@@ -395,9 +398,12 @@ async def google_callback(request: Request):
         ValueError,
     ):
         logger.exception("Google OAuth token exchange failed.")
-        return RedirectResponse(login_redirect_url, status_code=302)
-    finally:
         _clear_google_oauth_session(session)
+        return RedirectResponse(login_redirect_url, status_code=302)
+
+    # トークン交換成功後にOAuthセッションをクリアする
+    # Clear OAuth session after successful token exchange.
+    _clear_google_oauth_session(session)
 
     credentials = flow.credentials
     access_token = getattr(credentials, "token", "")
