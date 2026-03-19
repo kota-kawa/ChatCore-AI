@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from dotenv import load_dotenv
@@ -131,6 +131,21 @@ def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | N
 
     normalized_path = path if path.startswith("/") else f"/{path}"
     return urlunsplit((parts.scheme, parts.netloc, normalized_path, "", ""))
+
+
+def _append_query_params(url: str, **params: str) -> str:
+    parts = urlsplit(url)
+    existing_params = dict(parse_qsl(parts.query, keep_blank_values=True))
+    existing_params.update(params)
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(existing_params),
+            parts.fragment,
+        )
+    )
 
 
 def _google_callback_redirect_target(
@@ -327,6 +342,12 @@ async def google_login(request: Request):
         return _google_login_unavailable_response()
     request.session["google_oauth_state"] = state
     request.session["google_redirect_uri"] = redirect_uri
+    logger.info(
+        "Google OAuth login started. State: %s, Redirect URI: %s, Session ID: %s",
+        state[:16] + "..." if state else "None",
+        redirect_uri,
+        request.scope.get("session_id", "unknown"),
+    )
     return RedirectResponse(authorization_url, status_code=302)
 
 
@@ -335,9 +356,29 @@ async def google_callback(request: Request):
     session = request.session
     if Flow is None:
         return _redirect_to_login_after_google_failure(request, session)
+    # Google 側でエラーが発生した場合（ユーザーがキャンセルした等）を先に処理
+    # Handle Google-side errors first (e.g., user cancelled authorization).
+    google_error = request.query_params.get("error")
+    if google_error:
+        logger.warning(
+            "Google OAuth callback: authorization error from Google: %s",
+            google_error,
+        )
+        return _redirect_to_login_after_google_failure(request, session)
     state = session.get("google_oauth_state")
+    logger.info(
+        "Google OAuth callback received. Session ID: %s, Has state: %s, Session keys: %s",
+        request.scope.get("session_id", "unknown"),
+        bool(state),
+        list(session.keys()),
+    )
     if not state:
-        logger.warning("Google OAuth callback: session state missing.")
+        logger.warning(
+            "Google OAuth callback: session state missing. "
+            "Session keys: %s, Request host: %s",
+            list(session.keys()),
+            request.headers.get("host"),
+        )
         return _redirect_to_login_after_google_failure(request, session)
     redirect_uri = session.get("google_redirect_uri") or os.getenv(
         "GOOGLE_REDIRECT_URI"
@@ -516,7 +557,10 @@ async def google_callback(request: Request):
     except Exception:
         logger.exception("Google OAuth callback: failed to refresh email for user %s", user_id)
 
-    return RedirectResponse(success_redirect_url, status_code=302)
+    return RedirectResponse(
+        _append_query_params(success_redirect_url, auth="success"),
+        status_code=302,
+    )
 
 @auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")
 async def api_send_login_code(request: Request):

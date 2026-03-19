@@ -255,7 +255,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                             )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/?auth=success")
         mock_frontend_url.assert_not_called()
         self.assertEqual(request.session["user_id"], 42)
         self.assertEqual(request.session["user_email"], "user@example.com")
@@ -341,7 +341,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/")
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/?auth=success")
         self.assertEqual(request.session["user_id"], 7)
         mock_create.assert_not_called()
         mock_link.assert_called_once_with(7, "google-user-123", "user@example.com")

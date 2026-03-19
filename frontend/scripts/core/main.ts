@@ -21,6 +21,8 @@
 const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
 const AUTH_STATE_CACHE_AT_KEY = "chatcore.auth.cachedAt";
 const AUTH_STATE_CACHE_TTL_MS = 30_000;
+const AUTH_SUCCESS_QUERY_PARAM = "auth";
+const AUTH_SUCCESS_QUERY_VALUE = "success";
 
 function readCachedAuthState() {
   try {
@@ -61,6 +63,20 @@ function notifyAuthState(loggedIn: boolean) {
       detail: { loggedIn }
     })
   );
+}
+
+function consumeAuthSuccessHint() {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get(AUTH_SUCCESS_QUERY_PARAM) !== AUTH_SUCCESS_QUERY_VALUE) {
+    return false;
+  }
+
+  writeCachedAuthState(true);
+  url.searchParams.delete(AUTH_SUCCESS_QUERY_PARAM);
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, document.title, nextUrl || "/");
+  return true;
 }
 
 function initApp() {
@@ -118,6 +134,13 @@ function initApp() {
     }
   };
 
+  const refreshTasksForAuthStateChange = () => {
+    if (window.invalidateTasksCache) window.invalidateTasksCache();
+    if (window.loadTaskCards) window.loadTaskCards({ forceRefresh: true });
+  };
+
+  consumeAuthSuccessHint();
+
   // 前回の認証状態を先に反映し、初期表示のポップインを抑える
   const cachedAuthState = readCachedAuthState();
   if (cachedAuthState !== null) {
@@ -125,22 +148,28 @@ function initApp() {
     applyAuthUI(cachedAuthState);
   }
 
-  // ▼ログイン状態確認とUI制御（短時間はキャッシュを優先）
-  if (!isCachedAuthStateFresh()) {
-    fetch("/api/current_user")
-      .then((res) => res.json())
-      .then((data) => {
-        const loggedIn = Boolean(data.logged_in);
-        writeCachedAuthState(loggedIn);
-        notifyAuthState(loggedIn);
-        applyAuthUI(loggedIn);
-      })
-      .catch((err) => {
-        console.error("Error checking login status:", err);
+  // ▼ログイン状態確認とUI制御
+  const canFallBackToCachedState = isCachedAuthStateFresh() && cachedAuthState !== null;
+  fetch("/api/current_user", { credentials: "same-origin" })
+    .then((res) => res.json())
+    .then((data) => {
+      const previousLoggedIn = Boolean(window.loggedIn);
+      const loggedIn = Boolean(data.logged_in);
+      writeCachedAuthState(loggedIn);
+      notifyAuthState(loggedIn);
+      applyAuthUI(loggedIn);
+
+      if (loggedIn !== previousLoggedIn) {
+        refreshTasksForAuthStateChange();
+      }
+    })
+    .catch((err) => {
+      console.error("Error checking login status:", err);
+      if (!canFallBackToCachedState) {
         notifyAuthState(false);
         applyAuthUI(false);
-      });
-  }
+      }
+    });
 
   // ▼ローカルに保存されていれば現在のチャットルームを復元
   if (localStorage.getItem("currentChatRoomId")) {
