@@ -47,7 +47,14 @@ def _fetch_saved_prompts(user_id: int) -> list[dict[str, Any]]:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT id, name, prompt_template, input_examples, output_examples, created_at
+            SELECT id,
+                   name,
+                   prompt_template,
+                   response_rules,
+                   output_skeleton,
+                   input_examples,
+                   output_examples,
+                   created_at
             FROM task_with_examples
             WHERE user_id = %s
             ORDER BY created_at DESC, id DESC

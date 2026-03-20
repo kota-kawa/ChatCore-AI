@@ -44,9 +44,18 @@ const initTaskManager = () => {
   saveBtn.addEventListener("click", () => {
     const taskNameEl = document.getElementById("taskName") as HTMLInputElement | null;
     const promptTemplateEl = document.getElementById("promptTemplate") as HTMLTextAreaElement | null;
+    const responseRulesEl = document.getElementById("responseRules") as HTMLTextAreaElement | null;
+    const outputSkeletonEl = document.getElementById("outputSkeleton") as HTMLTextAreaElement | null;
     const inputExamplesEl = document.getElementById("inputExamples") as HTMLTextAreaElement | null;
     const outputExamplesEl = document.getElementById("outputExamples") as HTMLTextAreaElement | null;
-    if (!taskNameEl || !promptTemplateEl || !inputExamplesEl || !outputExamplesEl) {
+    if (
+      !taskNameEl ||
+      !promptTemplateEl ||
+      !responseRulesEl ||
+      !outputSkeletonEl ||
+      !inputExamplesEl ||
+      !outputExamplesEl
+    ) {
       alert("入力欄が見つかりませんでした。");
       return;
     }
@@ -54,6 +63,8 @@ const initTaskManager = () => {
     // 1. モーダル内の入力値取得
     const taskName = taskNameEl.value.trim();
     const promptTemplate = promptTemplateEl.value.trim();
+    const responseRules = responseRulesEl.value.trim();
+    const outputSkeleton = outputSkeletonEl.value.trim();
     const inputExamples = inputExamplesEl.value.trim();
     const outputExamples = outputExamplesEl.value.trim();
 
@@ -74,6 +85,8 @@ const initTaskManager = () => {
       old_task: oldTask,
       new_task: taskName,
       prompt_template: promptTemplate,
+      response_rules: responseRules,
+      output_skeleton: outputSkeleton,
       input_examples: inputExamples,
       output_examples: outputExamples
     };
@@ -106,6 +119,8 @@ const initTaskManager = () => {
         const card = editingCard;
         card.dataset.task = taskName;
         card.dataset.prompt_template = promptTemplate;
+        card.dataset.response_rules = responseRules;
+        card.dataset.output_skeleton = outputSkeleton;
         card.dataset.input_examples = inputExamples;
         card.dataset.output_examples = outputExamples;
         if (window.invalidateTasksCache) window.invalidateTasksCache();
@@ -320,10 +335,14 @@ function toggleTaskOrderEditing() {
         window.currentEditingCard = targetCard;
         const taskNameEl = document.getElementById("taskName") as HTMLInputElement | null;
         const promptTemplateEl = document.getElementById("promptTemplate") as HTMLTextAreaElement | null;
+        const responseRulesEl = document.getElementById("responseRules") as HTMLTextAreaElement | null;
+        const outputSkeletonEl = document.getElementById("outputSkeleton") as HTMLTextAreaElement | null;
         const inputExamplesEl = document.getElementById("inputExamples") as HTMLTextAreaElement | null;
         const outputExamplesEl = document.getElementById("outputExamples") as HTMLTextAreaElement | null;
         if (taskNameEl) taskNameEl.value = targetCard.getAttribute("data-task") || "";
         if (promptTemplateEl) promptTemplateEl.value = targetCard.getAttribute("data-prompt_template") || "";
+        if (responseRulesEl) responseRulesEl.value = targetCard.getAttribute("data-response_rules") || "";
+        if (outputSkeletonEl) outputSkeletonEl.value = targetCard.getAttribute("data-output_skeleton") || "";
         if (inputExamplesEl) inputExamplesEl.value = targetCard.getAttribute("data-input_examples") || "";
         if (outputExamplesEl) outputExamplesEl.value = targetCard.getAttribute("data-output_examples") || "";
 

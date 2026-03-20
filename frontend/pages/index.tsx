@@ -5,6 +5,8 @@ import defaultTasks from "../data/default_tasks.json";
 type DefaultTask = {
   name?: string;
   prompt_template?: string;
+  response_rules?: string;
+  output_skeleton?: string;
   input_examples?: string;
   output_examples?: string;
 };
@@ -30,14 +32,18 @@ function createInitialTaskCardsMarkup(tasks: DefaultTask[]) {
             : "無題";
       const taskHeader = taskName;
       const promptTemplate = task.prompt_template || "プロンプトテンプレートはありません";
-      const inputExamples = task.input_examples || "入力例がありません";
-      const outputExamples = task.output_examples || "出力例がありません";
+      const responseRules = task.response_rules || "";
+      const outputSkeleton = task.output_skeleton || "";
+      const inputExamples = task.input_examples || "";
+      const outputExamples = task.output_examples || "";
 
       return `
         <div class="task-wrapper">
           <div class="prompt-card"
             data-task="${escapeHtml(taskName)}"
             data-prompt_template="${escapeHtml(promptTemplate)}"
+            data-response_rules="${escapeHtml(responseRules)}"
+            data-output_skeleton="${escapeHtml(outputSkeleton)}"
             data-input_examples="${escapeHtml(inputExamples)}"
             data-output_examples="${escapeHtml(outputExamples)}"
             data-is_default="true">
@@ -220,6 +226,18 @@ const bodyMarkup = `
               <textarea class="custom-form-control" id="promptTemplate" name="prompt_template" rows="2"
                 placeholder="例：メール本文の書き出し..."></textarea>
               <div class="custom-form-text">タスク実行時に使用するプロンプトテンプレートです。</div>
+            </div>
+            <div class="custom-form-group">
+              <label for="responseRules" class="custom-form-label"><span style="color: green;">回答ルール</span></label>
+              <textarea class="custom-form-control" id="responseRules" name="response_rules" rows="2"
+                placeholder="例：不足情報があれば先に確認する。結論から先に書く。"></textarea>
+              <div class="custom-form-text">回答時に優先させたいルールを任意で指定します。</div>
+            </div>
+            <div class="custom-form-group">
+              <label for="outputSkeleton" class="custom-form-label"><span style="color: green;">出力テンプレート</span></label>
+              <textarea class="custom-form-control" id="outputSkeleton" name="output_skeleton" rows="2"
+                placeholder="例：## 結論\n## 詳細\n## 次の一手"></textarea>
+              <div class="custom-form-text">回答の骨組みを任意で指定します。</div>
             </div>
             <!-- 入力例 -->
             <div class="custom-form-group">

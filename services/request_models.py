@@ -59,6 +59,8 @@ class EditTaskRequest(RequestPayloadModel):
     old_task: NonEmptyStr
     new_task: NonEmptyStr
     prompt_template: str | None = None
+    response_rules: str | None = None
+    output_skeleton: str | None = None
     input_examples: str | None = None
     output_examples: str | None = None
 
@@ -66,6 +68,8 @@ class EditTaskRequest(RequestPayloadModel):
 class AddTaskRequest(RequestPayloadModel):
     title: NonEmptyStr
     prompt_content: NonEmptyStr
+    response_rules: str = ""
+    output_skeleton: str = ""
     input_examples: str = ""
     output_examples: str = ""
 

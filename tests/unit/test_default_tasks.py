@@ -44,6 +44,8 @@ SAMPLE_TASKS = [
     {
         "name": "Task A",
         "prompt_template": "Prompt A",
+        "response_rules": "Rules A",
+        "output_skeleton": "Skeleton A",
         "input_examples": "Input A",
         "output_examples": "Output A",
         "display_order": 0,
@@ -51,6 +53,8 @@ SAMPLE_TASKS = [
     {
         "name": "Task B",
         "prompt_template": "Prompt B",
+        "response_rules": "Rules B",
+        "output_skeleton": "Skeleton B",
         "input_examples": "Input B",
         "output_examples": "Output B",
         "display_order": 1,
@@ -67,7 +71,12 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertEqual(len(payloads), 2)
         self.assertTrue(all(payload["is_default"] for payload in payloads))
         self.assertEqual(payloads[0]["name"], "Task A")
-        self.assertEqual(rows[0], ("Task A", "Prompt A", "Input A", "Output A", 0))
+        self.assertEqual(payloads[0]["response_rules"], "Rules A")
+        self.assertEqual(payloads[0]["output_skeleton"], "Skeleton A")
+        self.assertEqual(
+            rows[0],
+            ("Task A", "Prompt A", "Rules A", "Skeleton A", "Input A", "Output A", 0),
+        )
 
     def test_seed_inserts_missing_default_tasks(self):
         fake_cursor = FakeCursor(existing_names=[])

@@ -67,9 +67,10 @@ BASE_SYSTEM_PROMPT = """
    - 最初に簡潔な結論や要約を述べ、その後に詳細な説明を続ける構成にしてください。
    - 長い回答になる場合は、適宜「### 小見出し」を使って論点を整理してください。
 
-4. **few-shot例の扱い**:
-   - 「入力例:」と「出力例:」が提供されることがありますが、これらはあくまで参考です。
-   - ユーザーが【リクエスト】で求めている内容を最優先し、最新のコンテキストに合わせて最適な回答を提供してください。
+4. **タスク補助情報の扱い**:
+   - システムから「タスク指示」「回答ルール」「出力テンプレート」「参考例」が追加されることがあります。
+   - 参考例は構成や粒度の参考にとどめ、固有名詞・題材・結論をそのまま流用しないでください。
+   - ユーザー情報が不足している場合は、決め打ちせず必要な確認事項を簡潔に質問してください。
 
 回答は常に親切かつプロフェッショナルなトーンで、日本語で行ってください。
 """
@@ -108,25 +109,127 @@ def _build_llm_stream_response(
     )
 
 
-def _fetch_prompt_data(task: str) -> dict[str, Any] | None:
-    # タスク名に対応するプロンプトテンプレートとfew-shot例を取得する
-    # Fetch prompt template and few-shot examples for a given task name.
+def _parse_task_launch_message(message: str) -> dict[str, str] | None:
+    # 初回タスク起動メッセージからタスク名と状況情報を抽出する
+    # Extract task name and setup info from the initial task-launch payload.
+    if not message:
+        return None
+
+    task_match = re.search(r"^【タスク】(?P<task>[^\n]+)", message, re.MULTILINE)
+    if not task_match:
+        return None
+
+    setup_match = re.search(r"【状況・作業環境】(?P<setup>[\s\S]+)", message)
+    setup_info = setup_match.group("setup").strip() if setup_match else ""
+    return {
+        "task": task_match.group("task").strip(),
+        "setup_info": setup_info,
+    }
+
+
+def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+    # タスク名に対応するプロンプト定義を取得する
+    # Fetch prompt-template metadata for the selected task.
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        query = (
-            "SELECT prompt_template, input_examples, output_examples "
-            "FROM task_with_examples WHERE name = %s"
-        )
-        cursor.execute(query, (task,))
+        if user_id:
+            query = """
+                SELECT name,
+                       prompt_template,
+                       response_rules,
+                       output_skeleton,
+                       input_examples,
+                       output_examples
+                  FROM task_with_examples
+                 WHERE name = %s
+                   AND (user_id = %s OR user_id IS NULL)
+                 ORDER BY CASE WHEN user_id = %s THEN 0 ELSE 1 END, id
+                 LIMIT 1
+            """
+            cursor.execute(query, (task, user_id, user_id))
+        else:
+            query = """
+                SELECT name,
+                       prompt_template,
+                       response_rules,
+                       output_skeleton,
+                       input_examples,
+                       output_examples
+                  FROM task_with_examples
+                 WHERE name = %s
+                   AND user_id IS NULL
+                 ORDER BY id
+                 LIMIT 1
+            """
+            cursor.execute(query, (task,))
         return cursor.fetchone()
     finally:
         if cursor is not None:
             cursor.close()
         if conn is not None:
             conn.close()
+
+
+def _parse_example_list(examples: str | None) -> list[str]:
+    # JSON配列または単一文字列の両方に対応して例を配列化する
+    # Normalize example payloads into a list of strings.
+    if not examples:
+        return []
+
+    examples = examples.strip()
+    if not examples:
+        return []
+
+    if examples.startswith("["):
+        try:
+            loaded = json.loads(examples)
+        except Exception:
+            logger.warning("Failed to parse examples JSON; using raw text fallback.")
+            return [examples]
+        if isinstance(loaded, list):
+            return [str(item).strip() for item in loaded if str(item).strip()]
+
+    return [examples]
+
+
+def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
+    # タスク定義から system 用の追加指示を組み立てる
+    # Build a system prompt fragment from task metadata.
+    sections: list[str] = []
+
+    task_name = str(prompt_data.get("name", "")).strip()
+    prompt_template = str(prompt_data.get("prompt_template", "")).strip()
+    response_rules = str(prompt_data.get("response_rules", "")).strip()
+    output_skeleton = str(prompt_data.get("output_skeleton", "")).strip()
+
+    if task_name:
+        sections.append(f"選択されたタスク: {task_name}")
+    if prompt_template:
+        sections.append(f"タスク指示:\n{prompt_template}")
+    if response_rules:
+        sections.append(f"回答ルール:\n{response_rules}")
+    if output_skeleton:
+        sections.append(f"出力テンプレート:\n{output_skeleton}")
+
+    input_examples = _parse_example_list(prompt_data.get("input_examples"))
+    output_examples = _parse_example_list(prompt_data.get("output_examples"))
+    num_examples = min(len(input_examples), len(output_examples))
+    if num_examples > 0:
+        example_lines = [
+            "参考例（構成や粒度だけを参考にし、語句や題材を流用しないこと）:"
+        ]
+        for i in range(num_examples):
+            example_lines.append(f"入力例{i + 1}: {input_examples[i]}")
+            example_lines.append(f"出力例{i + 1}: {output_examples[i]}")
+        sections.append("\n".join(example_lines))
+
+    sections.append(
+        "不足情報がある場合は、もっとも重要な確認事項だけを短く尋ねてください。"
+    )
+    return "\n\n".join(section for section in sections if section)
 
 
 def _fetch_chat_history(chat_room_id: str) -> list[dict[str, str]]:
@@ -198,8 +301,6 @@ async def chat(request: Request):
         "content": BASE_SYSTEM_PROMPT,
     }
 
-    match = re.match(r"【状況・作業環境】(.+)\n【リクエスト】(.+)", user_message)
-
     sid = None
     user_id = session.get("user_id")
     if "user_id" in session:
@@ -235,58 +336,29 @@ async def chat(request: Request):
         )
         all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
 
-    extra_prompt = None
-    # 後段で条件付き few-shot を組み立てるための初期化
-    # Initialize holder for optional few-shot prompt data.
+    launch_request = _parse_task_launch_message(user_message)
     prompt_data = None
 
-    if match and len(all_messages) == 1:
-        task = match.group(2).strip()
-
-        # DBから指定タスクのプロンプトテンプレートと few-shot 例を取得する
-        # Load task-specific prompt template and few-shot examples from DB.
-        prompt_data = await run_blocking(_fetch_prompt_data, task)
+    if launch_request and len(all_messages) == 1:
+        # 初回タスク起動時のみ、選択タスクの定義を補助 system prompt として追加する
+        # Only the first task-launch message receives task metadata as extra system guidance.
+        prompt_data = await run_blocking(_fetch_prompt_data, launch_request["task"], user_id)
 
     conversation_messages = []
 
     if prompt_data:
-        input_examples_str = prompt_data.get("input_examples", "")
-        output_examples_str = prompt_data.get("output_examples", "")
-        extra_prompt = ""
-
-        def parse_examples(ex_str: str) -> list[str]:
-            if not ex_str:
-                return []
-            ex_str = ex_str.strip()
-            if ex_str.startswith("["):
-                try:
-                    return json.loads(ex_str)
-                except Exception:
-                    logger.warning("Failed to parse examples JSON; using raw text fallback.")
-                    return [ex_str]
-            else:
-                return [ex_str]
-
-        loaded_input_examples = parse_examples(input_examples_str)
-        loaded_output_examples = parse_examples(output_examples_str)
-
-        num_examples = min(len(loaded_input_examples), len(loaded_output_examples))
-        if num_examples > 0:
-            few_shot_text_lines = []
-            for i in range(num_examples):
-                inp_text = loaded_input_examples[i].strip()
-                out_text = loaded_output_examples[i].strip()
-                few_shot_text_lines.append("Q{}: {}\nA{}: {}".format(i+1, inp_text, i+1, out_text))
-            extra_prompt = "\n\n".join(few_shot_text_lines)
-
-        conversation_messages.append({
-            "role": "system",
-            "content": BASE_SYSTEM_PROMPT,
-        })
-        conversation_messages.append({
-            "role": "system",
-            "content": extra_prompt,
-        })
+        conversation_messages.append(
+            {
+                "role": "system",
+                "content": BASE_SYSTEM_PROMPT,
+            }
+        )
+        conversation_messages.append(
+            {
+                "role": "system",
+                "content": _build_task_prompt(prompt_data),
+            }
+        )
     else:
         conversation_messages.append(system_prompt)
 

@@ -38,6 +38,8 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
                 """
               SELECT name,
                      prompt_template,
+                     response_rules,
+                     output_skeleton,
                      input_examples,
                      output_examples,
                      FALSE AS is_default
@@ -53,6 +55,8 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
                 """
               SELECT name,
                      prompt_template,
+                     response_rules,
+                     output_skeleton,
                      input_examples,
                      output_examples,
                      TRUE AS is_default
@@ -118,6 +122,8 @@ def _edit_task_for_user(
     old_task: str,
     new_task: str,
     prompt_template: str | None,
+    response_rules: str | None,
+    output_skeleton: str | None,
     input_examples: str | None,
     output_examples: str | None,
 ) -> bool:
@@ -148,6 +154,8 @@ def _edit_task_for_user(
             UPDATE task_with_examples
                SET name            = %s,
                    prompt_template = %s,
+                   response_rules  = %s,
+                   output_skeleton = %s,
                    input_examples  = %s,
                    output_examples = %s
              WHERE name = %s
@@ -156,6 +164,8 @@ def _edit_task_for_user(
             (
                 new_task,
                 prompt_template,
+                response_rules,
+                output_skeleton,
                 input_examples,
                 output_examples,
                 old_task,
@@ -177,6 +187,8 @@ def _add_task_for_user(
     user_id: int,
     title: str,
     prompt_content: str,
+    response_rules: str,
+    output_skeleton: str,
     input_examples: str,
     output_examples: str,
 ) -> None:
@@ -189,11 +201,28 @@ def _add_task_for_user(
         cursor = conn.cursor()
         query = """
             INSERT INTO task_with_examples
-                  (name, prompt_template, input_examples, output_examples, user_id)
-            VALUES (%s,   %s,               %s,             %s,             %s)
+                  (
+                      name,
+                      prompt_template,
+                      response_rules,
+                      output_skeleton,
+                      input_examples,
+                      output_examples,
+                      user_id
+                  )
+            VALUES (%s,   %s,               %s,             %s,             %s,             %s,             %s)
         """
         cursor.execute(
-            query, (title, prompt_content, input_examples, output_examples, user_id)
+            query,
+            (
+                title,
+                prompt_content,
+                response_rules,
+                output_skeleton,
+                input_examples,
+                output_examples,
+                user_id,
+            ),
         )
         conn.commit()
     finally:
@@ -335,6 +364,8 @@ async def edit_task(request: Request):
             payload.old_task,
             payload.new_task,
             payload.prompt_template,
+            payload.response_rules,
+            payload.output_skeleton,
             payload.input_examples,
             payload.output_examples,
         )
@@ -374,6 +405,8 @@ async def add_task(request: Request):
             user_id,
             payload.title,
             payload.prompt_content,
+            payload.response_rules,
+            payload.output_skeleton,
             payload.input_examples,
             payload.output_examples,
         )

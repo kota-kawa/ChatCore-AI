@@ -20,6 +20,8 @@ import defaultTasks from "../../data/default_tasks.json";
 type TaskItem = {
   name?: string;
   prompt_template?: string;
+  response_rules?: string;
+  output_skeleton?: string;
   input_examples?: string;
   output_examples?: string;
   is_default?: boolean;
@@ -28,7 +30,7 @@ type TaskItem = {
 let isTaskLaunchInProgress = false;
 
 const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
-const TASKS_CACHE_KEY_PREFIX = "chatcore.tasks.";
+const TASKS_CACHE_KEY_PREFIX = "chatcore.tasks.v2.";
 const TASKS_CACHE_TTL_MS = 30_000;
 const SETUP_FIT_COMPACT_CLASS = "setup-fit-compact";
 const SETUP_FIT_TIGHT_CLASS = "setup-fit-tight";
@@ -162,6 +164,8 @@ function normalizeTask(task: TaskItem | null | undefined) {
     return {
       name: "",
       prompt_template: "",
+      response_rules: "",
+      output_skeleton: "",
       input_examples: "",
       output_examples: "",
       is_default: false
@@ -171,6 +175,8 @@ function normalizeTask(task: TaskItem | null | undefined) {
   return {
     name: task.name ? String(task.name).trim() : "",
     prompt_template: task.prompt_template ? String(task.prompt_template) : "",
+    response_rules: task.response_rules ? String(task.response_rules) : "",
+    output_skeleton: task.output_skeleton ? String(task.output_skeleton) : "",
     input_examples: task.input_examples ? String(task.input_examples) : "",
     output_examples: task.output_examples ? String(task.output_examples) : "",
     is_default: Boolean(task.is_default)
@@ -185,6 +191,8 @@ function createTaskSignature(tasks: TaskItem[]) {
       return [
         normalized.name,
         normalized.prompt_template,
+        normalized.response_rules,
+        normalized.output_skeleton,
         normalized.input_examples,
         normalized.output_examples,
         normalized.is_default ? "1" : "0"
@@ -346,8 +354,70 @@ function loadTaskCards(options: LoadTaskCardsOptions = {}) {
     if (!ioModal || !ioModalContent) return;
     const safeTask = formatMultilineHtml(card.dataset.task || "タスク名がありません");
     const safePromptTemplate = formatMultilineHtml(card.dataset.prompt_template || "プロンプトテンプレートはありません");
-    const safeInputExamples = formatMultilineHtml(card.dataset.input_examples || "入力例がありません");
-    const safeOutputExamples = formatMultilineHtml(card.dataset.output_examples || "出力例がありません");
+    const responseRules = (card.dataset.response_rules || "").trim();
+    const outputSkeleton = (card.dataset.output_skeleton || "").trim();
+    const inputExamples = (card.dataset.input_examples || "").trim();
+    const outputExamples = (card.dataset.output_examples || "").trim();
+    const detailSections = [
+      `
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">タスク名</h6>
+          <div class="task-detail-section-body task-detail-section-body-compact">${safeTask}</div>
+        </section>
+      `,
+      `
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">プロンプトテンプレート</h6>
+          <div class="task-detail-section-body">${safePromptTemplate}</div>
+        </section>
+      `
+    ];
+
+    if (responseRules) {
+      detailSections.push(`
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">回答ルール</h6>
+          <div class="task-detail-section-body">${formatMultilineHtml(responseRules)}</div>
+        </section>
+      `);
+    }
+
+    if (outputSkeleton) {
+      detailSections.push(`
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">出力テンプレート</h6>
+          <div class="task-detail-section-body">${formatMultilineHtml(outputSkeleton)}</div>
+        </section>
+      `);
+    }
+
+    if (inputExamples) {
+      detailSections.push(`
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">入力例</h6>
+          <div class="task-detail-section-body">${formatMultilineHtml(inputExamples)}</div>
+        </section>
+      `);
+    }
+
+    if (outputExamples) {
+      detailSections.push(`
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">出力例</h6>
+          <div class="task-detail-section-body">${formatMultilineHtml(outputExamples)}</div>
+        </section>
+      `);
+    }
+
+    if (!responseRules && !outputSkeleton && !inputExamples && !outputExamples) {
+      detailSections.push(`
+        <section class="task-detail-section">
+          <h6 class="task-detail-section-title">補助情報</h6>
+          <div class="task-detail-section-body">追加の回答ルールや例は設定されていません。</div>
+        </section>
+      `);
+    }
+
     ioModalContent.innerHTML = `
       <div class="task-detail-modal-shell">
         <div class="task-detail-modal-header">
@@ -360,22 +430,7 @@ function loadTaskCards(options: LoadTaskCardsOptions = {}) {
           </button>
         </div>
         <div class="task-detail-sections">
-          <section class="task-detail-section">
-            <h6 class="task-detail-section-title">タスク名</h6>
-            <div class="task-detail-section-body task-detail-section-body-compact">${safeTask}</div>
-          </section>
-          <section class="task-detail-section">
-            <h6 class="task-detail-section-title">プロンプトテンプレート</h6>
-            <div class="task-detail-section-body">${safePromptTemplate}</div>
-          </section>
-          <section class="task-detail-section">
-            <h6 class="task-detail-section-title">入力例</h6>
-            <div class="task-detail-section-body">${safeInputExamples}</div>
-          </section>
-          <section class="task-detail-section">
-            <h6 class="task-detail-section-title">出力例</h6>
-            <div class="task-detail-section-body">${safeOutputExamples}</div>
-          </section>
+          ${detailSections.join("")}
         </div>
       </div>`;
     ioModal.style.display = "flex";
@@ -435,8 +490,10 @@ function loadTaskCards(options: LoadTaskCardsOptions = {}) {
       card.className = "prompt-card";
       card.dataset.task = taskName;
       card.dataset.prompt_template = task.prompt_template || "プロンプトテンプレートはありません";
-      card.dataset.input_examples = task.input_examples || "入力例がありません";
-      card.dataset.output_examples = task.output_examples || "出力例がありません";
+      card.dataset.response_rules = task.response_rules || "";
+      card.dataset.output_skeleton = task.output_skeleton || "";
+      card.dataset.input_examples = task.input_examples || "";
+      card.dataset.output_examples = task.output_examples || "";
       card.dataset.is_default = task.is_default ? "true" : "false";
 
       // ヘッダー（タイトル＋▼ボタン）
@@ -567,9 +624,7 @@ function handleTaskCardClick(e: Event) {
   const setupInfo = setupInfoElement ? setupInfoElement.value.trim() : "";
   const aiModel = aiModelSelect ? aiModelSelect.value : "openai/gpt-oss-20b";
 
-  const prompt_template = card.dataset.prompt_template || "";
-  const inputExamples = card.dataset.input_examples || "";
-  const outputExamples = card.dataset.output_examples || "";
+  const taskName = card.dataset.task || "";
 
   // 新チャットルーム ID とタイトル
   const newRoomId = Date.now().toString();
@@ -591,8 +646,8 @@ function handleTaskCardClick(e: Event) {
 
         // ② 最初のメッセージ
         const firstMsg = setupInfo
-          ? `【状況・作業環境】${setupInfo}\n【リクエスト】${prompt_template}\n\n入力例:\n${inputExamples}\n\n出力例:\n${outputExamples}`
-          : `【リクエスト】${prompt_template}\n\n入力例:\n${inputExamples}\n\n出力例:\n${outputExamples}`;
+          ? `【タスク】${taskName}\n【状況・作業環境】${setupInfo}`
+          : `【タスク】${taskName}`;
 
         // ③ Bot 応答生成
         if (typeof window.generateResponse === "function") window.generateResponse(firstMsg, aiModel);

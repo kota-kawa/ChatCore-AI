@@ -18,7 +18,8 @@ def copy_default_tasks_for_user(user_id: int) -> None:
     try:
         cursor.execute(
             """
-            SELECT name, prompt_template, input_examples,
+            SELECT name, prompt_template, response_rules,
+                   output_skeleton, input_examples,
                    output_examples, display_order
               FROM task_with_examples
              WHERE user_id IS NULL
@@ -28,7 +29,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
         if not defaults:
             defaults = default_task_rows()
 
-        for name, tmpl, inp, out, disp in defaults:
+        for name, tmpl, response_rules, output_skeleton, inp, out, disp in defaults:
             cursor.execute(
                 """
                 SELECT 1 FROM task_with_examples
@@ -42,10 +43,11 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                 """
                 INSERT INTO task_with_examples
                       (user_id, name, prompt_template,
+                       response_rules, output_skeleton,
                        input_examples, output_examples, display_order)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (user_id, name, tmpl, inp, out, disp)
+                (user_id, name, tmpl, response_rules, output_skeleton, inp, out, disp)
             )
 
         conn.commit()

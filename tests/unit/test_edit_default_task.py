@@ -63,6 +63,8 @@ class EditDefaultTaskTestCase(unittest.TestCase):
                 "old_task": "Default Task",
                 "new_task": "Updated Task",
                 "prompt_template": "Prompt",
+                "response_rules": "Rules",
+                "output_skeleton": "Skeleton",
                 "input_examples": "input",
                 "output_examples": "output",
             },

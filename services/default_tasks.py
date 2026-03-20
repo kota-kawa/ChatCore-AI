@@ -29,8 +29,10 @@ def load_default_tasks() -> list[dict]:
             {
                 "name": str(task["name"]),
                 "prompt_template": str(task["prompt_template"]),
-                "input_examples": str(task["input_examples"]),
-                "output_examples": str(task["output_examples"]),
+                "response_rules": str(task.get("response_rules", "")),
+                "output_skeleton": str(task.get("output_skeleton", "")),
+                "input_examples": str(task.get("input_examples", "")),
+                "output_examples": str(task.get("output_examples", "")),
                 "display_order": int(task.get("display_order", index)),
             }
         )
@@ -46,6 +48,8 @@ def default_task_payloads() -> list[dict]:
             {
                 "name": task["name"],
                 "prompt_template": task["prompt_template"],
+                "response_rules": task["response_rules"],
+                "output_skeleton": task["output_skeleton"],
                 "input_examples": task["input_examples"],
                 "output_examples": task["output_examples"],
                 "is_default": True,
@@ -63,6 +67,8 @@ def default_task_rows() -> list[tuple]:
             (
                 task["name"],
                 task["prompt_template"],
+                task["response_rules"],
+                task["output_skeleton"],
                 task["input_examples"],
                 task["output_examples"],
                 task["display_order"],
@@ -101,17 +107,42 @@ def ensure_default_tasks_seeded() -> int:
         }
 
         inserted = 0
-        for name, template, input_example, output_example, display_order in default_task_rows():
+        for (
+            name,
+            template,
+            response_rules,
+            output_skeleton,
+            input_example,
+            output_example,
+            display_order,
+        ) in default_task_rows():
             if name in existing_names:
                 continue
 
             cursor.execute(
                 """
                 INSERT INTO task_with_examples
-                      (user_id, name, prompt_template, input_examples, output_examples, display_order)
-                VALUES (NULL, %s, %s, %s, %s, %s)
+                      (
+                          user_id,
+                          name,
+                          prompt_template,
+                          response_rules,
+                          output_skeleton,
+                          input_examples,
+                          output_examples,
+                          display_order
+                      )
+                VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (name, template, input_example, output_example, display_order),
+                (
+                    name,
+                    template,
+                    response_rules,
+                    output_skeleton,
+                    input_example,
+                    output_example,
+                    display_order,
+                ),
             )
             inserted += 1
 

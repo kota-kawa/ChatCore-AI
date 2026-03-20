@@ -53,6 +53,8 @@ CREATE TABLE task_with_examples (
   user_id INT NULL,
   name VARCHAR(255) NOT NULL,
   prompt_template TEXT NOT NULL,
+  response_rules TEXT,
+  output_skeleton TEXT,
   input_examples TEXT,
   output_examples TEXT,
   display_order INT DEFAULT 0,
