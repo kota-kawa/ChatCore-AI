@@ -1,3 +1,59 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.cc-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transition: opacity 120ms ease, transform 120ms ease;
+  max-width: min(320px, calc(100vw - 24px));
+}
+
+.cc-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.cc-tooltip__content {
+  position: relative;
+  background: rgba(18, 23, 33, 0.96);
+  color: #f8fbff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 32px rgba(11, 18, 30, 0.35);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cc-tooltip__content::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  transform: rotate(45deg);
+  background: rgba(18, 23, 33, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.cc-tooltip[data-placement="top"] .cc-tooltip__content::after {
+  bottom: -5px;
+  border-left: none;
+  border-top: none;
+}
+
+.cc-tooltip[data-placement="bottom"] .cc-tooltip__content::after {
+  top: -5px;
+  border-right: none;
+  border-bottom: none;
+}

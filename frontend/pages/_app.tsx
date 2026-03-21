@@ -2,6 +2,7 @@ import "../styles/globals.css";
 import "../styles/chat-entry.css";
 import "../styles/memo-entry.css";
 import "../styles/prompt-share-entry.css";
+import "../scripts/core/tooltip";
 import type { AppProps } from "next/app";
 import { Noto_Sans_JP } from "next/font/google";
 
