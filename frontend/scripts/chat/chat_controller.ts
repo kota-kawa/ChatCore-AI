@@ -6,6 +6,40 @@ type StreamEventPayload = {
   data: Record<string, unknown>;
 };
 
+function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const directMessageKeys = ["error", "message", "detail"] as const;
+    for (const key of directMessageKeys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    const detail = record.detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+      const firstDetail = detail[0];
+      if (typeof firstDetail === "string" && firstDetail.trim()) {
+        return firstDetail.trim();
+      }
+      if (firstDetail && typeof firstDetail === "object") {
+        const detailMessage = (firstDetail as Record<string, unknown>).msg;
+        if (typeof detailMessage === "string" && detailMessage.trim()) {
+          return detailMessage.trim();
+        }
+      }
+    }
+  }
+
+  if (fallbackStatus) {
+    return `サーバーエラー: ${fallbackStatus}`;
+  }
+  return "予期しないエラーが発生しました。";
+}
+
 type StreamingBotMessageHandle = {
   appendChunk: (chunk: string) => void;
   complete: () => void;
@@ -564,15 +598,18 @@ async function generateResponse(message: string, aiModel: string) {
       return;
     }
 
+    if (!contentType.includes("application/json")) {
+      const rawText = await response.text();
+      throw new Error(rawText.trim() || `サーバーエラー: ${response.status}`);
+    }
+
     const data = await response.json();
     window.hideTypingIndicator?.();
     thinkingWrap?.remove();
-    if (data && data.response) {
+    if (response.ok && data && typeof data.response === "string" && data.response) {
       window.renderBotMessageImmediate?.(data.response);
-    } else if (data && data.error) {
-      window.renderBotMessageImmediate?.("エラー: " + data.error);
     } else {
-      window.renderBotMessageImmediate?.("エラー: 予期しないエラーが発生しました。");
+      window.renderBotMessageImmediate?.("エラー: " + extractApiErrorMessage(data, response.status));
     }
   } catch (err) {
     window.hideTypingIndicator?.();

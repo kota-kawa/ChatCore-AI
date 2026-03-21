@@ -173,6 +173,23 @@ def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
             conn.close()
 
 
+async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+    # タスク補助情報の取得失敗ではチャット全体を止めず、ベースプロンプトのみで続行する
+    # Do not fail the whole chat request when task metadata lookup fails.
+    try:
+        prompt_data = await run_blocking(_fetch_prompt_data, task, user_id)
+    except Exception:
+        logger.exception("Failed to load task prompt metadata for task launch: %s", task)
+        return None
+
+    if prompt_data is None:
+        return None
+    if not isinstance(prompt_data, dict):
+        logger.warning("Ignoring malformed task prompt metadata for task launch: %s", task)
+        return None
+    return prompt_data
+
+
 def _parse_example_list(examples: str | None) -> list[str]:
     # JSON配列または単一文字列の両方に対応して例を配列化する
     # Normalize example payloads into a list of strings.
@@ -342,7 +359,7 @@ async def chat(request: Request):
     if launch_request and len(all_messages) == 1:
         # 初回タスク起動時のみ、選択タスクの定義を補助 system prompt として追加する
         # Only the first task-launch message receives task metadata as extra system guidance.
-        prompt_data = await run_blocking(_fetch_prompt_data, launch_request["task"], user_id)
+        prompt_data = await _load_task_prompt_data(launch_request["task"], user_id)
 
     conversation_messages = []
 
