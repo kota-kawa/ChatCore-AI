@@ -35,20 +35,6 @@ tpl.innerHTML = `
       object-fit: cover;
       display: block;
     }
-    /* ホバー時にユーザー名ツールチップ */
-    .btn[data-username]:not([data-username=""]):hover::after {
-      content: attr(data-username);
-      position: absolute;
-      top: 105%;
-      right: 0;
-      padding: .25rem .6rem;
-      background: #333;
-      color: #fff;
-      font-size: .75rem;
-      border-radius: 4px;
-      white-space: nowrap;
-      pointer-events: none;
-    }
     /* ▼ dropdown */
     .dropdown {
       position: absolute;
@@ -79,7 +65,7 @@ tpl.innerHTML = `
     .item:hover { background: #f5f5f5; }
   </style>
 
-  <button class="btn" title="ユーザー">
+  <button class="btn" data-tooltip="アカウントメニューを開く" data-tooltip-placement="bottom">
     <img class="avatar" src="/static/user-icon.png" alt="ユーザーアイコン">
   </button>
 
@@ -88,19 +74,6 @@ tpl.innerHTML = `
     <a class="item" href="/logout">🚪 ログアウト</a>
   </div>
 `;
-
-const LEGACY_DEFAULT_USERNAME = "トマト";
-const FALLBACK_USERNAME_LABEL = "ユーザー";
-
-function normalizeUsernameForTooltip(rawName: string): string {
-  if (!rawName) {
-    return "";
-  }
-  if (rawName === LEGACY_DEFAULT_USERNAME) {
-    return FALLBACK_USERNAME_LABEL;
-  }
-  return rawName;
-}
 
 class UserIcon extends HTMLElement {
   private btn: HTMLButtonElement;
@@ -163,7 +136,6 @@ class UserIcon extends HTMLElement {
       this.dropdown.style.display = "none";
       this.avatarImg.src = "/static/user-icon.png";
       this.avatarImg.alt = "ユーザーアイコン";
-      this.btn.removeAttribute("data-username");
     }
   }
 
@@ -179,16 +151,9 @@ class UserIcon extends HTMLElement {
       const data = await res.json();
 
       const avatar = data.avatar_url || "/static/user-icon.png";
-      const rawName = typeof data.username === "string" ? data.username.trim() : "";
-      const name = normalizeUsernameForTooltip(rawName);
+      const name = typeof data.username === "string" ? data.username.trim() : "";
 
       this.avatarImg.src = avatar;
-      // ツールチップにユーザー名（空文字時は非表示）
-      if (name) {
-        this.btn.setAttribute("data-username", name);
-      } else {
-        this.btn.removeAttribute("data-username");
-      }
       // alt 属性にもセット
       this.avatarImg.alt = name ? `${name}のアイコン` : "ユーザーアイコン";
       this._profileLoaded = true;

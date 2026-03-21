@@ -57,3 +57,23 @@
   border-right: none;
   border-bottom: none;
 }
+
+.cc-tooltip.is-placement-left .cc-tooltip__content::after,
+.cc-tooltip.is-placement-right .cc-tooltip__content::after {
+  top: 50%;
+  margin-top: -4.5px;
+}
+
+.cc-tooltip.is-placement-left .cc-tooltip__content::after {
+  left: auto;
+  right: -5px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.cc-tooltip.is-placement-right .cc-tooltip__content::after {
+  left: -5px;
+  margin-left: 0;
+  border-right: none;
+  border-top: none;
+}

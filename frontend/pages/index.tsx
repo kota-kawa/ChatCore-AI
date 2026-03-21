@@ -95,7 +95,14 @@ const bodyMarkup = `
 
       <div class="task-selection-header">
         <p id="task-selection-text">実行したいタスクを選択（クリックで即実行）</p>
-        <button id="openNewPromptModal" class="circle-button new-prompt-modal-btn" type="button" title="新しいプロンプトを投稿" style="display:none;">
+        <button
+          id="openNewPromptModal"
+          class="circle-button new-prompt-modal-btn"
+          type="button"
+          data-tooltip="新しいプロンプトを作成"
+          data-tooltip-placement="bottom"
+          style="display:none;"
+        >
           <i class="bi bi-plus-lg"></i>
         </button>
         <!-- タスク編集ボタンは task_manager.js で後から追加され、CSSの order で中央に表示されます -->
@@ -130,7 +137,12 @@ const bodyMarkup = `
   <div id="chat-container" style="display: none;">
     <div class="chat-header">
       <div class="header-left">
-        <button id="back-to-setup" class="icon-button" title="設定変更">
+        <button
+          id="back-to-setup"
+          class="icon-button"
+          data-tooltip="タスク選択に戻る"
+          data-tooltip-placement="bottom"
+        >
           <i class="bi bi-arrow-left"></i>
         </button>
         <span>Chat Core</span>
@@ -145,7 +157,12 @@ const bodyMarkup = `
       </div>
       <div class="chat-area">
 
-        <button id="sidebar-toggle" class="icon-button sidebar-toggle chat-sidebar-toggle" title="チャットルーム">
+        <button
+          id="sidebar-toggle"
+          class="icon-button sidebar-toggle chat-sidebar-toggle"
+          data-tooltip="チャット一覧を表示"
+          data-tooltip-placement="left"
+        >
           <i class="bi bi-arrow-bar-right"></i>
         </button>
 
@@ -153,7 +170,13 @@ const bodyMarkup = `
         <div class="input-container">
           <div class="input-wrapper">
             <input type="text" id="user-input" placeholder="メッセージを入力..." />
-            <button type="button" id="send-btn" aria-label="送信">
+            <button
+              type="button"
+              id="send-btn"
+              aria-label="送信"
+              data-tooltip="メッセージを送信"
+              data-tooltip-placement="top"
+            >
               <i class="bi bi-send"></i>
             </button>
           </div>

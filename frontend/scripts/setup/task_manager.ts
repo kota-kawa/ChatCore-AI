@@ -173,7 +173,8 @@ function initTaskOrderEditing() {
   editButton.type = "button"; // フォーム送信を防止
   // Bootstrapのアイコンをセット（ここでは例としてbi-arrows-moveを使用）
   editButton.innerHTML = '<i class="bi bi-arrows-move"></i>';
-  editButton.title = "並び替え編集"; // ツールチップ用
+  editButton.setAttribute("data-tooltip", "タスクの並び順を編集");
+  editButton.setAttribute("data-tooltip-placement", "bottom");
 
   editButton.addEventListener("click", toggleTaskOrderEditing);
   // ヘッダー内にボタンを追加
@@ -190,7 +191,7 @@ function toggleTaskOrderEditing() {
     // 編集モード開始時：
     // ボタンを押した瞬間にアイコンをチェックマークに変更し、タイトルを「完了」にする
     if (editButton) {
-      editButton.title = "完了";
+      editButton.setAttribute("data-tooltip", "並び替え編集を終了");
       editButton.innerHTML = '<i class="bi bi-check"></i>';
     }
 
@@ -235,6 +236,8 @@ function toggleTaskOrderEditing() {
       deleteBtn.style.alignItems = "center";
       deleteBtn.style.justifyContent = "center";
       deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+      deleteBtn.setAttribute("data-tooltip", "このタスクを削除");
+      deleteBtn.setAttribute("data-tooltip-placement", "top");
       // ボタン押下時にタスクカードのクリックイベントと区別するためイベント伝播を停止
       deleteBtn.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -271,35 +274,7 @@ function toggleTaskOrderEditing() {
         }
       });
 
-      // 削除ボタン用ツールチップ
-      const deleteTooltip = document.createElement("span");
-      deleteTooltip.textContent = "削除";
-      deleteTooltip.style.position = "absolute";
-      deleteTooltip.style.bottom = "100%";
-      deleteTooltip.style.left = "50%";
-      deleteTooltip.style.transform = "translateX(-50%)";
-      deleteTooltip.style.marginBottom = "4px";
-      deleteTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.75)";
-      deleteTooltip.style.color = "white";
-      deleteTooltip.style.padding = "2px 4px";
-      deleteTooltip.style.borderRadius = "4px";
-      deleteTooltip.style.fontSize = "10px";
-      deleteTooltip.style.whiteSpace = "nowrap";
-      deleteTooltip.style.opacity = "0";
-      deleteTooltip.style.transition = "opacity 0.2s";
-
-      // ホバー時の挙動（削除ボタン）
-      deleteContainer.addEventListener("mouseenter", () => {
-        deleteTooltip.style.opacity = "1";
-        deleteBtn.style.transform = "scale(1.1)";
-      });
-      deleteContainer.addEventListener("mouseleave", () => {
-        deleteTooltip.style.opacity = "0";
-        deleteBtn.style.transform = "";
-      });
-
       deleteContainer.appendChild(deleteBtn);
-      deleteContainer.appendChild(deleteTooltip);
 
       // 編集ボタンコンテナ（右上・カード外側に配置）
       const editContainer = document.createElement("div");
@@ -324,6 +299,8 @@ function toggleTaskOrderEditing() {
       editBtn.style.alignItems = "center";
       editBtn.style.justifyContent = "center";
       editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
+      editBtn.setAttribute("data-tooltip", "このタスクを編集");
+      editBtn.setAttribute("data-tooltip-placement", "top");
 
       // 編集ボタン押下時の処理
       editBtn.addEventListener("click", function (e) {
@@ -350,34 +327,7 @@ function toggleTaskOrderEditing() {
         showModal(document.getElementById("taskEditModal"));
       });
 
-      // 編集ボタン用ツールチップ
-      const editTooltip = document.createElement("span");
-      editTooltip.textContent = "編集";
-      editTooltip.style.position = "absolute";
-      editTooltip.style.bottom = "100%";
-      editTooltip.style.left = "50%";
-      editTooltip.style.transform = "translateX(-50%)";
-      editTooltip.style.marginBottom = "4px";
-      editTooltip.style.backgroundColor = "rgba(0, 0, 0, 0.75)";
-      editTooltip.style.color = "white";
-      editTooltip.style.padding = "2px 4px";
-      editTooltip.style.borderRadius = "4px";
-      editTooltip.style.fontSize = "10px";
-      editTooltip.style.whiteSpace = "nowrap";
-      editTooltip.style.opacity = "0";
-      editTooltip.style.transition = "opacity 0.2s";
-
-      editContainer.addEventListener("mouseenter", () => {
-        editTooltip.style.opacity = "1";
-        editBtn.style.transform = "scale(1.1)";
-      });
-      editContainer.addEventListener("mouseleave", () => {
-        editTooltip.style.opacity = "0";
-        editBtn.style.transform = "";
-      });
-
       editContainer.appendChild(editBtn);
-      editContainer.appendChild(editTooltip);
 
       // カードにボタンコンテナを追加
       card.appendChild(deleteContainer);
@@ -404,7 +354,7 @@ function toggleTaskOrderEditing() {
     // ※もしタスク一覧全体の更新が必要なら、非同期で新たにタスク一覧をfetchして再レンダリングする処理をここに追加
 
     if (editButton) {
-      editButton.title = "並び替え編集";
+      editButton.setAttribute("data-tooltip", "タスクの並び順を編集");
       editButton.innerHTML = '<i class="bi bi-arrows-move"></i>';
     }
   }

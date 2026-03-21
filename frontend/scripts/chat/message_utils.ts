@@ -269,7 +269,8 @@ function createCopyBtn(getText: () => string) {
   btn.type = "button";
   btn.className = "copy-btn";
   btn.setAttribute("aria-label", "メッセージをコピー");
-  btn.title = "コピー";
+  btn.setAttribute("data-tooltip", "このメッセージをコピー");
+  btn.setAttribute("data-tooltip-placement", "top");
   setCopyButtonIcon(btn, "bi-clipboard");
 
   btn.addEventListener("click", async () => {
@@ -300,7 +301,8 @@ function createMemoSaveBtn(getText: () => string) {
   btn.type = "button";
   btn.className = "memo-save-btn";
   btn.setAttribute("aria-label", "メモに保存");
-  btn.title = "保存";
+  btn.setAttribute("data-tooltip", "この回答をメモに保存");
+  btn.setAttribute("data-tooltip-placement", "top");
   setActionButtonIcon(btn, "bi-bookmark-plus");
 
   let resetTimerId: number | null = null;
@@ -312,7 +314,7 @@ function createMemoSaveBtn(getText: () => string) {
     }
     setActionButtonIcon(btn, "bi-bookmark-plus");
     btn.classList.remove("memo-save-btn--success", "memo-save-btn--error", "memo-save-btn--loading");
-    btn.title = "保存";
+    btn.setAttribute("data-tooltip", "この回答をメモに保存");
   };
 
   const scheduleReset = () => {
@@ -332,7 +334,7 @@ function createMemoSaveBtn(getText: () => string) {
     if (!aiResponse) {
       setActionButtonIcon(btn, "bi-x-lg");
       btn.classList.add("memo-save-btn--error");
-      btn.title = "保存失敗: 空のメッセージです";
+      btn.setAttribute("data-tooltip", "保存失敗: 空のメッセージです");
       scheduleReset();
       return;
     }
@@ -368,13 +370,13 @@ function createMemoSaveBtn(getText: () => string) {
       setActionButtonIcon(btn, "bi-check-lg");
       btn.classList.add("memo-save-btn--success");
       btn.classList.remove("memo-save-btn--error");
-      btn.title = "メモに保存しました";
+      btn.setAttribute("data-tooltip", "メモに保存しました");
     } catch (error) {
       console.error("Failed to save chat message to memo.", error);
       setActionButtonIcon(btn, "bi-x-lg");
       btn.classList.add("memo-save-btn--error");
       btn.classList.remove("memo-save-btn--success");
-      btn.title = error instanceof Error ? `保存失敗: ${error.message}` : "保存に失敗しました";
+      btn.setAttribute("data-tooltip", error instanceof Error ? `保存失敗: ${error.message}` : "保存に失敗しました");
     } finally {
       btn.disabled = false;
       btn.classList.remove("memo-save-btn--loading");

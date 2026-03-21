@@ -24,7 +24,13 @@ const bodyMarkup = `
       <div class="search-section" role="search" aria-label="プロンプト検索">
         <div class="search-box">
           <input type="text" id="searchInput" placeholder="キーワードでプロンプトを検索..." />
-          <button id="searchButton" type="button" aria-label="検索を実行する">
+          <button
+            id="searchButton"
+            type="button"
+            aria-label="検索を実行する"
+            data-tooltip="入力したキーワードで検索"
+            data-tooltip-placement="bottom"
+          >
             <i class="bi bi-search"></i>
           </button>
         </div>
@@ -196,7 +202,13 @@ const bodyMarkup = `
   </div>
 
   <!-- 新規投稿ボタン -->
-  <button id="openPostModal" class="new-prompt-btn" aria-label="新しいプロンプトを投稿">
+  <button
+    id="openPostModal"
+    class="new-prompt-btn"
+    aria-label="新しいプロンプトを投稿"
+    data-tooltip="新しいプロンプトを投稿"
+    data-tooltip-placement="left"
+  >
     <i class="bi bi-plus-lg"></i>
   </button>
 

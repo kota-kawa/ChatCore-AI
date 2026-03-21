@@ -187,6 +187,7 @@ function initPromptSharePage(attempt = 0) {
     if (!button) return;
     button.classList.toggle("bookmarked", isBookmarked);
     button.setAttribute("aria-pressed", isBookmarked ? "true" : "false");
+    button.setAttribute("data-tooltip", isBookmarked ? "保存を解除" : "このプロンプトを保存");
     button.innerHTML = getBookmarkButtonMarkup(isBookmarked);
   }
 
@@ -265,7 +266,7 @@ function initPromptSharePage(attempt = 0) {
           <i class="bi bi-hash"></i>
           <span>${safeCategory}</span>
         </span>
-        <button class="meatball-menu" type="button" aria-label="その他の操作" aria-haspopup="true" aria-expanded="false">
+        <button class="meatball-menu" type="button" aria-label="その他の操作" aria-haspopup="true" aria-expanded="false" data-tooltip="その他の操作" data-tooltip-placement="left">
           <i class="bi bi-three-dots"></i>
         </button>
       </div>
@@ -293,15 +294,15 @@ function initPromptSharePage(attempt = 0) {
           </span>
         </div>
         <div class="prompt-actions">
-          <button class="prompt-action-btn comment-btn" type="button" aria-label="コメント">
+          <button class="prompt-action-btn comment-btn" type="button" aria-label="コメント" data-tooltip="コメント（準備中）" data-tooltip-placement="top">
             <i class="bi bi-chat-dots"></i>
             <span>コメント</span>
           </button>
-          <button class="prompt-action-btn like-btn" type="button" aria-label="いいね" aria-pressed="false">
+          <button class="prompt-action-btn like-btn" type="button" aria-label="いいね" aria-pressed="false" data-tooltip="このプロンプトにいいね" data-tooltip-placement="top">
             <i class="bi bi-heart"></i>
             <span>いいね</span>
           </button>
-          <button class="prompt-action-btn bookmark-btn ${isBookmarked ? "bookmarked" : ""}" type="button" aria-label="保存" aria-pressed="${isBookmarked ? "true" : "false"}">
+          <button class="prompt-action-btn bookmark-btn ${isBookmarked ? "bookmarked" : ""}" type="button" aria-label="保存" aria-pressed="${isBookmarked ? "true" : "false"}" data-tooltip="${isBookmarked ? "保存を解除" : "このプロンプトを保存"}" data-tooltip-placement="top">
             ${bookmarkIcon}
           </button>
         </div>

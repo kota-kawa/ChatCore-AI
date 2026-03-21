@@ -47,7 +47,8 @@ const bodyMarkup = `
     type="button"
     class="settings-back-btn"
     onclick="history.back()"
-    title="戻る"
+    data-tooltip="前の画面に戻る"
+    data-tooltip-placement="bottom"
   >
     <i class="bi bi-arrow-left"></i>
   </button>
@@ -71,7 +72,8 @@ const bodyMarkup = `
                   type="button"
                   class="change-avatar-btn"
                   id="changeAvatarBtn"
-                  title="画像を変更"
+                  data-tooltip="プロフィール画像を選択"
+                  data-tooltip-placement="bottom"
                 >
                   <i class="bi bi-pencil-fill"></i>
                 </button>
@@ -117,7 +119,6 @@ const bodyMarkup = `
               type="button"
               class="secondary-button"
               id="cancelBtn"
-              title="キャンセル"
             >
               キャンセル
             </button>

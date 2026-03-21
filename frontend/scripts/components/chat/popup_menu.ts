@@ -204,17 +204,17 @@ chatTemplate.innerHTML = `
 
   <input type="checkbox" id="chatActionMenuButton" />
   <div class="actions-menu">
-    <button class="btn btn--share" onclick="location.href='/prompt_share'" title="シェア">
+    <button class="btn btn--share" onclick="location.href='/prompt_share'" data-tooltip="プロンプト共有へ移動" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.048 3.048 0 0 0 0-1.39l7.13-4.17A3 3 0 1 0 14 5a3 3 0 0 0 .05.52l-7.14 4.18a3 3 0 1 0 0 4.6l7.14 4.18c-.03.17-.05.34-.05.52a3 3 0 1 0 3-2.92Z" />
       </svg>
     </button>
-    <button class="btn btn--star" onclick="location.href='/'" title="スター">
+    <button class="btn btn--star" onclick="location.href='/'" data-tooltip="チャット設定へ戻る" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M12,17.27L18.18,21L16.54,13.97 L22,9.24L14.81,8.62L12,2 L9.19,8.62L2,9.24L7.45,13.97 L5.82,21L12,17.27Z" />
       </svg>
     </button>
-    <button class="btn btn--comment" onclick="location.href='/memo'" title="メモ">
+    <button class="btn btn--comment" onclick="location.href='/memo'" data-tooltip="メモ画面へ移動" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l7-7V5a2 2 0 0 0-2-2Zm-5 14v-5h5l-5 5Z" />
       </svg>
