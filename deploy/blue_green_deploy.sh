@@ -46,13 +46,16 @@ validate_required_env() {
   )
   local var_name value missing=0
 
+  set +u
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+  set -u
+
   for var_name in "${required_vars[@]}"; do
-    value="$(
-      compose config --environment 2>/dev/null \
-        | awk -F '=' -v key="${var_name}" '$1 == key {print substr($0, index($0, "=") + 1)}' \
-        || true
-    )"
-    if [ -z "${value}" ]; then
+    value="${!var_name:-}"
+    if [ -z "${value}" ] || [[ "${value}" =~ ^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$ ]]; then
       echo "Required environment variable is empty or unresolved: ${var_name}" >&2
       missing=1
     fi
