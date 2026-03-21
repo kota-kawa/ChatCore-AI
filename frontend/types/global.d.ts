@@ -45,6 +45,7 @@ declare global {
     scrollMessageToBottom?: () => void;
     copyTextToClipboard?: (text: string) => Promise<void>;
     createCopyBtn?: (getText: () => string) => HTMLButtonElement;
+    createMemoSaveBtn?: (getText: () => string) => HTMLButtonElement;
     renderUserMessage?: (text: string) => void;
     renderBotMessageImmediate?: (text: string) => void;
     startStreamingBotMessage?: () => StreamingBotMessageHandle | null;

@@ -187,8 +187,12 @@ function scrollMessageToBottom() {
   window.chatMessages.scrollTop = window.chatMessages.scrollHeight;
 }
 
-function setCopyButtonIcon(btn: HTMLButtonElement, iconClass: string) {
+function setActionButtonIcon(btn: HTMLButtonElement, iconClass: string) {
   btn.innerHTML = `<i class="bi ${iconClass}"></i>`;
+}
+
+function setCopyButtonIcon(btn: HTMLButtonElement, iconClass: string) {
+  setActionButtonIcon(btn, iconClass);
 }
 
 function copyTextWithExecCommand(text: string) {
@@ -235,6 +239,30 @@ async function copyTextToClipboard(text: string) {
   throw new Error("Clipboard API is unavailable in this browser");
 }
 
+function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const directMessageKeys = ["error", "message", "detail"] as const;
+    for (const key of directMessageKeys) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    if (record.status === "fail") {
+      return "メモの保存に失敗しました。";
+    }
+  }
+
+  if (fallbackStatus) {
+    return `サーバーエラー: ${fallbackStatus}`;
+  }
+  return "メモの保存に失敗しました。";
+}
+
 // 汎用コピーアイコン
 function createCopyBtn(getText: () => string) {
   const btn = document.createElement("button");
@@ -267,6 +295,96 @@ function createCopyBtn(getText: () => string) {
   return btn;
 }
 
+function createMemoSaveBtn(getText: () => string) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "memo-save-btn";
+  btn.setAttribute("aria-label", "メモに保存");
+  btn.title = "保存";
+  setActionButtonIcon(btn, "bi-bookmark-plus");
+
+  let resetTimerId: number | null = null;
+
+  const resetVisualState = () => {
+    if (resetTimerId !== null) {
+      window.clearTimeout(resetTimerId);
+      resetTimerId = null;
+    }
+    setActionButtonIcon(btn, "bi-bookmark-plus");
+    btn.classList.remove("memo-save-btn--success", "memo-save-btn--error", "memo-save-btn--loading");
+    btn.title = "保存";
+  };
+
+  const scheduleReset = () => {
+    if (resetTimerId !== null) {
+      window.clearTimeout(resetTimerId);
+    }
+    resetTimerId = window.setTimeout(() => {
+      resetVisualState();
+    }, 2000);
+  };
+
+  btn.addEventListener("click", async () => {
+    if (btn.classList.contains("memo-save-btn--loading")) return;
+    resetVisualState();
+
+    const aiResponse = getText().trim();
+    if (!aiResponse) {
+      setActionButtonIcon(btn, "bi-x-lg");
+      btn.classList.add("memo-save-btn--error");
+      btn.title = "保存失敗: 空のメッセージです";
+      scheduleReset();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.classList.add("memo-save-btn--loading");
+    setActionButtonIcon(btn, "bi-hourglass-split");
+
+    try {
+      const response = await fetch("/memo/api", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          input_content: "",
+          ai_response: aiResponse,
+          title: "",
+          tags: ""
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      const status = data && typeof data === "object"
+        ? (data as Record<string, unknown>).status
+        : null;
+
+      if (!response.ok || status === "fail") {
+        throw new Error(extractApiErrorMessage(data, response.status));
+      }
+
+      setActionButtonIcon(btn, "bi-check-lg");
+      btn.classList.add("memo-save-btn--success");
+      btn.classList.remove("memo-save-btn--error");
+      btn.title = "メモに保存しました";
+    } catch (error) {
+      console.error("Failed to save chat message to memo.", error);
+      setActionButtonIcon(btn, "bi-x-lg");
+      btn.classList.add("memo-save-btn--error");
+      btn.classList.remove("memo-save-btn--success");
+      btn.title = error instanceof Error ? `保存失敗: ${error.message}` : "保存に失敗しました";
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("memo-save-btn--loading");
+      scheduleReset();
+    }
+  });
+
+  return btn;
+}
+
 // ---- window へ公開 ------------------------------
 window.renderSanitizedHTML = renderSanitizedHTML;
 window.setTextWithLineBreaks = setTextWithLineBreaks;
@@ -276,5 +394,6 @@ window.scrollMessageToBottom = scrollMessageToBottom;
 window.scrollMessageToTop = scrollMessageToBottom;
 window.copyTextToClipboard = copyTextToClipboard;
 window.createCopyBtn = createCopyBtn;
+window.createMemoSaveBtn = createMemoSaveBtn;
 
 export {};

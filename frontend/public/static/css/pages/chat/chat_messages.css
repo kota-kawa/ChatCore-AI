@@ -401,9 +401,61 @@ chat-action-menu {
   -webkit-tap-highlight-color: transparent;
 }
 
+.message-actions {
+  position: absolute;
+  top: 0.05rem;
+  right: -2.25rem;
+  z-index: 3;
+  display: inline-flex;
+  flex-direction: row;
+  gap: 0.45rem;
+  pointer-events: auto;
+}
+
+.message-action-btn {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+}
+
 .copy-btn:hover {
   background: rgba(255, 255, 255, 1);
   color: var(--text-dark, #1a1a1a);
+}
+
+.memo-save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.95rem;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition-normal, 0.2s ease),
+    color var(--transition-fast, 0.15s ease),
+    background var(--transition-fast, 0.15s ease);
+  padding: 0;
+  border-radius: 999px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.memo-save-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  color: var(--text-dark, #1a1a1a);
+}
+
+.memo-save-btn:disabled {
+  cursor: wait;
 }
 
 .user-message-wrapper .copy-btn {
@@ -412,11 +464,23 @@ chat-action-menu {
 }
 
 .bot-message-wrapper .copy-btn {
+  right: auto;
+  top: auto;
+}
+
+.bot-message-wrapper .message-actions {
   right: -2.25rem;
-  top: 0.05rem;
+}
+
+.user-message-wrapper .message-actions {
+  display: none;
 }
 
 .message-wrapper:hover .copy-btn {
+  opacity: 0.72;
+}
+
+.message-wrapper:hover .memo-save-btn {
   opacity: 0.72;
 }
 
@@ -424,11 +488,25 @@ chat-action-menu {
   opacity: 0.72;
 }
 
+.message-wrapper:focus-within .memo-save-btn {
+  opacity: 0.72;
+}
+
 .copy-btn:hover {
   opacity: 1 !important;
 }
 
+.memo-save-btn:hover {
+  opacity: 1 !important;
+}
+
 .copy-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid rgba(25, 195, 125, 0.45);
+  outline-offset: 1px;
+}
+
+.memo-save-btn:focus-visible {
   opacity: 1;
   outline: 2px solid rgba(25, 195, 125, 0.45);
   outline-offset: 1px;
@@ -444,13 +522,37 @@ chat-action-menu {
   opacity: 1 !important;
 }
 
+.memo-save-btn--success {
+  color: var(--primary-color, #19c37d);
+  opacity: 1 !important;
+}
+
+.memo-save-btn--error {
+  color: #dc2626;
+  opacity: 1 !important;
+}
+
+.memo-save-btn--loading {
+  color: var(--text-secondary, #6b7280);
+  opacity: 1 !important;
+}
+
 .message-wrapper--streaming .copy-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-wrapper--streaming .memo-save-btn {
   opacity: 0;
   pointer-events: none;
 }
 
 @media (hover: none), (pointer: coarse) {
   .copy-btn {
+    opacity: 0.68;
+  }
+
+  .memo-save-btn {
     opacity: 0.68;
   }
 }
@@ -587,6 +689,10 @@ chat-action-menu {
     opacity: 0.8;
   }
 
+  .memo-save-btn {
+    opacity: 0.8;
+  }
+
   .bot-message-wrapper {
     max-width: 100%;
     width: 100%;
@@ -608,12 +714,17 @@ chat-action-menu {
     top: 0.35rem;
   }
 
+  .bot-message-wrapper .message-actions {
+    right: 0.45rem;
+    top: 0.35rem;
+  }
+
   .user-message {
     padding-right: 2.35rem;
   }
 
   .bot-message {
-    padding-right: 2.2rem;
+    padding-right: 4.55rem;
   }
 }
 
@@ -713,6 +824,12 @@ chat-action-menu {
     font-size: 0.88rem;
   }
 
+  .memo-save-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.88rem;
+  }
+
   .user-message-wrapper .copy-btn {
     left: auto;
     right: 0.2rem;
@@ -724,12 +841,18 @@ chat-action-menu {
     top: 0.2rem;
   }
 
+  .bot-message-wrapper .message-actions {
+    right: 0.2rem;
+    top: 0.2rem;
+    gap: 0.3rem;
+  }
+
   .user-message {
     padding-right: 2.15rem;
   }
 
   .bot-message {
-    padding-right: 2rem;
+    padding-right: 4.25rem;
   }
 
   .scroll-to-bottom-btn {

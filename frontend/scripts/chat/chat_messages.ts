@@ -31,11 +31,21 @@ function createBotMessageElements(options: { scrollToBottom?: boolean } = {}) {
   const msg = document.createElement("div");
   msg.className = "bot-message";
 
+  const actionGroup = document.createElement("div");
+  actionGroup.className = "message-actions";
+
   const copyBtn = window.createCopyBtn
     ? window.createCopyBtn(() => msg.dataset.fullText || "")
     : document.createElement("button");
+  copyBtn.classList.add("message-action-btn");
 
-  wrapper.append(copyBtn, msg);
+  const saveBtn = window.createMemoSaveBtn
+    ? window.createMemoSaveBtn(() => msg.dataset.fullText || "")
+    : document.createElement("button");
+  saveBtn.classList.add("message-action-btn");
+
+  actionGroup.append(copyBtn, saveBtn);
+  wrapper.append(actionGroup, msg);
   window.chatMessages.appendChild(wrapper);
   if (scrollToBottom) {
     if (window.scrollMessageToBottom) {
@@ -364,12 +374,21 @@ function displayMessage(text: string, sender: string) {
     wrapper.className = "message-wrapper bot-message-wrapper";
     const msg = document.createElement("div");
     msg.className = "bot-message";
+    msg.dataset.fullText = text;
+    const actionGroup = document.createElement("div");
+    actionGroup.className = "message-actions";
+    const saveBtn = window.createMemoSaveBtn
+      ? window.createMemoSaveBtn(() => msg.dataset.fullText || "")
+      : document.createElement("button");
+    copyBtn.classList.add("message-action-btn");
+    saveBtn.classList.add("message-action-btn");
 
     // Bot はマークアップ済み → 広めのタグ許可でサニタイズ
     if (window.renderSanitizedHTML && window.formatLLMOutput) {
       window.renderSanitizedHTML(msg, window.formatLLMOutput(text));
     }
-    wrapper.append(copyBtn, msg);
+    actionGroup.append(copyBtn, saveBtn);
+    wrapper.append(actionGroup, msg);
   }
   window.chatMessages.appendChild(wrapper);
   if (window.scrollMessageToBottom) {
