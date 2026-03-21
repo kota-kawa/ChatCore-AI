@@ -394,6 +394,141 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_called_once_with(7)
         mock_copy_tasks.assert_called_once_with(7)
 
+    def test_existing_verified_email_user_is_prompted_for_passkey_after_first_google_link(self):
+        request = make_request()
+        fake_flow = FakeFlow()
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.return_value = fake_flow
+        existing_user = {
+            "id": 8,
+            "email": "user@example.com",
+            "is_verified": True,
+            "provider_user_id": None,
+            "username": "Custom Name",
+            "avatar_url": "/static/uploads/custom.png",
+        }
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth._fetch_google_user_info",
+                        return_value={
+                            "id": "google-user-456",
+                            "email": "user@example.com",
+                            "verified_email": True,
+                            "name": "Alice Example",
+                            "picture": "https://example.com/alice.png",
+                        },
+                    ):
+                        with patch("blueprints.auth.get_user_by_google_id", return_value=None):
+                            with patch(
+                                "blueprints.auth.get_user_by_email",
+                                return_value=existing_user,
+                            ):
+                                with patch("blueprints.auth.create_user") as mock_create:
+                                    with patch("blueprints.auth.link_google_account") as mock_link:
+                                        with patch(
+                                            "blueprints.auth.update_user_profile_from_google_if_unset"
+                                        ) as mock_profile_sync:
+                                            with patch(
+                                                "blueprints.auth.set_user_verified"
+                                            ) as mock_verify:
+                                                with patch(
+                                                    "blueprints.auth.copy_default_tasks_for_user"
+                                                ) as mock_copy_tasks:
+                                                    with patch(
+                                                        "blueprints.auth.get_user_by_id",
+                                                        return_value={
+                                                            "id": 8,
+                                                            "email": "user@example.com",
+                                                        },
+                                                    ):
+                                                        response = asyncio.run(
+                                                            google_callback(request)
+                                                        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.headers["location"],
+            "https://chatcore-ai.com/login?flow=register&offer_passkey_setup=1&provider=google",
+        )
+        self.assertEqual(request.session["user_id"], 8)
+        mock_create.assert_not_called()
+        mock_link.assert_called_once_with(8, "google-user-456", "user@example.com")
+        mock_profile_sync.assert_called_once_with(
+            8,
+            "Alice Example",
+            "https://example.com/alice.png",
+        )
+        mock_verify.assert_not_called()
+        mock_copy_tasks.assert_called_once_with(8)
+
+    def test_existing_google_user_keeps_normal_redirect_after_passkey_prompt_was_already_shown(self):
+        request = make_request(
+            session={
+                "google_oauth_state": "google-state",
+                "google_redirect_uri": "https://chatcore-ai.com/google-callback",
+                "google_login_next_path": "/memo",
+            }
+        )
+        fake_flow = FakeFlow()
+        fake_flow_class = Mock()
+        fake_flow_class.from_client_config.return_value = fake_flow
+        existing_google_user = {
+            "id": 9,
+            "email": "user@example.com",
+            "is_verified": True,
+            "provider_user_id": "google-user-789",
+            "username": "Alice Example",
+            "avatar_url": "https://example.com/alice.png",
+        }
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            with patch(
+                "blueprints.auth._google_client_config",
+                side_effect=valid_google_client_config,
+            ):
+                with patch("blueprints.auth.run_blocking", new=immediate_run_blocking):
+                    with patch(
+                        "blueprints.auth._fetch_google_user_info",
+                        return_value={
+                            "id": "google-user-789",
+                            "email": "user@example.com",
+                            "verified_email": True,
+                            "name": "Alice Example",
+                            "picture": "https://example.com/alice.png",
+                        },
+                    ):
+                        with patch(
+                            "blueprints.auth.get_user_by_google_id",
+                            return_value=existing_google_user,
+                        ):
+                            with patch("blueprints.auth.link_google_account") as mock_link:
+                                with patch(
+                                    "blueprints.auth.update_user_profile_from_google_if_unset"
+                                ):
+                                    with patch("blueprints.auth.set_user_verified") as mock_verify:
+                                        with patch(
+                                            "blueprints.auth.copy_default_tasks_for_user"
+                                        ):
+                                            with patch(
+                                                "blueprints.auth.get_user_by_id",
+                                                return_value={
+                                                    "id": 9,
+                                                    "email": "user@example.com",
+                                                },
+                                            ):
+                                                response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/memo")
+        mock_link.assert_called_once_with(9, "google-user-789", "user@example.com")
+        mock_verify.assert_not_called()
+
     def test_google_callback_redirects_to_login_when_db_error_occurs(self):
         request = make_request(
             session={

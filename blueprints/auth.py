@@ -927,9 +927,12 @@ async def google_callback(request: Request):
                     _clear_google_oauth_session(session)
                     return RedirectResponse(login_redirect_url, status_code=302)
                 user_id = user["id"]
+                linked_google_account_for_first_time = not existing_google_user_id
                 await run_blocking(link_google_account, user_id, google_user_id, email)
                 should_mark_verified = not user.get("is_verified")
-                should_offer_passkey_setup = should_mark_verified
+                should_offer_passkey_setup = (
+                    linked_google_account_for_first_time or should_mark_verified
+                )
             else:
                 # Google 初回ログイン時は Google プロフィールを初期値に使って自動作成する
                 # Auto-create a verified user seeded from the Google profile.
