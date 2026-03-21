@@ -1,0 +1,133 @@
+name: chat-core
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  app_blue: &app_service
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: chat-core-app:latest
+    container_name: chatcore_app_blue
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - Gemini_API_KEY=${Gemini_API_KEY}
+      - SEND_ADDRESS=${SEND_ADDRESS}
+      - SEND_PASSWORD=${SEND_PASSWORD:-}
+      - EMAIL_SEND_PASSWORD=${EMAIL_SEND_PASSWORD:-}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-20b}
+      - GEMINI_DEFAULT_MODEL=${GEMINI_DEFAULT_MODEL:-gemini-2.5-flash}
+      - LLM_DAILY_API_LIMIT=${LLM_DAILY_API_LIMIT:-300}
+      - AUTH_EMAIL_DAILY_SEND_LIMIT=${AUTH_EMAIL_DAILY_SEND_LIMIT:-50}
+      - FASTAPI_SECRET_KEY=${FASTAPI_SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-}
+      - GOOGLE_JS_ORIGIN=${GOOGLE_JS_ORIGIN:-https://chatcore-ai.com}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - PORT=5004
+      - FRONTEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DB_POOL_MIN_CONN=${DB_POOL_MIN_CONN:-1}
+      - DB_POOL_MAX_CONN=${DB_POOL_MAX_CONN:-10}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - FASTAPI_ENV=production
+      - FASTAPI_DEBUG=0
+      - LOG_OUTPUT=${LOG_OUTPUT:-json}
+    ports:
+      - "5004:5004"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; import sys; sys.exit(0 if urlopen('http://127.0.0.1:5004/readyz').status == 200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  app_green:
+    <<: *app_service
+    container_name: chatcore_app_green
+    ports:
+      - "5005:5004"
+
+  frontend_blue: &frontend_service
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: ${FRONTEND_URL:-https://chatcore-ai.com}
+    image: chat-core-frontend:latest
+    container_name: chatcore_frontend_blue
+    environment:
+      - BACKEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  frontend_green:
+    <<: *frontend_service
+    container_name: chatcore_frontend_green
+    ports:
+      - "3001:3000"
+
+volumes:
+  db_data:

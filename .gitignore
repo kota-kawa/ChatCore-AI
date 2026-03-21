@@ -87,6 +87,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 *.env.bak
+.deploy-active-color
 
 # Database & Uploads
 *.sqlite3

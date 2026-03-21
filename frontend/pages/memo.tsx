@@ -51,7 +51,12 @@ export const getServerSideProps: GetServerSideProps<MemoPageProps> = async (cont
 
 export default function MemoPage({ memos, saved }: MemoPageProps) {
   useEffect(() => {
+    document.body.classList.add("memo-page");
     import("../scripts/entries/memo");
+    return () => {
+      document.body.classList.remove("memo-page");
+      document.body.classList.remove("modal-open");
+    };
   }, []);
 
   const router = useRouter();
@@ -65,10 +70,6 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
     saved ? { type: "success", text: "メモを保存しました。" } : null
   );
   const [submitting, setSubmitting] = useState(false);
-  const messageTone =
-    message?.type === "success"
-      ? "border-violet-400/70 bg-violet-50 text-violet-700"
-      : "border-rose-400/70 bg-rose-50 text-rose-700";
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -130,11 +131,11 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
         />
       </Head>
 
-      <div className="relative min-h-screen overflow-hidden bg-violet-50">
+      <div className="memo-page-shell">
         <action-menu></action-menu>
 
-        <div className="pointer-events-none absolute -top-24 right-[-10rem] h-80 w-80 rounded-full bg-violet-200/50 blur-3xl"></div>
-        <div className="pointer-events-none absolute top-40 -left-24 h-96 w-96 rounded-full bg-fuchsia-200/50 blur-3xl"></div>
+        <div className="memo-page-glow memo-page-glow--amber" aria-hidden="true"></div>
+        <div className="memo-page-glow memo-page-glow--gold" aria-hidden="true"></div>
 
         <div id="auth-buttons" style={{ display: "none", position: "fixed", top: "10px", right: "10px", zIndex: 2000 }}>
           <button id="login-btn" className="auth-btn">
@@ -145,72 +146,72 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
 
         <user-icon id="userIcon" style={{ display: "none" }}></user-icon>
 
-        <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-10 px-6 py-12 lg:py-16">
-          <header className="rounded-3xl border border-white/70 bg-white/80 p-8 shadow-2xl shadow-violet-100/60 backdrop-blur">
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-600 text-2xl text-white shadow-lg shadow-violet-200">
-                ✍️
+        <div className="memo-container">
+          <header className="memo-hero memo-card">
+            <div className="memo-hero__topline">
+              <span className="memo-hero__icon">
+                <i className="bi bi-journal-text"></i>
               </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-violet-500">
+              <div className="memo-hero__text">
+                <p className="memo-hero__eyebrow">
                   Memo Workspace
                 </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+                <h1>
                   会話メモを整理する
                 </h1>
+                <p>
+                  AIとのやり取りを保存し、後から素早く振り返りましょう。入力とAIの回答をそのまま記録できます。
+                </p>
               </div>
             </div>
-            <p className="mt-4 max-w-2xl text-base text-slate-600 md:text-lg">
-              AIとのやり取りを保存し、後から素早く振り返りましょう。入力とAIの回答をそのまま記録できます。
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 shadow-sm">
-                🗂️ タグで整理
+            <div className="memo-hero__chips" aria-label="主な機能">
+              <span className="memo-hero__chip">
+                <i className="bi bi-tags"></i>
+                タグで整理
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 shadow-sm">
-                ⚡ すばやく検索
+              <span className="memo-hero__chip">
+                <i className="bi bi-lightning-charge"></i>
+                すばやく検索
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 shadow-sm">
-                🔒 安心の保存
+              <span className="memo-hero__chip">
+                <i className="bi bi-shield-check"></i>
+                安心の保存
               </span>
             </div>
           </header>
 
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <section className="rounded-3xl border border-white/70 bg-white/80 p-8 shadow-2xl shadow-violet-100/40 backdrop-blur">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-xl font-semibold text-slate-900">新しいメモを追加</h2>
-                <p className="text-sm text-slate-500">
+          <div className="memo-grid">
+            <section className="memo-card memo-card--form">
+              <div className="memo-card__header">
+                <h2>新しいメモを追加</h2>
+                <p>
                   入力内容とAIの回答を貼り付けて保存します。
                 </p>
               </div>
 
               {message ? (
-                <div
-                  className={`mt-6 rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${messageTone}`}
-                  role="alert"
-                >
+                <div className={`memo-flash memo-flash--${message.type}`} role="alert">
                   {message.text}
                 </div>
               ) : null}
 
-              <form method="post" className="mt-6 space-y-6" onSubmit={handleSubmit}>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="input_content">
-                    入力内容 <span className="text-xs text-slate-400">(任意)</span>
+              <form method="post" className="memo-form" onSubmit={handleSubmit}>
+                <div className="form-group">
+                  <label htmlFor="input_content">
+                    入力内容 <span className="optional">(任意)</span>
                   </label>
                   <textarea
                     id="input_content"
                     name="input_content"
                     placeholder="AIに送ったプロンプトを入力 / 貼り付けしてください"
-                    className="min-h-[140px] w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                    className="memo-control"
                     value={formState.input_content}
                     onChange={handleChange}
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="ai_response">
+                <div className="form-group">
+                  <label htmlFor="ai_response">
                     AIの回答
                   </label>
                   <textarea
@@ -218,38 +219,38 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                     name="ai_response"
                     placeholder="AIからの回答を入力 / 貼り付けしてください"
                     required
-                    className="min-h-[180px] w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                    className="memo-control memo-control--response"
                     value={formState.ai_response}
                     onChange={handleChange}
                   />
                 </div>
 
-                <div className="grid gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="title">
-                      タイトル <span className="text-xs text-slate-400">(任意)</span>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label htmlFor="title">
+                      タイトル <span className="optional">(任意)</span>
                     </label>
                     <input
                       type="text"
                       id="title"
                       name="title"
                       placeholder="空の場合は回答の1行目が使われます"
-                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                      className="memo-control"
                       value={formState.title}
                       onChange={handleChange}
                       maxLength={255}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="tags">
-                      タグ <span className="text-xs text-slate-400">(任意・スペース区切り)</span>
+                  <div className="form-group">
+                    <label htmlFor="tags">
+                      タグ <span className="optional">(任意・スペース区切り)</span>
                     </label>
                     <input
                       type="text"
                       id="tags"
                       name="tags"
                       placeholder="例: 仕事 議事録"
-                      className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm text-slate-700 shadow-sm transition focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-100"
+                      className="memo-control"
                       value={formState.tags}
                       onChange={handleChange}
                       maxLength={255}
@@ -257,11 +258,11 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-xs text-slate-400">必須項目はAIの回答のみです。</p>
+                <div className="form-actions">
+                  <p className="memo-form__hint">必須項目はAIの回答のみです。</p>
                   <button
                     type="submit"
-                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-200/60 transition hover:-translate-y-0.5 hover:shadow-violet-300/70 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="primary-button"
                     disabled={submitting}
                   >
                     <svg
@@ -278,14 +279,14 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
               </form>
             </section>
 
-            <section className="rounded-3xl border border-white/70 bg-white/70 p-8 shadow-2xl shadow-violet-100/40 backdrop-blur">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-xl font-semibold text-slate-900">最近保存したメモ</h2>
-                <p className="text-sm text-slate-500">メモをクリックすると内容が表示されます。</p>
+            <section className="memo-card memo-history">
+              <div className="memo-card__header memo-card__header--compact">
+                <h2>最近保存したメモ</h2>
+                <p>メモをクリックすると内容が表示されます。</p>
               </div>
 
               {memos.length ? (
-                <ul className="mt-6 space-y-4">
+                <ul className="memo-history__list">
                   {memos.map((memo) => {
                     const displayTitle = memo.title || "無題のメモ";
                     const tagList = memo.tags ? memo.tags.split(/\s+/).filter(Boolean) : [];
@@ -297,7 +298,7 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                       <li key={memo.id}>
                         <button
                           type="button"
-                          className="memo-item group w-full rounded-2xl border border-slate-100 bg-white/80 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-violet-200 hover:bg-violet-50/70 hover:shadow-md focus:outline-none focus-visible:ring-4 focus-visible:ring-violet-100"
+                          className="memo-item"
                           data-memo-id={memo.id}
                           data-title={displayTitle}
                           data-date={memo.created_at || ""}
@@ -305,38 +306,35 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                           data-input={JSON.stringify(memo.input_content || "")}
                           data-response={JSON.stringify(memo.ai_response || "")}
                         >
-                          <div className="flex items-center justify-between gap-4">
-                            <h3 className="text-base font-semibold text-slate-900 group-hover:text-violet-700">
+                          <div className="memo-item__header">
+                            <h3 className="memo-item__title">
                               {displayTitle}
                             </h3>
                             {memo.created_at ? (
-                              <time className="text-xs font-medium text-slate-400">{memo.created_at}</time>
+                              <time className="memo-item__date">{memo.created_at}</time>
                             ) : null}
                           </div>
-                          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                          <div className="memo-tag-list">
                             {tagList.length ? (
                               tagList.map((tag) => (
-                                <span
-                                  className="rounded-full bg-violet-50 px-2.5 py-1 text-violet-700"
-                                  key={tag}
-                                >
+                                <span className="memo-tag" key={tag}>
                                   {tag}
                                 </span>
                               ))
                             ) : (
-                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-400">
+                              <span className="memo-tag memo-tag--muted">
                                 タグなし
                               </span>
                             )}
                           </div>
-                          {excerpt ? <p className="mt-3 text-sm text-slate-600">{excerpt}</p> : null}
+                          {excerpt ? <p className="memo-item__excerpt">{excerpt}</p> : null}
                         </button>
                       </li>
                     );
                   })}
                 </ul>
               ) : (
-                <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-sm text-slate-500">
+                <div className="memo-history__empty">
                   まだ保存されたメモはありません。
                 </div>
               )}
@@ -345,17 +343,17 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
         </div>
 
         <div
-          className="memo-modal fixed inset-0 z-50 hidden items-center justify-center px-4 py-10"
+          className="memo-modal"
           id="memoModal"
           aria-hidden="true"
         >
           <div
-            className="memo-modal__overlay absolute inset-0 bg-slate-900/60 opacity-0 backdrop-blur-sm transition-opacity duration-200"
+            className="memo-modal__overlay"
             data-modal-overlay
             data-close-modal
           ></div>
           <div
-            className="memo-modal__content relative z-10 w-full max-w-3xl translate-y-4 scale-95 rounded-3xl border border-white/60 bg-white/95 p-6 opacity-0 shadow-2xl shadow-slate-900/20 transition duration-200"
+            className="memo-modal__content"
             role="dialog"
             aria-modal="true"
             aria-labelledby="memoModalTitle"
@@ -363,7 +361,7 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
           >
             <button
               type="button"
-              className="memo-modal__close absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+              className="memo-modal__close"
               data-close-modal
               aria-label="閉じる"
             >
@@ -372,20 +370,20 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
               </svg>
             </button>
             <header className="memo-modal__header">
-              <h3 id="memoModalTitle" data-modal-title className="text-xl font-semibold text-slate-900">
+              <h3 id="memoModalTitle" data-modal-title>
                 保存したメモ
               </h3>
-              <p className="memo-modal__date mt-2 text-sm text-slate-500" data-modal-date></p>
+              <p className="memo-modal__date" data-modal-date></p>
             </header>
-            <div className="memo-modal__tags mt-4 flex flex-wrap gap-2 text-xs font-semibold" data-modal-tags></div>
-            <div className="memo-modal__body mt-6 grid gap-4 lg:grid-cols-2">
-              <section className="memo-modal__section rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-semibold text-slate-600">入力内容</h4>
-                <pre className="mt-3 whitespace-pre-wrap text-sm text-slate-700" data-modal-input></pre>
+            <div className="memo-modal__tags" data-modal-tags></div>
+            <div className="memo-modal__body">
+              <section className="memo-modal__section">
+                <h4>入力内容</h4>
+                <pre data-modal-input></pre>
               </section>
-              <section className="memo-modal__section rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                <h4 className="text-sm font-semibold text-slate-600">AIの回答</h4>
-                <pre className="mt-3 whitespace-pre-wrap text-sm text-slate-700" data-modal-response></pre>
+              <section className="memo-modal__section">
+                <h4>AIの回答</h4>
+                <pre data-modal-response></pre>
               </section>
             </div>
           </div>
