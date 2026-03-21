@@ -7,6 +7,7 @@ ENV_FILE="${ENV_FILE:-.env}"
 STATE_FILE="${DEPLOY_STATE_FILE:-.deploy-active-color}"
 NGINX_UPSTREAM_DIR="${NGINX_UPSTREAM_DIR:-/etc/nginx/chatcore-ai/upstreams}"
 NGINX_SITE_PATH="${NGINX_SITE_PATH:-}"
+NGINX_SITE_SOURCE="${NGINX_SITE_SOURCE:-deploy/chatcore-ai.conf}"
 NGINX_TEST_CMD="${NGINX_TEST_CMD:-}"
 NGINX_RELOAD_CMD="${NGINX_RELOAD_CMD:-}"
 DEPLOY_TARGET_COLOR="${DEPLOY_TARGET_COLOR:-}"
@@ -34,6 +35,13 @@ legacy_compose() {
 require_env_file() {
   if [ ! -f "${ENV_FILE}" ]; then
     echo "Required env file not found: ${ENV_FILE}" >&2
+    exit 1
+  fi
+}
+
+require_nginx_site_source() {
+  if [ -n "${NGINX_SITE_PATH}" ] && [ ! -f "${NGINX_SITE_SOURCE}" ]; then
+    echo "Required nginx site template not found: ${NGINX_SITE_SOURCE}" >&2
     exit 1
   fi
 }
@@ -95,6 +103,7 @@ validate_required_env() {
 
 require_cmd docker
 require_env_file
+require_nginx_site_source
 load_env_file
 apply_legacy_env_fallbacks
 preflight_compose_config
@@ -192,33 +201,65 @@ write_text_as_root() {
   fi
 }
 
-write_active_upstreams() {
+resolve_color_ports() {
   local color="$1"
-  local backend_port frontend_port
 
   case "${color}" in
     blue)
-      backend_port="5004"
-      frontend_port="3000"
+      printf "%s %s\n" "5004" "3000"
       ;;
     green)
-      backend_port="5005"
-      frontend_port="3001"
+      printf "%s %s\n" "5005" "3001"
       ;;
     *)
       echo "Unsupported color: ${color}" >&2
       return 1
       ;;
   esac
+}
+
+install_nginx_site_config() {
+  if [ -n "${NGINX_SITE_PATH}" ]; then
+    run_root install -m 644 "${NGINX_SITE_SOURCE}" "${NGINX_SITE_PATH}"
+  fi
+}
+
+write_upstream_files() {
+  local color="$1"
+  local backend_port frontend_port
+
+  read -r backend_port frontend_port < <(resolve_color_ports "${color}")
 
   run_root install -d -m 755 "${NGINX_UPSTREAM_DIR}"
 
   write_text_as_root "${NGINX_UPSTREAM_DIR}/backend_active.conf" "server 127.0.0.1:${backend_port};"$'\n'
   write_text_as_root "${NGINX_UPSTREAM_DIR}/frontend_active.conf" "server 127.0.0.1:${frontend_port};"$'\n'
+}
 
-  if [ -n "${NGINX_SITE_PATH}" ]; then
-    run_root install -m 644 chatcore-ai.conf "${NGINX_SITE_PATH}"
+bootstrap_nginx_upstreams() {
+  local current_color="$1"
+  local target_color="$2"
+  local bootstrap_color="${current_color}"
+
+  if [ "${bootstrap_color}" = "none" ]; then
+    bootstrap_color="${target_color}"
   fi
+
+  if [ ! -f "${NGINX_UPSTREAM_DIR}/backend_active.conf" ] || [ ! -f "${NGINX_UPSTREAM_DIR}/frontend_active.conf" ]; then
+    echo "Bootstrapping nginx upstream include files for ${bootstrap_color}."
+    write_upstream_files "${bootstrap_color}"
+  else
+    run_root install -d -m 755 "${NGINX_UPSTREAM_DIR}"
+  fi
+
+  install_nginx_site_config
+}
+
+write_active_upstreams() {
+  local color="$1"
+
+  write_upstream_files "${color}"
+  install_nginx_site_config
 
   nginx_test
   nginx_reload
@@ -337,6 +378,8 @@ if [ "${TARGET_COLOR}" = "${CURRENT_COLOR}" ] && [ "${CURRENT_COLOR}" != "none" 
   echo "Target color matches the active color (${CURRENT_COLOR}). Choose the inactive color instead." >&2
   exit 1
 fi
+
+bootstrap_nginx_upstreams "${CURRENT_COLOR}" "${TARGET_COLOR}"
 
 SWITCHED=0
 
