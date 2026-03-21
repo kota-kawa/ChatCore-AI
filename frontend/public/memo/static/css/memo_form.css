@@ -78,7 +78,7 @@ body.memo-page.modal-open {
   gap: 1.5rem;
 }
 
-#auth-buttons .auth-btn {
+.memo-page-shell #auth-buttons .auth-btn {
   border: 1px solid rgba(255, 251, 235, 0.9);
   border-radius: 999px;
   background: rgba(255, 251, 235, 0.96);
@@ -92,16 +92,16 @@ body.memo-page.modal-open {
   transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-#auth-buttons .auth-btn:hover {
+.memo-page-shell #auth-buttons .auth-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 14px rgba(41, 24, 6, 0.2);
 }
 
-#auth-buttons .auth-btn i {
+.memo-page-shell #auth-buttons .auth-btn i {
   font-size: 1.1rem;
 }
 
-#auth-buttons .auth-btn span {
+.memo-page-shell #auth-buttons .auth-btn span {
   font-size: 0.86rem;
   font-weight: 700;
 }
@@ -250,19 +250,19 @@ body.memo-page.modal-open {
   gap: 1.2rem;
 }
 
-.form-group {
+.memo-page-shell .form-group {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
 }
 
-.form-group label {
+.memo-page-shell .form-group label {
   font-size: 0.94rem;
   font-weight: 600;
   color: #5c3610;
 }
 
-.optional {
+.memo-page-shell .optional {
   font-size: 0.82rem;
   font-weight: 500;
   color: #9f7a4a;
@@ -299,13 +299,13 @@ textarea.memo-control {
   transform: translateY(-1px);
 }
 
-.form-grid {
+.memo-page-shell .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
-.form-actions {
+.memo-page-shell .form-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -313,13 +313,13 @@ textarea.memo-control {
   flex-wrap: wrap;
 }
 
-.memo-form__hint {
+.memo-page-shell .memo-form__hint {
   margin: 0;
   font-size: 0.82rem;
   color: #9f7a4a;
 }
 
-.primary-button {
+.memo-page-shell .primary-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -337,12 +337,12 @@ textarea.memo-control {
   transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
 }
 
-.primary-button:hover {
+.memo-page-shell .primary-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 22px 40px rgba(217, 119, 6, 0.3);
 }
 
-.primary-button:disabled {
+.memo-page-shell .primary-button:disabled {
   cursor: not-allowed;
   opacity: 0.62;
 }
@@ -612,14 +612,14 @@ textarea.memo-control {
     gap: 1rem;
   }
 
-  #auth-buttons .auth-btn {
+  .memo-page-shell #auth-buttons .auth-btn {
     width: 2.5rem;
     height: 2.5rem;
     padding: 0;
     justify-content: center;
   }
 
-  #auth-buttons .auth-btn span {
+  .memo-page-shell #auth-buttons .auth-btn span {
     display: none;
   }
 
@@ -648,16 +648,16 @@ textarea.memo-control {
     justify-content: flex-start;
   }
 
-  .form-grid,
+  .memo-page-shell .form-grid,
   .memo-modal__body {
     grid-template-columns: 1fr;
   }
 
-  .form-actions {
+  .memo-page-shell .form-actions {
     align-items: stretch;
   }
 
-  .primary-button {
+  .memo-page-shell .primary-button {
     width: 100%;
   }
 
