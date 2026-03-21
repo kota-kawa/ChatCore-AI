@@ -31,7 +31,7 @@ def cleanup_ephemeral_chats():
 
 # ルートハンドラを import して APIRouter へ登録する
 # Import route modules so handlers are registered on APIRouter.
-from . import views, profile, rooms, messages, tasks  # noqa: F401
+from . import views, profile, rooms, messages, tasks  # noqa: F401, E402
 
 __all__ = [
     "chat_bp",

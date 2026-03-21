@@ -134,15 +134,15 @@ async def readyz():
 
 # 各 Router を読み込んでエンドポイント定義を登録可能にする
 # Import routers so endpoint definitions are attached.
-from blueprints.auth import auth_bp
-from blueprints.verification import verification_bp
-from blueprints.chat import chat_bp
-from blueprints.prompt_share import prompt_share_bp
-from blueprints.prompt_share.prompt_share_api import prompt_share_api_bp
-from blueprints.prompt_share.prompt_search import search_bp
-from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp
-from blueprints.admin import admin_bp
-from blueprints.memo import memo_bp
+from blueprints.auth import auth_bp  # noqa: E402
+from blueprints.verification import verification_bp  # noqa: E402
+from blueprints.chat import chat_bp  # noqa: E402
+from blueprints.prompt_share import prompt_share_bp  # noqa: E402
+from blueprints.prompt_share.prompt_share_api import prompt_share_api_bp  # noqa: E402
+from blueprints.prompt_share.prompt_search import search_bp  # noqa: E402
+from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp  # noqa: E402
+from blueprints.admin import admin_bp  # noqa: E402
+from blueprints.memo import memo_bp  # noqa: E402
 
 # ルーティングテーブルに各 Router を登録する
 # Register all routers into the app routing table.

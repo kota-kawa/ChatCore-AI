@@ -897,9 +897,12 @@ async def google_callback(request: Request):
 
     if not email or not google_user_id or not verified_email:
         missing = []
-        if not email: missing.append("email")
-        if not google_user_id: missing.append("google_user_id (id/sub)")
-        if not verified_email: missing.append("verified_email/email_verified")
+        if not email:
+            missing.append("email")
+        if not google_user_id:
+            missing.append("google_user_id (id/sub)")
+        if not verified_email:
+            missing.append("verified_email/email_verified")
         logger.warning("Google OAuth callback: required fields missing: %s", ", ".join(missing))
         _clear_google_oauth_session(session)
         return RedirectResponse(login_redirect_url, status_code=302)
