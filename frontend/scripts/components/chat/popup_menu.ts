@@ -98,13 +98,13 @@ chatTemplate.innerHTML = `
     }
 
     .btn--share {
-      background: linear-gradient(135deg, #3498db, #2980b9);
+      background: linear-gradient(135deg, #1a73e8, #4a9bf5);
     }
     .btn--star {
-      background: linear-gradient(135deg, #2ecc71, #27ae60);
+      background: linear-gradient(135deg, #19c37d, #0fa86a);
     }
     .btn--comment {
-      background: linear-gradient(135deg, #11998e, #38ef7d);
+      background: linear-gradient(135deg, #d97706, #f59e0b);
     }
 
     .actions-menu .btn {
