@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: ci-quality-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   PYTHON_VERSION: "3.12"
@@ -210,6 +210,36 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+  docker_backend_build:
+    name: Backend Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: |
+          set -euo pipefail
+          docker build -t chat-core-backend-ci:latest .
+
+  docker_frontend_build:
+    name: Frontend Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build frontend image
+        run: |
+          set -euo pipefail
+          docker build \
+            -f frontend/Dockerfile \
+            --build-arg BACKEND_URL=http://app:5004 \
+            -t chat-core-frontend-ci:latest \
+            ./frontend
+
   session_middleware_quarantine:
     name: Session Middleware Fallback Tests (Quarantined)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -278,7 +308,7 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [lint, unittest, integration_tests, frontend_checks]
+    needs: [lint, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 15
 
@@ -314,32 +344,10 @@ jobs:
           cd "${DEPLOY_PATH}"
 
           PREV_COMMIT="$(git rev-parse HEAD)"
-          if docker compose up --help 2>/dev/null | grep -q -- '--wait'; then
-            COMPOSE_WAIT=1
-          else
-            COMPOSE_WAIT=0
-          fi
-          compose_up_with_wait() {
-            if [ "${COMPOSE_WAIT}" -eq 1 ]; then
-              docker compose up -d --build --wait --wait-timeout 180
-            else
-              docker compose up -d --build
-            fi
-          }
           diagnose() {
             echo "Deployment diagnostics"
             docker compose ps || true
             docker compose logs app db frontend redis --tail=200 || true
-          }
-          rollback() {
-            echo "Deploy failed. Rolling back to ${PREV_COMMIT}"
-            git reset --hard "${PREV_COMMIT}"
-            compose_up_with_wait
-          }
-          on_error() {
-            trap - ERR
-            diagnose
-            rollback || echo "Rollback also failed." >&2
           }
           fail_deploy() {
             echo "$1" >&2
@@ -369,6 +377,58 @@ jobs:
 
             fail_deploy "Timed out waiting for service ${service} to become ready."
           }
+          probe_backend() {
+            docker compose exec -T app python -c "from urllib.request import urlopen; import sys; sys.exit(0 if urlopen('http://127.0.0.1:5004/readyz').status == 200 else 1)"
+          }
+          probe_frontend() {
+            docker compose exec -T frontend node -e "fetch('http://127.0.0.1:3000/api/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+          }
+          wait_for_http_probe() {
+            probe_name="$1"
+            retries="${2:-30}"
+            while [ "${retries}" -gt 0 ]; do
+              if "${probe_name}"; then
+                echo "${probe_name} passed."
+                return 0
+              fi
+              sleep 2
+              retries=$((retries - 1))
+            done
+            fail_deploy "HTTP readiness probe ${probe_name} failed."
+          }
+          start_core_services() {
+            docker compose up -d db redis
+            wait_for_service_healthy db 90
+            wait_for_service_healthy redis 90
+          }
+          build_runtime_images() {
+            docker compose build app frontend
+          }
+          run_migrations() {
+            docker compose run --rm app alembic upgrade head
+          }
+          deploy_app() {
+            docker compose up -d --no-deps app
+            wait_for_service_healthy app 90
+            wait_for_http_probe probe_backend 30
+          }
+          deploy_frontend() {
+            docker compose up -d --no-deps frontend
+            wait_for_service_healthy frontend 90
+            wait_for_http_probe probe_frontend 30
+          }
+          rollback() {
+            echo "Deploy failed. Rolling back to ${PREV_COMMIT}"
+            git reset --hard "${PREV_COMMIT}"
+            start_core_services
+            build_runtime_images
+            docker compose up -d --no-deps app frontend
+          }
+          on_error() {
+            trap - ERR
+            diagnose
+            rollback || echo "Rollback also failed." >&2
+          }
           trap on_error ERR
 
           git fetch origin main
@@ -379,36 +439,12 @@ jobs:
             echo "Created .env from .env.example. Please update it with actual secrets."
           fi
 
-          compose_up_with_wait
-
+          start_core_services
+          build_runtime_images
+          run_migrations
+          deploy_app
+          deploy_frontend
           docker compose ps
-          if [ "${COMPOSE_WAIT}" -eq 0 ]; then
-            for service in app frontend db redis; do
-              wait_for_service_healthy "${service}" 90
-            done
-          fi
-
-          probe_backend() {
-            docker compose exec -T app python -c "from urllib.request import urlopen; import sys; sys.exit(0 if urlopen('http://127.0.0.1:5004/readyz').status == 200 else 1)"
-          }
-
-          probe_frontend() {
-            docker compose exec -T frontend node -e "fetch('http://127.0.0.1:3000/api/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
-          }
-
-          retries=30
-          while [ "${retries}" -gt 0 ]; do
-            if probe_backend && probe_frontend; then
-              echo "HTTP readiness probes passed."
-              break
-            fi
-            sleep 2
-            retries=$((retries - 1))
-          done
-
-          if [ "${retries}" -eq 0 ]; then
-            fail_deploy "HTTP readiness probes failed."
-          fi
 
           trap - ERR
           docker image prune -f || true
