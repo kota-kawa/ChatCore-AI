@@ -403,9 +403,9 @@ jobs:
           diagnose() {
             echo "--- Deployment Diagnostics ---"
             echo "Container Status:"
-            docker compose -f deploy/docker-compose.bluegreen.yml ps || true
+            docker compose --env-file .env -f deploy/docker-compose.bluegreen.yml ps || true
             echo "Recent Logs for Core Services:"
-            docker compose -f deploy/docker-compose.bluegreen.yml logs --tail=50 db redis app_blue app_green frontend_blue frontend_green || true
+            docker compose --env-file .env -f deploy/docker-compose.bluegreen.yml logs --tail=50 db redis app_blue app_green frontend_blue frontend_green || true
           }
           
           rollback() {

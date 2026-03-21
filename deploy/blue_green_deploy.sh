@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-deploy/docker-compose.bluegreen.yml}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-docker-compose.yml}"
+ENV_FILE="${ENV_FILE:-.env}"
 STATE_FILE="${DEPLOY_STATE_FILE:-.deploy-active-color}"
 NGINX_UPSTREAM_DIR="${NGINX_UPSTREAM_DIR:-/etc/nginx/chatcore-ai/upstreams}"
 NGINX_SITE_PATH="${NGINX_SITE_PATH:-}"
@@ -17,15 +18,55 @@ require_cmd() {
   fi
 }
 
-require_cmd docker
-
 compose() {
-  docker compose -f "${COMPOSE_FILE}" "$@"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
 legacy_compose() {
-  docker compose -f "${LEGACY_COMPOSE_FILE}" "$@"
+  docker compose --env-file "${ENV_FILE}" -f "${LEGACY_COMPOSE_FILE}" "$@"
 }
+
+require_env_file() {
+  if [ ! -f "${ENV_FILE}" ]; then
+    echo "Required env file not found: ${ENV_FILE}" >&2
+    exit 1
+  fi
+}
+
+preflight_compose_config() {
+  compose config >/dev/null
+}
+
+validate_required_env() {
+  local required_vars=(
+    POSTGRES_DB
+    POSTGRES_USER
+    POSTGRES_PASSWORD
+    FASTAPI_SECRET_KEY
+  )
+  local var_name value missing=0
+
+  for var_name in "${required_vars[@]}"; do
+    value="$(
+      compose config --environment 2>/dev/null \
+        | awk -F '=' -v key="${var_name}" '$1 == key {print substr($0, index($0, "=") + 1)}' \
+        || true
+    )"
+    if [ -z "${value}" ]; then
+      echo "Required environment variable is empty or unresolved: ${var_name}" >&2
+      missing=1
+    fi
+  done
+
+  if [ "${missing}" -ne 0 ]; then
+    exit 1
+  fi
+}
+
+require_cmd docker
+require_env_file
+preflight_compose_config
+validate_required_env
 
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
