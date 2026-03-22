@@ -401,58 +401,26 @@ chat-action-menu {
   color: var(--text-dark, #1a1a1a);
 }
 
-/* コピーアイコン */
-.copy-btn {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  color: var(--text-secondary, #6b7280);
-  font-size: 0.95rem;
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    opacity var(--transition-normal, 0.2s ease),
-    color var(--transition-fast, 0.15s ease),
-    background var(--transition-fast, 0.15s ease);
-  padding: 0;
-  border-radius: 999px;
-  line-height: 1;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
-  z-index: 3;
-  pointer-events: auto;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
+/* メッセージアクション（コピー / メモ保存） */
 .message-actions {
-  position: absolute;
-  top: 0.05rem;
-  right: -2.25rem;
-  z-index: 3;
   display: inline-flex;
-  flex-direction: row;
+  align-items: center;
   gap: 0.45rem;
-  pointer-events: auto;
+  margin-top: 0.35rem;
+  width: 100%;
 }
 
-.message-action-btn {
-  position: static !important;
-  left: auto !important;
-  right: auto !important;
-  top: auto !important;
+.user-message-wrapper .message-actions {
+  justify-content: flex-end;
 }
 
-.copy-btn:hover {
-  background: rgba(255, 255, 255, 1);
-  color: var(--text-dark, #1a1a1a);
+.bot-message-wrapper .message-actions {
+  justify-content: flex-start;
 }
 
+.copy-btn,
 .memo-save-btn {
+  position: static !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -463,7 +431,7 @@ chat-action-menu {
   color: var(--text-secondary, #6b7280);
   font-size: 0.95rem;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.76;
   transition:
     opacity var(--transition-normal, 0.2s ease),
     color var(--transition-fast, 0.15s ease),
@@ -477,6 +445,7 @@ chat-action-menu {
   -webkit-tap-highlight-color: transparent;
 }
 
+.copy-btn:hover,
 .memo-save-btn:hover {
   background: rgba(255, 255, 255, 1);
   color: var(--text-dark, #1a1a1a);
@@ -484,40 +453,6 @@ chat-action-menu {
 
 .memo-save-btn:disabled {
   cursor: wait;
-}
-
-.user-message-wrapper .copy-btn {
-  left: -2.25rem;
-  top: 0.05rem;
-}
-
-.bot-message-wrapper .copy-btn {
-  right: auto;
-  top: auto;
-}
-
-.bot-message-wrapper .message-actions {
-  right: -2.25rem;
-}
-
-.user-message-wrapper .message-actions {
-  display: none;
-}
-
-.message-wrapper:hover .copy-btn {
-  opacity: 0.72;
-}
-
-.message-wrapper:hover .memo-save-btn {
-  opacity: 0.72;
-}
-
-.message-wrapper:focus-within .copy-btn {
-  opacity: 0.72;
-}
-
-.message-wrapper:focus-within .memo-save-btn {
-  opacity: 0.72;
 }
 
 .copy-btn:hover {
@@ -565,6 +500,10 @@ chat-action-menu {
   opacity: 1 !important;
 }
 
+.message-wrapper--streaming .message-actions {
+  display: none;
+}
+
 .message-wrapper--streaming .copy-btn {
   opacity: 0;
   pointer-events: none;
@@ -577,11 +516,11 @@ chat-action-menu {
 
 @media (hover: none), (pointer: coarse) {
   .copy-btn {
-    opacity: 0.68;
+    opacity: 0.88;
   }
 
   .memo-save-btn {
-    opacity: 0.68;
+    opacity: 0.88;
   }
 }
 
@@ -729,31 +668,6 @@ chat-action-menu {
   .user-message-wrapper {
     max-width: 88%;
   }
-
-  /* コピーボタンをバブル内側に配置 */
-  .user-message-wrapper .copy-btn {
-    left: auto;
-    right: 0.45rem;
-    top: 0.35rem;
-  }
-
-  .bot-message-wrapper .copy-btn {
-    right: 0.45rem;
-    top: 0.35rem;
-  }
-
-  .bot-message-wrapper .message-actions {
-    right: 0.45rem;
-    top: 0.35rem;
-  }
-
-  .user-message {
-    padding-right: 2.35rem;
-  }
-
-  .bot-message {
-    padding-right: 4.55rem;
-  }
 }
 
 /* ─── スマートフォン (≤576px) ─── */
@@ -845,7 +759,6 @@ chat-action-menu {
     font-size: 0.82rem;
   }
 
-  /* コピーボタンをバブルの右上に小さく配置 */
   .copy-btn {
     width: 1.75rem;
     height: 1.75rem;
@@ -858,29 +771,8 @@ chat-action-menu {
     font-size: 0.88rem;
   }
 
-  .user-message-wrapper .copy-btn {
-    left: auto;
-    right: 0.2rem;
-    top: 0.2rem;
-  }
-
-  .bot-message-wrapper .copy-btn {
-    right: 0.2rem;
-    top: 0.2rem;
-  }
-
-  .bot-message-wrapper .message-actions {
-    right: 0.2rem;
-    top: 0.2rem;
+  .message-actions {
     gap: 0.3rem;
-  }
-
-  .user-message {
-    padding-right: 2.15rem;
-  }
-
-  .bot-message {
-    padding-right: 4.25rem;
   }
 
   .scroll-to-bottom-btn {

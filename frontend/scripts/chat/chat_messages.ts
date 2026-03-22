@@ -50,7 +50,7 @@ function createBotMessageElements(options: { scrollToBottom?: boolean } = {}) {
   saveBtn.classList.add("message-action-btn");
 
   actionGroup.append(copyBtn, saveBtn);
-  wrapper.append(actionGroup, msg);
+  wrapper.append(msg, actionGroup);
   window.chatMessages.appendChild(wrapper);
   if (scrollToBottom) {
     if (window.scrollMessageToBottom) {
@@ -107,8 +107,12 @@ function renderUserMessage(text: string) {
   msg.style.animation = "floatUp 0.5s ease-out";
 
   const copyBtn = window.createCopyBtn ? window.createCopyBtn(() => text) : document.createElement("button");
+  copyBtn.classList.add("message-action-btn");
+  const actionGroup = document.createElement("div");
+  actionGroup.className = "message-actions";
 
-  wrapper.append(copyBtn, msg);
+  actionGroup.append(copyBtn);
+  wrapper.append(msg, actionGroup);
   window.chatMessages.appendChild(wrapper);
   if (window.scrollMessageToBottom) {
     window.scrollMessageToBottom();
@@ -372,6 +376,9 @@ function buildHistoryMessageElement(text: string, sender: string) {
     wrapper.className = "message-wrapper user-message-wrapper";
     const msg = document.createElement("div");
     msg.className = "user-message";
+    const actionGroup = document.createElement("div");
+    actionGroup.className = "message-actions";
+    copyBtn.classList.add("message-action-btn");
 
     // 既存履歴は <br> が含まれているため、<br> だけ許可して描画
     if (text.includes("<")) {
@@ -380,7 +387,8 @@ function buildHistoryMessageElement(text: string, sender: string) {
       window.setTextWithLineBreaks?.(msg, text);
     }
 
-    wrapper.append(copyBtn, msg);
+    actionGroup.append(copyBtn);
+    wrapper.append(msg, actionGroup);
   } else {
     wrapper.className = "message-wrapper bot-message-wrapper";
     const msg = document.createElement("div");
@@ -399,7 +407,7 @@ function buildHistoryMessageElement(text: string, sender: string) {
       window.renderSanitizedHTML(msg, window.formatLLMOutput(text));
     }
     actionGroup.append(copyBtn, saveBtn);
-    wrapper.append(actionGroup, msg);
+    wrapper.append(msg, actionGroup);
   }
   return wrapper;
 }

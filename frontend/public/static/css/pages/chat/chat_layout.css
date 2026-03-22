@@ -276,6 +276,19 @@
     padding: 0.6rem 1rem;
   }
 
+  /* 右上固定の user-icon と重ならないように共有ボタン分の余白を確保 */
+  .header-right {
+    margin-right: 3.2rem;
+  }
+
+  .chat-share-btn {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .header-left span {
     font-size: 1rem;
   }
