@@ -339,6 +339,15 @@
 /* global.css
    Base reset only. Page layout styles should live in each page stylesheet.
 */
+:root {
+  --scrollbar-size: 10px;
+  --scrollbar-radius: 999px;
+  --scrollbar-track: rgba(148, 163, 184, 0.16);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.34);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.48);
+  --scrollbar-thumb-border: rgba(255, 255, 255, 0.72);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -351,11 +360,49 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scrollbar-gutter: stable;
 }
 
 /* タッチ端末でタップ時のハイライトを抑制 */
 html {
   -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+body * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+body *::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+body *::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--scrollbar-radius);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+body *::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-thumb-border);
+  border-radius: var(--scrollbar-radius);
+  min-height: 36px;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+body *::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* サイドバー表示時にbodyスクロールを止める */
@@ -580,6 +627,10 @@ body.sidebar-visible {
 /* global.css の body スタイルをこのページ専用に上書き */
 body.settings-page,
 .user-settings-page {
+  --scrollbar-track: rgba(222, 226, 230, 0.86);
+  --scrollbar-thumb: rgba(25, 195, 125, 0.28);
+  --scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
+  --scrollbar-thumb-border: rgba(244, 247, 246, 0.94);
   background: var(--content-bg); /* ページ全体の背景 */
   min-height: 100vh;
   display: block; /* 中央寄せを解除 */

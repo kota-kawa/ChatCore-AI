@@ -59,20 +59,21 @@ chat-action-menu {
 
 /* スクロールバーを上品に */
 .chat-messages::-webkit-scrollbar {
-  width: 6px;
+  width: calc(var(--scrollbar-size) - 1px);
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 6px;
+  background: var(--scrollbar-thumb);
+  border: 2px solid var(--scrollbar-thumb-border);
+  border-radius: var(--scrollbar-radius, 999px);
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* メッセージラッパ */

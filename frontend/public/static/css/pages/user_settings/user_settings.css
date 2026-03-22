@@ -209,6 +209,10 @@
 /* global.css の body スタイルをこのページ専用に上書き */
 body.settings-page,
 .user-settings-page {
+  --scrollbar-track: rgba(222, 226, 230, 0.86);
+  --scrollbar-thumb: rgba(25, 195, 125, 0.28);
+  --scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
+  --scrollbar-thumb-border: rgba(244, 247, 246, 0.94);
   background: var(--content-bg); /* ページ全体の背景 */
   min-height: 100vh;
   display: block; /* 中央寄せを解除 */

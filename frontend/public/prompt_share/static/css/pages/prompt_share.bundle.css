@@ -43,6 +43,10 @@
 body.prompt-share-page,
 .prompt-share-page {
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
+  --scrollbar-track: rgba(218, 220, 224, 0.78);
+  --scrollbar-thumb: rgba(26, 115, 232, 0.28);
+  --scrollbar-thumb-hover: rgba(24, 90, 188, 0.44);
+  --scrollbar-thumb-border: rgba(248, 249, 250, 0.94);
   color: var(--ps-text-strong);
   line-height: 1.6;
   min-height: 100vh;
