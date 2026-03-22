@@ -21,6 +21,13 @@
 /* タスクラッパーが編集状態の場合、内部のカードに振動アニメーションを適用 */
 .task-wrapper.editable .prompt-card {
   animation: shake 0.5s infinite;
+  /* 削除・編集ボタンがカード外に配置されるため overflow を visible に */
+  overflow: visible !important;
+}
+
+/* 編集モード時：ボタンが上にはみ出る分の余白を確保 */
+.task-wrapper.editable {
+  padding-top: 12px;
 }
 
 
