@@ -158,6 +158,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
   let typingCharsPerMs = 0.042;
   let isProgrammaticScroll = false;
   let shouldStickToBottom = shouldStickToBottomAtStart;
+  let lastObservedScrollTop = scrollContainer.scrollTop;
   let isCompleted = false;
   let isFinalized = false;
 
@@ -177,6 +178,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
       shouldStickToBottom = true;
       isProgrammaticScroll = true;
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      lastObservedScrollTop = scrollContainer.scrollTop;
       isProgrammaticScroll = false;
       updateScrollToBottomVisibility();
     });
@@ -204,7 +206,10 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 
   const handleScroll = () => {
     if (isProgrammaticScroll) return;
-    shouldStickToBottom = getShouldStickToBottom(scrollContainer);
+    const currentScrollTop = scrollContainer.scrollTop;
+    const didUserScrollUp = currentScrollTop < lastObservedScrollTop;
+    shouldStickToBottom = didUserScrollUp ? false : getShouldStickToBottom(scrollContainer);
+    lastObservedScrollTop = currentScrollTop;
     updateScrollToBottomVisibility();
   };
 
@@ -215,6 +220,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 
     isProgrammaticScroll = true;
     scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    lastObservedScrollTop = scrollContainer.scrollTop;
     isProgrammaticScroll = false;
   };
 
