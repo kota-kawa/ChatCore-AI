@@ -311,10 +311,10 @@ def upgrade() -> None:
             VALUES (
                 COALESCE(NEW.id, OLD.id),
                 next_version,
-                CASE TG_OP
-                    WHEN 'INSERT' THEN 'created'
-                    WHEN 'DELETE' THEN 'deleted'
-                    WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN 'deleted'
+                CASE
+                    WHEN TG_OP = 'INSERT' THEN 'created'
+                    WHEN TG_OP = 'DELETE' THEN 'deleted'
+                    WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN 'soft_deleted'
                     ELSE 'updated'
                 END,
                 COALESCE(NEW.user_id, OLD.user_id),
@@ -366,10 +366,10 @@ def upgrade() -> None:
             VALUES (
                 COALESCE(NEW.id, OLD.id),
                 next_version,
-                CASE TG_OP
-                    WHEN 'INSERT' THEN 'created'
-                    WHEN 'DELETE' THEN 'deleted'
-                    WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN 'deleted'
+                CASE
+                    WHEN TG_OP = 'INSERT' THEN 'created'
+                    WHEN TG_OP = 'DELETE' THEN 'deleted'
+                    WHEN NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN 'soft_deleted'
                     ELSE 'updated'
                 END,
                 COALESCE(NEW.user_id, OLD.user_id),
