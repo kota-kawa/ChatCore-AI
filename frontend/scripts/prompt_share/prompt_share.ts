@@ -466,6 +466,9 @@ function initPromptSharePage(attempt = 0) {
       </div>
 
       <div class="prompt-actions-dropdown" role="menu">
+        <button class="dropdown-item" type="button" role="menuitem" data-action="share">
+          共有する
+        </button>
         <button class="dropdown-item" type="button" role="menuitem" data-action="save-to-list" ${isSavedToList ? "disabled" : ""}>
           ${isSavedToList ? "プロンプトリストに保存済み" : "プロンプトリストに保存"}
         </button>
@@ -489,9 +492,6 @@ function initPromptSharePage(attempt = 0) {
           </span>
         </div>
         <div class="prompt-actions">
-          <button class="prompt-action-btn share-btn" type="button" aria-label="共有" data-tooltip="このプロンプトを共有" data-tooltip-placement="top">
-            <i class="bi bi-share"></i>
-          </button>
           <button class="prompt-action-btn comment-btn" type="button" aria-label="コメント" data-tooltip="コメント（準備中）" data-tooltip-placement="top">
             <i class="bi bi-chat-dots"></i>
           </button>
@@ -551,18 +551,15 @@ function initPromptSharePage(attempt = 0) {
       });
     }
 
-    const shareBtn = card.querySelector(".share-btn") as HTMLButtonElement | null;
-    if (shareBtn) {
-      shareBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        currentSharePrompt = prompt;
-        const { modal, createBtn } = getPromptShareModalElements();
-        if (modal) {
-          openModal(modal, createBtn);
-        }
-        void createPromptShareLink(false);
-      });
-    }
+    const openPromptShareDialog = (event?: Event) => {
+      event?.stopPropagation();
+      currentSharePrompt = prompt;
+      const { modal, createBtn } = getPromptShareModalElements();
+      if (modal) {
+        openModal(modal, createBtn);
+      }
+      void createPromptShareLink(false);
+    };
 
     const likeBtn = card.querySelector(".like-btn") as HTMLButtonElement | null;
     if (likeBtn) {
@@ -604,6 +601,12 @@ function initPromptSharePage(attempt = 0) {
       });
 
       const saveMenuItem = dropdownMenu.querySelector<HTMLButtonElement>('[data-action="save-to-list"]');
+      const shareMenuItem = dropdownMenu.querySelector<HTMLButtonElement>('[data-action="share"]');
+      if (shareMenuItem) {
+        shareMenuItem.addEventListener("click", (event) => {
+          openPromptShareDialog(event);
+        });
+      }
       if (saveMenuItem) {
         saveMenuItem.addEventListener("click", () => {
           if (!isLoggedIn) {

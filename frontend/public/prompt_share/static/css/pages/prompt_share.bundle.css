@@ -1027,32 +1027,30 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 }
 
 .prompt-share-page .prompt-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.18rem;
   border-top: 2px solid #eef3f7;
   padding-top: 0.62rem;
 }
 
 .prompt-share-page .prompt-action-btn {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid #dce7f3;
-  border-radius: 12px;
-  background: #f7fbff;
-  color: #4a6580;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #6f859a;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.45rem;
-  box-shadow: 0 2px 8px rgba(97, 143, 186, 0.14);
+  padding: 0;
   transition:
     transform 0.14s ease,
     background 0.14s ease,
-    color 0.14s ease,
-    border-color 0.14s ease,
-    box-shadow 0.14s ease;
+    color 0.14s ease;
   user-select: none;
 }
 
@@ -1079,11 +1077,9 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 }
 
 .prompt-share-page .prompt-action-btn:hover {
-  background: #e9f3ff;
-  border-color: #9ec8f0;
+  background: rgba(72, 147, 224, 0.1);
   color: #1a5fa8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(87, 134, 177, 0.2);
 }
 
 .prompt-share-page .meatball-menu:hover {
@@ -1096,8 +1092,7 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 
 .prompt-share-page .prompt-action-btn:active {
   transform: translateY(0);
-  background: #dcecff;
-  box-shadow: 0 2px 6px rgba(87, 134, 177, 0.16);
+  background: rgba(72, 147, 224, 0.16);
 }
 
 .prompt-share-page .prompt-action-btn:disabled {
@@ -1112,16 +1107,12 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 
 .prompt-share-page .bookmark-btn.bookmarked {
   color: #1a7a4a;
-  background: #e9f7ef;
-  border-color: #93d0a9;
-  box-shadow: 0 2px 8px rgba(58, 141, 95, 0.2);
+  background: rgba(26, 122, 74, 0.1);
 }
 
 .prompt-share-page .like-btn.liked {
   color: #d93025;
-  background: #fdeceb;
-  border-color: #f1aaa5;
-  box-shadow: 0 2px 8px rgba(203, 92, 85, 0.18);
+  background: rgba(217, 48, 37, 0.1);
 }
 
 .prompt-share-page .meatball-menu {
