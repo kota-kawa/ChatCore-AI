@@ -295,11 +295,9 @@ function initPromptSharePage(attempt = 0) {
         <div class="prompt-actions">
           <button class="prompt-action-btn comment-btn" type="button" aria-label="コメント" data-tooltip="コメント（準備中）" data-tooltip-placement="top">
             <i class="bi bi-chat-dots"></i>
-            <span>コメント</span>
           </button>
           <button class="prompt-action-btn like-btn" type="button" aria-label="いいね" aria-pressed="false" data-tooltip="このプロンプトにいいね" data-tooltip-placement="top">
             <i class="bi bi-heart"></i>
-            <span>いいね</span>
           </button>
           <button class="prompt-action-btn bookmark-btn ${isBookmarked ? "bookmarked" : ""}" type="button" aria-label="保存" aria-pressed="${isBookmarked ? "true" : "false"}" data-tooltip="${isBookmarked ? "保存を解除" : "このプロンプトを保存"}" data-tooltip-placement="top">
             ${bookmarkIcon}
@@ -363,10 +361,6 @@ function initPromptSharePage(attempt = 0) {
         if (icon) {
           icon.classList.toggle("bi-heart");
           icon.classList.toggle("bi-heart-fill");
-        }
-        const label = likeBtn.querySelector("span");
-        if (label) {
-          label.textContent = liked ? "いいね済み" : "いいね";
         }
       });
     }
