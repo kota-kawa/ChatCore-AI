@@ -174,7 +174,7 @@ const bodyMarkup = `
           <p id="promptPostStatus" class="composer-status" hidden></p>
           <div class="form-group">
             <label for="prompt-author">投稿者名</label>
-            <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />
+            <input type="text" id="prompt-author" placeholder="ニックネームなど" required />
           </div>
           <div class="form-group">
             <label for="prompt-ai-model">使用AIモデル（任意）</label>

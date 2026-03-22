@@ -386,7 +386,16 @@ async def api_current_user(request: Request):
     if "user_id" in session:
         user = await run_blocking(get_user_by_id, session["user_id"])
         if user:
-            return jsonify({"logged_in": True, "user": {"id": user["id"], "email": user["email"]}})
+            return jsonify(
+                {
+                    "logged_in": True,
+                    "user": {
+                        "id": user["id"],
+                        "email": user["email"],
+                        "username": user.get("username") or "",
+                    },
+                }
+            )
         # user_id in session but user no longer exists; clear the stale session
         # セッション内 user_id が無効なため、古いログイン情報を破棄する
         session.pop("user_id", None)

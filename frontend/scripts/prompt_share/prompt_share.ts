@@ -18,6 +18,15 @@ type PromptData = {
   created_at?: string;
 };
 
+type CurrentUserResponse = {
+  logged_in?: boolean;
+  user?: {
+    id?: number;
+    email?: string;
+    username?: string;
+  };
+};
+
 const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
 const PROMPTS_CACHE_KEY = "prompt_share.prompts.v1";
 const PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -85,10 +94,34 @@ function initPromptSharePage(attempt = 0) {
   const promptCountMeta = document.getElementById("promptCountMeta") as HTMLElement | null;
   const cachedPromptShareUrls = new Map<string, string>();
   let currentSharePrompt: PromptData | null = null;
+  let hasAutoFilledAuthor = false;
 
   function setPromptCountMeta(text: string) {
     if (!promptCountMeta) return;
     promptCountMeta.textContent = text;
+  }
+
+  function applyDefaultAuthorName(user?: { username?: string } | null) {
+    const authorInput = document.getElementById("prompt-author") as HTMLInputElement | null;
+    if (!authorInput) {
+      return;
+    }
+
+    const username = String(user?.username || "").trim();
+    if (!username) {
+      return;
+    }
+
+    const currentValue = authorInput.value.trim();
+    const shouldAutofill =
+      !currentValue || currentValue === "アイデア職人" || hasAutoFilledAuthor;
+
+    if (!shouldAutofill) {
+      return;
+    }
+
+    authorInput.value = username;
+    hasAutoFilledAuthor = true;
   }
 
   // ログイン状態の確認とUI切り替え
@@ -129,11 +162,14 @@ function initPromptSharePage(attempt = 0) {
   window.setTimeout(() => {
     fetch("/api/current_user")
       .then((res) => (res.ok ? res.json() : { logged_in: false }))
-      .then((data) => {
+      .then((data: CurrentUserResponse) => {
         isLoggedIn = Boolean(data.logged_in);
         writeCachedAuthState(isLoggedIn);
         notifyAuthState(isLoggedIn);
         applyAuthUI(isLoggedIn);
+        if (isLoggedIn) {
+          applyDefaultAuthorName(data.user);
+        }
       })
       .catch((err) => {
         console.error("Error checking login status:", err);
@@ -992,6 +1028,10 @@ function initPromptSharePage(attempt = 0) {
       ? '<i class="bi bi-stars"></i> 投稿を準備中...'
       : '<i class="bi bi-upload"></i> 投稿する';
   };
+
+  authorInput?.addEventListener("input", () => {
+    hasAutoFilledAuthor = false;
+  });
 
   const promptAssistController = initPromptAssist({
     root: promptAssistRoot,
