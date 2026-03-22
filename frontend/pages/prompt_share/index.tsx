@@ -112,77 +112,75 @@ const bodyMarkup = `
   <div id="postModal" class="post-modal" role="dialog" aria-modal="true" aria-labelledby="postModalTitle" aria-hidden="true">
     <div class="post-modal-content post-modal-content--composer" tabindex="-1">
       <button type="button" class="close-btn" aria-label="投稿モーダルを閉じる">&times;</button>
-      <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
-      <p class="post-modal-lead">みんなの役に立つプロンプトを、分かりやすく共有しましょう。</p>
-      <form class="post-form" id="postForm">
-
-        <div class="form-group">
-          <label for="prompt-title">タイトル</label>
-          <input type="text" id="prompt-title" placeholder="プロンプトのタイトルを入力" required />
-        </div>
-        <div class="form-group">
-
-          <label for="prompt-category">カテゴリ</label>
-          <select id="prompt-category" required>
-            <option value="未選択" selected>未選択</option>
-            <option value="恋愛">恋愛</option>
-            <option value="勉強">勉強</option>
-            <option value="趣味">趣味</option>
-            <option value="仕事">仕事</option>
-            <option value="その他">その他</option>
-            <option value="スポーツ">スポーツ</option>
-            <option value="音楽">音楽</option>
-            <option value="旅行">旅行</option>
-            <option value="グルメ">グルメ</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="prompt-content">プロンプト内容</label>
-          <textarea id="prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
-        </div>
-        <div class="form-group">
-          <label for="prompt-author">投稿者名</label>
-          <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />
-        </div>
-        <div class="form-group">
-          <label for="prompt-ai-model">使用AIモデル（任意）</label>
-          <select id="prompt-ai-model">
-            <option value="">未設定</option>
-            <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
-            <option value="ChatGPT (GPT-4)">ChatGPT (GPT-4)</option>
-            <option value="ChatGPT (GPT-3.5)">ChatGPT (GPT-3.5)</option>
-            <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
-            <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
-            <option value="Claude 3 Opus">Claude 3 Opus</option>
-            <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
-            <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
-            <option value="その他">その他</option>
-          </select>
-        </div>
-        <!-- ガードレールの使用チェック -->
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="guardrail-checkbox"> 入出力例を追加する
-          </label>
-        </div>
-
-        <!-- ガードレールチェック時に表示する入力例・出力例のフィールド -->
-        <div id="guardrail-fields" style="display: none;">
+      <div class="post-modal-scroll">
+        <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
+        <p class="post-modal-lead">みんなの役に立つプロンプトを、分かりやすく共有しましょう。</p>
+        <form class="post-form" id="postForm">
           <div class="form-group">
-            <label for="prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
-            <textarea id="prompt-input-example" rows="3" placeholder="例: 夏休みの思い出をテーマにした短いエッセイを書いてください。"></textarea>
+            <label for="prompt-title">タイトル</label>
+            <input type="text" id="prompt-title" placeholder="プロンプトのタイトルを入力" required />
           </div>
           <div class="form-group">
-            <label for="prompt-output-example">出力例</label>
-            <textarea id="prompt-output-example" rows="3"
-              placeholder="例: 夏休みのある日、私は家族と一緒に海辺へ出かけました。波の音と潮風に包まれながら、子供の頃の記憶がよみがえり、心が温かくなりました。その日は一生忘れられない、宝物のような時間となりました。"></textarea>
+            <label for="prompt-category">カテゴリ</label>
+            <select id="prompt-category" required>
+              <option value="未選択" selected>未選択</option>
+              <option value="恋愛">恋愛</option>
+              <option value="勉強">勉強</option>
+              <option value="趣味">趣味</option>
+              <option value="仕事">仕事</option>
+              <option value="その他">その他</option>
+              <option value="スポーツ">スポーツ</option>
+              <option value="音楽">音楽</option>
+              <option value="旅行">旅行</option>
+              <option value="グルメ">グルメ</option>
+            </select>
           </div>
-        </div>
+          <div class="form-group">
+            <label for="prompt-content">プロンプト内容</label>
+            <textarea id="prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
+          </div>
+          <div class="form-group">
+            <label for="prompt-author">投稿者名</label>
+            <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />
+          </div>
+          <div class="form-group">
+            <label for="prompt-ai-model">使用AIモデル（任意）</label>
+            <select id="prompt-ai-model">
+              <option value="">未設定</option>
+              <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
+              <option value="ChatGPT (GPT-4)">ChatGPT (GPT-4)</option>
+              <option value="ChatGPT (GPT-3.5)">ChatGPT (GPT-3.5)</option>
+              <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
+              <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
+              <option value="Claude 3 Opus">Claude 3 Opus</option>
+              <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
+              <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="guardrail-checkbox"> 入出力例を追加する
+            </label>
+          </div>
 
-        <button type="submit" class="submit-btn">
-          <i class="bi bi-upload"></i> 投稿する
-        </button>
-      </form>
+          <div id="guardrail-fields" style="display: none;">
+            <div class="form-group">
+              <label for="prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
+              <textarea id="prompt-input-example" rows="3" placeholder="例: 夏休みの思い出をテーマにした短いエッセイを書いてください。"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="prompt-output-example">出力例</label>
+              <textarea id="prompt-output-example" rows="3"
+                placeholder="例: 夏休みのある日、私は家族と一緒に海辺へ出かけました。波の音と潮風に包まれながら、子供の頃の記憶がよみがえり、心が温かくなりました。その日は一生忘れられない、宝物のような時間となりました。"></textarea>
+            </div>
+          </div>
+
+          <button type="submit" class="submit-btn">
+            <i class="bi bi-upload"></i> 投稿する
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 

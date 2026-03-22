@@ -797,7 +797,7 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 .post-modal-content {
   width: min(92%, 700px);
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   border-radius: 16px;
   border: 1px solid var(--ps-border);
   background: #ffffff;
@@ -808,6 +808,18 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
   opacity: 0;
   transition: transform 0.18s ease, opacity 0.18s ease;
   overflow-wrap: anywhere;
+}
+
+.post-modal-content--composer {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.post-modal-scroll {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 1.3rem 1.15rem 1.15rem;
 }
 
 .post-modal.show .post-modal-content {
