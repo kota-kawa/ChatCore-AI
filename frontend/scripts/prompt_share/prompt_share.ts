@@ -96,6 +96,15 @@ function initPromptSharePage(attempt = 0) {
   const authButtons = document.getElementById("auth-buttons");
   let isLoggedIn = false; // ログイン状態を保持
 
+  const notifyAuthState = (loggedIn: boolean) => {
+    window.loggedIn = loggedIn;
+    document.dispatchEvent(
+      new CustomEvent("authstatechange", {
+        detail: { loggedIn }
+      })
+    );
+  };
+
   const applyAuthUI = (loggedIn: boolean) => {
     if (loggedIn) {
       if (authButtons) authButtons.style.display = "none";
@@ -113,6 +122,7 @@ function initPromptSharePage(attempt = 0) {
   const cachedAuthState = readCachedAuthState();
   if (cachedAuthState !== null) {
     isLoggedIn = cachedAuthState;
+    notifyAuthState(cachedAuthState);
     applyAuthUI(cachedAuthState);
   }
 
@@ -122,10 +132,12 @@ function initPromptSharePage(attempt = 0) {
       .then((data) => {
         isLoggedIn = Boolean(data.logged_in);
         writeCachedAuthState(isLoggedIn);
+        notifyAuthState(isLoggedIn);
         applyAuthUI(isLoggedIn);
       })
       .catch((err) => {
         console.error("Error checking login status:", err);
+        notifyAuthState(false);
         applyAuthUI(false);
       });
   }, 0);
