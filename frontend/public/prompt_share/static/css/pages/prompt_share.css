@@ -615,26 +615,32 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 }
 
 .prompt-share-page .prompt-actions {
-  display: flex;
-  gap: 0.1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
   border-top: 2px solid #eef3f7;
-  padding-top: 0.52rem;
+  padding-top: 0.62rem;
 }
 
 .prompt-share-page .prompt-action-btn {
-  border: none;
-  border-radius: 50%;
-  background: transparent;
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #dce7f3;
+  border-radius: 12px;
+  background: #f7fbff;
   color: #4a6580;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  box-shadow: none;
-  transition: background 0.14s ease, color 0.14s ease;
+  padding: 0.45rem;
+  box-shadow: 0 2px 8px rgba(97, 143, 186, 0.14);
+  transition:
+    transform 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
   user-select: none;
 }
 
@@ -661,8 +667,11 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 }
 
 .prompt-share-page .prompt-action-btn:hover {
-  background: rgba(72, 147, 224, 0.12);
+  background: #e9f3ff;
+  border-color: #9ec8f0;
   color: #1a5fa8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(87, 134, 177, 0.2);
 }
 
 .prompt-share-page .meatball-menu:hover {
@@ -674,7 +683,14 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 }
 
 .prompt-share-page .prompt-action-btn:active {
-  background: rgba(72, 147, 224, 0.2);
+  transform: translateY(0);
+  background: #dcecff;
+  box-shadow: 0 2px 6px rgba(87, 134, 177, 0.16);
+}
+
+.prompt-share-page .prompt-action-btn:disabled {
+  opacity: 0.68;
+  cursor: wait;
 }
 
 .prompt-share-page .meatball-menu:active {
@@ -684,10 +700,16 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 
 .prompt-share-page .bookmark-btn.bookmarked {
   color: #1a7a4a;
+  background: #e9f7ef;
+  border-color: #93d0a9;
+  box-shadow: 0 2px 8px rgba(58, 141, 95, 0.2);
 }
 
 .prompt-share-page .like-btn.liked {
   color: #d93025;
+  background: #fdeceb;
+  border-color: #f1aaa5;
+  box-shadow: 0 2px 8px rgba(203, 92, 85, 0.18);
 }
 
 .prompt-share-page .meatball-menu {
@@ -1189,6 +1211,15 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 
   .prompt-action-btn i {
     font-size: 0.88rem;
+  }
+
+  .prompt-share-page .prompt-actions {
+    gap: 0.4rem;
+  }
+
+  .prompt-share-page .prompt-action-btn {
+    min-height: 38px;
+    border-radius: 11px;
   }
 
   .post-modal-content {

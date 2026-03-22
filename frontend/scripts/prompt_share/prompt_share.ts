@@ -175,8 +175,7 @@ function initPromptSharePage(attempt = 0) {
 
   function getBookmarkButtonMarkup(isBookmarked: boolean) {
     const iconClass = isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark";
-    const label = isBookmarked ? "保存済み" : "保存";
-    return `<i class="bi ${iconClass}"></i><span>${label}</span>`;
+    return `<i class="bi ${iconClass}"></i>`;
   }
 
   function renderPromptStatusMessage(message: string, variant: "empty" | "error" = "empty") {
