@@ -113,8 +113,18 @@ const bodyMarkup = `
     <div class="post-modal-content post-modal-content--composer" tabindex="-1">
       <button type="button" class="close-btn" aria-label="投稿モーダルを閉じる">&times;</button>
       <div class="post-modal-scroll">
-        <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
-        <p class="post-modal-lead">みんなの役に立つプロンプトを、分かりやすく共有しましょう。</p>
+        <div class="composer-hero">
+          <div class="composer-hero__copy">
+            <p class="composer-hero__eyebrow">Prompt Share Composer</p>
+            <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
+            <p class="post-modal-lead">AI 補助を使いながら、公開用の見やすさと使いやすさまでその場で仕上げます。</p>
+          </div>
+          <div class="composer-hero__chips" aria-hidden="true">
+            <span>Searchable</span>
+            <span>Polished</span>
+            <span>Share Ready</span>
+          </div>
+        </div>
         <form class="post-form" id="postForm">
           <div class="form-group">
             <label>投稿タイプ</label>
@@ -161,6 +171,7 @@ const bodyMarkup = `
             <textarea id="prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
           </div>
           <div id="sharedPromptAssistRoot"></div>
+          <p id="promptPostStatus" class="composer-status" hidden></p>
           <div class="form-group">
             <label for="prompt-author">投稿者名</label>
             <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />
@@ -235,9 +246,13 @@ const bodyMarkup = `
               </div>
             </div>
           </div>
-          <div class="form-group">
-            <label>
-              <input type="checkbox" id="guardrail-checkbox"> 入出力例を追加する
+          <div class="form-group form-group--toggle">
+            <label class="composer-toggle" for="guardrail-checkbox">
+              <input type="checkbox" id="guardrail-checkbox">
+              <span class="composer-toggle__copy">
+                <strong>入出力例を追加する</strong>
+                <small>保存・再利用しやすい投稿にするため、プロンプトの使い方を例で添えます。</small>
+              </span>
             </label>
           </div>
 

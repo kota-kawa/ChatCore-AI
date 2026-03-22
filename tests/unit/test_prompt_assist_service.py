@@ -26,6 +26,28 @@ class PromptAssistServiceTestCase(unittest.TestCase):
         self.assertEqual(result["warnings"], ["入力例は仮案です。"])
         self.assertEqual(result["suggested_fields"]["title"], "面接練習プロンプト")
         self.assertIn("prompt_content", result["suggested_fields"])
+        self.assertEqual(result["suggestion_modes"]["title"], "refine")
+
+    def test_create_prompt_assist_payload_filters_out_unchanged_fields(self):
+        with patch(
+            "services.prompt_assist.get_llm_response",
+            return_value='{"summary":"タイトルを整えました。","warnings":[],"suggested_fields":{"title":"旅行計画","content":"週末旅行の計画を立ててください。"}}',
+        ):
+            result = create_prompt_assist_payload(
+                "shared_prompt_modal",
+                "generate_draft",
+                {
+                    "title": "旅行計画",
+                    "content": "",
+                },
+            )
+
+        self.assertNotIn("title", result["suggested_fields"])
+        self.assertEqual(
+            result["suggested_fields"]["content"],
+            "週末旅行の計画を立ててください。",
+        )
+        self.assertEqual(result["suggestion_modes"]["content"], "create")
 
     def test_create_prompt_assist_payload_raises_for_invalid_response(self):
         with patch(

@@ -147,18 +147,25 @@ def _parse_prompt_assist_response(raw_response: str) -> dict[str, Any]:
 def _normalize_prompt_assist_response(
     target: str,
     parsed_response: dict[str, Any],
+    current_fields: dict[str, str],
 ) -> dict[str, Any]:
     target_config = PROMPT_ASSIST_TARGETS[target]
     allowed_fields = target_config["allowed_fields"]
 
     raw_suggested_fields = parsed_response.get("suggested_fields", {})
     suggested_fields: dict[str, str] = {}
+    suggestion_modes: dict[str, str] = {}
     if isinstance(raw_suggested_fields, dict):
         for field_name in allowed_fields:
             value = raw_suggested_fields.get(field_name)
             normalized_value = _normalize_field_value(value)
             if normalized_value:
+                if normalized_value == current_fields.get(field_name, ""):
+                    continue
                 suggested_fields[field_name] = normalized_value
+                suggestion_modes[field_name] = (
+                    "create" if not current_fields.get(field_name, "") else "refine"
+                )
 
     if not suggested_fields:
         raise LlmProviderError("AI assist response did not contain usable suggestions.")
@@ -177,6 +184,7 @@ def _normalize_prompt_assist_response(
         "summary": summary,
         "warnings": warnings,
         "suggested_fields": suggested_fields,
+        "suggestion_modes": suggestion_modes,
         "model": PROMPT_ASSIST_MODEL,
     }
 
@@ -195,4 +203,8 @@ def create_prompt_assist_payload(
     _validate_prompt_assist_request(target, action, normalized_fields)
     messages = _build_prompt_assist_messages(target, action, normalized_fields)
     raw_response = get_llm_response(messages, PROMPT_ASSIST_MODEL)
-    return _normalize_prompt_assist_response(target, _parse_prompt_assist_response(raw_response or ""))
+    return _normalize_prompt_assist_response(
+        target,
+        _parse_prompt_assist_response(raw_response or ""),
+        normalized_fields,
+    )
