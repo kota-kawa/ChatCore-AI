@@ -65,7 +65,7 @@ tpl.innerHTML = `
     .item:hover { background: #f5f5f5; }
   </style>
 
-  <button class="btn" data-tooltip="アカウントメニューを開く" data-tooltip-placement="bottom">
+  <button class="btn" aria-label="アカウントメニューを開く">
     <img class="avatar" src="/static/user-icon.png" alt="ユーザーアイコン">
   </button>
 

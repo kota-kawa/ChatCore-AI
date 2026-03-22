@@ -1,5 +1,6 @@
 const TOOLTIP_OFFSET_PX = 10;
 const TOOLTIP_VIEWPORT_PADDING_PX = 12;
+const TOOLTIP_ARROW_EDGE_PADDING_PX = 14;
 const TOOLTIP_TARGET_SELECTOR = "[data-tooltip]";
 
 const TOOLTIP_SOURCE_ATTR = "data-tooltip";
@@ -85,6 +86,10 @@ class GlobalTooltip {
     return DEFAULT_TOOLTIP_PLACEMENT;
   }
 
+  private applyPlacement(placement: TooltipPlacement) {
+    this.tooltipEl.setAttribute("data-placement", placement);
+  }
+
   private showTooltip(target: HTMLElement, text: string) {
     if (!text) return;
 
@@ -94,10 +99,9 @@ class GlobalTooltip {
 
     this.activePlacement = this.getPlacement(target);
     this.tooltipContentEl.textContent = text;
-    this.tooltipEl.classList.remove("is-placement-top", "is-placement-bottom", "is-placement-left", "is-placement-right");
-    this.tooltipEl.classList.add(`is-placement-${this.activePlacement}`);
     this.tooltipEl.classList.add("is-visible");
     this.tooltipEl.setAttribute("aria-hidden", "false");
+    this.applyPlacement(this.activePlacement);
     this.queuePositionUpdate();
   }
 
@@ -110,9 +114,10 @@ class GlobalTooltip {
     this.activeTarget = null;
 
     this.tooltipEl.classList.remove("is-visible");
-    this.tooltipEl.classList.remove("is-placement-top", "is-placement-bottom", "is-placement-left", "is-placement-right");
     this.tooltipEl.setAttribute("aria-hidden", "true");
     this.tooltipEl.removeAttribute("data-placement");
+    this.tooltipEl.style.removeProperty("--cc-tooltip-arrow-x");
+    this.tooltipEl.style.removeProperty("--cc-tooltip-arrow-y");
   };
 
   private readonly queuePositionUpdate = () => {
@@ -153,48 +158,46 @@ class GlobalTooltip {
     }
 
     const tooltipRect = this.tooltipEl.getBoundingClientRect();
-    const scrollX = window.scrollX || window.pageXOffset;
-    const scrollY = window.scrollY || window.pageYOffset;
     const viewportWidth = document.documentElement.clientWidth;
     const viewportHeight = document.documentElement.clientHeight;
 
-    const minTop = scrollY + TOOLTIP_VIEWPORT_PADDING_PX;
-    const maxTop = scrollY + viewportHeight - tooltipRect.height - TOOLTIP_VIEWPORT_PADDING_PX;
-    const minLeft = scrollX + TOOLTIP_VIEWPORT_PADDING_PX;
-    const maxLeft = scrollX + viewportWidth - tooltipRect.width - TOOLTIP_VIEWPORT_PADDING_PX;
+    const minTop = TOOLTIP_VIEWPORT_PADDING_PX;
+    const maxTop = viewportHeight - tooltipRect.height - TOOLTIP_VIEWPORT_PADDING_PX;
+    const minLeft = TOOLTIP_VIEWPORT_PADDING_PX;
+    const maxLeft = viewportWidth - tooltipRect.width - TOOLTIP_VIEWPORT_PADDING_PX;
 
-    const centerX = targetRect.left + scrollX + targetRect.width / 2;
-    const centerY = targetRect.top + scrollY + targetRect.height / 2;
+    const centerX = targetRect.left + targetRect.width / 2;
+    const centerY = targetRect.top + targetRect.height / 2;
 
     let placement: TooltipPlacement = this.activePlacement;
     let left = centerX - tooltipRect.width / 2;
-    let top = targetRect.top + scrollY - tooltipRect.height - TOOLTIP_OFFSET_PX;
+    let top = targetRect.top - tooltipRect.height - TOOLTIP_OFFSET_PX;
 
     if (placement === "bottom") {
-      top = targetRect.bottom + scrollY + TOOLTIP_OFFSET_PX;
+      top = targetRect.bottom + TOOLTIP_OFFSET_PX;
     } else if (placement === "left") {
-      left = targetRect.left + scrollX - tooltipRect.width - TOOLTIP_OFFSET_PX;
+      left = targetRect.left - tooltipRect.width - TOOLTIP_OFFSET_PX;
       top = centerY - tooltipRect.height / 2;
     } else if (placement === "right") {
-      left = targetRect.right + scrollX + TOOLTIP_OFFSET_PX;
+      left = targetRect.right + TOOLTIP_OFFSET_PX;
       top = centerY - tooltipRect.height / 2;
     }
 
     if (placement === "top" && top < minTop) {
       placement = "bottom";
-      top = targetRect.bottom + scrollY + TOOLTIP_OFFSET_PX;
+      top = targetRect.bottom + TOOLTIP_OFFSET_PX;
     }
     if (placement === "bottom" && top > maxTop) {
       placement = "top";
-      top = targetRect.top + scrollY - tooltipRect.height - TOOLTIP_OFFSET_PX;
+      top = targetRect.top - tooltipRect.height - TOOLTIP_OFFSET_PX;
     }
     if (placement === "left" && left < minLeft) {
       placement = "right";
-      left = targetRect.right + scrollX + TOOLTIP_OFFSET_PX;
+      left = targetRect.right + TOOLTIP_OFFSET_PX;
     }
     if (placement === "right" && left > maxLeft) {
       placement = "left";
-      left = targetRect.left + scrollX - tooltipRect.width - TOOLTIP_OFFSET_PX;
+      left = targetRect.left - tooltipRect.width - TOOLTIP_OFFSET_PX;
     }
 
     if (placement === "top" || placement === "bottom") {
@@ -225,7 +228,35 @@ class GlobalTooltip {
 
     this.tooltipEl.style.left = `${Math.round(left)}px`;
     this.tooltipEl.style.top = `${Math.round(top)}px`;
-    this.tooltipEl.setAttribute("data-placement", placement);
+    this.applyPlacement(placement);
+    this.updateTooltipArrowPosition(placement, targetRect, tooltipRect, left, top);
+  }
+
+  private updateTooltipArrowPosition(
+    placement: TooltipPlacement,
+    targetRect: DOMRect,
+    tooltipRect: DOMRect,
+    left: number,
+    top: number
+  ) {
+    if (placement === "top" || placement === "bottom") {
+      const arrowX = targetRect.left + targetRect.width / 2 - left;
+      const clampedArrowX = Math.min(
+        Math.max(arrowX, TOOLTIP_ARROW_EDGE_PADDING_PX),
+        tooltipRect.width - TOOLTIP_ARROW_EDGE_PADDING_PX
+      );
+      this.tooltipEl.style.setProperty("--cc-tooltip-arrow-x", `${Math.round(clampedArrowX)}px`);
+      this.tooltipEl.style.removeProperty("--cc-tooltip-arrow-y");
+      return;
+    }
+
+    const arrowY = targetRect.top + targetRect.height / 2 - top;
+    const clampedArrowY = Math.min(
+      Math.max(arrowY, TOOLTIP_ARROW_EDGE_PADDING_PX),
+      tooltipRect.height - TOOLTIP_ARROW_EDGE_PADDING_PX
+    );
+    this.tooltipEl.style.setProperty("--cc-tooltip-arrow-y", `${Math.round(clampedArrowY)}px`);
+    this.tooltipEl.style.removeProperty("--cc-tooltip-arrow-x");
   }
 
   private readonly handlePointerOver = (event: Event) => {

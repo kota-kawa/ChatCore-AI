@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 .cc-tooltip {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   z-index: 2147483000;
@@ -12,6 +12,8 @@
   transform: translateY(4px) scale(0.98);
   transition: opacity 120ms ease, transform 120ms ease;
   max-width: min(320px, calc(100vw - 24px));
+  --cc-tooltip-arrow-x: 50%;
+  --cc-tooltip-arrow-y: 50%;
 }
 
 .cc-tooltip.is-visible {
@@ -37,7 +39,7 @@
 .cc-tooltip__content::after {
   content: "";
   position: absolute;
-  left: 50%;
+  left: var(--cc-tooltip-arrow-x);
   width: 9px;
   height: 9px;
   margin-left: -4.5px;
@@ -58,20 +60,21 @@
   border-bottom: none;
 }
 
-.cc-tooltip.is-placement-left .cc-tooltip__content::after,
-.cc-tooltip.is-placement-right .cc-tooltip__content::after {
-  top: 50%;
+.cc-tooltip[data-placement="left"] .cc-tooltip__content::after,
+.cc-tooltip[data-placement="right"] .cc-tooltip__content::after {
+  top: var(--cc-tooltip-arrow-y);
   margin-top: -4.5px;
 }
 
-.cc-tooltip.is-placement-left .cc-tooltip__content::after {
+.cc-tooltip[data-placement="left"] .cc-tooltip__content::after {
   left: auto;
   right: -5px;
+  margin-left: 0;
   border-left: none;
   border-bottom: none;
 }
 
-.cc-tooltip.is-placement-right .cc-tooltip__content::after {
+.cc-tooltip[data-placement="right"] .cc-tooltip__content::after {
   left: -5px;
   margin-left: 0;
   border-right: none;
