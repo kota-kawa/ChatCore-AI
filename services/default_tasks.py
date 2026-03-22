@@ -98,6 +98,7 @@ def ensure_default_tasks_seeded() -> int:
             SELECT name
               FROM task_with_examples
              WHERE user_id IS NULL
+               AND deleted_at IS NULL
             """
         )
         existing_names = {

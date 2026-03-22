@@ -104,6 +104,22 @@ def _ensure_sample_owner(cursor: Any) -> int:
     owner_id = _extract_id(row)
     if owner_id is None:
         raise RuntimeError("Failed to create sample prompt owner.")
+    cursor.execute(
+        """
+        INSERT INTO user_auth_providers (
+            user_id,
+            provider,
+            provider_user_id,
+            provider_email
+        )
+        VALUES (%s, 'email', %s, %s)
+        ON CONFLICT (user_id, provider) DO UPDATE
+           SET provider_user_id = EXCLUDED.provider_user_id,
+               provider_email = EXCLUDED.provider_email,
+               updated_at = CURRENT_TIMESTAMP
+        """,
+        (owner_id, SAMPLE_PROMPT_OWNER_EMAIL, SAMPLE_PROMPT_OWNER_EMAIL),
+    )
     return owner_id
 
 
@@ -123,6 +139,7 @@ def ensure_default_shared_prompts() -> int:
                   FROM prompts
                  WHERE user_id = %s
                    AND title = %s
+                   AND deleted_at IS NULL
                 """,
                 (owner_user_id, prompt["title"]),
             )

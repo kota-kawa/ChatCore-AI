@@ -43,6 +43,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             SELECT id, title, category, content, author, input_examples, output_examples, created_at
             FROM prompts
             WHERE is_public = TRUE
+              AND deleted_at IS NULL
             ORDER BY created_at DESC
             """
         )
@@ -52,7 +53,12 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         saved_prompt_ids = set()
         if user_id:
             cursor.execute(
-                "SELECT name FROM task_with_examples WHERE user_id = %s",
+                """
+                SELECT name
+                  FROM task_with_examples
+                 WHERE user_id = %s
+                   AND deleted_at IS NULL
+                """,
                 (user_id,),
             )
             bookmarks = cursor.fetchall()
@@ -100,8 +106,19 @@ def _create_prompt_for_user(
         conn = get_db_connection()
         cursor = conn.cursor()
         query = """
-            INSERT INTO prompts (title, category, content, author, input_examples, output_examples, user_id, is_public, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, NOW())
+            INSERT INTO prompts (
+                title,
+                category,
+                content,
+                author,
+                input_examples,
+                output_examples,
+                user_id,
+                is_public,
+                created_at,
+                updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
             RETURNING id
         """
         cursor.execute(
@@ -130,7 +147,13 @@ def _add_bookmark_for_user(
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id FROM task_with_examples WHERE user_id = %s AND name = %s",
+            """
+            SELECT id
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND name = %s
+               AND deleted_at IS NULL
+            """,
             (user_id, title),
         )
         existing = cursor.fetchone()
@@ -163,7 +186,13 @@ def _remove_bookmark_for_user(user_id: int, title: str) -> None:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM task_with_examples WHERE user_id = %s AND name = %s",
+            """
+            UPDATE task_with_examples
+               SET deleted_at = CURRENT_TIMESTAMP
+             WHERE user_id = %s
+               AND name = %s
+               AND deleted_at IS NULL
+            """,
             (user_id, title),
         )
         conn.commit()
@@ -187,7 +216,9 @@ def _add_prompt_list_entry_for_user(
             """
             SELECT id
             FROM prompts
-            WHERE id = %s AND is_public = TRUE
+            WHERE id = %s
+              AND is_public = TRUE
+              AND deleted_at IS NULL
             """,
             (prompt_id,),
         )

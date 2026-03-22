@@ -45,6 +45,7 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
                      FALSE AS is_default
                 FROM task_with_examples
                WHERE user_id = %s
+                 AND deleted_at IS NULL
                ORDER BY COALESCE(display_order, 99999),
                         id
             """,
@@ -62,6 +63,7 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
                      TRUE AS is_default
                 FROM task_with_examples
                WHERE user_id IS NULL
+                 AND deleted_at IS NULL
                ORDER BY COALESCE(display_order, 99999), id
             """
             )
@@ -88,6 +90,7 @@ def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
                 UPDATE task_with_examples
                    SET display_order=%s
                  WHERE name=%s AND user_id=%s
+                   AND deleted_at IS NULL
             """,
                 (index, task_name, user_id),
             )
@@ -107,7 +110,13 @@ def _delete_task_for_user(user_id: int, task_name: str) -> None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        query = "DELETE FROM task_with_examples WHERE name=%s AND user_id=%s"
+        query = """
+            UPDATE task_with_examples
+               SET deleted_at = CURRENT_TIMESTAMP
+             WHERE name = %s
+               AND user_id = %s
+               AND deleted_at IS NULL
+        """
         cursor.execute(query, (task_name, user_id))
         conn.commit()
     finally:
@@ -141,6 +150,7 @@ def _edit_task_for_user(
               FROM task_with_examples
              WHERE name = %s
                AND user_id = %s
+               AND deleted_at IS NULL
             """,
             (old_task, user_id),
         )
@@ -160,6 +170,7 @@ def _edit_task_for_user(
                    output_examples = %s
              WHERE name = %s
                AND user_id = %s
+               AND deleted_at IS NULL
             """,
             (
                 new_task,

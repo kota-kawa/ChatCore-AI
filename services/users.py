@@ -9,6 +9,47 @@ EMAIL_AUTH_PROVIDER = "email"
 GOOGLE_AUTH_PROVIDER = "google"
 
 
+def _normalize_provider_metadata(
+    auth_provider: str,
+    email: str,
+    provider_user_id: str | None,
+    provider_email: str | None,
+) -> tuple[str | None, str | None]:
+    normalized_provider_user_id = (provider_user_id or "").strip() or None
+    normalized_provider_email = (provider_email or "").strip() or None
+
+    if auth_provider == EMAIL_AUTH_PROVIDER:
+        normalized_provider_user_id = normalized_provider_user_id or email
+        normalized_provider_email = normalized_provider_email or email
+
+    return normalized_provider_user_id, normalized_provider_email
+
+
+def _upsert_user_auth_provider(
+    cursor: Any,
+    user_id: int,
+    provider: str,
+    provider_user_id: str | None,
+    provider_email: str | None,
+) -> None:
+    cursor.execute(
+        """
+        INSERT INTO user_auth_providers (
+            user_id,
+            provider,
+            provider_user_id,
+            provider_email
+        )
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (user_id, provider) DO UPDATE
+           SET provider_user_id = EXCLUDED.provider_user_id,
+               provider_email = EXCLUDED.provider_email,
+               updated_at = CURRENT_TIMESTAMP
+        """,
+        (user_id, provider, provider_user_id, provider_email),
+    )
+
+
 def copy_default_tasks_for_user(user_id: int) -> None:
     # 共有タスクをユーザー専用タスクとして重複なく複製する
     # Copy shared default tasks into user-owned rows without duplicates.
@@ -23,6 +64,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                    output_examples, display_order
               FROM task_with_examples
              WHERE user_id IS NULL
+               AND deleted_at IS NULL
             """
         )
         defaults = cursor.fetchall()
@@ -34,6 +76,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                 """
                 SELECT 1 FROM task_with_examples
                  WHERE user_id = %s AND name = %s
+                   AND deleted_at IS NULL
                 """,
                 (user_id, name)
             )
@@ -63,7 +106,20 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+        cursor.execute(
+            """
+            SELECT u.*,
+                   gap.provider AS auth_provider,
+                   gap.provider_user_id,
+                   gap.provider_email
+              FROM users AS u
+              LEFT JOIN user_auth_providers AS gap
+                ON gap.user_id = u.id
+               AND gap.provider = %s
+             WHERE u.email = %s
+            """,
+            (GOOGLE_AUTH_PROVIDER, email),
+        )
         return cursor.fetchone()
     finally:
         cursor.close()
@@ -78,10 +134,15 @@ def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
     try:
         cursor.execute(
             """
-            SELECT *
-              FROM users
-             WHERE auth_provider = %s
-               AND provider_user_id = %s
+            SELECT u.*,
+                   p.provider AS auth_provider,
+                   p.provider_user_id,
+                   p.provider_email
+              FROM user_auth_providers AS p
+              JOIN users AS u
+                ON u.id = p.user_id
+             WHERE p.provider = %s
+               AND p.provider_user_id = %s
             """,
             (GOOGLE_AUTH_PROVIDER, google_user_id),
         )
@@ -128,8 +189,12 @@ def create_user(
     """未認証ユーザーを新規作成"""
     normalized_username = (username or "").strip() or DEFAULT_USERNAME
     normalized_avatar_url = (avatar_url or "").strip() or DEFAULT_AVATAR_URL
-    normalized_provider_user_id = (provider_user_id or "").strip() or None
-    normalized_provider_email = (provider_email or "").strip() or None
+    normalized_provider_user_id, normalized_provider_email = _normalize_provider_metadata(
+        auth_provider,
+        email,
+        provider_user_id,
+        provider_email,
+    )
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -139,12 +204,9 @@ def create_user(
                 email,
                 username,
                 avatar_url,
-                is_verified,
-                auth_provider,
-                provider_user_id,
-                provider_email
+                is_verified
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -152,14 +214,26 @@ def create_user(
                 normalized_username,
                 normalized_avatar_url,
                 is_verified,
-                auth_provider,
-                normalized_provider_user_id,
-                normalized_provider_email,
             ),
         )
-        conn.commit()
         row = cursor.fetchone()
-        return row[0] if row else None
+        user_id = row[0] if row else None
+        if user_id is None:
+            conn.rollback()
+            return None
+
+        _upsert_user_auth_provider(
+            cursor,
+            user_id,
+            auth_provider,
+            normalized_provider_user_id,
+            normalized_provider_email,
+        )
+        conn.commit()
+        return user_id
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         cursor.close()
         conn.close()
@@ -176,22 +250,17 @@ def link_google_account(user_id: int, google_user_id: str, provider_email: str) 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            """
-            UPDATE users
-               SET auth_provider = %s,
-                   provider_user_id = %s,
-                   provider_email = %s
-             WHERE id = %s
-            """,
-            (
-                GOOGLE_AUTH_PROVIDER,
-                normalized_google_user_id,
-                normalized_provider_email,
-                user_id,
-            ),
+        _upsert_user_auth_provider(
+            cursor,
+            user_id,
+            GOOGLE_AUTH_PROVIDER,
+            normalized_google_user_id,
+            normalized_provider_email,
         )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         cursor.close()
         conn.close()

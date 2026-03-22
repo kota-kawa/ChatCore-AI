@@ -34,6 +34,7 @@ def _search_public_prompts(query):
               created_at
             FROM prompts
             WHERE is_public = TRUE
+              AND deleted_at IS NULL
               AND (
                 title   LIKE %s OR
                 content LIKE %s OR

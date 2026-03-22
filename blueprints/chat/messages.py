@@ -145,8 +145,9 @@ def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
                        output_skeleton,
                        input_examples,
                        output_examples
-                  FROM task_with_examples
+                 FROM task_with_examples
                  WHERE name = %s
+                   AND deleted_at IS NULL
                    AND (user_id = %s OR user_id IS NULL)
                  ORDER BY CASE WHEN user_id = %s THEN 0 ELSE 1 END, id
                  LIMIT 1
@@ -160,8 +161,9 @@ def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
                        output_skeleton,
                        input_examples,
                        output_examples
-                  FROM task_with_examples
+                 FROM task_with_examples
                  WHERE name = %s
+                   AND deleted_at IS NULL
                    AND user_id IS NULL
                  ORDER BY id
                  LIMIT 1
