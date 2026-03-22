@@ -144,6 +144,21 @@ const bodyMarkup = `
           <label for="prompt-author">投稿者名</label>
           <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />
         </div>
+        <div class="form-group">
+          <label for="prompt-ai-model">使用AIモデル（任意）</label>
+          <select id="prompt-ai-model">
+            <option value="">未設定</option>
+            <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
+            <option value="ChatGPT (GPT-4)">ChatGPT (GPT-4)</option>
+            <option value="ChatGPT (GPT-3.5)">ChatGPT (GPT-3.5)</option>
+            <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
+            <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
+            <option value="Claude 3 Opus">Claude 3 Opus</option>
+            <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
+            <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
         <!-- ガードレールの使用チェック -->
         <div class="form-group">
           <label>
@@ -188,6 +203,10 @@ const bodyMarkup = `
         <div class="form-group">
           <label><strong>投稿者:</strong></label>
           <p id="modalPromptAuthor"></p>
+        </div>
+        <div id="modalAiModelGroup" class="form-group" style="display: none;">
+          <label><strong>使用AIモデル:</strong></label>
+          <p id="modalAiModel"></p>
         </div>
         <div id="modalInputExamplesGroup" class="form-group" style="display: none;">
           <label><strong>入力例:</strong></label>

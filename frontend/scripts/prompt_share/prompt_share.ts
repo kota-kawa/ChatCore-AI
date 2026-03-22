@@ -6,6 +6,7 @@ type PromptData = {
   author?: string;
   input_examples?: string;
   output_examples?: string;
+  ai_model?: string;
   bookmarked?: boolean;
   saved_to_list?: boolean;
   created_at?: string;
@@ -627,6 +628,8 @@ function initPromptSharePage(attempt = 0) {
       const category = categoryInput.value;
       const content = contentInput.value;
       const author = authorInput.value;
+      const aiModelInput = document.getElementById("prompt-ai-model") as HTMLSelectElement | null;
+      const ai_model = aiModelInput ? aiModelInput.value : "";
 
       // ガードレール使用のチェックと値取得
       const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
@@ -650,6 +653,7 @@ function initPromptSharePage(attempt = 0) {
         author: author,
         input_examples: input_examples,
         output_examples: output_examples,
+        ai_model: ai_model,
         is_public: isPublic
       };
 
@@ -802,7 +806,9 @@ function initPromptSharePage(attempt = 0) {
 
     if (event.key === "Escape") {
       event.preventDefault();
-      closeModal(activeModal, { rotateTrigger: activeModal === postModal });
+      if (activeModal !== postModal) {
+        closeModal(activeModal);
+      }
       return;
     }
 
@@ -881,14 +887,7 @@ function initPromptSharePage(attempt = 0) {
     });
   }
 
-  if (postModal && postModal.dataset.psBackdropListener !== "true") {
-    postModal.dataset.psBackdropListener = "true";
-    postModal.addEventListener("click", function (event) {
-      if (event.target === postModal) {
-        closeModal(postModal, { rotateTrigger: true });
-      }
-    });
-  }
+  // 投稿モーダルは背景クリックでは閉じない（×ボタンのみ）
 
   // ------------------------------
   // ガードレールの表示切替処理
@@ -915,6 +914,8 @@ function initPromptSharePage(attempt = 0) {
     const modalOutputExamples = document.getElementById("modalOutputExamples");
     const modalInputExamplesGroup = document.getElementById("modalInputExamplesGroup");
     const modalOutputExamplesGroup = document.getElementById("modalOutputExamplesGroup");
+    const modalAiModel = document.getElementById("modalAiModel");
+    const modalAiModelGroup = document.getElementById("modalAiModelGroup");
 
     if (!modal || !modalTitle || !modalCategory || !modalContent || !modalAuthor) return;
 
@@ -923,6 +924,14 @@ function initPromptSharePage(attempt = 0) {
     modalCategory.textContent = prompt.category || "";
     modalContent.textContent = prompt.content;
     modalAuthor.textContent = prompt.author || "";
+
+    // 使用AIモデルがある場合のみ表示
+    if (prompt.ai_model && modalAiModel && modalAiModelGroup) {
+      modalAiModel.textContent = prompt.ai_model;
+      modalAiModelGroup.style.display = "block";
+    } else if (modalAiModelGroup) {
+      modalAiModelGroup.style.display = "none";
+    }
 
     // 入力例・出力例がある場合のみ表示
     if (prompt.input_examples && modalInputExamples && modalInputExamplesGroup) {

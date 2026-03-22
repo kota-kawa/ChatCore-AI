@@ -40,7 +40,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, title, category, content, author, input_examples, output_examples, created_at
+            SELECT id, title, category, content, author, input_examples, output_examples, ai_model, created_at
             FROM prompts
             WHERE is_public = TRUE
               AND deleted_at IS NULL
@@ -99,6 +99,7 @@ def _create_prompt_for_user(
     author: str,
     input_examples: str,
     output_examples: str,
+    ai_model: str,
 ) -> Any:
     conn = None
     cursor = None
@@ -113,17 +114,18 @@ def _create_prompt_for_user(
                 author,
                 input_examples,
                 output_examples,
+                ai_model,
                 user_id,
                 is_public,
                 created_at,
                 updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
             RETURNING id
         """
         cursor.execute(
             query,
-            (title, category, content, author, input_examples, output_examples, user_id),
+            (title, category, content, author, input_examples, output_examples, ai_model or None, user_id),
         )
         conn.commit()
         return _extract_id(cursor.fetchone())
@@ -305,6 +307,7 @@ async def create_prompt(request: Request):
             payload.author,
             payload.input_examples,
             payload.output_examples,
+            payload.ai_model,
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
     except Exception:

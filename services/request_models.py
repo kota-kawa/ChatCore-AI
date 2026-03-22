@@ -85,6 +85,7 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     author: NonEmptyStr
     input_examples: str = ""
     output_examples: str = ""
+    ai_model: str = ""
 
 
 class BookmarkCreateRequest(RequestPayloadModel):
