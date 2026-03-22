@@ -1,3 +1,5 @@
+import { initPromptAssist } from "../components/prompt_assist";
+
 function initNewPromptModal() {
   const openModalBtn = document.getElementById("openNewPromptModal") as HTMLButtonElement | null;
   const plusIcon = openModalBtn?.querySelector(".bi-plus-lg") as HTMLElement | null;
@@ -6,6 +8,30 @@ function initNewPromptModal() {
   const guardrailCheckbox = document.getElementById("new-guardrail-checkbox") as HTMLInputElement | null;
   const guardrailFields = document.getElementById("new-guardrail-fields");
   const newPostForm = document.getElementById("newPostForm") as HTMLFormElement | null;
+  const promptAssistRoot = document.getElementById("newPromptAssistRoot");
+  const titleInput = document.getElementById("new-prompt-title") as HTMLInputElement | null;
+  const contentInput = document.getElementById("new-prompt-content") as HTMLTextAreaElement | null;
+  const inputExampleEl = document.getElementById("new-prompt-input-example") as HTMLTextAreaElement | null;
+  const outputExampleEl = document.getElementById("new-prompt-output-example") as HTMLTextAreaElement | null;
+
+  const promptAssistController = initPromptAssist({
+    root: promptAssistRoot,
+    target: "task_modal",
+    fields: {
+      title: { label: "タイトル", element: titleInput },
+      prompt_content: { label: "プロンプト内容", element: contentInput },
+      input_examples: { label: "入力例", element: inputExampleEl },
+      output_examples: { label: "出力例", element: outputExampleEl },
+    },
+    beforeApplyField: (fieldName) => {
+      if ((fieldName === "input_examples" || fieldName === "output_examples") && guardrailCheckbox) {
+        guardrailCheckbox.checked = true;
+        if (guardrailFields) {
+          guardrailFields.style.display = "block";
+        }
+      }
+    },
+  });
 
   const togglePlusRotation = (isRotated: boolean, options: { animate?: boolean } = {}) => {
     if (!openModalBtn) return;
@@ -29,6 +55,7 @@ function initNewPromptModal() {
     if (!newPromptModal) return;
     newPromptModal.classList.remove("show");
     (newPromptModal as HTMLElement).style.display = "none";
+    promptAssistController?.reset();
 
     if (options.skipRotation) {
       if (openModalBtn) {
@@ -98,8 +125,6 @@ function initNewPromptModal() {
     newPostForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
-      const titleInput = document.getElementById("new-prompt-title") as HTMLInputElement | null;
-      const contentInput = document.getElementById("new-prompt-content") as HTMLTextAreaElement | null;
       if (!titleInput || !contentInput) {
         alert("入力欄が見つかりませんでした。");
         return;
@@ -111,10 +136,8 @@ function initNewPromptModal() {
       let inputExample = "";
       let outputExample = "";
       if (guardrailCheckbox?.checked) {
-        const inputEl = document.getElementById("new-prompt-input-example") as HTMLTextAreaElement | null;
-        const outputEl = document.getElementById("new-prompt-output-example") as HTMLTextAreaElement | null;
-        inputExample = inputEl ? inputEl.value : "";
-        outputExample = outputEl ? outputEl.value : "";
+        inputExample = inputExampleEl ? inputExampleEl.value : "";
+        outputExample = outputExampleEl ? outputExampleEl.value : "";
       }
 
       const data = {

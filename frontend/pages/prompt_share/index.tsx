@@ -160,6 +160,7 @@ const bodyMarkup = `
             <label for="prompt-content">プロンプト内容</label>
             <textarea id="prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
           </div>
+          <div id="sharedPromptAssistRoot"></div>
           <div class="form-group">
             <label for="prompt-author">投稿者名</label>
             <input type="text" id="prompt-author" placeholder="ニックネームなど" value="アイデア職人" required />

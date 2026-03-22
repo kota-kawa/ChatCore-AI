@@ -18,6 +18,7 @@ def _get_positive_int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
 
@@ -28,7 +29,7 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 VALID_GEMINI_MODELS = {
     "gemini-2.5-flash",
 }
-VALID_GROQ_MODELS = {GROQ_MODEL}
+VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_20B_MODEL}
 
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
 gemini_api_key = os.environ.get("Gemini_API_KEY", "")

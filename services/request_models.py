@@ -78,6 +78,24 @@ class AddTaskRequest(RequestPayloadModel):
     output_examples: str = ""
 
 
+class PromptAssistFields(RequestPayloadModel):
+    title: str = ""
+    content: str = ""
+    prompt_content: str = ""
+    category: str = ""
+    author: str = ""
+    prompt_type: str = "text"
+    input_examples: str = ""
+    output_examples: str = ""
+    ai_model: str = ""
+
+
+class PromptAssistRequest(RequestPayloadModel):
+    target: Literal["task_modal", "shared_prompt_modal"]
+    action: Literal["generate_draft", "improve", "shorten", "expand", "generate_examples"]
+    fields: PromptAssistFields = Field(default_factory=PromptAssistFields)
+
+
 class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: NonEmptyStr

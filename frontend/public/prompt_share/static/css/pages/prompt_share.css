@@ -1,4 +1,5 @@
 @import url('../base/base.css');
+@import url('../../../../static/css/components/prompt_assist.css');
 
 :root {
   --ps-bg: #f8f9fa;

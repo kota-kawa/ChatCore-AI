@@ -1,3 +1,5 @@
+import { initPromptAssist } from "../components/prompt_assist";
+
 type PromptType = "text" | "image";
 
 type PromptData = {
@@ -928,14 +930,48 @@ function initPromptSharePage(attempt = 0) {
   }
 
   const postForm = document.getElementById("postForm") as HTMLFormElement | null;
+  const promptAssistRoot = document.getElementById("sharedPromptAssistRoot");
+  const titleInput = document.getElementById("prompt-title") as HTMLInputElement | null;
+  const categoryInput = document.getElementById("prompt-category") as HTMLSelectElement | null;
+  const contentInput = document.getElementById("prompt-content") as HTMLTextAreaElement | null;
+  const authorInput = document.getElementById("prompt-author") as HTMLInputElement | null;
+  const aiModelInput = document.getElementById("prompt-ai-model") as HTMLSelectElement | null;
+  const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
+  const guardrailFields = document.getElementById("guardrail-fields");
+  const inputExample = document.getElementById("prompt-input-example") as HTMLTextAreaElement | null;
+  const outputExample = document.getElementById("prompt-output-example") as HTMLTextAreaElement | null;
+
+  const promptAssistController = initPromptAssist({
+    root: promptAssistRoot,
+    target: "shared_prompt_modal",
+    fields: {
+      title: { label: "タイトル", element: titleInput },
+      category: { label: "カテゴリ", element: categoryInput },
+      content: { label: "プロンプト内容", element: contentInput },
+      author: { label: "投稿者名", element: authorInput },
+      ai_model: { label: "使用AIモデル", element: aiModelInput },
+      prompt_type: {
+        label: "投稿タイプ",
+        element: null,
+        getValue: () => getSelectedPromptType(),
+      },
+      input_examples: { label: "入力例", element: inputExample },
+      output_examples: { label: "出力例", element: outputExample },
+    },
+    beforeApplyField: (fieldName) => {
+      if ((fieldName === "input_examples" || fieldName === "output_examples") && guardrailCheckbox) {
+        guardrailCheckbox.checked = true;
+        if (guardrailFields) {
+          guardrailFields.style.display = "block";
+        }
+      }
+    },
+  });
+
   if (postForm) {
     postForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
-      const titleInput = document.getElementById("prompt-title") as HTMLInputElement | null;
-      const categoryInput = document.getElementById("prompt-category") as HTMLSelectElement | null;
-      const contentInput = document.getElementById("prompt-content") as HTMLTextAreaElement | null;
-      const authorInput = document.getElementById("prompt-author") as HTMLInputElement | null;
       if (!titleInput || !categoryInput || !contentInput || !authorInput) {
         alert("フォーム要素が見つかりませんでした。ページを再読み込みしてください。");
         return;
@@ -946,7 +982,6 @@ function initPromptSharePage(attempt = 0) {
       const category = categoryInput.value;
       const content = contentInput.value;
       const author = authorInput.value;
-      const aiModelInput = document.getElementById("prompt-ai-model") as HTMLSelectElement | null;
       const ai_model = aiModelInput ? aiModelInput.value : "";
       const referenceImageFile = referenceImageInput?.files?.[0] || null;
       const referenceImageError = validateReferenceImageFile(referenceImageFile);
@@ -956,13 +991,10 @@ function initPromptSharePage(attempt = 0) {
       }
 
       // ガードレール使用のチェックと値取得
-      const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
       const useGuardrail = guardrailCheckbox ? guardrailCheckbox.checked : false;
       let input_examples = "";
       let output_examples = "";
       if (useGuardrail) {
-        const inputExample = document.getElementById("prompt-input-example") as HTMLTextAreaElement | null;
-        const outputExample = document.getElementById("prompt-output-example") as HTMLTextAreaElement | null;
         input_examples = inputExample ? inputExample.value : "";
         output_examples = outputExample ? outputExample.value : "";
       }
@@ -1111,6 +1143,9 @@ function initPromptSharePage(attempt = 0) {
 
     modal.classList.remove("show");
     modal.setAttribute("aria-hidden", "true");
+    if (modal === postModal) {
+      promptAssistController?.reset();
+    }
     if (options?.rotateTrigger) {
       triggerNewPromptIconRotation();
     }
@@ -1260,9 +1295,6 @@ function initPromptSharePage(attempt = 0) {
   // ------------------------------
   // ガードレールの表示切替処理
   // ------------------------------
-  const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
-  const guardrailFields = document.getElementById("guardrail-fields");
-
   if (guardrailCheckbox && guardrailFields) {
     guardrailCheckbox.addEventListener("change", function () {
       guardrailFields.style.display = guardrailCheckbox.checked ? "block" : "none";

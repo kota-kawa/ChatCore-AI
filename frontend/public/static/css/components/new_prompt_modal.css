@@ -1,6 +1,8 @@
 /* new_prompt_modal.css
    Modal component for submitting new prompts. Relies on variables defined in
    base/variables.css. */
+@import url('./prompt_assist.css');
+
 :root {
   --primary-color: #168d48;      /* 明るい緑 */
   --accent-color: #27ae60;       /* 濃い緑 */

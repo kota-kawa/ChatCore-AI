@@ -212,6 +212,7 @@ const bodyMarkup = `
           <label for="new-prompt-content">プロンプト内容</label>
           <textarea id="new-prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
         </div>
+        <div id="newPromptAssistRoot"></div>
         <!-- ガードレールチェック -->
         <div class="form-group">
           <label>

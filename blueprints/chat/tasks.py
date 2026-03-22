@@ -6,10 +6,13 @@ from fastapi import Request
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
+from services.llm import LlmServiceError
+from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
     DeleteTaskRequest,
     EditTaskRequest,
+    PromptAssistRequest,
     UpdateTasksOrderRequest,
 )
 from services.web import (
@@ -426,4 +429,42 @@ async def add_task(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to add task.",
+        )
+
+
+@chat_bp.post("/api/prompt-assist", name="chat.prompt_assist")
+async def prompt_assist(request: Request):
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        PromptAssistRequest,
+        error_message="AI補助リクエストが不正です。",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        dump_fields = getattr(payload.fields, "model_dump", None)
+        result = await run_blocking(
+            create_prompt_assist_payload,
+            payload.target,
+            payload.action,
+            dump_fields() if callable(dump_fields) else payload.fields.dict(),
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}, status_code=400)
+    except LlmServiceError:
+        logger.exception("Failed to generate prompt assist suggestion.")
+        return jsonify(
+            {"error": "AI補助の取得に失敗しました。時間をおいて再試行してください。"},
+            status_code=502,
+        )
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to handle prompt assist request.",
         )
