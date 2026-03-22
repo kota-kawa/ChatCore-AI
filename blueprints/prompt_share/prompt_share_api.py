@@ -190,6 +190,45 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             conn.close()
 
 
+def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                id,
+                title,
+                category,
+                content,
+                author,
+                input_examples,
+                output_examples,
+                ai_model,
+                prompt_type,
+                reference_image_url,
+                created_at
+            FROM prompts
+            WHERE id = %s
+              AND is_public = TRUE
+              AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            (prompt_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return _serialize_prompt_row(dict(row))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 def _create_prompt_for_user(
     user_id: int,
     title: str,
@@ -389,6 +428,20 @@ async def get_prompts(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to load shared prompts.",
+        )
+
+
+@prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
+async def get_prompt_detail(prompt_id: int):
+    try:
+        prompt = await run_blocking(_get_public_prompt_by_id, prompt_id)
+        if not prompt:
+            return jsonify({"error": "プロンプトが見つかりません"}, status_code=404)
+        return jsonify({"prompt": prompt})
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to load public prompt detail.",
         )
 
 

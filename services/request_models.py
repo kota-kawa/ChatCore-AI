@@ -119,3 +119,7 @@ class MemoCreateRequest(RequestPayloadModel):
     ai_response: NonEmptyStr
     title: str = ""
     tags: str = ""
+
+
+class ShareMemoRequest(RequestPayloadModel):
+    memo_id: int

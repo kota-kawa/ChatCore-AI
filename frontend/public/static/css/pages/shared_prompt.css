@@ -1,0 +1,126 @@
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 36%),
+    linear-gradient(180deg, #f6fbff 0%, #eef6ff 100%);
+  color: #14324a;
+  font-family: "Noto Sans JP", "Segoe UI", sans-serif;
+}
+
+.shared-prompt-page {
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.shared-prompt-state {
+  width: min(880px, 100%);
+  margin: 4rem auto 0;
+  padding: 1rem 1.2rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 48px rgba(20, 50, 74, 0.12);
+}
+
+.shared-prompt-state--error {
+  color: #b42318;
+}
+
+.shared-prompt-shell {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.shared-prompt-header,
+.shared-prompt-section,
+.shared-prompt-image {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(20, 50, 74, 0.08);
+  box-shadow: 0 18px 48px rgba(20, 50, 74, 0.12);
+}
+
+.shared-prompt-header {
+  padding: 1.6rem;
+}
+
+.shared-prompt-header h1 {
+  margin: 0.7rem 0 0;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  line-height: 1.25;
+}
+
+.shared-prompt-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.shared-prompt-meta {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.shared-prompt-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(20, 50, 74, 0.06);
+  color: #36506a;
+  font-size: 0.84rem;
+}
+
+.shared-prompt-image {
+  padding: 1rem;
+}
+
+.shared-prompt-image img {
+  display: block;
+  width: 100%;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.shared-prompt-section {
+  padding: 1.3rem 1.4rem;
+}
+
+.shared-prompt-section h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f4c81;
+}
+
+.shared-prompt-section pre {
+  margin: 0.8rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  line-height: 1.75;
+  color: #173954;
+}
+
+@media (max-width: 640px) {
+  .shared-prompt-page {
+    padding: 0.9rem;
+  }
+
+  .shared-prompt-header,
+  .shared-prompt-section,
+  .shared-prompt-image {
+    border-radius: 18px;
+  }
+}

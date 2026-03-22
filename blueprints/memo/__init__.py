@@ -9,12 +9,16 @@ from services.request_models import MemoCreateRequest
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.db import Error, get_db_connection
+from services.memo_share import create_or_get_shared_memo_token, get_shared_memo_payload
+from services.request_models import ShareMemoRequest
 from services.web import (
     flash,
+    frontend_url,
     get_json,
     jsonify,
     log_and_internal_server_error,
     redirect_to_frontend,
+    require_json_dict,
     validate_payload_model,
 )
 
@@ -170,6 +174,69 @@ async def api_create_memo(request: Request):
             logger,
             "Failed to create memo entry.",
             status="fail",
+        )
+
+
+@memo_bp.post("/api/share", name="memo.api_share")
+async def api_share_memo(request: Request):
+    user_id = _user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        ShareMemoRequest,
+        error_message="共有するメモを指定してください。",
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        share_token, status_code = await run_blocking(
+            create_or_get_shared_memo_token,
+            payload.memo_id,
+            user_id,
+        )
+        if status_code == 404 or not share_token:
+            return jsonify(
+                {"status": "fail", "error": "共有対象のメモが見つかりません。"},
+                status_code=404,
+            )
+
+        share_url = frontend_url(f"/shared/memo/{share_token}")
+        return jsonify(
+            {
+                "status": "success",
+                "share_token": share_token,
+                "share_url": share_url,
+            }
+        )
+    except Error:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to create share link for memo entry.",
+            status="fail",
+        )
+
+
+@memo_bp.get("/api/shared", name="memo.api_shared")
+async def api_shared_memo(request: Request):
+    token = request.query_params.get("token", "").strip()
+    if not token:
+        return jsonify({"error": "token is required"}, status_code=400)
+
+    try:
+        payload, status_code = await run_blocking(get_shared_memo_payload, token)
+        return jsonify(payload, status_code=status_code)
+    except Error:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to load shared memo payload.",
         )
 
 

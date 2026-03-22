@@ -281,6 +281,37 @@ const bodyMarkup = `
     </div>
   </div>
 
+  <div id="promptShareModal" class="post-modal prompt-share-modal" role="dialog" aria-modal="true" aria-labelledby="promptShareModalTitle" aria-hidden="true">
+    <div class="post-modal-content prompt-share-dialog" tabindex="-1">
+      <button type="button" class="close-btn" id="closePromptShareModal" aria-label="共有モーダルを閉じる">&times;</button>
+      <h2 id="promptShareModalTitle">プロンプトを共有</h2>
+      <p class="prompt-share-dialog__lead">このプロンプト専用のURLをコピーしたり、そのまま共有できます。</p>
+      <div class="prompt-share-dialog__row">
+        <input type="text" id="prompt-share-link-input" readonly placeholder="共有リンクを準備しています" />
+      </div>
+      <p id="prompt-share-status" class="prompt-share-dialog__status">共有するプロンプトを選択してください。</p>
+      <div class="prompt-share-dialog__actions">
+        <button type="button" id="prompt-share-create-btn" class="submit-btn">リンクを表示</button>
+        <button type="button" id="prompt-share-copy-btn" class="submit-btn">リンクをコピー</button>
+        <button type="button" id="prompt-share-web-btn" class="submit-btn">端末で共有</button>
+      </div>
+      <div class="prompt-share-dialog__sns">
+        <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href="#">
+          <i class="bi bi-twitter"></i>
+          <span>X</span>
+        </a>
+        <a id="prompt-share-sns-line" target="_blank" rel="noopener noreferrer" href="#">
+          <i class="bi bi-chat-dots"></i>
+          <span>LINE</span>
+        </a>
+        <a id="prompt-share-sns-facebook" target="_blank" rel="noopener noreferrer" href="#">
+          <i class="bi bi-facebook"></i>
+          <span>Facebook</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
   <!-- 新規投稿ボタン -->
   <button
     id="openPostModal"

@@ -296,9 +296,10 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
 
                     return (
                       <li key={memo.id}>
-                        <button
-                          type="button"
+                        <article
                           className="memo-item"
+                          role="button"
+                          tabIndex={0}
                           data-memo-id={memo.id}
                           data-title={displayTitle}
                           data-date={memo.created_at || ""}
@@ -307,12 +308,24 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                           data-response={JSON.stringify(memo.ai_response || "")}
                         >
                           <div className="memo-item__header">
-                            <h3 className="memo-item__title">
-                              {displayTitle}
-                            </h3>
-                            {memo.created_at ? (
-                              <time className="memo-item__date">{memo.created_at}</time>
-                            ) : null}
+                            <div className="memo-item__heading">
+                              <h3 className="memo-item__title">
+                                {displayTitle}
+                              </h3>
+                              {memo.created_at ? (
+                                <time className="memo-item__date">{memo.created_at}</time>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              className="memo-item__share"
+                              data-share-memo
+                              data-tooltip="このメモを共有"
+                              data-tooltip-placement="top"
+                              aria-label="このメモを共有"
+                            >
+                              <i className="bi bi-share"></i>
+                            </button>
                           </div>
                           <div className="memo-tag-list">
                             {tagList.length ? (
@@ -328,7 +341,7 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                             )}
                           </div>
                           {excerpt ? <p className="memo-item__excerpt">{excerpt}</p> : null}
-                        </button>
+                        </article>
                       </li>
                     );
                   })}
@@ -385,6 +398,68 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                 <h4>AIの回答</h4>
                 <pre data-modal-response></pre>
               </section>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="memo-share-modal"
+          id="memoShareModal"
+          aria-hidden="true"
+        >
+          <div
+            className="memo-share-modal__overlay"
+            data-close-share-modal
+          ></div>
+          <div
+            className="memo-share-modal__content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="memoShareModalTitle"
+          >
+            <button
+              type="button"
+              className="memo-share-modal__close"
+              data-close-share-modal
+              aria-label="閉じる"
+            >
+              <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6 16.9 4.29z" />
+              </svg>
+            </button>
+            <header className="memo-share-modal__header">
+              <h3 id="memoShareModalTitle">メモを共有</h3>
+              <p>このメモ専用のURLをコピーしたり、そのまま共有できます。</p>
+            </header>
+            <div className="memo-share-modal__body">
+              <input
+                type="text"
+                id="memo-share-link-input"
+                readOnly
+                placeholder="共有リンクを準備しています"
+              />
+              <p id="memo-share-status" className="memo-share-modal__status">
+                共有するメモを選択してください。
+              </p>
+              <div className="memo-share-modal__actions">
+                <button type="button" id="memo-share-create-btn" className="primary-button">リンクを生成</button>
+                <button type="button" id="memo-share-copy-btn" className="primary-button">リンクをコピー</button>
+                <button type="button" id="memo-share-web-btn" className="primary-button">端末で共有</button>
+              </div>
+              <div className="memo-share-modal__sns">
+                <a id="memo-share-sns-x" target="_blank" rel="noopener noreferrer" href="#">
+                  <i className="bi bi-twitter"></i>
+                  <span>X</span>
+                </a>
+                <a id="memo-share-sns-line" target="_blank" rel="noopener noreferrer" href="#">
+                  <i className="bi bi-chat-dots"></i>
+                  <span>LINE</span>
+                </a>
+                <a id="memo-share-sns-facebook" target="_blank" rel="noopener noreferrer" href="#">
+                  <i className="bi bi-facebook"></i>
+                  <span>Facebook</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>

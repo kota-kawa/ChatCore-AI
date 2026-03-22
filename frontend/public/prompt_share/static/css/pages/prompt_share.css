@@ -673,7 +673,7 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
 
 .prompt-share-page .prompt-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.45rem;
   border-top: 2px solid #eef3f7;
   padding-top: 0.62rem;
@@ -897,6 +897,10 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
   width: min(92%, 620px);
 }
 
+#promptShareModal .post-modal-content {
+  width: min(92%, 560px);
+}
+
 .prompt-share-page .close-btn {
   position: absolute;
   top: 0.72rem;
@@ -925,6 +929,80 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
   margin: 0 0 0.4rem;
   color: var(--ps-text-strong);
   font-size: clamp(1.14rem, 1vw + 0.94rem, 1.45rem);
+}
+
+.prompt-share-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.prompt-share-dialog__lead {
+  margin: 0;
+  color: var(--ps-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.prompt-share-dialog__row input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid #dce7f3;
+  background: #f8fbff;
+  color: #24476e;
+  font: inherit;
+  padding: 0.8rem 0.95rem;
+}
+
+.prompt-share-dialog__status {
+  margin: 0;
+  min-height: 1.6em;
+  color: var(--ps-text-muted);
+  font-size: 0.88rem;
+}
+
+.prompt-share-dialog__status--error {
+  color: #c0392b;
+}
+
+.prompt-share-dialog__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.prompt-share-dialog__actions .submit-btn {
+  margin: 0;
+  width: 100%;
+}
+
+.prompt-share-dialog__sns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.prompt-share-dialog__sns a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid #dce7f3;
+  background: #f8fbff;
+  color: #28517b;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.prompt-share-dialog__sns a:hover {
+  background: #e9f3ff;
+  border-color: #9ec8f0;
+  transform: translateY(-1px);
 }
 
 .post-modal-lead {
@@ -1438,6 +1516,11 @@ body.prompt-share-page.ps-modal-open #promptDetailModal.show {
     width: 95%;
     max-height: 86vh;
     padding: 1.12rem 0.9rem 0.92rem;
+  }
+
+  .prompt-share-dialog__actions,
+  .prompt-share-dialog__sns {
+    grid-template-columns: 1fr;
   }
 
   .prompt-share-page .close-btn {
