@@ -492,6 +492,52 @@ textarea.memo-control {
   line-height: 1.65;
 }
 
+.memo-item__excerpt p {
+  margin: 0;
+}
+
+.memo-item__excerpt p + p {
+  margin-top: 0.3rem;
+}
+
+.memo-item__excerpt strong {
+  font-weight: 700;
+}
+
+.memo-item__excerpt em {
+  font-style: italic;
+}
+
+.memo-item__excerpt code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: rgba(146, 64, 14, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+  color: var(--memo-amber-strong, #b45309);
+}
+
+.memo-item__excerpt h1,
+.memo-item__excerpt h2,
+.memo-item__excerpt h3,
+.memo-item__excerpt h4,
+.memo-item__excerpt h5,
+.memo-item__excerpt h6 {
+  font-size: inherit;
+  font-weight: 700;
+  margin: 0;
+}
+
+.memo-item__excerpt ul,
+.memo-item__excerpt ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.memo-item__excerpt li + li {
+  margin-top: 0.1rem;
+}
+
 .memo-history__empty {
   position: relative;
   z-index: 1;

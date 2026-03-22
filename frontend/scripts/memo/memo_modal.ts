@@ -362,6 +362,16 @@ const setupMemoModal = () => {
       void createShareLink(false);
     });
   });
+
+  // Apply Markdown formatting to excerpt previews in the memo list
+  const excerptEls = document.querySelectorAll<HTMLElement>(".memo-item__excerpt");
+  excerptEls.forEach((el) => {
+    const text = el.textContent || "";
+    if (!text) return;
+    if (window.renderSanitizedHTML && window.formatLLMOutput) {
+      window.renderSanitizedHTML(el, window.formatLLMOutput(text));
+    }
+  });
 };
 
 if (document.readyState === "loading") {
