@@ -168,17 +168,40 @@ const bodyMarkup = `
             <label for="prompt-ai-model">使用AIモデル（任意）</label>
             <select id="prompt-ai-model">
               <option value="">未設定</option>
-              <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
-              <option value="ChatGPT (GPT-4)">ChatGPT (GPT-4)</option>
-              <option value="ChatGPT (GPT-3.5)">ChatGPT (GPT-3.5)</option>
-              <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
-              <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
-              <option value="Claude 3 Opus">Claude 3 Opus</option>
-              <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
-              <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
-              <option value="Midjourney">Midjourney</option>
-              <option value="Stable Diffusion">Stable Diffusion</option>
-              <option value="FLUX">FLUX</option>
+              <optgroup label="OpenAI">
+                <option value="ChatGPT (GPT-5.4)">ChatGPT (GPT-5.4)</option>
+                <option value="ChatGPT (GPT-5.4 mini)">ChatGPT (GPT-5.4 mini)</option>
+                <option value="ChatGPT (o3)">ChatGPT (o3)</option>
+                <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
+              </optgroup>
+              <optgroup label="Anthropic">
+                <option value="Claude Opus 4.6">Claude Opus 4.6</option>
+                <option value="Claude Sonnet 4.6">Claude Sonnet 4.6</option>
+                <option value="Claude Haiku 4.5">Claude Haiku 4.5</option>
+                <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
+              </optgroup>
+              <optgroup label="Google">
+                <option value="Gemini 3.1 Pro">Gemini 3.1 Pro</option>
+                <option value="Gemini 3.1 Flash">Gemini 3.1 Flash</option>
+                <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
+              </optgroup>
+              <optgroup label="Meta">
+                <option value="Llama 4 Maverick">Llama 4 Maverick</option>
+                <option value="Llama 4 Scout">Llama 4 Scout</option>
+              </optgroup>
+              <optgroup label="DeepSeek">
+                <option value="DeepSeek-R1">DeepSeek-R1</option>
+                <option value="DeepSeek-V3">DeepSeek-V3</option>
+              </optgroup>
+              <optgroup label="xAI">
+                <option value="Grok 3">Grok 3</option>
+              </optgroup>
+              <optgroup label="画像生成">
+                <option value="Midjourney">Midjourney</option>
+                <option value="Stable Diffusion">Stable Diffusion</option>
+                <option value="FLUX">FLUX</option>
+                <option value="DALL-E 3">DALL-E 3</option>
+              </optgroup>
               <option value="その他">その他</option>
             </select>
           </div>
