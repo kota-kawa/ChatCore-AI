@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -83,6 +83,7 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     category: NonEmptyStr
     content: NonEmptyStr
     author: NonEmptyStr
+    prompt_type: Literal["text", "image"] = "text"
     input_examples: str = ""
     output_examples: str = ""
     ai_model: str = ""

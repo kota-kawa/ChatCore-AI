@@ -1,8 +1,11 @@
 # prompt_share/prompt_share_api.py
 import logging
+import os
+from uuid import uuid4
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from werkzeug.utils import secure_filename
 
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
@@ -14,6 +17,7 @@ from services.request_models import (
     SharedPromptCreateRequest,
 )
 from services.web import (
+    BASE_DIR,
     jsonify,
     log_and_internal_server_error,
     require_json_dict,
@@ -22,6 +26,19 @@ from services.web import (
 
 prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
+PROMPT_TYPE_TEXT = "text"
+PROMPT_TYPE_IMAGE = "image"
+PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
+    BASE_DIR,
+    "frontend",
+    "public",
+    "static",
+    "uploads",
+    "prompt_share",
+)
+PROMPT_IMAGE_URL_PREFIX = "/static/uploads/prompt_share"
+PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+PROMPT_IMAGE_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
@@ -32,6 +49,80 @@ def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
     return row[0]
 
 
+def _normalize_prompt_type(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {PROMPT_TYPE_IMAGE, "image_prompt", "image-generation", "image_generation"}:
+        return PROMPT_TYPE_IMAGE
+    return PROMPT_TYPE_TEXT
+
+
+def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
+    prompt = dict(row)
+    created_at = prompt.get("created_at")
+    if created_at is not None and hasattr(created_at, "isoformat"):
+        prompt["created_at"] = created_at.isoformat()
+    prompt["prompt_type"] = _normalize_prompt_type(prompt.get("prompt_type"))
+    prompt["reference_image_url"] = prompt.get("reference_image_url") or None
+    return prompt
+
+
+def _delete_prompt_reference_image(image_url: str | None) -> None:
+    if not image_url or not image_url.startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
+        return
+    filename = image_url.rsplit("/", 1)[-1].strip()
+    if not filename:
+        return
+    filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+
+def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
+    filename = secure_filename(getattr(upload_file, "filename", "") or "")
+    if not filename:
+        raise ValueError("画像ファイル名が不正です。")
+
+    extension = os.path.splitext(filename)[1].lower()
+    if extension not in PROMPT_IMAGE_ALLOWED_EXTENSIONS:
+        raise ValueError("画像は PNG / JPG / WebP / GIF のいずれかを指定してください。")
+
+    content_type = str(getattr(upload_file, "content_type", "") or "").lower()
+    if content_type and not content_type.startswith("image/"):
+        raise ValueError("画像ファイルのみアップロードできます。")
+
+    os.makedirs(PROMPT_IMAGE_UPLOAD_DIR, exist_ok=True)
+    stored_filename = f"user_{user_id}_{uuid4().hex}{extension}"
+    filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, stored_filename)
+    file_obj = upload_file.file
+    total_size = 0
+
+    try:
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+
+        with open(filepath, "wb") as out_f:
+            while True:
+                chunk = file_obj.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > PROMPT_IMAGE_MAX_BYTES:
+                    raise ValueError("画像サイズは5MB以下にしてください。")
+                out_f.write(chunk)
+    except Exception:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        raise
+    finally:
+        if hasattr(file_obj, "seek"):
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+
+    return f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}"
+
+
 def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
     conn = None
     cursor = None
@@ -40,14 +131,25 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, title, category, content, author, input_examples, output_examples, ai_model, created_at
+            SELECT
+                id,
+                title,
+                category,
+                content,
+                author,
+                input_examples,
+                output_examples,
+                ai_model,
+                prompt_type,
+                reference_image_url,
+                created_at
             FROM prompts
             WHERE is_public = TRUE
               AND deleted_at IS NULL
             ORDER BY created_at DESC
             """
         )
-        prompts = [dict(row) for row in cursor.fetchall()]
+        prompts = [_serialize_prompt_row(dict(row)) for row in cursor.fetchall()]
 
         bookmark_titles = set()
         saved_prompt_ids = set()
@@ -78,9 +180,6 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                     saved_prompt_ids.add(entry["prompt_id"])
 
         for prompt in prompts:
-            created_at = prompt.get("created_at")
-            if created_at is not None and hasattr(created_at, "isoformat"):
-                prompt["created_at"] = created_at.isoformat()
             prompt["bookmarked"] = prompt["title"] in bookmark_titles
             prompt["saved_to_list"] = prompt["id"] in saved_prompt_ids
         return prompts
@@ -97,9 +196,11 @@ def _create_prompt_for_user(
     category: str,
     content: str,
     author: str,
+    prompt_type: str,
     input_examples: str,
     output_examples: str,
     ai_model: str,
+    reference_image_url: str | None,
 ) -> Any:
     conn = None
     cursor = None
@@ -112,6 +213,8 @@ def _create_prompt_for_user(
                 category,
                 content,
                 author,
+                prompt_type,
+                reference_image_url,
                 input_examples,
                 output_examples,
                 ai_model,
@@ -120,12 +223,23 @@ def _create_prompt_for_user(
                 created_at,
                 updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
             RETURNING id
         """
         cursor.execute(
             query,
-            (title, category, content, author, input_examples, output_examples, ai_model or None, user_id),
+            (
+                title,
+                category,
+                content,
+                author,
+                _normalize_prompt_type(prompt_type),
+                reference_image_url,
+                input_examples,
+                output_examples,
+                ai_model or None,
+                user_id,
+            ),
         )
         conn.commit()
         return _extract_id(cursor.fetchone())
@@ -285,9 +399,26 @@ async def create_prompt(request: Request):
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
+    content_type = request.headers.get("content-type", "")
+    image_file = None
+    if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        form = await request.form()
+        image_candidate = form.get("reference_image")
+        image_file = image_candidate if getattr(image_candidate, "filename", "") else None
+        data = {
+            "title": form.get("title", ""),
+            "category": form.get("category", ""),
+            "content": form.get("content", ""),
+            "author": form.get("author", ""),
+            "prompt_type": form.get("prompt_type", PROMPT_TYPE_TEXT),
+            "input_examples": form.get("input_examples", ""),
+            "output_examples": form.get("output_examples", ""),
+            "ai_model": form.get("ai_model", ""),
+        }
+    else:
+        data, error_response = await require_json_dict(request)
+        if error_response is not None:
+            return error_response
 
     payload, validation_error = validate_payload_model(
         data,
@@ -297,7 +428,17 @@ async def create_prompt(request: Request):
     if validation_error is not None:
         return validation_error
 
+    normalized_prompt_type = _normalize_prompt_type(payload.prompt_type)
+    if normalized_prompt_type != PROMPT_TYPE_IMAGE and image_file is not None:
+        return jsonify(
+            {"error": "画像は画像生成プロンプトでのみアップロードできます。"},
+            status_code=400,
+        )
+
+    reference_image_url = None
     try:
+        if image_file is not None:
+            reference_image_url = await run_blocking(_save_prompt_reference_image, image_file, user_id)
         prompt_id = await run_blocking(
             _create_prompt_for_user,
             user_id,
@@ -305,12 +446,20 @@ async def create_prompt(request: Request):
             payload.category,
             payload.content,
             payload.author,
+            normalized_prompt_type,
             payload.input_examples,
             payload.output_examples,
             payload.ai_model,
+            reference_image_url,
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
+    except ValueError as exc:
+        if reference_image_url:
+            await run_blocking(_delete_prompt_reference_image, reference_image_url)
+        return jsonify({"error": str(exc)}, status_code=400)
     except Exception:
+        if reference_image_url:
+            await run_blocking(_delete_prompt_reference_image, reference_image_url)
         return log_and_internal_server_error(
             logger,
             "Failed to create shared prompt.",

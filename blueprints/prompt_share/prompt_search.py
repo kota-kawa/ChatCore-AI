@@ -31,6 +31,8 @@ def _search_public_prompts(query):
               author,
               input_examples,
               output_examples,
+              prompt_type,
+              reference_image_url,
               created_at
             FROM prompts
             WHERE is_public = TRUE

@@ -1,9 +1,13 @@
+type PromptType = "text" | "image";
+
 type PromptData = {
   id?: string | number;
   title: string;
   content: string;
   category?: string;
   author?: string;
+  prompt_type?: PromptType | string;
+  reference_image_url?: string;
   input_examples?: string;
   output_examples?: string;
   ai_model?: string;
@@ -14,6 +18,14 @@ type PromptData = {
 
 const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
 const PROMPTS_CACHE_KEY = "prompt_share.prompts.v1";
+const PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_PROMPT_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif"
+]);
+const ACCEPTED_PROMPT_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 
 function readCachedAuthState() {
   try {
@@ -178,6 +190,18 @@ function initPromptSharePage(attempt = 0) {
     return `<i class="bi ${iconClass}"></i>`;
   }
 
+  function normalizePromptType(value?: string): PromptType {
+    return value === "image" ? "image" : "text";
+  }
+
+  function getPromptTypeLabel(promptType: PromptType) {
+    return promptType === "image" ? "画像生成" : "通常";
+  }
+
+  function getPromptTypeIconClass(promptType: PromptType) {
+    return promptType === "image" ? "bi-image" : "bi-chat-square-text";
+  }
+
   function renderPromptStatusMessage(message: string, variant: "empty" | "error" = "empty") {
     if (!promptContainer) return;
     promptContainer.innerHTML = `<p class="prompt-feedback prompt-feedback--${variant}">${escapeHtml(message)}</p>`;
@@ -249,6 +273,7 @@ function initPromptSharePage(attempt = 0) {
       card.setAttribute("data-category", prompt.category);
     }
 
+    const promptType = normalizePromptType(prompt.prompt_type);
     const isBookmarked = Boolean(prompt.bookmarked);
     const isSavedToList = Boolean(prompt.saved_to_list);
     const truncatedContent = truncateContent(prompt.content);
@@ -257,14 +282,29 @@ function initPromptSharePage(attempt = 0) {
     const safeCategory = escapeHtml(prompt.category || "未分類");
     const safeAuthor = escapeHtml(prompt.author || "匿名ユーザー");
     const safeCreatedAt = escapeHtml(formatPromptDate(prompt.created_at) || "日付未設定");
+    const safePromptTypeLabel = escapeHtml(getPromptTypeLabel(promptType));
+    const promptTypeIconClass = getPromptTypeIconClass(promptType);
     const bookmarkIcon = getBookmarkButtonMarkup(isBookmarked);
+    const referenceImageMarkup = prompt.reference_image_url
+      ? `
+        <div class="prompt-card__image">
+          <img src="${escapeHtml(prompt.reference_image_url)}" alt="${safeTitle} の作例画像" loading="lazy" decoding="async" />
+        </div>
+      `
+      : "";
 
     card.innerHTML = `
       <div class="prompt-card__header">
-        <span class="prompt-card__category-pill">
-          <i class="bi bi-hash"></i>
-          <span>${safeCategory}</span>
-        </span>
+        <div class="prompt-card__badges">
+          <span class="prompt-card__category-pill">
+            <i class="bi bi-hash"></i>
+            <span>${safeCategory}</span>
+          </span>
+          <span class="prompt-card__type-pill prompt-card__type-pill--${promptType}">
+            <i class="bi ${promptTypeIconClass}"></i>
+            <span>${safePromptTypeLabel}</span>
+          </span>
+        </div>
         <button class="meatball-menu" type="button" aria-label="その他の操作" aria-haspopup="true" aria-expanded="false" data-tooltip="その他の操作" data-tooltip-placement="left">
           <i class="bi bi-three-dots"></i>
         </button>
@@ -278,6 +318,7 @@ function initPromptSharePage(attempt = 0) {
         <button class="dropdown-item" type="button" role="menuitem">報告する</button>
       </div>
 
+      ${referenceImageMarkup}
       <h3>${safeTitle}</h3>
       <p class="prompt-card__content">${safeContent}</p>
 
@@ -308,6 +349,7 @@ function initPromptSharePage(attempt = 0) {
 
     card.dataset.fullTitle = prompt.title || "";
     card.dataset.fullContent = prompt.content || "";
+    card.dataset.promptType = promptType;
     card.dataset.savedToList = isSavedToList ? "true" : "false";
     card.dataset.psBound = "true";
 
@@ -445,6 +487,8 @@ function initPromptSharePage(attempt = 0) {
   function normalizePromptData(prompt: PromptData): PromptData {
     return {
       ...prompt,
+      prompt_type: normalizePromptType(prompt.prompt_type),
+      reference_image_url: prompt.reference_image_url || "",
       bookmarked: Boolean(prompt.bookmarked),
       saved_to_list: Boolean(prompt.saved_to_list)
     };
@@ -609,13 +653,118 @@ function initPromptSharePage(attempt = 0) {
   // ------------------------------
   // 投稿フォームの送信処理
   // ------------------------------
+  const promptTypeInputs = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[name="prompt-type"]')
+  );
+  const imagePromptFields = document.getElementById("imagePromptFields") as HTMLElement | null;
+  const referenceImageInput = document.getElementById("prompt-reference-image") as HTMLInputElement | null;
+  const promptImagePreview = document.getElementById("promptImagePreview") as HTMLElement | null;
+  const promptImagePreviewImg = document.getElementById("promptImagePreviewImg") as HTMLImageElement | null;
+  const promptImagePreviewName = document.getElementById("promptImagePreviewName") as HTMLElement | null;
+  const promptImageClearButton = document.getElementById("promptImageClearButton") as HTMLButtonElement | null;
+  let promptImagePreviewUrl = "";
+
+  function getSelectedPromptType(): PromptType {
+    const checked = promptTypeInputs.find((input) => input.checked);
+    return normalizePromptType(checked?.value);
+  }
+
+  function revokePromptImagePreview() {
+    if (!promptImagePreviewUrl) return;
+    URL.revokeObjectURL(promptImagePreviewUrl);
+    promptImagePreviewUrl = "";
+  }
+
+  function clearPromptImageSelection() {
+    revokePromptImagePreview();
+    if (referenceImageInput) {
+      referenceImageInput.value = "";
+    }
+    if (promptImagePreviewImg) {
+      promptImagePreviewImg.src = "";
+    }
+    if (promptImagePreviewName) {
+      promptImagePreviewName.textContent = "";
+    }
+    if (promptImagePreview) {
+      promptImagePreview.hidden = true;
+    }
+  }
+
+  function validateReferenceImageFile(file: File | null) {
+    if (!file) return null;
+    const lowerName = file.name.toLowerCase();
+    const hasAcceptedExtension = ACCEPTED_PROMPT_IMAGE_EXTENSIONS.some((ext) =>
+      lowerName.endsWith(ext)
+    );
+    if (!ACCEPTED_PROMPT_IMAGE_TYPES.has(file.type) && !hasAcceptedExtension) {
+      return "画像は PNG / JPG / WebP / GIF のいずれかを指定してください。";
+    }
+    if (file.size > PROMPT_IMAGE_MAX_BYTES) {
+      return "画像サイズは5MB以下にしてください。";
+    }
+    return null;
+  }
+
+  function updatePromptImagePreview(file: File | null) {
+    if (!file || !promptImagePreview || !promptImagePreviewImg || !promptImagePreviewName) {
+      clearPromptImageSelection();
+      return;
+    }
+
+    revokePromptImagePreview();
+    promptImagePreviewUrl = URL.createObjectURL(file);
+    promptImagePreviewImg.src = promptImagePreviewUrl;
+    promptImagePreviewName.textContent = `${file.name} (${Math.max(1, Math.round(file.size / 1024))}KB)`;
+    promptImagePreview.hidden = false;
+  }
+
+  function syncPromptTypeUI() {
+    const selectedPromptType = getSelectedPromptType();
+    promptTypeInputs.forEach((input) => {
+      input.closest(".prompt-type-option")?.classList.toggle("prompt-type-option--active", input.checked);
+    });
+    if (imagePromptFields) {
+      imagePromptFields.hidden = selectedPromptType !== "image";
+    }
+    if (selectedPromptType !== "image") {
+      clearPromptImageSelection();
+    }
+  }
+
+  if (promptTypeInputs.length > 0) {
+    promptTypeInputs.forEach((input) => {
+      input.addEventListener("change", syncPromptTypeUI);
+    });
+    syncPromptTypeUI();
+  }
+
+  if (referenceImageInput) {
+    referenceImageInput.addEventListener("change", () => {
+      const file = referenceImageInput.files?.[0] || null;
+      const validationError = validateReferenceImageFile(file);
+      if (validationError) {
+        alert(validationError);
+        clearPromptImageSelection();
+        return;
+      }
+      updatePromptImagePreview(file);
+    });
+  }
+
+  if (promptImageClearButton) {
+    promptImageClearButton.addEventListener("click", () => {
+      clearPromptImageSelection();
+    });
+  }
+
   const postForm = document.getElementById("postForm") as HTMLFormElement | null;
   if (postForm) {
     postForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
       const titleInput = document.getElementById("prompt-title") as HTMLInputElement | null;
-      const categoryInput = document.getElementById("prompt-category") as HTMLInputElement | null;
+      const categoryInput = document.getElementById("prompt-category") as HTMLSelectElement | null;
       const contentInput = document.getElementById("prompt-content") as HTMLTextAreaElement | null;
       const authorInput = document.getElementById("prompt-author") as HTMLInputElement | null;
       if (!titleInput || !categoryInput || !contentInput || !authorInput) {
@@ -623,12 +772,19 @@ function initPromptSharePage(attempt = 0) {
         return;
       }
 
+      const promptType = getSelectedPromptType();
       const title = titleInput.value;
       const category = categoryInput.value;
       const content = contentInput.value;
       const author = authorInput.value;
       const aiModelInput = document.getElementById("prompt-ai-model") as HTMLSelectElement | null;
       const ai_model = aiModelInput ? aiModelInput.value : "";
+      const referenceImageFile = referenceImageInput?.files?.[0] || null;
+      const referenceImageError = validateReferenceImageFile(referenceImageFile);
+      if (referenceImageError) {
+        alert(referenceImageError);
+        return;
+      }
 
       // ガードレール使用のチェックと値取得
       const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
@@ -642,50 +798,51 @@ function initPromptSharePage(attempt = 0) {
         output_examples = outputExample ? outputExample.value : "";
       }
 
-      // すべての投稿を公開するため、常に true に設定
-      const isPublic = true;
-
-      const postData = {
-        title: title,
-        category: category,
-        content: content,
-        author: author,
-        input_examples: input_examples,
-        output_examples: output_examples,
-        ai_model: ai_model,
-        is_public: isPublic
-      };
+      const postData = new FormData();
+      postData.append("title", title);
+      postData.append("category", category);
+      postData.append("content", content);
+      postData.append("author", author);
+      postData.append("prompt_type", promptType);
+      postData.append("input_examples", input_examples);
+      postData.append("output_examples", output_examples);
+      postData.append("ai_model", ai_model);
+      if (promptType === "image" && referenceImageFile) {
+        postData.append("reference_image", referenceImageFile);
+      }
 
       fetch("/prompt_share/api/prompts", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(postData)
+        body: postData
       })
-        .then((response) => response.json())
-        .then((result) => {
-          if (result.error) {
-            alert("エラー: " + result.error);
-          } else {
-            alert("プロンプトが投稿されました！");
-            // フォームリセット＆モーダルを閉じる
-            postForm.reset();
-            const guardrailFields = document.getElementById("guardrail-fields");
-            if (guardrailFields) {
-              guardrailFields.style.display = "none";
-            }
-            const postModalElement = document.getElementById("postModal") as HTMLElement | null;
-            if (postModalElement) {
-              closeModal(postModalElement, { rotateTrigger: true });
-            }
-            // 最新のプロンプト一覧を再読み込み
-            loadPrompts();
+        .then(async (response) => {
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.error) {
+            throw new Error(result.error || "プロンプト投稿中にエラーが発生しました。");
           }
+          return result;
+        })
+        .then((result) => {
+          if (result.message) {
+            console.log(result.message);
+          }
+          alert("プロンプトが投稿されました！");
+          postForm.reset();
+          clearPromptImageSelection();
+          syncPromptTypeUI();
+          const guardrailFields = document.getElementById("guardrail-fields");
+          if (guardrailFields) {
+            guardrailFields.style.display = "none";
+          }
+          const postModalElement = document.getElementById("postModal") as HTMLElement | null;
+          if (postModalElement) {
+            closeModal(postModalElement, { rotateTrigger: true });
+          }
+          loadPrompts();
         })
         .catch((err) => {
           console.error("投稿エラー:", err);
-          alert("プロンプト投稿中にエラーが発生しました。");
+          alert(err instanceof Error ? err.message : "プロンプト投稿中にエラーが発生しました。");
         });
     });
   }
@@ -906,6 +1063,7 @@ function initPromptSharePage(attempt = 0) {
   function showPromptDetailModal(prompt: PromptData) {
     const modal = document.getElementById("promptDetailModal");
     const modalTitle = document.getElementById("modalPromptTitle");
+    const modalPromptType = document.getElementById("modalPromptType");
     const modalCategory = document.getElementById("modalPromptCategory");
     const modalContent = document.getElementById("modalPromptContent");
     const modalAuthor = document.getElementById("modalPromptAuthor");
@@ -915,11 +1073,15 @@ function initPromptSharePage(attempt = 0) {
     const modalOutputExamplesGroup = document.getElementById("modalOutputExamplesGroup");
     const modalAiModel = document.getElementById("modalAiModel");
     const modalAiModelGroup = document.getElementById("modalAiModelGroup");
+    const modalReferenceImage = document.getElementById("modalReferenceImage") as HTMLImageElement | null;
+    const modalReferenceImageGroup = document.getElementById("modalReferenceImageGroup");
 
-    if (!modal || !modalTitle || !modalCategory || !modalContent || !modalAuthor) return;
+    if (!modal || !modalTitle || !modalPromptType || !modalCategory || !modalContent || !modalAuthor) return;
 
     // モーダルにデータを設定
+    const promptType = normalizePromptType(prompt.prompt_type);
     modalTitle.textContent = prompt.title;
+    modalPromptType.textContent = getPromptTypeLabel(promptType);
     modalCategory.textContent = prompt.category || "";
     modalContent.textContent = prompt.content;
     modalAuthor.textContent = prompt.author || "";
@@ -947,6 +1109,16 @@ function initPromptSharePage(attempt = 0) {
       modalOutputExamplesGroup.style.display = "none";
     }
 
+    if (prompt.reference_image_url && modalReferenceImage && modalReferenceImageGroup) {
+      modalReferenceImage.src = prompt.reference_image_url;
+      modalReferenceImage.alt = `${prompt.title} の作例画像`;
+      modalReferenceImageGroup.style.display = "block";
+    } else if (modalReferenceImage && modalReferenceImageGroup) {
+      modalReferenceImage.src = "";
+      modalReferenceImage.alt = "";
+      modalReferenceImageGroup.style.display = "none";
+    }
+
     // モーダルを表示
     openModal(modal, closePromptDetailModalBtn);
   }
@@ -966,6 +1138,10 @@ function initPromptSharePage(attempt = 0) {
       }
     });
   }
+
+  window.addEventListener("beforeunload", () => {
+    revokePromptImagePreview();
+  });
 }
 
 if (document.readyState === "loading") {

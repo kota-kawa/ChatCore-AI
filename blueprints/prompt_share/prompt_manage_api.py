@@ -32,6 +32,8 @@ def _serialize_prompt_list_entry(row: dict[str, Any]) -> dict[str, Any]:
             "category": row.get("category"),
             "content": row.get("content"),
             "author": row.get("author"),
+            "prompt_type": row.get("prompt_type") or "text",
+            "reference_image_url": row.get("reference_image_url"),
             "input_examples": row.get("input_examples"),
             "output_examples": row.get("output_examples"),
             "created_at": (
@@ -50,7 +52,16 @@ def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT id, title, category, content, input_examples, output_examples, created_at
+            SELECT
+                id,
+                title,
+                category,
+                content,
+                input_examples,
+                output_examples,
+                prompt_type,
+                reference_image_url,
+                created_at
             FROM prompts
             WHERE user_id = %s
               AND deleted_at IS NULL
@@ -107,6 +118,8 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
                    p.category,
                    p.content,
                    p.author,
+                   p.prompt_type,
+                   p.reference_image_url,
                    p.input_examples,
                    p.output_examples,
                    p.created_at AS prompt_created_at,

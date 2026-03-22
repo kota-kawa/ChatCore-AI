@@ -117,6 +117,27 @@ const bodyMarkup = `
         <p class="post-modal-lead">みんなの役に立つプロンプトを、分かりやすく共有しましょう。</p>
         <form class="post-form" id="postForm">
           <div class="form-group">
+            <label>投稿タイプ</label>
+            <div class="prompt-type-toggle" role="radiogroup" aria-label="投稿タイプを選択">
+              <label class="prompt-type-option prompt-type-option--active">
+                <input type="radio" name="prompt-type" value="text" checked />
+                <span class="prompt-type-option__icon"><i class="bi bi-chat-square-text"></i></span>
+                <span class="prompt-type-option__body">
+                  <strong>通常プロンプト</strong>
+                  <small>文章生成、要約、相談、分析など</small>
+                </span>
+              </label>
+              <label class="prompt-type-option">
+                <input type="radio" name="prompt-type" value="image" />
+                <span class="prompt-type-option__icon"><i class="bi bi-image"></i></span>
+                <span class="prompt-type-option__body">
+                  <strong>画像生成プロンプト</strong>
+                  <small>Midjourney、Stable Diffusion、Flux など向け</small>
+                </span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
             <label for="prompt-title">タイトル</label>
             <input type="text" id="prompt-title" placeholder="プロンプトのタイトルを入力" required />
           </div>
@@ -155,8 +176,40 @@ const bodyMarkup = `
               <option value="Claude 3 Opus">Claude 3 Opus</option>
               <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
               <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
+              <option value="Midjourney">Midjourney</option>
+              <option value="Stable Diffusion">Stable Diffusion</option>
+              <option value="FLUX">FLUX</option>
               <option value="その他">その他</option>
             </select>
+          </div>
+          <div id="imagePromptFields" class="image-prompt-fields" hidden>
+            <div class="form-group">
+              <label for="prompt-reference-image">作例画像（任意・1枚）</label>
+              <label class="image-upload-field" for="prompt-reference-image">
+                <input
+                  type="file"
+                  id="prompt-reference-image"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                />
+                <span class="image-upload-field__icon">
+                  <i class="bi bi-cloud-arrow-up"></i>
+                </span>
+                <span class="image-upload-field__copy">
+                  <strong>画像をアップロード</strong>
+                  <small>PNG / JPG / WebP / GIF、5MBまで、1枚のみ</small>
+                </span>
+              </label>
+              <div id="promptImagePreview" class="prompt-image-preview" hidden>
+                <img id="promptImagePreviewImg" src="" alt="アップロード画像のプレビュー" />
+                <div class="prompt-image-preview__meta">
+                  <span id="promptImagePreviewName"></span>
+                  <button type="button" id="promptImageClearButton" class="prompt-image-clear-btn">
+                    <i class="bi bi-x-lg"></i>
+                    <span>画像を外す</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label>
@@ -190,6 +243,16 @@ const bodyMarkup = `
       <button type="button" class="close-btn" id="closePromptDetailModal" aria-label="詳細モーダルを閉じる">&times;</button>
       <h2 id="modalPromptTitle">プロンプト詳細</h2>
       <div class="modal-content-body">
+        <div class="form-group">
+          <label><strong>タイプ:</strong></label>
+          <p id="modalPromptType"></p>
+        </div>
+        <div id="modalReferenceImageGroup" class="form-group" style="display: none;">
+          <label><strong>作例画像:</strong></label>
+          <div class="modal-reference-image">
+            <img id="modalReferenceImage" src="" alt="作例画像" />
+          </div>
+        </div>
         <div class="form-group">
           <label><strong>カテゴリ:</strong></label>
           <p id="modalPromptCategory"></p>
