@@ -7,6 +7,7 @@ from unittest.mock import patch
 from starlette.responses import StreamingResponse
 
 from blueprints.chat.messages import (
+    _paginate_ephemeral_chat_history,
     chat,
     _iter_llm_stream_events,
     chat_generation_status,
@@ -32,6 +33,36 @@ def make_request(json_body, session=None):
 
 
 class ChatStreamingTestCase(unittest.TestCase):
+    def test_paginate_ephemeral_chat_history_reports_has_more_and_cursor(self):
+        rows = [
+            {"role": "user" if index % 2 == 0 else "assistant", "content": f"msg-{index}"}
+            for index in range(5)
+        ]
+
+        payload = _paginate_ephemeral_chat_history(rows, limit=2)
+
+        self.assertEqual(
+            [message["id"] for message in payload["messages"]],
+            [4, 5],
+        )
+        self.assertTrue(payload["pagination"]["has_more"])
+        self.assertEqual(payload["pagination"]["next_before_id"], 4)
+
+    def test_paginate_ephemeral_chat_history_respects_before_id_cursor(self):
+        rows = [
+            {"role": "user" if index % 2 == 0 else "assistant", "content": f"msg-{index}"}
+            for index in range(5)
+        ]
+
+        payload = _paginate_ephemeral_chat_history(rows, limit=2, before_message_id=4)
+
+        self.assertEqual(
+            [message["id"] for message in payload["messages"]],
+            [2, 3],
+        )
+        self.assertTrue(payload["pagination"]["has_more"])
+        self.assertEqual(payload["pagination"]["next_before_id"], 2)
+
     def test_chat_returns_streaming_response_for_gemini(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},

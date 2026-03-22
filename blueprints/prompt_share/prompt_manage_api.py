@@ -19,6 +19,30 @@ prompt_manage_api_bp = APIRouter(prefix="/prompt_manage/api", dependencies=[Depe
 logger = logging.getLogger(__name__)
 
 
+def _serialize_prompt_list_entry(row: dict[str, Any]) -> dict[str, Any]:
+    prompt_created_at = row.get("prompt_created_at")
+    saved_at = row.get("saved_at")
+    return {
+        "id": row.get("entry_id"),
+        "prompt_id": row.get("prompt_id"),
+        "created_at": saved_at.isoformat() if hasattr(saved_at, "isoformat") else saved_at,
+        "prompt": {
+            "id": row.get("prompt_id"),
+            "title": row.get("title"),
+            "category": row.get("category"),
+            "content": row.get("content"),
+            "author": row.get("author"),
+            "input_examples": row.get("input_examples"),
+            "output_examples": row.get("output_examples"),
+            "created_at": (
+                prompt_created_at.isoformat()
+                if hasattr(prompt_created_at, "isoformat")
+                else prompt_created_at
+            ),
+        },
+    }
+
+
 def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
     conn = None
     cursor = None
@@ -75,21 +99,23 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT ple.id,
+            SELECT ple.id AS entry_id,
                    ple.prompt_id,
                    p.title,
                    p.category,
                    p.content,
+                   p.author,
                    p.input_examples,
                    p.output_examples,
-                   ple.created_at
+                   p.created_at AS prompt_created_at,
+                   ple.created_at AS saved_at
             FROM prompt_list_entries ple
             JOIN prompts p ON p.id = ple.prompt_id
             WHERE ple.user_id = %s
             ORDER BY ple.created_at DESC, ple.id DESC
         """
         cursor.execute(query, (user_id,))
-        return cursor.fetchall()
+        return [_serialize_prompt_list_entry(dict(row)) for row in cursor.fetchall()]
     finally:
         if cursor is not None:
             cursor.close()

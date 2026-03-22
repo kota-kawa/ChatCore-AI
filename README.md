@@ -82,7 +82,7 @@ docker-compose up --build
 - API: `http://localhost:5004`
 
 ## Database Migrations (Alembic)
-Schema management is unified on Alembic. `docker-compose up --build` now waits for PostgreSQL and runs `alembic upgrade head` automatically before starting the API.
+Schema management is unified on Alembic. `docker-compose up --build` now waits for PostgreSQL and runs `alembic upgrade head` automatically before starting the API. No separate `init.sql` bootstrap is required or used.
 
 For existing environments, you can also apply DB changes manually:
 
@@ -275,7 +275,7 @@ docker-compose up --build
 - API: `http://localhost:5004`
 
 ## データベースマイグレーション（Alembic）
-スキーマ管理は Alembic に統一しています。`docker-compose up --build` では PostgreSQL の起動待ち後に `alembic upgrade head` を実行してから API を起動します。
+スキーマ管理は Alembic に統一しています。`docker-compose up --build` では PostgreSQL の起動待ち後に `alembic upgrade head` を実行してから API を起動します。`init.sql` のような別系統の初期化スクリプトは使いません。
 
 既存環境へ手動で適用する場合は次を実行してください。
 

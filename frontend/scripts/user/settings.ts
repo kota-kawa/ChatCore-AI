@@ -281,6 +281,8 @@ const initSettingsPage = () => {
 
   type PromptListEntry = {
     id?: string | number;
+    promptId?: string | number;
+    prompt: PromptRecord;
     title: string;
     content: string;
     category: string;
@@ -291,13 +293,18 @@ const initSettingsPage = () => {
 
   const toPromptListEntry = (raw: unknown): PromptListEntry => {
     const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+    const nestedPrompt = toPromptRecord(obj.prompt);
+    const fallbackPrompt = toPromptRecord(obj);
+    const prompt = nestedPrompt.title || nestedPrompt.content ? nestedPrompt : fallbackPrompt;
     return {
       id: asId(obj.id),
-      title: asString(obj.title),
-      content: asString(obj.content),
-      category: asString(obj.category),
-      inputExamples: asString(obj.input_examples),
-      outputExamples: asString(obj.output_examples),
+      promptId: asId(obj.prompt_id),
+      prompt,
+      title: prompt.title,
+      content: prompt.content,
+      category: prompt.category,
+      inputExamples: prompt.inputExamples,
+      outputExamples: prompt.outputExamples,
       createdAt: asString(obj.created_at) || undefined
     };
   };
