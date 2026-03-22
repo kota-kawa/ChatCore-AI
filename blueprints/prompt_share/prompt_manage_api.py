@@ -75,10 +75,18 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT id, prompt_id, title, category, content, input_examples, output_examples, created_at
-            FROM prompt_list_entries
-            WHERE user_id = %s
-            ORDER BY created_at DESC, id DESC
+            SELECT ple.id,
+                   ple.prompt_id,
+                   p.title,
+                   p.category,
+                   p.content,
+                   p.input_examples,
+                   p.output_examples,
+                   ple.created_at
+            FROM prompt_list_entries ple
+            JOIN prompts p ON p.id = ple.prompt_id
+            WHERE ple.user_id = %s
+            ORDER BY ple.created_at DESC, ple.id DESC
         """
         cursor.execute(query, (user_id,))
         return cursor.fetchall()

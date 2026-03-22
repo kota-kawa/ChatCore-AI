@@ -222,17 +222,16 @@ function initPromptSharePage(attempt = 0) {
   }
 
   function savePromptToList(prompt: PromptData) {
+    if (prompt.id === undefined || prompt.id === null) {
+      return Promise.reject(new Error("保存対象のプロンプトIDが見つかりません。"));
+    }
+
     return fetch("/prompt_share/api/prompt_list", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt_id: prompt.id ?? null,
-        title: prompt.title,
-        category: prompt.category || "",
-        content: prompt.content,
-        input_examples: prompt.input_examples || "",
-        output_examples: prompt.output_examples || ""
+        prompt_id: prompt.id
       })
     }).then(async (response) => {
       const data = await response.json().catch(() => ({}));

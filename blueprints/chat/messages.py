@@ -49,6 +49,8 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
+CHAT_HISTORY_PAGE_SIZE_DEFAULT = 50
+CHAT_HISTORY_PAGE_SIZE_MAX = 100
 
 BASE_SYSTEM_PROMPT = """
 あなたは、ユーザーをサポートする優秀なAIアシスタントです。
@@ -249,37 +251,119 @@ def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
     return "\n\n".join(section for section in sections if section)
 
 
-def _fetch_chat_history(chat_room_id: str) -> list[dict[str, str]]:
-    # API返却向けにチャット履歴を時系列で整形する
-    # Fetch and format chat history in chronological order for API response.
+def _parse_page_size(raw_value: str | None) -> int:
+    if raw_value is None:
+        return CHAT_HISTORY_PAGE_SIZE_DEFAULT
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return CHAT_HISTORY_PAGE_SIZE_DEFAULT
+    if parsed < 1:
+        return CHAT_HISTORY_PAGE_SIZE_DEFAULT
+    return min(parsed, CHAT_HISTORY_PAGE_SIZE_MAX)
+
+
+def _parse_before_message_id(raw_value: str | None) -> int | None:
+    if raw_value is None or raw_value == "":
+        return None
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 1:
+        return None
+    return parsed
+
+
+def _fetch_chat_history(
+    chat_room_id: str,
+    limit: int,
+    before_message_id: int | None = None,
+) -> dict[str, Any]:
+    # API返却向けにチャット履歴をページ単位で整形する
+    # Fetch and format paginated chat history for API response.
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         query = """
-            SELECT message, sender, timestamp
-            FROM chat_history
-            WHERE chat_room_id = %s
+            SELECT id, message, sender, timestamp
+            FROM (
+                SELECT id, message, sender, timestamp
+                FROM chat_history
+                WHERE chat_room_id = %s
+                  AND (%s IS NULL OR id < %s)
+                ORDER BY id DESC
+                LIMIT %s
+            ) recent_history
             ORDER BY id ASC
         """
-        cursor.execute(query, (chat_room_id,))
+        cursor.execute(query, (chat_room_id, before_message_id, before_message_id, limit + 1))
         rows = cursor.fetchall()
+        has_more = len(rows) > limit
+        if has_more:
+            rows = rows[1:]
+
         messages = []
-        for (msg, sender, ts) in rows:
+        for (message_id, msg, sender, ts) in rows:
             messages.append(
                 {
+                    "id": message_id,
                     "message": msg,
                     "sender": sender,
                     "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
                 }
             )
-        return messages
+
+        next_before_id = messages[0]["id"] if has_more and messages else None
+        return {
+            "messages": messages,
+            "pagination": {
+                "limit": limit,
+                "has_more": has_more,
+                "next_before_id": next_before_id,
+            },
+        }
     finally:
         if cursor is not None:
             cursor.close()
         if conn is not None:
             conn.close()
+
+
+def _paginate_ephemeral_chat_history(
+    rows: list[dict[str, str]],
+    limit: int,
+    before_message_id: int | None = None,
+) -> dict[str, Any]:
+    # 一時チャット履歴も同じAPI形式で返し、将来の拡張に備える
+    # Shape guest chat history with the same pagination payload as persisted chats.
+    normalized_messages = [
+        {
+            "id": index + 1,
+            "message": row.get("content", ""),
+            "sender": row.get("role", ""),
+            "timestamp": "",
+        }
+        for index, row in enumerate(rows)
+    ]
+    if before_message_id is not None:
+        normalized_messages = [
+            message for message in normalized_messages if message["id"] < before_message_id
+        ]
+
+    has_more = len(normalized_messages) > limit
+    page_messages = normalized_messages[-limit:]
+    next_before_id = page_messages[0]["id"] if has_more and page_messages else None
+    return {
+        "messages": page_messages,
+        "pagination": {
+            "limit": limit,
+            "has_more": has_more,
+            "next_before_id": next_before_id,
+        },
+    }
 
 
 @chat_bp.post("/api/chat", name="chat.chat")
@@ -444,9 +528,11 @@ async def chat(request: Request):
 @chat_bp.get("/api/get_chat_history", name="chat.get_chat_history")
 async def get_chat_history(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
-    chat_room_id = request.query_params.get('room_id')
+    chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
+    limit = _parse_page_size(request.query_params.get("limit"))
+    before_message_id = _parse_before_message_id(request.query_params.get("before_id"))
 
     session = request.session
     if "user_id" in session:
@@ -466,8 +552,8 @@ async def get_chat_history(request: Request):
             )
 
         try:
-            messages = await run_blocking(_fetch_chat_history, chat_room_id)
-            return jsonify({"messages": messages})
+            payload = await run_blocking(_fetch_chat_history, chat_room_id, limit, before_message_id)
+            return jsonify(payload)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -479,7 +565,8 @@ async def get_chat_history(request: Request):
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
         messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
-        return jsonify({"messages": messages})
+        payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
+        return jsonify(payload)
 
 
 @chat_bp.get("/api/chat_generation_stream", name="chat.chat_generation_stream")

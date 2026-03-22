@@ -1,12 +1,155 @@
 // chat_history.ts – 履歴のロード／保存
 // --------------------------------------------------
 
+type ChatHistoryMessage = {
+  id?: number;
+  message: string;
+  sender: string;
+  timestamp?: string;
+};
+
+type ChatHistoryPagination = {
+  has_more?: boolean;
+  next_before_id?: number | null;
+  limit?: number;
+};
+
+const CHAT_HISTORY_PAGE_SIZE = 50;
+const historyPaginationState = new Map<string, { hasMore: boolean; nextBeforeId: number | null }>();
+
 let chatGenerationPollTimer: number | null = null;
 
 function stopChatGenerationPolling() {
   if (chatGenerationPollTimer === null) return;
   window.clearTimeout(chatGenerationPollTimer);
   chatGenerationPollTimer = null;
+}
+
+function readStoredHistory(roomId: string) {
+  try {
+    const stored = localStorage.getItem(`chatHistory_${roomId}`);
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredHistory(roomId: string, list: { message: string; sender: string }[]) {
+  localStorage.setItem(
+    `chatHistory_${roomId}`,
+    JSON.stringify(list.map((item) => ({ text: item.message, sender: item.sender })))
+  );
+}
+
+function prependStoredHistory(roomId: string, list: { message: string; sender: string }[]) {
+  const existing = readStoredHistory(roomId) as { text?: string; sender?: string }[];
+  const normalizedExisting = existing.map((item) => ({
+    message: typeof item.text === "string" ? item.text : "",
+    sender: typeof item.sender === "string" ? item.sender : ""
+  }));
+  writeStoredHistory(roomId, [...list, ...normalizedExisting]);
+}
+
+function normalizeHistoryMessages(raw: unknown): ChatHistoryMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const obj = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+    return {
+      id: typeof obj.id === "number" ? obj.id : undefined,
+      message: typeof obj.message === "string" ? obj.message : "",
+      sender: typeof obj.sender === "string" ? obj.sender : "",
+      timestamp: typeof obj.timestamp === "string" ? obj.timestamp : undefined
+    };
+  });
+}
+
+function updateHistoryPagination(roomId: string, pagination: ChatHistoryPagination | null | undefined) {
+  historyPaginationState.set(roomId, {
+    hasMore: pagination?.has_more === true,
+    nextBeforeId: typeof pagination?.next_before_id === "number" ? pagination.next_before_id : null
+  });
+}
+
+function removeHistoryLoadMoreButton() {
+  window.chatMessages?.querySelector(".chat-history-load-more-btn")?.remove();
+}
+
+function renderHistoryLoadMoreButton(roomId: string) {
+  if (!window.chatMessages || window.currentChatRoomId !== roomId) return;
+  removeHistoryLoadMoreButton();
+
+  const state = historyPaginationState.get(roomId);
+  if (!state || !state.hasMore || state.nextBeforeId === null) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-history-load-more-btn";
+  button.textContent = "過去のメッセージを読み込む";
+  button.addEventListener("click", () => {
+    void loadOlderChatHistory(roomId);
+  });
+  window.chatMessages.insertBefore(button, window.chatMessages.firstChild);
+}
+
+async function fetchChatHistoryPage(roomId: string, beforeId?: number | null) {
+  const params = new URLSearchParams({
+    room_id: roomId,
+    limit: String(CHAT_HISTORY_PAGE_SIZE)
+  });
+  if (typeof beforeId === "number") {
+    params.set("before_id", String(beforeId));
+  }
+
+  const response = await fetch(`/api/get_chat_history?${params.toString()}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    throw new Error(data.error || "履歴取得に失敗しました。");
+  }
+  return data;
+}
+
+async function loadOlderChatHistory(roomId: string) {
+  if (!window.chatMessages || window.currentChatRoomId !== roomId) return;
+
+  const state = historyPaginationState.get(roomId);
+  if (!state || !state.hasMore || state.nextBeforeId === null) return;
+
+  const button = window.chatMessages.querySelector<HTMLButtonElement>(".chat-history-load-more-btn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "読み込み中...";
+  }
+
+  try {
+    const data = await fetchChatHistoryPage(roomId, state.nextBeforeId);
+    if (window.currentChatRoomId !== roomId || !window.chatMessages) return;
+
+    const olderMessages = normalizeHistoryMessages(data.messages);
+    const previousScrollHeight = window.chatMessages.scrollHeight;
+    const previousScrollTop = window.chatMessages.scrollTop;
+
+    removeHistoryLoadMoreButton();
+    [...olderMessages].reverse().forEach((message) => {
+      window.displayMessage?.(message.message, message.sender, { prepend: true, autoScroll: false });
+    });
+
+    const scrollDelta = window.chatMessages.scrollHeight - previousScrollHeight;
+    window.chatMessages.scrollTop = previousScrollTop + scrollDelta;
+
+    prependStoredHistory(
+      roomId,
+      olderMessages.map((message) => ({ message: message.message, sender: message.sender }))
+    );
+    updateHistoryPagination(roomId, data.pagination);
+    renderHistoryLoadMoreButton(roomId);
+  } catch (err) {
+    console.error("追加履歴取得失敗:", err);
+    if (button) {
+      button.disabled = false;
+      button.textContent = "過去のメッセージを読み込む";
+    }
+  }
 }
 
 function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = false) {
@@ -61,20 +204,18 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
 function loadChatHistory(shouldPollStatus = true) {
   if (!window.currentChatRoomId) {
     stopChatGenerationPolling();
+    historyPaginationState.clear();
     if (window.chatMessages) window.chatMessages.innerHTML = "";
     return;
   }
   const roomId = window.currentChatRoomId;
-  fetch(`/api/get_chat_history?room_id=${encodeURIComponent(roomId)}`)
-    .then((r) => r.json())
+
+  fetchChatHistoryPage(roomId)
     .then(async (data) => {
-      if (data.error) {
-        console.error("get_chat_history:", data.error);
-        return;
-      }
       if (!window.chatMessages) return;
 
-      const msgs: { message: string; sender: string }[] = Array.isArray(data.messages) ? data.messages : [];
+      const msgs = normalizeHistoryMessages(data.messages);
+      updateHistoryPagination(roomId, data.pagination);
 
       const scrollToBottom = () => {
         if (window.scrollMessageToBottom) {
@@ -84,29 +225,30 @@ function loadChatHistory(shouldPollStatus = true) {
         }
       };
 
-      const renderMsgs = (list: { message: string; sender: string }[]) => {
-        list.forEach((m) => {
-          if (window.displayMessage) window.displayMessage(m.message, m.sender);
+      const renderMsgs = (list: ChatHistoryMessage[]) => {
+        list.forEach((message) => {
+          window.displayMessage?.(message.message, message.sender, { autoScroll: false });
         });
       };
 
-      const saveToLocalStorage = (list: { message: string; sender: string }[]) => {
-        localStorage.setItem(
-          `chatHistory_${roomId}`,
-          JSON.stringify(list.map((m) => ({ text: m.message, sender: m.sender })))
+      const saveToLocalStorage = (list: ChatHistoryMessage[]) => {
+        writeStoredHistory(
+          roomId,
+          list.map((message) => ({ message: message.message, sender: message.sender }))
         );
       };
 
       if (!shouldPollStatus) {
         window.chatMessages.innerHTML = "";
+        renderHistoryLoadMoreButton(roomId);
         saveToLocalStorage(msgs);
         renderMsgs(msgs);
+        renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
         stopChatGenerationPolling();
         return;
       }
 
-      // 生成ステータスを確認
       let isGenerating = false;
       let hasReplayableJob = false;
       try {
@@ -120,22 +262,21 @@ function loadChatHistory(shouldPollStatus = true) {
         // ステータス取得失敗時は通常描画にフォールバック
       }
 
-      // ルーム切替が起きていたら中断
       if (window.currentChatRoomId !== roomId) return;
 
       window.chatMessages.innerHTML = "";
       stopChatGenerationPolling();
 
       if (isGenerating) {
-        // 生成中: 最後のbotメッセージはまだDBにないので全メッセージをそのまま表示
         saveToLocalStorage(msgs);
+        renderHistoryLoadMoreButton(roomId);
         renderMsgs(msgs);
+        renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
         window.connectToGenerationStream?.(roomId);
       } else if (hasReplayableJob) {
-        // 生成完了直後: 最後のassistantメッセージを除いて表示し、ストリームで再生
         let lastAssistantIdx = -1;
-        for (let i = msgs.length - 1; i >= 0; i--) {
+        for (let i = msgs.length - 1; i >= 0; i -= 1) {
           if (msgs[i].sender === "assistant") {
             lastAssistantIdx = i;
             break;
@@ -146,13 +287,16 @@ function loadChatHistory(shouldPollStatus = true) {
             ? [...msgs.slice(0, lastAssistantIdx), ...msgs.slice(lastAssistantIdx + 1)]
             : msgs;
         saveToLocalStorage(msgsWithoutLast);
+        renderHistoryLoadMoreButton(roomId);
         renderMsgs(msgsWithoutLast);
+        renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
         window.connectToGenerationStream?.(roomId);
       } else {
-        // 通常: 全メッセージ表示
         saveToLocalStorage(msgs);
+        renderHistoryLoadMoreButton(roomId);
         renderMsgs(msgs);
+        renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
       }
     })
@@ -171,8 +315,9 @@ function loadLocalChatHistory() {
     history = [];
   }
   window.chatMessages.innerHTML = "";
+  removeHistoryLoadMoreButton();
   history.forEach((item) => {
-    if (window.displayMessage) window.displayMessage(item.text, item.sender);
+    window.displayMessage?.(item.text, item.sender, { autoScroll: false });
   });
 
   if (window.scrollMessageToBottom) {

@@ -19,6 +19,8 @@ RUN chmod +x /wait-for-it.sh
 
 COPY . .
 
+RUN chmod +x /app/docker/app-entrypoint.sh
+
 EXPOSE 5004
 
-CMD ["/wait-for-it.sh", "db:5432", "--timeout=60", "--strict", "--", "uvicorn", "app:app", "--host=0.0.0.0", "--port=5004", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["/app/docker/app-entrypoint.sh"]

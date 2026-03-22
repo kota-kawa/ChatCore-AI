@@ -99,12 +99,7 @@ class BookmarkDeleteRequest(RequestPayloadModel):
 
 
 class PromptListEntryCreateRequest(RequestPayloadModel):
-    prompt_id: int | None = None
-    title: NonEmptyStr
-    category: str = ""
-    content: NonEmptyStr
-    input_examples: str = ""
-    output_examples: str = ""
+    prompt_id: int
 
 
 class PromptUpdateRequest(RequestPayloadModel):

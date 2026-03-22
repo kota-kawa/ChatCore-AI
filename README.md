@@ -82,7 +82,9 @@ docker-compose up --build
 - API: `http://localhost:5004`
 
 ## Database Migrations (Alembic)
-For existing environments, apply incremental DB changes with Alembic:
+Schema management is unified on Alembic. `docker-compose up --build` now waits for PostgreSQL and runs `alembic upgrade head` automatically before starting the API.
+
+For existing environments, you can also apply DB changes manually:
 
 ```sh
 # Install dependencies first
@@ -92,7 +94,6 @@ pip install -r requirements.txt
 alembic upgrade head
 ```
 
-- `db/init.sql` remains the bootstrap schema for brand-new databases.
 - Default task definitions are centralized in `frontend/data/default_tasks.json` and seeded on startup.
 - `alembic/versions/` contains incremental migration history.
 - `db/performance_indexes.sql` is kept as a direct SQL fallback for index-only updates.
@@ -138,7 +139,7 @@ alembic upgrade head
 - `blueprints/`: feature modules (auth, chat, memo, prompt_share, admin)
 - `services/`: shared integrations (DB, LLM, email, user helpers)
 - `templates/` and `static/`: global HTML/CSS/JS assets
-- `db/init.sql`: initial PostgreSQL schema
+- `alembic/versions/`: PostgreSQL schema migration history
 - `frontend/`: Next.js frontend
 
 ## Architecture Diagram
@@ -274,7 +275,9 @@ docker-compose up --build
 - API: `http://localhost:5004`
 
 ## データベースマイグレーション（Alembic）
-既存環境への段階的なDB変更は Alembic で適用します。
+スキーマ管理は Alembic に統一しています。`docker-compose up --build` では PostgreSQL の起動待ち後に `alembic upgrade head` を実行してから API を起動します。
+
+既存環境へ手動で適用する場合は次を実行してください。
 
 ```sh
 # 先に依存関係をインストール
@@ -284,7 +287,6 @@ pip install -r requirements.txt
 alembic upgrade head
 ```
 
-- `db/init.sql`: 新規DBの初期スキーマ
 - 既定タスク定義は `frontend/data/default_tasks.json` を単一ソースとして起動時に投入
 - `alembic/versions/`: 段階的な変更履歴
 - `db/performance_indexes.sql`: インデックスのみを直接適用するフォールバックSQL
@@ -329,7 +331,7 @@ alembic upgrade head
 - `blueprints/`: 機能別モジュール（auth, chat, memo, prompt_share, admin）
 - `services/`: DB/LLM/メールなど共通処理
 - `templates/`・`static/`: 共有 HTML/CSS/JS
-- `db/init.sql`: 初期スキーマ
+- `alembic/versions/`: PostgreSQL スキーマ変更履歴
 - `frontend/`: Next.js フロントエンド
 
 ## アーキテクチャ図

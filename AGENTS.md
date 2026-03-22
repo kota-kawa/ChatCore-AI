@@ -5,7 +5,7 @@
 - `blueprints/` contains feature modules (auth, chat, memo, prompt_share, admin) and their routes/templates/static assets.
 - `services/` holds shared integrations (DB, LLM, email, user helpers).
 - `templates/` and `static/` are global HTML/CSS/JS assets; blueprint-specific assets live under each blueprint’s `templates/` and `static/` folders.
-- `db/init.sql` defines the initial PostgreSQL schema.
+- `alembic/versions/` holds the PostgreSQL schema migration history.
 - `tests/` contains `unit/` and `integration/` suites (`unittest`) plus shared helpers under `tests/helpers/`.
 
 ## Build, Test, and Development Commands

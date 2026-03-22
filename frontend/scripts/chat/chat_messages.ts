@@ -8,6 +8,11 @@ type StreamingBotMessageHandle = {
   showError: (message: string) => void;
 };
 
+type DisplayMessageOptions = {
+  prepend?: boolean;
+  autoScroll?: boolean;
+};
+
 const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 
 function isScrollViewportNearBottom(container: HTMLElement, thresholdPx = STICKY_SCROLL_BOTTOM_THRESHOLD_PX) {
@@ -352,7 +357,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 }
 
 /* ローカル／サーバ履歴共通描画 */
-function displayMessage(text: string, sender: string) {
+function buildHistoryMessageElement(text: string, sender: string) {
   if (!window.chatMessages) return;
   const wrapper = document.createElement("div");
   const copyBtn = window.createCopyBtn ? window.createCopyBtn(() => text) : document.createElement("button");
@@ -390,7 +395,23 @@ function displayMessage(text: string, sender: string) {
     actionGroup.append(copyBtn, saveBtn);
     wrapper.append(actionGroup, msg);
   }
-  window.chatMessages.appendChild(wrapper);
+  return wrapper;
+}
+
+function displayMessage(text: string, sender: string, options: DisplayMessageOptions = {}) {
+  if (!window.chatMessages) return;
+
+  const wrapper = buildHistoryMessageElement(text, sender);
+  if (!wrapper) return;
+
+  const { prepend = false, autoScroll = true } = options;
+  if (prepend) {
+    window.chatMessages.insertBefore(wrapper, window.chatMessages.firstChild);
+  } else {
+    window.chatMessages.appendChild(wrapper);
+  }
+
+  if (!autoScroll) return;
   if (window.scrollMessageToBottom) {
     window.scrollMessageToBottom();
   } else if (window.scrollMessageToTop) {

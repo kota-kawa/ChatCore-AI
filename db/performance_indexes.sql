@@ -43,24 +43,6 @@ CREATE INDEX IF NOT EXISTS idx_prompts_public_author_trgm
 CREATE INDEX IF NOT EXISTS idx_prompt_list_user_created_at
     ON prompt_list_entries (user_id, created_at DESC, id DESC);
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM prompt_list_entries
-        WHERE prompt_id IS NULL
-        GROUP BY user_id, title
-        HAVING COUNT(*) > 1
-    ) THEN
-        RAISE EXCEPTION
-            'Cannot create uq_prompt_list_user_title_when_prompt_null due to duplicate rows.';
-    END IF;
-END $$;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_prompt_list_user_title_when_prompt_null
-    ON prompt_list_entries (user_id, title)
-    WHERE prompt_id IS NULL;
-
 CREATE INDEX IF NOT EXISTS idx_memo_entries_created_at
     ON memo_entries (created_at DESC);
 

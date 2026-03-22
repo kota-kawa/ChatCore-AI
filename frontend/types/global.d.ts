@@ -8,6 +8,11 @@ interface StreamingBotMessageHandle {
   showError: (message: string) => void;
 }
 
+interface DisplayMessageOptions {
+  prepend?: boolean;
+  autoScroll?: boolean;
+}
+
 declare global {
   interface Window {
     loggedIn?: boolean;
@@ -49,7 +54,7 @@ declare global {
     renderUserMessage?: (text: string) => void;
     renderBotMessageImmediate?: (text: string) => void;
     startStreamingBotMessage?: () => StreamingBotMessageHandle | null;
-    displayMessage?: (text: string, sender: string) => void;
+    displayMessage?: (text: string, sender: string, options?: DisplayMessageOptions) => void;
     loadChatHistory?: (shouldPollStatus?: boolean) => void;
     connectToGenerationStream?: (roomId: string) => Promise<void>;
     loadLocalChatHistory?: () => void;

@@ -50,7 +50,6 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
 
         bookmark_titles = set()
         saved_prompt_ids = set()
-        saved_prompt_titles = set()
         if user_id:
             cursor.execute(
                 "SELECT name FROM task_with_examples WHERE user_id = %s",
@@ -61,7 +60,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
 
             cursor.execute(
                 """
-                SELECT prompt_id, title
+                SELECT prompt_id
                 FROM prompt_list_entries
                 WHERE user_id = %s
                 """,
@@ -71,18 +70,13 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             for entry in saved_entries:
                 if entry["prompt_id"] is not None:
                     saved_prompt_ids.add(entry["prompt_id"])
-                if entry["title"]:
-                    saved_prompt_titles.add(entry["title"])
 
         for prompt in prompts:
             created_at = prompt.get("created_at")
             if created_at is not None and hasattr(created_at, "isoformat"):
                 prompt["created_at"] = created_at.isoformat()
             prompt["bookmarked"] = prompt["title"] in bookmark_titles
-            prompt["saved_to_list"] = (
-                prompt["id"] in saved_prompt_ids
-                or prompt["title"] in saved_prompt_titles
-            )
+            prompt["saved_to_list"] = prompt["id"] in saved_prompt_ids
         return prompts
     finally:
         if cursor is not None:
@@ -182,59 +176,45 @@ def _remove_bookmark_for_user(user_id: int, title: str) -> None:
 
 def _add_prompt_list_entry_for_user(
     user_id: int,
-    prompt_id: int | None,
-    title: str,
-    category: str,
-    content: str,
-    input_examples: str,
-    output_examples: str,
+    prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        if prompt_id is not None:
-            cursor.execute(
-                """
-                SELECT id
-                FROM prompt_list_entries
-                WHERE user_id = %s AND prompt_id = %s
-                """,
-                (user_id, prompt_id),
-            )
-            existing = cursor.fetchone()
-            if existing:
-                return {"message": "すでに保存されています。", "saved_id": existing["id"]}, 200
+        cursor.execute(
+            """
+            SELECT id
+            FROM prompts
+            WHERE id = %s AND is_public = TRUE
+            """,
+            (prompt_id,),
+        )
+        prompt = cursor.fetchone()
+        if not prompt:
+            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
         cursor.execute(
             """
             SELECT id
             FROM prompt_list_entries
-            WHERE user_id = %s AND prompt_id IS NULL AND title = %s
+            WHERE user_id = %s AND prompt_id = %s
             """,
-            (user_id, title),
+            (user_id, prompt_id),
         )
-        existing_by_title = cursor.fetchone()
-        if existing_by_title:
-            return {"message": "すでに保存されています。", "saved_id": existing_by_title["id"]}, 200
+        existing = cursor.fetchone()
+        if existing:
+            return {"message": "すでに保存されています。", "saved_id": existing["id"]}, 200
 
         cursor.execute(
             """
             INSERT INTO prompt_list_entries
-                (user_id, prompt_id, title, category, content, input_examples, output_examples)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (user_id, prompt_id)
+            VALUES (%s, %s)
             RETURNING id
             """,
-            (
-                user_id,
-                prompt_id,
-                title,
-                category or "",
-                content,
-                input_examples,
-                output_examples,
-            ),
+            (user_id, prompt_id),
         )
         conn.commit()
         saved_id = _extract_id(cursor.fetchone())
@@ -389,11 +369,6 @@ async def add_prompt_to_list(request: Request):
             _add_prompt_list_entry_for_user,
             user_id,
             request_payload.prompt_id,
-            request_payload.title,
-            request_payload.category,
-            request_payload.content,
-            request_payload.input_examples,
-            request_payload.output_examples,
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:

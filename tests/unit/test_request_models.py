@@ -49,9 +49,13 @@ class RequestModelsTestCase(unittest.TestCase):
     def test_prompt_list_entry_parses_prompt_id_type(self):
         payload = _validate(
             PromptListEntryCreateRequest,
-            {"prompt_id": "12", "title": "t", "content": "c"},
+            {"prompt_id": "12"},
         )
         self.assertEqual(payload.prompt_id, 12)
+
+    def test_prompt_list_entry_requires_prompt_id(self):
+        with self.assertRaises(ValidationError):
+            _validate(PromptListEntryCreateRequest, {})
 
 
 if __name__ == "__main__":
