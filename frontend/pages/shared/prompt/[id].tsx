@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
+import MarkdownContent from "../../../components/MarkdownContent";
 
 type SharedPrompt = {
   id?: number | string;
@@ -105,20 +106,20 @@ export default function SharedPromptPage() {
 
             <section className="shared-prompt-section">
               <h2>内容</h2>
-              <pre>{prompt.content || ""}</pre>
+              <MarkdownContent text={prompt.content || ""} className="md-content" />
             </section>
 
             {prompt.input_examples ? (
               <section className="shared-prompt-section">
                 <h2>入力例</h2>
-                <pre>{prompt.input_examples}</pre>
+                <MarkdownContent text={prompt.input_examples} className="md-content" />
               </section>
             ) : null}
 
             {prompt.output_examples ? (
               <section className="shared-prompt-section">
                 <h2>出力例</h2>
-                <pre>{prompt.output_examples}</pre>
+                <MarkdownContent text={prompt.output_examples} className="md-content" />
               </section>
             ) : null}
           </article>

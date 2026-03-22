@@ -104,13 +104,115 @@ body {
   color: #0f4c81;
 }
 
-.shared-prompt-section pre {
+.md-content {
   margin: 0.8rem 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font: inherit;
   line-height: 1.75;
   color: #173954;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.md-content > * { margin: 0.65rem 0; }
+.md-content > :first-child { margin-top: 0; }
+.md-content > :last-child { margin-bottom: 0; }
+
+.md-content p { margin: 0.5rem 0; }
+
+.md-content h1,
+.md-content h2,
+.md-content h3,
+.md-content h4,
+.md-content h5,
+.md-content h6 {
+  margin: 1.1rem 0 0.4rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f3a5e;
+}
+
+.md-content h1 {
+  font-size: 1.35rem;
+  border-bottom: 1px solid rgba(14, 165, 233, 0.2);
+  padding-bottom: 0.3rem;
+}
+.md-content h2 { font-size: 1.15rem; }
+.md-content h3 { font-size: 1rem; }
+
+.md-content ul,
+.md-content ol {
+  margin: 0.5rem 0 0.5rem 1rem;
+  padding-left: 0.8rem;
+}
+
+.md-content li + li { margin-top: 0.25rem; }
+
+.md-content blockquote {
+  margin: 0.65rem 0;
+  padding: 0.5rem 0.9rem;
+  border-left: 3px solid #0ea5e9;
+  background: rgba(14, 165, 233, 0.07);
+  border-radius: 0 6px 6px 0;
+  color: #36506a;
+  font-style: italic;
+}
+
+.md-content code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: rgba(14, 165, 233, 0.08);
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.87em;
+  color: #0369a1;
+}
+
+.md-content pre {
+  margin: 0.65rem 0;
+  padding: 0.9rem 1rem;
+  background: #1e1e2e;
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.55;
+}
+
+.md-content pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #cdd6f4;
+  font-size: 0.84rem;
+}
+
+.md-content strong { font-weight: 700; }
+.md-content em { font-style: italic; }
+
+.md-content hr {
+  border: none;
+  border-top: 1px solid rgba(14, 165, 233, 0.2);
+  margin: 1rem 0;
+}
+
+.md-content table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+  margin: 0.65rem 0;
+}
+
+.md-content th,
+.md-content td {
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  padding: 0.4rem 0.7rem;
+  text-align: left;
+}
+
+.md-content th {
+  background: rgba(14, 165, 233, 0.07);
+  font-weight: 700;
+}
+
+.md-content a {
+  color: #0369a1;
+  text-decoration: underline;
 }
 
 @media (max-width: 640px) {

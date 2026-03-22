@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
+import MarkdownContent from "../../../components/MarkdownContent";
 
 type SharedMemo = {
   title?: string;
@@ -77,12 +78,12 @@ export default function SharedMemoPage() {
 
             <section className="shared-memo-section">
               <h2>入力内容</h2>
-              <pre>{memo.input_content || ""}</pre>
+              <MarkdownContent text={memo.input_content || ""} className="md-content" />
             </section>
 
             <section className="shared-memo-section">
               <h2>AIの回答</h2>
-              <pre>{memo.ai_response || ""}</pre>
+              <MarkdownContent text={memo.ai_response || ""} className="md-content" />
             </section>
           </article>
         )}

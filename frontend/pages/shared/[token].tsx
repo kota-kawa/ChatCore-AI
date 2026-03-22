@@ -1,6 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
+import MarkdownContent from "../../components/MarkdownContent";
 
 type SharedMessage = {
   message: string;
@@ -100,12 +101,17 @@ export default function SharedChatPage() {
 
               {messages.map((message, index) => {
                 const normalizedSender = message.sender === "user" ? "user" : "assistant";
+                const decoded = decodeStoredMessage(message.message || "");
                 return (
                   <article
                     key={`${normalizedSender}-${index}-${message.timestamp || ""}`}
                     className={`shared-chat-message shared-chat-message--${normalizedSender}`}
                   >
-                    {decodeStoredMessage(message.message || "")}
+                    {normalizedSender === "assistant" ? (
+                      <MarkdownContent text={decoded} className="md-content" />
+                    ) : (
+                      decoded
+                    )}
                   </article>
                 );
               })}
