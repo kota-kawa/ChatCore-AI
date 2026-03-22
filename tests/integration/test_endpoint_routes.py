@@ -95,6 +95,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
             }
 
             async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo._fetch_recent_memos", return_value=[sample]):
                     response = await client.get("/memo/api/recent?limit=5")
 
@@ -105,9 +106,20 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_memo_recent_endpoint_requires_login(self):
+        async def scenario():
+            async with self._make_client() as client:
+                response = await client.get("/memo/api/recent?limit=5")
+
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json(), {"status": "fail", "error": "ログインが必要です"})
+
+        asyncio.run(scenario())
+
     def test_memo_create_endpoint_validates_required_fields(self):
         async def scenario():
             async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
                 response = await self._post_with_csrf(
                     client,
                     "/memo/api",
@@ -122,6 +134,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
     def test_memo_create_endpoint_success(self):
         async def scenario():
             async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo._insert_memo", return_value=42):
                     response = await self._post_with_csrf(
                         client,
@@ -138,6 +151,20 @@ class EndpointRoutesTestCase(unittest.TestCase):
             payload = response.json()
             self.assertEqual(payload["status"], "success")
             self.assertEqual(payload["memo_id"], 42)
+
+        asyncio.run(scenario())
+
+    def test_memo_create_endpoint_requires_login(self):
+        async def scenario():
+            async with self._make_client() as client:
+                response = await self._post_with_csrf(
+                    client,
+                    "/memo/api",
+                    json={"input_content": "hello", "ai_response": "ok"},
+                )
+
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json(), {"status": "fail", "error": "ログインが必要です"})
 
         asyncio.run(scenario())
 

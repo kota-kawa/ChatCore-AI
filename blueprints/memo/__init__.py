@@ -36,7 +36,14 @@ def _ensure_title(ai_response: str, provided_title: str) -> str:
     return "新しいメモ"
 
 
-def _fetch_recent_memos(limit: int = 10) -> list[dict[str, Any]]:
+def _user_id_from_session(session: dict[str, Any]) -> int | None:
+    user_id = session.get("user_id")
+    if isinstance(user_id, int):
+        return user_id
+    return None
+
+
+def _fetch_recent_memos(user_id: int, limit: int = 10) -> list[dict[str, Any]]:
     connection = None
     cursor = None
     try:
@@ -52,10 +59,11 @@ def _fetch_recent_memos(limit: int = 10) -> list[dict[str, Any]]:
                 input_content,
                 ai_response
             FROM memo_entries
+            WHERE user_id = %s
             ORDER BY created_at DESC
             LIMIT %s
             """,
-            (limit,),
+            (user_id, limit),
         )
         return list(cursor.fetchall())
     except Error:
@@ -81,6 +89,7 @@ def _serialize_memo(memo: dict[str, Any]) -> dict[str, Any]:
 
 
 def _insert_memo(
+    user_id: int,
     input_content: str,
     ai_response: str,
     resolved_title: str,
@@ -93,11 +102,11 @@ def _insert_memo(
         cursor = connection.cursor()
         cursor.execute(
             """
-            INSERT INTO memo_entries (input_content, ai_response, title, tags)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO memo_entries (user_id, input_content, ai_response, title, tags)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (input_content, ai_response, resolved_title, tags or None),
+            (user_id, input_content, ai_response, resolved_title, tags or None),
         )
         connection.commit()
         row = cursor.fetchone()
@@ -111,14 +120,22 @@ def _insert_memo(
 
 @memo_bp.get("/api/recent", name="memo.api_recent")
 async def api_recent_memos(request: Request, limit: int = 10):
+    user_id = _user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+
     safe_limit = max(1, min(limit, 100))
-    recent_memos = await run_blocking(_fetch_recent_memos, safe_limit)
+    recent_memos = await run_blocking(_fetch_recent_memos, user_id, safe_limit)
     memos = [_serialize_memo(memo) for memo in recent_memos]
     return jsonify({"memos": memos})
 
 
 @memo_bp.post("/api", name="memo.api_create")
 async def api_create_memo(request: Request):
+    user_id = _user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+
     data = await get_json(request)
     if data is None:
         form = await request.form()
@@ -140,6 +157,7 @@ async def api_create_memo(request: Request):
     try:
         memo_id = await run_blocking(
             _insert_memo,
+            user_id,
             payload.input_content,
             payload.ai_response,
             resolved_title,
