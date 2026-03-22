@@ -393,12 +393,13 @@ body.prompt-share-page.ps-modal-open {
   overscroll-behavior: none;
 }
 
-body.prompt-share-page.ps-modal-open .prompt-share-page > :not(#postModal):not(#promptDetailModal) {
+body.prompt-share-page.ps-modal-open .prompt-share-page > :not(#postModal):not(#promptDetailModal):not(#promptShareModal) {
   pointer-events: none;
 }
 
 body.prompt-share-page.ps-modal-open #postModal.show,
-body.prompt-share-page.ps-modal-open #promptDetailModal.show {
+body.prompt-share-page.ps-modal-open #promptDetailModal.show,
+body.prompt-share-page.ps-modal-open #promptShareModal.show {
   pointer-events: auto;
 }
 
