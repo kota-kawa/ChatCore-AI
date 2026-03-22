@@ -4,6 +4,8 @@ import threading
 from types import TracebackType
 from typing import Any
 
+from .runtime_config import is_production_env
+
 # テスト環境では psycopg2 が未導入の場合があるため遅延フォールバックする
 # Allow graceful fallback when psycopg2 is unavailable in test environments.
 try:
@@ -143,8 +145,21 @@ def _get_db_config() -> DbConfig:
 
 
 def _get_pool_bounds() -> tuple[int, int]:
-    min_conn = int(os.environ.get("DB_POOL_MIN_CONN", "1"))
-    max_conn = int(os.environ.get("DB_POOL_MAX_CONN", "10"))
+    if is_production_env():
+        min_conn_raw = os.environ.get(
+            "DB_POOL_MIN_CONN_PRODUCTION",
+            os.environ.get("DB_POOL_MIN_CONN", "1"),
+        )
+        max_conn_raw = os.environ.get(
+            "DB_POOL_MAX_CONN_PRODUCTION",
+            os.environ.get("DB_POOL_MAX_CONN", "10"),
+        )
+    else:
+        min_conn_raw = os.environ.get("DB_POOL_MIN_CONN", "1")
+        max_conn_raw = os.environ.get("DB_POOL_MAX_CONN", "10")
+
+    min_conn = int(min_conn_raw)
+    max_conn = int(max_conn_raw)
     if min_conn < 1:
         raise ValueError("DB_POOL_MIN_CONN must be >= 1.")
     if max_conn < min_conn:

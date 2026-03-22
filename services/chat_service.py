@@ -3,6 +3,8 @@ from typing import Any
 
 from .db import get_db_connection
 
+UNIQUE_VIOLATION_PGCODE = "23505"
+
 
 def save_message_to_db(chat_room_id: str, message: str, sender: str) -> None:
     # チャットメッセージを履歴テーブルへ追加する
@@ -101,36 +103,31 @@ def create_or_get_shared_chat_token(room_id: str) -> tuple[str | None, int | Non
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT share_token FROM shared_chat_rooms WHERE chat_room_id = %s",
-            (room_id,),
-        )
-        existing = cursor.fetchone()
-        if existing:
-            return existing[0], None
-
         cursor.execute("SELECT 1 FROM chat_rooms WHERE id = %s", (room_id,))
         if not cursor.fetchone():
             return None, 404
 
         while True:
             token = secrets.token_urlsafe(18)
-            cursor.execute(
-                "SELECT 1 FROM shared_chat_rooms WHERE share_token = %s",
-                (token,),
-            )
-            if cursor.fetchone():
-                continue
-
-            cursor.execute(
-                """
-                INSERT INTO shared_chat_rooms (chat_room_id, share_token)
-                VALUES (%s, %s)
-                """,
-                (room_id, token),
-            )
-            conn.commit()
-            return token, None
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO shared_chat_rooms (chat_room_id, share_token)
+                    VALUES (%s, %s)
+                    ON CONFLICT (chat_room_id)
+                    DO UPDATE SET chat_room_id = EXCLUDED.chat_room_id
+                    RETURNING share_token
+                    """,
+                    (room_id, token),
+                )
+                row = cursor.fetchone()
+                conn.commit()
+                return (row[0] if row else token), None
+            except Exception as exc:
+                conn.rollback()
+                if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
+                    continue
+                raise
     finally:
         if cursor is not None:
             cursor.close()

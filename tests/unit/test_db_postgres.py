@@ -149,6 +149,32 @@ class DBConfigTestCase(unittest.TestCase):
         self.assertEqual(pool.getconn_calls, 3)
         self.assertEqual(len(pool.putconn_calls), 3)
 
+    def test_get_db_connection_uses_production_pool_env_when_production(self):
+        connection = DummyConnection()
+        pool_factory = DummyPoolFactory(connection)
+        env = {
+            "FASTAPI_ENV": "production",
+            "POSTGRES_HOST": "pg-host",
+            "POSTGRES_USER": "pg-user",
+            "POSTGRES_PASSWORD": "pg-pass",
+            "POSTGRES_DB": "pg-db",
+            "POSTGRES_PORT": "5432",
+            "DB_POOL_MIN_CONN": "1",
+            "DB_POOL_MAX_CONN": "10",
+            "DB_POOL_MIN_CONN_PRODUCTION": "4",
+            "DB_POOL_MAX_CONN_PRODUCTION": "20",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(
+            db, "ThreadedConnectionPool", pool_factory
+        ), patch.object(db, "psycopg2", object()), patch.object(db, "extras", DummyExtras):
+            proxy = db.get_db_connection()
+            proxy.close()
+
+        self.assertEqual(len(pool_factory.instances), 1)
+        pool = pool_factory.instances[0]
+        self.assertEqual(pool.minconn, 4)
+        self.assertEqual(pool.maxconn, 20)
+
 
 if __name__ == "__main__":
     unittest.main()

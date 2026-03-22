@@ -45,7 +45,10 @@ CREATE TABLE chat_rooms (
     user_id INT NOT NULL,
     title VARCHAR(255) DEFAULT '新規チャット',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    CONSTRAINT fk_chat_rooms_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_created_at
@@ -124,7 +127,10 @@ CREATE TABLE IF NOT EXISTS prompts (
     input_examples TEXT,
     output_examples TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
+    CONSTRAINT fk_prompts_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_prompts_public_created_at
