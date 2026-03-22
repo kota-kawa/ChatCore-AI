@@ -340,7 +340,7 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                               </span>
                             )}
                           </div>
-                          {excerpt ? <p className="memo-item__excerpt">{excerpt}</p> : null}
+                          {excerpt ? <div className="memo-item__excerpt">{excerpt}</div> : null}
                         </article>
                       </li>
                     );
