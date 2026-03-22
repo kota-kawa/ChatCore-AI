@@ -200,9 +200,19 @@ const bodyMarkup = `
   <!-- 新規追加：新しいプロンプトモーダル -->
   <div id="newPromptModal" class="new-prompt-modal" style="display: none;">
     <div class="new-prompt-modal-content">
-      <!-- 閉じるボタン -->
-      <span class="new-modal-close-btn" id="newModalCloseBtn">&times;</span>
-      <h2>新しいプロンプトを投稿</h2>
+      <button type="button" class="new-modal-close-btn" id="newModalCloseBtn" aria-label="モーダルを閉じる">&times;</button>
+      <div class="new-prompt-modal__hero">
+        <div class="new-prompt-modal__hero-copy">
+          <p class="new-prompt-modal__eyebrow">Prompt Composer</p>
+          <h2>新しいプロンプトを追加</h2>
+          <p class="new-prompt-modal__lead">AI 補助を使いながら、短時間で実用的なタスクに整えられます。</p>
+        </div>
+        <div class="new-prompt-modal__hero-badges" aria-hidden="true">
+          <span>Draft</span>
+          <span>Polish</span>
+          <span>Examples</span>
+        </div>
+      </div>
       <form class="new-post-form" id="newPostForm">
         <div class="form-group">
           <label for="new-prompt-title">タイトル</label>
@@ -213,11 +223,15 @@ const bodyMarkup = `
           <textarea id="new-prompt-content" rows="5" placeholder="具体的なプロンプト内容を入力" required></textarea>
         </div>
         <div id="newPromptAssistRoot"></div>
+        <p id="newPromptSubmitStatus" class="composer-status" hidden></p>
         <!-- ガードレールチェック -->
-        <div class="form-group">
-          <label>
+        <div class="form-group form-group--toggle">
+          <label class="composer-toggle" for="new-guardrail-checkbox">
             <input type="checkbox" id="new-guardrail-checkbox" />
-            入出力例を追加する
+            <span class="composer-toggle__copy">
+              <strong>入出力例を追加する</strong>
+              <small>AI 提案の再現性を高めるための例を持たせます。</small>
+            </span>
           </label>
         </div>
         <!-- ガードレールがONのときだけ表示される部分 -->

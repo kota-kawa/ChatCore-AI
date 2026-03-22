@@ -946,15 +946,52 @@ function initPromptSharePage(attempt = 0) {
 
   const postForm = document.getElementById("postForm") as HTMLFormElement | null;
   const promptAssistRoot = document.getElementById("sharedPromptAssistRoot");
+  const promptPostStatusEl = document.getElementById("promptPostStatus") as HTMLElement | null;
   const titleInput = document.getElementById("prompt-title") as HTMLInputElement | null;
   const categoryInput = document.getElementById("prompt-category") as HTMLSelectElement | null;
   const contentInput = document.getElementById("prompt-content") as HTMLTextAreaElement | null;
   const authorInput = document.getElementById("prompt-author") as HTMLInputElement | null;
   const aiModelInput = document.getElementById("prompt-ai-model") as HTMLSelectElement | null;
   const guardrailCheckbox = document.getElementById("guardrail-checkbox") as HTMLInputElement | null;
-  const guardrailFields = document.getElementById("guardrail-fields");
+  const guardrailFields = document.getElementById("guardrail-fields") as HTMLElement | null;
   const inputExample = document.getElementById("prompt-input-example") as HTMLTextAreaElement | null;
   const outputExample = document.getElementById("prompt-output-example") as HTMLTextAreaElement | null;
+  const postSubmitButton = postForm?.querySelector<HTMLButtonElement>('button[type="submit"]') || null;
+  let isPostSubmitting = false;
+
+  const showGuardrailFields = (visible: boolean) => {
+    if (!guardrailFields) {
+      return;
+    }
+    guardrailFields.style.display = visible ? "block" : "none";
+  };
+
+  const setPromptPostStatus = (
+    message: string,
+    variant: "info" | "success" | "error" = "info"
+  ) => {
+    if (!promptPostStatusEl) {
+      return;
+    }
+    promptPostStatusEl.hidden = !message;
+    promptPostStatusEl.textContent = message;
+    promptPostStatusEl.dataset.variant = variant;
+  };
+
+  const setPostSubmitting = (submitting: boolean) => {
+    isPostSubmitting = submitting;
+    const postModalElement = document.getElementById("postModal") as HTMLElement | null;
+    if (postModalElement) {
+      postModalElement.dataset.submitting = submitting ? "true" : "false";
+    }
+    if (!postSubmitButton) {
+      return;
+    }
+    postSubmitButton.disabled = submitting;
+    postSubmitButton.innerHTML = submitting
+      ? '<i class="bi bi-stars"></i> 投稿を準備中...'
+      : '<i class="bi bi-upload"></i> 投稿する';
+  };
 
   const promptAssistController = initPromptAssist({
     root: promptAssistRoot,
@@ -976,19 +1013,35 @@ function initPromptSharePage(attempt = 0) {
     beforeApplyField: (fieldName) => {
       if ((fieldName === "input_examples" || fieldName === "output_examples") && guardrailCheckbox) {
         guardrailCheckbox.checked = true;
-        if (guardrailFields) {
-          guardrailFields.style.display = "block";
-        }
+        showGuardrailFields(true);
       }
     },
   });
 
+  [titleInput, categoryInput, contentInput, authorInput, aiModelInput, inputExample, outputExample].forEach(
+    (field) => {
+      field?.addEventListener("input", () => {
+        if (promptPostStatusEl?.dataset.variant === "error") {
+          setPromptPostStatus("", "info");
+        }
+      });
+      field?.addEventListener("change", () => {
+        if (promptPostStatusEl?.dataset.variant === "error") {
+          setPromptPostStatus("", "info");
+        }
+      });
+    }
+  );
+
   if (postForm) {
-    postForm.addEventListener("submit", function (e) {
+    postForm.addEventListener("submit", async function (e) {
       e.preventDefault();
 
       if (!titleInput || !categoryInput || !contentInput || !authorInput) {
-        alert("フォーム要素が見つかりませんでした。ページを再読み込みしてください。");
+        setPromptPostStatus("フォーム要素が見つかりませんでした。ページを再読み込みしてください。", "error");
+        return;
+      }
+      if (isPostSubmitting) {
         return;
       }
 
@@ -1001,7 +1054,7 @@ function initPromptSharePage(attempt = 0) {
       const referenceImageFile = referenceImageInput?.files?.[0] || null;
       const referenceImageError = validateReferenceImageFile(referenceImageFile);
       if (referenceImageError) {
-        alert(referenceImageError);
+        setPromptPostStatus(referenceImageError, "error");
         return;
       }
 
@@ -1027,39 +1080,43 @@ function initPromptSharePage(attempt = 0) {
         postData.append("reference_image", referenceImageFile);
       }
 
-      fetch("/prompt_share/api/prompts", {
-        method: "POST",
-        body: postData
-      })
-        .then(async (response) => {
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || result.error) {
-            throw new Error(result.error || "プロンプト投稿中にエラーが発生しました。");
-          }
-          return result;
-        })
-        .then((result) => {
-          if (result.message) {
-            console.log(result.message);
-          }
-          alert("プロンプトが投稿されました！");
-          postForm.reset();
-          clearPromptImageSelection();
-          syncPromptTypeUI();
-          const guardrailFields = document.getElementById("guardrail-fields");
-          if (guardrailFields) {
-            guardrailFields.style.display = "none";
-          }
+      setPostSubmitting(true);
+      setPromptPostStatus("プロンプトを投稿しています...", "info");
+
+      try {
+        const response = await fetch("/prompt_share/api/prompts", {
+          method: "POST",
+          body: postData
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.error) {
+          throw new Error(result.error || "プロンプト投稿中にエラーが発生しました。");
+        }
+
+        if (result.message) {
+          console.log(result.message);
+        }
+        setPromptPostStatus("プロンプトが投稿されました。公開一覧へ反映します。", "success");
+        postForm.reset();
+        clearPromptImageSelection();
+        syncPromptTypeUI();
+        showGuardrailFields(false);
+        loadPrompts();
+
+        window.setTimeout(() => {
           const postModalElement = document.getElementById("postModal") as HTMLElement | null;
           if (postModalElement) {
             closeModal(postModalElement, { rotateTrigger: true });
           }
-          loadPrompts();
-        })
-        .catch((err) => {
-          console.error("投稿エラー:", err);
-          alert(err instanceof Error ? err.message : "プロンプト投稿中にエラーが発生しました。");
-        });
+        }, 550);
+      } catch (err) {
+        console.error("投稿エラー:", err);
+        setPromptPostStatus(
+          err instanceof Error ? err.message : "プロンプト投稿中にエラーが発生しました。",
+          "error"
+        );
+        setPostSubmitting(false);
+      }
     });
   }
 
@@ -1159,6 +1216,8 @@ function initPromptSharePage(attempt = 0) {
     modal.classList.remove("show");
     modal.setAttribute("aria-hidden", "true");
     if (modal === postModal) {
+      setPromptPostStatus("", "info");
+      setPostSubmitting(false);
       promptAssistController?.reset();
     }
     if (options?.rotateTrigger) {
@@ -1185,10 +1244,11 @@ function initPromptSharePage(attempt = 0) {
     }
 
     if (event.key === "Escape") {
-      event.preventDefault();
-      if (activeModal !== postModal) {
-        closeModal(activeModal);
+      if (activeModal === postModal && isPostSubmitting) {
+        return;
       }
+      event.preventDefault();
+      closeModal(activeModal);
       return;
     }
 
@@ -1250,6 +1310,7 @@ function initPromptSharePage(attempt = 0) {
     }
 
     triggerNewPromptIconRotation();
+    setPromptPostStatus("カテゴリやタイトルを軽く入れてから AI 補助を使うと、提案が安定します。");
     openModal(postModal, postModalTitleInput);
   };
 
@@ -1312,7 +1373,7 @@ function initPromptSharePage(attempt = 0) {
   // ------------------------------
   if (guardrailCheckbox && guardrailFields) {
     guardrailCheckbox.addEventListener("change", function () {
-      guardrailFields.style.display = guardrailCheckbox.checked ? "block" : "none";
+      showGuardrailFields(guardrailCheckbox.checked);
     });
   }
 
