@@ -79,8 +79,8 @@ const setupMemoModal = () => {
     if (titleEl) titleEl.textContent = "保存したメモ";
     if (dateEl) dateEl.textContent = "";
     if (tagsEl) tagsEl.innerHTML = "";
-    if (inputEl) inputEl.textContent = "";
-    if (responseEl) responseEl.textContent = "";
+    if (inputEl) inputEl.innerHTML = "";
+    if (responseEl) responseEl.innerHTML = "";
   };
 
   const renderTags = (tags: string[]) => {
@@ -114,8 +114,15 @@ const setupMemoModal = () => {
     if (titleEl) titleEl.textContent = memo.title || "保存したメモ";
     if (dateEl) dateEl.textContent = memo.date || "";
     renderTags(memo.tags || []);
-    if (inputEl) inputEl.textContent = memo.input || "";
-    if (responseEl) responseEl.textContent = memo.response || "";
+    const renderContent = (el: Element, text: string) => {
+      if (window.renderSanitizedHTML && window.formatLLMOutput) {
+        window.renderSanitizedHTML(el as HTMLElement, window.formatLLMOutput(text));
+      } else {
+        el.textContent = text;
+      }
+    };
+    if (inputEl) renderContent(inputEl, memo.input || "");
+    if (responseEl) renderContent(responseEl, memo.response || "");
     modal.classList.add("is-visible");
     syncBodyModalOpen();
   };

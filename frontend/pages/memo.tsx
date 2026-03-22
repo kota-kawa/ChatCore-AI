@@ -392,11 +392,11 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
             <div className="memo-modal__body">
               <section className="memo-modal__section">
                 <h4>入力内容</h4>
-                <pre data-modal-input></pre>
+                <div className="memo-modal__markdown" data-modal-input></div>
               </section>
               <section className="memo-modal__section">
                 <h4>AIの回答</h4>
-                <pre data-modal-response></pre>
+                <div className="memo-modal__markdown" data-modal-response></div>
               </section>
             </div>
           </div>
