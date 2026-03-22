@@ -53,7 +53,7 @@ const PROMPT_ASSIST_ACTION_ORDER: PromptAssistAction[] = [
   "generate_examples",
 ];
 
-function createPromptAssistMarkup() {
+function createPromptAssistMarkup(panelId: string) {
   const actions = PROMPT_ASSIST_ACTION_ORDER.map(
     (action) =>
       `<button type="button" class="prompt-assist__action" data-assist-action="${action}">${PROMPT_ASSIST_ACTION_LABELS[action]}</button>`
@@ -61,27 +61,47 @@ function createPromptAssistMarkup() {
 
   return `
     <section class="prompt-assist" aria-label="AI入力補助">
-      <div class="prompt-assist__header">
-        <div>
-          <p class="prompt-assist__eyebrow">AI入力補助</p>
-          <h3 class="prompt-assist__title">モーダルを閉じずに下書きと編集を補助</h3>
-          <p class="prompt-assist__lead">GPT OSS 20B がタイトル、本文、入出力例のたたき台や改善案を提案します。</p>
-        </div>
-        <span class="prompt-assist__model">GPT OSS 20B</span>
-      </div>
-      <div class="prompt-assist__actions">${actions}</div>
-      <p class="prompt-assist__status" data-assist-status hidden></p>
-      <section class="prompt-assist__preview" data-assist-preview hidden>
-        <div class="prompt-assist__preview-header">
-          <div>
-            <p class="prompt-assist__preview-eyebrow">AI提案</p>
-            <p class="prompt-assist__summary" data-assist-summary></p>
+      <button
+        type="button"
+        class="prompt-assist__toggle"
+        data-assist-toggle
+        aria-expanded="false"
+        aria-controls="${panelId}"
+        title="AI入力補助を開く"
+      >
+        <span class="prompt-assist__toggle-icon" aria-hidden="true">
+          <i class="bi bi-stars"></i>
+        </span>
+        <span class="prompt-assist__toggle-ping" aria-hidden="true"></span>
+      </button>
+      <div class="prompt-assist__panel" id="${panelId}" data-assist-panel hidden>
+        <div class="prompt-assist__header">
+          <div class="prompt-assist__header-copy">
+            <p class="prompt-assist__eyebrow">AI入力補助</p>
+            <h3 class="prompt-assist__title">下書きと編集をその場で補助</h3>
+            <p class="prompt-assist__lead">GPT OSS 20B でタイトル、本文、入出力例をすばやく整えます。</p>
           </div>
-          <button type="button" class="prompt-assist__apply-all" data-assist-apply-all>提案をすべて反映</button>
+          <div class="prompt-assist__header-actions">
+            <span class="prompt-assist__model">GPT OSS 20B</span>
+            <button type="button" class="prompt-assist__close" data-assist-close aria-label="AI入力補助を閉じる">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
         </div>
-        <ul class="prompt-assist__warnings" data-assist-warnings hidden></ul>
-        <div class="prompt-assist__field-list" data-assist-field-list></div>
-      </section>
+        <div class="prompt-assist__actions">${actions}</div>
+        <p class="prompt-assist__status" data-assist-status hidden></p>
+        <section class="prompt-assist__preview" data-assist-preview hidden>
+          <div class="prompt-assist__preview-header">
+            <div>
+              <p class="prompt-assist__preview-eyebrow">AI提案</p>
+              <p class="prompt-assist__summary" data-assist-summary></p>
+            </div>
+            <button type="button" class="prompt-assist__apply-all" data-assist-apply-all>提案をすべて反映</button>
+          </div>
+          <ul class="prompt-assist__warnings" data-assist-warnings hidden></ul>
+          <div class="prompt-assist__field-list" data-assist-field-list></div>
+        </section>
+      </div>
     </section>
   `;
 }
@@ -123,10 +143,15 @@ export function initPromptAssist(config: PromptAssistConfig) {
     return;
   }
 
-  root.innerHTML = createPromptAssistMarkup();
+  const panelId = `promptAssistPanel-${target}`;
+  root.innerHTML = createPromptAssistMarkup(panelId);
   const actionButtons = Array.from(
     root.querySelectorAll<HTMLButtonElement>("[data-assist-action]")
   );
+  const containerEl = root.querySelector<HTMLElement>(".prompt-assist");
+  const toggleButton = root.querySelector<HTMLButtonElement>("[data-assist-toggle]");
+  const closeButton = root.querySelector<HTMLButtonElement>("[data-assist-close]");
+  const panelEl = root.querySelector<HTMLElement>("[data-assist-panel]");
   const statusEl = root.querySelector<HTMLElement>("[data-assist-status]");
   const previewEl = root.querySelector<HTMLElement>("[data-assist-preview]");
   const summaryEl = root.querySelector<HTMLElement>("[data-assist-summary]");
@@ -134,11 +159,39 @@ export function initPromptAssist(config: PromptAssistConfig) {
   const fieldListEl = root.querySelector<HTMLElement>("[data-assist-field-list]");
   const applyAllButton = root.querySelector<HTMLButtonElement>("[data-assist-apply-all]");
 
-  if (!statusEl || !previewEl || !summaryEl || !warningsEl || !fieldListEl || !applyAllButton) {
+  if (
+    !containerEl ||
+    !toggleButton ||
+    !closeButton ||
+    !panelEl ||
+    !statusEl ||
+    !previewEl ||
+    !summaryEl ||
+    !warningsEl ||
+    !fieldListEl ||
+    !applyAllButton
+  ) {
     return;
   }
 
   let latestSuggestion: Partial<Record<PromptAssistFieldName, string>> = {};
+  let isExpanded = false;
+
+  const syncExpandedState = (expanded: boolean) => {
+    isExpanded = expanded;
+    containerEl.classList.toggle("is-open", expanded);
+    panelEl.hidden = !expanded;
+    toggleButton.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggleButton.title = expanded ? "AI入力補助を閉じる" : "AI入力補助を開く";
+  };
+
+  const openPanel = () => {
+    syncExpandedState(true);
+  };
+
+  const closePanel = () => {
+    syncExpandedState(false);
+  };
 
   const reset = () => {
     latestSuggestion = {};
@@ -149,6 +202,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
     summaryEl.textContent = "";
     setStatus("", "info");
     setLoading(false);
+    closePanel();
   };
 
   const setLoading = (loading: boolean) => {
@@ -193,6 +247,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
   };
 
   const renderPreview = (response: PromptAssistResponse) => {
+    openPanel();
     latestSuggestion = response.suggested_fields || {};
     fieldListEl.innerHTML = "";
 
@@ -229,6 +284,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
   };
 
   const runPromptAssist = async (action: PromptAssistAction) => {
+    openPanel();
     setLoading(true);
     setStatus("AIが提案を作成しています...", "info");
 
@@ -272,6 +328,18 @@ export function initPromptAssist(config: PromptAssistConfig) {
     button.addEventListener("click", () => {
       void runPromptAssist(action);
     });
+  });
+
+  toggleButton.addEventListener("click", () => {
+    if (isExpanded) {
+      closePanel();
+      return;
+    }
+    openPanel();
+  });
+
+  closeButton.addEventListener("click", () => {
+    closePanel();
   });
 
   applyAllButton.addEventListener("click", () => {
