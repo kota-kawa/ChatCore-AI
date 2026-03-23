@@ -338,10 +338,10 @@ const bodyMarkup = `
       <p id="chat-share-status" class="chat-share-status">共有するチャットルームを選択してください。</p>
       <div class="chat-share-actions">
         <button type="button" id="chat-share-copy-btn" class="primary-button chat-share-icon-btn" aria-label="リンクをコピー" title="リンクをコピー">
-          <i class="bi bi-copy" aria-hidden="true"></i>
+          <i class="bi bi-files" aria-hidden="true"></i>
         </button>
         <button type="button" id="chat-share-web-btn" class="primary-button chat-share-icon-btn" aria-label="端末で共有" title="端末で共有">
-          <i class="bi bi-share" aria-hidden="true"></i>
+          <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
         </button>
       </div>
       <div class="chat-share-sns">

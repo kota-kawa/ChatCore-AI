@@ -443,10 +443,10 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
               </p>
               <div className="memo-share-modal__actions">
                 <button type="button" id="memo-share-copy-btn" className="primary-button memo-share-icon-btn" aria-label="リンクをコピー" title="リンクをコピー">
-                  <i className="bi bi-copy" aria-hidden="true"></i>
+                  <i className="bi bi-files" aria-hidden="true"></i>
                 </button>
                 <button type="button" id="memo-share-web-btn" className="primary-button memo-share-icon-btn" aria-label="端末で共有" title="端末で共有">
-                  <i className="bi bi-share" aria-hidden="true"></i>
+                  <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
                 </button>
               </div>
               <div className="memo-share-modal__sns">

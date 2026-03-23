@@ -331,10 +331,10 @@ const bodyMarkup = `
       <p id="prompt-share-status" class="prompt-share-dialog__status">共有するプロンプトを選択してください。</p>
       <div class="prompt-share-dialog__actions">
         <button type="button" id="prompt-share-copy-btn" class="submit-btn prompt-share-icon-btn" aria-label="リンクをコピー" title="リンクをコピー">
-          <i class="bi bi-copy" aria-hidden="true"></i>
+          <i class="bi bi-files" aria-hidden="true"></i>
         </button>
         <button type="button" id="prompt-share-web-btn" class="submit-btn prompt-share-icon-btn" aria-label="端末で共有" title="端末で共有">
-          <i class="bi bi-share" aria-hidden="true"></i>
+          <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
         </button>
       </div>
       <div class="prompt-share-dialog__sns">
