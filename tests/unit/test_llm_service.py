@@ -64,6 +64,23 @@ class LlmServiceTestCase(unittest.TestCase):
 
         self.assertIn("無効なモデル", str(cm.exception))
 
+    def test_get_llm_response_redacts_sensitive_values_before_provider_call(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _mock_openai_response("ok")
+        input_message = "api_key=sk-abcdefghijklmnopqrstuvwxyz012345"
+
+        with patch.object(llm, "groq_client", mock_groq):
+            response = llm.get_llm_response(
+                [{"role": "user", "content": input_message}],
+                llm.GROQ_MODEL,
+            )
+
+        self.assertEqual(response, "ok")
+        passed_messages = mock_groq.chat.completions.create.call_args.kwargs["messages"]
+        self.assertEqual(len(passed_messages), 1)
+        self.assertNotIn("sk-", passed_messages[0]["content"])
+        self.assertIn("REDACTED-SENSITIVE", passed_messages[0]["content"])
+
     def test_get_groq_response_raises_configuration_error_without_api_key(self):
         with patch.object(llm, "groq_client", None):
             with self.assertRaises(llm.LlmConfigurationError):

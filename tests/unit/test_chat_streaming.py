@@ -8,6 +8,7 @@ from starlette.responses import StreamingResponse
 
 from blueprints.chat.messages import (
     _paginate_ephemeral_chat_history,
+    _truncate_conversation_for_llm,
     chat,
     _iter_llm_stream_events,
     chat_generation_status,
@@ -33,6 +34,18 @@ def make_request(json_body, session=None):
 
 
 class ChatStreamingTestCase(unittest.TestCase):
+    def test_truncate_conversation_for_llm_keeps_system_and_recent_history(self):
+        messages = [{"role": "system", "content": "system"}]
+        for index in range(60):
+            role = "user" if index % 2 == 0 else "assistant"
+            messages.append({"role": role, "content": f"msg-{index}"})
+
+        truncated = _truncate_conversation_for_llm(messages)
+
+        self.assertEqual(truncated[0]["role"], "system")
+        self.assertLessEqual(len(truncated), 41)
+        self.assertEqual(truncated[-1]["content"], "msg-59")
+
     def test_paginate_ephemeral_chat_history_reports_has_more_and_cursor(self):
         rows = [
             {"role": "user" if index % 2 == 0 else "assistant", "content": f"msg-{index}"}

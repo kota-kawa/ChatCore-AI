@@ -3,10 +3,12 @@ from typing import Any
 
 from fastapi import Request
 
+from services.auth_limits import consume_rate_limit, get_request_client_ip
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
 from services.llm import LlmServiceError
+from services.llm_daily_limit import consume_llm_daily_quota
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -25,6 +27,43 @@ from services.web import (
 from . import chat_bp
 
 logger = logging.getLogger(__name__)
+PROMPT_ASSIST_RATE_WINDOW_SECONDS = 300
+PROMPT_ASSIST_PER_IP_LIMIT = 20
+PROMPT_ASSIST_PER_USER_LIMIT = 30
+
+
+def _consume_prompt_assist_limits(request: Request, user_id: int | str) -> tuple[bool, str | None]:
+    client_ip = get_request_client_ip(request)
+    allowed, _, retry_after = consume_rate_limit(
+        "prompt_assist:ip",
+        client_ip,
+        limit=PROMPT_ASSIST_PER_IP_LIMIT,
+        window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
+    )
+    if not allowed:
+        return (
+            False,
+            (
+                "AI補助の試行回数が多すぎます。"
+                f"{retry_after}秒ほど待ってから再試行してください。"
+            ),
+        )
+
+    allowed, _, retry_after = consume_rate_limit(
+        "prompt_assist:user",
+        str(user_id),
+        limit=PROMPT_ASSIST_PER_USER_LIMIT,
+        window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
+    )
+    if not allowed:
+        return (
+            False,
+            (
+                "AI補助の試行回数が多すぎます。"
+                f"{retry_after}秒ほど待ってから再試行してください。"
+            ),
+        )
+    return True, None
 
 
 def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
@@ -438,6 +477,10 @@ async def prompt_assist(request: Request):
     if error_response is not None:
         return error_response
 
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "ログインが必要です"}, status_code=403)
+
     payload, validation_error = validate_payload_model(
         data,
         PromptAssistRequest,
@@ -445,6 +488,26 @@ async def prompt_assist(request: Request):
     )
     if validation_error is not None:
         return validation_error
+
+    can_access, limit_message = await run_blocking(
+        _consume_prompt_assist_limits,
+        request,
+        user_id,
+    )
+    if not can_access:
+        return jsonify({"error": limit_message}, status_code=429)
+
+    can_access_llm, _, daily_limit = await run_blocking(consume_llm_daily_quota)
+    if not can_access_llm:
+        return jsonify(
+            {
+                "error": (
+                    f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                    "日付が変わってから再度お試しください。"
+                )
+            },
+            status_code=429,
+        )
 
     try:
         dump_fields = getattr(payload.fields, "model_dump", None)

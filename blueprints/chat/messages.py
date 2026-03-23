@@ -33,6 +33,7 @@ from services.llm import (
     LlmInvalidModelError,
     LlmServiceError,
     is_streaming_model,
+    validate_model_name,
 )
 from services.request_models import ChatMessageRequest
 from services.web import (
@@ -52,6 +53,9 @@ from . import (
 logger = logging.getLogger(__name__)
 CHAT_HISTORY_PAGE_SIZE_DEFAULT = 50
 CHAT_HISTORY_PAGE_SIZE_MAX = 100
+LLM_CONTEXT_MAX_HISTORY_MESSAGES = 40
+LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
+LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
 
 BASE_SYSTEM_PROMPT = """
 あなたは、ユーザーをサポートする優秀なAIアシスタントです。
@@ -278,6 +282,69 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
     return parsed
 
 
+def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
+    if char_budget <= 0:
+        return ""
+    if len(content) <= char_budget:
+        return content
+    return content[-char_budget:]
+
+
+def _truncate_conversation_for_llm(
+    messages: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    if not messages:
+        return []
+
+    system_messages: list[dict[str, str]] = []
+    non_system_messages: list[dict[str, str]] = []
+    system_prefix_active = True
+    for message in messages:
+        role = message.get("role", "")
+        if system_prefix_active and role == "system":
+            system_messages.append(dict(message))
+            continue
+        system_prefix_active = False
+        non_system_messages.append(dict(message))
+
+    if not non_system_messages:
+        return system_messages
+
+    selected_reversed: list[dict[str, str]] = []
+    remaining_char_budget = max(LLM_CONTEXT_MAX_CHAR_BUDGET, 1)
+
+    for message in reversed(non_system_messages):
+        content = message.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        normalized_content = content[-LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS:]
+
+        if not selected_reversed:
+            # 最低でも最新メッセージは保持する
+            normalized_content = _trim_message_content_for_budget(
+                normalized_content,
+                remaining_char_budget,
+            )
+            message["content"] = normalized_content
+            selected_reversed.append(message)
+            remaining_char_budget -= len(normalized_content)
+            continue
+
+        if len(selected_reversed) >= LLM_CONTEXT_MAX_HISTORY_MESSAGES:
+            break
+        if remaining_char_budget <= 0:
+            break
+        if len(normalized_content) > remaining_char_budget:
+            break
+
+        message["content"] = normalized_content
+        selected_reversed.append(message)
+        remaining_char_budget -= len(normalized_content)
+
+    selected_history = list(reversed(selected_reversed))
+    return system_messages + selected_history
+
+
 def _fetch_chat_history(
     chat_room_id: str,
     limit: int,
@@ -467,6 +534,12 @@ async def chat(request: Request):
         conversation_messages.append(system_prompt)
 
     conversation_messages += all_messages
+    conversation_messages = _truncate_conversation_for_llm(conversation_messages)
+
+    try:
+        validate_model_name(model)
+    except LlmInvalidModelError as exc:
+        return jsonify({"error": str(exc)}, status_code=400)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     if has_active_generation(generation_key):

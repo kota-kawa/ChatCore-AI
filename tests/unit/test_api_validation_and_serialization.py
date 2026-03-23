@@ -8,7 +8,6 @@ from blueprints.auth import api_send_login_code
 from blueprints.chat.messages import chat
 from blueprints.chat.tasks import update_tasks_order
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
-from services.llm import LlmInvalidModelError
 from tests.helpers.request_helpers import build_request
 
 
@@ -86,21 +85,15 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
                 with patch("blueprints.chat.messages.ephemeral_store.get_messages", return_value=[]):
                     with patch("blueprints.chat.messages.ephemeral_store.append_message"):
-                        with patch(
-                            "blueprints.chat.messages.consume_llm_daily_quota",
-                            return_value=(True, 0, 300),
-                        ):
-                            with patch(
-                                "blueprints.chat.messages.get_llm_response",
-                                side_effect=LlmInvalidModelError(
-                                    "無効なモデル 'invalid-model' が指定されました。"
-                                ),
-                            ):
+                        with patch("blueprints.chat.messages.consume_llm_daily_quota") as mock_quota:
+                            with patch("blueprints.chat.messages.get_llm_response") as mock_llm:
                                 response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertIn("無効なモデル", payload["error"])
+        mock_quota.assert_not_called()
+        mock_llm.assert_not_called()
 
     def test_prompt_manage_serializes_datetime_consistently(self):
         request = make_request(

@@ -5,6 +5,15 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
+MAX_CHAT_MESSAGE_LENGTH = 8000
+MAX_CHAT_ROOM_ID_LENGTH = 128
+MAX_MODEL_NAME_LENGTH = 64
+MAX_PROMPT_ASSIST_TEXT_LENGTH = 4000
+MAX_PROMPT_ASSIST_META_LENGTH = 256
+
+ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
+ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
+ModelNameStr = Annotated[str, Field(min_length=1, max_length=MAX_MODEL_NAME_LENGTH)]
 
 
 class RequestPayloadModel(BaseModel):
@@ -33,22 +42,22 @@ class NewChatRoomRequest(RequestPayloadModel):
 
 
 class ChatRoomIdRequest(RequestPayloadModel):
-    room_id: NonEmptyStr
+    room_id: ChatRoomIdStr
 
 
 class RenameChatRoomRequest(RequestPayloadModel):
-    room_id: NonEmptyStr
+    room_id: ChatRoomIdStr
     new_title: NonEmptyStr
 
 
 class ShareChatRoomRequest(RequestPayloadModel):
-    room_id: NonEmptyStr
+    room_id: ChatRoomIdStr
 
 
 class ChatMessageRequest(RequestPayloadModel):
-    message: str
-    chat_room_id: str = "default"
-    model: str | None = None
+    message: ChatMessageStr
+    chat_room_id: ChatRoomIdStr = "default"
+    model: ModelNameStr | None = None
 
 
 class UpdateTasksOrderRequest(RequestPayloadModel):
@@ -79,15 +88,15 @@ class AddTaskRequest(RequestPayloadModel):
 
 
 class PromptAssistFields(RequestPayloadModel):
-    title: str = ""
-    content: str = ""
-    prompt_content: str = ""
-    category: str = ""
-    author: str = ""
+    title: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
+    content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
+    prompt_content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
+    category: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
+    author: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     prompt_type: str = "text"
-    input_examples: str = ""
-    output_examples: str = ""
-    ai_model: str = ""
+    input_examples: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
+    output_examples: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
+    ai_model: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
 
 
 class PromptAssistRequest(RequestPayloadModel):

@@ -4,7 +4,9 @@ from pydantic import ValidationError
 
 from services.request_models import (
     AddTaskRequest,
+    ChatMessageRequest,
     MemoCreateRequest,
+    PromptAssistRequest,
     PromptListEntryCreateRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
@@ -56,6 +58,29 @@ class RequestModelsTestCase(unittest.TestCase):
     def test_prompt_list_entry_requires_prompt_id(self):
         with self.assertRaises(ValidationError):
             _validate(PromptListEntryCreateRequest, {})
+
+    def test_chat_message_rejects_oversized_body(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                ChatMessageRequest,
+                {
+                    "message": "a" * 8001,
+                    "chat_room_id": "room-1",
+                },
+            )
+
+    def test_prompt_assist_rejects_oversized_fields(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                PromptAssistRequest,
+                {
+                    "target": "task_modal",
+                    "action": "generate_draft",
+                    "fields": {
+                        "prompt_content": "a" * 4001,
+                    },
+                },
+            )
 
 
 if __name__ == "__main__":

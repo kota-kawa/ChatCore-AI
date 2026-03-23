@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from collections.abc import Iterator
 
 from openai import OpenAI
@@ -21,6 +22,26 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
 GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
+LLM_REQUEST_TIMEOUT_SECONDS = 30.0
+LLM_MAX_RETRIES = 1
+
+REDACTED_SENSITIVE_VALUE = "[REDACTED-SENSITIVE]"
+_SENSITIVE_VALUE_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),
+    re.compile(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z ]*PRIVATE KEY-----",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+)
+_SENSITIVE_ASSIGNMENT_PATTERNS = (
+    re.compile(
+        r"(?i)\b(api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*([^\s,;]+)"
+    ),
+)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -35,12 +56,22 @@ groq_api_key = os.environ.get("GROQ_API_KEY", "")
 gemini_api_key = os.environ.get("Gemini_API_KEY", "")
 
 groq_client = (
-    OpenAI(api_key=groq_api_key, base_url=GROQ_BASE_URL)
+    OpenAI(
+        api_key=groq_api_key,
+        base_url=GROQ_BASE_URL,
+        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=LLM_MAX_RETRIES,
+    )
     if groq_api_key
     else None
 )
 gemini_client = (
-    OpenAI(api_key=gemini_api_key, base_url=GEMINI_BASE_URL)
+    OpenAI(
+        api_key=gemini_api_key,
+        base_url=GEMINI_BASE_URL,
+        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=LLM_MAX_RETRIES,
+    )
     if gemini_api_key
     else None
 )
@@ -85,6 +116,38 @@ def _raise_invalid_model_error(model_name: str) -> None:
     )
 
 
+def _redact_sensitive_text(value: str) -> str:
+    redacted = value
+    for pattern in _SENSITIVE_VALUE_PATTERNS:
+        redacted = pattern.sub(REDACTED_SENSITIVE_VALUE, redacted)
+    for pattern in _SENSITIVE_ASSIGNMENT_PATTERNS:
+        redacted = pattern.sub(r"\1=<REDACTED-SENSITIVE>", redacted)
+    return redacted
+
+
+def _sanitize_conversation_messages(
+    conversation_messages: ConversationMessages,
+) -> ConversationMessages:
+    sanitized_messages: ConversationMessages = []
+    redacted_message_count = 0
+
+    for message in conversation_messages:
+        role = str(message.get("role", "user"))
+        raw_content = message.get("content", "")
+        content = raw_content if isinstance(raw_content, str) else str(raw_content)
+        redacted_content = _redact_sensitive_text(content)
+        if redacted_content != content:
+            redacted_message_count += 1
+        sanitized_messages.append({"role": role, "content": redacted_content})
+
+    if redacted_message_count > 0:
+        logger.warning(
+            "Redacted sensitive content in %s message(s) before LLM request.",
+            redacted_message_count,
+        )
+    return sanitized_messages
+
+
 def get_groq_response(
     conversation_messages: ConversationMessages, model_name: str
 ) -> str | None:
@@ -94,15 +157,16 @@ def get_groq_response(
     if groq_client is None:
         raise LlmConfigurationError("GROQ_API_KEY が未設定です。")
 
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
         response = groq_client.chat.completions.create(
             model=model_name,
-            messages=conversation_messages,
+            messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
         )
         return response.choices[0].message.content
     except Exception as exc:
-        logger.exception("Groq API call failed.")
+        logger.error("Groq API call failed (%s).", exc.__class__.__name__)
         raise LlmProviderError("Groq API call failed.") from exc
 
 
@@ -119,11 +183,12 @@ def _get_openai_compatible_response_stream(
     if client is None:
         raise LlmConfigurationError(missing_key_message)
 
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     stream = None
     try:
         stream = client.chat.completions.create(
             model=model_name,
-            messages=conversation_messages,
+            messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
             stream=True,
         )
@@ -135,7 +200,7 @@ def _get_openai_compatible_response_stream(
             if content:
                 yield content
     except Exception as exc:
-        logger.exception(provider_error_message)
+        logger.error("%s (%s).", provider_error_message, exc.__class__.__name__)
         raise LlmProviderError(provider_error_message) from exc
     finally:
         close = getattr(stream, "close", None)
@@ -166,15 +231,16 @@ def get_gemini_response(
     if gemini_client is None:
         raise LlmConfigurationError("Gemini_API_KEY が未設定です。")
 
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
         response = gemini_client.chat.completions.create(
             model=model_name,
-            messages=conversation_messages,
+            messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
         )
         return response.choices[0].message.content
     except Exception as exc:
-        logger.exception("Google Gemini API call failed.")
+        logger.error("Google Gemini API call failed (%s).", exc.__class__.__name__)
         raise LlmProviderError("Google Gemini API call failed.") from exc
 
 
@@ -210,17 +276,23 @@ def is_streaming_model(model_name: str) -> bool:
     return is_gemini_model(model_name) or is_groq_model(model_name)
 
 
+def validate_model_name(model_name: str) -> None:
+    if is_gemini_model(model_name) or is_groq_model(model_name):
+        return
+    _raise_invalid_model_error(model_name)
+
+
 def get_llm_response(
     conversation_messages: ConversationMessages, model_name: str
 ) -> str | None:
     # 指定モデル名でプロバイダを振り分け、不正モデルは例外として扱う
     # Route provider by model name and raise on invalid models.
+    validate_model_name(model_name)
     if is_gemini_model(model_name):
         return get_gemini_response(conversation_messages, model_name)
     if is_groq_model(model_name):
         return get_groq_response(conversation_messages, model_name)
-
-    _raise_invalid_model_error(model_name)
+    raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
 def get_llm_response_stream(
@@ -228,9 +300,9 @@ def get_llm_response_stream(
 ) -> Iterator[str]:
     # 指定モデル名でストリーム可能なプロバイダを振り分ける
     # Route streaming providers by model name and raise on invalid models.
+    validate_model_name(model_name)
     if is_gemini_model(model_name):
         return get_gemini_response_stream(conversation_messages, model_name)
     if is_groq_model(model_name):
         return get_groq_response_stream(conversation_messages, model_name)
-
-    _raise_invalid_model_error(model_name)
+    raise RuntimeError("Unreachable model dispatch branch in get_llm_response_stream.")

@@ -22,7 +22,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
                 "chat_room_id": "room-1",
-                "model": "test-model",
+                "model": "gemini-2.5-flash",
             },
             session={},
         )
@@ -88,7 +88,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
                 "chat_room_id": "room-1",
-                "model": "test-model",
+                "model": "gemini-2.5-flash",
             },
             session={},
         )

@@ -18,6 +18,25 @@ def make_request(json_body, session=None):
 
 
 class PromptAssistApiTestCase(unittest.TestCase):
+    def test_prompt_assist_requires_login(self):
+        request = make_request(
+            {
+                "target": "task_modal",
+                "action": "generate_draft",
+                "fields": {
+                    "title": "メール返信",
+                    "prompt_content": "丁寧な返信テンプレートを作りたい",
+                },
+            },
+            session={},
+        )
+
+        response = asyncio.run(prompt_assist(request))
+
+        self.assertEqual(response.status_code, 403)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "ログインが必要です")
+
     def test_prompt_assist_returns_suggestions(self):
         request = make_request(
             {
@@ -27,27 +46,81 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     "title": "メール返信",
                     "prompt_content": "丁寧な返信テンプレートを作りたい",
                 },
-            }
+            },
+            session={"user_id": 1},
         )
 
-        with patch(
-            "blueprints.chat.tasks.create_prompt_assist_payload",
-            return_value={
-                "summary": "AIが下書きを作成しました。",
-                "warnings": [],
-                "suggested_fields": {
-                    "title": "丁寧なメール返信テンプレート",
-                    "prompt_content": "顧客への丁寧な返信文を作成してください。",
-                },
-                "model": "openai/gpt-oss-20b",
-            },
-        ):
-            response = asyncio.run(prompt_assist(request))
+        with patch("blueprints.chat.tasks._consume_prompt_assist_limits", return_value=(True, None)):
+            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch(
+                    "blueprints.chat.tasks.create_prompt_assist_payload",
+                    return_value={
+                        "summary": "AIが下書きを作成しました。",
+                        "warnings": [],
+                        "suggested_fields": {
+                            "title": "丁寧なメール返信テンプレート",
+                            "prompt_content": "顧客への丁寧な返信文を作成してください。",
+                        },
+                        "model": "openai/gpt-oss-20b",
+                    },
+                ):
+                    response = asyncio.run(prompt_assist(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["suggested_fields"]["title"], "丁寧なメール返信テンプレート")
         self.assertEqual(payload["model"], "openai/gpt-oss-20b")
+
+    def test_prompt_assist_returns_429_when_daily_quota_exceeded(self):
+        request = make_request(
+            {
+                "target": "task_modal",
+                "action": "generate_draft",
+                "fields": {
+                    "title": "メール返信",
+                    "prompt_content": "丁寧な返信テンプレートを作りたい",
+                },
+            },
+            session={"user_id": 1},
+        )
+
+        with patch("blueprints.chat.tasks._consume_prompt_assist_limits", return_value=(True, None)):
+            with patch(
+                "blueprints.chat.tasks.consume_llm_daily_quota",
+                return_value=(False, 0, 300),
+            ):
+                with patch("blueprints.chat.tasks.create_prompt_assist_payload") as mock_create:
+                    response = asyncio.run(prompt_assist(request))
+
+        self.assertEqual(response.status_code, 429)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertIn("上限", payload["error"])
+        mock_create.assert_not_called()
+
+    def test_prompt_assist_returns_429_when_rate_limited(self):
+        request = make_request(
+            {
+                "target": "task_modal",
+                "action": "generate_draft",
+                "fields": {
+                    "title": "メール返信",
+                    "prompt_content": "丁寧な返信テンプレートを作りたい",
+                },
+            },
+            session={"user_id": 1},
+        )
+
+        with patch(
+            "blueprints.chat.tasks._consume_prompt_assist_limits",
+            return_value=(False, "AI補助の試行回数が多すぎます。10秒ほど待ってから再試行してください。"),
+        ):
+            with patch("blueprints.chat.tasks.create_prompt_assist_payload") as mock_create:
+                response = asyncio.run(prompt_assist(request))
+
+        self.assertEqual(response.status_code, 429)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertIn("多すぎます", payload["error"])
+        mock_create.assert_not_called()
 
     def test_prompt_assist_rejects_improve_without_body(self):
         request = make_request(
@@ -58,10 +131,13 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     "title": "メール返信",
                     "prompt_content": "   ",
                 },
-            }
+            },
+            session={"user_id": 1},
         )
 
-        response = asyncio.run(prompt_assist(request))
+        with patch("blueprints.chat.tasks._consume_prompt_assist_limits", return_value=(True, None)):
+            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                response = asyncio.run(prompt_assist(request))
 
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))
@@ -76,14 +152,17 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     "title": "学習計画",
                     "content": "学習計画を1週間分作るプロンプト",
                 },
-            }
+            },
+            session={"user_id": 1},
         )
 
-        with patch(
-            "blueprints.chat.tasks.create_prompt_assist_payload",
-            side_effect=LlmProviderError("boom"),
-        ):
-            response = asyncio.run(prompt_assist(request))
+        with patch("blueprints.chat.tasks._consume_prompt_assist_limits", return_value=(True, None)):
+            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch(
+                    "blueprints.chat.tasks.create_prompt_assist_payload",
+                    side_effect=LlmProviderError("boom"),
+                ):
+                    response = asyncio.run(prompt_assist(request))
 
         self.assertEqual(response.status_code, 502)
         payload = json.loads(response.body.decode("utf-8"))
