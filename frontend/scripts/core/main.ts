@@ -219,8 +219,16 @@ function initApp() {
     });
   }
 
-  // 送信
-  if (sendBtn) sendBtn.addEventListener("click", callSendMessage);
+  // 送信 / 停止
+  if (sendBtn) {
+    sendBtn.addEventListener("click", () => {
+      if (sendBtn.classList.contains("send-btn--stop")) {
+        window.stopGeneration?.();
+      } else {
+        callSendMessage();
+      }
+    });
+  }
 
   // Enter 送信 (Shift+Enter で改行)
   if (userInput) {

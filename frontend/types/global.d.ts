@@ -69,6 +69,7 @@ declare global {
     closeChatShareModal?: () => void;
     sendMessage?: () => void;
     generateResponse?: (message: string, aiModel: string) => void;
+    stopGeneration?: () => void;
     toggleUserMenu?: () => void;
   }
 

@@ -394,6 +394,47 @@ function appendConstellationLoader(parent: HTMLElement, modifierClass: string) {
   return loader;
 }
 
+let currentAbortController: AbortController | null = null;
+let isGenerating = false;
+
+function setGeneratingState(generating: boolean) {
+  isGenerating = generating;
+  const btn = window.sendBtn;
+  if (!btn) return;
+  if (generating) {
+    btn.classList.add("send-btn--stop");
+    btn.setAttribute("aria-label", "停止");
+    btn.setAttribute("data-tooltip", "生成を停止");
+    const icon = btn.querySelector("i");
+    if (icon) icon.className = "bi bi-stop-fill";
+  } else {
+    btn.classList.remove("send-btn--stop");
+    btn.setAttribute("aria-label", "送信");
+    btn.setAttribute("data-tooltip", "メッセージを送信");
+    const icon = btn.querySelector("i");
+    if (icon) icon.className = "bi bi-send";
+  }
+}
+
+async function stopGeneration() {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+  if (window.currentChatRoomId) {
+    try {
+      await fetch("/api/chat_stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_room_id: window.currentChatRoomId })
+      });
+    } catch {
+      // ベストエフォート
+    }
+  }
+  setGeneratingState(false);
+}
+
 function shouldAutoScrollForGeneration() {
   if (window.isChatViewportNearBottom) {
     return window.isChatViewportNearBottom();
@@ -506,51 +547,78 @@ async function consumeStreamingChatResponse(response: Response, thinkingWrap: HT
     window.renderBotMessageImmediate?.("エラー: " + message);
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+  const processBlock = (block: string) => {
+    const parsed = parseStreamEventBlock(block);
+    if (!parsed) return;
 
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    buffer = blocks.pop() || "";
-
-    blocks.forEach((block) => {
-      const parsed = parseStreamEventBlock(block);
-      if (!parsed) return;
-
-      if (parsed.event === "chunk") {
-        const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
-        if (!text) return;
-        ensureStreamHandle().appendChunk(text);
-        return;
-      }
-
-      if (parsed.event === "done") {
-        completed = true;
-        const responseText = typeof parsed.data.response === "string" ? parsed.data.response : "";
-        if (streamHandle) {
-          streamHandle.complete();
-        } else {
-          dismissThinkingState();
-          if (responseText) {
-            window.renderBotMessageImmediate?.(responseText);
-          }
-        }
-        return;
-      }
-
-      if (parsed.event === "error") {
-        streamError = typeof parsed.data.message === "string"
-          ? parsed.data.message
-          : "ストリーム生成中にエラーが発生しました。";
-      }
-    });
-
-    if (streamError) {
-      renderStreamError(streamError);
-      break;
+    if (parsed.event === "chunk") {
+      const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
+      if (!text) return;
+      ensureStreamHandle().appendChunk(text);
+      return;
     }
 
-    if (done) break;
+    if (parsed.event === "done") {
+      completed = true;
+      const responseText = typeof parsed.data.response === "string" ? parsed.data.response : "";
+      if (streamHandle) {
+        streamHandle.complete();
+      } else {
+        dismissThinkingState();
+        if (responseText) {
+          window.renderBotMessageImmediate?.(responseText);
+        }
+      }
+      return;
+    }
+
+    if (parsed.event === "aborted") {
+      completed = true;
+      if (streamHandle) {
+        streamHandle.complete();
+      } else {
+        dismissThinkingState();
+      }
+      return;
+    }
+
+    if (parsed.event === "error") {
+      streamError = typeof parsed.data.message === "string"
+        ? parsed.data.message
+        : "ストリーム生成中にエラーが発生しました。";
+    }
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || "";
+
+      blocks.forEach(processBlock);
+
+      if (streamError) {
+        renderStreamError(streamError);
+        break;
+      }
+
+      if (done) break;
+    }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      // ユーザーが停止ボタンを押した場合: 受信済み内容を完了として表示
+      dismissThinkingState();
+      const activeHandle = streamHandle as StreamingBotMessageHandle | null;
+      if (activeHandle) {
+        activeHandle.complete();
+      }
+      return;
+    }
+    throw err;
+  } finally {
+    reader.cancel().catch(() => {});
   }
 
   if (!completed && !streamError) {
@@ -560,6 +628,7 @@ async function consumeStreamingChatResponse(response: Response, thinkingWrap: HT
 
 /* 送信ボタン or Enter 押下 */
 function sendMessage() {
+  if (isGenerating) return;
   if (!window.userInput) return;
   const message = window.userInput.value.trim();
   if (!message) return;
@@ -573,6 +642,11 @@ function sendMessage() {
 /* サーバー POST → Bot 応答を描画 */
 async function generateResponse(message: string, aiModel: string) {
   if (!window.chatMessages) return;
+
+  setGeneratingState(true);
+  const abortController = new AbortController();
+  currentAbortController = abortController;
+
   // marked の遅延読み込みを先行して開始し、初回描画の崩れを減らす
   window.formatLLMOutput?.("");
   // ユーザーメッセージを即描画
@@ -589,7 +663,8 @@ async function generateResponse(message: string, aiModel: string) {
         message,
         chat_room_id: window.currentChatRoomId,
         model: aiModel
-      })
+      }),
+      signal: abortController.signal
     });
     const contentType = response.headers.get("content-type") || "";
 
@@ -612,33 +687,57 @@ async function generateResponse(message: string, aiModel: string) {
       window.renderBotMessageImmediate?.("エラー: " + extractApiErrorMessage(data, response.status));
     }
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      // ユーザーが停止ボタンを押した場合はエラー表示しない
+      window.hideTypingIndicator?.();
+      thinkingWrap?.remove();
+      return;
+    }
     window.hideTypingIndicator?.();
     thinkingWrap?.remove();
     const errorMessage = err instanceof Error ? err.message : String(err);
     window.renderBotMessageImmediate?.("エラー: " + errorMessage);
+  } finally {
+    setGeneratingState(false);
+    currentAbortController = null;
   }
 }
 
 /* ページ復帰時にバックグラウンド生成ジョブへ再接続してストリーミング表示する */
 async function connectToGenerationStream(roomId: string): Promise<void> {
+  setGeneratingState(true);
+  const abortController = new AbortController();
+  currentAbortController = abortController;
+
   const thinkingWrap = createThinkingPlaceholder();
   try {
-    const response = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`);
+    const response = await fetch(
+      `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+      { signal: abortController.signal }
+    );
     if (!response.ok) {
       thinkingWrap?.remove();
       window.loadChatHistory?.(false);
       return;
     }
     await consumeStreamingChatResponse(response, thinkingWrap);
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      thinkingWrap?.remove();
+      return;
+    }
     thinkingWrap?.remove();
     window.loadChatHistory?.(false);
+  } finally {
+    setGeneratingState(false);
+    currentAbortController = null;
   }
 }
 
 // ---- window へ公開 ------------------------------
 window.sendMessage = sendMessage;
 window.generateResponse = generateResponse;
+window.stopGeneration = stopGeneration;
 window.connectToGenerationStream = connectToGenerationStream;
 
 export {};

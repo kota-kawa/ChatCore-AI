@@ -38,6 +38,7 @@ class ChatGenerationJob:
         self._events: list[ChatGenerationEvent] = []
         self._condition = threading.Condition()
         self._thread: threading.Thread | None = None
+        self._cancelled: bool = False
         self.response = ""
         self.error_message: str | None = None
         self.started_at = time.monotonic()
@@ -49,6 +50,18 @@ class ChatGenerationJob:
             return
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def cancel(self) -> None:
+        """生成をキャンセルし、aborted イベントを発行して完了とする."""
+        if self.is_done:
+            return
+        self._cancelled = True
+        with self._condition:
+            if not self.is_done:
+                self._events.append(ChatGenerationEvent(event="aborted", payload={}))
+                self.is_done = True
+                self.finished_at = time.monotonic()
+                self._condition.notify_all()
 
     def wait(self, timeout: float | None = None) -> bool:
         thread = self._thread
@@ -86,13 +99,20 @@ class ChatGenerationJob:
         chunks: list[str] = []
         try:
             for chunk in get_llm_response_stream(self._conversation_messages, self._model):
+                if self._cancelled:
+                    return
                 if not chunk:
                     continue
                 chunks.append(chunk)
                 self._publish("chunk", {"text": chunk})
         except LlmServiceError:
+            if self._cancelled:
+                return
             self.error_message = "内部エラーが発生しました。"
             self._publish("error", {"message": self.error_message}, done=True)
+            return
+
+        if self._cancelled:
             return
 
         bot_reply = "".join(chunks)
@@ -134,6 +154,16 @@ def _cleanup_expired_jobs(now: float | None = None) -> None:
 
         for key in expired_keys:
             _jobs.pop(key, None)
+
+
+def cancel_generation_job(job_key: str) -> bool:
+    """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
+    with _jobs_lock:
+        job = _jobs.get(job_key)
+    if job is None or job.is_done:
+        return False
+    job.cancel()
+    return True
 
 
 def has_active_generation(job_key: str) -> bool:

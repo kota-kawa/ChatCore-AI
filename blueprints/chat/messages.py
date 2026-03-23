@@ -21,6 +21,7 @@ from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationJob,
     build_generation_key,
+    cancel_generation_job,
     get_generation_job,
     has_active_generation,
     start_generation_job,
@@ -525,6 +526,45 @@ async def chat(request: Request):
         await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
 
     return jsonify({"response": bot_reply})
+
+
+@chat_bp.post("/api/chat_stop", name="chat.chat_stop")
+async def chat_stop(request: Request):
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    chat_room_id = data.get("chat_room_id")
+    if not chat_room_id:
+        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+
+    session = request.session
+    sid = None
+    user_id = session.get("user_id")
+
+    if user_id is not None:
+        try:
+            payload, status_code = await run_blocking(
+                validate_room_owner,
+                chat_room_id,
+                user_id,
+                "他ユーザーのチャットルームは操作できません",
+            )
+            if payload is not None:
+                return jsonify(payload, status_code=status_code)
+        except Exception:
+            return log_and_internal_server_error(
+                logger,
+                "Failed to validate chat room ownership before stop.",
+            )
+    else:
+        sid = get_session_id(session)
+        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
+            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+
+    generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
+    cancelled = await run_blocking(cancel_generation_job, generation_key)
+    return jsonify({"cancelled": cancelled})
 
 
 @chat_bp.get("/api/get_chat_history", name="chat.get_chat_history")

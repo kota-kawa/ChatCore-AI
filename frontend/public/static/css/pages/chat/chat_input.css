@@ -99,6 +99,30 @@
   left: -1px;
 }
 
+/* 生成中: 停止ボタン */
+#send-btn.send-btn--stop {
+  background: #ef4444;
+  animation: sendBtnStopPulse 1.8s ease-in-out infinite;
+}
+
+#send-btn.send-btn--stop:hover {
+  background: #dc2626;
+  animation: none;
+}
+
+#send-btn.send-btn--stop:active {
+  transform: scale(0.88);
+}
+
+#send-btn.send-btn--stop i {
+  left: 0;
+}
+
+@keyframes sendBtnStopPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   .input-container {
@@ -143,6 +167,10 @@
 
   #send-btn i {
     font-size: 0.85rem;
+  }
+
+  #send-btn.send-btn--stop i {
+    left: 0;
   }
 }
 
