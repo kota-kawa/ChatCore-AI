@@ -442,12 +442,18 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                 共有するメモを選択してください。
               </p>
               <div className="memo-share-modal__actions">
-                <button type="button" id="memo-share-copy-btn" className="primary-button">リンクをコピー</button>
-                <button type="button" id="memo-share-web-btn" className="primary-button">端末で共有</button>
+                <button type="button" id="memo-share-copy-btn" className="primary-button memo-share-icon-btn" aria-label="リンクをコピー" title="リンクをコピー">
+                  <i className="bi bi-copy" aria-hidden="true"></i>
+                </button>
+                <button type="button" id="memo-share-web-btn" className="primary-button memo-share-icon-btn" aria-label="端末で共有" title="端末で共有">
+                  <i className="bi bi-share" aria-hidden="true"></i>
+                </button>
               </div>
               <div className="memo-share-modal__sns">
                 <a id="memo-share-sns-x" target="_blank" rel="noopener noreferrer" href="#">
-                  <i className="bi bi-twitter"></i>
+                  <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"></path>
+                  </svg>
                   <span>X</span>
                 </a>
                 <a id="memo-share-sns-line" target="_blank" rel="noopener noreferrer" href="#">

@@ -148,13 +148,24 @@
 .chat-share-actions {
   margin-top: 0.72rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.55rem;
 }
 
-.chat-share-actions .primary-button {
-  padding: 0.5rem 0.8rem;
-  font-size: 0.84rem;
+.chat-share-actions .chat-share-icon-btn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-share-actions .chat-share-icon-btn i {
+  font-size: 0.98rem;
+  line-height: 1;
 }
 
 .chat-share-sns {
@@ -179,6 +190,12 @@
 
 .chat-share-sns a:hover {
   background: #f2f5f3;
+}
+
+.chat-share-sns .share-x-icon {
+  width: 0.92rem;
+  height: 0.92rem;
+  flex-shrink: 0;
 }
 
 /* メイン 2 カラム */

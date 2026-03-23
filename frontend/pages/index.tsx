@@ -333,16 +333,22 @@ const bodyMarkup = `
         共有リンクを作成すると、このチャットルームの履歴をURL経由で閲覧できます。
       </p>
       <div class="chat-share-link-row">
-        <input type="text" id="chat-share-link-input" readonly placeholder="まずリンクを生成してください" />
+        <input type="text" id="chat-share-link-input" readonly placeholder="共有リンクを準備しています" />
       </div>
       <p id="chat-share-status" class="chat-share-status">共有するチャットルームを選択してください。</p>
       <div class="chat-share-actions">
-        <button type="button" id="chat-share-copy-btn" class="primary-button">リンクをコピー</button>
-        <button type="button" id="chat-share-web-btn" class="primary-button">端末で共有</button>
+        <button type="button" id="chat-share-copy-btn" class="primary-button chat-share-icon-btn" aria-label="リンクをコピー" title="リンクをコピー">
+          <i class="bi bi-copy" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="chat-share-web-btn" class="primary-button chat-share-icon-btn" aria-label="端末で共有" title="端末で共有">
+          <i class="bi bi-share" aria-hidden="true"></i>
+        </button>
       </div>
       <div class="chat-share-sns">
         <a id="chat-share-sns-x" target="_blank" rel="noopener noreferrer" href="#">
-          <i class="bi bi-twitter"></i>
+          <svg class="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"></path>
+          </svg>
           <span>X</span>
         </a>
         <a id="chat-share-sns-line" target="_blank" rel="noopener noreferrer" href="#">

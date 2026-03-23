@@ -1032,14 +1032,24 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-dialog__actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
   gap: 0.7rem;
 }
 
-.prompt-share-dialog__actions .submit-btn {
+.prompt-share-dialog__actions .prompt-share-icon-btn {
   margin: 0;
-  width: 100%;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.prompt-share-dialog__actions .prompt-share-icon-btn i {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .prompt-share-dialog__sns {
@@ -1068,6 +1078,12 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   background: #e9f3ff;
   border-color: #9ec8f0;
   transform: translateY(-1px);
+}
+
+.prompt-share-dialog__sns .share-x-icon {
+  width: 0.94rem;
+  height: 0.94rem;
+  flex-shrink: 0;
 }
 
 .post-modal-lead {
@@ -1684,7 +1700,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     padding: 1.12rem 0.9rem 0.92rem;
   }
 
-  .prompt-share-dialog__actions,
   .prompt-share-dialog__sns {
     grid-template-columns: 1fr;
   }
