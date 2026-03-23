@@ -1,0 +1,64 @@
+import type { PromptData, PromptType } from "./types";
+import { CONTENT_CHAR_LIMIT, TITLE_CHAR_LIMIT } from "./constants";
+
+export function truncateText(text: string, limit: number) {
+  const safeText = text || "";
+  const chars = Array.from(safeText);
+  return chars.length > limit ? chars.slice(0, limit).join("") + "..." : safeText;
+}
+
+export function truncateTitle(title: string) {
+  return truncateText(title, TITLE_CHAR_LIMIT);
+}
+
+export function truncateContent(content: string) {
+  return truncateText(content, CONTENT_CHAR_LIMIT);
+}
+
+export function formatPromptDate(createdAt?: string) {
+  if (!createdAt) return "";
+  const parsedDate = new Date(createdAt);
+  if (Number.isNaN(parsedDate.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(parsedDate);
+}
+
+export function escapeHtml(value: unknown) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function getBookmarkButtonMarkup(isBookmarked: boolean) {
+  const iconClass = isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark";
+  return `<i class="bi ${iconClass}"></i>`;
+}
+
+export function normalizePromptType(value?: string): PromptType {
+  return value === "image" ? "image" : "text";
+}
+
+export function getPromptTypeLabel(promptType: PromptType) {
+  return promptType === "image" ? "画像生成" : "通常";
+}
+
+export function getPromptTypeIconClass(promptType: PromptType) {
+  return promptType === "image" ? "bi-image" : "bi-chat-square-text";
+}
+
+export function normalizePromptData(prompt: PromptData): PromptData {
+  return {
+    ...prompt,
+    prompt_type: normalizePromptType(prompt.prompt_type),
+    reference_image_url: prompt.reference_image_url || "",
+    bookmarked: Boolean(prompt.bookmarked),
+    saved_to_list: Boolean(prompt.saved_to_list)
+  };
+}
