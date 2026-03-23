@@ -1,0 +1,3 @@
+export const REDIRECT_DELAY_MS = 1200;
+export const MODAL_AUTO_CLOSE_MS = 2200;
+export const MODAL_CLOSE_ANIMATION_MS = 500;
