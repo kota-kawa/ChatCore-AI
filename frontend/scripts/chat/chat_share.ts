@@ -35,7 +35,6 @@ function getShareModalElements() {
     shareBtn: document.getElementById("share-chat-btn") as HTMLButtonElement | null,
     modal: document.getElementById("chat-share-modal"),
     closeBtn: document.getElementById("chat-share-close-btn") as HTMLButtonElement | null,
-    createBtn: document.getElementById("chat-share-create-btn") as HTMLButtonElement | null,
     copyBtn: document.getElementById("chat-share-copy-btn") as HTMLButtonElement | null,
     webShareBtn: document.getElementById("chat-share-web-btn") as HTMLButtonElement | null,
     linkInput: document.getElementById("chat-share-link-input") as HTMLInputElement | null,
@@ -91,11 +90,7 @@ function closeChatShareModal() {
 }
 
 function setShareActionLoading(isLoading: boolean) {
-  const { createBtn, copyBtn, webShareBtn } = getShareModalElements();
-  if (createBtn) {
-    createBtn.disabled = isLoading;
-    createBtn.textContent = isLoading ? "生成中..." : "リンクを生成";
-  }
+  const { copyBtn, webShareBtn } = getShareModalElements();
   if (copyBtn) copyBtn.disabled = isLoading;
   if (webShareBtn) webShareBtn.disabled = isLoading;
 }
@@ -209,7 +204,6 @@ function initChatShare() {
     shareBtn,
     modal,
     closeBtn,
-    createBtn,
     copyBtn,
     webShareBtn
   } = getShareModalElements();
@@ -236,9 +230,6 @@ function initChatShare() {
     }
   });
 
-  createBtn?.addEventListener("click", () => {
-    void createShareLink(true);
-  });
   copyBtn?.addEventListener("click", () => {
     void copyShareLink();
   });

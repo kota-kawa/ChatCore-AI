@@ -330,7 +330,6 @@ const bodyMarkup = `
       </div>
       <p id="prompt-share-status" class="prompt-share-dialog__status">共有するプロンプトを選択してください。</p>
       <div class="prompt-share-dialog__actions">
-        <button type="button" id="prompt-share-create-btn" class="submit-btn">リンクを表示</button>
         <button type="button" id="prompt-share-copy-btn" class="submit-btn">リンクをコピー</button>
         <button type="button" id="prompt-share-web-btn" class="submit-btn">端末で共有</button>
       </div>

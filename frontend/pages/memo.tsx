@@ -442,7 +442,6 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                 共有するメモを選択してください。
               </p>
               <div className="memo-share-modal__actions">
-                <button type="button" id="memo-share-create-btn" className="primary-button">リンクを生成</button>
                 <button type="button" id="memo-share-copy-btn" className="primary-button">リンクをコピー</button>
                 <button type="button" id="memo-share-web-btn" className="primary-button">端末で共有</button>
               </div>

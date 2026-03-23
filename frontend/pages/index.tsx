@@ -337,7 +337,6 @@ const bodyMarkup = `
       </div>
       <p id="chat-share-status" class="chat-share-status">共有するチャットルームを選択してください。</p>
       <div class="chat-share-actions">
-        <button type="button" id="chat-share-create-btn" class="primary-button">リンクを生成</button>
         <button type="button" id="chat-share-copy-btn" class="primary-button">リンクをコピー</button>
         <button type="button" id="chat-share-web-btn" class="primary-button">端末で共有</button>
       </div>

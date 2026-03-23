@@ -20,7 +20,6 @@ const setupMemoModal = () => {
   const responseEl = modal.querySelector("[data-modal-response]");
   const shareLinkInput = document.getElementById("memo-share-link-input") as HTMLInputElement | null;
   const shareStatusEl = document.getElementById("memo-share-status");
-  const shareCreateBtn = document.getElementById("memo-share-create-btn") as HTMLButtonElement | null;
   const shareCopyBtn = document.getElementById("memo-share-copy-btn") as HTMLButtonElement | null;
   const shareWebBtn = document.getElementById("memo-share-web-btn") as HTMLButtonElement | null;
   const shareSnsX = document.getElementById("memo-share-sns-x") as HTMLAnchorElement | null;
@@ -160,10 +159,6 @@ const setupMemoModal = () => {
   };
 
   const setShareActionLoading = (isLoading: boolean) => {
-    if (shareCreateBtn) {
-      shareCreateBtn.disabled = isLoading;
-      shareCreateBtn.textContent = isLoading ? "生成中..." : "リンクを生成";
-    }
     if (shareCopyBtn) shareCopyBtn.disabled = isLoading;
     if (shareWebBtn) shareWebBtn.disabled = isLoading;
   };
@@ -308,10 +303,6 @@ const setupMemoModal = () => {
     if (event.target === shareModal) {
       closeShareModal();
     }
-  });
-
-  shareCreateBtn?.addEventListener("click", () => {
-    void createShareLink(true);
   });
 
   shareCopyBtn?.addEventListener("click", () => {

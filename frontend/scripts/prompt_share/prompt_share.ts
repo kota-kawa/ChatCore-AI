@@ -330,7 +330,6 @@ function initPromptSharePage(attempt = 0) {
     return {
       modal: document.getElementById("promptShareModal") as HTMLElement | null,
       closeBtn: document.getElementById("closePromptShareModal") as HTMLButtonElement | null,
-      createBtn: document.getElementById("prompt-share-create-btn") as HTMLButtonElement | null,
       copyBtn: document.getElementById("prompt-share-copy-btn") as HTMLButtonElement | null,
       webShareBtn: document.getElementById("prompt-share-web-btn") as HTMLButtonElement | null,
       linkInput: document.getElementById("prompt-share-link-input") as HTMLInputElement | null,
@@ -372,11 +371,7 @@ function initPromptSharePage(attempt = 0) {
   }
 
   function setPromptShareActionLoading(isLoading: boolean) {
-    const { createBtn, copyBtn, webShareBtn } = getPromptShareModalElements();
-    if (createBtn) {
-      createBtn.disabled = isLoading;
-      createBtn.textContent = isLoading ? "準備中..." : "リンクを表示";
-    }
+    const { copyBtn, webShareBtn } = getPromptShareModalElements();
     if (copyBtn) copyBtn.disabled = isLoading;
     if (webShareBtn) webShareBtn.disabled = isLoading;
   }
@@ -602,9 +597,9 @@ function initPromptSharePage(attempt = 0) {
     const openPromptShareDialog = (event?: Event) => {
       event?.stopPropagation();
       currentSharePrompt = prompt;
-      const { modal, createBtn } = getPromptShareModalElements();
+      const { modal, copyBtn } = getPromptShareModalElements();
       if (modal) {
-        openModal(modal, createBtn);
+        openModal(modal, copyBtn);
       }
       void createPromptShareLink(false);
     };
@@ -1171,7 +1166,6 @@ function initPromptSharePage(attempt = 0) {
   const closePromptDetailModalBtn = document.getElementById("closePromptDetailModal") as HTMLButtonElement | null;
   const promptShareModal = document.getElementById("promptShareModal") as HTMLElement | null;
   const promptShareCloseBtn = document.getElementById("closePromptShareModal") as HTMLButtonElement | null;
-  const promptShareCreateBtn = document.getElementById("prompt-share-create-btn") as HTMLButtonElement | null;
   const promptShareCopyBtn = document.getElementById("prompt-share-copy-btn") as HTMLButtonElement | null;
   const promptShareWebBtn = document.getElementById("prompt-share-web-btn") as HTMLButtonElement | null;
   const postModalTitleInput = document.getElementById("prompt-title") as HTMLInputElement | null;
@@ -1373,12 +1367,6 @@ function initPromptSharePage(attempt = 0) {
   }
   setPromptShareUrl("");
   setPromptShareStatus("共有するプロンプトを選択してください。");
-
-  if (promptShareCreateBtn) {
-    promptShareCreateBtn.addEventListener("click", () => {
-      void createPromptShareLink(true);
-    });
-  }
 
   if (promptShareCopyBtn) {
     promptShareCopyBtn.addEventListener("click", () => {

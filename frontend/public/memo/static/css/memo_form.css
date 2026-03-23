@@ -957,15 +957,20 @@ textarea.memo-control {
   color: #b42318;
 }
 
-.memo-share-modal__actions,
-.memo-share-modal__sns {
+.memo-share-modal__actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
 .memo-share-modal__actions .primary-button {
   width: 100%;
+}
+
+.memo-share-modal__sns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .memo-share-modal__sns a {
