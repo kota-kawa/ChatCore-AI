@@ -71,8 +71,19 @@ class EndpointRoutesTestCase(unittest.TestCase):
     def test_logout_endpoint_clears_session_and_redirects(self):
         async def scenario():
             async with self._make_client(follow_redirects=False) as client:
-                await self._set_session(client, {"user_id": 7, "user_email": "user@example.com"})
-                response = await client.get("/logout")
+                csrf_token = "logout-csrf-token"
+                await self._set_session(
+                    client,
+                    {
+                        "user_id": 7,
+                        "user_email": "user@example.com",
+                        CSRF_SESSION_KEY: csrf_token,
+                    },
+                )
+                response = await client.post(
+                    "/logout",
+                    headers={CSRF_HEADER_NAME: csrf_token},
+                )
                 self.assertEqual(response.status_code, 302)
                 self.assertTrue(response.headers["location"].endswith("/login"))
 

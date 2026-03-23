@@ -137,7 +137,7 @@ function renderSanitizedHTML(
   if (purifier && typeof purifier.sanitize === "function") {
     let clean = purifier.sanitize(dirtyHtml, {
       ALLOWED_TAGS: allowed,
-      ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class", "onclick"]
+      ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"]
     });
     if (isBotMessage) {
       clean = compactBotMessageHtml(clean);
@@ -152,7 +152,7 @@ function renderSanitizedHTML(
     return;
   }
 
-  let clean = sanitizeHtmlWithoutPurifier(dirtyHtml, allowed, ["href", "src", "alt", "title", "target", "class", "onclick"]);
+  let clean = sanitizeHtmlWithoutPurifier(dirtyHtml, allowed, ["href", "src", "alt", "title", "target", "class"]);
   if (isBotMessage) {
     clean = compactBotMessageHtml(clean);
   }

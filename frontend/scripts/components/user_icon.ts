@@ -75,6 +75,22 @@ tpl.innerHTML = `
   </div>
 `;
 
+async function postLogoutAndRedirect() {
+  try {
+    const response = await fetch("/logout", {
+      method: "POST",
+      credentials: "same-origin"
+    });
+    if (response.redirected && response.url) {
+      window.location.href = response.url;
+      return;
+    }
+  } catch (error) {
+    console.warn("user_icon: logout request failed", error);
+  }
+  window.location.href = "/login";
+}
+
 class UserIcon extends HTMLElement {
   private btn: HTMLButtonElement;
   private dropdown: HTMLDivElement;
@@ -110,6 +126,13 @@ class UserIcon extends HTMLElement {
     document.addEventListener("click", () => {
       this.dropdown.style.display = "none";
     });
+    const logoutAnchor = root.querySelector('a[href="/logout"]') as HTMLAnchorElement | null;
+    logoutAnchor?.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.dropdown.style.display = "none";
+      void postLogoutAndRedirect();
+    });
+
   }
 
   connectedCallback() {

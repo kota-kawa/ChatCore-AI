@@ -312,7 +312,20 @@ function toggleUserMenu() {
     }
     if (logoutEl) {
       logoutEl.addEventListener("click", () => {
-        window.location.href = "/logout";
+        void fetch("/logout", {
+          method: "POST",
+          credentials: "same-origin"
+        })
+          .then((response) => {
+            if (response.redirected && response.url) {
+              window.location.href = response.url;
+              return;
+            }
+            window.location.href = "/login";
+          })
+          .catch(() => {
+            window.location.href = "/login";
+          });
       });
     }
 

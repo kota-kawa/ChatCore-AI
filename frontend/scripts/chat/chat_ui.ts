@@ -6,6 +6,7 @@ let markedLoadPromise: Promise<void> | null = null;
 let hljs: any = null;
 let markdownEnhancementDisabled = false;
 const dynamicImport = new Function("modulePath", "return import(modulePath);") as (modulePath: string) => Promise<any>;
+const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
 
 async function importOptionalModule(modulePath: string) {
   try {
@@ -269,6 +270,58 @@ function formatMarkdownFallback(markdown: string) {
   return html;
 }
 
+function onCodeBlockCopyButtonClick(event: Event) {
+  const target = event.target as Element | null;
+  const button = target?.closest(CODE_COPY_BUTTON_SELECTOR) as HTMLButtonElement | null;
+  if (!button) return;
+
+  const codeElement = button.closest(".code-block-container")?.querySelector("code");
+  const code = codeElement ? codeElement.textContent || "" : "";
+  const icon = button.querySelector("i");
+  const textSpan = button.querySelector("span");
+  const defaultLabel = textSpan ? textSpan.dataset.defaultLabel || textSpan.textContent || "" : "";
+  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
+
+  const copyPromise = window.copyTextToClipboard
+    ? window.copyTextToClipboard(code)
+    : (navigator.clipboard && navigator.clipboard.writeText
+      ? navigator.clipboard.writeText(code)
+      : Promise.reject(new Error("Clipboard API unavailable")));
+
+  copyPromise.then(() => {
+    if (icon) {
+      icon.classList.remove("bi-clipboard", "bi-x-lg");
+      icon.classList.add("bi-check-lg");
+      window.setTimeout(() => {
+        icon.classList.remove("bi-check-lg", "bi-x-lg");
+        icon.classList.add("bi-clipboard");
+      }, 2000);
+    }
+    if (textSpan) {
+      textSpan.textContent = "Copied!";
+      window.setTimeout(() => {
+        textSpan.textContent = defaultLabel;
+      }, 2000);
+    }
+  }).catch((error) => {
+    console.error("Failed to copy code block.", error);
+    if (icon) {
+      icon.classList.remove("bi-clipboard", "bi-check-lg");
+      icon.classList.add("bi-x-lg");
+      window.setTimeout(() => {
+        icon.classList.remove("bi-check-lg", "bi-x-lg");
+        icon.classList.add("bi-clipboard");
+      }, 2000);
+    }
+    if (textSpan) {
+      textSpan.textContent = "Failed";
+      window.setTimeout(() => {
+        textSpan.textContent = defaultLabel;
+      }, 2000);
+    }
+  });
+}
+
 function ensureMarkedParser() {
   if (markedParser) return Promise.resolve();
   if (markdownEnhancementDisabled) return Promise.resolve();
@@ -316,47 +369,7 @@ function ensureMarkedParser() {
             <div class="code-block-container">
               <div class="code-block-header">
                 <span class="code-block-lang">${language}</span>
-                <button class="code-block-copy-btn" onclick="
-                  const codeElement = this.closest('.code-block-container')?.querySelector('code');
-                  const code = codeElement ? codeElement.innerText : '';
-                  const icon = this.querySelector('i');
-                  const textSpan = this.querySelector('span');
-                  const defaultLabel = textSpan ? (textSpan.dataset.defaultLabel || textSpan.innerText) : '';
-                  if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
-                  const copyPromise = window.copyTextToClipboard
-                    ? window.copyTextToClipboard(code)
-                    : (navigator.clipboard && navigator.clipboard.writeText
-                      ? navigator.clipboard.writeText(code)
-                      : Promise.reject(new Error('Clipboard API unavailable')));
-                  copyPromise.then(() => {
-                    if (icon) {
-                      icon.classList.remove('bi-clipboard', 'bi-x-lg');
-                      icon.classList.add('bi-check-lg');
-                      setTimeout(() => {
-                        icon.classList.remove('bi-check-lg', 'bi-x-lg');
-                        icon.classList.add('bi-clipboard');
-                      }, 2000);
-                    }
-                    if (textSpan) {
-                      textSpan.innerText = 'Copied!';
-                      setTimeout(() => textSpan.innerText = defaultLabel, 2000);
-                    }
-                  }).catch((error) => {
-                    console.error('Failed to copy code block.', error);
-                    if (icon) {
-                      icon.classList.remove('bi-clipboard', 'bi-check-lg');
-                      icon.classList.add('bi-x-lg');
-                      setTimeout(() => {
-                        icon.classList.remove('bi-check-lg', 'bi-x-lg');
-                        icon.classList.add('bi-clipboard');
-                      }, 2000);
-                    }
-                    if (textSpan) {
-                      textSpan.innerText = 'Failed';
-                      setTimeout(() => textSpan.innerText = defaultLabel, 2000);
-                    }
-                  });
-                ">
+                <button class="code-block-copy-btn" type="button">
                   <i class="bi bi-clipboard"></i>
                   <span>Copy code</span>
                 </button>
@@ -473,10 +486,16 @@ const initSidebarToggle = () => {
   window.addEventListener("resize", closeSidebar);
 };
 
+function initCodeBlockCopyButtons() {
+  document.addEventListener("click", onCodeBlockCopyButtonClick);
+}
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initSidebarToggle);
+  document.addEventListener("DOMContentLoaded", initCodeBlockCopyButtons);
 } else {
   initSidebarToggle();
+  initCodeBlockCopyButtons();
 }
 
 // ---- window へ公開 -------------------------------

@@ -420,7 +420,7 @@ async def login(request: Request):
     """
     return redirect_to_frontend(request)
 
-@auth_bp.get("/logout", name="auth.logout")
+@auth_bp.post("/logout", name="auth.logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(frontend_login_url(), status_code=302)
