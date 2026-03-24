@@ -229,7 +229,6 @@ function toggleTaskOrderEditing() {
       deleteBtn.style.height = "24px";
       deleteBtn.style.borderRadius = "50%";
       deleteBtn.style.border = "none";
-      deleteBtn.style.backgroundColor = "#dc3545";
       deleteBtn.style.color = "white";
       deleteBtn.style.fontSize = "14px";
       deleteBtn.style.display = "flex";
@@ -292,7 +291,6 @@ function toggleTaskOrderEditing() {
       editBtn.style.height = "24px";
       editBtn.style.borderRadius = "50%";
       editBtn.style.border = "none";
-      editBtn.style.backgroundColor = "#007bff";
       editBtn.style.color = "white";
       editBtn.style.fontSize = "14px";
       editBtn.style.display = "flex";

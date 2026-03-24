@@ -2,6 +2,32 @@
 const template = document.createElement("template");
 template.innerHTML = `
   <style>
+    :host {
+      --cc-fab-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+      --cc-fab-hover-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      --cc-fab-hover-transform: scale(1.1);
+      --cc-fab-hover-filter: none;
+      --cc-fab-menu-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+      --cc-fab-menu-bg: linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
+      --cc-fab-share-bg: linear-gradient(135deg, #1a73e8, #4a9bf5);
+      --cc-fab-star-bg: linear-gradient(135deg, #19c37d, #0fa86a);
+      --cc-fab-comment-bg: linear-gradient(135deg, #d97706, #f59e0b);
+      --cc-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
+      --cc-fab-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+    }
+
+    :host([data-chat-page="true"]) {
+      --cc-fab-shadow: 0 14px 24px rgba(15, 122, 81, 0.22), var(--cc-fab-edge-highlight);
+      --cc-fab-hover-shadow: 0 18px 30px rgba(7, 21, 17, 0.28), var(--cc-fab-edge-highlight);
+      --cc-fab-hover-transform: scale(1.08);
+      --cc-fab-hover-filter: saturate(1.06);
+      --cc-fab-menu-shadow: 0 16px 28px rgba(7, 21, 17, 0.3), var(--cc-fab-edge-highlight);
+      --cc-fab-menu-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
+      --cc-fab-share-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #4a9bf5);
+      --cc-fab-star-bg: var(--cc-fab-sheen), linear-gradient(135deg, #19c37d, #0fa86a);
+      --cc-fab-comment-bg: var(--cc-fab-sheen), linear-gradient(135deg, #d97706, #f59e0b);
+    }
+
     /* ============
        Reset / Base
        ============ */
@@ -30,13 +56,14 @@ template.innerHTML = `
       display: flex;
       justify-content: center;
       align-items: center;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+      transition: transform 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease;
+      box-shadow: var(--cc-fab-shadow);
       position: relative;
     }
     .btn:hover {
-      transform: scale(1.1);
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      transform: var(--cc-fab-hover-transform);
+      filter: var(--cc-fab-hover-filter);
+      box-shadow: var(--cc-fab-hover-shadow);
     }
     .btn svg {
       width: 24px;
@@ -87,7 +114,7 @@ template.innerHTML = `
     .btn--menu {
       width: 60px;
       height: 60px;
-      background: linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
+      background: var(--cc-fab-menu-bg);
       z-index: 1;
     }
     .btn--menu:after,
@@ -120,13 +147,13 @@ template.innerHTML = `
        Action Buttons
        ============ */
     .btn--share {
-      background: linear-gradient(135deg, #1a73e8, #4a9bf5);
+      background: var(--cc-fab-share-bg);
     }
     .btn--star {
-      background: linear-gradient(135deg, #19c37d, #0fa86a);
+      background: var(--cc-fab-star-bg);
     }
     .btn--comment {
-      background: linear-gradient(135deg, #d97706, #f59e0b);
+      background: var(--cc-fab-comment-bg);
     }
 
     /* ============
@@ -146,7 +173,7 @@ template.innerHTML = `
       width: 60px;
       height: 60px;
       opacity: 1;
-      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--cc-fab-menu-shadow);
       transform: none;
     }
 
@@ -318,6 +345,7 @@ class ActionMenu extends HTMLElement {
   updateMenuSize() {
     const chatContainer = document.getElementById("chat-container");
     const isInChatMode = Boolean(chatContainer && (chatContainer as HTMLElement).style.display === "flex");
+    const isChatPage = document.body.classList.contains("chat-page");
 
     // CSSカスタムプロパティでコンテキストを設定
     if (isInChatMode) {
@@ -325,6 +353,8 @@ class ActionMenu extends HTMLElement {
     } else {
       this.setAttribute("data-context", "non-chat");
     }
+
+    this.toggleAttribute("data-chat-page", isChatPage);
   }
 
   observeScreenChanges() {

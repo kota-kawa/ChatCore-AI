@@ -15,6 +15,8 @@ tpl.innerHTML = `
       z-index: 10000;
       font-family: inherit;
       user-select: none;
+      --cc-user-btn-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
+      --cc-user-btn-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
     }
     .btn {
       background: transparent;
@@ -27,7 +29,28 @@ tpl.innerHTML = `
       align-items: center;
       justify-content: center;
     }
-    .btn:hover { background: rgba(0,0,0,.06); }
+    :host([data-chat-page="true"]) .btn {
+      background:
+        var(--cc-user-btn-sheen),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 247, 242, 0.98) 100%);
+      transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
+      box-shadow:
+        0 14px 24px rgba(15, 23, 42, 0.12),
+        var(--cc-user-btn-edge-highlight);
+    }
+    .btn:hover {
+      background: rgba(0,0,0,.06);
+    }
+    :host([data-chat-page="true"]) .btn:hover {
+      background:
+        var(--cc-user-btn-sheen),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 247, 242, 0.98) 100%);
+      transform: translateY(-1px);
+      filter: saturate(1.06);
+      box-shadow:
+        0 18px 30px rgba(15, 23, 42, 0.16),
+        var(--cc-user-btn-edge-highlight);
+    }
     .avatar {
       width: 2.2rem;
       height: 2.2rem;
@@ -95,6 +118,7 @@ class UserIcon extends HTMLElement {
   private btn: HTMLButtonElement;
   private dropdown: HTMLDivElement;
   private avatarImg: HTMLImageElement;
+  private bodyClassObserver: MutationObserver | null = null;
   private _profileLoaded = false;
   private _handleAuthState: (evt?: Event) => void;
 
@@ -136,6 +160,16 @@ class UserIcon extends HTMLElement {
   }
 
   connectedCallback() {
+    this.syncTextureContext();
+    if (document.body) {
+      this.bodyClassObserver = new MutationObserver(() => {
+        this.syncTextureContext();
+      });
+      this.bodyClassObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"]
+      });
+    }
     document.addEventListener("authstatechange", this._handleAuthState);
     if (typeof window.loggedIn !== "undefined") {
       this._handleAuthStateInternal({ detail: { loggedIn: window.loggedIn } } as CustomEvent);
@@ -143,7 +177,15 @@ class UserIcon extends HTMLElement {
   }
 
   disconnectedCallback() {
+    if (this.bodyClassObserver) {
+      this.bodyClassObserver.disconnect();
+      this.bodyClassObserver = null;
+    }
     document.removeEventListener("authstatechange", this._handleAuthState);
+  }
+
+  private syncTextureContext() {
+    this.toggleAttribute("data-chat-page", document.body.classList.contains("chat-page"));
   }
 
   private _handleAuthStateInternal(evt?: Event) {

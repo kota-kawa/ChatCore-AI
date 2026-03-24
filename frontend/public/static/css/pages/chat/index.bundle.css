@@ -18,6 +18,282 @@
   --sai-right: env(safe-area-inset-right, 0px);
 }
 
+/* ホームページ（chat-page）内のボタン質感を
+   「新しいプロンプト作成（＋）」系の立体感にそろえる */
+body.chat-page {
+  --chat-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
+  --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+body.chat-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .new-chat-btn,
+  .icon-button,
+  #send-btn,
+  .task-detail-toggle,
+  .task-detail-modal-close,
+  .new-modal-close-btn,
+  .submit-btn,
+  .custom-btn-primary,
+  .custom-btn-secondary,
+  .custom-modal-close,
+  .chat-share-close-btn,
+  .chat-history-load-more-btn,
+  .code-block-copy-btn,
+  .copy-btn,
+  .memo-save-btn,
+  .scroll-to-bottom-btn,
+  .model-select-trigger,
+  .model-select-option,
+  .prompt-assist__toggle,
+  .prompt-assist__action,
+  .prompt-assist__apply-all,
+  .prompt-assist__field-apply,
+  .prompt-assist__close,
+  .cc-alert-modal__button,
+  .cc-alert-modal__close,
+  .card-delete-btn,
+  .card-edit-btn
+) {
+  --chat-button-base: var(--primary-color);
+  --chat-button-accent: var(--primary-hover, #15a86b);
+  --chat-button-shadow-color: rgba(15, 122, 81, 0.22);
+  background:
+    var(--chat-button-sheen),
+    linear-gradient(135deg, var(--chat-button-base) 0%, var(--chat-button-accent) 100%);
+  box-shadow:
+    0 14px 24px var(--chat-button-shadow-color),
+    var(--chat-button-edge-highlight);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+body.chat-page :where(
+  .task-detail-toggle,
+  .task-detail-modal-close,
+  .new-modal-close-btn,
+  .chat-share-close-btn,
+  .copy-btn,
+  .memo-save-btn,
+  .scroll-to-bottom-btn,
+  .model-select-trigger,
+  .model-select-option,
+  .prompt-assist__action,
+  .prompt-assist__field-apply,
+  .prompt-assist__close,
+  .cc-alert-modal__close,
+  .custom-modal-close
+) {
+  border-color: transparent;
+}
+
+body.chat-page :where(.primary-button, .new-chat-btn, #auth-buttons .auth-btn, #send-btn, .submit-btn, .custom-btn-primary) {
+  color: #ffffff;
+}
+
+body.chat-page :where(
+  .task-detail-toggle,
+  .task-detail-modal-close,
+  .new-modal-close-btn,
+  .custom-modal-close,
+  .chat-share-close-btn,
+  .copy-btn,
+  .memo-save-btn,
+  .scroll-to-bottom-btn,
+  .model-select-trigger,
+  .model-select-option,
+  .prompt-assist__action,
+  .prompt-assist__field-apply,
+  .prompt-assist__close,
+  .cc-alert-modal__close
+) {
+  --chat-button-base: rgba(255, 255, 255, 0.98);
+  --chat-button-accent: rgba(239, 247, 242, 0.98);
+  --chat-button-shadow-color: rgba(15, 23, 42, 0.12);
+}
+
+body.chat-page .icon-button {
+  --chat-button-base: rgba(255, 255, 255, 0.22);
+  --chat-button-accent: rgba(255, 255, 255, 0.12);
+  --chat-button-shadow-color: rgba(7, 21, 17, 0.2);
+}
+
+body.chat-page .chat-history-load-more-btn {
+  --chat-button-base: rgba(25, 195, 125, 0.16);
+  --chat-button-accent: rgba(25, 195, 125, 0.08);
+  --chat-button-shadow-color: rgba(15, 122, 81, 0.16);
+  border-color: rgba(25, 195, 125, 0.2);
+}
+
+body.chat-page .code-block-copy-btn {
+  --chat-button-base: rgba(255, 255, 255, 0.16);
+  --chat-button-accent: rgba(255, 255, 255, 0.06);
+  --chat-button-shadow-color: rgba(15, 23, 42, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+body.chat-page .custom-btn-secondary {
+  --chat-button-base: #6c757d;
+  --chat-button-accent: #5a646c;
+  --chat-button-shadow-color: rgba(75, 85, 99, 0.28);
+}
+
+body.chat-page .cc-alert-modal__button {
+  --chat-button-base: #2563eb;
+  --chat-button-accent: #1d4ed8;
+  --chat-button-shadow-color: rgba(37, 99, 235, 0.28);
+}
+
+body.chat-page .card-delete-btn {
+  --chat-button-base: #dc3545;
+  --chat-button-accent: #b91c1c;
+  --chat-button-shadow-color: rgba(220, 38, 38, 0.26);
+}
+
+body.chat-page .card-edit-btn {
+  --chat-button-base: #007bff;
+  --chat-button-accent: #0b5ed7;
+  --chat-button-shadow-color: rgba(37, 99, 235, 0.24);
+}
+
+body.chat-page #send-btn.send-btn--stop {
+  --chat-button-base: #ef4444;
+  --chat-button-accent: #dc2626;
+  --chat-button-shadow-color: rgba(220, 38, 38, 0.28);
+}
+
+body.chat-page .prompt-assist__toggle,
+body.chat-page .prompt-assist__apply-all,
+body.chat-page .prompt-assist__action.is-active {
+  --chat-button-base: var(--assist-hue-1);
+  --chat-button-accent: var(--assist-hue-2);
+  --chat-button-shadow-color: color-mix(in srgb, var(--assist-hue-2) 34%, transparent);
+  color: #ffffff;
+}
+
+body.chat-page .model-select-option.is-selected {
+  --chat-button-base: var(--primary-color);
+  --chat-button-accent: var(--primary-hover, #15a86b);
+  --chat-button-shadow-color: rgba(15, 122, 81, 0.24);
+  color: #ffffff;
+}
+
+body.chat-page .chat-share-close-btn,
+body.chat-page .custom-modal-close,
+body.chat-page .cc-alert-modal__close {
+  color: var(--text-secondary, #6b7280);
+}
+
+body.chat-page .task-detail-modal-close,
+body.chat-page .new-modal-close-btn,
+body.chat-page .prompt-assist__close {
+  color: #225742;
+}
+
+body.chat-page .copy-btn,
+body.chat-page .memo-save-btn,
+body.chat-page .scroll-to-bottom-btn,
+body.chat-page .model-select-trigger,
+body.chat-page .model-select-option {
+  color: var(--text-secondary, #6b7280);
+}
+
+body.chat-page .chat-history-load-more-btn,
+body.chat-page .task-detail-toggle {
+  color: var(--primary-color, #19c37d);
+}
+
+body.chat-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .new-chat-btn,
+  .icon-button,
+  #send-btn,
+  .task-detail-toggle,
+  .task-detail-modal-close,
+  .new-modal-close-btn,
+  .submit-btn,
+  .custom-btn-primary,
+  .custom-btn-secondary,
+  .custom-modal-close,
+  .chat-share-close-btn,
+  .chat-history-load-more-btn,
+  .code-block-copy-btn,
+  .copy-btn,
+  .memo-save-btn,
+  .scroll-to-bottom-btn,
+  .model-select-trigger,
+  .model-select-option,
+  .prompt-assist__toggle,
+  .prompt-assist__action,
+  .prompt-assist__apply-all,
+  .prompt-assist__field-apply,
+  .prompt-assist__close,
+  .cc-alert-modal__button,
+  .cc-alert-modal__close,
+  .card-delete-btn,
+  .card-edit-btn
+):hover:not(:disabled):not(.chat-share-btn--disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 18px 30px color-mix(in srgb, var(--chat-button-shadow-color) 92%, transparent),
+    var(--chat-button-edge-highlight);
+}
+
+body.chat-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .new-chat-btn,
+  .icon-button,
+  #send-btn,
+  .task-detail-toggle,
+  .task-detail-modal-close,
+  .new-modal-close-btn,
+  .submit-btn,
+  .custom-btn-primary,
+  .custom-btn-secondary,
+  .custom-modal-close,
+  .chat-share-close-btn,
+  .chat-history-load-more-btn,
+  .code-block-copy-btn,
+  .copy-btn,
+  .memo-save-btn,
+  .scroll-to-bottom-btn,
+  .model-select-trigger,
+  .model-select-option,
+  .prompt-assist__toggle,
+  .prompt-assist__action,
+  .prompt-assist__apply-all,
+  .prompt-assist__field-apply,
+  .prompt-assist__close,
+  .cc-alert-modal__button,
+  .cc-alert-modal__close,
+  .card-delete-btn,
+  .card-edit-btn
+):active:not(:disabled):not(.chat-share-btn--disabled) {
+  transform: scale(0.97);
+}
+
+body.chat-page .model-select-option:hover,
+body.chat-page .model-select-option:active {
+  transform: none;
+}
+
+body.chat-page .sidebar-toggle:active {
+  transform: scale(0.9);
+}
+
+body.chat-page :where(.prompt-assist__action:disabled, .prompt-assist__apply-all:disabled, .memo-save-btn:disabled) {
+  box-shadow: none;
+}
+
 body.chat-page {
   --scrollbar-track: rgba(226, 235, 230, 0.88);
   --scrollbar-thumb: rgba(25, 195, 125, 0.28);
