@@ -153,6 +153,15 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         border-radius: 16px;
         cursor: pointer;
         transition: transform 0.2s ease, box-shadow 0.25s ease, background 0.25s ease;
+        --auth-button-base: rgba(255, 255, 255, 0.98);
+        --auth-button-accent: rgba(241, 245, 249, 0.98);
+        --auth-button-shadow-color: rgba(7, 20, 14, 0.22);
+        background:
+          radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%),
+          linear-gradient(135deg, var(--auth-button-base) 0%, var(--auth-button-accent) 100%);
+        box-shadow:
+          0 14px 24px var(--auth-button-shadow-color),
+          inset 0 1px 0 rgba(255, 255, 255, 0.24);
       }
 
       .submit-btn,
@@ -164,20 +173,25 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       }
 
       .passkey-btn {
-        background: linear-gradient(135deg, #00ff88, #8cffc1);
+        --auth-button-base: #00ff88;
+        --auth-button-accent: #8cffc1;
+        --auth-button-shadow-color: rgba(0, 255, 136, 0.25);
         color: #072b1a;
-        box-shadow: 0 12px 28px rgba(0, 255, 136, 0.25);
       }
 
       .submit-btn {
-        background: #eafff3;
+        --auth-button-base: #eafff3;
+        --auth-button-accent: #d8f8e6;
+        --auth-button-shadow-color: rgba(9, 43, 26, 0.2);
         color: #0a2a18;
       }
 
       .ghost-btn {
         margin-top: 12px;
         padding: 12px 16px;
-        background: rgba(255, 255, 255, 0.06);
+        --auth-button-base: rgba(255, 255, 255, 0.24);
+        --auth-button-accent: rgba(255, 255, 255, 0.12);
+        --auth-button-shadow-color: rgba(7, 20, 14, 0.22);
         color: var(--text);
         font-weight: 600;
       }
@@ -207,7 +221,9 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         justify-content: center;
         gap: 10px;
         padding: 12px 16px;
-        background: #ffffff;
+        --auth-button-base: #ffffff;
+        --auth-button-accent: #edf2f7;
+        --auth-button-shadow-color: rgba(22, 48, 34, 0.2);
         color: #163022;
         font-weight: 700;
       }

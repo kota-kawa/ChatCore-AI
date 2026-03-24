@@ -993,4 +993,91 @@ body.settings-page,
     width: 100%;   /* 幅いっぱいにして中央寄せを有効化 */
   }
 }
+
+/* Settings ページのボタン質感統一 */
+body.settings-page :where(
+  .settings-back-btn,
+  .change-avatar-btn,
+  .toggle-password-btn,
+  .primary-button,
+  .secondary-button,
+  .prompt-card .btn-warning,
+  .prompt-card .btn-danger,
+  .btn-close,
+  .btn-primary
+) {
+  --settings-button-base: rgba(255, 255, 255, 0.98);
+  --settings-button-accent: rgba(241, 245, 249, 0.98);
+  --settings-button-shadow-color: rgba(15, 23, 42, 0.14);
+  background:
+    var(--cc-button-sheen),
+    linear-gradient(135deg, var(--settings-button-base) 0%, var(--settings-button-accent) 100%) !important;
+  box-shadow:
+    0 14px 24px var(--settings-button-shadow-color),
+    var(--cc-button-edge-highlight);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    border-color 0.2s ease;
+}
+
+body.settings-page :where(
+  .settings-back-btn,
+  .change-avatar-btn,
+  .primary-button,
+  .prompt-card .btn-warning,
+  .btn-primary
+) {
+  --settings-button-base: var(--primary-color);
+  --settings-button-accent: var(--accent-color);
+  --settings-button-shadow-color: rgba(25, 195, 125, 0.26);
+  color: #ffffff !important;
+}
+
+body.settings-page :where(.prompt-card .btn-danger) {
+  --settings-button-base: #ef4444;
+  --settings-button-accent: #dc2626;
+  --settings-button-shadow-color: rgba(220, 38, 38, 0.28);
+  color: #ffffff !important;
+}
+
+body.settings-page :where(.secondary-button, .toggle-password-btn, .btn-close) {
+  color: var(--text-muted);
+}
+
+body.settings-page :where(
+  .settings-back-btn,
+  .change-avatar-btn,
+  .toggle-password-btn,
+  .primary-button,
+  .secondary-button,
+  .prompt-card .btn-warning,
+  .prompt-card .btn-danger,
+  .btn-close,
+  .btn-primary
+):hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 18px 30px color-mix(in srgb, var(--settings-button-shadow-color) 92%, transparent),
+    var(--cc-button-edge-highlight);
+}
+
+body.settings-page :where(
+  .settings-back-btn,
+  .change-avatar-btn,
+  .toggle-password-btn,
+  .primary-button,
+  .secondary-button,
+  .prompt-card .btn-warning,
+  .prompt-card .btn-danger,
+  .btn-close,
+  .btn-primary
+):active:not(:disabled) {
+  transform: scale(0.97);
+}
 /* END inlined: public/static/css/pages/user_settings/user_settings.css */

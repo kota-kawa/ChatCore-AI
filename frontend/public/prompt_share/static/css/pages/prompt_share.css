@@ -1794,3 +1794,166 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     padding: 0.92rem;
   }
 }
+
+/* Prompt Share 全体のボタン質感をトップページの＋ボタン系に統一 */
+.prompt-share-page :where(
+  #auth-buttons .auth-btn,
+  .hero-action,
+  .search-box button,
+  .category-card,
+  .prompt-action-btn,
+  .meatball-menu,
+  .close-btn,
+  .prompt-image-clear-btn,
+  .submit-btn,
+  .new-prompt-btn,
+  .prompt-actions-dropdown .dropdown-item
+) {
+  --ps-button-base: rgba(255, 255, 255, 0.98);
+  --ps-button-accent: rgba(241, 245, 249, 0.98);
+  --ps-button-shadow-color: rgba(15, 23, 42, 0.14);
+  background:
+    var(--cc-button-sheen),
+    linear-gradient(135deg, var(--ps-button-base) 0%, var(--ps-button-accent) 100%);
+  box-shadow:
+    0 14px 24px var(--ps-button-shadow-color),
+    var(--cc-button-edge-highlight);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.prompt-share-page :where(
+  .submit-btn,
+  .new-prompt-btn,
+  .search-box button
+) {
+  --ps-button-base: var(--ps-primary);
+  --ps-button-accent: var(--ps-primary-strong);
+  --ps-button-shadow-color: rgba(24, 90, 188, 0.28);
+  color: #ffffff;
+}
+
+.prompt-share-page .hero-action--secondary {
+  --ps-button-base: rgba(255, 255, 255, 0.32);
+  --ps-button-accent: rgba(255, 255, 255, 0.16);
+  --ps-button-shadow-color: rgba(15, 23, 42, 0.24);
+}
+
+.prompt-share-page .category-card.active,
+.prompt-share-page .meatball-menu[aria-expanded="true"] {
+  --ps-button-base: rgba(234, 243, 255, 0.98);
+  --ps-button-accent: #ffffff;
+  --ps-button-shadow-color: rgba(56, 111, 172, 0.18);
+}
+
+.prompt-share-page .prompt-action-btn.like-btn.liked {
+  --ps-button-base: rgba(217, 48, 37, 0.92);
+  --ps-button-accent: rgba(185, 28, 28, 0.92);
+  --ps-button-shadow-color: rgba(220, 38, 38, 0.24);
+  color: #ffffff;
+}
+
+.prompt-share-page .prompt-action-btn.bookmark-btn.bookmarked {
+  --ps-button-base: rgba(26, 122, 74, 0.9);
+  --ps-button-accent: rgba(22, 101, 52, 0.9);
+  --ps-button-shadow-color: rgba(22, 163, 74, 0.24);
+  color: #ffffff;
+}
+
+.prompt-share-page :where(
+  #auth-buttons .auth-btn,
+  .hero-action,
+  .category-card,
+  .prompt-action-btn,
+  .meatball-menu,
+  .close-btn,
+  .prompt-image-clear-btn,
+  .submit-btn,
+  .new-prompt-btn,
+  .prompt-actions-dropdown .dropdown-item
+):hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 18px 30px color-mix(in srgb, var(--ps-button-shadow-color) 92%, transparent),
+    var(--cc-button-edge-highlight);
+}
+
+.prompt-share-page :where(
+  #auth-buttons .auth-btn,
+  .hero-action,
+  .category-card,
+  .prompt-action-btn,
+  .meatball-menu,
+  .close-btn,
+  .prompt-image-clear-btn,
+  .submit-btn,
+  .new-prompt-btn,
+  .prompt-actions-dropdown .dropdown-item
+):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.prompt-share-page .search-box button:hover:not(:disabled) {
+  transform: translateY(-50%) translateY(-1px);
+}
+
+.prompt-share-page .search-box button:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-share-page :where(
+    #auth-buttons .auth-btn,
+    .hero-action,
+    .search-box button,
+    .category-card,
+    .prompt-action-btn,
+    .meatball-menu,
+    .close-btn,
+    .prompt-image-clear-btn,
+    .submit-btn,
+    .new-prompt-btn,
+    .prompt-actions-dropdown .dropdown-item
+  ) {
+    transition-duration: 0.01ms !important;
+  }
+
+  .prompt-share-page :where(
+    #auth-buttons .auth-btn,
+    .hero-action,
+    .category-card,
+    .prompt-action-btn,
+    .meatball-menu,
+    .close-btn,
+    .prompt-image-clear-btn,
+    .submit-btn,
+    .new-prompt-btn,
+    .prompt-actions-dropdown .dropdown-item
+  ):hover:not(:disabled),
+  .prompt-share-page :where(
+    #auth-buttons .auth-btn,
+    .hero-action,
+    .category-card,
+    .prompt-action-btn,
+    .meatball-menu,
+    .close-btn,
+    .prompt-image-clear-btn,
+    .submit-btn,
+    .new-prompt-btn,
+    .prompt-actions-dropdown .dropdown-item
+  ):active:not(:disabled) {
+    transform: none;
+  }
+
+  .prompt-share-page .search-box button:hover:not(:disabled),
+  .prompt-share-page .search-box button:active:not(:disabled) {
+    transform: translateY(-50%);
+  }
+}

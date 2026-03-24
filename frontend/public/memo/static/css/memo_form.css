@@ -1128,3 +1128,68 @@ textarea.memo-control {
     right: 0.78rem;
   }
 }
+
+/* Memo ページのボタン質感統一 */
+body.memo-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .memo-item__share,
+  .memo-modal__close,
+  .memo-share-modal__close,
+  .memo-share-modal__sns a
+) {
+  --memo-button-base: rgba(255, 255, 255, 0.98);
+  --memo-button-accent: rgba(255, 249, 240, 0.98);
+  --memo-button-shadow-color: rgba(41, 24, 6, 0.14);
+  background:
+    var(--cc-button-sheen),
+    linear-gradient(135deg, var(--memo-button-base) 0%, var(--memo-button-accent) 100%);
+  box-shadow:
+    0 14px 24px var(--memo-button-shadow-color),
+    var(--cc-button-edge-highlight);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    border-color 0.2s ease;
+}
+
+body.memo-page :where(.primary-button, #auth-buttons .auth-btn) {
+  --memo-button-base: var(--memo-amber);
+  --memo-button-accent: var(--memo-amber-strong);
+  --memo-button-shadow-color: rgba(217, 119, 6, 0.24);
+  color: #fffdf8;
+}
+
+body.memo-page :where(.memo-item__share, .memo-modal__close, .memo-share-modal__close, .memo-share-modal__sns a) {
+  color: #8f5a17;
+}
+
+body.memo-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .memo-item__share,
+  .memo-modal__close,
+  .memo-share-modal__close,
+  .memo-share-modal__sns a
+):hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 18px 30px color-mix(in srgb, var(--memo-button-shadow-color) 92%, transparent),
+    var(--cc-button-edge-highlight);
+}
+
+body.memo-page :where(
+  #auth-buttons .auth-btn,
+  .primary-button,
+  .memo-item__share,
+  .memo-modal__close,
+  .memo-share-modal__close,
+  .memo-share-modal__sns a
+):active:not(:disabled) {
+  transform: scale(0.97);
+}

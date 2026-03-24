@@ -17,39 +17,40 @@ tpl.innerHTML = `
       user-select: none;
       --cc-user-btn-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
       --cc-user-btn-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      --cc-user-btn-base: #19c37d;
+      --cc-user-btn-accent: #15a86b;
+      --cc-user-btn-shadow-color: rgba(15, 122, 81, 0.22);
     }
     .btn {
-      background: transparent;
+      background:
+        var(--cc-user-btn-sheen),
+        linear-gradient(135deg, var(--cc-user-btn-base) 0%, var(--cc-user-btn-accent) 100%);
       border: none;
       cursor: pointer;
       padding: .5rem;
       border-radius: 50%;
-      transition: background-color .15s;
+      transition: transform .2s ease, filter .2s ease, box-shadow .2s ease, background .2s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-    }
-    :host([data-chat-page="true"]) .btn {
-      background:
-        var(--cc-user-btn-sheen),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 247, 242, 0.98) 100%);
-      transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
       box-shadow:
-        0 14px 24px rgba(15, 23, 42, 0.12),
+        0 14px 24px var(--cc-user-btn-shadow-color),
         var(--cc-user-btn-edge-highlight);
     }
-    .btn:hover {
-      background: rgba(0,0,0,.06);
+    :host([data-chat-page="true"]) .btn {
+      --cc-user-btn-base: rgba(255, 255, 255, 0.98);
+      --cc-user-btn-accent: rgba(239, 247, 242, 0.98);
+      --cc-user-btn-shadow-color: rgba(15, 23, 42, 0.12);
     }
-    :host([data-chat-page="true"]) .btn:hover {
-      background:
-        var(--cc-user-btn-sheen),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 247, 242, 0.98) 100%);
+    .btn:hover {
       transform: translateY(-1px);
       filter: saturate(1.06);
       box-shadow:
-        0 18px 30px rgba(15, 23, 42, 0.16),
+        0 18px 30px color-mix(in srgb, var(--cc-user-btn-shadow-color) 92%, transparent),
         var(--cc-user-btn-edge-highlight);
+    }
+    .btn:active {
+      transform: scale(0.97);
     }
     .avatar {
       width: 2.2rem;

@@ -285,3 +285,55 @@ body.prompt-manage-page,
     gap: 0.75rem;
   }
 }
+
+/* Prompt Manage のボタン質感統一 */
+.prompt-manage-page :where(.edit-btn, .delete-btn, .btn-primary, .btn-close) {
+  --pm-button-base: rgba(255, 255, 255, 0.98);
+  --pm-button-accent: rgba(241, 245, 249, 0.98);
+  --pm-button-shadow-color: rgba(15, 23, 42, 0.14);
+  background:
+    var(--cc-button-sheen),
+    linear-gradient(135deg, var(--pm-button-base) 0%, var(--pm-button-accent) 100%);
+  box-shadow:
+    0 14px 24px var(--pm-button-shadow-color),
+    var(--cc-button-edge-highlight);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.prompt-manage-page :where(.edit-btn, .btn-primary) {
+  --pm-button-base: var(--ps-primary-color);
+  --pm-button-accent: var(--ps-accent-color);
+  --pm-button-shadow-color: rgba(25, 195, 125, 0.26);
+  color: #ffffff;
+}
+
+.prompt-manage-page .delete-btn {
+  --pm-button-base: #ef4444;
+  --pm-button-accent: #dc2626;
+  --pm-button-shadow-color: rgba(220, 38, 38, 0.28);
+  color: #ffffff;
+}
+
+.prompt-manage-page .btn-close {
+  --pm-button-base: rgba(255, 255, 255, 0.98);
+  --pm-button-accent: rgba(241, 245, 249, 0.98);
+  --pm-button-shadow-color: rgba(15, 23, 42, 0.12);
+}
+
+.prompt-manage-page :where(.edit-btn, .delete-btn, .btn-primary, .btn-close):hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+  box-shadow:
+    0 18px 30px color-mix(in srgb, var(--pm-button-shadow-color) 92%, transparent),
+    var(--cc-button-edge-highlight);
+}
+
+.prompt-manage-page :where(.edit-btn, .delete-btn, .btn-primary, .btn-close):active:not(:disabled) {
+  transform: scale(0.97);
+}

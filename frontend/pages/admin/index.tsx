@@ -101,7 +101,7 @@ export default function AdminDashboard({
   const inputClass =
     "w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100";
   const buttonClass =
-    "rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
+    "cc-texture-btn cc-texture-btn--indigo rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
   const flashTone = (category: string) => {
     if (category === "success") {
       return "border-emerald-400/70 bg-emerald-50 text-emerald-700";
@@ -177,13 +177,13 @@ export default function AdminDashboard({
             </div>
             <nav className="flex flex-wrap gap-3">
               <a
-                className="inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50"
+                className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50"
                 href="/admin"
               >
                 管理トップへ戻る
               </a>
               <a
-                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+                className="cc-texture-btn cc-texture-btn--light inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
                 href="/admin/logout"
                 onClick={handleLogout}
               >
@@ -228,7 +228,7 @@ export default function AdminDashboard({
                     >
                       <span className="font-semibold text-slate-700">{table}</span>
                       <a
-                        className="inline-flex items-center rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                        className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo inline-flex items-center rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
                         href={`/admin?table=${encodeURIComponent(table)}`}
                       >
                         開く
@@ -252,7 +252,7 @@ export default function AdminDashboard({
                 </div>
                 <button
                   type="submit"
-                  className="rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-200/60 transition hover:-translate-y-0.5 hover:shadow-rose-300/70"
+                  className="cc-texture-btn cc-texture-btn--danger rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-200/60 transition hover:-translate-y-0.5 hover:shadow-rose-300/70"
                 >
                   削除
                 </button>
