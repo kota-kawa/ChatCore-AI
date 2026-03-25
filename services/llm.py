@@ -315,9 +315,11 @@ def get_openai_response_stream(
             input=sanitized_messages,
             max_output_tokens=LLM_MAX_TOKENS,
         ) as stream:
-            for delta in stream.text_deltas:
-                if delta:
-                    yield delta
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    delta = event.delta
+                    if delta:
+                        yield delta
     except Exception as exc:
         logger.error("OpenAI Responses streaming API call failed (%s).", exc.__class__.__name__)
         raise LlmProviderError("OpenAI Responses streaming API call failed.") from exc
