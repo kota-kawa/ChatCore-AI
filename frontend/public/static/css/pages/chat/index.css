@@ -201,6 +201,43 @@ body.chat-page .model-select-option {
   color: var(--text-secondary, #6b7280);
 }
 
+/* Model select is informational UI, so keep high-contrast neutral styling. */
+body.chat-page .model-select-trigger {
+  background: #ffffff !important;
+  color: #1f2d28 !important;
+  border: 1px solid #d3e3dc !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.chat-page .model-select.is-open .model-select-trigger,
+body.chat-page .model-select-trigger:focus {
+  border-color: #1ba36a !important;
+  box-shadow: 0 0 0 3px rgba(27, 163, 106, 0.2), 0 10px 22px rgba(15, 23, 42, 0.1) !important;
+}
+
+body.chat-page .model-select-menu {
+  background: #f8fcfa;
+  border: 1px solid #cfe3da;
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.14);
+  padding: 0.45rem;
+}
+
+body.chat-page .model-select-option {
+  background: #ffffff !important;
+  color: #1f2d28 !important;
+  border: 1px solid #e1ece7 !important;
+  box-shadow: none !important;
+}
+
+body.chat-page .model-select-option + .model-select-option {
+  margin-top: 0.4rem;
+}
+
+body.chat-page .model-select-option:hover {
+  background: #edf8f2 !important;
+  border-color: #b8dccb !important;
+}
+
 body.chat-page .chat-history-load-more-btn,
 body.chat-page .task-detail-toggle {
   color: var(--primary-color, #19c37d);
