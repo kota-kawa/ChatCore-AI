@@ -54,8 +54,8 @@ Chat-Core-AI is a FastAPI-based AI chat application with email-based authenticat
 
 ```sh
 # 1) Clone the repository
-git clone https://github.com/kota-kawa/Chat-Core.git
-cd Chat-Core
+git clone https://github.com/kota-kawa/ChatCore-AI.git
+cd ChatCore-AI
 
 # 2) Create a .env file with required environment variables
 # Example:
@@ -258,8 +258,8 @@ Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メー
 
 ```sh
 # 1) リポジトリを取得
-git clone https://github.com/kota-kawa/Chat-Core.git
-cd Chat-Core
+git clone https://github.com/kota-kawa/ChatCore-AI.git
+cd ChatCore-AI
 
 # 2) .env に必要な環境変数を設定
 # GROQ_API_KEY=xxxxx
