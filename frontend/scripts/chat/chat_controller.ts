@@ -643,6 +643,8 @@ function sendMessage() {
 async function generateResponse(message: string, aiModel: string) {
   if (!window.chatMessages) return;
 
+  // 生成中フラグと AbortController を同期管理し、重複送信とリークを防ぐ
+  // Keep generation state and AbortController in sync to avoid duplicate sends/leaks.
   setGeneratingState(true);
   const abortController = new AbortController();
   currentAbortController = abortController;
@@ -668,6 +670,8 @@ async function generateResponse(message: string, aiModel: string) {
     });
     const contentType = response.headers.get("content-type") || "";
 
+    // SSE応答なら逐次描画、JSON応答なら一括描画へ分岐する
+    // Branch by response type: SSE incremental render vs JSON single render.
     if (contentType.includes("text/event-stream")) {
       await consumeStreamingChatResponse(response, thinkingWrap);
       return;
@@ -705,6 +709,8 @@ async function generateResponse(message: string, aiModel: string) {
 
 /* ページ復帰時にバックグラウンド生成ジョブへ再接続してストリーミング表示する */
 async function connectToGenerationStream(roomId: string): Promise<void> {
+  // 画面再表示時の途中生成を復元するため、サーバーの既存ストリームへ接続し直す
+  // Reconnect to server-side generation stream to resume in-progress output after return.
   setGeneratingState(true);
   const abortController = new AbortController();
   currentAbortController = abortController;

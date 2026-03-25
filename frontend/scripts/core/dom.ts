@@ -1,5 +1,6 @@
 // dom.ts
 // 画面内で使用するDOM要素をまとめて取得し、グローバル変数として window に登録
+// Collect shared DOM handles once and expose them on window for legacy module interop.
 
 // セットアップ画面関連
 const setupContainer = document.getElementById("setup-container");
@@ -19,6 +20,8 @@ const newChatBtn = document.getElementById("new-chat-btn");
 const chatRoomListEl = document.getElementById("chat-room-list");
 
 // グローバル登録
+// 既存スクリプト間の依存を保つため、window へ明示的に公開する
+// Explicitly publish to window to preserve cross-script compatibility.
 window.setupContainer = setupContainer;
 window.chatContainer = chatContainer;
 window.chatMessages = chatMessages;

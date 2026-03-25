@@ -17,6 +17,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
     return;
   }
 
+  // マークアップは毎回同一テンプレートで差し込み、対象別に panelId を分離する
+  // Inject a consistent template and isolate panel IDs per target context.
   const panelId = `promptAssistPanel-${target}`;
   root.innerHTML = createPromptAssistMarkup(panelId, target);
 
@@ -65,6 +67,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
   let requestVersion = 0;
 
   const syncExpandedState = (expanded: boolean) => {
+    // 開閉状態は DOM/class/aria を同時更新してアクセシビリティと表示を揃える
+    // Keep DOM/class/aria in sync for consistent visibility and accessibility.
     isExpanded = expanded;
     containerEl.classList.toggle("is-open", expanded);
     panelEl.hidden = !expanded;
@@ -122,6 +126,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
   };
 
   const renderFieldStateSummary = () => {
+    // 入力状況を集計して進捗メーターと状態カードへ反映する
+    // Aggregate current field fill state into progress meter and summary cards.
     const values = collectFieldValues();
     const entries = Object.entries(fields).filter(([, fieldConfig]) =>
       Boolean(fieldConfig?.element || fieldConfig?.getValue)
@@ -141,6 +147,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
   };
 
   const invalidatePendingResponse = () => {
+    // requestVersion を進めて古いレスポンスを無効化する
+    // Bump requestVersion so stale async responses are ignored.
     requestVersion += 1;
     setLoading(false);
     setPendingAction(null);
@@ -192,6 +200,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
     response: PromptAssistResponse,
     currentValues: Partial<Record<PromptAssistFieldName, string>>
   ) => {
+    // 既存値と提案値を比較カードで可視化し、部分適用可能な形で提示する
+    // Visualize current vs suggested values as per-field cards for selective apply.
     openPanel();
     latestSuggestion = response.suggested_fields || {};
     latestSuggestionModes = response.suggestion_modes || {};
@@ -244,6 +254,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
   };
 
   const runPromptAssist = async (action: PromptAssistAction) => {
+    // 現在フォームのスナップショットを送信し、結果は最新リクエストのみ反映する
+    // Submit current field snapshot and apply only the latest request result.
     const currentValues = collectFieldValues();
     const currentRequestVersion = ++requestVersion;
 

@@ -13,6 +13,8 @@ async def run_blocking(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # Offload blocking sync call to threadpool to keep the event loop responsive.
     loop = asyncio.get_running_loop()
     result_future: asyncio.Future[T] = loop.create_future()
+    # kwargs 付き呼び出しも同じ経路で扱えるよう partial で束ねる
+    # Bind positional/keyword args via partial for uniform thread execution.
     bound = partial(func, *args, **kwargs) if kwargs else partial(func, *args)
 
     def runner() -> None:

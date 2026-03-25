@@ -6,6 +6,8 @@ type ChatRoom = {
   title?: string;
 };
 
+// ルーム一覧は毎回サーバーの正を取得して再描画する
+// Always re-fetch canonical room list from server before rendering sidebar.
 /* サイドバーにルーム一覧を描画 */
 function loadChatRooms() {
   fetch("/api/get_chat_rooms")
@@ -137,6 +139,8 @@ function decorateMenuItem(el: HTMLElement, color: string, hover: string) {
 
 /* ルーム切替 */
 function switchChatRoom(roomId: string) {
+  // 選択状態をローカル保持しつつ、履歴はローカル→サーバーの順で復元する
+  // Persist selected room locally, then restore history from local cache and server.
   window.currentChatRoomId = roomId;
   localStorage.setItem("currentChatRoomId", roomId);
   window.showChatInterface?.();
@@ -172,6 +176,8 @@ function deleteChatRoom(roomId: string) {
     .then((data) => {
       if (data.error) alert("削除失敗: " + data.error);
       else {
+      // 現在開いているルーム削除時はUI状態も同時に初期化する
+      // Reset active room UI state when deleting the currently opened room.
       if (roomId === window.currentChatRoomId) {
         window.currentChatRoomId = null;
         if (window.chatMessages) window.chatMessages.innerHTML = "";

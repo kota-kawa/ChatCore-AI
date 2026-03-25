@@ -7,6 +7,8 @@ import { initPromptPostForm } from "./post_form";
 import { initPromptShareDialog } from "./prompt_share_dialog";
 
 function initPromptSharePage(attempt = 0) {
+  // SSR/遅延描画時に備え、必要要素が出るまで短時間リトライする
+  // Retry briefly until required DOM appears (for SSR/deferred rendering timing).
   const promptContainer = document.querySelector(".prompt-cards") as HTMLElement | null;
   if (!promptContainer) {
     if (attempt < 10) {
@@ -15,6 +17,8 @@ function initPromptSharePage(attempt = 0) {
     return;
   }
   if (promptContainer.dataset.psInitialized === "true") {
+    // 二重初期化防止
+    // Guard against duplicate page initialization.
     return;
   }
   promptContainer.dataset.psInitialized = "true";
@@ -36,6 +40,8 @@ function initPromptSharePage(attempt = 0) {
   const openModal = modalController.openModal;
   const closeModal = modalController.closeModal;
 
+  // 新規投稿アイコンの回転アニメーションを毎回確実に再トリガーする
+  // Force-restart the compose icon animation on each trigger.
   const triggerNewPromptIconRotation = () => {
     if (!newPromptIcon) {
       return;
@@ -107,6 +113,8 @@ function initPromptSharePage(attempt = 0) {
 
   const openComposerModal = () => {
     if (!postModal) return;
+    // 投稿機能は認証必須
+    // Posting prompts requires authenticated user state.
     if (!authState.isLoggedIn()) {
       alert("プロンプトを投稿するにはログインが必要です。");
       return;

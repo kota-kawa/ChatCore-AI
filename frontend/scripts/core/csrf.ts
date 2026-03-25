@@ -1,5 +1,7 @@
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// CSRF トークン取得の多重リクエストを避けるため Promise を共有する
+// Share a single in-flight token promise to avoid duplicate CSRF fetches.
 let csrfTokenPromise: Promise<string> | null = null;
 let csrfProtectionInitialized = false;
 
@@ -89,6 +91,8 @@ export function ensureCsrfProtection(): void {
 
   const originalFetch = window.fetch.bind(window);
 
+  // 既存 fetch をラップし、同一オリジンの unsafe メソッドだけ CSRF ヘッダーを付与する
+  // Wrap fetch and attach CSRF headers only for same-origin unsafe methods.
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const createBaseRequest = () => new Request(input, init);
     const baseRequest = createBaseRequest();

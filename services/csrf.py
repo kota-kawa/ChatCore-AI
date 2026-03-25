@@ -13,6 +13,8 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 def get_or_create_csrf_token(request: Request) -> str:
     session = request.session
+    # 既存トークンがあれば再利用し、無ければ新規発行して保存する
+    # Reuse existing token; otherwise issue and persist a new one.
     token = session.get(CSRF_SESSION_KEY)
     if isinstance(token, str) and token:
         return token
@@ -23,6 +25,8 @@ def get_or_create_csrf_token(request: Request) -> str:
 
 
 async def require_csrf(request: Request) -> None:
+    # 安全なメソッドでは検証不要として早期リターンする
+    # Skip CSRF checks for safe HTTP methods.
     if request.method.upper() not in UNSAFE_METHODS:
         return
 

@@ -438,6 +438,8 @@ def _paginate_ephemeral_chat_history(
 
 @chat_bp.post("/api/chat", name="chat.chat")
 async def chat(request: Request):
+    # 1リクエストで「入力検証 → 履歴取得 → LLM応答 → 永続化」までを一貫処理する
+    # Handle validation, history load, LLM response, and persistence in one request flow.
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
@@ -475,6 +477,8 @@ async def chat(request: Request):
     sid = None
     user_id = session.get("user_id")
     if "user_id" in session:
+        # ログインユーザーはDB永続履歴、ゲストは ephemeral_store を利用する
+        # Use DB-backed history for signed-in users and ephemeral store for guests.
         try:
             payload, status_code = await run_blocking(
                 validate_room_owner,
@@ -561,6 +565,8 @@ async def chat(request: Request):
         )
 
     if is_streaming_model(model):
+        # ストリーミング対応モデルはバックグラウンド生成ジョブ + SSE で返す
+        # For streaming-capable models, run background generation and return via SSE.
         persist_response = (
             partial(save_message_to_db, chat_room_id, sender="assistant")
             if "user_id" in session
@@ -603,6 +609,8 @@ async def chat(request: Request):
 
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")
 async def chat_stop(request: Request):
+    # 生成中ジョブを停止する前に、対象ルームのアクセス権を再検証する
+    # Re-validate room access before cancelling in-flight generation jobs.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
@@ -642,6 +650,8 @@ async def chat_stop(request: Request):
 
 @chat_bp.get("/api/get_chat_history", name="chat.get_chat_history")
 async def get_chat_history(request: Request):
+    # 履歴取得は常にページング形式で返し、クライアント側の遅延読み込みに合わせる
+    # Always return paginated history payloads for client-side incremental loading.
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
@@ -686,6 +696,8 @@ async def get_chat_history(request: Request):
 
 @chat_bp.get("/api/chat_generation_stream", name="chat.chat_generation_stream")
 async def chat_generation_stream(request: Request):
+    # 既存生成ジョブへ再接続するためのSSEエンドポイント
+    # SSE endpoint for reconnecting to an existing generation job.
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:

@@ -18,6 +18,8 @@ logger = logging.getLogger("chatcore.request")
 
 
 def get_request_context() -> dict[str, str | None]:
+    # ContextVar から現在リクエスト情報を取り出す
+    # Read current request metadata from ContextVars.
     return {
         "request_id": _request_id_var.get(),
         "request_method": _request_method_var.get(),
@@ -28,6 +30,8 @@ def get_request_context() -> dict[str, str | None]:
 class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         context = get_request_context()
+        # ログ整形時に未設定項目は "-" を入れて欠損を明示する
+        # Fill missing fields with "-" to keep log output explicit and stable.
         record.request_id = context["request_id"] or "-"
         record.request_method = context["request_method"] or "-"
         record.request_path = context["request_path"] or "-"
@@ -40,10 +44,14 @@ class RequestContextMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
+            # HTTP 以外 (websocket/lifespan など) はそのまま委譲する
+            # Pass through non-HTTP scopes (websocket/lifespan, etc.).
             await self.app(scope, receive, send)
             return
 
         start_time = time.perf_counter()
+        # 受信ヘッダーの Request ID を優先し、無ければサーバー側で採番する
+        # Prefer inbound request ID header and generate one when absent.
         request_id = _extract_request_id(scope) or str(uuid.uuid4())
         method = scope.get("method") or "-"
         path = scope.get("path") or "-"
@@ -74,6 +82,8 @@ class RequestContextMiddleware:
                     "duration_ms": duration_ms,
                 },
             )
+            # 応答後は ContextVar を必ず戻し、別リクエストへの値漏れを防ぐ
+            # Always reset ContextVars to avoid leaking data to other requests.
             _request_id_var.reset(request_id_token)
             _request_method_var.reset(method_token)
             _request_path_var.reset(path_token)

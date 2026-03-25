@@ -9,6 +9,8 @@ from openai import OpenAI
 
 
 def _get_positive_int_env(name: str, default: int) -> int:
+    # 正の整数のみ採用し、無効値は安全側で既定値へ戻す
+    # Accept only positive integers and fallback to default on invalid values.
     raw = os.environ.get(name)
     if raw is None:
         return default
@@ -46,6 +48,8 @@ _SENSITIVE_ASSIGNMENT_PATTERNS = (
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
+# サポート対象モデルを明示し、入力バリデーションの単一情報源にする
+# Keep supported model names explicit as the single validation source.
 # Valid model names
 VALID_GEMINI_MODELS = {
     "gemini-2.5-flash",
@@ -55,6 +59,8 @@ VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_20B_MODEL}
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
 gemini_api_key = os.environ.get("Gemini_API_KEY", "")
 
+# APIキーがある場合のみクライアントを構築し、未設定時は None を保持する
+# Initialize provider clients only when corresponding API keys are present.
 groq_client = (
     OpenAI(
         api_key=groq_api_key,
@@ -117,6 +123,8 @@ def _raise_invalid_model_error(model_name: str) -> None:
 
 
 def _redact_sensitive_text(value: str) -> str:
+    # 既知トークン形式と key=value 形式の両方を伏せ字化する
+    # Redact both known token patterns and key=value style secrets.
     redacted = value
     for pattern in _SENSITIVE_VALUE_PATTERNS:
         redacted = pattern.sub(REDACTED_SENSITIVE_VALUE, redacted)
