@@ -100,7 +100,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
     def test_chat_returns_streaming_response_for_groq(self):
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "default", "model": "openai/gpt-oss-20b"},
+            {"message": "こんにちは", "chat_room_id": "default", "model": "openai/gpt-oss-120b"},
             session={},
         )
 
@@ -130,7 +130,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 "guest:sid-1:default",
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 persist_response=lambda response: persisted_messages.append(
                     ("sid-1", "default", "assistant", response)
                 ),
@@ -162,7 +162,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 job_key,
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 persist_response=lambda _: None,
             )
 
@@ -183,7 +183,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             start_generation_job(
                 job_key,
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 persist_response=lambda _: None,
             )
 
@@ -191,7 +191,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 start_generation_job(
                     job_key,
                     conversation_messages=[{"role": "user", "content": "再送"}],
-                    model="openai/gpt-oss-20b",
+                    model="openai/gpt-oss-120b",
                     persist_response=lambda _: None,
                 )
 
@@ -244,7 +244,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             yield "了"
 
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "room-1", "model": "openai/gpt-oss-20b"},
+            {"message": "こんにちは", "chat_room_id": "room-1", "model": "openai/gpt-oss-120b"},
             session=session,
         )
 
@@ -337,7 +337,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 job_key,
                 conversation_messages=[{"role": "user", "content": "test"}],
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 persist_response=lambda _: None,
             )
             # consume all events so the job finishes
@@ -368,7 +368,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 job_key,
                 conversation_messages=[{"role": "user", "content": "test"}],
-                model="openai/gpt-oss-20b",
+                model="openai/gpt-oss-120b",
                 persist_response=lambda _: None,
             )
             # consume all events so the job finishes

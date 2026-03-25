@@ -61,7 +61,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                             "title": "丁寧なメール返信テンプレート",
                             "prompt_content": "顧客への丁寧な返信文を作成してください。",
                         },
-                        "model": "openai/gpt-oss-20b",
+                        "model": "openai/gpt-oss-120b",
                     },
                 ):
                     response = asyncio.run(prompt_assist(request))
@@ -69,7 +69,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["suggested_fields"]["title"], "丁寧なメール返信テンプレート")
-        self.assertEqual(payload["model"], "openai/gpt-oss-20b")
+        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
 
     def test_prompt_assist_returns_429_when_daily_quota_exceeded(self):
         request = make_request(

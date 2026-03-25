@@ -53,7 +53,7 @@ export function createPromptAssistMarkup(panelId: string, target: PromptAssistTa
             <p class="prompt-assist__lead">${targetMeta.lead}</p>
           </div>
           <div class="prompt-assist__hero-actions">
-            <span class="prompt-assist__model">GPT OSS 20B</span>
+            <span class="prompt-assist__model">GPT OSS 120B</span>
             <button type="button" class="prompt-assist__close" data-assist-close aria-label="AI入力補助を閉じる">
               <i class="bi bi-x-lg"></i>
             </button>

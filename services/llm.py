@@ -20,8 +20,10 @@ def _get_positive_int_env(name: str, default: int) -> int:
         return default
     return value if value > 0 else default
 
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
+GPT_OSS_20B_LEGACY_MODEL = "openai/gpt-oss-20b"
+GPT_5_MINI_2025_08_07_MODEL = "gpt-5-mini-2025-08-07"
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
@@ -54,10 +56,12 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 VALID_GEMINI_MODELS = {
     "gemini-2.5-flash",
 }
-VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_20B_MODEL}
+VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_120B_MODEL, GPT_OSS_20B_LEGACY_MODEL}
+VALID_OPENAI_MODELS = {GPT_5_MINI_2025_08_07_MODEL}
 
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
 gemini_api_key = os.environ.get("Gemini_API_KEY", "")
+openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
 # APIキーがある場合のみクライアントを構築し、未設定時は None を保持する
 # Initialize provider clients only when corresponding API keys are present.
@@ -79,6 +83,15 @@ gemini_client = (
         max_retries=LLM_MAX_RETRIES,
     )
     if gemini_api_key
+    else None
+)
+openai_client = (
+    OpenAI(
+        api_key=openai_api_key,
+        timeout=LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=LLM_MAX_RETRIES,
+    )
+    if openai_api_key
     else None
 )
 logger = logging.getLogger(__name__)
@@ -110,7 +123,7 @@ class LlmInvalidModelError(LlmServiceError):
 
 
 def _raise_invalid_model_error(model_name: str) -> None:
-    valid_models = sorted(VALID_GEMINI_MODELS | VALID_GROQ_MODELS)
+    valid_models = sorted(VALID_GEMINI_MODELS | VALID_GROQ_MODELS | VALID_OPENAI_MODELS)
     logger.warning(
         "Invalid model requested: %s. Valid models: %s",
         model_name,
@@ -266,6 +279,50 @@ def get_gemini_response_stream(
     )
 
 
+def get_openai_response(
+    conversation_messages: ConversationMessages, model_name: str
+) -> str:
+    # OpenAI Responses APIでテキスト応答を取得する
+    # Fetch text output via OpenAI Responses API.
+    if openai_client is None:
+        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    try:
+        response = openai_client.responses.create(
+            model=model_name,
+            input=sanitized_messages,
+            max_output_tokens=LLM_MAX_TOKENS,
+        )
+        return response.output_text
+    except Exception as exc:
+        logger.error("OpenAI Responses API call failed (%s).", exc.__class__.__name__)
+        raise LlmProviderError("OpenAI Responses API call failed.") from exc
+
+
+def get_openai_response_stream(
+    conversation_messages: ConversationMessages, model_name: str
+) -> Iterator[str]:
+    # OpenAI Responses APIのストリーム断片を逐次返す
+    # Yield OpenAI Responses API text deltas incrementally.
+    if openai_client is None:
+        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    try:
+        with openai_client.responses.stream(
+            model=model_name,
+            input=sanitized_messages,
+            max_output_tokens=LLM_MAX_TOKENS,
+        ) as stream:
+            for delta in stream.text_deltas:
+                if delta:
+                    yield delta
+    except Exception as exc:
+        logger.error("OpenAI Responses streaming API call failed (%s).", exc.__class__.__name__)
+        raise LlmProviderError("OpenAI Responses streaming API call failed.") from exc
+
+
 def is_gemini_model(model_name: str) -> bool:
     # モデル名が Gemini 系かを判定する
     # Check whether the selected model belongs to Gemini.
@@ -278,14 +335,20 @@ def is_groq_model(model_name: str) -> bool:
     return model_name in VALID_GROQ_MODELS
 
 
+def is_openai_model(model_name: str) -> bool:
+    # モデル名が OpenAI 系かを判定する
+    # Check whether the selected model belongs to OpenAI.
+    return model_name in VALID_OPENAI_MODELS
+
+
 def is_streaming_model(model_name: str) -> bool:
     # 現在SSE配信に対応しているモデルかを判定する
     # Check whether the selected model supports SSE streaming in this app.
-    return is_gemini_model(model_name) or is_groq_model(model_name)
+    return is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name)
 
 
 def validate_model_name(model_name: str) -> None:
-    if is_gemini_model(model_name) or is_groq_model(model_name):
+    if is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name):
         return
     _raise_invalid_model_error(model_name)
 
@@ -300,6 +363,8 @@ def get_llm_response(
         return get_gemini_response(conversation_messages, model_name)
     if is_groq_model(model_name):
         return get_groq_response(conversation_messages, model_name)
+    if is_openai_model(model_name):
+        return get_openai_response(conversation_messages, model_name)
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
@@ -313,4 +378,6 @@ def get_llm_response_stream(
         return get_gemini_response_stream(conversation_messages, model_name)
     if is_groq_model(model_name):
         return get_groq_response_stream(conversation_messages, model_name)
+    if is_openai_model(model_name):
+        return get_openai_response_stream(conversation_messages, model_name)
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response_stream.")

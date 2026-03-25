@@ -22,20 +22,16 @@ tpl.innerHTML = `
       --cc-user-btn-shadow-color: rgba(15, 122, 81, 0.22);
     }
     .btn {
-      background:
-        var(--cc-user-btn-sheen),
-        linear-gradient(135deg, var(--cc-user-btn-base) 0%, var(--cc-user-btn-accent) 100%);
+      background: transparent;
       border: none;
       cursor: pointer;
-      padding: .5rem;
+      padding: .25rem;
       border-radius: 50%;
-      transition: transform .2s ease, filter .2s ease, box-shadow .2s ease, background .2s ease;
+      transition: transform .2s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow:
-        0 14px 24px var(--cc-user-btn-shadow-color),
-        var(--cc-user-btn-edge-highlight);
+      box-shadow: none;
     }
     :host([data-chat-page="true"]) .btn {
       --cc-user-btn-base: rgba(255, 255, 255, 0.98);
@@ -44,17 +40,13 @@ tpl.innerHTML = `
     }
     .btn:hover {
       transform: translateY(-1px);
-      filter: saturate(1.06);
-      box-shadow:
-        0 18px 30px color-mix(in srgb, var(--cc-user-btn-shadow-color) 92%, transparent),
-        var(--cc-user-btn-edge-highlight);
     }
     .btn:active {
       transform: scale(0.97);
     }
     .avatar {
-      width: 2.2rem;
-      height: 2.2rem;
+      width: 2.5rem;
+      height: 2.5rem;
       border-radius: 50%;
       object-fit: cover;
       display: block;

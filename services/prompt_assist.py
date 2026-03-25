@@ -6,7 +6,7 @@ from typing import Any
 
 from services.llm import LlmProviderError, get_llm_response
 
-PROMPT_ASSIST_MODEL = "openai/gpt-oss-20b"
+PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
 PROMPT_ASSIST_TARGETS = {
     "task_modal": {
         "allowed_fields": ("title", "prompt_content", "input_examples", "output_examples"),

@@ -30,7 +30,7 @@ function handleTaskCardClick(e: Event) {
 
   // 入力フォームの値（空欄可）
   const setupInfo = setupInfoElement ? setupInfoElement.value.trim() : "";
-  const aiModel = aiModelSelect ? aiModelSelect.value : "openai/gpt-oss-20b";
+  const aiModel = aiModelSelect ? aiModelSelect.value : "openai/gpt-oss-120b";
 
   const taskName = card.dataset.task || "";
 

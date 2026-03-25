@@ -632,7 +632,7 @@ function sendMessage() {
   if (!window.userInput) return;
   const message = window.userInput.value.trim();
   if (!message) return;
-  const aiModel = window.aiModelSelect ? window.aiModelSelect.value : "openai/gpt-oss-20b";
+  const aiModel = window.aiModelSelect ? window.aiModelSelect.value : "openai/gpt-oss-120b";
   window.showTypingIndicator?.();
   generateResponse(message, aiModel);
   window.userInput.value = "";

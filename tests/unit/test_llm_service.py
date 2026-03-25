@@ -55,6 +55,19 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "gemini-ok")
         mock_gemini.chat.completions.create.assert_called_once()
 
+    def test_get_llm_response_routes_to_openai_responses(self):
+        mock_openai = MagicMock()
+        mock_openai.responses.create.return_value = SimpleNamespace(output_text="openai-ok")
+
+        with patch.object(llm, "openai_client", mock_openai):
+            response = llm.get_llm_response(
+                [{"role": "user", "content": "hello"}],
+                llm.GPT_5_MINI_2025_08_07_MODEL,
+            )
+
+        self.assertEqual(response, "openai-ok")
+        mock_openai.responses.create.assert_called_once()
+
     def test_get_llm_response_rejects_invalid_model(self):
         with self.assertRaises(llm.LlmInvalidModelError) as cm:
             llm.get_llm_response(
@@ -98,6 +111,14 @@ class LlmServiceTestCase(unittest.TestCase):
                 llm.get_gemini_response(
                     [{"role": "user", "content": "hello"}],
                     "gemini-2.5-flash",
+                )
+
+    def test_get_openai_response_raises_configuration_error_without_api_key(self):
+        with patch.object(llm, "openai_client", None):
+            with self.assertRaises(llm.LlmConfigurationError):
+                llm.get_openai_response(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GPT_5_MINI_2025_08_07_MODEL,
                 )
 
     def test_get_gemini_response_stream_yields_chunks_and_closes_stream(self):
@@ -156,6 +177,42 @@ class LlmServiceTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response, ["groq", "-stream"])
+        mock_stream.assert_called_once()
+
+    def test_get_openai_response_stream_yields_text_deltas(self):
+        mock_openai = MagicMock()
+        mock_stream = MagicMock()
+        mock_stream.text_deltas = iter(["openai", "-stream"])
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__enter__.return_value = mock_stream
+        mock_stream_ctx.__exit__.return_value = None
+        mock_openai.responses.stream.return_value = mock_stream_ctx
+
+        with patch.object(llm, "openai_client", mock_openai):
+            response = list(
+                llm.get_openai_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                )
+            )
+
+        self.assertEqual(response, ["openai", "-stream"])
+        mock_openai.responses.stream.assert_called_once()
+
+    def test_get_llm_response_stream_routes_to_openai(self):
+        with patch.object(
+            llm,
+            "get_openai_response_stream",
+            return_value=iter(["openai", "-stream"]),
+        ) as mock_stream:
+            response = list(
+                llm.get_llm_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                )
+            )
+
+        self.assertEqual(response, ["openai", "-stream"])
         mock_stream.assert_called_once()
 
 
