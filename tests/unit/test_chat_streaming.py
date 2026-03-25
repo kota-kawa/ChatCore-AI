@@ -21,6 +21,7 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
+from services.llm import LlmConfigurationError
 from tests.helpers.request_helpers import build_request
 
 
@@ -146,6 +147,22 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages,
             [("sid-1", "default", "assistant", "こんにちは")],
         )
+
+    def test_background_generation_job_surfaces_configuration_error_message(self):
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=LlmConfigurationError("OPENAI_API_KEY が未設定です。"),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="gpt-5-mini-2025-08-07",
+                persist_response=lambda _: None,
+            )
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: error", body)
+        self.assertIn("OPENAI_API_KEY が未設定です。", body)
 
     def test_has_active_generation_is_false_after_job_completion(self):
         release_generation = threading.Event()

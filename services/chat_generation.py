@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from .llm import LlmServiceError, get_llm_response_stream
+from .llm import LlmConfigurationError, LlmServiceError, get_llm_response_stream
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,12 @@ class ChatGenerationJob:
                     continue
                 chunks.append(chunk)
                 self._publish("chunk", {"text": chunk})
+        except LlmConfigurationError as exc:
+            if self._cancelled:
+                return
+            self.error_message = str(exc) or "LLM設定エラーが発生しました。"
+            self._publish("error", {"message": self.error_message}, done=True)
+            return
         except LlmServiceError:
             if self._cancelled:
                 return

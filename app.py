@@ -6,6 +6,11 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from dotenv import load_dotenv
+
+# 初回起動時に環境変数を読み込む（他モジュール import より先に実行）
+# Load environment variables before importing modules that read env at import-time.
+load_dotenv()
+
 from fastapi import FastAPI, Request
 
 from blueprints.chat import cleanup_ephemeral_chats
@@ -23,10 +28,6 @@ from services.runtime_config import (
 )
 from services.session_middleware import PermanentSessionMiddleware
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify
-
-# 初回起動時に環境変数を読み込む
-# Load environment variables at startup.
-load_dotenv()
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.

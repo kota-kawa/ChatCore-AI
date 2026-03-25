@@ -347,6 +347,19 @@ start_core_services() {
   fi
 
   compose rm -f nginx_bootstrap >/dev/null 2>&1 || true
+
+  # Remove containers with conflicting names that are not owned by this compose
+  # project (chatcore-ai). This handles leftovers from legacy or failed deploys.
+  # Containers already owned by this project are left for compose to manage.
+  local cname proj
+  for cname in postgres_db redis_cache; do
+    proj="$(docker inspect --format='{{index .Config.Labels "com.docker.compose.project"}}' "${cname}" 2>/dev/null || true)"
+    if docker inspect "${cname}" >/dev/null 2>&1 && [ "${proj}" != "chatcore-ai" ]; then
+      echo "Removing container ${cname} (owner project: '${proj:-none}')" >&2
+      docker rm -f "${cname}" >/dev/null 2>&1 || true
+    fi
+  done
+
   NGINX_BOOTSTRAP_COLOR="${bootstrap_color}" compose up -d db redis nginx_bootstrap
   wait_for_service_healthy db 90
   wait_for_service_healthy redis 90
