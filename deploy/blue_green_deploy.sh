@@ -360,7 +360,9 @@ start_core_services() {
     fi
   done
 
-  NGINX_BOOTSTRAP_COLOR="${bootstrap_color}" compose up -d db redis nginx_bootstrap
+  # Remove legacy/orphan containers (for example: fastapi_app, strike_frontend)
+  # before bootstrapping to prevent host-port conflicts on blue (5004/3000).
+  NGINX_BOOTSTRAP_COLOR="${bootstrap_color}" compose up -d --remove-orphans db redis nginx_bootstrap
   wait_for_service_healthy db 90
   wait_for_service_healthy redis 90
   wait_for_service_completed nginx_bootstrap 45
