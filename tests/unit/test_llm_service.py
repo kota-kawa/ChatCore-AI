@@ -181,8 +181,14 @@ class LlmServiceTestCase(unittest.TestCase):
 
     def test_get_openai_response_stream_yields_text_deltas(self):
         mock_openai = MagicMock()
+        mock_event1 = MagicMock()
+        mock_event1.type = "response.output_text.delta"
+        mock_event1.delta = "openai"
+        mock_event2 = MagicMock()
+        mock_event2.type = "response.output_text.delta"
+        mock_event2.delta = "-stream"
         mock_stream = MagicMock()
-        mock_stream.text_deltas = iter(["openai", "-stream"])
+        mock_stream.__iter__ = MagicMock(return_value=iter([mock_event1, mock_event2]))
         mock_stream_ctx = MagicMock()
         mock_stream_ctx.__enter__.return_value = mock_stream
         mock_stream_ctx.__exit__.return_value = None
