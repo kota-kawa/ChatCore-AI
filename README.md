@@ -13,6 +13,7 @@
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
 ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-LLM%20API-4285F4?logo=google&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
 
 **🚀 Live Demo: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
 
@@ -33,20 +34,22 @@ Click a thumbnail to open the video on YouTube.
 </p>
 
 ## Overview
-Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq and Google Gemini APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
+Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq, Google Gemini, and OpenAI APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
 
 ## Key Features
 - **Email-based authentication** with 6‑digit verification codes
+- **Google OAuth** sign-in
+- **Streaming LLM responses** via Server-Sent Events (SSE) — all three providers
 - **Persistent + ephemeral chat** modes
 - **Chat room sharing** via public URLs and SNS link sharing
 - **Prompt sharing** with search and public visibility controls
-- **Groq / Gemini integrations** for LLM responses
+- **Groq / Gemini / OpenAI** integrations for LLM responses
 
 ## Tech Stack
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy, Alembic
 - **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 15, Redis 7 (optional)
-- **LLM Providers**: Groq, Google Gemini
+- **LLM Providers**: Groq, Google Gemini, OpenAI
 - **Local Dev**: Docker Compose
 
 ## Quick Start (Docker Compose)
@@ -58,21 +61,7 @@ git clone https://github.com/kota-kawa/ChatCore-AI.git
 cd ChatCore-AI
 
 # 2) Create a .env file with required environment variables
-# Example:
-# GROQ_API_KEY=xxxxx
-# Gemini_API_KEY=xxxxx
-# FASTAPI_SECRET_KEY=xxxxx
-# SEND_ADDRESS=example@gmail.com
-# SEND_PASSWORD=app_password
-# GOOGLE_CLIENT_ID=xxxxx
-# GOOGLE_CLIENT_SECRET=xxxxx
-# GOOGLE_REDIRECT_URI=https://chatcore-ai.com/google-callback
-# ADMIN_PASSWORD_HASH=pbkdf2_sha256$...
-# POSTGRES_HOST=db
-# POSTGRES_USER=postgres
-# POSTGRES_PASSWORD=postgres
-# POSTGRES_DB=strike_chat
-# FRONTEND_URL=http://localhost:3000
+cp .env.example .env
 
 # 3) Build and run
 docker-compose up --build
@@ -172,27 +161,11 @@ flowchart LR
 - **Why Next.js for frontend**: Next.js supports route-based UI composition and production-ready optimization while allowing incremental migration from legacy static/script assets.
 
 ## Engineering Highlights (for reviewers)
-- **Modular design**: feature-specific blueprints keep routing and templates scoped and maintainable.
-- **Clear separation of concerns**: integrations live in `services/`, keeping HTTP handlers thin and testable.
-- **Security-aware defaults**: environment-based session configuration and secret management via `.env`.
-- **Composable UI assets**: shared global assets with page-specific entrypoints for predictable styling.
-
-## CSS Guidelines
-- `static/css/base/`: reset, variables, common layout primitives
-- `static/css/components/`: reusable UI components (e.g., sidebar, modal)
-- `static/css/pages/<page>/index.css`: page entrypoints (import base + components)
-
-Use BEM-style `kebab-case` class names and document purpose/dependencies at the top of each file.
-
-## Production Notes
-- Set `FASTAPI_ENV=production` to enable secure cookie settings.
-- Tune production DB pool size with `DB_POOL_MIN_CONN_PRODUCTION` and `DB_POOL_MAX_CONN_PRODUCTION` when needed. If unset, the app falls back to `DB_POOL_MIN_CONN` and `DB_POOL_MAX_CONN`.
-- Google OAuth compatibility relies on `SameSite=None; Secure` session cookies in production. Override with `FASTAPI_SESSION_SAMESITE` only when your deployment topology requires it.
-- `GET /healthz` returns process liveness; `GET /readyz` checks DB readiness and reports Redis as optional/degraded when unavailable.
-- Logs default to structured JSON and include `X-Request-ID` correlation IDs.
-- Sessions prefer Redis when configured and automatically fall back to signed cookies when Redis is unavailable.
-- Keep secrets out of version control; use `.env` or a secrets manager.
-- Pin dependencies and update regularly.
+- **Hybrid session middleware** (`services/session_middleware.py`): Built a custom ASGI middleware that transparently falls back from Redis-backed sessions to signed-cookie sessions when Redis is unavailable or fails mid-request — no session loss, no user disruption. Also implements session fixation prevention by rotating the session identifier on login.
+- **Streaming LLM responses** (`services/chat_generation.py`): LLM responses are streamed token-by-token via SSE using a background `ChatGenerationJob` thread. Jobs are cancellable, and the completed response is persisted to the database only after the full stream finishes, keeping the HTTP handler thin.
+- **Provider-agnostic LLM abstraction** (`services/llm.py`): A single `get_llm_response` / `get_llm_response_stream` interface routes to Groq, Gemini, or OpenAI based on model name, with an allowlist that rejects unsupported models before any external call is made.
+- **LLM input sanitization**: Conversation messages are scanned for known secret patterns (API keys, OAuth tokens, passwords) using compiled regexes and redacted before forwarding to any LLM provider, preventing accidental secret leakage.
+- **CSRF protection** (`services/csrf.py`): Custom header-based CSRF token validation is enforced on all state-changing requests. Tokens are auto-generated per session inside the session middleware, requiring no extra setup per route.
 
 ## License
 Copyright (c) 2026 Kota Kawagoe
@@ -217,6 +190,7 @@ Licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
 ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-LLM%20API-4285F4?logo=google&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
 
 **🚀 ライブデモ: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
 
@@ -237,20 +211,22 @@ Click a thumbnail to open the video on YouTube.
 </p>
 
 ## 概要
-Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq と Google Gemini API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
+Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq・Google Gemini・OpenAI API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
 
 ## 主な機能
 - **メール認証**（6 桁コード）
+- **Google OAuth** ログイン
+- **LLM ストリーミング応答**（SSE 経由 — 全プロバイダ対応）
 - **永続／エフェメラル**のチャット
 - **チャット共有リンク**（URL/SNS 共有）
 - **プロンプト共有**（公開・検索）
-- **Groq / Gemini 連携**
+- **Groq / Gemini / OpenAI 連携**
 
 ## 技術スタック
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy, Alembic
 - **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 15, Redis 7（任意）
-- **LLM Providers**: Groq, Google Gemini
+- **LLM Providers**: Groq, Google Gemini, OpenAI
 - **Local Dev**: Docker Compose
 
 ## 実行方法（Docker Compose）
@@ -261,11 +237,8 @@ Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メー
 git clone https://github.com/kota-kawa/ChatCore-AI.git
 cd ChatCore-AI
 
-# 2) .env に必要な環境変数を設定
-# GROQ_API_KEY=xxxxx
-# GOOGLE_CLIENT_ID=xxxxx
-# GOOGLE_CLIENT_SECRET=xxxxx
-# GOOGLE_REDIRECT_URI=https://chatcore-ai.com/google-callback
+# 2) 環境変数を設定
+cp .env.example .env
 
 # 3) ビルド＆起動
 docker-compose up --build
@@ -364,26 +337,11 @@ flowchart LR
 - **なぜ Next.js を採用したか**: ルート単位でUIを構成しつつ本番最適化を行え、既存の静的アセット/スクリプト構成から段階的に移行しやすいためです。
 
 ## レビュー観点の強み
-- **機能単位の分割設計**で保守性を高めた構成
-- **責務分離**によるテスト容易性の向上
-- **セキュリティ前提の設定**（環境変数による秘密管理）
-- **CSS の再利用性**を意識した構造化
-
-## CSS ガイドライン
-- `static/css/base/`: リセット／変数／共通レイアウト
-- `static/css/components/`: 再利用可能な UI
-- `static/css/pages/<page>/index.css`: ページ単位のエントリーポイント
-
-BEM 風の `kebab-case` を推奨し、ファイル冒頭に目的・依存関係を記載します。
-
-## 本番運用のポイント
-- `FASTAPI_ENV=production` で Secure 設定を有効化
-- DB コネクションプールは `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` で本番時のみ個別調整可能（未指定時は `DB_POOL_MIN_CONN` / `DB_POOL_MAX_CONN` を使用）
-- `GET /healthz` は liveness、`GET /readyz` は DB 到達性と Redis の劣化状態を返します
-- ログは JSON をデフォルトとし、`X-Request-ID` で相関付けできます
-- セッションは Redis を優先しつつ、Redis 障害時は署名付き Cookie へ自動フォールバックします
-- 秘密情報は `.env` or シークレット管理へ
-- 依存関係の定期更新を推奨
+- **ハイブリッドセッションミドルウェア** (`services/session_middleware.py`): Redis バックエンドから署名付き Cookie への透過的フォールバックを実装したカスタム ASGI ミドルウェア。Redis 障害時もセッション消失なし・ユーザー影響ゼロで吸収。ログイン時のセッション ID 再発行によるセッション固定攻撃対策も実装。
+- **LLM ストリーミング応答** (`services/chat_generation.py`): バックグラウンドスレッド上の `ChatGenerationJob` がトークン逐次生成し SSE で配信。ジョブはキャンセル可能で、レスポンス全体の受信完了後にのみ DB 保存を行うことで HTTP ハンドラを薄く保つ設計。
+- **プロバイダ非依存 LLM 抽象層** (`services/llm.py`): `get_llm_response` / `get_llm_response_stream` の単一インターフェースがモデル名でルーティング。許可リスト外のモデルは外部 API 呼び出し前に即時拒否。
+- **LLM 入力サニタイズ**: API キー・OAuth トークン・パスワードなどの秘密情報パターンをコンパイル済み正規表現でスキャンし、外部 LLM プロバイダへ送信する前に自動的に伏せ字化。意図しない秘密漏洩を防止。
+- **CSRF 対策** (`services/csrf.py`): ヘッダーベースの CSRF トークン検証をすべての状態変更リクエストに適用。トークンはセッションミドルウェア内でセッションごとに自動生成されるため、ルートごとの追加設定不要。
 
 ## ライセンス
 Copyright (c) 2026 Kota Kawagoe
