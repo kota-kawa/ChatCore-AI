@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, List, Tuple, TypeVar
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse, RedirectResponse
 
 from .api_errors import ApiServiceError
 from .error_messages import ERROR_INVALID_JSON
-from .web_constants import BASE_DIR, DEFAULT_INTERNAL_ERROR_MESSAGE, FRONTEND_URL
+from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE, FRONTEND_URL
 from .web_json import (
     get_json as _get_json,
     jsonify as _jsonify,
