@@ -1,3 +1,6 @@
+import { escapeHtml } from "../core/html";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
+
 const initPromptSearch = () => {
   const searchButton = document.getElementById("searchButton");
   const searchInput = document.getElementById("searchInput") as HTMLInputElement | null;
@@ -30,16 +33,6 @@ const initPromptSearch = () => {
 
   function truncateContent(content: string) {
     return truncateText(content, CONTENT_CHAR_LIMIT);
-  }
-
-  function escapeHtml(value: unknown) {
-    const text = value === null || value === undefined ? "" : String(value);
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   type PromptSearchRecord = {
@@ -78,14 +71,14 @@ const initPromptSearch = () => {
     // ヘッダーを更新して検索結果を上部に表示
     selectedCategoryTitleEl.textContent = `検索結果: 「${query}」`;
 
-    fetch(`/search/prompts?q=${encodeURIComponent(query)}`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
+    fetchJsonOrThrow<{ prompts?: unknown[] }>(
+      `/search/prompts?q=${encodeURIComponent(query)}`,
+      undefined,
+      {
+        defaultMessage: "検索に失敗しました。"
+      }
+    )
+      .then(({ payload: data }) => {
         // .prompt-cards 内をクリアして検索結果を表示
         promptCardsSectionEl.innerHTML = "";
         const prompts = Array.isArray(data.prompts) ? data.prompts : [];

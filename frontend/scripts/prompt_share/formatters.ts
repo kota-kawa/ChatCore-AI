@@ -1,5 +1,6 @@
 import type { PromptData, PromptType } from "./types";
 import { CONTENT_CHAR_LIMIT, TITLE_CHAR_LIMIT } from "./constants";
+import { escapeHtml } from "../core/html";
 
 export function truncateText(text: string, limit: number) {
   const safeText = text || "";
@@ -26,15 +27,7 @@ export function formatPromptDate(createdAt?: string) {
   }).format(parsedDate);
 }
 
-export function escapeHtml(value: unknown) {
-  const text = value === null || value === undefined ? "" : String(value);
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+export { escapeHtml };
 
 export function getBookmarkButtonMarkup(isBookmarked: boolean) {
   const iconClass = isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark";

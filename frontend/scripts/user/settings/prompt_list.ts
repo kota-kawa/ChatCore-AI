@@ -1,5 +1,6 @@
 import { toPromptListEntry } from "./types";
-import { showConfirmModal } from "../../core/alert_modal";
+import { confirmAndDelete } from "../../core/api_actions";
+import { buildPromptCard } from "../../core/prompt_card";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import { escapeHtml, truncateTitle } from "./utils";
 
@@ -17,30 +18,18 @@ export function setupPromptListModule(options: PromptListModuleOptions) {
       btn.addEventListener("click", async function () {
         const entryId = this.dataset.id;
         if (!entryId) return;
-        const confirmed = await showConfirmModal("プロンプトリストから削除しますか？");
-        if (!confirmed) return;
-
-        try {
-          const { payload: result } = await fetchJsonOrThrow<Record<string, unknown>>(
-            `/prompt_manage/api/prompt_list/${entryId}`,
-            {
-              method: "DELETE",
-              credentials: "same-origin"
-            },
-            {
-              defaultMessage: "プロンプトリストの削除に失敗しました。"
-            }
-          );
-          alert(
-            typeof result.message === "string" && result.message.trim()
-              ? result.message
-              : "プロンプトを削除しました。"
-          );
-          loadPromptList();
-        } catch (err) {
-          console.error("プロンプトリストの削除中にエラーが発生しました:", err);
-          alert(err instanceof Error ? err.message : "プロンプトリストの削除に失敗しました。");
-        }
+        await confirmAndDelete({
+          message: "プロンプトリストから削除しますか？",
+          url: `/prompt_manage/api/prompt_list/${entryId}`,
+          init: {
+            credentials: "same-origin"
+          },
+          successMessage: "プロンプトを削除しました。",
+          errorMessage: "プロンプトリストの削除に失敗しました。",
+          onSuccess: () => {
+            loadPromptList();
+          }
+        });
       });
     });
   }
@@ -70,42 +59,29 @@ export function setupPromptListModule(options: PromptListModuleOptions) {
         const entries = Array.isArray(data.prompts) ? data.prompts : [];
         entries.forEach((rawEntry: unknown) => {
           const entry = toPromptListEntry(rawEntry);
-          const card = document.createElement("div");
-          card.classList.add("prompt-card");
-
           const createdAt = entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "";
-          const safeTitle = escapeHtml(truncateTitle(entry.title));
-          const safeContent = escapeHtml(entry.content);
-          const safeCategory = escapeHtml(entry.category);
-          const safeInputExamples = escapeHtml(entry.inputExamples);
-          const safeOutputExamples = escapeHtml(entry.outputExamples);
-          const safeCreatedAt = escapeHtml(createdAt);
-          const safeEntryId = escapeHtml(entry.id ?? "");
-          const safeCategoryBlock = entry.category
-            ? `<div class="meta"><strong>カテゴリ:</strong> ${safeCategory}</div>`
-            : "";
-          const safeInputBlock = entry.inputExamples
-            ? `<div class="meta"><strong>入力例:</strong> ${safeInputExamples}</div>`
-            : "";
-          const safeOutputBlock = entry.outputExamples
-            ? `<div class="meta"><strong>出力例:</strong> ${safeOutputExamples}</div>`
-            : "";
-
-          card.innerHTML = `
-            <h3>${safeTitle}</h3>
-            <p>${safeContent}</p>
-            ${safeCategoryBlock}
-            ${safeInputBlock}
-            ${safeOutputBlock}
-            <div class="meta">
-              <span>保存日: ${safeCreatedAt}</span>
-            </div>
-            <div class="btn-group">
-              <button class="btn btn-sm btn-danger remove-prompt-list-btn" data-id="${safeEntryId}">
-                <i class="bi bi-trash"></i> 削除
-              </button>
-            </div>
-          `;
+          const card = buildPromptCard(
+            {
+              id: entry.id,
+              title: truncateTitle(entry.title),
+              content: entry.content,
+              category: entry.category,
+              createdAt,
+              inputExamples: entry.inputExamples,
+              outputExamples: entry.outputExamples
+            },
+            {
+              inlineMeta: true,
+              dateLabel: "保存日",
+              buttons: [
+                {
+                  label: "削除",
+                  iconClass: "bi-trash",
+                  btnClass: "btn btn-sm btn-danger remove-prompt-list-btn"
+                }
+              ]
+            }
+          );
 
           promptListEntriesEl.appendChild(card);
         });

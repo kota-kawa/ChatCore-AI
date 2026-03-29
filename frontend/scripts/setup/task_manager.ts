@@ -6,6 +6,7 @@ import {
   setTaskOrderEditingState
 } from "../core/app_state";
 import { showConfirmModal } from "../core/alert_modal";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
 import { loadTaskCards } from "./setup_task_cards";
 import { initToggleTasks } from "./setup_task_toggle";
 import { invalidateTasksCache } from "./setup_tasks_cache";
@@ -102,28 +103,18 @@ function initTaskManager() {
     };
 
     // 4. API 呼び出し
-    fetch("/api/edit_task", {
-      method: "POST",
-      credentials: "same-origin", // Cookie を送信
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then((response) => {
-        const ct = response.headers.get("Content-Type") || "";
-        if (ct.includes("application/json")) {
-          // 正常 or JSON エラー(JSON.stringify された {"error":...})
-          return response.json().then((data) => {
-            if (!response.ok) throw new Error(data.error || "更新に失敗しました");
-            return data;
-          });
-        } else {
-          // HTML の 500 ページなどが返ってきた場合
-          return response.text().then((text) => {
-            console.error("非JSONレスポンス:", text);
-            throw new Error(`サーバーエラー: ${response.status}`);
-          });
-        }
-      })
+    fetchJsonOrThrow<Record<string, unknown>>(
+      "/api/edit_task",
+      {
+        method: "POST",
+        credentials: "same-origin", // Cookie を送信
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      },
+      {
+        defaultMessage: "更新に失敗しました。"
+      }
+    )
       .then(() => {
         // 5. 成功したら data- 属性を更新
         const card = editingCard;
@@ -283,19 +274,17 @@ function toggleTaskOrderEditing() {
         if (!confirmed) return;
 
         const taskName = targetCard.getAttribute("data-task");
-        fetch("/api/delete_task", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task: taskName })
-        })
-          .then((response) => {
-            if (!response.ok) {
-              return response.json().then((errorData) => {
-                throw new Error(errorData.error || "削除に失敗しました");
-              });
-            }
-            return response.json();
-          })
+        fetchJsonOrThrow<Record<string, unknown>>(
+          "/api/delete_task",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task: taskName })
+          },
+          {
+            defaultMessage: "削除に失敗しました。"
+          }
+        )
           .then(() => {
             // 削除が成功した場合、対応するラッパー要素を削除し、並び順保存のためのAPI呼び出しも非同期で行う
             const wrapper = targetCard.closest(".task-wrapper");
@@ -525,21 +514,22 @@ function saveTaskOrder() {
     return;
   }
 
-  fetch("/api/update_tasks_order", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order: newOrder })
-  })
-    .then((res) => res.json())
-    .then((data) => {
-      if (data.error) {
-        alert("並び順の保存に失敗: " + data.error);
-      } else {
-        invalidateTasksCache();
-      }
+  fetchJsonOrThrow<Record<string, unknown>>(
+    "/api/update_tasks_order",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: newOrder })
+    },
+    {
+      defaultMessage: "並び順の保存に失敗しました。"
+    }
+  )
+    .then(() => {
+      invalidateTasksCache();
     })
     .catch((err) => {
-      alert("並び順の保存に失敗: " + err.toString());
+      alert(err instanceof Error ? `並び順の保存に失敗: ${err.message}` : "並び順の保存に失敗しました。");
     });
 }
 

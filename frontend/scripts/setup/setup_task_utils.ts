@@ -1,4 +1,5 @@
 import defaultTasks from "../../data/default_tasks.json";
+import { formatMultilineHtml } from "../core/html";
 
 import type { TaskItem } from "./setup_types";
 
@@ -9,19 +10,7 @@ export function getFallbackTasks() {
   }));
 }
 
-function escapeHtml(value: unknown) {
-  const text = value === null || value === undefined ? "" : String(value);
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-export function formatMultilineHtml(value: unknown) {
-  return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
-}
+export { formatMultilineHtml };
 
 function normalizeTask(task: TaskItem | null | undefined) {
   if (!task) {

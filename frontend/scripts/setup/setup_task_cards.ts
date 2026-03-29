@@ -3,6 +3,8 @@ import { initSetupTaskCards } from "./setup_task_launch";
 import { initTaskOrderEditing } from "./task_manager";
 import { getFallbackTasks, formatMultilineHtml, createTaskSignature } from "./setup_task_utils";
 import { initToggleTasks } from "./setup_task_toggle";
+import { buildPromptCard } from "../core/prompt_card";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
 import type { LoadTaskCardsOptions, TaskItem } from "./setup_types";
 import { scheduleSetupViewportFit } from "./setup_viewport";
 
@@ -194,32 +196,18 @@ export function loadTaskCards(options: LoadTaskCardsOptions = {}) {
       const wrapper = document.createElement("div");
       wrapper.className = "task-wrapper";
 
-      // カード
-      const card = document.createElement("div");
-      card.className = "prompt-card";
-      card.dataset.task = taskName;
-      card.dataset.prompt_template = task.prompt_template || "プロンプトテンプレートはありません";
-      card.dataset.response_rules = task.response_rules || "";
-      card.dataset.output_skeleton = task.output_skeleton || "";
-      card.dataset.input_examples = task.input_examples || "";
-      card.dataset.output_examples = task.output_examples || "";
-      card.dataset.is_default = task.is_default ? "true" : "false";
-
-      // ヘッダー（タイトル＋▼ボタン）
-      const headerContainer = document.createElement("div");
-      headerContainer.className = "header-container";
-
-      const header = document.createElement("div");
-      header.className = "task-header";
-      header.textContent = taskName;
-
-      const toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.classList.add("btn", "btn-outline-success", "btn-md", "task-detail-toggle");
-      toggleBtn.innerHTML = '<i class="bi bi-caret-down"></i>';
-
-      headerContainer.append(header, toggleBtn);
-      card.appendChild(headerContainer);
+      const card = buildPromptCard(
+        {
+          task: taskName,
+          promptTemplate: task.prompt_template || "プロンプトテンプレートはありません",
+          responseRules: task.response_rules || "",
+          outputSkeleton: task.output_skeleton || "",
+          inputExamples: task.input_examples || "",
+          outputExamples: task.output_examples || "",
+          isDefault: task.is_default
+        },
+        { layout: "setupTask" }
+      );
       wrapper.appendChild(card);
       container.appendChild(wrapper);
     });
@@ -254,18 +242,10 @@ export function loadTaskCards(options: LoadTaskCardsOptions = {}) {
   renderTaskCards(getFallbackTasks());
 
   // /api/tasks から取得
-  fetch("/api/tasks")
-    .then((r) => {
-      const contentType = r.headers.get("content-type") || "";
-      if (!r.ok) {
-        throw new Error(`tasks fetch failed: ${r.status}`);
-      }
-      if (!contentType.includes("application/json")) {
-        throw new Error("tasks response is not json");
-      }
-      return r.json();
-    })
-    .then((data) => {
+  fetchJsonOrThrow<{ tasks?: TaskItem[] }>("/api/tasks", undefined, {
+    defaultMessage: "タスクの読み込みに失敗しました。"
+  })
+    .then(({ payload: data }) => {
       const tasks: TaskItem[] = Array.isArray(data?.tasks) ? data.tasks : [];
       if (tasks.length > 0) {
         writeCachedTasks(tasks);

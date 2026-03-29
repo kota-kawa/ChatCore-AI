@@ -1,6 +1,7 @@
 import { setLoggedInState } from "../core/app_state";
 import { formatLLMOutput } from "../chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../chat/message_utils";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
 
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
@@ -188,24 +189,20 @@ const setupMemoModal = () => {
     setShareStatus("共有リンクを生成しています...");
 
     try {
-      const response = await fetch("/memo/api/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ memo_id: Number(currentShareMemoId) })
-      });
-      const data = await response.json().catch(() => ({} as Record<string, unknown>));
+      const { payload: data } = await fetchJsonOrThrow<Record<string, unknown>>(
+        "/memo/api/share",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ memo_id: Number(currentShareMemoId) })
+        },
+        {
+          defaultMessage: "共有リンクの作成に失敗しました。",
+          hasApplicationError: (payload) => typeof payload.share_url !== "string" || !payload.share_url.trim()
+        }
+      );
       const shareUrl = typeof data.share_url === "string" ? data.share_url : "";
-      const errorText =
-        typeof data.error === "string"
-          ? data.error
-          : typeof data.message === "string"
-            ? data.message
-            : `共有リンクの作成に失敗しました (${response.status})`;
-
-      if (!response.ok || !shareUrl) {
-        throw new Error(errorText);
-      }
 
       cachedShareUrls.set(currentShareMemoId, shareUrl);
       setShareUrl(shareUrl);

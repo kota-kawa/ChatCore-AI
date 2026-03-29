@@ -1,5 +1,6 @@
 // prompt_manage.ts
-import { showConfirmModal } from "../core/alert_modal";
+import { confirmAndDelete } from "../core/api_actions";
+import { buildPromptCard } from "../core/prompt_card";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
 
 const initPromptManage = () => {
@@ -18,16 +19,6 @@ const initPromptManage = () => {
 
   function truncateContent(content: string) {
     return truncateText(content, CONTENT_CHAR_LIMIT);
-  }
-
-  function escapeHtml(value: unknown) {
-    const text = value === null || value === undefined ? "" : String(value);
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   type PromptRecord = {
@@ -76,38 +67,37 @@ const initPromptManage = () => {
         if (prompts.length > 0) {
           prompts.forEach((rawPrompt: unknown) => {
             const prompt = toPromptRecord(rawPrompt);
-            const card = document.createElement("div");
-            card.classList.add("prompt-card");
             const truncatedContent = truncateContent(prompt.content);
-            const safeTitle = escapeHtml(truncateTitle(prompt.title));
-            const safeContent = escapeHtml(truncatedContent);
-            const safeCategory = escapeHtml(prompt.category);
-            const safeCreatedAt = escapeHtml(prompt.createdAt ? new Date(prompt.createdAt).toLocaleString() : "");
-            const safeInputExamples = escapeHtml(prompt.inputExamples || "");
-            const safeOutputExamples = escapeHtml(prompt.outputExamples || "");
-            const safePromptId = escapeHtml(prompt.id ?? "");
-
-            card.innerHTML = `
-              <h3>${safeTitle}</h3>
-              <p class="prompt-card__content">${safeContent}</p>
-              <div class="meta">
-                <span>カテゴリ: ${safeCategory}</span><br>
-                <span>投稿日: ${safeCreatedAt}</span>
-              </div>
-              <!-- 隠し要素として入力例と出力例を保持 -->
-              <p class="d-none input-examples">${safeInputExamples}</p>
-              <p class="d-none output-examples">${safeOutputExamples}</p>
-              <div class="btn-group">
-                <button class="btn btn-sm btn-warning edit-btn" data-id="${safePromptId}">
-                  <i class="bi bi-pencil"></i> 編集
-                </button>
-                <button class="btn btn-sm btn-danger delete-btn" data-id="${safePromptId}">
-                  <i class="bi bi-trash"></i> 削除
-                </button>
-              </div>
-            `;
-            card.dataset.fullTitle = prompt.title || "";
-            card.dataset.fullContent = prompt.content || "";
+            const card = buildPromptCard(
+              {
+                id: prompt.id,
+                title: truncateTitle(prompt.title),
+                content: truncatedContent,
+                category: prompt.category,
+                createdAt: prompt.createdAt ? new Date(prompt.createdAt).toLocaleString() : "",
+                inputExamples: prompt.inputExamples || "",
+                outputExamples: prompt.outputExamples || ""
+              },
+              {
+                contentClass: "prompt-card__content",
+                buttons: [
+                  {
+                    label: "編集",
+                    iconClass: "bi-pencil",
+                    btnClass: "btn btn-sm btn-warning edit-btn"
+                  },
+                  {
+                    label: "削除",
+                    iconClass: "bi-trash",
+                    btnClass: "btn btn-sm btn-danger delete-btn"
+                  }
+                ],
+                fullContent: {
+                  title: prompt.title,
+                  content: prompt.content
+                }
+              }
+            );
             promptList.appendChild(card);
           });
           attachEventHandlers();
@@ -132,23 +122,20 @@ const initPromptManage = () => {
       btn.addEventListener("click", async function () {
         const promptId = this.getAttribute("data-id");
         if (!promptId) return;
-        const confirmed = await showConfirmModal("本当にこのプロンプトを削除しますか？");
-        if (!confirmed) return;
-
-        fetchJsonOrThrow<Record<string, unknown>>(`/prompt_manage/api/prompts/${promptId}`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json"
-          }
-        })
-          .then(({ payload: result }) => {
-            alert(typeof result.message === "string" ? result.message : "削除しました。");
+        await confirmAndDelete({
+          message: "本当にこのプロンプトを削除しますか？",
+          url: `/prompt_manage/api/prompts/${promptId}`,
+          init: {
+            headers: {
+              "Content-Type": "application/json"
+            }
+          },
+          successMessage: "削除しました。",
+          errorMessage: "プロンプトの削除に失敗しました。",
+          onSuccess: () => {
             loadMyPrompts();
-          })
-          .catch((err) => {
-            console.error("削除中のエラー:", err);
-            alert(err instanceof Error ? err.message : "プロンプトの削除に失敗しました。");
-          });
+          }
+        });
       });
     });
 

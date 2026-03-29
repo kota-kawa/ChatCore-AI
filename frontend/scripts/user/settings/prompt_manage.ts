@@ -1,7 +1,8 @@
 import { toPromptRecord } from "./types";
-import { showConfirmModal } from "../../core/alert_modal";
+import { confirmAndDelete } from "../../core/api_actions";
+import { buildPromptCard } from "../../core/prompt_card";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
-import { escapeHtml, truncateTitle } from "./utils";
+import { truncateTitle } from "./utils";
 
 export function setupPromptManageModule() {
 
@@ -9,11 +10,11 @@ export function setupPromptManageModule() {
     document.querySelectorAll<HTMLButtonElement>(".edit-btn").forEach((btn) => {
       btn.addEventListener("click", function () {
         const promptId = this.dataset.id;
-        const card = this.closest(".prompt-card");
+        const card = this.closest(".prompt-card") as HTMLElement | null;
         if (!card || !promptId) return;
 
-        const title = card.querySelector("h3")?.textContent || "";
-        const content = card.querySelector("p")?.textContent || "";
+        const title = card.dataset.fullTitle || card.querySelector("h3")?.textContent || "";
+        const content = card.dataset.fullContent || card.querySelector("p")?.textContent || "";
         const metaSpans = card.querySelectorAll(".meta span");
         const category = metaSpans[0]?.textContent?.replace("カテゴリ: ", "") || "";
         const inputExamples = card.querySelector(".input-examples")?.textContent || "";
@@ -48,20 +49,15 @@ export function setupPromptManageModule() {
       btn.addEventListener("click", async function () {
         const promptId = this.dataset.id;
         if (!promptId) return;
-        const confirmed = await showConfirmModal("このプロンプトを削除しますか？");
-        if (!confirmed) return;
-
-        fetchJsonOrThrow<Record<string, unknown>>(`/prompt_manage/api/prompts/${promptId}`, {
-          method: "DELETE"
-        })
-          .then(({ payload: result }) => {
-            alert(typeof result.message === "string" ? result.message : "削除しました。");
+        await confirmAndDelete({
+          message: "このプロンプトを削除しますか？",
+          url: `/prompt_manage/api/prompts/${promptId}`,
+          successMessage: "削除しました。",
+          errorMessage: "プロンプトの削除に失敗しました。",
+          onSuccess: () => {
             loadMyPrompts();
-          })
-          .catch((err) => {
-            console.error("削除中のエラー:", err);
-            alert(err instanceof Error ? err.message : "プロンプトの削除に失敗しました。");
-          });
+          }
+        });
       });
     });
   }
@@ -78,35 +74,35 @@ export function setupPromptManageModule() {
         if (prompts.length > 0) {
           prompts.forEach((rawPrompt: unknown) => {
             const prompt = toPromptRecord(rawPrompt);
-            const card = document.createElement("div");
-            card.classList.add("prompt-card");
-            const safeTitle = escapeHtml(truncateTitle(prompt.title));
-            const safeContent = escapeHtml(prompt.content);
-            const safeCategory = escapeHtml(prompt.category);
-            const safeCreatedAt = escapeHtml(prompt.createdAt ? new Date(prompt.createdAt).toLocaleString() : "");
-            const safeInputExamples = escapeHtml(prompt.inputExamples || "");
-            const safeOutputExamples = escapeHtml(prompt.outputExamples || "");
-            const safePromptId = escapeHtml(prompt.id ?? "");
-
-            card.innerHTML = `
-              <h3>${safeTitle}</h3>
-              <p>${safeContent}</p>
-              <div class="meta">
-                <span>カテゴリ: ${safeCategory}</span><br>
-                <span>投稿日: ${safeCreatedAt}</span>
-              </div>
-              <!-- 隠し要素として入力例と出力例を保持 -->
-              <p class="d-none input-examples">${safeInputExamples}</p>
-              <p class="d-none output-examples">${safeOutputExamples}</p>
-              <div class="btn-group">
-                <button class="btn btn-sm btn-warning edit-btn" data-id="${safePromptId}">
-                  <i class="bi bi-pencil"></i> 編集
-                </button>
-                <button class="btn btn-sm btn-danger delete-btn" data-id="${safePromptId}">
-                  <i class="bi bi-trash"></i> 削除
-                </button>
-              </div>
-            `;
+            const card = buildPromptCard(
+              {
+                id: prompt.id,
+                title: truncateTitle(prompt.title),
+                content: prompt.content,
+                category: prompt.category,
+                createdAt: prompt.createdAt ? new Date(prompt.createdAt).toLocaleString() : "",
+                inputExamples: prompt.inputExamples || "",
+                outputExamples: prompt.outputExamples || ""
+              },
+              {
+                buttons: [
+                  {
+                    label: "編集",
+                    iconClass: "bi-pencil",
+                    btnClass: "btn btn-sm btn-warning edit-btn"
+                  },
+                  {
+                    label: "削除",
+                    iconClass: "bi-trash",
+                    btnClass: "btn btn-sm btn-danger delete-btn"
+                  }
+                ],
+                fullContent: {
+                  title: prompt.title,
+                  content: prompt.content
+                }
+              }
+            );
             promptList.appendChild(card);
           });
           attachEventHandlers(loadMyPrompts);
