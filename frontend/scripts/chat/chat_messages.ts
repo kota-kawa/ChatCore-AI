@@ -2,6 +2,7 @@
 // --------------------------------------------------
 // ※ DOMPurify が未ロードでも message_utils 側でテキスト描画にフォールバックする
 import { getSharedDomRefs } from "../core/dom";
+import type { DisplayMessageOptions, StreamingBotMessageHandle } from "../../types/chat";
 import { saveMessageToLocalStorage } from "./chat_history";
 import { formatLLMOutput } from "./chat_ui";
 import {
@@ -12,17 +13,6 @@ import {
   scrollMessageToBottom,
   setTextWithLineBreaks
 } from "./message_utils";
-
-type StreamingBotMessageHandle = {
-  appendChunk: (chunk: string) => void;
-  complete: () => void;
-  showError: (message: string) => void;
-};
-
-type DisplayMessageOptions = {
-  prepend?: boolean;
-  autoScroll?: boolean;
-};
 
 const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 

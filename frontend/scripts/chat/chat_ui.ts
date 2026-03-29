@@ -2,17 +2,85 @@
 // --------------------------------------------------
 import { getCurrentChatRoomId, hydrateCurrentChatRoomIdFromStorage } from "../core/app_state";
 import { getSharedDomRefs } from "../core/dom";
+import { isRecord } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
 import { refreshChatShareState } from "./chat_share";
 
-let markedParser: any = null;
+type HighlightResult = {
+  value: string;
+};
+
+type HighlightJsLike = {
+  getLanguage?: (language: string) => unknown;
+  highlight?: (code: string, options: { language: string }) => HighlightResult;
+  highlightAuto?: (code: string) => HighlightResult;
+};
+
+type MarkedRenderer = {
+  code: (token: unknown) => string;
+};
+
+type MarkedParseOptions = {
+  async?: boolean;
+  gfm?: boolean;
+  breaks?: boolean;
+};
+
+type MarkedLike = {
+  use: (options: { renderer: MarkedRenderer }) => void;
+  parse: (markdown: string, options?: MarkedParseOptions) => string | Promise<string>;
+};
+
+type MarkedCtor = new () => MarkedLike;
+
+type MarkedModuleLike = {
+  Marked: MarkedCtor;
+};
+
+type DynamicImporter = (modulePath: string) => Promise<unknown>;
+
+let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markedLoadPromise: Promise<void> | null = null;
-let hljs: any = null;
+let hljs: HighlightJsLike | null = null;
 let markdownEnhancementDisabled = false;
-const dynamicImport = new Function("modulePath", "return import(modulePath);") as (modulePath: string) => Promise<any>;
+const dynamicImport = new Function("modulePath", "return import(modulePath);") as DynamicImporter;
 const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
 
-async function importOptionalModule(modulePath: string) {
+function isHighlightResult(value: unknown): value is HighlightResult {
+  return isRecord(value) && typeof value.value === "string";
+}
+
+function isHighlightJsLike(value: unknown): value is HighlightJsLike {
+  if (!isRecord(value)) return false;
+  const hasGetLanguage = value.getLanguage === undefined || typeof value.getLanguage === "function";
+  const hasHighlight = value.highlight === undefined || typeof value.highlight === "function";
+  const hasHighlightAuto = value.highlightAuto === undefined || typeof value.highlightAuto === "function";
+  return hasGetLanguage && hasHighlight && hasHighlightAuto;
+}
+
+function resolveHighlightJsModule(moduleValue: unknown): HighlightJsLike | null {
+  if (isHighlightJsLike(moduleValue)) return moduleValue;
+  if (isRecord(moduleValue) && isHighlightJsLike(moduleValue.default)) {
+    return moduleValue.default;
+  }
+  return null;
+}
+
+function isMarkedModuleLike(value: unknown): value is MarkedModuleLike {
+  return isRecord(value) && typeof value.Marked === "function";
+}
+
+function readMarkedCodeToken(token: unknown) {
+  if (!isRecord(token)) {
+    return { text: "", lang: "plaintext" };
+  }
+  return {
+    text: typeof token.text === "string" ? token.text : "",
+    lang: typeof token.lang === "string" ? token.lang : "plaintext"
+  };
+}
+
+async function importOptionalModule(modulePath: string): Promise<unknown | null> {
   try {
     return await dynamicImport(modulePath);
   } catch (error) {
@@ -21,7 +89,7 @@ async function importOptionalModule(modulePath: string) {
   }
 }
 
-async function importFirstAvailableModule(modulePaths: string[]) {
+async function importFirstAvailableModule(modulePaths: string[]): Promise<unknown | null> {
   for (const modulePath of modulePaths) {
     const loaded = await importOptionalModule(modulePath);
     if (loaded) return loaded;
@@ -330,12 +398,13 @@ function ensureMarkedParser() {
   markedLoadPromise = (async () => {
     try {
       // 依存解決に失敗しても UI を壊さないよう、CDN モジュールを優先してベストエフォートで読み込む
-      const markedModule = await importFirstAvailableModule([
+      const markedModuleRaw = await importFirstAvailableModule([
         "https://esm.sh/marked@15.0.12?bundle"
       ]);
-      const hljsModule = await importFirstAvailableModule([
+      const hljsModuleRaw = await importFirstAvailableModule([
         "https://esm.sh/highlight.js@11.11.1?bundle"
       ]);
+      const markedModule = isMarkedModuleLike(markedModuleRaw) ? markedModuleRaw : null;
       if (!markedModule) {
         markdownEnhancementDisabled = true;
         console.warn("Marked runtime module is unavailable. Falling back to lightweight markdown formatter.");
@@ -343,20 +412,21 @@ function ensureMarkedParser() {
       }
 
       const { Marked } = markedModule;
-      hljs = hljsModule?.default || hljsModule || null;
+      hljs = resolveHighlightJsModule(hljsModuleRaw);
       
       const renderer = {
-        code(token: any) {
-          const text = token.text || "";
-          const lang = token.lang || "plaintext";
+        code(token: unknown) {
+          const { text, lang } = readMarkedCodeToken(token);
           const language = lang.split(" ")[0] || "plaintext";
           
           let highlighted = text;
           try {
             if (hljs?.getLanguage?.(language)) {
-              highlighted = hljs.highlight(text, { language }).value;
+              const highlightedResult = hljs.highlight?.(text, { language });
+              highlighted = isHighlightResult(highlightedResult) ? highlightedResult.value : escapeHtml(text);
             } else if (hljs?.highlightAuto) {
-              highlighted = hljs.highlightAuto(text).value;
+              const highlightedResult = hljs.highlightAuto(text);
+              highlighted = isHighlightResult(highlightedResult) ? highlightedResult.value : escapeHtml(text);
             } else {
               highlighted = escapeHtml(text);
             }

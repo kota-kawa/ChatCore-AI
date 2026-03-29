@@ -1,28 +1,38 @@
 // chat_history.ts – 履歴のロード／保存
 // --------------------------------------------------
+import {
+  ChatGenerationStatusResponseSchema,
+  ChatHistoryMessageSchema,
+  ChatHistoryResponseSchema,
+  StoredChatHistoryEntrySchema
+} from "../../types/chat";
+import type {
+  ChatHistoryResponse,
+  ChatHistoryPagination
+} from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
 import { getSharedDomRefs } from "../core/dom";
+import { extractApiErrorMessage, parseJsonText, readJsonBody } from "../core/runtime_validation";
 import { connectToGenerationStream } from "./chat_controller";
 import { displayMessage } from "./chat_messages";
 import { scrollMessageToBottom, scrollMessageToTop } from "./message_utils";
 
-type ChatHistoryMessage = {
+const CHAT_HISTORY_PAGE_SIZE = 50;
+const historyPaginationState = new Map<string, { hasMore: boolean; nextBeforeId: number | null }>();
+
+let chatGenerationPollTimer: number | null = null;
+
+type NormalizedChatHistoryMessage = {
   id?: number;
   message: string;
   sender: string;
   timestamp?: string;
 };
 
-type ChatHistoryPagination = {
-  has_more?: boolean;
-  next_before_id?: number | null;
-  limit?: number;
+type StoredHistoryMessage = {
+  text: string;
+  sender: string;
 };
-
-const CHAT_HISTORY_PAGE_SIZE = 50;
-const historyPaginationState = new Map<string, { hasMore: boolean; nextBeforeId: number | null }>();
-
-let chatGenerationPollTimer: number | null = null;
 
 function stopChatGenerationPolling() {
   if (chatGenerationPollTimer === null) return;
@@ -30,11 +40,25 @@ function stopChatGenerationPolling() {
   chatGenerationPollTimer = null;
 }
 
-function readStoredHistory(roomId: string) {
+function normalizeStoredHistory(raw: unknown): StoredHistoryMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: StoredHistoryMessage[] = [];
+  raw.forEach((entry) => {
+    const parsed = StoredChatHistoryEntrySchema.safeParse(entry);
+    if (!parsed.success) return;
+    entries.push({
+      text: typeof parsed.data.text === "string" ? parsed.data.text : "",
+      sender: typeof parsed.data.sender === "string" ? parsed.data.sender : ""
+    });
+  });
+  return entries;
+}
+
+function readStoredHistory(roomId: string): StoredHistoryMessage[] {
   try {
     const stored = localStorage.getItem(`chatHistory_${roomId}`);
-    const parsed = stored ? JSON.parse(stored) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsedRaw = stored ? parseJsonText(stored) : [];
+    return normalizeStoredHistory(parsedRaw);
   } catch {
     return [];
   }
@@ -48,25 +72,29 @@ function writeStoredHistory(roomId: string, list: { message: string; sender: str
 }
 
 function prependStoredHistory(roomId: string, list: { message: string; sender: string }[]) {
-  const existing = readStoredHistory(roomId) as { text?: string; sender?: string }[];
+  const existing = readStoredHistory(roomId);
   const normalizedExisting = existing.map((item) => ({
-    message: typeof item.text === "string" ? item.text : "",
-    sender: typeof item.sender === "string" ? item.sender : ""
+    message: item.text,
+    sender: item.sender
   }));
   writeStoredHistory(roomId, [...list, ...normalizedExisting]);
 }
 
-function normalizeHistoryMessages(raw: unknown): ChatHistoryMessage[] {
+function normalizeHistoryMessages(raw: unknown): NormalizedChatHistoryMessage[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((entry) => {
-    const obj = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
-    return {
-      id: typeof obj.id === "number" ? obj.id : undefined,
-      message: typeof obj.message === "string" ? obj.message : "",
-      sender: typeof obj.sender === "string" ? obj.sender : "",
-      timestamp: typeof obj.timestamp === "string" ? obj.timestamp : undefined
-    };
+  const messages: NormalizedChatHistoryMessage[] = [];
+  raw.forEach((entry) => {
+    const parsed = ChatHistoryMessageSchema.safeParse(entry);
+    if (!parsed.success) return;
+    const data = parsed.data;
+    messages.push({
+      id: typeof data.id === "number" ? data.id : undefined,
+      message: typeof data.message === "string" ? data.message : "",
+      sender: typeof data.sender === "string" ? data.sender : "",
+      timestamp: typeof data.timestamp === "string" ? data.timestamp : undefined
+    });
   });
+  return messages;
 }
 
 function updateHistoryPagination(roomId: string, pagination: ChatHistoryPagination | null | undefined) {
@@ -98,7 +126,7 @@ function renderHistoryLoadMoreButton(roomId: string) {
   chatMessages.insertBefore(button, chatMessages.firstChild);
 }
 
-async function fetchChatHistoryPage(roomId: string, beforeId?: number | null) {
+async function fetchChatHistoryPage(roomId: string, beforeId?: number | null): Promise<ChatHistoryResponse> {
   const params = new URLSearchParams({
     room_id: roomId,
     limit: String(CHAT_HISTORY_PAGE_SIZE)
@@ -108,9 +136,11 @@ async function fetchChatHistoryPage(roomId: string, beforeId?: number | null) {
   }
 
   const response = await fetch(`/api/get_chat_history?${params.toString()}`);
-  const data = await response.json().catch(() => ({}));
+  const rawPayload = await readJsonBody(response).catch(() => ({}));
+  const parsed = ChatHistoryResponseSchema.safeParse(rawPayload);
+  const data = parsed.success ? parsed.data : {};
   if (!response.ok || data.error) {
-    throw new Error(data.error || "履歴取得に失敗しました。");
+    throw new Error(extractApiErrorMessage(rawPayload, "履歴取得に失敗しました。", response.status));
   }
   return data;
 }
@@ -169,7 +199,11 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
     }
 
     fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`)
-      .then((r) => r.json())
+      .then(async (response) => {
+        const rawPayload = await readJsonBody(response).catch(() => ({}));
+        const parsed = ChatGenerationStatusResponseSchema.safeParse(rawPayload);
+        return parsed.success ? parsed.data : {};
+      })
       .then((data) => {
         if (getCurrentChatRoomId() !== roomId) {
           stopChatGenerationPolling();
@@ -227,20 +261,20 @@ function loadChatHistory(shouldPollStatus = true) {
       updateHistoryPagination(roomId, data.pagination);
 
       const scrollToBottom = () => {
-        if (chatMessages.lastElementChild) {
-          scrollMessageToTop(chatMessages.lastElementChild as HTMLElement);
+        if (chatMessages.lastElementChild instanceof HTMLElement) {
+          scrollMessageToTop(chatMessages.lastElementChild);
         } else {
           scrollMessageToBottom();
         }
       };
 
-      const renderMsgs = (list: ChatHistoryMessage[]) => {
+      const renderMsgs = (list: NormalizedChatHistoryMessage[]) => {
         list.forEach((message) => {
           displayMessage(message.message, message.sender, { autoScroll: false });
         });
       };
 
-      const saveToLocalStorage = (list: ChatHistoryMessage[]) => {
+      const saveToLocalStorage = (list: NormalizedChatHistoryMessage[]) => {
         writeStoredHistory(
           roomId,
           list.map((message) => ({ message: message.message, sender: message.sender }))
@@ -262,7 +296,9 @@ function loadChatHistory(shouldPollStatus = true) {
       let hasReplayableJob = false;
       try {
         const statusResp = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`);
-        const statusData = await statusResp.json();
+        const rawPayload = await readJsonBody(statusResp).catch(() => ({}));
+        const parsed = ChatGenerationStatusResponseSchema.safeParse(rawPayload);
+        const statusData = parsed.success ? parsed.data : {};
         if (!statusData.error) {
           isGenerating = statusData.is_generating === true;
           hasReplayableJob = statusData.has_replayable_job === true;
@@ -321,7 +357,8 @@ function loadLocalChatHistory() {
   let history: { text: string; sender: string }[] = [];
   try {
     const stored = localStorage.getItem(key);
-    history = stored ? JSON.parse(stored) : [];
+    const parsedRaw = stored ? parseJsonText(stored) : [];
+    history = normalizeStoredHistory(parsedRaw);
   } catch {
     history = [];
   }
@@ -331,8 +368,8 @@ function loadLocalChatHistory() {
     displayMessage(item.text, item.sender, { autoScroll: false });
   });
 
-  if (chatMessages.lastElementChild) {
-    scrollMessageToTop(chatMessages.lastElementChild as HTMLElement);
+  if (chatMessages.lastElementChild instanceof HTMLElement) {
+    scrollMessageToTop(chatMessages.lastElementChild);
   } else {
     scrollMessageToBottom();
   }
@@ -346,7 +383,8 @@ function saveMessageToLocalStorage(text: string, sender: string) {
   let history: { text: string; sender: string }[] = [];
   try {
     const stored = localStorage.getItem(key);
-    history = stored ? JSON.parse(stored) : [];
+    const parsedRaw = stored ? parseJsonText(stored) : [];
+    history = normalizeStoredHistory(parsedRaw);
   } catch {
     history = [];
   }

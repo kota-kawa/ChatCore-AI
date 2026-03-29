@@ -1,37 +1,12 @@
+import { ShareChatRoomResponseSchema } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
+import { extractApiErrorMessage, readJsonBody } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
-
-type ShareApiResponse = {
-  share_url?: string;
-  error?: string;
-  message?: string;
-  detail?: string;
-};
 
 const SHARE_TITLE = "Chat Core 共有チャット";
 const SHARE_TEXT = "このチャットルームを共有しました。";
 const cachedShareUrls = new Map<string, string>();
 let chatShareInitialized = false;
-
-function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
-  if (typeof payload === "string" && payload.trim()) return payload.trim();
-
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    const directMessageKeys = ["error", "message", "detail"] as const;
-    for (const key of directMessageKeys) {
-      const value = record[key];
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
-      }
-    }
-  }
-
-  if (fallbackStatus) {
-    return `サーバーエラー: ${fallbackStatus}`;
-  }
-  return "共有リンクの作成に失敗しました。";
-}
 
 function getShareModalElements() {
   return {
@@ -123,10 +98,12 @@ async function createShareLink(forceRefresh = false) {
       credentials: "same-origin",
       body: JSON.stringify({ room_id: roomId })
     });
-    const data = (await response.json().catch(() => ({}))) as ShareApiResponse;
+    const rawPayload = await readJsonBody(response).catch(() => ({}));
+    const parsed = ShareChatRoomResponseSchema.safeParse(rawPayload);
+    const data = parsed.success ? parsed.data : null;
 
-    if (!response.ok || typeof data.share_url !== "string" || data.share_url.length === 0) {
-      throw new Error(extractApiErrorMessage(data, response.status));
+    if (!response.ok || !data || typeof data.share_url !== "string" || data.share_url.length === 0) {
+      throw new Error(extractApiErrorMessage(rawPayload, "共有リンクの作成に失敗しました。", response.status));
     }
 
     cachedShareUrls.set(roomId, data.share_url);

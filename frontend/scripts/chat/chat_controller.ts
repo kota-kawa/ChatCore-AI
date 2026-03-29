@@ -1,7 +1,10 @@
 // chat_controller.ts – 送信ボタン／バックエンド通信
 // --------------------------------------------------
+import { ChatJsonResponseSchema, StreamEventDataSchema } from "../../types/chat";
+import type { StreamEventPayload, StreamingBotMessageHandle } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
 import { getSharedDomRefs } from "../core/dom";
+import { extractApiErrorMessage, parseJsonText, readJsonBody } from "../core/runtime_validation";
 import { loadChatHistory } from "./chat_history";
 import {
   renderBotMessageImmediate,
@@ -10,52 +13,6 @@ import {
 } from "./chat_messages";
 import { formatLLMOutput, hideTypingIndicator, showTypingIndicator } from "./chat_ui";
 import { isChatViewportNearBottom, scrollMessageToBottom } from "./message_utils";
-
-type StreamEventPayload = {
-  event: string;
-  data: Record<string, unknown>;
-  id?: number;
-};
-
-function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
-  if (typeof payload === "string" && payload.trim()) return payload.trim();
-
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    const directMessageKeys = ["error", "message", "detail"] as const;
-    for (const key of directMessageKeys) {
-      const value = record[key];
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
-      }
-    }
-
-    const detail = record.detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const firstDetail = detail[0];
-      if (typeof firstDetail === "string" && firstDetail.trim()) {
-        return firstDetail.trim();
-      }
-      if (firstDetail && typeof firstDetail === "object") {
-        const detailMessage = (firstDetail as Record<string, unknown>).msg;
-        if (typeof detailMessage === "string" && detailMessage.trim()) {
-          return detailMessage.trim();
-        }
-      }
-    }
-  }
-
-  if (fallbackStatus) {
-    return `サーバーエラー: ${fallbackStatus}`;
-  }
-  return "予期しないエラーが発生しました。";
-}
-
-type StreamingBotMessageHandle = {
-  appendChunk: (chunk: string) => void;
-  complete: () => void;
-  showError: (message: string) => void;
-};
 
 type ZodiacNode = {
   x: number;
@@ -515,10 +472,13 @@ function parseStreamEventBlock(block: string): StreamEventPayload | null {
   if (dataLines.length === 0) return null;
 
   try {
+    const parsedJson = parseJsonText(dataLines.join("\n"));
+    const parsedData = StreamEventDataSchema.safeParse(parsedJson);
+    if (!parsedData.success) return null;
     return {
       event,
       id: eventId,
-      data: JSON.parse(dataLines.join("\n")) as Record<string, unknown>
+      data: parsedData.data
     };
   } catch (error) {
     console.warn("Failed to parse stream event payload.", error, block);
@@ -560,12 +520,17 @@ async function consumeStreamingChatResponse(
 
   const renderStreamError = (message: string) => {
     dismissThinkingState();
-    const activeStreamHandle = streamHandle as StreamingBotMessageHandle | null;
-    if (activeStreamHandle !== null) {
-      activeStreamHandle.showError(message);
+    if (streamHandle !== null) {
+      streamHandle.showError(message);
       return;
     }
     renderBotMessageImmediate("エラー: " + message);
+  };
+
+  const completeStreamHandle = (handle: StreamingBotMessageHandle | null) => {
+    if (handle) {
+      handle.complete();
+    }
   };
 
   const processBlock = (block: string) => {
@@ -586,7 +551,7 @@ async function consumeStreamingChatResponse(
       completed = true;
       const responseText = typeof parsed.data.response === "string" ? parsed.data.response : "";
       if (streamHandle) {
-        streamHandle.complete();
+        completeStreamHandle(streamHandle);
       } else {
         dismissThinkingState();
         if (responseText) {
@@ -599,7 +564,7 @@ async function consumeStreamingChatResponse(
     if (parsed.event === "aborted") {
       completed = true;
       if (streamHandle) {
-        streamHandle.complete();
+        completeStreamHandle(streamHandle);
       } else {
         dismissThinkingState();
       }
@@ -634,10 +599,7 @@ async function consumeStreamingChatResponse(
     if (err instanceof DOMException && err.name === "AbortError") {
       // ユーザーが停止ボタンを押した場合: 受信済み内容を完了として表示
       dismissThinkingState();
-      const activeHandle = streamHandle as StreamingBotMessageHandle | null;
-      if (activeHandle) {
-        activeHandle.complete();
-      }
+      completeStreamHandle(streamHandle);
       return;
     }
     throw err;
@@ -719,13 +681,17 @@ async function generateResponse(message: string, aiModel: string) {
       throw new Error(rawText.trim() || `サーバーエラー: ${response.status}`);
     }
 
-    const data = await response.json();
+    const rawPayload = await readJsonBody(response);
+    const parsed = ChatJsonResponseSchema.safeParse(rawPayload);
+    const data = parsed.success ? parsed.data : null;
     hideTypingIndicator();
     thinkingWrap?.remove();
     if (response.ok && data && typeof data.response === "string" && data.response) {
       renderBotMessageImmediate(data.response);
     } else {
-      renderBotMessageImmediate("エラー: " + extractApiErrorMessage(data, response.status));
+      renderBotMessageImmediate(
+        "エラー: " + extractApiErrorMessage(rawPayload, "予期しないエラーが発生しました。", response.status)
+      );
     }
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

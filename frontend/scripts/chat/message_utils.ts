@@ -1,6 +1,8 @@
 // message_utils.ts – 共通メッセージユーティリティ
 // --------------------------------------------------
+import { z } from "zod";
 import { getSharedDomRefs } from "../core/dom";
+import { extractApiErrorMessage, readJsonBody } from "../core/runtime_validation";
 
 // DOMPurify が利用可能な場合は使用し、未ロード時は安全なテキスト描画にフォールバック
 
@@ -134,7 +136,7 @@ function renderSanitizedHTML(
   ]
 ) {
   const isBotMessage = element.classList.contains("bot-message");
-  const purifier = (globalThis as { DOMPurify?: { sanitize?: Function } }).DOMPurify;
+  const purifier = typeof DOMPurify !== "undefined" ? DOMPurify : null;
   if (purifier && typeof purifier.sanitize === "function") {
     let clean = purifier.sanitize(dirtyHtml, {
       ALLOWED_TAGS: allowed,
@@ -225,6 +227,10 @@ function copyTextWithExecCommand(text: string) {
   return copied;
 }
 
+const MemoSaveResponseSchema = z.object({
+  status: z.string().optional()
+}).passthrough();
+
 async function copyTextToClipboard(text: string) {
   const clipboardWrite = navigator.clipboard?.writeText?.bind(navigator.clipboard);
   if (clipboardWrite) {
@@ -239,30 +245,6 @@ async function copyTextToClipboard(text: string) {
 
   if (copyTextWithExecCommand(text)) return;
   throw new Error("Clipboard API is unavailable in this browser");
-}
-
-function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
-  if (typeof payload === "string" && payload.trim()) return payload.trim();
-
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    const directMessageKeys = ["error", "message", "detail"] as const;
-    for (const key of directMessageKeys) {
-      const value = record[key];
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
-      }
-    }
-
-    if (record.status === "fail") {
-      return "メモの保存に失敗しました。";
-    }
-  }
-
-  if (fallbackStatus) {
-    return `サーバーエラー: ${fallbackStatus}`;
-  }
-  return "メモの保存に失敗しました。";
 }
 
 // 汎用コピーアイコン
@@ -360,13 +342,12 @@ function createMemoSaveBtn(getText: () => string) {
         })
       });
 
-      const data = await response.json().catch(() => ({}));
-      const status = data && typeof data === "object"
-        ? (data as Record<string, unknown>).status
-        : null;
+      const rawPayload = await readJsonBody(response).catch(() => ({}));
+      const parsed = MemoSaveResponseSchema.safeParse(rawPayload);
+      const status = parsed.success ? parsed.data.status : null;
 
       if (!response.ok || status === "fail") {
-        throw new Error(extractApiErrorMessage(data, response.status));
+        throw new Error(extractApiErrorMessage(rawPayload, "メモの保存に失敗しました。", response.status));
       }
 
       setActionButtonIcon(btn, "bi-check-lg");
