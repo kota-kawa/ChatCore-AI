@@ -10,7 +10,11 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from .api_errors import ApiServiceError
 from .error_messages import ERROR_INVALID_JSON
-from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE, FRONTEND_URL
+from .web_constants import (
+    BASE_DIR as _BASE_DIR,
+    DEFAULT_INTERNAL_ERROR_MESSAGE,
+    FRONTEND_URL,
+)
 from .web_json import (
     get_json as _get_json,
     jsonify as _jsonify,
@@ -29,6 +33,7 @@ from .web_urls import (
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+BASE_DIR = _BASE_DIR
 
 
 async def get_json(request: Request) -> Any | None:
