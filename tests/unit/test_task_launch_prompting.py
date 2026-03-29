@@ -34,39 +34,43 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                with patch(
-                    "blueprints.chat.messages.ephemeral_store.append_message",
-                    side_effect=append_message,
-                ):
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
                     with patch(
-                        "blueprints.chat.messages.ephemeral_store.get_messages",
-                        side_effect=lambda *_args, **_kwargs: list(saved_messages),
+                        "blueprints.chat.messages.ephemeral_store.append_message",
+                        side_effect=append_message,
                     ):
                         with patch(
-                            "blueprints.chat.messages._fetch_prompt_data",
-                            return_value={
-                                "name": "📧 メール作成",
-                                "prompt_template": "メール案を作成してください。",
-                                "response_rules": "- 丁寧に書く",
-                                "output_skeleton": "## 件名\n## 本文",
-                                "input_examples": "",
-                                "output_examples": "",
-                            },
-                        ) as mock_fetch:
+                            "blueprints.chat.messages.ephemeral_store.get_messages",
+                            side_effect=lambda *_args, **_kwargs: list(saved_messages),
+                        ):
                             with patch(
-                                "blueprints.chat.messages.consume_llm_daily_quota",
-                                return_value=(True, 1, 300),
-                            ):
+                                "blueprints.chat.messages._fetch_prompt_data",
+                                return_value={
+                                    "name": "📧 メール作成",
+                                    "prompt_template": "メール案を作成してください。",
+                                    "response_rules": "- 丁寧に書く",
+                                    "output_skeleton": "## 件名\n## 本文",
+                                    "input_examples": "",
+                                    "output_examples": "",
+                                },
+                            ) as mock_fetch:
                                 with patch(
-                                    "blueprints.chat.messages.is_streaming_model",
-                                    return_value=False,
+                                    "blueprints.chat.messages.consume_llm_daily_quota",
+                                    return_value=(True, 1, 300),
                                 ):
                                     with patch(
-                                        "blueprints.chat.messages.get_llm_response",
-                                        return_value="ok",
-                                    ) as mock_llm:
-                                        response = asyncio.run(chat(request))
+                                        "blueprints.chat.messages.is_streaming_model",
+                                        return_value=False,
+                                    ):
+                                        with patch(
+                                            "blueprints.chat.messages.get_llm_response",
+                                            return_value="ok",
+                                        ) as mock_llm:
+                                            response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
@@ -100,33 +104,37 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                with patch(
-                    "blueprints.chat.messages.ephemeral_store.append_message",
-                    side_effect=append_message,
-                ):
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
                     with patch(
-                        "blueprints.chat.messages.ephemeral_store.get_messages",
-                        side_effect=lambda *_args, **_kwargs: list(saved_messages),
+                        "blueprints.chat.messages.ephemeral_store.append_message",
+                        side_effect=append_message,
                     ):
                         with patch(
-                            "blueprints.chat.messages._fetch_prompt_data",
-                            side_effect=RuntimeError("db temporarily unavailable"),
+                            "blueprints.chat.messages.ephemeral_store.get_messages",
+                            side_effect=lambda *_args, **_kwargs: list(saved_messages),
                         ):
                             with patch(
-                                "blueprints.chat.messages.consume_llm_daily_quota",
-                                return_value=(True, 1, 300),
+                                "blueprints.chat.messages._fetch_prompt_data",
+                                side_effect=RuntimeError("db temporarily unavailable"),
                             ):
                                 with patch(
-                                    "blueprints.chat.messages.is_streaming_model",
-                                    return_value=False,
+                                    "blueprints.chat.messages.consume_llm_daily_quota",
+                                    return_value=(True, 1, 300),
                                 ):
                                     with patch(
-                                        "blueprints.chat.messages.get_llm_response",
-                                        return_value="ok",
-                                    ) as mock_llm:
-                                        with patch("blueprints.chat.messages.logger.exception") as mock_log:
-                                            response = asyncio.run(chat(request))
+                                        "blueprints.chat.messages.is_streaming_model",
+                                        return_value=False,
+                                    ):
+                                        with patch(
+                                            "blueprints.chat.messages.get_llm_response",
+                                            return_value="ok",
+                                        ) as mock_llm:
+                                            with patch("blueprints.chat.messages.logger.exception") as mock_log:
+                                                response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))

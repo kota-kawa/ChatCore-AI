@@ -84,17 +84,21 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                with patch(
-                    "blueprints.chat.messages.ephemeral_store.get_messages",
-                    return_value=[{"role": "user", "content": "こんにちは"}],
-                ):
-                    with patch("blueprints.chat.messages.ephemeral_store.append_message"):
-                        with patch(
-                            "blueprints.chat.messages.consume_llm_daily_quota",
-                            return_value=(True, 1, 300),
-                        ):
-                            response = asyncio.run(chat(request))
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
+                    with patch(
+                        "blueprints.chat.messages.ephemeral_store.get_messages",
+                        return_value=[{"role": "user", "content": "こんにちは"}],
+                    ):
+                        with patch("blueprints.chat.messages.ephemeral_store.append_message"):
+                            with patch(
+                                "blueprints.chat.messages.consume_llm_daily_quota",
+                                return_value=(True, 1, 300),
+                            ):
+                                response = asyncio.run(chat(request))
 
         self.assertIsInstance(response, StreamingResponse)
         self.assertEqual(response.media_type, "text/event-stream")
@@ -106,17 +110,21 @@ class ChatStreamingTestCase(unittest.TestCase):
         )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                with patch(
-                    "blueprints.chat.messages.ephemeral_store.get_messages",
-                    return_value=[{"role": "user", "content": "こんにちは"}],
-                ):
-                    with patch("blueprints.chat.messages.ephemeral_store.append_message"):
-                        with patch(
-                            "blueprints.chat.messages.consume_llm_daily_quota",
-                            return_value=(True, 1, 300),
-                        ):
-                            response = asyncio.run(chat(request))
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
+                    with patch(
+                        "blueprints.chat.messages.ephemeral_store.get_messages",
+                        return_value=[{"role": "user", "content": "こんにちは"}],
+                    ):
+                        with patch("blueprints.chat.messages.ephemeral_store.append_message"):
+                            with patch(
+                                "blueprints.chat.messages.consume_llm_daily_quota",
+                                return_value=(True, 1, 300),
+                            ):
+                                response = asyncio.run(chat(request))
 
         self.assertIsInstance(response, StreamingResponse)
         self.assertEqual(response.media_type, "text/event-stream")

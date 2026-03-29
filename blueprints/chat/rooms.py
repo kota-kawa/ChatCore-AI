@@ -1,9 +1,9 @@
-from datetime import date
 import logging
 from typing import Any
 
 from fastapi import Request
 
+from services.auth_limits import consume_guest_chat_daily_limit
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.chat_service import (
@@ -134,15 +134,11 @@ async def new_chat_room(request: Request):
                 "Failed to create chat room for authenticated user.",
             )
     else:
-        # 非ログインユーザーの場合は、1日10回まで利用可能
-        # Guests can create chats up to 10 times per day.
-        today = date.today().isoformat()
-        if session.get("free_chats_date") != today:
-            session["free_chats_date"] = today
-            session["free_chats_count"] = 0
-        if session.get("free_chats_count", 0) >= 10:
-            return jsonify({"error": "1日10回までです"}, status_code=403)
-        session["free_chats_count"] = session.get("free_chats_count", 0) + 1
+        # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
+        # Enforce guest daily quota with a server-side counter.
+        allowed, message = await run_blocking(consume_guest_chat_daily_limit, request)
+        if not allowed:
+            return jsonify({"error": message or "1日10回までです"}, status_code=429)
 
         sid = get_session_id(session)
         await run_blocking(ephemeral_store.create_room, sid, room_id, title)

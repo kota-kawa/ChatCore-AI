@@ -4,7 +4,6 @@ import html
 import logging
 from collections.abc import Iterator
 from functools import partial
-from datetime import date
 from typing import Any
 
 from fastapi import Request
@@ -26,6 +25,7 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
+from services.auth_limits import consume_guest_chat_daily_limit
 from services.llm_daily_limit import consume_llm_daily_quota
 from services.llm import (
     get_llm_response,
@@ -457,17 +457,13 @@ async def chat(request: Request):
     chat_room_id = payload.chat_room_id
     model = payload.model or GEMINI_DEFAULT_MODEL
 
-    # 非ログインユーザーの場合、新規チャット・続けてのチャットの回数としてカウント
-    # Count each guest request toward daily free chat quota.
+    # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
+    # Enforce guest daily quota with a server-side counter.
     session = request.session
     if "user_id" not in session:
-        today = date.today().isoformat()
-        if session.get("free_chats_date") != today:
-            session["free_chats_date"] = today
-            session["free_chats_count"] = 0
-        if session.get("free_chats_count", 0) >= 10:
-            return jsonify({"error": "1日10回までです"}, status_code=403)
-        session["free_chats_count"] = session.get("free_chats_count", 0) + 1
+        allowed, message = await run_blocking(consume_guest_chat_daily_limit, request)
+        if not allowed:
+            return jsonify({"error": message or "1日10回までです"}, status_code=429)
 
     system_prompt = {
         "role": "system",

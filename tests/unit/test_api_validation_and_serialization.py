@@ -66,8 +66,12 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=False):
-                response = asyncio.run(chat(request))
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=False):
+                    response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 404)
         payload = json.loads(response.body.decode("utf-8"))
@@ -82,12 +86,16 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         )
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                with patch("blueprints.chat.messages.ephemeral_store.get_messages", return_value=[]):
-                    with patch("blueprints.chat.messages.ephemeral_store.append_message"):
-                        with patch("blueprints.chat.messages.consume_llm_daily_quota") as mock_quota:
-                            with patch("blueprints.chat.messages.get_llm_response") as mock_llm:
-                                response = asyncio.run(chat(request))
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
+                    with patch("blueprints.chat.messages.ephemeral_store.get_messages", return_value=[]):
+                        with patch("blueprints.chat.messages.ephemeral_store.append_message"):
+                            with patch("blueprints.chat.messages.consume_llm_daily_quota") as mock_quota:
+                                with patch("blueprints.chat.messages.get_llm_response") as mock_llm:
+                                    response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))

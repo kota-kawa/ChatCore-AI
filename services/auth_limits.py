@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import time
+from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any
 
@@ -23,6 +24,8 @@ DEFAULT_ADMIN_LOGIN_WINDOW_SECONDS = 900
 DEFAULT_PASSKEY_AUTH_OPTIONS_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_VERIFY_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS = 300
+DEFAULT_GUEST_CHAT_DAILY_LIMIT = 10
+GUEST_CHAT_DAILY_LIMIT_ENV = "GUEST_CHAT_DAILY_LIMIT"
 
 _in_memory_lock = Lock()
 _in_memory_windows: dict[str, tuple[int, float]] = {}
@@ -53,6 +56,13 @@ def get_request_client_ip(request: Request) -> str:
 
 def _hash_identifier(raw_value: str) -> str:
     return hashlib.sha256(raw_value.encode("utf-8")).hexdigest()
+
+
+def _seconds_until_tomorrow() -> int:
+    now = datetime.now()
+    tomorrow = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
+    seconds = int((tomorrow - now).total_seconds())
+    return max(seconds, 1)
 
 
 def _consume_with_redis(
@@ -164,6 +174,25 @@ def consume_rate_limit(
         limit=limit,
         window_seconds=window_seconds,
     )
+
+
+def consume_guest_chat_daily_limit(request: Request) -> tuple[bool, str | None]:
+    # ゲストのチャット利用回数を日次で制御する（サーバー側カウンタのみ使用）
+    # Enforce guest chat daily quota using only server-side counters.
+    client_ip = get_request_client_ip(request)
+    daily_limit = _get_positive_int_env(
+        GUEST_CHAT_DAILY_LIMIT_ENV,
+        DEFAULT_GUEST_CHAT_DAILY_LIMIT,
+    )
+    allowed, _, _ = consume_rate_limit(
+        "guest_chat:daily:ip",
+        client_ip,
+        limit=daily_limit,
+        window_seconds=_seconds_until_tomorrow(),
+    )
+    if allowed:
+        return True, None
+    return False, f"1日{daily_limit}回までです"
 
 
 def consume_auth_email_send_limits(request: Request, email: str) -> tuple[bool, str | None]:
