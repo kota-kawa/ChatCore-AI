@@ -2,22 +2,18 @@
    Chat page root-level tokens and shell styles.
    Import ordering is controlled by frontend/styles/chat-entry.css. */
 
-:root {
-  --surface: rgba(255, 255, 255, 0.92);
-  --surface-strong: #ffffff;
-  --surface-muted: #f3f7f5;
-  --border-soft: rgba(25, 195, 125, 0.18);
-  --shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.16);
-  --shadow-soft: 0 12px 24px rgba(0, 0, 0, 0.12);
-  /* safe-area fallback */
-  --sai-bottom: env(safe-area-inset-bottom, 0px);
-  --sai-left: env(safe-area-inset-left, 0px);
-  --sai-right: env(safe-area-inset-right, 0px);
-}
-
 /* ホームページ（chat-page）内のボタン質感を
    「新しいプロンプト作成（＋）」系の立体感にそろえる */
 body.chat-page {
+  --surface: var(--chat-surface);
+  --surface-strong: var(--chat-surface-strong);
+  --surface-muted: var(--chat-surface-muted);
+  --border-soft: var(--chat-border-soft);
+  --shadow-strong: var(--chat-shadow-strong);
+  --shadow-soft: var(--chat-shadow-soft);
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
+  --sai-left: env(safe-area-inset-left, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
   --chat-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
   --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
@@ -329,10 +325,10 @@ body.chat-page :where(.prompt-assist__action:disabled, .prompt-assist__apply-all
 }
 
 body.chat-page {
-  --scrollbar-track: rgba(226, 235, 230, 0.88);
-  --scrollbar-thumb: rgba(25, 195, 125, 0.28);
-  --scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
-  --scrollbar-thumb-border: rgba(243, 247, 245, 0.96);
+  --page-scrollbar-track: rgba(226, 235, 230, 0.88);
+  --page-scrollbar-thumb: rgba(25, 195, 125, 0.28);
+  --page-scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
+  --page-scrollbar-thumb-border: rgba(243, 247, 245, 0.96);
   background: #f0f2f1;
   overflow-x: hidden;
   overflow-x: clip;

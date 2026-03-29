@@ -147,8 +147,8 @@
   background: rgba(25, 195, 125, 0.15);
 }
 
-/* ─── モバイル (≤960px) タッチ向け調整 ─── */
-@media (max-width: 960px) {
+/* ─── モバイル (≤992px) タッチ向け調整 ─── */
+@media (max-width: 992px) {
   /* タッチ端末ではアクションアイコンを常に表示 */
   .room-actions-icon {
     opacity: 0.5;

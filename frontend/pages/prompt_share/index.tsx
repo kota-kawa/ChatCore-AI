@@ -585,10 +585,6 @@ export default function PromptSharePage() {
         <link rel="icon" type="image/png" href="/static/favicon.png" />
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-        />
       </Head>
 
       <div className="prompt-share-page">

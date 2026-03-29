@@ -531,14 +531,6 @@ export default function HomePage() {
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-        <link
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-          rel="stylesheet"
-        />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-        />
       </Head>
       <div className="chat-page-shell">
         <HomePageContent />

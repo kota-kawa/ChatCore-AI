@@ -125,10 +125,6 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
         <title>メモを保存</title>
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-        />
       </Head>
 
       <div className="memo-page-shell">

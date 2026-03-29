@@ -1,16 +1,5 @@
 @import url("./prompt_assist.css");
 
-:root {
-  --primary-color: #0f7a51;
-  --accent-color: #16a34a;
-  --accent-color-strong: #0f8a40;
-  --text-color: #1f2937;
-  --muted-text-color: #52606d;
-  --light-bg: #edf8f2;
-  --card-bg: #ffffff;
-  --shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
-}
-
 .task-selection-header {
   display: flex;
   align-items: center;
@@ -23,7 +12,7 @@
   order: 1;
   flex-grow: 1;
   margin: 0;
-  color: var(--primary-color);
+  color: var(--new-prompt-primary-color);
   font-weight: 700;
 }
 
@@ -40,7 +29,7 @@
   position: relative;
   background:
     radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%),
-    linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+    linear-gradient(135deg, var(--new-prompt-primary-color) 0%, var(--new-prompt-accent-color) 100%);
   color: #fff;
   width: 44px;
   height: 44px;
@@ -158,7 +147,7 @@
 
 .new-prompt-modal__lead {
   margin: 0.34rem 0 0;
-  color: var(--muted-text-color);
+  color: var(--new-prompt-muted-text-color);
   font-size: 0.92rem;
   line-height: 1.65;
 }
@@ -242,7 +231,7 @@
   font-family: inherit;
   font-size: 0.95rem;
   line-height: 1.55;
-  color: var(--text-color);
+  color: var(--new-prompt-text-color);
   background: rgba(255, 255, 255, 0.92);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
@@ -314,7 +303,7 @@
 }
 
 .composer-toggle__copy small {
-  color: var(--muted-text-color);
+  color: var(--new-prompt-muted-text-color);
   font-size: 0.8rem;
   line-height: 1.45;
 }
@@ -333,7 +322,7 @@
   width: 100%;
   min-height: 48px;
   background:
-    linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color-strong) 100%);
+    linear-gradient(135deg, var(--new-prompt-accent-color) 0%, var(--new-prompt-accent-color-strong) 100%);
   color: #fff;
   border: none;
   border-radius: 16px;

@@ -8,10 +8,10 @@
 body.prompt-manage-page,
 .prompt-manage-page {
   font-family: 'Poppins', sans-serif;
-  --scrollbar-track: rgba(214, 239, 228, 0.84);
-  --scrollbar-thumb: rgba(17, 153, 142, 0.3);
-  --scrollbar-thumb-hover: rgba(25, 195, 125, 0.42);
-  --scrollbar-thumb-border: rgba(255, 255, 255, 0.94);
+  --page-scrollbar-track: rgba(214, 239, 228, 0.84);
+  --page-scrollbar-thumb: rgba(17, 153, 142, 0.3);
+  --page-scrollbar-thumb-hover: rgba(25, 195, 125, 0.42);
+  --page-scrollbar-thumb-border: rgba(255, 255, 255, 0.94);
   background: linear-gradient(120deg, var(--ps-light-bg) 0%, #ffffff 100%);
   color: var(--ps-text-color);
   line-height: 1.6;

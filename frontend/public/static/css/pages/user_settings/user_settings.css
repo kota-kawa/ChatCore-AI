@@ -1,16 +1,6 @@
 /* user_settings.css
    Styles specific to the user settings page. Base styles are imported via
    index.css. */
-:root {
-  --primary-color-light: #e8f9f3; /* Primary color の薄い版 */
-  --sidebar-bg: #ffffff;
-  --content-bg: #f4f7f6; /* variables.css の secondary-color に近いが、少し調整 */
-  --card-bg: #ffffff;
-  --text-muted: #6c757d;
-  --border-color: #dee2e6;
-  --input-bg: #ffffff; /* 入力フィールドの背景 */
-}
-
 /* ───────── 戻るボタン（.settings-back-btn）基本スタイル ───────── */
 .settings-back-btn {
   background: var(--primary-color) !important; /* 緑色 */
@@ -76,6 +66,44 @@
   display: block;
 }
 
+.security-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.security-panel {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.passkey-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.passkey-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  background: #f7faf8;
+}
+
+.passkey-meta {
+  color: #5f6b66;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.passkey-empty {
+  margin: 0;
+  color: #5f6b66;
+}
+
 /* ─────────────────────────── */
 /* プロンプト管理用スタイル       */
 /* ─────────────────────────── */
@@ -138,7 +166,7 @@
 
 .prompt-card .meta {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--settings-text-muted);
   margin-bottom: 1rem;
 }
 
@@ -209,11 +237,11 @@
 /* global.css の body スタイルをこのページ専用に上書き */
 body.settings-page,
 .user-settings-page {
-  --scrollbar-track: rgba(222, 226, 230, 0.86);
-  --scrollbar-thumb: rgba(25, 195, 125, 0.28);
-  --scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
-  --scrollbar-thumb-border: rgba(244, 247, 246, 0.94);
-  background: var(--content-bg); /* ページ全体の背景 */
+  --page-scrollbar-track: rgba(222, 226, 230, 0.86);
+  --page-scrollbar-thumb: rgba(25, 195, 125, 0.28);
+  --page-scrollbar-thumb-hover: rgba(21, 168, 107, 0.42);
+  --page-scrollbar-thumb-border: rgba(244, 247, 246, 0.94);
+  background: var(--settings-content-bg); /* ページ全体の背景 */
   min-height: 100vh;
   display: block; /* 中央寄せを解除 */
   padding: 0;     /* global.css の padding をリセット */
@@ -231,7 +259,7 @@ body.settings-page,
 /* 左サイドバー */
 .settings-sidebar {
   width: 260px;
-  background: var(--sidebar-bg);
+  background: var(--settings-sidebar-bg);
   padding: 1.5rem;
   box-shadow: 2px 0 15px rgba(0, 0, 0, 0.05);
   display: flex;
@@ -246,7 +274,7 @@ body.settings-page,
 .settings-sidebar .sidebar-header {
   padding-bottom: 1rem;
   margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--settings-border-color);
 }
 
 .settings-sidebar .sidebar-header h3 {
@@ -278,12 +306,12 @@ body.settings-page,
 
 .settings-sidebar .nav-link i {
   font-size: 1.2rem;
-  color: var(--text-muted);
+  color: var(--settings-text-muted);
   transition: color 0.2s ease;
 }
 
 .settings-sidebar .nav-link:hover {
-  background-color: var(--primary-color-light);
+  background-color: var(--settings-primary-color-light);
   color: var(--primary-color);
 }
 
@@ -304,13 +332,13 @@ body.settings-page,
 .settings-sidebar .sidebar-footer {
   margin-top: auto; /* フッターを一番下に配置 */
   padding-top: 1rem;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--settings-border-color);
   text-align: center;
 }
 
 .settings-sidebar .sidebar-footer p {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--settings-text-muted);
   margin: 0;
 }
 
@@ -324,7 +352,7 @@ body.settings-page,
 }
 
 .settings-card {
-  background: var(--card-bg);
+  background: var(--settings-card-bg);
   padding: 2.5rem; /* パディングを増やす */
   border-radius: 16px; /* 角丸を調整 */
   box-shadow: var(--shadow);
@@ -355,11 +383,11 @@ body.settings-page,
 .custom-form-control {
   width: 100%;
   padding: 0.85rem 1rem; /* パディング調整 */
-  border: 1px solid var(--border-color); /* 枠線を少し濃く */
+  border: 1px solid var(--settings-border-color); /* 枠線を少し濃く */
   border-radius: 8px; /* 角丸を調整 */
   font-size: 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background-color: var(--input-bg);
+  background-color: var(--settings-input-bg);
 }
 
 .custom-form-control:focus {
@@ -369,7 +397,7 @@ body.settings-page,
 }
 
 .custom-form-control::placeholder {
-  color: var(--text-muted);
+  color: var(--settings-text-muted);
 }
 
 
@@ -391,7 +419,7 @@ body.settings-page,
   height: 120px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid var(--border-color); /* 枠線を調整 */
+  border: 3px solid var(--settings-border-color); /* 枠線を調整 */
   background-color: var(--secondary-color);
 }
 
@@ -437,7 +465,7 @@ body.settings-page,
   transform: translateY(-50%);
   right: 0.75rem; /* 位置調整 */
   background: transparent;
-  color: var(--text-muted); /* 色を少し濃く */
+  color: var(--settings-text-muted); /* 色を少し濃く */
   border: none; /* 枠線削除 */
   padding: 0.5rem;
 }
@@ -469,8 +497,8 @@ body.settings-page,
   padding: 0.85rem 1.5rem;
   font-weight: 700;
   background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-color);
+  color: var(--settings-text-muted);
+  border: 1px solid var(--settings-border-color);
   border-radius: 12px; /* primary-button と合わせる */
   transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
@@ -478,7 +506,7 @@ body.settings-page,
 .secondary-button:hover {
   background: var(--secondary-color); /* variables.css の secondary-color */
   color: var(--text-dark);
-  border-color: var(--text-muted);
+  border-color: var(--settings-text-muted);
 }
 
 /* レスポンシブ対応 (基本的な例) */
@@ -503,7 +531,7 @@ body.settings-page,
     height: auto;
     position: static; /* モバイルでは固定解除 */
     box-shadow: none;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--settings-border-color);
   }
   .settings-sidebar .sidebar-header h3 {
     font-size: 1.25rem;
@@ -628,7 +656,7 @@ body.settings-page :where(.prompt-card .btn-danger) {
 }
 
 body.settings-page :where(.secondary-button, .toggle-password-btn, .btn-close) {
-  color: var(--text-muted);
+  color: var(--settings-text-muted);
 }
 
 body.settings-page :where(

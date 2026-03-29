@@ -172,11 +172,6 @@
   overflow: hidden;
 }
 
-:root {
-  --cc-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
-  --cc-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
-}
-
 .cc-texture-btn {
   --cc-button-base: #2563eb;
   --cc-button-accent: #1d4ed8;

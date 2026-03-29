@@ -6,8 +6,8 @@
   "scripts": {
     "build:css-bundles": "node scripts/build-css-bundles.mjs",
     "check:imports": "node scripts/check-import-resolve.cjs",
-    "predev": "npm run build:css-bundles && npm run check:imports",
-    "prebuild": "npm run build:css-bundles && npm run check:imports",
+    "predev": "npm run check:imports",
+    "prebuild": "npm run check:imports",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

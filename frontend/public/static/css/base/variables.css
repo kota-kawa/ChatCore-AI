@@ -1,7 +1,10 @@
 /* variables.css
-   共通のカラーバリアブル、テキストカラー、シャドウなど全体で参照する変数定義
+   Design token single source of truth.
+   All :root custom properties must be declared in this file only.
 */
 :root {
+  --font-app-sans: "Noto Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
   --primary-color: #19c37d;
   --primary-hover: #15a86b;
   --primary-subtle: rgba(25, 195, 125, 0.08);
@@ -26,4 +29,54 @@
   --radius-xl: 24px;
   --transition-fast: 0.15s ease;
   --transition-normal: 0.2s ease;
+
+  --scrollbar-size: 10px;
+  --scrollbar-radius: 999px;
+  --scrollbar-track: rgba(148, 163, 184, 0.16);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.34);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.48);
+  --scrollbar-thumb-border: rgba(255, 255, 255, 0.72);
+
+  --cc-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
+  --cc-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+
+  --chat-surface: rgba(255, 255, 255, 0.92);
+  --chat-surface-strong: #ffffff;
+  --chat-surface-muted: #f3f7f5;
+  --chat-border-soft: rgba(25, 195, 125, 0.18);
+  --chat-shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.16);
+  --chat-shadow-soft: 0 12px 24px rgba(0, 0, 0, 0.12);
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
+  --sai-left: env(safe-area-inset-left, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
+
+  --ps-primary-color: #19c37d;
+  --ps-accent-color: #11998e;
+  --ps-text-color: #333;
+  --ps-light-bg: #f0fdf4;
+  --ps-background-color: var(--ps-light-bg);
+  --ps-card-bg: #ffffff;
+  --ps-border-color: #dddddd;
+  --ps-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+
+  --new-prompt-primary-color: #0f7a51;
+  --new-prompt-accent-color: #16a34a;
+  --new-prompt-accent-color-strong: #0f8a40;
+  --new-prompt-text-color: #1f2937;
+  --new-prompt-muted-text-color: #52606d;
+  --new-prompt-light-bg: #edf8f2;
+  --new-prompt-card-bg: #ffffff;
+  --new-prompt-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+
+  --settings-primary-color-light: #e8f9f3;
+  --settings-sidebar-bg: #ffffff;
+  --settings-content-bg: #f4f7f6;
+  --settings-card-bg: #ffffff;
+  --settings-text-muted: #6c757d;
+  --settings-border-color: #dee2e6;
+  --settings-input-bg: #ffffff;
+
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
 }

@@ -213,8 +213,8 @@
   display: none;
 }
 
-/* ─── タブレット (≤960px) ─── */
-@media (max-width: 960px) {
+/* ─── タブレット (≤992px) ─── */
+@media (max-width: 992px) {
   #chat-container {
     max-width: none;
   }

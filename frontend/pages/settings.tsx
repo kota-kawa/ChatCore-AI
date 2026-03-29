@@ -1,6 +1,5 @@
 import Head from "next/head";
-import Script from "next/script";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 type SettingsNavItem = {
   section: string;
@@ -300,20 +299,13 @@ function SettingsPageContent() {
 }
 
 export default function UserSettingsPage() {
-  const [bootstrapReady, setBootstrapReady] = useState(false);
-
   useEffect(() => {
     document.body.classList.add("settings-page");
+    import("../scripts/entries/settings");
     return () => {
       document.body.classList.remove("settings-page");
     };
   }, []);
-
-  useEffect(() => {
-    if (bootstrapReady) {
-      import("../scripts/entries/settings");
-    }
-  }, [bootstrapReady]);
 
   return (
     <>
@@ -328,99 +320,12 @@ export default function UserSettingsPage() {
           href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap"
           rel="stylesheet"
         />
-        <link
-          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-          rel="stylesheet"
-        />
-        <link
-          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
-          rel="stylesheet"
-        />
-        <style>{`
-          .user-settings-page {
-            min-height: 100vh;
-            background: #f4f7f6;
-          }
-          .user-settings-layout {
-            display: flex;
-            min-height: 100vh;
-          }
-          .settings-sidebar {
-            width: 260px;
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-          }
-          .settings-content {
-            flex: 1;
-            margin-left: 260px;
-            padding: 2rem;
-          }
-          .settings-section {
-            display: none;
-          }
-          .settings-section.active {
-            display: block;
-          }
-          .security-stack {
-            display: grid;
-            gap: 1rem;
-          }
-          .security-panel {
-            padding: 1rem 1.1rem;
-            border: 1px solid rgba(0, 0, 0, 0.08);
-            border-radius: 16px;
-            background: #fff;
-          }
-          .passkey-list {
-            display: grid;
-            gap: 0.75rem;
-          }
-          .passkey-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-            padding: 0.9rem 1rem;
-            border-radius: 14px;
-            background: #f7faf8;
-          }
-          .passkey-meta {
-            color: #5f6b66;
-            font-size: 0.92rem;
-            line-height: 1.5;
-          }
-          .passkey-empty {
-            margin: 0;
-            color: #5f6b66;
-          }
-          @media (max-width: 768px) {
-            .user-settings-layout {
-              flex-direction: column;
-            }
-            .settings-sidebar {
-              width: 100%;
-              position: static;
-            }
-            .settings-content {
-              margin-left: 0;
-              padding: 1.5rem;
-            }
-          }
-        `}</style>
-        <link rel="stylesheet" href="/static/css/pages/user_settings/index.bundle.css" />
+        <link rel="stylesheet" href="/static/css/pages/user_settings/index.css" />
       </Head>
 
       <div className="user-settings-page">
         <SettingsPageContent />
       </div>
-
-      <Script
-        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
-        strategy="afterInteractive"
-        onLoad={() => setBootstrapReady(true)}
-      />
     </>
   );
 }

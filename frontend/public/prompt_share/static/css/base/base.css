@@ -1,15 +1,4 @@
 /* Shared variables and resets for prompt share pages */
-:root {
-  --ps-primary-color: #19c37d;
-  --ps-accent-color: #11998e;
-  --ps-text-color: #333;
-  --ps-light-bg: #f0fdf4;
-  --ps-background-color: var(--ps-light-bg);
-  --ps-card-bg: #ffffff;
-  --ps-border-color: #dddddd;
-  --ps-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
 :where(body.prompt-share-page, .prompt-share-page, body.prompt-manage-page, .prompt-manage-page) {
   margin: 0;
   padding: 0;

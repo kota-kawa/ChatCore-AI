@@ -5,7 +5,8 @@ type AuthGatewayGlobalStylesProps = {
 export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesProps) {
   return (
     <style jsx global>{`
-      :root {
+      body.auth-page,
+      .auth-page-root {
         --accent: #00ff88;
         --accent-soft: #ccff99;
         --bg-1: #0e401e;

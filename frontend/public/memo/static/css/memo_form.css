@@ -11,10 +11,10 @@ body.memo-page {
   --memo-text-muted: #7c5a35;
   --memo-shadow-strong: 0 24px 60px rgba(41, 24, 6, 0.14);
   --memo-shadow-soft: 0 10px 24px rgba(41, 24, 6, 0.08);
-  --scrollbar-track: rgba(245, 214, 161, 0.56);
-  --scrollbar-thumb: rgba(217, 119, 6, 0.34);
-  --scrollbar-thumb-hover: rgba(180, 83, 9, 0.48);
-  --scrollbar-thumb-border: rgba(255, 247, 232, 0.94);
+  --page-scrollbar-track: rgba(245, 214, 161, 0.56);
+  --page-scrollbar-thumb: rgba(217, 119, 6, 0.34);
+  --page-scrollbar-thumb-hover: rgba(180, 83, 9, 0.48);
+  --page-scrollbar-thumb-border: rgba(255, 247, 232, 0.94);
   margin: 0;
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
   color: var(--memo-text);
@@ -1013,7 +1013,7 @@ textarea.memo-control {
   flex-shrink: 0;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 992px) {
   .memo-grid {
     grid-template-columns: 1fr;
   }

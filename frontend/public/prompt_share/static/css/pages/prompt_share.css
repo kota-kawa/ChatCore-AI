@@ -1,7 +1,8 @@
 @import url('../base/base.css');
 @import url('../../../../static/css/components/prompt_assist.css');
 
-:root {
+body.prompt-share-page,
+.prompt-share-page {
   --ps-bg: #f8f9fa;
   --ps-surface: #ffffff;
   --ps-surface-muted: #f1f3f4;
@@ -14,15 +15,11 @@
   --ps-danger: #d93025;
   --ps-shadow-soft: 0 1px 3px rgba(60, 64, 67, 0.18);
   --ps-shadow-hover: 0 8px 24px rgba(60, 64, 67, 0.2);
-}
-
-body.prompt-share-page,
-.prompt-share-page {
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
-  --scrollbar-track: rgba(218, 220, 224, 0.78);
-  --scrollbar-thumb: rgba(26, 115, 232, 0.28);
-  --scrollbar-thumb-hover: rgba(24, 90, 188, 0.44);
-  --scrollbar-thumb-border: rgba(248, 249, 250, 0.94);
+  --page-scrollbar-track: rgba(218, 220, 224, 0.78);
+  --page-scrollbar-thumb: rgba(26, 115, 232, 0.28);
+  --page-scrollbar-thumb-hover: rgba(24, 90, 188, 0.44);
+  --page-scrollbar-thumb-border: rgba(248, 249, 250, 0.94);
   color: var(--ps-text-strong);
   line-height: 1.6;
   min-height: 100vh;
