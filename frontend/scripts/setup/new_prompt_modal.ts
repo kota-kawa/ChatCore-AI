@@ -1,4 +1,5 @@
 import { initPromptAssist } from "../components/prompt_assist";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
 import { invalidateTasksCache } from "./setup_tasks_cache";
 import { loadTaskCards } from "./setup_task_cards";
 
@@ -212,20 +213,24 @@ function initNewPromptModal() {
     setComposerStatus("タスクを追加しています...", "info");
 
     try {
-      const response = await fetch("/api/add_task", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const { payload: result } = await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/add_task",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
         },
-        body: JSON.stringify(data),
-      });
-      const result = await response.json().catch(() => ({}));
+        {
+          defaultMessage: "タスクの追加に失敗しました。"
+        }
+      );
 
-      if (!response.ok || result.error) {
-        throw new Error(result.error || "タスクの追加に失敗しました。");
-      }
-
-      setComposerStatus(result.message || "タスクが追加されました。", "success");
+      setComposerStatus(
+        typeof result.message === "string" ? result.message : "タスクが追加されました。",
+        "success"
+      );
       newPostForm.reset();
       showGuardrailFields(false);
       invalidateTasksCache();

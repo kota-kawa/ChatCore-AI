@@ -1,4 +1,6 @@
 import { toPromptListEntry } from "./types";
+import { showConfirmModal } from "../../core/alert_modal";
+import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import { escapeHtml, truncateTitle } from "./utils";
 
 type PromptListModuleOptions = {
@@ -12,28 +14,33 @@ export function setupPromptListModule(options: PromptListModuleOptions) {
     if (!promptListEntriesEl) return;
 
     promptListEntriesEl.querySelectorAll<HTMLButtonElement>(".remove-prompt-list-btn").forEach((btn) => {
-      btn.addEventListener("click", function () {
+      btn.addEventListener("click", async function () {
         const entryId = this.dataset.id;
         if (!entryId) return;
-        if (!confirm("プロンプトリストから削除しますか？")) return;
+        const confirmed = await showConfirmModal("プロンプトリストから削除しますか？");
+        if (!confirmed) return;
 
-        fetch(`/prompt_manage/api/prompt_list/${entryId}`, {
-          method: "DELETE",
-          credentials: "same-origin"
-        })
-          .then((response) => response.json())
-          .then((result) => {
-            if (result.error) {
-              alert("削除エラー: " + result.error);
-            } else {
-              alert(result.message || "プロンプトを削除しました。");
-              loadPromptList();
+        try {
+          const { payload: result } = await fetchJsonOrThrow<Record<string, unknown>>(
+            `/prompt_manage/api/prompt_list/${entryId}`,
+            {
+              method: "DELETE",
+              credentials: "same-origin"
+            },
+            {
+              defaultMessage: "プロンプトリストの削除に失敗しました。"
             }
-          })
-          .catch((err) => {
-            console.error("プロンプトリストの削除中にエラーが発生しました:", err);
-            alert("プロンプトリストの削除中にエラーが発生しました。");
-          });
+          );
+          alert(
+            typeof result.message === "string" && result.message.trim()
+              ? result.message
+              : "プロンプトを削除しました。"
+          );
+          loadPromptList();
+        } catch (err) {
+          console.error("プロンプトリストの削除中にエラーが発生しました:", err);
+          alert(err instanceof Error ? err.message : "プロンプトリストの削除に失敗しました。");
+        }
       });
     });
   }
@@ -43,16 +50,16 @@ export function setupPromptListModule(options: PromptListModuleOptions) {
 
     promptListEntriesEl.innerHTML = "<p>読み込み中...</p>";
 
-    fetch("/prompt_manage/api/prompt_list", {
-      credentials: "same-origin"
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data.error || "プロンプトリストの取得に失敗しました。");
-        }
-        return data;
-      })
+    fetchJsonOrThrow<{ prompts?: unknown[] }>(
+      "/prompt_manage/api/prompt_list",
+      {
+        credentials: "same-origin"
+      },
+      {
+        defaultMessage: "プロンプトリストの取得に失敗しました。"
+      }
+    )
+      .then(({ payload: data }) => data)
       .then((data) => {
         if (!data.prompts || data.prompts.length === 0) {
           promptListEntriesEl.innerHTML = "<p>プロンプトリストは存在しません。</p>";

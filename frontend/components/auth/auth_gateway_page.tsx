@@ -8,6 +8,7 @@ import {
   PasskeyCancelledError,
   registerPasskey
 } from "../../scripts/core/passkeys";
+import { fetchJson } from "../../scripts/core/runtime_validation";
 import { REDIRECT_DELAY_MS } from "./auth_gateway_modules/constants";
 import { AuthCodeStep } from "./auth_gateway_modules/components/auth_code_step";
 import { AuthEntryStep } from "./auth_gateway_modules/components/auth_entry_step";
@@ -130,12 +131,11 @@ export default function AuthGatewayPage() {
 
     setSendingCode(true);
     try {
-      const response = await fetch("/api/auth/send_email_code", {
+      const { payload: data } = await fetchJson<Record<string, unknown>>("/api/auth/send_email_code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmedEmail })
       });
-      const data = await response.json().catch(() => ({}));
 
       if (data.status === "success") {
         setStep("code");
@@ -162,12 +162,11 @@ export default function AuthGatewayPage() {
 
     setVerifyingCode(true);
     try {
-      const response = await fetch("/api/auth/verify_email_code", {
+      const { payload: data } = await fetchJson<Record<string, unknown>>("/api/auth/verify_email_code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authCode: trimmedCode })
       });
-      const data = await response.json().catch(() => ({}));
 
       if (data.status === "success") {
         const flow = data.flow === "register" ? "register" : "login";

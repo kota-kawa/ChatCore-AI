@@ -2,6 +2,7 @@ import { animateAppliedField } from "./animation";
 import { createFieldPreviewCard, createStateCard } from "./cards";
 import { PROMPT_ASSIST_ACTION_META, PROMPT_ASSIST_TARGET_META } from "./constants";
 import { createPromptAssistMarkup } from "./markup";
+import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import type {
   PromptAssistAction,
   PromptAssistConfig,
@@ -265,27 +266,28 @@ export function initPromptAssist(config: PromptAssistConfig) {
     setStatus("AIが提案を生成しています...", "info");
 
     try {
-      const response = await fetch("/api/prompt-assist", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          target,
-          action,
-          fields: currentValues,
-        }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as PromptAssistResponse & {
+      const { payload } = await fetchJsonOrThrow<PromptAssistResponse & {
         error?: string;
-      };
+      }>(
+        "/api/prompt-assist",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            target,
+            action,
+            fields: currentValues,
+          }),
+        },
+        {
+          defaultMessage: "AI補助の取得に失敗しました。"
+        }
+      );
 
       if (currentRequestVersion !== requestVersion) {
         return;
-      }
-
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error || "AI補助の取得に失敗しました。");
       }
 
       renderPreview(payload, currentValues);

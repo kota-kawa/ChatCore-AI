@@ -1,4 +1,6 @@
 import { browserSupportsPasskeys, PasskeyCancelledError, registerPasskey } from "../../core/passkeys";
+import { showConfirmModal } from "../../core/alert_modal";
+import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import { escapeHtml } from "./utils";
 
 type PasskeyModuleOptions = {
@@ -73,11 +75,16 @@ export function setupPasskeyModule(options: PasskeyModuleOptions) {
     passkeySupportStatusEl.textContent = "このブラウザはPasskeyに対応しています。";
 
     try {
-      const response = await fetch("/api/passkeys", { credentials: "same-origin" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.status === "fail") {
-        throw new Error(typeof data.error === "string" ? data.error : "Passkey一覧の取得に失敗しました。");
-      }
+      const { payload: data } = await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/passkeys",
+        {
+          credentials: "same-origin"
+        },
+        {
+          defaultMessage: "Passkey一覧の取得に失敗しました。",
+          hasApplicationError: (payload) => payload.status === "fail"
+        }
+      );
       renderPasskeys(Array.isArray(data.passkeys) ? data.passkeys : []);
     } catch (error) {
       renderPasskeys([]);
@@ -111,20 +118,24 @@ export function setupPasskeyModule(options: PasskeyModuleOptions) {
 
     const rawPasskeyId = target.dataset.passkeyId;
     if (!rawPasskeyId) return;
-    if (!window.confirm("このPasskeyを削除しますか？")) return;
+    const confirmed = await showConfirmModal("このPasskeyを削除しますか？");
+    if (!confirmed) return;
 
     target.disabled = true;
     try {
-      const response = await fetch("/api/passkeys/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passkey_id: Number(rawPasskeyId) }),
-        credentials: "same-origin"
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.status === "fail") {
-        throw new Error(typeof data.error === "string" ? data.error : "Passkeyの削除に失敗しました。");
-      }
+      await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/passkeys/delete",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ passkey_id: Number(rawPasskeyId) }),
+          credentials: "same-origin"
+        },
+        {
+          defaultMessage: "Passkeyの削除に失敗しました。",
+          hasApplicationError: (payload) => payload.status === "fail"
+        }
+      );
       await loadPasskeys();
     } catch (error) {
       alert((error as Error).message);

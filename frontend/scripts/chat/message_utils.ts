@@ -2,7 +2,7 @@
 // --------------------------------------------------
 import { z } from "zod";
 import { getSharedDomRefs } from "../core/dom";
-import { extractApiErrorMessage, readJsonBody } from "../core/runtime_validation";
+import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 
 // DOMPurify が利用可能な場合は使用し、未ロード時は安全なテキスト描画にフォールバック
 
@@ -342,7 +342,7 @@ function createMemoSaveBtn(getText: () => string) {
         })
       });
 
-      const rawPayload = await readJsonBody(response).catch(() => ({}));
+      const rawPayload = await readJsonBodySafe(response);
       const parsed = MemoSaveResponseSchema.safeParse(rawPayload);
       const status = parsed.success ? parsed.data.status : null;
 

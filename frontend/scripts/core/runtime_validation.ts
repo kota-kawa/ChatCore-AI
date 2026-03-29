@@ -1,5 +1,16 @@
 import { ApiErrorPayloadSchema } from "../../types/chat";
 
+type JsonLikeRecord = Record<string, unknown>;
+type FetchJsonResult<TPayload> = {
+  response: Response;
+  payload: TPayload;
+};
+
+type FetchJsonOrThrowOptions<TPayload> = {
+  defaultMessage?: string;
+  hasApplicationError?: (payload: TPayload) => boolean;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -11,6 +22,48 @@ function parseJsonText(raw: string): unknown {
 async function readJsonBody(response: Response): Promise<unknown> {
   const payload: unknown = await response.json();
   return payload;
+}
+
+async function readJsonBodySafe(response: Response, fallback: unknown = {}): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return fallback;
+  }
+}
+
+async function fetchJson<TPayload = JsonLikeRecord>(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<FetchJsonResult<TPayload>> {
+  const response = await fetch(input, init);
+  const payload = (await readJsonBodySafe(response, {})) as TPayload;
+  return { response, payload };
+}
+
+function hasErrorField(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  return typeof payload.error === "string" && payload.error.trim().length > 0;
+}
+
+async function fetchJsonOrThrow<TPayload = JsonLikeRecord>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: FetchJsonOrThrowOptions<TPayload>
+): Promise<FetchJsonResult<TPayload>> {
+  const { response, payload } = await fetchJson<TPayload>(input, init);
+  const fallbackMessage = options?.defaultMessage || "操作に失敗しました。";
+  const hasApplicationError = options?.hasApplicationError
+    ? options.hasApplicationError(payload)
+    : hasErrorField(payload);
+
+  if (!response.ok || hasApplicationError) {
+    throw new Error(
+      extractApiErrorMessage(payload, fallbackMessage, response.ok ? undefined : response.status)
+    );
+  }
+
+  return { response, payload };
 }
 
 function extractApiErrorMessage(
@@ -43,10 +96,18 @@ function extractApiErrorMessage(
     }
   }
 
-  if (fallbackStatus) {
+  if (typeof fallbackStatus === "number") {
     return `サーバーエラー: ${fallbackStatus}`;
   }
   return defaultMessage;
 }
 
-export { extractApiErrorMessage, isRecord, parseJsonText, readJsonBody };
+export {
+  extractApiErrorMessage,
+  fetchJson,
+  fetchJsonOrThrow,
+  isRecord,
+  parseJsonText,
+  readJsonBody,
+  readJsonBodySafe
+};

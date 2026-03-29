@@ -168,8 +168,59 @@
   background: #1d4ed8;
 }
 
+.cc-alert-modal--confirm .cc-alert-modal__actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cc-alert-modal__button--secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.cc-alert-modal__button--secondary:hover {
+  background: #d1d5db;
+}
+
 .cc-alert-modal-open {
   overflow: hidden;
+}
+
+.global-error-boundary {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 58%),
+    linear-gradient(135deg, #f8fbff 0%, #eef2ff 100%);
+}
+
+.global-error-boundary__card {
+  width: min(560px, 100%);
+  border-radius: 18px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+  padding: 28px 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.global-error-boundary__card h1 {
+  margin: 0;
+  font-size: clamp(1.18rem, 1.2rem + 0.4vw, 1.42rem);
+  color: #111827;
+}
+
+.global-error-boundary__card p {
+  margin: 0;
+  color: #374151;
+  line-height: 1.7;
+}
+
+.global-error-boundary__card .cc-texture-btn {
+  justify-self: start;
 }
 
 .cc-texture-btn {

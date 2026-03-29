@@ -1,6 +1,6 @@
 import { ShareChatRoomResponseSchema } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
-import { extractApiErrorMessage, readJsonBody } from "../core/runtime_validation";
+import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
 
 const SHARE_TITLE = "Chat Core 共有チャット";
@@ -98,7 +98,7 @@ async function createShareLink(forceRefresh = false) {
       credentials: "same-origin",
       body: JSON.stringify({ room_id: roomId })
     });
-    const rawPayload = await readJsonBody(response).catch(() => ({}));
+    const rawPayload = await readJsonBodySafe(response);
     const parsed = ShareChatRoomResponseSchema.safeParse(rawPayload);
     const data = parsed.success ? parsed.data : null;
 

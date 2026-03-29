@@ -1,4 +1,5 @@
 import type { PromptData } from "./types";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
 
 type ApiResponse = {
   error?: string;
@@ -6,21 +7,22 @@ type ApiResponse = {
   [key: string]: unknown;
 };
 
-export function sendBookmarkRequest(method: "POST" | "DELETE", payload: Record<string, unknown>) {
+export async function sendBookmarkRequest(
+  method: "POST" | "DELETE",
+  payload: Record<string, unknown>
+) {
   // ブックマーク系APIの共通処理（HTTP失敗と業務エラーを同じ経路で扱う）
   // Shared bookmark API helper handling both HTTP and business-level errors.
-  return fetch("/prompt_share/api/bookmark", {
-    method,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  }).then(async (response) => {
-    const data = (await response.json().catch(() => ({}))) as ApiResponse;
-    if (!response.ok || data.error) {
-      throw new Error(data.error || "操作に失敗しました。");
+  const { payload: data } = await fetchJsonOrThrow<ApiResponse>(
+    "/prompt_share/api/bookmark",
+    {
+      method,
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     }
-    return data;
-  });
+  );
+  return data;
 }
 
 export function savePromptBookmark(prompt: PromptData) {
@@ -45,50 +47,44 @@ export function savePromptToList(prompt: PromptData) {
     return Promise.reject(new Error("保存対象のプロンプトIDが見つかりません。"));
   }
 
-  return fetch("/prompt_share/api/prompt_list", {
+  return fetchJsonOrThrow<ApiResponse>("/prompt_share/api/prompt_list", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       prompt_id: prompt.id
     })
-  }).then(async (response) => {
-    const data = (await response.json().catch(() => ({}))) as ApiResponse;
-    if (!response.ok || data.error) {
-      throw new Error(data.error || "操作に失敗しました。");
-    }
-    return data;
-  });
+  }).then(({ payload }) => payload);
 }
 
 export function fetchPromptList() {
-  return fetch("/prompt_share/api/prompts").then((response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response.json() as Promise<{ prompts?: PromptData[] }>;
-  });
+  return fetchJsonOrThrow<{ prompts?: PromptData[] }>("/prompt_share/api/prompts", undefined, {
+    defaultMessage: "プロンプト一覧の取得に失敗しました。"
+  }).then(({ payload }) => payload);
 }
 
 export function fetchPromptSearchResults(query: string) {
-  return fetch(`/search/prompts?q=${encodeURIComponent(query)}`).then((response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  return fetchJsonOrThrow<{ prompts?: PromptData[] }>(
+    `/search/prompts?q=${encodeURIComponent(query)}`,
+    undefined,
+    {
+      defaultMessage: "検索に失敗しました。"
     }
-    return response.json() as Promise<{ prompts?: PromptData[] }>;
-  });
+  ).then(({ payload }) => payload);
 }
 
 export async function createPrompt(postData: FormData) {
   // FormData は multipart 送信になるため Content-Type は自動設定に任せる
   // Let browser set multipart Content-Type automatically for FormData.
-  const response = await fetch("/prompt_share/api/prompts", {
-    method: "POST",
-    body: postData
-  });
-  const result = (await response.json().catch(() => ({}))) as ApiResponse;
-  if (!response.ok || result.error) {
-    throw new Error(result.error || "プロンプト投稿中にエラーが発生しました。");
-  }
-  return result;
+  const { payload } = await fetchJsonOrThrow<ApiResponse>(
+    "/prompt_share/api/prompts",
+    {
+      method: "POST",
+      body: postData
+    },
+    {
+      defaultMessage: "プロンプト投稿中にエラーが発生しました。"
+    }
+  );
+  return payload;
 }

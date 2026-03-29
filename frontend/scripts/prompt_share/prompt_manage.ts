@@ -1,4 +1,7 @@
 // prompt_manage.ts
+import { showConfirmModal } from "../core/alert_modal";
+import { fetchJsonOrThrow } from "../core/runtime_validation";
+
 const initPromptManage = () => {
   const TITLE_CHAR_LIMIT = 17;
   const CONTENT_CHAR_LIMIT = 160;
@@ -62,9 +65,10 @@ const initPromptManage = () => {
   };
 
   function loadMyPrompts() {
-    fetch("/prompt_manage/api/my_prompts")
-      .then((response) => response.json())
-      .then((data) => {
+    fetchJsonOrThrow<{ prompts?: unknown[] }>("/prompt_manage/api/my_prompts", undefined, {
+      defaultMessage: "プロンプトの取得に失敗しました。"
+    })
+      .then(({ payload: data }) => {
         const promptList = document.getElementById("promptList");
         if (!promptList) return;
         promptList.innerHTML = "";
@@ -125,29 +129,26 @@ const initPromptManage = () => {
     // 削除ボタンのイベント
     const deleteButtons = document.querySelectorAll<HTMLButtonElement>(".delete-btn");
     deleteButtons.forEach((btn) => {
-      btn.addEventListener("click", function () {
+      btn.addEventListener("click", async function () {
         const promptId = this.getAttribute("data-id");
-        if (promptId && confirm("本当にこのプロンプトを削除しますか？")) {
-          fetch(`/prompt_manage/api/prompts/${promptId}`, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json"
-            }
+        if (!promptId) return;
+        const confirmed = await showConfirmModal("本当にこのプロンプトを削除しますか？");
+        if (!confirmed) return;
+
+        fetchJsonOrThrow<Record<string, unknown>>(`/prompt_manage/api/prompts/${promptId}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          }
+        })
+          .then(({ payload: result }) => {
+            alert(typeof result.message === "string" ? result.message : "削除しました。");
+            loadMyPrompts();
           })
-            .then((response) => response.json())
-            .then((result) => {
-              if (result.error) {
-                alert("削除エラー: " + result.error);
-              } else {
-                alert(result.message);
-                loadMyPrompts();
-              }
-            })
-            .catch((err) => {
-              console.error("削除中のエラー:", err);
-              alert("プロンプトの削除中にエラーが発生しました。");
-            });
-        }
+          .catch((err) => {
+            console.error("削除中のエラー:", err);
+            alert(err instanceof Error ? err.message : "プロンプトの削除に失敗しました。");
+          });
       });
     });
 
@@ -211,7 +212,7 @@ const initPromptManage = () => {
       return;
     }
 
-    fetch(`/prompt_manage/api/prompts/${promptId}`, {
+    fetchJsonOrThrow<Record<string, unknown>>(`/prompt_manage/api/prompts/${promptId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json"
@@ -224,22 +225,17 @@ const initPromptManage = () => {
         output_examples: outputExamples
       })
     })
-      .then((response) => response.json())
-      .then((result) => {
-        if (result.error) {
-          alert("更新エラー: " + result.error);
-        } else {
-          alert(result.message);
-          // モーダルを閉じて一覧を再読み込み
-          const editModalEl = document.getElementById("editModal");
-          const modal = bootstrap.Modal.getInstance(editModalEl);
-          modal?.hide();
-          loadMyPrompts();
-        }
+      .then(({ payload: result }) => {
+        alert(typeof result.message === "string" ? result.message : "更新しました。");
+        // モーダルを閉じて一覧を再読み込み
+        const editModalEl = document.getElementById("editModal");
+        const modal = bootstrap.Modal.getInstance(editModalEl);
+        modal?.hide();
+        loadMyPrompts();
       })
       .catch((err) => {
         console.error("更新中のエラー:", err);
-        alert("プロンプトの更新中にエラーが発生しました。");
+        alert(err instanceof Error ? err.message : "プロンプトの更新に失敗しました。");
       });
   });
 

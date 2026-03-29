@@ -2,6 +2,7 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import MarkdownContent from "../../components/MarkdownContent";
+import { fetchJson } from "../../scripts/core/runtime_validation";
 
 type SharedMessage = {
   message: string;
@@ -47,9 +48,8 @@ export default function SharedChatPage() {
     if (!router.isReady || !token) return;
 
     setLoading(true);
-    fetch(`/api/shared_chat_room?token=${encodeURIComponent(token)}`)
-      .then(async (response) => {
-        const data = (await response.json().catch(() => ({}))) as SharedChatPayload;
+    fetchJson<SharedChatPayload>(`/api/shared_chat_room?token=${encodeURIComponent(token)}`)
+      .then(({ response, payload: data }) => {
         if (!response.ok) {
           setPayload({ error: data.error || `共有チャットの取得に失敗しました (${response.status})` });
           return;

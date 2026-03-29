@@ -1,6 +1,7 @@
 // chat_rooms.ts – ルーム一覧・作成／削除／改名
 // --------------------------------------------------
 import { getCurrentChatRoomId, setCurrentChatRoomId } from "../core/app_state";
+import { showConfirmModal } from "../core/alert_modal";
 import { getSharedDomRefs } from "../core/dom";
 import { loadChatHistory, loadLocalChatHistory } from "./chat_history";
 import { closeChatShareModal, refreshChatShareState } from "./chat_share";
@@ -116,10 +117,13 @@ function buildRoomActionsMenu(room: ChatRoom) {
   del.className = "menu-item";
   del.innerHTML = '<i class="bi bi-trash" style="margin-right:6px;"></i> 削除';
   decorateMenuItem(del, "#dc3545", "#ffe6e6");
-  del.addEventListener("click", (e) => {
+  del.addEventListener("click", async (e) => {
     e.stopPropagation();
     menu.style.display = "none";
-    if (confirm(`「${room.title}」を削除しますか？`)) deleteChatRoom(room.id);
+    const confirmed = await showConfirmModal(`「${room.title}」を削除しますか？`);
+    if (confirmed) {
+      deleteChatRoom(room.id);
+    }
   });
 
   menu.append(rename, del);

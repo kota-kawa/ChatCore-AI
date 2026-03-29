@@ -2,6 +2,7 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import MarkdownContent from "../../../components/MarkdownContent";
+import { fetchJson } from "../../../scripts/core/runtime_validation";
 
 type SharedMemo = {
   title?: string;
@@ -31,9 +32,8 @@ export default function SharedMemoPage() {
     if (!router.isReady || !token) return;
 
     setLoading(true);
-    fetch(`/memo/api/shared?token=${encodeURIComponent(token)}`)
-      .then(async (response) => {
-        const data = (await response.json().catch(() => ({}))) as SharedMemoPayload;
+    fetchJson<SharedMemoPayload>(`/memo/api/shared?token=${encodeURIComponent(token)}`)
+      .then(({ response, payload: data }) => {
         if (!response.ok) {
           setPayload({ error: data.error || `共有メモの取得に失敗しました (${response.status})` });
           return;

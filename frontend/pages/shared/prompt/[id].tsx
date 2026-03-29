@@ -2,6 +2,7 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import MarkdownContent from "../../../components/MarkdownContent";
+import { fetchJson } from "../../../scripts/core/runtime_validation";
 
 type SharedPrompt = {
   id?: number | string;
@@ -50,9 +51,8 @@ export default function SharedPromptPage() {
     if (!router.isReady || !promptId) return;
 
     setLoading(true);
-    fetch(`/prompt_share/api/prompts/${encodeURIComponent(promptId)}`)
-      .then(async (response) => {
-        const data = (await response.json().catch(() => ({}))) as SharedPromptPayload;
+    fetchJson<SharedPromptPayload>(`/prompt_share/api/prompts/${encodeURIComponent(promptId)}`)
+      .then(({ response, payload: data }) => {
         if (!response.ok) {
           setPayload({ error: data.error || `共有プロンプトの取得に失敗しました (${response.status})` });
           return;

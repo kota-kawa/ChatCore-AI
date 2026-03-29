@@ -12,7 +12,7 @@ import type {
 } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
 import { getSharedDomRefs } from "../core/dom";
-import { extractApiErrorMessage, parseJsonText, readJsonBody } from "../core/runtime_validation";
+import { extractApiErrorMessage, parseJsonText, readJsonBodySafe } from "../core/runtime_validation";
 import { connectToGenerationStream } from "./chat_controller";
 import { displayMessage } from "./chat_messages";
 import { scrollMessageToBottom, scrollMessageToTop } from "./message_utils";
@@ -136,7 +136,7 @@ async function fetchChatHistoryPage(roomId: string, beforeId?: number | null): P
   }
 
   const response = await fetch(`/api/get_chat_history?${params.toString()}`);
-  const rawPayload = await readJsonBody(response).catch(() => ({}));
+  const rawPayload = await readJsonBodySafe(response);
   const parsed = ChatHistoryResponseSchema.safeParse(rawPayload);
   const data = parsed.success ? parsed.data : {};
   if (!response.ok || data.error) {
@@ -200,7 +200,7 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
 
     fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`)
       .then(async (response) => {
-        const rawPayload = await readJsonBody(response).catch(() => ({}));
+        const rawPayload = await readJsonBodySafe(response);
         const parsed = ChatGenerationStatusResponseSchema.safeParse(rawPayload);
         return parsed.success ? parsed.data : {};
       })
@@ -296,7 +296,7 @@ function loadChatHistory(shouldPollStatus = true) {
       let hasReplayableJob = false;
       try {
         const statusResp = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`);
-        const rawPayload = await readJsonBody(statusResp).catch(() => ({}));
+        const rawPayload = await readJsonBodySafe(statusResp);
         const parsed = ChatGenerationStatusResponseSchema.safeParse(rawPayload);
         const statusData = parsed.success ? parsed.data : {};
         if (!statusData.error) {

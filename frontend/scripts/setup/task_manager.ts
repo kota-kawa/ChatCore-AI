@@ -5,6 +5,7 @@ import {
   setCurrentEditingCard,
   setTaskOrderEditingState
 } from "../core/app_state";
+import { showConfirmModal } from "../core/alert_modal";
 import { loadTaskCards } from "./setup_task_cards";
 import { initToggleTasks } from "./setup_task_toggle";
 import { invalidateTasksCache } from "./setup_tasks_cache";
@@ -241,39 +242,40 @@ function toggleTaskOrderEditing() {
       deleteBtn.setAttribute("data-tooltip", "このタスクを削除");
       deleteBtn.setAttribute("data-tooltip-placement", "top");
       // ボタン押下時にタスクカードのクリックイベントと区別するためイベント伝播を停止
-      deleteBtn.addEventListener("click", function (e) {
+      deleteBtn.addEventListener("click", async function (e) {
         e.stopPropagation();
         const targetCard = (e.currentTarget as HTMLElement | null)?.closest(".prompt-card") as HTMLElement | null;
         if (!targetCard) return;
-        if (confirm("このタスクを削除してもよろしいですか？")) {
-          const taskName = targetCard.getAttribute("data-task");
-          fetch("/api/delete_task", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ task: taskName })
+        const confirmed = await showConfirmModal("このタスクを削除してもよろしいですか？");
+        if (!confirmed) return;
+
+        const taskName = targetCard.getAttribute("data-task");
+        fetch("/api/delete_task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: taskName })
+        })
+          .then((response) => {
+            if (!response.ok) {
+              return response.json().then((errorData) => {
+                throw new Error(errorData.error || "削除に失敗しました");
+              });
+            }
+            return response.json();
           })
-            .then((response) => {
-              if (!response.ok) {
-                return response.json().then((errorData) => {
-                  throw new Error(errorData.error || "削除に失敗しました");
-                });
-              }
-              return response.json();
-            })
-            .then(() => {
-              // 削除が成功した場合、対応するラッパー要素を削除し、並び順保存のためのAPI呼び出しも非同期で行う
-              const wrapper = targetCard.closest(".task-wrapper");
-              if (wrapper) {
-                wrapper.remove();
-              }
-              invalidateTasksCache();
-              // 並び順の更新は非同期で行うので、ここでページ再読み込みは行わずにDOM上を更新
-              saveTaskOrder();
-            })
-            .catch((err) => {
-              alert("削除に失敗しました: " + err.message);
-            });
-        }
+          .then(() => {
+            // 削除が成功した場合、対応するラッパー要素を削除し、並び順保存のためのAPI呼び出しも非同期で行う
+            const wrapper = targetCard.closest(".task-wrapper");
+            if (wrapper) {
+              wrapper.remove();
+            }
+            invalidateTasksCache();
+            // 並び順の更新は非同期で行うので、ここでページ再読み込みは行わずにDOM上を更新
+            saveTaskOrder();
+          })
+          .catch((err) => {
+            alert("削除に失敗しました: " + err.message);
+          });
       });
 
       deleteContainer.appendChild(deleteBtn);

@@ -1,3 +1,5 @@
+import { fetchJsonOrThrow } from "./runtime_validation";
+
 type JsonRecord = Record<string, unknown>;
 type PasskeyAction = "authenticate" | "register";
 
@@ -117,19 +119,18 @@ function publicKeyCredentialToJson(credential: PublicKeyCredential): JsonRecord 
   return payload;
 }
 
-async function readJsonResponse(response: Response): Promise<JsonRecord> {
-  return (await response.json().catch(() => ({}))) as JsonRecord;
-}
-
 async function requestJson(url: string, init?: RequestInit): Promise<JsonRecord> {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...init
-  });
-  const payload = await readJsonResponse(response);
-  if (!response.ok || payload.status === "fail") {
-    throw new Error(String(payload.error || "認証に失敗しました。"));
-  }
+  const { payload } = await fetchJsonOrThrow<JsonRecord>(
+    url,
+    {
+      credentials: "same-origin",
+      ...init
+    },
+    {
+      defaultMessage: "認証に失敗しました。",
+      hasApplicationError: (data) => data.status === "fail"
+    }
+  );
   return payload;
 }
 
