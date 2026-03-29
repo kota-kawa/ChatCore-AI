@@ -147,60 +147,58 @@ def _load_passkey_ceremony(raw_state: Any) -> dict[str, Any] | None:
 
 
 def list_passkeys_for_user(user_id: int) -> list[dict[str, Any]]:
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(
-            """
-            SELECT id,
-                   credential_id,
-                   sign_count,
-                   aaguid,
-                   credential_device_type,
-                   credential_backed_up,
-                   label,
-                   created_at,
-                   last_used_at
-              FROM user_passkeys
-             WHERE user_id = %s
-             ORDER BY created_at DESC, id DESC
-            """,
-            (user_id,),
-        )
-        rows = cursor.fetchall() or []
-        return [dict(row) for row in rows]
-    finally:
-        cursor.close()
-        conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT id,
+                       credential_id,
+                       sign_count,
+                       aaguid,
+                       credential_device_type,
+                       credential_backed_up,
+                       label,
+                       created_at,
+                       last_used_at
+                  FROM user_passkeys
+                 WHERE user_id = %s
+                 ORDER BY created_at DESC, id DESC
+                """,
+                (user_id,),
+            )
+            rows = cursor.fetchall() or []
+            return [dict(row) for row in rows]
+        finally:
+            cursor.close()
 
 
 def get_passkey_by_credential_id(credential_id: str) -> dict[str, Any] | None:
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(
-            """
-            SELECT id,
-                   user_id,
-                   credential_id,
-                   public_key,
-                   sign_count,
-                   aaguid,
-                   credential_device_type,
-                   credential_backed_up,
-                   label,
-                   created_at,
-                   last_used_at
-              FROM user_passkeys
-             WHERE credential_id = %s
-            """,
-            (credential_id,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
-    finally:
-        cursor.close()
-        conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT id,
+                       user_id,
+                       credential_id,
+                       public_key,
+                       sign_count,
+                       aaguid,
+                       credential_device_type,
+                       credential_backed_up,
+                       label,
+                       created_at,
+                       last_used_at
+                  FROM user_passkeys
+                 WHERE credential_id = %s
+                """,
+                (credential_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            cursor.close()
 
 
 def create_passkey(
@@ -218,53 +216,52 @@ def create_passkey(
     normalized_aaguid = (aaguid or "").strip() or None
     normalized_device_type = (credential_device_type or "").strip() or None
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(
-            """
-            INSERT INTO user_passkeys (
-                user_id,
-                credential_id,
-                public_key,
-                sign_count,
-                aaguid,
-                credential_device_type,
-                credential_backed_up,
-                label,
-                last_used_at
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                INSERT INTO user_passkeys (
+                    user_id,
+                    credential_id,
+                    public_key,
+                    sign_count,
+                    aaguid,
+                    credential_device_type,
+                    credential_backed_up,
+                    label,
+                    last_used_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                RETURNING id,
+                          credential_id,
+                          sign_count,
+                          aaguid,
+                          credential_device_type,
+                          credential_backed_up,
+                          label,
+                          created_at,
+                          last_used_at
+                """,
+                (
+                    user_id,
+                    credential_id,
+                    public_key,
+                    int(sign_count),
+                    normalized_aaguid,
+                    normalized_device_type,
+                    bool(credential_backed_up),
+                    normalized_label,
+                ),
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            RETURNING id,
-                      credential_id,
-                      sign_count,
-                      aaguid,
-                      credential_device_type,
-                      credential_backed_up,
-                      label,
-                      created_at,
-                      last_used_at
-            """,
-            (
-                user_id,
-                credential_id,
-                public_key,
-                int(sign_count),
-                normalized_aaguid,
-                normalized_device_type,
-                bool(credential_backed_up),
-                normalized_label,
-            ),
-        )
-        conn.commit()
-        row = cursor.fetchone()
-        return dict(row) if row else None
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cursor.close()
-        conn.close()
+            conn.commit()
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
 
 def update_passkey_usage(
@@ -274,52 +271,50 @@ def update_passkey_usage(
     credential_backed_up: bool | None = None,
     credential_device_type: str | None = None,
 ) -> None:
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            UPDATE user_passkeys
-               SET sign_count = %s,
-                   credential_backed_up = COALESCE(%s, credential_backed_up),
-                   credential_device_type = COALESCE(%s, credential_device_type),
-                   last_used_at = CURRENT_TIMESTAMP
-             WHERE id = %s
-            """,
-            (
-                int(sign_count),
-                credential_backed_up,
-                (credential_device_type or "").strip() or None,
-                passkey_id,
-            ),
-        )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cursor.close()
-        conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE user_passkeys
+                   SET sign_count = %s,
+                       credential_backed_up = COALESCE(%s, credential_backed_up),
+                       credential_device_type = COALESCE(%s, credential_device_type),
+                       last_used_at = CURRENT_TIMESTAMP
+                 WHERE id = %s
+                """,
+                (
+                    int(sign_count),
+                    credential_backed_up,
+                    (credential_device_type or "").strip() or None,
+                    passkey_id,
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
 
 def delete_passkey(user_id: int, passkey_id: int) -> bool:
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            DELETE FROM user_passkeys
-             WHERE id = %s
-               AND user_id = %s
-            """,
-            (passkey_id, user_id),
-        )
-        deleted = cursor.rowcount > 0
-        conn.commit()
-        return deleted
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cursor.close()
-        conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                DELETE FROM user_passkeys
+                 WHERE id = %s
+                   AND user_id = %s
+                """,
+                (passkey_id, user_id),
+            )
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()

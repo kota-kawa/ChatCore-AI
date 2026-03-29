@@ -49,6 +49,13 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
 
 class UserAuthProvidersTestCase(unittest.TestCase):
     def test_create_user_persists_email_provider_in_separate_table(self):

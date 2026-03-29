@@ -30,13 +30,12 @@ def send_email(to_address: str, subject: str, body_text: str) -> None:
     # Send a plain-text email through Gmail SMTP.
     """指定アドレスにメール送信"""
     send_address, send_password = _load_email_credentials()
-    smtpobj = smtplib.SMTP("smtp.gmail.com", 587)
-    smtpobj.starttls()
-    smtpobj.login(send_address, send_password)
-    msg = MIMEText(body_text)
-    msg['Subject'] = subject
-    msg['From'] = send_address
-    msg['To'] = to_address
-    msg['Date'] = formatdate()
-    smtpobj.send_message(msg)
-    smtpobj.close()
+    with smtplib.SMTP("smtp.gmail.com", 587) as smtpobj:
+        smtpobj.starttls()
+        smtpobj.login(send_address, send_password)
+        msg = MIMEText(body_text)
+        msg['Subject'] = subject
+        msg['From'] = send_address
+        msg['To'] = to_address
+        msg['Date'] = formatdate()
+        smtpobj.send_message(msg)

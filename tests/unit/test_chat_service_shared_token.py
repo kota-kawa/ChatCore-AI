@@ -68,6 +68,13 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
 
 class ChatServiceSharedTokenTestCase(unittest.TestCase):
     def test_create_or_get_shared_chat_token_returns_404_when_room_missing(self):

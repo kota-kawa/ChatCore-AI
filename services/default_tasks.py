@@ -90,70 +90,69 @@ def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
 def ensure_default_tasks_seeded() -> int:
     # 共通タスク（user_id IS NULL）に不足分のみ追加し、追加件数を返す
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            SELECT name
-              FROM task_with_examples
-             WHERE user_id IS NULL
-               AND deleted_at IS NULL
-            """
-        )
-        existing_names = {
-            name
-            for name in (_extract_name(row) for row in cursor.fetchall())
-            if isinstance(name, str)
-        }
-
-        inserted = 0
-        for (
-            name,
-            template,
-            response_rules,
-            output_skeleton,
-            input_example,
-            output_example,
-            display_order,
-        ) in default_task_rows():
-            if name in existing_names:
-                continue
-
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
             cursor.execute(
                 """
-                INSERT INTO task_with_examples
-                      (
-                          user_id,
-                          name,
-                          prompt_template,
-                          response_rules,
-                          output_skeleton,
-                          input_examples,
-                          output_examples,
-                          display_order
-                      )
-                VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    name,
-                    template,
-                    response_rules,
-                    output_skeleton,
-                    input_example,
-                    output_example,
-                    display_order,
-                ),
+                SELECT name
+                  FROM task_with_examples
+                 WHERE user_id IS NULL
+                   AND deleted_at IS NULL
+                """
             )
-            inserted += 1
+            existing_names = {
+                name
+                for name in (_extract_name(row) for row in cursor.fetchall())
+                if isinstance(name, str)
+            }
 
-        if inserted > 0:
-            conn.commit()
+            inserted = 0
+            for (
+                name,
+                template,
+                response_rules,
+                output_skeleton,
+                input_example,
+                output_example,
+                display_order,
+            ) in default_task_rows():
+                if name in existing_names:
+                    continue
 
-        return inserted
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cursor.close()
-        conn.close()
+                cursor.execute(
+                    """
+                    INSERT INTO task_with_examples
+                          (
+                              user_id,
+                              name,
+                              prompt_template,
+                              response_rules,
+                              output_skeleton,
+                              input_examples,
+                              output_examples,
+                              display_order
+                          )
+                    VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        name,
+                        template,
+                        response_rules,
+                        output_skeleton,
+                        input_example,
+                        output_example,
+                        display_order,
+                    ),
+                )
+                inserted += 1
+
+            if inserted > 0:
+                conn.commit()
+
+            return inserted
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()

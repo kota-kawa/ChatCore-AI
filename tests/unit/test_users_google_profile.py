@@ -51,6 +51,13 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
 
 class GoogleProfileSyncTestCase(unittest.TestCase):
     def test_updates_default_username_and_avatar_from_google(self):
