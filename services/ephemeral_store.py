@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
 from .cache import get_redis_client
+
+logger = logging.getLogger(__name__)
 
 
 class EphemeralChatStore:
@@ -22,7 +25,11 @@ class EphemeralChatStore:
         return json.dumps(room, ensure_ascii=False)
 
     def _decode(self, payload: str) -> dict:
-        return json.loads(payload)
+        try:
+            return json.loads(payload)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            logger.warning("Failed to decode ephemeral room payload; using empty fallback.", exc_info=True)
+            return {}
 
     def _created_at_from_room(self, room: dict) -> Optional[datetime]:
         created_at = room.get("created_at")
@@ -32,7 +39,7 @@ class EphemeralChatStore:
             return created_at
         try:
             return datetime.fromisoformat(created_at)
-        except ValueError:
+        except (TypeError, ValueError):
             return None
 
     def _remaining_ttl(self, room: dict) -> int:
@@ -54,13 +61,11 @@ class EphemeralChatStore:
         # Let Redis TTL handle expiry; prune expired rooms only for in-memory mode.
         if self._redis is not None:
             return
-        now = datetime.now()
         sids_to_delete = []
         for sid, rooms in self._memory.items():
             room_ids_to_delete = []
             for room_id, room_data in rooms.items():
-                created_at = room_data.get("created_at")
-                if created_at and (now - created_at).total_seconds() > self.expiration_seconds:
+                if self._is_expired(room_data):
                     room_ids_to_delete.append(room_id)
             for room_id in room_ids_to_delete:
                 del rooms[room_id]
@@ -82,11 +87,7 @@ class EphemeralChatStore:
             self._redis.set(key, self._encode(room), ex=self.expiration_seconds)
             return
 
-        self._memory.setdefault(sid, {})[room_id] = {
-            "title": title,
-            "messages": [],
-            "created_at": datetime.now(),
-        }
+        self._memory.setdefault(sid, {})[room_id] = room
 
     def get_room(self, sid: str, room_id: str) -> Optional[dict]:
         # 取得時にも期限切れを判定し、期限超過ルームは削除して None を返す
@@ -97,6 +98,9 @@ class EphemeralChatStore:
             if not payload:
                 return None
             room = self._decode(payload)
+            if not room:
+                self._redis.delete(key)
+                return None
             if self._is_expired(room):
                 self._redis.delete(key)
                 return None
