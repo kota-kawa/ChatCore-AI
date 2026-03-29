@@ -1,7 +1,7 @@
 import Head from "next/head";
-import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import useSWR from "swr";
 
 type MemoRecord = {
   id: number | string;
@@ -17,39 +17,33 @@ type MessageState = {
   text: string;
 };
 
-type MemoPageProps = {
-  memos: MemoRecord[];
-  saved: boolean;
+type MemoListResponse = {
+  memos?: MemoRecord[];
+  error?: string;
 };
 
-export const getServerSideProps: GetServerSideProps<MemoPageProps> = async (context) => {
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
-  const cookie = typeof context.req.headers.cookie === "string" ? context.req.headers.cookie : "";
-  let memos: MemoRecord[] = [];
+type HttpError = Error & {
+  status?: number;
+};
 
-  try {
-    const res = await fetch(`${backendUrl}/memo/api/recent`, {
-      headers: cookie ? { cookie } : undefined
-    });
-    if (res.ok) {
-      const data = await res.json();
-      memos = Array.isArray(data.memos) ? data.memos : [];
-    }
-  } catch (err) {
-    memos = [];
+const loadRecentMemos = async (url: string): Promise<MemoRecord[]> => {
+  const res = await fetch(url, { credentials: "same-origin" });
+  const data: MemoListResponse = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    return [];
   }
 
-  const saved = context.query.saved === "1";
+  if (!res.ok) {
+    const error = new Error(data.error || `メモの取得に失敗しました (${res.status})`) as HttpError;
+    error.status = res.status;
+    throw error;
+  }
 
-  return {
-    props: {
-      memos,
-      saved
-    }
-  };
+  return Array.isArray(data.memos) ? data.memos : [];
 };
 
-export default function MemoPage({ memos, saved }: MemoPageProps) {
+export default function MemoPage() {
   useEffect(() => {
     document.body.classList.add("memo-page");
     import("../scripts/entries/memo");
@@ -60,16 +54,31 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
   }, []);
 
   const router = useRouter();
+  const { data: memos = [], error: memoLoadError, isLoading, mutate } = useSWR<MemoRecord[]>(
+    "/memo/api/recent",
+    loadRecentMemos,
+    {
+      revalidateOnFocus: true,
+      refreshInterval: 15000,
+      dedupingInterval: 5000,
+      keepPreviousData: true
+    }
+  );
   const [formState, setFormState] = useState({
     input_content: "",
     ai_response: "",
     title: "",
     tags: ""
   });
-  const [message, setMessage] = useState<MessageState | null>(
-    saved ? { type: "success", text: "メモを保存しました。" } : null
-  );
+  const [message, setMessage] = useState<MessageState | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.saved === "1") {
+      setMessage({ type: "success", text: "メモを保存しました。" });
+    }
+  }, [router.isReady, router.query.saved]);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -106,7 +115,15 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
         throw new Error(data.error || "メモの保存に失敗しました。");
       }
 
-      router.replace("/memo?saved=1");
+      setFormState({
+        input_content: "",
+        ai_response: "",
+        title: "",
+        tags: ""
+      });
+      setMessage({ type: "success", text: "メモを保存しました。" });
+      void router.replace("/memo?saved=1", undefined, { shallow: true });
+      void mutate();
     } catch (error) {
       setMessage({
         type: "error",
@@ -281,6 +298,18 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                 <p>メモをクリックすると内容が表示されます。</p>
               </div>
 
+              {memoLoadError ? (
+                <div className="memo-history__empty">
+                  {memoLoadError.message}
+                </div>
+              ) : null}
+
+              {!memoLoadError && isLoading && memos.length === 0 ? (
+                <div className="memo-history__empty">
+                  メモを読み込んでいます...
+                </div>
+              ) : null}
+
               {memos.length ? (
                 <ul className="memo-history__list">
                   {memos.map((memo) => {
@@ -342,11 +371,11 @@ export default function MemoPage({ memos, saved }: MemoPageProps) {
                     );
                   })}
                 </ul>
-              ) : (
+              ) : !memoLoadError && !isLoading ? (
                 <div className="memo-history__empty">
                   まだ保存されたメモはありません。
                 </div>
-              )}
+              ) : null}
             </section>
           </div>
         </div>

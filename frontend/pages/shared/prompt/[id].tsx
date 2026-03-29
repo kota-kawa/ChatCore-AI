@@ -1,8 +1,6 @@
 import Head from "next/head";
-import { useRouter } from "next/router";
-import { useEffect, useMemo, useState } from "react";
+import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../../components/MarkdownContent";
-import { fetchJson } from "../../../scripts/core/runtime_validation";
 
 type SharedPrompt = {
   id?: number | string;
@@ -23,6 +21,14 @@ type SharedPromptPayload = {
   error?: string;
 };
 
+type SharedPromptPageProps = {
+  payload: SharedPromptPayload;
+  pageUrl: string;
+  defaultOgImageUrl: string;
+};
+
+type SharedPromptResponse = SharedPromptPayload;
+
 function formatDate(value?: string) {
   if (!value) return "";
   const parsed = new Date(value);
@@ -36,56 +42,137 @@ function formatDate(value?: string) {
   }).format(parsed);
 }
 
-export default function SharedPromptPage() {
-  const router = useRouter();
-  const promptId = useMemo(() => {
-    const raw = router.query.id;
-    if (typeof raw === "string") return raw;
-    if (Array.isArray(raw) && raw.length > 0) return raw[0];
-    return "";
-  }, [router.query.id]);
-  const [loading, setLoading] = useState(true);
-  const [payload, setPayload] = useState<SharedPromptPayload>({});
+function normalizeHostHeader(header: string | string[] | undefined) {
+  if (Array.isArray(header)) return header[0] || "";
+  return header || "";
+}
 
-  useEffect(() => {
-    if (!router.isReady || !promptId) return;
+function normalizeProtoHeader(header: string | string[] | undefined) {
+  const raw = Array.isArray(header) ? header[0] : header;
+  if (!raw) return "";
+  return raw.split(",")[0]?.trim() || "";
+}
 
-    setLoading(true);
-    fetchJson<SharedPromptPayload>(`/prompt_share/api/prompts/${encodeURIComponent(promptId)}`)
-      .then(({ response, payload: data }) => {
-        if (!response.ok) {
-          setPayload({ error: data.error || `共有プロンプトの取得に失敗しました (${response.status})` });
-          return;
-        }
-        setPayload(data);
-      })
-      .catch((error) => {
-        setPayload({ error: error instanceof Error ? error.message : String(error) });
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [router.isReady, promptId]);
+function stripPreviewText(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*_\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
+function truncateText(value: string, maxLength = 140) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function resolveAbsoluteUrl(value: string | null | undefined, origin: string) {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (!origin) return value;
+  if (value.startsWith("/")) return `${origin}${value}`;
+  return `${origin}/${value}`;
+}
+
+function buildMetaDescription(payload: SharedPromptPayload) {
+  if (payload.error) {
+    return truncateText(payload.error);
+  }
   const prompt = payload.prompt;
-  const pageTitle = prompt?.title || "共有プロンプト";
+  if (!prompt) {
+    return "Chat Core で共有されたプロンプトの閲覧ページです。";
+  }
+  const summarySource = prompt.content || prompt.output_examples || prompt.input_examples || "";
+  const normalized = stripPreviewText(summarySource);
+  if (!normalized) {
+    return "Chat Core で共有されたプロンプトの閲覧ページです。";
+  }
+  return truncateText(normalized);
+}
+
+export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = async (context) => {
+  const rawId = context.params?.id;
+  const promptId = Array.isArray(rawId) ? rawId[0] : rawId;
+  if (!promptId) {
+    return { notFound: true };
+  }
+
+  const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
+  const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
+  const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
+    || (process.env.NODE_ENV === "development" ? "http" : "https");
+  const origin = host ? `${proto}://${host}` : "";
+  const resolvedPath = context.resolvedUrl || `/shared/prompt/${encodeURIComponent(promptId)}`;
+  const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
+  const defaultOgImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
+
+  let payload: SharedPromptPayload = {};
+
+  try {
+    const res = await fetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`);
+    const data: SharedPromptResponse = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      context.res.statusCode = res.status;
+    }
+    payload = data && typeof data === "object" ? data : {};
+    if (!res.ok && !payload.error) {
+      payload.error = `共有プロンプトの取得に失敗しました (${res.status})`;
+    }
+  } catch {
+    context.res.statusCode = 500;
+    payload = { error: "共有プロンプトの取得に失敗しました。" };
+  }
+
+  return {
+    props: {
+      payload,
+      pageUrl,
+      defaultOgImageUrl
+    }
+  };
+};
+
+export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
+  const prompt = payload.prompt;
+  const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
+  const description = buildMetaDescription(payload);
   const promptTypeLabel = prompt?.prompt_type === "image" ? "画像生成プロンプト" : "通常プロンプト";
+  const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, (() => {
+    try {
+      const parsed = new URL(pageUrl);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      return "";
+    }
+  })()) || defaultOgImageUrl;
 
   return (
     <>
       <Head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <title>{pageTitle} | Chat Core 共有</title>
+        <title>{pageTitle}</title>
+        <meta name="description" content={description} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={description} />
+        <meta property="og:type" content="article" />
+        <meta property="og:site_name" content="Chat Core" />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={ogImageUrl} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={ogImageUrl} />
         <link rel="stylesheet" href="/static/css/pages/shared_prompt.css" />
       </Head>
 
       <div className="shared-prompt-page">
-        {loading && <div className="shared-prompt-state">共有プロンプトを読み込んでいます...</div>}
-
-        {!loading && payload.error && <div className="shared-prompt-state shared-prompt-state--error">{payload.error}</div>}
-
-        {!loading && !payload.error && prompt && (
+        {payload.error ? (
+          <div className="shared-prompt-state shared-prompt-state--error">{payload.error}</div>
+        ) : prompt ? (
           <article className="shared-prompt-shell">
             <header className="shared-prompt-header">
               <span className="shared-prompt-pill">{promptTypeLabel}</span>
@@ -123,6 +210,8 @@ export default function SharedPromptPage() {
               </section>
             ) : null}
           </article>
+        ) : (
+          <div className="shared-prompt-state shared-prompt-state--error">共有プロンプトの取得に失敗しました。</div>
         )}
       </div>
     </>

@@ -1,7 +1,7 @@
 import Head from "next/head";
-import type { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
-import { useState, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
+import useSWR from "swr";
 
 type ColumnDetail = {
   name: string;
@@ -14,7 +14,7 @@ type ColumnDetail = {
 
 type FlashMessage = [string, string];
 
-type AdminDashboardProps = {
+type AdminDashboardData = {
   tables: string[];
   selectedTable: string;
   columnNames: string[];
@@ -24,69 +24,95 @@ type AdminDashboardProps = {
   messages: FlashMessage[];
 };
 
+type AdminDashboardResponse = {
+  tables?: string[];
+  selected_table?: string;
+  column_names?: string[];
+  column_details?: ColumnDetail[];
+  rows?: Array<Array<unknown>>;
+  error?: string;
+  messages?: FlashMessage[];
+};
+
 type LocalMessage = {
   type: "success" | "error";
   text: string;
 };
 
-export const getServerSideProps: GetServerSideProps<AdminDashboardProps> = async (context) => {
-  const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
-  const cookie = typeof context.req.headers.cookie === "string" ? context.req.headers.cookie : "";
-  const table = typeof context.query.table === "string" ? context.query.table : undefined;
-  const query = table ? `?table=${encodeURIComponent(table)}` : "";
-
-  try {
-    const res = await fetch(`${backendUrl}/admin/api/dashboard${query}`, {
-      headers: cookie ? { cookie } : undefined
-    });
-
-    if (res.status === 401) {
-      return {
-        redirect: {
-          destination: `/admin/login?next=${encodeURIComponent(context.resolvedUrl)}`,
-          permanent: false
-        }
-      };
-    }
-
-    const data = await res.json();
-    return {
-      props: {
-        tables: data.tables || [],
-        selectedTable: data.selected_table || "",
-        columnNames: data.column_names || [],
-        columnDetails: data.column_details || [],
-        rows: data.rows || [],
-        error: data.error || "",
-        messages: data.messages || []
-      }
-    };
-  } catch (error) {
-    return {
-      props: {
-        tables: [],
-        selectedTable: "",
-        columnNames: [],
-        columnDetails: [],
-        rows: [],
-        error: "サーバーとの通信に失敗しました。",
-        messages: []
-      }
-    };
-  }
+type HttpError = Error & {
+  status?: number;
 };
 
-export default function AdminDashboard({
-  tables,
-  selectedTable,
-  columnNames,
-  columnDetails,
-  rows,
-  error,
-  messages
-}: AdminDashboardProps) {
+const EMPTY_DASHBOARD: AdminDashboardData = {
+  tables: [],
+  selectedTable: "",
+  columnNames: [],
+  columnDetails: [],
+  rows: [],
+  error: "",
+  messages: []
+};
+
+const loadAdminDashboard = async (url: string): Promise<AdminDashboardData> => {
+  const res = await fetch(url, { credentials: "same-origin" });
+  const data: AdminDashboardResponse = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    const error = new Error("管理者認証が必要です。") as HttpError;
+    error.status = 401;
+    throw error;
+  }
+
+  if (!res.ok) {
+    const error = new Error(data.error || `ダッシュボード情報の取得に失敗しました (${res.status})`) as HttpError;
+    error.status = res.status;
+    throw error;
+  }
+
+  return {
+    tables: Array.isArray(data.tables) ? data.tables : [],
+    selectedTable: data.selected_table || "",
+    columnNames: Array.isArray(data.column_names) ? data.column_names : [],
+    columnDetails: Array.isArray(data.column_details) ? data.column_details : [],
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    error: data.error || "",
+    messages: Array.isArray(data.messages) ? data.messages : []
+  };
+};
+
+export default function AdminDashboard() {
   const router = useRouter();
+  const selectedQueryTable = useMemo(() => {
+    const raw = router.query.table;
+    if (typeof raw === "string") return raw;
+    if (Array.isArray(raw) && raw.length > 0) return raw[0];
+    return "";
+  }, [router.query.table]);
+  const dashboardUrl = useMemo(() => {
+    if (!router.isReady) return null;
+    const query = selectedQueryTable ? `?table=${encodeURIComponent(selectedQueryTable)}` : "";
+    return `/admin/api/dashboard${query}`;
+  }, [router.isReady, selectedQueryTable]);
+  const {
+    data: dashboard = EMPTY_DASHBOARD,
+    error: dashboardFetchError,
+    isLoading
+  } = useSWR<AdminDashboardData, HttpError>(dashboardUrl, loadAdminDashboard, {
+    revalidateOnFocus: true,
+    refreshInterval: 15000,
+    dedupingInterval: 5000,
+    keepPreviousData: true
+  });
   const [localMessage, setLocalMessage] = useState<LocalMessage | null>(null);
+  const {
+    tables,
+    selectedTable,
+    columnNames,
+    columnDetails,
+    rows,
+    error: dashboardError,
+    messages
+  } = dashboard;
   const deleteDisabled = columnDetails.length <= 1;
   const wideColumns = [
     "message",
@@ -114,6 +140,12 @@ export default function AdminDashboard({
   const cellWidthClass = (columnName: string) =>
     wideColumns.includes(columnName) ? "min-w-[240px] max-w-[420px]" : "min-w-[140px]";
 
+  useEffect(() => {
+    if (dashboardFetchError?.status !== 401) return;
+    const nextPath = router.asPath || "/admin";
+    void router.replace(`/admin/login?next=${encodeURIComponent(nextPath)}`);
+  }, [dashboardFetchError, router]);
+
   const submitForm = async (event: FormEvent<HTMLFormElement>, endpoint: string) => {
     event.preventDefault();
     setLocalMessage(null);
@@ -125,6 +157,11 @@ export default function AdminDashboard({
         credentials: "same-origin",
         body: formData
       });
+      if (res.status === 401) {
+        const nextPath = router.asPath || "/admin";
+        void router.replace(`/admin/login?next=${encodeURIComponent(nextPath)}`);
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.status === "fail") {
         throw new Error(data.error || "操作に失敗しました。");
@@ -195,6 +232,16 @@ export default function AdminDashboard({
 
         <main className="relative z-10 mx-auto max-w-6xl px-6 py-10 lg:py-12">
           <div className="mb-8 grid gap-3">
+            {isLoading ? (
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
+                管理データを読み込んでいます...
+              </div>
+            ) : null}
+            {dashboardFetchError && dashboardFetchError.status !== 401 ? (
+              <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                {dashboardFetchError.message}
+              </div>
+            ) : null}
             {messages.map(([category, message], index) => (
               <div
                 className={`rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${flashTone(
@@ -472,7 +519,7 @@ export default function AdminDashboard({
                   </>
                 )}
 
-                {error ? <p className="mt-4 text-sm font-semibold text-rose-600">エラー：{error}</p> : null}
+                {dashboardError ? <p className="mt-4 text-sm font-semibold text-rose-600">エラー：{dashboardError}</p> : null}
               </section>
             </div>
           </div>

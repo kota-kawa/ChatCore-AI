@@ -302,54 +302,88 @@ const setupMemoModal = () => {
     void shareWithNativeSheet();
   });
 
-  const memoItems = document.querySelectorAll<HTMLElement>(".memo-item");
-  memoItems.forEach((item) => {
-    const openMemoDetail = () => {
-      const input = item.dataset.input ? JSON.parse(item.dataset.input) : "";
-      const response = item.dataset.response ? JSON.parse(item.dataset.response) : "";
-      const tagString = item.dataset.tags || "";
-      const tags = tagString
-        .split(/\s+/)
-        .map((tag) => tag.trim())
-        .filter(Boolean);
+  const parseMemoText = (raw: string | undefined) => {
+    if (!raw) return "";
+    try {
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "string" ? parsed : "";
+    } catch {
+      return raw;
+    }
+  };
 
-      openModal({
-        title: item.dataset.title || "保存したメモ",
-        date: item.dataset.date || "",
-        tags,
-        input,
-        response
-      });
-    };
+  const openMemoDetail = (item: HTMLElement) => {
+    const input = parseMemoText(item.dataset.input);
+    const response = parseMemoText(item.dataset.response);
+    const tagString = item.dataset.tags || "";
+    const tags = tagString
+      .split(/\s+/)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
 
-    item.addEventListener("click", openMemoDetail);
-    item.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      if ((event.target as HTMLElement | null)?.closest("[data-share-memo]")) return;
-      event.preventDefault();
-      openMemoDetail();
+    openModal({
+      title: item.dataset.title || "保存したメモ",
+      date: item.dataset.date || "",
+      tags,
+      input,
+      response
     });
+  };
 
-    const shareButton = item.querySelector<HTMLButtonElement>("[data-share-memo]");
-    shareButton?.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    const shareButton = target.closest<HTMLElement>("[data-share-memo]");
+    if (shareButton) {
       event.stopPropagation();
-      const memoId = item.dataset.memoId || "";
+      const memoItem = shareButton.closest<HTMLElement>(".memo-item");
+      const memoId = memoItem?.dataset.memoId || "";
       if (!memoId) {
         setShareStatus("共有対象のメモが見つかりません。", true);
         return;
       }
       openShareModal(memoId);
       void createShareLink(false);
-    });
+      return;
+    }
+
+    const memoItem = target.closest<HTMLElement>(".memo-item");
+    if (!memoItem) return;
+    openMemoDetail(memoItem);
   });
 
-  // Apply Markdown formatting to excerpt previews in the memo list
-  const excerptEls = document.querySelectorAll<HTMLElement>(".memo-item__excerpt");
-  excerptEls.forEach((el) => {
-    const text = el.textContent || "";
-    if (!text) return;
-    renderSanitizedHTML(el, formatLLMOutput(text));
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest("[data-share-memo]")) return;
+    const memoItem = target.closest<HTMLElement>(".memo-item");
+    if (!memoItem) return;
+    event.preventDefault();
+    openMemoDetail(memoItem);
   });
+
+  const formatExcerptPreviews = () => {
+    const excerptEls = document.querySelectorAll<HTMLElement>(".memo-item__excerpt");
+    excerptEls.forEach((el) => {
+      if (el.dataset.mdFormatted === "1") return;
+      const text = el.textContent || "";
+      if (text) {
+        renderSanitizedHTML(el, formatLLMOutput(text));
+      }
+      el.dataset.mdFormatted = "1";
+    });
+  };
+
+  formatExcerptPreviews();
+  const memoHistoryList = document.querySelector<HTMLElement>(".memo-history__list");
+  if (memoHistoryList && "MutationObserver" in window) {
+    const observer = new MutationObserver(() => {
+      formatExcerptPreviews();
+    });
+    observer.observe(memoHistoryList, { childList: true, subtree: true });
+  }
 };
 
 if (document.readyState === "loading") {
