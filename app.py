@@ -2,6 +2,7 @@
 import logging
 import os
 import threading
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
@@ -11,6 +12,10 @@ from fastapi import FastAPI, Request
 from blueprints.chat import cleanup_ephemeral_chats
 from services.auth_limits import AuthLimitService
 from services.chat_generation import ChatGenerationService
+from services.background_executor import (
+    shutdown_background_executor,
+    submit_background_task,
+)
 from services.db import close_db_pool
 from services.default_tasks import ensure_default_tasks_seeded
 from services.default_shared_prompts import ensure_default_shared_prompts
@@ -86,22 +91,31 @@ async def lifespan(app_instance: FastAPI):
         raise
 
     cleanup_stop_event = threading.Event()
-    cleanup_thread = threading.Thread(
-        target=periodic_cleanup,
-        args=(cleanup_stop_event,),
-        daemon=True,
-        name="ephemeral-chat-cleanup",
-    )
-    cleanup_thread.start()
+    cleanup_future = submit_background_task(periodic_cleanup, cleanup_stop_event)
 
     try:
         yield
     finally:
+        shutdown_wait_safe = True
         chat_generation_service = getattr(app_instance.state, "chat_generation_service", None)
         if isinstance(chat_generation_service, ChatGenerationService):
             chat_generation_service.reset_in_memory_state(cancel_running=True)
+            jobs_stopped = chat_generation_service.wait_for_running_jobs(timeout=5.0)
+            if not jobs_stopped:
+                shutdown_wait_safe = False
+                logger.warning("Timed out while waiting for chat generation jobs to finish.")
         cleanup_stop_event.set()
-        cleanup_thread.join(timeout=1)
+        try:
+            cleanup_future.result(timeout=5.0)
+        except FutureTimeoutError:
+            shutdown_wait_safe = False
+            logger.warning("Timed out while waiting for periodic cleanup to stop.")
+        except Exception:
+            logger.exception("Periodic cleanup worker exited with an unexpected error.")
+        shutdown_background_executor(
+            wait=shutdown_wait_safe,
+            cancel_futures=not shutdown_wait_safe,
+        )
         close_db_pool()
 
 

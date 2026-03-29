@@ -6,14 +6,23 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Request
 
+from .background_executor import submit_background_task
 from services.cache import get_redis_client
 
-from .llm import LlmConfigurationError, LlmServiceError, get_llm_response_stream
+from .llm import (
+    LlmAuthenticationError,
+    LlmConfigurationError,
+    LlmRateLimitError,
+    LlmServiceError,
+    get_llm_response_stream,
+    is_retryable_llm_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +64,7 @@ class ChatGenerationJob:
         self._events: list[ChatGenerationEvent] = []
         self._next_sequence_id = 1
         self._condition = threading.Condition()
-        self._thread: threading.Thread | None = None
+        self._future: Future[None] | None = None
         self._cancelled: bool = False
         self.response = ""
         self.error_message: str | None = None
@@ -64,10 +73,9 @@ class ChatGenerationJob:
         self.is_done = False
 
     def start(self) -> None:
-        if self._thread is not None:
+        if self._future is not None:
             return
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+        self._future = submit_background_task(self._run)
 
     def cancel(self) -> None:
         """生成をキャンセルし、aborted イベントを発行して完了とする."""
@@ -77,10 +85,15 @@ class ChatGenerationJob:
         self._publish("aborted", {}, done=True)
 
     def wait(self, timeout: float | None = None) -> bool:
-        thread = self._thread
-        if thread is None:
+        future = self._future
+        if future is None:
             return self.is_done
-        thread.join(timeout)
+        try:
+            future.result(timeout=timeout)
+        except TimeoutError:
+            return self.is_done
+        except Exception:
+            return self.is_done
         return self.is_done
 
     def iter_events(self, *, after_sequence_id: int = 0) -> Iterator[ChatGenerationEvent]:
@@ -156,20 +169,58 @@ class ChatGenerationJob:
             if self._cancelled:
                 return
             self.error_message = str(exc) or "LLM設定エラーが発生しました。"
-            self._publish("error", {"message": self.error_message}, done=True)
+            self._publish(
+                "error",
+                {"message": self.error_message, "retryable": False},
+                done=True,
+            )
             return
-        except LlmServiceError:
+        except LlmAuthenticationError:
             if self._cancelled:
                 return
-            self.error_message = "内部エラーが発生しました。"
-            self._publish("error", {"message": self.error_message}, done=True)
+            self.error_message = "LLMプロバイダ認証エラーが発生しました。設定を確認してください。"
+            self._publish(
+                "error",
+                {"message": self.error_message, "retryable": False},
+                done=True,
+            )
+            return
+        except LlmRateLimitError as exc:
+            if self._cancelled:
+                return
+            self.error_message = "AI提供元が混み合っています。時間をおいて再試行してください。"
+            payload: dict[str, Any] = {
+                "message": self.error_message,
+                "retryable": True,
+            }
+            if exc.retry_after_seconds is not None:
+                payload["retry_after_seconds"] = exc.retry_after_seconds
+            self._publish("error", payload, done=True)
+            return
+        except LlmServiceError as exc:
+            if self._cancelled:
+                return
+            retryable = is_retryable_llm_error(exc)
+            if retryable:
+                self.error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
+            else:
+                self.error_message = "内部エラーが発生しました。"
+            self._publish(
+                "error",
+                {"message": self.error_message, "retryable": retryable},
+                done=True,
+            )
             return
         except Exception:
             if self._cancelled:
                 return
             logger.exception("Unexpected error while generating chat response.")
             self.error_message = "内部エラーが発生しました。"
-            self._publish("error", {"message": self.error_message}, done=True)
+            self._publish(
+                "error",
+                {"message": self.error_message, "retryable": False},
+                done=True,
+            )
             return
 
         if self._cancelled:
@@ -183,7 +234,11 @@ class ChatGenerationJob:
         except Exception:
             logger.exception("Failed to persist background chat response.")
             self.error_message = "応答は生成されましたが、履歴保存に失敗しました。"
-            self._publish("error", {"message": self.error_message}, done=True)
+            self._publish(
+                "error",
+                {"message": self.error_message, "retryable": True},
+                done=True,
+            )
             return
 
         self._publish("done", {"response": bot_reply}, done=True)
@@ -377,6 +432,25 @@ return 0
         for job in running_jobs:
             job.cancel()
 
+    def wait_for_running_jobs(self, *, timeout: float | None = None) -> bool:
+        with self._jobs_lock:
+            running_jobs = [job for job in self._jobs.values() if not job.is_done]
+
+        if not running_jobs:
+            return True
+
+        deadline = None if timeout is None else time.monotonic() + timeout
+        all_done = True
+        for job in running_jobs:
+            if deadline is None:
+                waited = job.wait(timeout=None)
+            else:
+                remaining = max(deadline - time.monotonic(), 0.0)
+                waited = job.wait(timeout=remaining)
+            if not waited:
+                all_done = False
+        return all_done
+
     def _cleanup_expired_jobs(self, now: float | None = None) -> None:
         current_time = time.monotonic() if now is None else now
         expired_keys: list[str] = []
@@ -404,8 +478,8 @@ return 0
         self._cleanup_expired_jobs()
         with self._jobs_lock:
             job = self._jobs.get(job_key)
-            if job is not None and not job.is_done:
-                return True
+            if job is not None:
+                return not job.is_done
         return self._has_distributed_active_lock(job_key)
 
     def has_replayable_generation(self, job_key: str) -> bool:

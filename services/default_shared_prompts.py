@@ -1,6 +1,7 @@
+import time
 from typing import Any
 
-from .db import get_db_connection
+from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 
 SAMPLE_PROMPT_OWNER_EMAIL = "sample-prompts@chat-core.local"
 SAMPLE_PROMPT_OWNER_NAME = "運営サンプル"
@@ -66,6 +67,8 @@ DEFAULT_SHARED_PROMPTS = [
         ),
     },
 ]
+DB_WRITE_MAX_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 def _extract_id(
@@ -126,50 +129,59 @@ def _ensure_sample_owner(cursor: Any) -> int:
 def ensure_default_shared_prompts() -> int:
     # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
     # Seed missing public sample prompts under the sample owner account.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            owner_user_id = _ensure_sample_owner(cursor)
-            inserted = 0
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                owner_user_id = _ensure_sample_owner(cursor)
+                inserted = 0
 
-            for prompt in DEFAULT_SHARED_PROMPTS:
-                cursor.execute(
-                    """
-                    SELECT 1
-                      FROM prompts
-                     WHERE user_id = %s
-                       AND title = %s
-                       AND deleted_at IS NULL
-                    """,
-                    (owner_user_id, prompt["title"]),
-                )
-                if cursor.fetchone():
+                for prompt in DEFAULT_SHARED_PROMPTS:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                          FROM prompts
+                         WHERE user_id = %s
+                           AND title = %s
+                           AND deleted_at IS NULL
+                        """,
+                        (owner_user_id, prompt["title"]),
+                    )
+                    if cursor.fetchone():
+                        continue
+
+                    cursor.execute(
+                        """
+                        INSERT INTO prompts
+                            (user_id, is_public, title, category, content, author, input_examples, output_examples, created_at)
+                        VALUES (%s, TRUE, %s, %s, %s, %s, %s, %s, NOW())
+                        """,
+                        (
+                            owner_user_id,
+                            prompt["title"],
+                            prompt["category"],
+                            prompt["content"],
+                            SAMPLE_PROMPT_OWNER_NAME,
+                            prompt["input_examples"],
+                            prompt["output_examples"],
+                        ),
+                    )
+                    inserted += 1
+
+                if inserted > 0:
+                    conn.commit()
+
+                return inserted
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                     continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
 
-                cursor.execute(
-                    """
-                    INSERT INTO prompts
-                        (user_id, is_public, title, category, content, author, input_examples, output_examples, created_at)
-                    VALUES (%s, TRUE, %s, %s, %s, %s, %s, %s, NOW())
-                    """,
-                    (
-                        owner_user_id,
-                        prompt["title"],
-                        prompt["category"],
-                        prompt["content"],
-                        SAMPLE_PROMPT_OWNER_NAME,
-                        prompt["input_examples"],
-                        prompt["output_examples"],
-                    ),
-                )
-                inserted += 1
-
-            if inserted > 0:
-                conn.commit()
-
-            return inserted
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    raise RuntimeError("Failed to seed default shared prompts after retry attempts.")

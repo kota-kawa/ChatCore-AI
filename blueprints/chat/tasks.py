@@ -13,7 +13,12 @@ from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_s
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
-from services.llm import LlmServiceError
+from services.llm import (
+    LlmAuthenticationError,
+    LlmRateLimitError,
+    LlmServiceError,
+    is_retryable_llm_error,
+)
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_llm_daily_quota,
@@ -574,10 +579,29 @@ async def prompt_assist(
         return jsonify(result)
     except ValueError as exc:
         return jsonify({"error": str(exc)}, status_code=400)
-    except LlmServiceError:
-        logger.exception("Failed to generate prompt assist suggestion.")
+    except LlmRateLimitError as exc:
+        return jsonify_rate_limited(
+            "AI補助の呼び出しが混み合っています。時間をおいて再試行してください。",
+            retry_after=(
+                exc.retry_after_seconds
+                if exc.retry_after_seconds is not None
+                else DEFAULT_RETRY_AFTER_SECONDS
+            ),
+        )
+    except LlmAuthenticationError:
+        logger.exception("Prompt assist failed due to LLM authentication/configuration issue.")
         return jsonify(
-            {"error": "AI補助の取得に失敗しました。時間をおいて再試行してください。"},
+            {"error": "AI補助の設定エラーが発生しました。管理者に連絡してください。"},
+            status_code=502,
+        )
+    except LlmServiceError as exc:
+        logger.exception("Failed to generate prompt assist suggestion.")
+        retryable = is_retryable_llm_error(exc)
+        return jsonify(
+            {
+                "error": "AI補助の取得に失敗しました。時間をおいて再試行してください。",
+                "retryable": retryable,
+            },
             status_code=502,
         )
     except Exception:

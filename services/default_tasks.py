@@ -1,13 +1,16 @@
 import json
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from .db import get_db_connection
+from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 
 DEFAULT_TASKS_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.json"
 )
+DB_WRITE_MAX_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 @lru_cache(maxsize=1)
@@ -90,69 +93,78 @@ def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
 def ensure_default_tasks_seeded() -> int:
     # 共通タスク（user_id IS NULL）に不足分のみ追加し、追加件数を返す
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT name
-                  FROM task_with_examples
-                 WHERE user_id IS NULL
-                   AND deleted_at IS NULL
-                """
-            )
-            existing_names = {
-                name
-                for name in (_extract_name(row) for row in cursor.fetchall())
-                if isinstance(name, str)
-            }
-
-            inserted = 0
-            for (
-                name,
-                template,
-                response_rules,
-                output_skeleton,
-                input_example,
-                output_example,
-                display_order,
-            ) in default_task_rows():
-                if name in existing_names:
-                    continue
-
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
                 cursor.execute(
                     """
-                    INSERT INTO task_with_examples
-                          (
-                              user_id,
-                              name,
-                              prompt_template,
-                              response_rules,
-                              output_skeleton,
-                              input_examples,
-                              output_examples,
-                              display_order
-                          )
-                    VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        name,
-                        template,
-                        response_rules,
-                        output_skeleton,
-                        input_example,
-                        output_example,
-                        display_order,
-                    ),
+                    SELECT name
+                      FROM task_with_examples
+                     WHERE user_id IS NULL
+                       AND deleted_at IS NULL
+                    """
                 )
-                inserted += 1
+                existing_names = {
+                    name
+                    for name in (_extract_name(row) for row in cursor.fetchall())
+                    if isinstance(name, str)
+                }
 
-            if inserted > 0:
-                conn.commit()
+                inserted = 0
+                for (
+                    name,
+                    template,
+                    response_rules,
+                    output_skeleton,
+                    input_example,
+                    output_example,
+                    display_order,
+                ) in default_task_rows():
+                    if name in existing_names:
+                        continue
 
-            return inserted
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+                    cursor.execute(
+                        """
+                        INSERT INTO task_with_examples
+                              (
+                                  user_id,
+                                  name,
+                                  prompt_template,
+                                  response_rules,
+                                  output_skeleton,
+                                  input_examples,
+                                  output_examples,
+                                  display_order
+                              )
+                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            name,
+                            template,
+                            response_rules,
+                            output_skeleton,
+                            input_example,
+                            output_example,
+                            display_order,
+                        ),
+                    )
+                    inserted += 1
+
+                if inserted > 0:
+                    conn.commit()
+
+                return inserted
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to seed default tasks after retry attempts.")

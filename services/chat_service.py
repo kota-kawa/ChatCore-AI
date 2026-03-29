@@ -1,50 +1,93 @@
 import secrets
+import time
 from typing import Any
 
 from .api_errors import ForbiddenOperationError, ResourceNotFoundError
-from .db import get_db_connection
+from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from .error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
 
 UNIQUE_VIOLATION_PGCODE = "23505"
+DB_WRITE_MAX_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
+SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 
 
 def save_message_to_db(chat_room_id: str, message: str, sender: str) -> None:
     # チャットメッセージを履歴テーブルへ追加する
     # Insert a chat message into the history table.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            query = "INSERT INTO chat_history (chat_room_id, message, sender) VALUES (%s, %s, %s)"
-            cursor.execute(query, (chat_room_id, message, sender))
-            conn.commit()
-        finally:
-            cursor.close()
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                query = "INSERT INTO chat_history (chat_room_id, message, sender) VALUES (%s, %s, %s)"
+                cursor.execute(query, (chat_room_id, message, sender))
+                conn.commit()
+                return
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to save chat message after retry attempts.")
 
 
 def create_chat_room_in_db(room_id: str, user_id: int, title: str) -> None:
     # チャットルームのメタ情報を保存する
     # Persist chat room metadata.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            query = "INSERT INTO chat_rooms (id, user_id, title) VALUES (%s, %s, %s)"
-            cursor.execute(query, (room_id, user_id, title))
-            conn.commit()
-        finally:
-            cursor.close()
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                query = "INSERT INTO chat_rooms (id, user_id, title) VALUES (%s, %s, %s)"
+                cursor.execute(query, (room_id, user_id, title))
+                conn.commit()
+                return
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to create chat room after retry attempts.")
 
 
 def rename_chat_room_in_db(room_id: str, new_title: str) -> None:
     # 既存チャットルームのタイトルを更新する
     # Update the title of an existing chat room.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            query = "UPDATE chat_rooms SET title = %s WHERE id = %s"
-            cursor.execute(query, (new_title, room_id))
-            conn.commit()
-        finally:
-            cursor.close()
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                query = "UPDATE chat_rooms SET title = %s WHERE id = %s"
+                cursor.execute(query, (new_title, room_id))
+                conn.commit()
+                return
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to rename chat room after retry attempts.")
 
 
 def get_chat_room_messages(chat_room_id: str) -> list[dict[str, str]]:
@@ -90,16 +133,18 @@ def validate_room_owner(
 def create_or_get_shared_chat_token(room_id: str) -> str:
     # 共有リンク用トークンを作成し、既存がある場合は再利用する
     # Create share token for a room and reuse the existing one when present.
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT 1 FROM chat_rooms WHERE id = %s", (room_id,))
-            if not cursor.fetchone():
-                raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
+    for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
+        token = secrets.token_urlsafe(18)
+        collision_detected = False
 
-            while True:
-                token = secrets.token_urlsafe(18)
+        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
                 try:
+                    cursor.execute("SELECT 1 FROM chat_rooms WHERE id = %s", (room_id,))
+                    if not cursor.fetchone():
+                        raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
+
                     cursor.execute(
                         """
                         INSERT INTO shared_chat_rooms (chat_room_id, share_token)
@@ -113,13 +158,25 @@ def create_or_get_shared_chat_token(room_id: str) -> str:
                     row = cursor.fetchone()
                     conn.commit()
                     return row[0] if row else token
-                except Exception as exc:
-                    conn.rollback()
+                except Error as exc:
+                    rollback_connection(conn)
                     if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
+                        collision_detected = True
+                        break
+                    if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                        time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
                     raise
-        finally:
-            cursor.close()
+                except BaseException:
+                    rollback_connection(conn)
+                    raise
+                finally:
+                    cursor.close()
+
+        if collision_detected:
+            continue
+
+    raise RuntimeError("Failed to create shared chat token after collision retries.")
 
 
 def get_shared_chat_room_payload(

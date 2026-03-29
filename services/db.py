@@ -25,6 +25,21 @@ PoolKey = tuple[tuple[str, ...], str, str, str, int, int, int]
 
 _connection_pool: Any | None = None
 _connection_pool_key: PoolKey | None = None
+_RETRYABLE_DB_PG_CODES = {
+    # serialization_failure
+    "40001",
+    # deadlock_detected
+    "40P01",
+    # lock_not_available
+    "55P03",
+    # connection_failure, sqlclient_unable_to_establish_sqlconnection
+    "08006",
+    "08001",
+    # too_many_connections
+    "53300",
+    # cannot_connect_now
+    "57P03",
+}
 
 
 class _ConnectionProxy:
@@ -66,9 +81,8 @@ class _ConnectionProxy:
         # Roll back before returning so dirty transactions are not leaked.
         close_physical = bool(getattr(connection, "closed", 0))
         if not close_physical:
-            try:
-                connection.rollback()
-            except Exception:
+            rolled_back = rollback_connection(connection)
+            if not rolled_back:
                 close_physical = True
 
         try:
@@ -113,6 +127,33 @@ def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
     if value:
         return value
     return default
+
+
+def rollback_connection(connection: Any) -> bool:
+    # 例外処理時に安全にロールバックし、失敗しても二次例外を出さない
+    # Roll back safely during exception handling and swallow rollback failures.
+    if connection is None:
+        return False
+    try:
+        connection.rollback()
+        return True
+    except Exception:
+        return False
+
+
+def is_retryable_db_error(exc: BaseException) -> bool:
+    # DB例外から再試行可能性を判定する
+    # Infer whether a DB error is retryable.
+    pgcode = getattr(exc, "pgcode", None)
+    if isinstance(pgcode, str) and pgcode in _RETRYABLE_DB_PG_CODES:
+        return True
+
+    if Error is not Exception and isinstance(exc, Error):
+        exc_name = exc.__class__.__name__
+        if exc_name in {"OperationalError", "InterfaceError"}:
+            return True
+
+    return False
 
 
 def _get_db_hosts() -> list[str]:

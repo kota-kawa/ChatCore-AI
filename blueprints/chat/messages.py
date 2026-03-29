@@ -46,9 +46,12 @@ from services.llm_daily_limit import (
 from services.llm import (
     get_llm_response,
     GEMINI_DEFAULT_MODEL,
+    LlmAuthenticationError,
     LlmInvalidModelError,
+    LlmRateLimitError,
     LlmServiceError,
     is_streaming_model,
+    is_retryable_llm_error,
     validate_model_name,
 )
 from services.request_models import ChatMessageRequest
@@ -696,10 +699,33 @@ async def chat(
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except LlmInvalidModelError as exc:
         return jsonify({"error": str(exc)}, status_code=400)
-    except LlmServiceError:
-        return log_and_internal_server_error(
-            logger,
-            "Failed to get LLM response.",
+    except LlmRateLimitError as exc:
+        return jsonify_rate_limited(
+            "AI提供元が混み合っています。時間をおいて再試行してください。",
+            retry_after=(
+                exc.retry_after_seconds
+                if exc.retry_after_seconds is not None
+                else 10
+            ),
+        )
+    except LlmAuthenticationError:
+        logger.exception("LLM authentication/configuration error while generating chat response.")
+        return jsonify(
+            {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
+            status_code=502,
+        )
+    except LlmServiceError as exc:
+        retryable = is_retryable_llm_error(exc)
+        logger.exception(
+            "Failed to get LLM response (retryable=%s).",
+            retryable,
+        )
+        return jsonify(
+            {
+                "error": "AI応答の生成に失敗しました。時間をおいて再試行してください。",
+                "retryable": retryable,
+            },
+            status_code=502,
         )
 
     if "user_id" in session:

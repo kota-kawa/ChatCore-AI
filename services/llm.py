@@ -6,6 +6,23 @@ import re
 from collections.abc import Iterator
 
 from openai import OpenAI
+try:
+    from openai import (
+        APIConnectionError,
+        APIStatusError,
+        APITimeoutError,
+        AuthenticationError,
+        RateLimitError,
+    )
+except ImportError:  # pragma: no cover - depends on SDK version
+    class _UnavailableOpenAIError(Exception):
+        pass
+
+    APIConnectionError = _UnavailableOpenAIError  # type: ignore[assignment]
+    APIStatusError = _UnavailableOpenAIError  # type: ignore[assignment]
+    APITimeoutError = _UnavailableOpenAIError  # type: ignore[assignment]
+    AuthenticationError = _UnavailableOpenAIError  # type: ignore[assignment]
+    RateLimitError = _UnavailableOpenAIError  # type: ignore[assignment]
 
 
 def _get_positive_int_env(name: str, default: int) -> int:
@@ -113,6 +130,51 @@ class LlmConfigurationError(LlmServiceError):
 class LlmProviderError(LlmServiceError):
     # 外部プロバイダ呼び出し失敗に関する例外
     # Provider-call failure exception.
+    retryable = False
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class LlmRetryableProviderError(LlmProviderError):
+    # 再試行により回復可能な可能性が高いプロバイダ例外
+    # Provider-call failure that is likely retryable.
+    retryable = True
+
+
+class LlmRateLimitError(LlmRetryableProviderError):
+    # レート制限による失敗
+    # Provider rate-limit failure.
+    pass
+
+
+class LlmTimeoutError(LlmRetryableProviderError):
+    # タイムアウトによる失敗
+    # Provider timeout failure.
+    pass
+
+
+class LlmNetworkError(LlmRetryableProviderError):
+    # ネットワーク到達性による失敗
+    # Provider network/connectivity failure.
+    pass
+
+
+class LlmUpstreamServiceError(LlmRetryableProviderError):
+    # 上流サービス障害 (5xx)
+    # Upstream provider service failure (5xx).
+    pass
+
+
+class LlmAuthenticationError(LlmProviderError):
+    # 認証・権限不備による失敗
+    # Provider authentication/authorization failure.
     pass
 
 
@@ -120,6 +182,82 @@ class LlmInvalidModelError(LlmServiceError):
     # 未サポートモデル指定時の例外
     # Unsupported model selection exception.
     pass
+
+
+def is_retryable_llm_error(exc: BaseException) -> bool:
+    return isinstance(exc, LlmRetryableProviderError)
+
+
+def _extract_retry_after_seconds(exc: BaseException) -> int | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None or not hasattr(headers, "get"):
+        return None
+    raw_retry_after = headers.get("retry-after")
+    if raw_retry_after is None:
+        return None
+    try:
+        retry_after = int(str(raw_retry_after).strip())
+    except (TypeError, ValueError):
+        return None
+    return retry_after if retry_after >= 0 else None
+
+
+def _map_provider_exception(
+    exc: BaseException,
+    *,
+    provider_name: str,
+    fallback_message: str,
+) -> LlmProviderError:
+    if isinstance(exc, LlmProviderError):
+        return exc
+
+    if isinstance(exc, RateLimitError):
+        return LlmRateLimitError(
+            f"{provider_name} API rate limit exceeded.",
+            retry_after_seconds=_extract_retry_after_seconds(exc),
+        )
+    if isinstance(exc, APITimeoutError):
+        return LlmTimeoutError(f"{provider_name} API request timed out.")
+    if isinstance(exc, APIConnectionError):
+        return LlmNetworkError(f"{provider_name} API connection failed.")
+    if isinstance(exc, AuthenticationError):
+        return LlmAuthenticationError(f"{provider_name} API authentication failed.")
+    if isinstance(exc, APIStatusError):
+        status_code = getattr(exc, "status_code", None)
+        if status_code in (401, 403):
+            return LlmAuthenticationError(f"{provider_name} API authentication failed.")
+        if status_code == 408:
+            return LlmTimeoutError(f"{provider_name} API request timed out.")
+        if status_code == 429:
+            return LlmRateLimitError(
+                f"{provider_name} API rate limit exceeded.",
+                retry_after_seconds=_extract_retry_after_seconds(exc),
+            )
+        if isinstance(status_code, int) and status_code >= 500:
+            return LlmUpstreamServiceError(f"{provider_name} API is temporarily unavailable.")
+
+    return LlmProviderError(fallback_message)
+
+
+def _raise_provider_error(
+    exc: BaseException,
+    *,
+    provider_name: str,
+    fallback_message: str,
+) -> None:
+    mapped_error = _map_provider_exception(
+        exc,
+        provider_name=provider_name,
+        fallback_message=fallback_message,
+    )
+    logger.error(
+        "%s (%s -> %s).",
+        fallback_message,
+        exc.__class__.__name__,
+        mapped_error.__class__.__name__,
+    )
+    raise mapped_error from exc
 
 
 def _raise_invalid_model_error(model_name: str) -> None:
@@ -187,8 +325,11 @@ def get_groq_response(
         )
         return response.choices[0].message.content
     except Exception as exc:
-        logger.error("Groq API call failed (%s).", exc.__class__.__name__)
-        raise LlmProviderError("Groq API call failed.") from exc
+        _raise_provider_error(
+            exc,
+            provider_name="Groq",
+            fallback_message="Groq API call failed.",
+        )
 
 
 def _get_openai_compatible_response_stream(
@@ -221,8 +362,16 @@ def _get_openai_compatible_response_stream(
             if content:
                 yield content
     except Exception as exc:
-        logger.error("%s (%s).", provider_error_message, exc.__class__.__name__)
-        raise LlmProviderError(provider_error_message) from exc
+        provider_name = "provider"
+        if "Groq" in provider_error_message:
+            provider_name = "Groq"
+        elif "Gemini" in provider_error_message:
+            provider_name = "Google Gemini"
+        _raise_provider_error(
+            exc,
+            provider_name=provider_name,
+            fallback_message=provider_error_message,
+        )
     finally:
         close = getattr(stream, "close", None)
         if callable(close):
@@ -261,8 +410,11 @@ def get_gemini_response(
         )
         return response.choices[0].message.content
     except Exception as exc:
-        logger.error("Google Gemini API call failed (%s).", exc.__class__.__name__)
-        raise LlmProviderError("Google Gemini API call failed.") from exc
+        _raise_provider_error(
+            exc,
+            provider_name="Google Gemini",
+            fallback_message="Google Gemini API call failed.",
+        )
 
 
 def get_gemini_response_stream(
@@ -296,8 +448,11 @@ def get_openai_response(
         )
         return response.output_text
     except Exception as exc:
-        logger.error("OpenAI Responses API call failed (%s).", exc.__class__.__name__)
-        raise LlmProviderError("OpenAI Responses API call failed.") from exc
+        _raise_provider_error(
+            exc,
+            provider_name="OpenAI",
+            fallback_message="OpenAI Responses API call failed.",
+        )
 
 
 def get_openai_response_stream(
@@ -321,8 +476,11 @@ def get_openai_response_stream(
                     if delta:
                         yield delta
     except Exception as exc:
-        logger.error("OpenAI Responses streaming API call failed (%s).", exc.__class__.__name__)
-        raise LlmProviderError("OpenAI Responses streaming API call failed.") from exc
+        _raise_provider_error(
+            exc,
+            provider_name="OpenAI",
+            fallback_message="OpenAI Responses streaming API call failed.",
+        )
 
 
 def is_gemini_model(model_name: str) -> bool:

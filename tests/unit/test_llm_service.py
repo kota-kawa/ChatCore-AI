@@ -113,6 +113,57 @@ class LlmServiceTestCase(unittest.TestCase):
                     "gemini-2.5-flash",
                 )
 
+    def test_get_gemini_response_maps_rate_limit_error(self):
+        class FakeRateLimitError(Exception):
+            pass
+
+        mock_gemini = MagicMock()
+        mock_gemini.chat.completions.create.side_effect = FakeRateLimitError("rate limit")
+
+        with patch.object(llm, "RateLimitError", FakeRateLimitError):
+            with patch.object(llm, "gemini_client", mock_gemini):
+                with self.assertRaises(llm.LlmRateLimitError) as cm:
+                    llm.get_gemini_response(
+                        [{"role": "user", "content": "hello"}],
+                        "gemini-2.5-flash",
+                    )
+
+        self.assertTrue(llm.is_retryable_llm_error(cm.exception))
+
+    def test_get_gemini_response_maps_timeout_error(self):
+        class FakeTimeoutError(Exception):
+            pass
+
+        mock_gemini = MagicMock()
+        mock_gemini.chat.completions.create.side_effect = FakeTimeoutError("timeout")
+
+        with patch.object(llm, "APITimeoutError", FakeTimeoutError):
+            with patch.object(llm, "gemini_client", mock_gemini):
+                with self.assertRaises(llm.LlmTimeoutError) as cm:
+                    llm.get_gemini_response(
+                        [{"role": "user", "content": "hello"}],
+                        "gemini-2.5-flash",
+                    )
+
+        self.assertTrue(llm.is_retryable_llm_error(cm.exception))
+
+    def test_get_gemini_response_maps_authentication_error(self):
+        class FakeAuthError(Exception):
+            pass
+
+        mock_gemini = MagicMock()
+        mock_gemini.chat.completions.create.side_effect = FakeAuthError("auth")
+
+        with patch.object(llm, "AuthenticationError", FakeAuthError):
+            with patch.object(llm, "gemini_client", mock_gemini):
+                with self.assertRaises(llm.LlmAuthenticationError) as cm:
+                    llm.get_gemini_response(
+                        [{"role": "user", "content": "hello"}],
+                        "gemini-2.5-flash",
+                    )
+
+        self.assertFalse(llm.is_retryable_llm_error(cm.exception))
+
     def test_get_openai_response_raises_configuration_error_without_api_key(self):
         with patch.object(llm, "openai_client", None):
             with self.assertRaises(llm.LlmConfigurationError):
