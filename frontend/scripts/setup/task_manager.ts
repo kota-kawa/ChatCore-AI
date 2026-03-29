@@ -156,6 +156,39 @@ let draggingTask: HTMLElement | null = null;
 let taskPlaceholder: HTMLElement | null = null;
 let taskOffsetX = 0;
 let taskOffsetY = 0;
+let taskDragAbortController: AbortController | null = null;
+
+function abortTaskDragListeners() {
+  taskDragAbortController?.abort();
+  taskDragAbortController = null;
+}
+
+function resetDraggingTaskStyles(task: HTMLElement | null) {
+  if (!task) return;
+  task.classList.remove("dragging");
+  task.style.position = "";
+  task.style.left = "";
+  task.style.top = "";
+  task.style.width = "";
+  task.style.height = "";
+  task.style.zIndex = "";
+}
+
+function finishTaskDrag() {
+  const dragging = draggingTask;
+  const placeholder = taskPlaceholder;
+  const container = document.querySelector(".task-selection");
+
+  if (dragging && container && placeholder && placeholder.parentElement === container) {
+    container.insertBefore(dragging, placeholder);
+  }
+
+  resetDraggingTaskStyles(dragging);
+  placeholder?.remove();
+  taskPlaceholder = null;
+  draggingTask = null;
+  abortTaskDragListeners();
+}
 
 // タスクカード読み込み後に並び替え編集ボタンを追加する処理
 function initTaskOrderEditing() {
@@ -389,12 +422,7 @@ function disableTaskDragAndDrop() {
     }
     wrapper.removeEventListener("pointerdown", onTaskPointerDown);
   });
-  document.removeEventListener("pointermove", onTaskPointerMove);
-  document.removeEventListener("pointerup", onTaskPointerUp);
-  if (draggingTask) {
-    draggingTask.style.position = "";
-    draggingTask.style.zIndex = "";
-  }
+  finishTaskDrag();
 }
 
 // pointerdown イベント
@@ -411,6 +439,10 @@ function onTaskPointerDown(e: PointerEvent) {
     return;
   }
 
+  const container = document.querySelector(".task-selection") as HTMLElement | null;
+  if (!container) return;
+
+  finishTaskDrag();
   draggingTask = e.currentTarget as HTMLElement | null; // task-wrapper をドラッグ対象にする
   if (!draggingTask) return;
   draggingTask.classList.add("dragging");
@@ -422,8 +454,6 @@ function onTaskPointerDown(e: PointerEvent) {
   draggingTask.style.height = rect.height + "px";
   draggingTask.style.zIndex = "1000";
 
-  const container = document.querySelector(".task-selection") as HTMLElement | null;
-  if (!container) return;
   const containerRect = container.getBoundingClientRect();
   draggingTask.style.left = e.clientX - containerRect.left - rect.width / 2 + "px";
   draggingTask.style.top = e.clientY - containerRect.top - rect.height / 2 + "px";
@@ -436,8 +466,13 @@ function onTaskPointerDown(e: PointerEvent) {
   taskPlaceholder.style.border = "1px dashed #aaa";
   container.insertBefore(taskPlaceholder, draggingTask.nextSibling);
 
-  document.addEventListener("pointermove", onTaskPointerMove);
-  document.addEventListener("pointerup", onTaskPointerUp);
+  taskDragAbortController = new AbortController();
+  const { signal } = taskDragAbortController;
+  document.addEventListener("pointermove", onTaskPointerMove, { signal });
+  document.addEventListener("pointerup", onTaskPointerUp, { signal });
+  document.addEventListener("pointercancel", onTaskPointerUp, { signal });
+  window.addEventListener("blur", onTaskPointerUp, { signal });
+  window.addEventListener("pagehide", onTaskPointerUp, { signal });
 }
 
 function onTaskPointerMove(e: PointerEvent) {
@@ -470,23 +505,7 @@ function onTaskPointerMove(e: PointerEvent) {
 }
 
 function onTaskPointerUp() {
-  if (!draggingTask) return;
-  const container = document.querySelector(".task-selection");
-  if (!container || !taskPlaceholder) return;
-  container.insertBefore(draggingTask, taskPlaceholder);
-  draggingTask.classList.remove("dragging");
-  // スタイルリセット
-  draggingTask.style.position = "";
-  draggingTask.style.left = "";
-  draggingTask.style.top = "";
-  draggingTask.style.width = "";
-  draggingTask.style.height = "";
-  draggingTask.style.zIndex = "";
-  taskPlaceholder.remove();
-  taskPlaceholder = null;
-  draggingTask = null;
-  document.removeEventListener("pointermove", onTaskPointerMove);
-  document.removeEventListener("pointerup", onTaskPointerUp);
+  finishTaskDrag();
 }
 
 // 並び順をサーバーに保存する関数

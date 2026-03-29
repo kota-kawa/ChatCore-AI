@@ -191,6 +191,7 @@ const ZODIAC_CONSTELLATIONS: ZodiacConstellation[] = [
 const activeZodiacLoaders = new Set<HTMLElement>();
 let zodiacLoopId: number | null = null;
 let zodiacResizeBound = false;
+let zodiacDomObserver: MutationObserver | null = null;
 
 function getCurrentZodiacIndex() {
   return Math.floor(Date.now() / ZODIAC_STEP_MS) % ZODIAC_CONSTELLATIONS.length;
@@ -272,6 +273,35 @@ function applyZodiacConstellation(loader: HTMLElement, zodiacIndex: number) {
   loader.dataset.zodiacSizeKey = `${Math.round(width)}x${Math.round(height)}`;
 }
 
+function cleanupZodiacRuntime() {
+  if (zodiacLoopId !== null) {
+    window.clearInterval(zodiacLoopId);
+    zodiacLoopId = null;
+  }
+
+  if (zodiacResizeBound) {
+    window.removeEventListener("resize", handleZodiacResize);
+    zodiacResizeBound = false;
+  }
+
+  if (zodiacDomObserver) {
+    zodiacDomObserver.disconnect();
+    zodiacDomObserver = null;
+  }
+}
+
+function ensureZodiacDomObserver() {
+  if (zodiacDomObserver || !document.body) return;
+
+  zodiacDomObserver = new MutationObserver(() => {
+    syncZodiacLoaders(false);
+  });
+  zodiacDomObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+
 function syncZodiacLoaders(forceCurrent = false) {
   const zodiacIndex = getCurrentZodiacIndex();
 
@@ -292,13 +322,8 @@ function syncZodiacLoaders(forceCurrent = false) {
     }
   });
 
-  if (activeZodiacLoaders.size === 0 && zodiacLoopId !== null) {
-    window.clearInterval(zodiacLoopId);
-    zodiacLoopId = null;
-    if (zodiacResizeBound) {
-      window.removeEventListener("resize", handleZodiacResize);
-      zodiacResizeBound = false;
-    }
+  if (activeZodiacLoaders.size === 0) {
+    cleanupZodiacRuntime();
   }
 }
 
@@ -317,6 +342,8 @@ function ensureZodiacLoop() {
     window.addEventListener("resize", handleZodiacResize);
     zodiacResizeBound = true;
   }
+
+  ensureZodiacDomObserver();
 }
 
 function setupZodiacLoader(loader: HTMLElement) {

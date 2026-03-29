@@ -17,6 +17,34 @@ import {
 } from "../setup/setup";
 import { initTaskOrderEditing } from "../setup/task_manager";
 
+let userMenuOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+
+function bindUserMenuOutsideClick(menu: HTMLDivElement) {
+  if (userMenuOutsideClickHandler) {
+    document.removeEventListener("click", userMenuOutsideClickHandler);
+  }
+
+  userMenuOutsideClickHandler = (e: MouseEvent) => {
+    const btn = document.getElementById("settings-btn");
+    const target = e.target as Node | null;
+    if (!target) return;
+
+    if (!menu.isConnected) {
+      if (userMenuOutsideClickHandler) {
+        document.removeEventListener("click", userMenuOutsideClickHandler);
+        userMenuOutsideClickHandler = null;
+      }
+      return;
+    }
+
+    if (!menu.contains(target) && (!btn || !btn.contains(target))) {
+      menu.style.display = "none";
+    }
+  };
+
+  document.addEventListener("click", userMenuOutsideClickHandler);
+}
+
 function readCachedAuthState() {
   try {
     const cached = localStorage.getItem(STORAGE_KEYS.authStateCache);
@@ -289,14 +317,7 @@ function toggleUserMenu() {
       });
     }
 
-    document.addEventListener("click", function docClick(e) {
-      const btn = document.getElementById("settings-btn");
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (menu && !menu.contains(target) && (!btn || !btn.contains(target))) {
-        menu.style.display = "none";
-      }
-    });
+    bindUserMenuOutsideClick(menu);
   }
 
   menu.style.display = menu.style.display === "block" ? "none" : "block";

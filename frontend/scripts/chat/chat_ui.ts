@@ -525,29 +525,43 @@ function closeSidebar() {
   setSidebarOpen(false);
 }
 
+let sidebarToggleInitialized = false;
+let sidebarToggleAbortController: AbortController | null = null;
+
+function onSidebarToggleButtonClick(e: Event) {
+  e.stopPropagation();
+  toggleSidebar();
+}
+
+function onSidebarOutsideClick(e: Event) {
+  const target = e.target as Element | null;
+  if (
+    document.body.classList.contains("sidebar-visible") &&
+    target &&
+    !target.closest(".sidebar") &&
+    !target.closest("#sidebar-toggle")
+  ) {
+    closeSidebar();
+  }
+}
+
 const initSidebarToggle = () => {
+  if (sidebarToggleInitialized) return;
+  sidebarToggleInitialized = true;
+
+  sidebarToggleAbortController?.abort();
+  sidebarToggleAbortController = new AbortController();
+  const { signal } = sidebarToggleAbortController;
+
   const sbBtn = document.getElementById("sidebar-toggle");
   sbBtn?.setAttribute("aria-expanded", "false");
 
-  if (sbBtn)
-    sbBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleSidebar();
-    });
-  // オーバーレイ／リンクタップで閉じる
-  document.addEventListener("click", (e) => {
-    const target = e.target as Element | null;
-    if (
-      document.body.classList.contains("sidebar-visible") &&
-      target &&
-      !target.closest(".sidebar") &&
-      !target.closest("#sidebar-toggle")
-    ) {
-      closeSidebar();
-    }
-  });
+  sbBtn?.addEventListener("click", onSidebarToggleButtonClick, { signal });
 
-  window.addEventListener("resize", closeSidebar);
+  // オーバーレイ／リンクタップで閉じる
+  document.addEventListener("click", onSidebarOutsideClick, { signal });
+
+  window.addEventListener("resize", closeSidebar, { signal });
 };
 
 function initCodeBlockCopyButtons() {
