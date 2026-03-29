@@ -2,56 +2,81 @@ import Head from "next/head";
 import Script from "next/script";
 import { useEffect, useState } from "react";
 
-const bodyMarkup = `
-<header class="main-header">
-      <div class="container">
-        <h1 class="logo">Prompt Manager</h1>
+function PromptManageHeader() {
+  return (
+    <header className="main-header">
+      <div className="container">
+        <h1 className="logo">Prompt Manager</h1>
       </div>
     </header>
+  );
+}
 
-    <main class="container main-container">
-      <div class="header-bar">
-        <h2 class="section-title">My Prompts</h2>
+function PromptManageMain() {
+  return (
+    <main className="container main-container">
+      <div className="header-bar">
+        <h2 className="section-title">My Prompts</h2>
       </div>
-      <div id="promptList" class="prompt-grid">
-        <!-- プロンプトカードは JavaScript により動的に生成 -->
-      </div>
+      <div id="promptList" className="prompt-grid"></div>
     </main>
+  );
+}
 
-    <!-- 編集用モーダル -->
-    <div id="editModal" class="modal" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>プロンプト編集</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+function EditPromptModal() {
+  return (
+    <div id="editModal" className="modal" tabIndex={-1}>
+      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div className="modal-content">
+          <div className="modal-header">
+            <h5 className="modal-title">
+              <i className="bi bi-pencil-square me-2"></i>プロンプト編集
+            </h5>
+            <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body">
-            <form id="editForm" class="modal-form">
-              <input type="hidden" id="editPromptId">
-              <div class="form-group">
-                <label for="editTitle" class="form-label">タイトル</label>
-                <input type="text" class="form-control input-field" id="editTitle" required>
+
+          <div className="modal-body">
+            <form id="editForm" className="modal-form">
+              <input type="hidden" id="editPromptId" />
+
+              <div className="form-group">
+                <label htmlFor="editTitle" className="form-label">
+                  タイトル
+                </label>
+                <input type="text" className="form-control input-field" id="editTitle" required />
               </div>
-              <div class="form-group">
-                <label for="editCategory" class="form-label">カテゴリ</label>
-                <input type="text" class="form-control input-field" id="editCategory" required>
+
+              <div className="form-group">
+                <label htmlFor="editCategory" className="form-label">
+                  カテゴリ
+                </label>
+                <input type="text" className="form-control input-field" id="editCategory" required />
               </div>
-              <div class="form-group">
-                <label for="editContent" class="form-label">内容</label>
-                <textarea class="form-control input-field" id="editContent" rows="5" required></textarea>
+
+              <div className="form-group">
+                <label htmlFor="editContent" className="form-label">
+                  内容
+                </label>
+                <textarea className="form-control input-field" id="editContent" rows={5} required></textarea>
               </div>
-              <div class="form-group">
-                <label for="editInputExamples" class="form-label">入力例</label>
-                <textarea class="form-control input-field" id="editInputExamples" rows="3"></textarea>
+
+              <div className="form-group">
+                <label htmlFor="editInputExamples" className="form-label">
+                  入力例
+                </label>
+                <textarea className="form-control input-field" id="editInputExamples" rows={3}></textarea>
               </div>
-              <div class="form-group">
-                <label for="editOutputExamples" class="form-label">出力例</label>
-                <textarea class="form-control input-field" id="editOutputExamples" rows="3"></textarea>
+
+              <div className="form-group">
+                <label htmlFor="editOutputExamples" className="form-label">
+                  出力例
+                </label>
+                <textarea className="form-control input-field" id="editOutputExamples" rows={3}></textarea>
               </div>
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary w-100">
-                  <i class="bi bi-save me-2"></i>更新する
+
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary w-100">
+                  <i className="bi bi-save me-2"></i>更新する
                 </button>
               </div>
             </form>
@@ -59,7 +84,18 @@ const bodyMarkup = `
         </div>
       </div>
     </div>
-`;
+  );
+}
+
+function PromptManagePageContent() {
+  return (
+    <>
+      <PromptManageHeader />
+      <PromptManageMain />
+      <EditPromptModal />
+    </>
+  );
+}
 
 export default function PromptManagePage() {
   const [bootstrapReady, setBootstrapReady] = useState(false);
@@ -99,7 +135,10 @@ export default function PromptManagePage() {
         />
         <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_manage.bundle.css" />
       </Head>
-      <div className="prompt-manage-page" dangerouslySetInnerHTML={{ __html: bodyMarkup }} />
+
+      <div className="prompt-manage-page">
+        <PromptManagePageContent />
+      </div>
 
       <Script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
