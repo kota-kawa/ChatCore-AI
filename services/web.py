@@ -10,10 +10,14 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse, RedirectResponse
 
+from .api_errors import ApiServiceError
+from .error_messages import ERROR_INVALID_JSON
 from .web_constants import BASE_DIR, DEFAULT_INTERNAL_ERROR_MESSAGE, FRONTEND_URL
 from .web_json import (
     get_json as _get_json,
     jsonify as _jsonify,
+    jsonify_rate_limited as _jsonify_rate_limited,
+    jsonify_service_error as _jsonify_service_error,
 )
 from .web_session import (
     flash as _flash,
@@ -33,8 +37,35 @@ async def get_json(request: Request) -> Any | None:
     return await _get_json(request)
 
 
-def jsonify(payload: Any, status_code: int = 200) -> JSONResponse:
-    return _jsonify(payload, status_code=status_code)
+def jsonify(
+    payload: Any,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    return _jsonify(payload, status_code=status_code, headers=headers)
+
+
+def jsonify_service_error(
+    error: ApiServiceError,
+    *,
+    status: str | None = None,
+) -> JSONResponse:
+    return _jsonify_service_error(error, status=status)
+
+
+def jsonify_rate_limited(
+    message: str,
+    *,
+    retry_after: int | None,
+    status: str | None = None,
+    error_key: str = "error",
+) -> JSONResponse:
+    return _jsonify_rate_limited(
+        message,
+        retry_after=retry_after,
+        status=status,
+        error_key=error_key,
+    )
 
 
 def log_and_internal_server_error(
@@ -57,7 +88,7 @@ def log_and_internal_server_error(
 async def require_json_dict(
     request: Request,
     *,
-    error_message: str = "JSON形式が不正です。",
+    error_message: str = ERROR_INVALID_JSON,
     status: str | None = None,
 ) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
     # リクエストボディがdictであることを保証し、違う場合は400を返す

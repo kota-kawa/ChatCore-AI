@@ -33,11 +33,14 @@ from services.chat_generation import (
 from services.auth_limits import (
     AuthLimitService,
     consume_guest_chat_daily_limit,
+    get_seconds_until_tomorrow,
     get_auth_limit_service,
 )
+from services.api_errors import ApiServiceError
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_llm_daily_quota,
+    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
 from services.llm import (
@@ -51,9 +54,14 @@ from services.llm import (
 from services.request_models import ChatMessageRequest
 from services.web import (
     jsonify,
+    jsonify_rate_limited,
+    jsonify_service_error,
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
+)
+from services.error_messages import (
+    ERROR_CHAT_ROOM_NOT_FOUND,
 )
 
 from . import (
@@ -345,6 +353,17 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
     return parsed
 
 
+def _legacy_error_response(result: Any):
+    if not (isinstance(result, tuple) and len(result) == 2):
+        return None
+    payload, status_code = result
+    if payload is None:
+        return None
+    if isinstance(payload, dict) and isinstance(status_code, int):
+        return jsonify(payload, status_code=status_code)
+    return None
+
+
 def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
     if char_budget <= 0:
         return ""
@@ -544,7 +563,10 @@ async def chat(
             service=resolved_auth_limit_service,
         )
         if not allowed:
-            return jsonify({"error": message or "1日10回までです"}, status_code=429)
+            return jsonify_rate_limited(
+                message or "1日10回までです",
+                retry_after=get_seconds_until_tomorrow(),
+            )
 
     system_prompt = {
         "role": "system",
@@ -557,14 +579,17 @@ async def chat(
         # ログインユーザーはDB永続履歴、ゲストは ephemeral_store を利用する
         # Use DB-backed history for signed-in users and ephemeral store for guests.
         try:
-            payload, status_code = await run_blocking(
+            owner_result = await run_blocking(
                 validate_room_owner,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームには投稿できません",
             )
-            if payload is not None:
-                return jsonify(payload, status_code=status_code)
+            legacy_response = _legacy_error_response(owner_result)
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -579,7 +604,7 @@ async def chat(
     else:
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
         escaped = html.escape(user_message)
         formatted_user_message = escaped.replace("\n", "<br>")
@@ -634,14 +659,12 @@ async def chat(
         service=resolved_llm_daily_limit_service,
     )
     if not can_access_llm:
-        return jsonify(
-            {
-                "error": (
-                    f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
-                    "日付が変わってから再度お試しください。"
-                )
-            },
-            status_code=429,
+        return jsonify_rate_limited(
+            (
+                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
         )
 
     if is_streaming_model(model):
@@ -713,14 +736,17 @@ async def chat_stop(
 
     if user_id is not None:
         try:
-            payload, status_code = await run_blocking(
+            owner_result = await run_blocking(
                 validate_room_owner,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームは操作できません",
             )
-            if payload is not None:
-                return jsonify(payload, status_code=status_code)
+            legacy_response = _legacy_error_response(owner_result)
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -729,7 +755,7 @@ async def chat_stop(
     else:
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     cancelled = await run_blocking(
@@ -754,14 +780,17 @@ async def get_chat_history(request: Request):
     session = request.session
     if "user_id" in session:
         try:
-            payload, status_code = await run_blocking(
+            owner_result = await run_blocking(
                 validate_room_owner,
                 chat_room_id,
                 session["user_id"],
                 "他ユーザーのチャット履歴は見れません",
             )
-            if payload is not None:
-                return jsonify(payload, status_code=status_code)
+            legacy_response = _legacy_error_response(owner_result)
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -779,7 +808,7 @@ async def get_chat_history(request: Request):
     else:
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
         messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
@@ -808,14 +837,17 @@ async def chat_generation_stream(
 
     if user_id is not None:
         try:
-            payload, status_code = await run_blocking(
+            owner_result = await run_blocking(
                 validate_room_owner,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",
             )
-            if payload is not None:
-                return jsonify(payload, status_code=status_code)
+            legacy_response = _legacy_error_response(owner_result)
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -824,7 +856,7 @@ async def chat_generation_stream(
     else:
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     last_event_id = _parse_last_event_id(request)
@@ -878,14 +910,17 @@ async def chat_generation_status(
 
     if user_id is not None:
         try:
-            payload, status_code = await run_blocking(
+            owner_result = await run_blocking(
                 validate_room_owner,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",
             )
-            if payload is not None:
-                return jsonify(payload, status_code=status_code)
+            legacy_response = _legacy_error_response(owner_result)
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -894,7 +929,7 @@ async def chat_generation_status(
     else:
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
+            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     is_generating = has_active_generation(

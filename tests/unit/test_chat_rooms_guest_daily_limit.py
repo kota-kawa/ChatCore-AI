@@ -32,6 +32,7 @@ class ChatRoomsGuestDailyLimitTestCase(unittest.TestCase):
                     response = asyncio.run(new_chat_room(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日10回までです")
         mock_guest_limit.assert_called_once()

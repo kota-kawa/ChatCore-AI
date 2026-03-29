@@ -90,6 +90,7 @@ class AdminApiTestCase(unittest.TestCase):
             response = asyncio.run(admin_views.api_login(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "60")
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")

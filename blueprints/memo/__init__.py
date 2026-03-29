@@ -6,9 +6,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from services.request_models import MemoCreateRequest
+from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.db import Error, get_db_connection
+from services.error_messages import ERROR_LOGIN_REQUIRED, ERROR_TOKEN_REQUIRED
 from services.memo_share import create_or_get_shared_memo_token, get_shared_memo_payload
 from services.request_models import ShareMemoRequest
 from services.web import (
@@ -16,6 +18,7 @@ from services.web import (
     frontend_url,
     get_json,
     jsonify,
+    jsonify_service_error,
     log_and_internal_server_error,
     redirect_to_frontend,
     require_json_dict,
@@ -126,7 +129,7 @@ def _insert_memo(
 async def api_recent_memos(request: Request, limit: int = 10):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     safe_limit = max(1, min(limit, 100))
     recent_memos = await run_blocking(_fetch_recent_memos, user_id, safe_limit)
@@ -138,7 +141,7 @@ async def api_recent_memos(request: Request, limit: int = 10):
 async def api_create_memo(request: Request):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data = await get_json(request)
     if data is None:
@@ -181,7 +184,7 @@ async def api_create_memo(request: Request):
 async def api_share_memo(request: Request):
     user_id = _user_id_from_session(request.session)
     if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
     if error_response is not None:
@@ -197,16 +200,20 @@ async def api_share_memo(request: Request):
         return validation_error
 
     try:
-        share_token, status_code = await run_blocking(
+        share_token_result = await run_blocking(
             create_or_get_shared_memo_token,
             payload.memo_id,
             user_id,
         )
-        if status_code == 404 or not share_token:
-            return jsonify(
-                {"status": "fail", "error": "共有対象のメモが見つかりません。"},
-                status_code=404,
-            )
+        if isinstance(share_token_result, tuple) and len(share_token_result) == 2:
+            share_token, status_code = share_token_result
+            if status_code == 404 or not share_token:
+                return jsonify(
+                    {"status": "fail", "error": "共有対象のメモが見つかりません。"},
+                    status_code=404,
+                )
+        else:
+            share_token = share_token_result
 
         share_url = frontend_url(f"/shared/memo/{share_token}")
         return jsonify(
@@ -216,6 +223,8 @@ async def api_share_memo(request: Request):
                 "share_url": share_url,
             }
         )
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
     except Error:
         return log_and_internal_server_error(
             logger,
@@ -228,11 +237,16 @@ async def api_share_memo(request: Request):
 async def api_shared_memo(request: Request):
     token = request.query_params.get("token", "").strip()
     if not token:
-        return jsonify({"error": "token is required"}, status_code=400)
+        return jsonify({"error": ERROR_TOKEN_REQUIRED}, status_code=400)
 
     try:
-        payload, status_code = await run_blocking(get_shared_memo_payload, token)
-        return jsonify(payload, status_code=status_code)
+        payload_result = await run_blocking(get_shared_memo_payload, token)
+        if isinstance(payload_result, tuple) and len(payload_result) == 2:
+            payload, status_code = payload_result
+            return jsonify(payload, status_code=status_code)
+        return jsonify(payload_result)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
     except Error:
         return log_and_internal_server_error(
             logger,

@@ -8,7 +8,9 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse
 
+from .api_errors import ApiServiceError
 from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
+from .error_messages import ERROR_INVALID_JSON
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -22,10 +24,48 @@ async def get_json(request: Request) -> Any | None:
         return None
 
 
-def jsonify(payload: Any, status_code: int = 200) -> JSONResponse:
+def jsonify(
+    payload: Any,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     # FastAPI 互換のJSONエンコードを通してレスポンスを返す
     # Build a JSON response via FastAPI-compatible jsonable encoding.
-    return JSONResponse(content=jsonable_encoder(payload), status_code=status_code)
+    response = JSONResponse(content=jsonable_encoder(payload), status_code=status_code)
+    for key, value in (headers or {}).items():
+        response.headers[str(key)] = str(value)
+    return response
+
+
+def jsonify_service_error(
+    error: ApiServiceError,
+    *,
+    status: str | None = None,
+) -> JSONResponse:
+    payload = error.to_payload()
+    if status is not None:
+        payload["status"] = status
+    return jsonify(
+        payload,
+        status_code=error.status_code,
+        headers=error.headers,
+    )
+
+
+def jsonify_rate_limited(
+    message: str,
+    *,
+    retry_after: int | None,
+    status: str | None = None,
+    error_key: str = "error",
+) -> JSONResponse:
+    payload: Dict[str, Any] = {error_key: message}
+    if status is not None:
+        payload["status"] = status
+    headers: dict[str, str] = {}
+    if retry_after is not None:
+        headers["Retry-After"] = str(max(int(retry_after), 1))
+    return jsonify(payload, status_code=429, headers=headers)
 
 
 def log_and_internal_server_error(
@@ -48,7 +88,7 @@ def log_and_internal_server_error(
 async def require_json_dict(
     request: Request,
     *,
-    error_message: str = "JSON形式が不正です。",
+    error_message: str = ERROR_INVALID_JSON,
     status: str | None = None,
 ) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
     # リクエストボディがdictであることを保証し、違う場合は400を返す

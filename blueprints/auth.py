@@ -63,6 +63,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 from services.web import (
     log_and_internal_server_error,
     jsonify,
+    jsonify_rate_limited,
     require_json_dict,
     validate_payload_model,
     frontend_login_url,
@@ -72,6 +73,7 @@ from services.web import (
     set_session_permanent,
     url_for,
 )
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
@@ -116,6 +118,7 @@ from services.email_service import send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
+    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
 from services.runtime_config import is_production_env
@@ -671,7 +674,14 @@ async def api_passkey_authenticate_options(
         service=resolved_auth_limit_service,
     )
     if not allowed:
-        return jsonify({"status": "fail", "error": limit_error}, status_code=429)
+        return jsonify_rate_limited(
+            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
 
     options = generate_authentication_options(
         rp_id=get_passkey_rp_id(request),
@@ -701,7 +711,14 @@ async def api_passkey_authenticate_verify(
         service=resolved_auth_limit_service,
     )
     if not allowed:
-        return jsonify({"status": "fail", "error": limit_error}, status_code=429)
+        return jsonify_rate_limited(
+            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
 
     ceremony = get_passkey_authentication_ceremony(request.session)
     if ceremony is None:
@@ -1125,7 +1142,14 @@ async def api_send_login_code(
         service=resolved_auth_limit_service,
     )
     if not allowed:
-        return jsonify({"status": "fail", "error": limit_error}, status_code=429)
+        return jsonify_rate_limited(
+            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
 
     user = await run_blocking(get_user_by_email, email)
     if not user or not user["is_verified"]:
@@ -1138,15 +1162,13 @@ async def api_send_login_code(
         service=resolved_llm_daily_limit_service,
     )
     if not can_send_email:
-        return jsonify(
-            {
-                "status": "fail",
-                "error": (
-                    f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
-                    "日付が変わってから再度お試しください。"
-                ),
-            },
-            status_code=429,
+        return jsonify_rate_limited(
+            (
+                f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
+            status="fail",
         )
     # 認証コードを発行し、検証用にセッションへ保持する
     # Generate and store login verification code in session.

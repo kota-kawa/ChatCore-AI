@@ -47,6 +47,10 @@ def _seconds_until_tomorrow() -> int:
     return max(seconds, 1)
 
 
+def get_seconds_until_daily_reset() -> int:
+    return _seconds_until_tomorrow()
+
+
 class LlmDailyLimitService:
     def __init__(
         self,

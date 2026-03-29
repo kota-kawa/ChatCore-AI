@@ -33,6 +33,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
                         response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日10回までです")
         mock_guest_limit.assert_called_once()
@@ -53,6 +54,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
                 response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日3回までです")
 
@@ -78,6 +80,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
                                     response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertIn("上限", payload["error"])
         mock_llm.assert_not_called()

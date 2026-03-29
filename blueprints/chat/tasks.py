@@ -9,6 +9,7 @@ from services.auth_limits import (
     get_auth_limit_service,
     get_request_client_ip,
 )
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
@@ -16,6 +17,7 @@ from services.llm import LlmServiceError
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_llm_daily_quota,
+    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
 from services.prompt_assist import create_prompt_assist_payload
@@ -28,6 +30,7 @@ from services.request_models import (
 )
 from services.web import (
     jsonify,
+    jsonify_rate_limited,
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
@@ -539,21 +542,25 @@ async def prompt_assist(
         auth_limit_service=resolved_auth_limit_service,
     )
     if not can_access:
-        return jsonify({"error": limit_message}, status_code=429)
+        return jsonify_rate_limited(
+            limit_message or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_message,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+        )
 
     can_access_llm, _, daily_limit = await run_blocking(
         consume_llm_daily_quota,
         service=resolved_llm_daily_limit_service,
     )
     if not can_access_llm:
-        return jsonify(
-            {
-                "error": (
-                    f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
-                    "日付が変わってから再度お試しください。"
-                )
-            },
-            status_code=429,
+        return jsonify_rate_limited(
+            (
+                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
         )
 
     try:

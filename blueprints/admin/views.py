@@ -9,6 +9,7 @@ from fastapi import Depends, Request
 from starlette.responses import RedirectResponse
 
 from services.async_utils import run_blocking
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.auth_limits import (
     AuthLimitService,
     consume_admin_login_limit,
@@ -23,6 +24,7 @@ from services.web import (
     get_flashed_messages,
     get_json,
     jsonify,
+    jsonify_rate_limited,
     log_and_internal_server_error,
     redirect_to_frontend,
     sanitize_next_path,
@@ -139,7 +141,14 @@ async def api_login(
         service=resolved_auth_limit_service,
     )
     if not allowed:
-        return jsonify({"status": "fail", "error": limit_error}, status_code=429)
+        return jsonify_rate_limited(
+            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
 
     if _verify_admin_password(password):
         rotate_session_identifier(request)

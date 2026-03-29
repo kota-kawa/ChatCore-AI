@@ -3,12 +3,14 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
+from .api_errors import ResourceNotFoundError
 from .db import get_db_connection
+from .error_messages import ERROR_MEMO_NOT_FOUND_FOR_SHARE, ERROR_SHARED_LINK_NOT_FOUND
 
 UNIQUE_VIOLATION_PGCODE = "23505"
 
 
-def create_or_get_shared_memo_token(memo_id: int, user_id: int) -> tuple[str | None, int | None]:
+def create_or_get_shared_memo_token(memo_id: int, user_id: int) -> str:
     # メモ所有者を検証した上で共有トークンを作成し、既存があれば再利用する
     # Create a memo share token after owner validation and reuse the existing one.
     with get_db_connection() as conn:
@@ -19,7 +21,7 @@ def create_or_get_shared_memo_token(memo_id: int, user_id: int) -> tuple[str | N
                 (memo_id, user_id),
             )
             if not cursor.fetchone():
-                return None, 404
+                raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
 
             while True:
                 token = secrets.token_urlsafe(18)
@@ -36,7 +38,7 @@ def create_or_get_shared_memo_token(memo_id: int, user_id: int) -> tuple[str | N
                     )
                     row = cursor.fetchone()
                     conn.commit()
-                    return (row[0] if row else token), None
+                    return row[0] if row else token
                 except Exception as exc:
                     conn.rollback()
                     if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
@@ -46,7 +48,7 @@ def create_or_get_shared_memo_token(memo_id: int, user_id: int) -> tuple[str | N
             cursor.close()
 
 
-def get_shared_memo_payload(token: str) -> tuple[dict[str, Any], int]:
+def get_shared_memo_payload(token: str) -> dict[str, Any]:
     # 共有トークンに対応する公開メモ内容を返す
     # Return publicly viewable memo payload for the given share token.
     with get_db_connection() as conn:
@@ -70,21 +72,18 @@ def get_shared_memo_payload(token: str) -> tuple[dict[str, Any], int]:
             )
             row = cursor.fetchone()
             if not row:
-                return {"error": "共有リンクが見つかりません"}, 404
+                raise ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND)
 
             created_at = row.get("created_at")
-            return (
-                {
-                    "memo": {
-                        "id": row.get("id"),
-                        "title": row.get("title") or "保存したメモ",
-                        "tags": row.get("tags") or "",
-                        "created_at": created_at.strftime("%Y-%m-%d %H:%M") if created_at else None,
-                        "input_content": row.get("input_content") or "",
-                        "ai_response": row.get("ai_response") or "",
-                    }
-                },
-                200,
-            )
+            return {
+                "memo": {
+                    "id": row.get("id"),
+                    "title": row.get("title") or "保存したメモ",
+                    "tags": row.get("tags") or "",
+                    "created_at": created_at.strftime("%Y-%m-%d %H:%M") if created_at else None,
+                    "input_content": row.get("input_content") or "",
+                    "ai_response": row.get("ai_response") or "",
+                }
+            }
         finally:
             cursor.close()

@@ -29,6 +29,7 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
                 response = asyncio.run(api_send_login_code(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "60")
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
@@ -53,6 +54,7 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
                         response = asyncio.run(api_send_login_code(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
         self.assertIn("上限", payload["error"])
@@ -69,6 +71,7 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
                 response = asyncio.run(api_send_verification_email(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "60")
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
@@ -89,6 +92,7 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
                     response = asyncio.run(api_send_verification_email(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["status"], "fail")
         self.assertIn("上限", payload["error"])

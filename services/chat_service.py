@@ -1,7 +1,9 @@
 import secrets
 from typing import Any
 
+from .api_errors import ForbiddenOperationError, ResourceNotFoundError
 from .db import get_db_connection
+from .error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
 
 UNIQUE_VIOLATION_PGCODE = "23505"
 
@@ -68,9 +70,9 @@ def get_chat_room_messages(chat_room_id: str) -> list[dict[str, str]]:
 
 def validate_room_owner(
     room_id: str, user_id: int, forbidden_message: str
-) -> tuple[dict[str, str] | None, int | None]:
-    # 指定ルームの所有者チェックを行い、失敗時はAPI返却形式で返す
-    # Validate room ownership and return API-shaped error on failure.
+) -> None:
+    # 指定ルームの所有者チェックを行い、失敗時は例外を送出する
+    # Validate room ownership and raise API service errors on failure.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -78,15 +80,14 @@ def validate_room_owner(
             cursor.execute(check_q, (room_id,))
             result = cursor.fetchone()
             if not result:
-                return {"error": "該当ルームが存在しません"}, 404
+                raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
             if result[0] != user_id:
-                return {"error": forbidden_message}, 403
-            return None, None
+                raise ForbiddenOperationError(forbidden_message)
         finally:
             cursor.close()
 
 
-def create_or_get_shared_chat_token(room_id: str) -> tuple[str | None, int | None]:
+def create_or_get_shared_chat_token(room_id: str) -> str:
     # 共有リンク用トークンを作成し、既存がある場合は再利用する
     # Create share token for a room and reuse the existing one when present.
     with get_db_connection() as conn:
@@ -94,7 +95,7 @@ def create_or_get_shared_chat_token(room_id: str) -> tuple[str | None, int | Non
         try:
             cursor.execute("SELECT 1 FROM chat_rooms WHERE id = %s", (room_id,))
             if not cursor.fetchone():
-                return None, 404
+                raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
 
             while True:
                 token = secrets.token_urlsafe(18)
@@ -111,7 +112,7 @@ def create_or_get_shared_chat_token(room_id: str) -> tuple[str | None, int | Non
                     )
                     row = cursor.fetchone()
                     conn.commit()
-                    return (row[0] if row else token), None
+                    return row[0] if row else token
                 except Exception as exc:
                     conn.rollback()
                     if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
@@ -123,7 +124,7 @@ def create_or_get_shared_chat_token(room_id: str) -> tuple[str | None, int | Non
 
 def get_shared_chat_room_payload(
     token: str,
-) -> tuple[dict[str, Any] | None, int | None]:
+) -> dict[str, Any]:
     # 共有トークンに対応する公開チャット履歴を返す
     # Return publicly viewable chat payload for the given share token.
     with get_db_connection() as conn:
@@ -141,7 +142,7 @@ def get_shared_chat_room_payload(
             )
             room_row = cursor.fetchone()
             if not room_row:
-                return {"error": "共有リンクが見つかりません"}, 404
+                raise ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND)
 
             room_id, title, created_at = room_row
             cursor.execute(
@@ -164,16 +165,13 @@ def get_shared_chat_room_payload(
                     }
                 )
 
-            return (
-                {
-                    "room": {
-                        "id": room_id,
-                        "title": title,
-                        "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    },
-                    "messages": messages,
+            return {
+                "room": {
+                    "id": room_id,
+                    "title": title,
+                    "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 },
-                200,
-            )
+                "messages": messages,
+            }
         finally:
             cursor.close()

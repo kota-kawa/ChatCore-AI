@@ -4,6 +4,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from services.async_utils import run_blocking
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
@@ -15,6 +16,7 @@ from services.email_service import send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
+    get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
 from services.request_models import AuthCodeRequest, EmailRequest
@@ -28,6 +30,7 @@ from services.users import (
 )
 from services.web import (
     jsonify,
+    jsonify_rate_limited,
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
@@ -107,22 +110,27 @@ async def api_send_verification_email(
         service=resolved_auth_limit_service,
     )
     if not allowed:
-        return jsonify({"status": "fail", "error": limit_error}, status_code=429)
+        return jsonify_rate_limited(
+            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
+        )
 
     can_send_email, _, daily_limit = await run_blocking(
         consume_auth_email_daily_quota,
         service=resolved_llm_daily_limit_service,
     )
     if not can_send_email:
-        return jsonify(
-            {
-                "status": "fail",
-                "error": (
-                    f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
-                    "日付が変わってから再度お試しください。"
-                ),
-            },
-            status_code=429,
+        return jsonify_rate_limited(
+            (
+                f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
+            status="fail",
         )
 
     # すでにユーザーがあれば再利用、なければ作成

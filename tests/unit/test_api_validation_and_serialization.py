@@ -75,7 +75,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(payload["error"], "該当ルームが存在しません")
+        self.assertEqual(payload["error"], "該当ルームが見つかりません")
 
     def test_chat_returns_400_when_invalid_model_is_requested(self):
         request = make_request(

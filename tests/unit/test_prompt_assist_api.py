@@ -93,6 +93,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     response = asyncio.run(prompt_assist(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
         payload = json.loads(response.body.decode("utf-8"))
         self.assertIn("上限", payload["error"])
         mock_create.assert_not_called()
@@ -118,6 +119,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
                 response = asyncio.run(prompt_assist(request))
 
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "10")
         payload = json.loads(response.body.decode("utf-8"))
         self.assertIn("多すぎます", payload["error"])
         mock_create.assert_not_called()

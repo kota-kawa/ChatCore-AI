@@ -107,6 +107,7 @@ class PasskeyRouteTestCase(unittest.TestCase):
 
         payload = json.loads(response.body.decode())
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "60")
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
 
@@ -287,6 +288,7 @@ class PasskeyRouteTestCase(unittest.TestCase):
 
         payload = json.loads(response.body.decode())
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers.get("Retry-After"), "60")
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
 
