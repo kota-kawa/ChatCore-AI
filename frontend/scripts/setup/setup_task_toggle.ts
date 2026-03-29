@@ -1,3 +1,4 @@
+import { getSharedDomRefs } from "../core/dom";
 import { scheduleSetupViewportFit } from "./setup_viewport";
 
 export function initToggleTasks() {
@@ -45,7 +46,7 @@ export function initToggleTasks() {
   applyExpandedState();
 
   // ボタンをリストの末尾に追加
-  const selectionContainer = window.taskSelection || container;
+  const selectionContainer = getSharedDomRefs().taskSelection || container;
   selectionContainer.appendChild(btn);
   scheduleSetupViewportFit();
 }

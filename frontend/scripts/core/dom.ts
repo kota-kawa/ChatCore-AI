@@ -1,39 +1,39 @@
-// dom.ts
-// 画面内で使用するDOM要素をまとめて取得し、グローバル変数として window に登録
-// Collect shared DOM handles once and expose them on window for legacy module interop.
+export type SharedDomRefs = {
+  setupContainer: HTMLElement | null;
+  chatContainer: HTMLElement | null;
+  chatMessages: HTMLElement | null;
+  userInput: HTMLInputElement | null;
+  sendBtn: HTMLElement | null;
+  backToSetupBtn: HTMLElement | null;
+  newChatBtn: HTMLElement | null;
+  chatRoomListEl: HTMLElement | null;
+  setupInfoElement: HTMLTextAreaElement | null;
+  aiModelSelect: HTMLSelectElement | null;
+  accessChatBtn: HTMLElement | null;
+  taskSelection: HTMLElement | null;
+};
 
-// セットアップ画面関連
-const setupContainer = document.getElementById("setup-container");
-const setupInfoElement = document.getElementById("setup-info") as HTMLTextAreaElement | null;
-const aiModelSelect = document.getElementById("ai-model") as HTMLSelectElement | null;
-const accessChatBtn = document.getElementById("access-chat-btn");
-const setupTaskCards = document.querySelectorAll(".task-selection .prompt-card");
-const taskSelection = document.querySelector(".task-selection");
+let cachedDomRefs: SharedDomRefs | null = null;
 
-// チャット画面関連
-const chatContainer = document.getElementById("chat-container");
-const chatMessages = document.getElementById("chat-messages");
-const userInput = document.getElementById("user-input") as HTMLInputElement | null;
-const sendBtn = document.getElementById("send-btn");
-const backToSetupBtn = document.getElementById("back-to-setup");
-const newChatBtn = document.getElementById("new-chat-btn");
-const chatRoomListEl = document.getElementById("chat-room-list");
+export function initSharedDomRefs(): SharedDomRefs {
+  cachedDomRefs = {
+    setupContainer: document.getElementById("setup-container"),
+    chatContainer: document.getElementById("chat-container"),
+    chatMessages: document.getElementById("chat-messages"),
+    userInput: document.getElementById("user-input") as HTMLInputElement | null,
+    sendBtn: document.getElementById("send-btn"),
+    backToSetupBtn: document.getElementById("back-to-setup"),
+    newChatBtn: document.getElementById("new-chat-btn"),
+    chatRoomListEl: document.getElementById("chat-room-list"),
+    setupInfoElement: document.getElementById("setup-info") as HTMLTextAreaElement | null,
+    aiModelSelect: document.getElementById("ai-model") as HTMLSelectElement | null,
+    accessChatBtn: document.getElementById("access-chat-btn"),
+    taskSelection: document.querySelector(".task-selection") as HTMLElement | null
+  };
 
-// グローバル登録
-// 既存スクリプト間の依存を保つため、window へ明示的に公開する
-// Explicitly publish to window to preserve cross-script compatibility.
-window.setupContainer = setupContainer;
-window.chatContainer = chatContainer;
-window.chatMessages = chatMessages;
-window.userInput = userInput;
-window.sendBtn = sendBtn;
-window.backToSetupBtn = backToSetupBtn;
-window.newChatBtn = newChatBtn;
-window.chatRoomListEl = chatRoomListEl;
-window.setupInfoElement = setupInfoElement;
-window.aiModelSelect = aiModelSelect;
-window.accessChatBtn = accessChatBtn;
-window.setupTaskCards = setupTaskCards;
-window.taskSelection = taskSelection;
+  return cachedDomRefs;
+}
 
-export {};
+export function getSharedDomRefs(): SharedDomRefs {
+  return cachedDomRefs || initSharedDomRefs();
+}

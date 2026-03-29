@@ -1,3 +1,6 @@
+import { getCurrentChatRoomId } from "../core/app_state";
+import { copyTextToClipboard } from "./message_utils";
+
 type ShareApiResponse = {
   share_url?: string;
   error?: string;
@@ -96,7 +99,7 @@ function setShareActionLoading(isLoading: boolean) {
 }
 
 async function createShareLink(forceRefresh = false) {
-  const roomId = window.currentChatRoomId;
+  const roomId = getCurrentChatRoomId();
   if (!roomId) {
     setStatus("共有するチャットルームを選択してください。", true);
     setShareUrl("");
@@ -146,13 +149,7 @@ async function copyShareLink() {
   }
 
   try {
-    if (window.copyTextToClipboard) {
-      await window.copyTextToClipboard(shareUrl);
-    } else if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(shareUrl);
-    } else {
-      throw new Error("このブラウザではコピー機能が利用できません。");
-    }
+    await copyTextToClipboard(shareUrl);
     setStatus("リンクをコピーしました。");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -190,7 +187,7 @@ function refreshChatShareState() {
   const { shareBtn } = getShareModalElements();
   if (!shareBtn) return;
 
-  const hasRoom = Boolean(window.currentChatRoomId);
+  const hasRoom = Boolean(getCurrentChatRoomId());
   shareBtn.disabled = !hasRoom;
   shareBtn.classList.toggle("chat-share-btn--disabled", !hasRoom);
   shareBtn.setAttribute("aria-disabled", hasRoom ? "false" : "true");
@@ -244,14 +241,4 @@ function initChatShare() {
   });
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initChatShare);
-} else {
-  initChatShare();
-}
-
-window.initChatShare = initChatShare;
-window.refreshChatShareState = refreshChatShareState;
-window.closeChatShareModal = closeChatShareModal;
-
-export {};
+export { initChatShare, refreshChatShareState, closeChatShareModal };

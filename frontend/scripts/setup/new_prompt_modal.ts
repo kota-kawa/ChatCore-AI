@@ -1,4 +1,6 @@
 import { initPromptAssist } from "../components/prompt_assist";
+import { invalidateTasksCache } from "./setup_tasks_cache";
+import { loadTaskCards } from "./setup_task_cards";
 
 function initNewPromptModal() {
   const openModalBtn = document.getElementById("openNewPromptModal") as HTMLButtonElement | null;
@@ -226,8 +228,8 @@ function initNewPromptModal() {
       setComposerStatus(result.message || "タスクが追加されました。", "success");
       newPostForm.reset();
       showGuardrailFields(false);
-      if (window.invalidateTasksCache) window.invalidateTasksCache();
-      if (window.loadTaskCards) window.loadTaskCards({ forceRefresh: true });
+      invalidateTasksCache();
+      loadTaskCards({ forceRefresh: true });
 
       window.setTimeout(() => {
         closeModal();
@@ -242,10 +244,4 @@ function initNewPromptModal() {
   });
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initNewPromptModal);
-} else {
-  initNewPromptModal();
-}
-
-export {};
+export { initNewPromptModal };

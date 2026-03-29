@@ -1,5 +1,6 @@
 // components/user_icon.ts
 // ────────────────────────────────────────────────
+import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username を取得
 //  - 取得失敗時はデフォルト画像・空文字にフォールバック
@@ -164,8 +165,8 @@ class UserIcon extends HTMLElement {
       });
     }
     document.addEventListener("authstatechange", this._handleAuthState);
-    if (typeof window.loggedIn !== "undefined") {
-      this._handleAuthStateInternal({ detail: { loggedIn: window.loggedIn } } as CustomEvent);
+    if (hasLoggedInState()) {
+      this._handleAuthStateInternal({ detail: { loggedIn: getLoggedInState() } } as CustomEvent);
     }
   }
 

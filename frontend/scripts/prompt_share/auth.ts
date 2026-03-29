@@ -1,4 +1,5 @@
 import type { CurrentUserResponse } from "./types";
+import { setLoggedInState } from "../core/app_state";
 import { readCachedAuthState, writeCachedAuthState } from "./storage";
 
 type InitAuthOptions = {
@@ -14,12 +15,7 @@ export function initPromptShareAuth(options: InitAuthOptions) {
   let isLoggedIn = false;
 
   const notifyAuthState = (loggedIn: boolean) => {
-    window.loggedIn = loggedIn;
-    document.dispatchEvent(
-      new CustomEvent("authstatechange", {
-        detail: { loggedIn }
-      })
-    );
+    setLoggedInState(loggedIn);
   };
 
   const applyAuthUI = (loggedIn: boolean) => {

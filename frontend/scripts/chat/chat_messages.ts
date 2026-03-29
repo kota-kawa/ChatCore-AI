@@ -1,6 +1,17 @@
 // chat_messages.ts – メッセージ描画／コピー／ボット表示
 // --------------------------------------------------
 // ※ DOMPurify が未ロードでも message_utils 側でテキスト描画にフォールバックする
+import { getSharedDomRefs } from "../core/dom";
+import { saveMessageToLocalStorage } from "./chat_history";
+import { formatLLMOutput } from "./chat_ui";
+import {
+  createCopyBtn,
+  createMemoSaveBtn,
+  isChatViewportNearBottom,
+  renderSanitizedHTML,
+  scrollMessageToBottom,
+  setTextWithLineBreaks
+} from "./message_utils";
 
 type StreamingBotMessageHandle = {
   appendChunk: (chunk: string) => void;
@@ -21,15 +32,13 @@ function isScrollViewportNearBottom(container: HTMLElement, thresholdPx = STICKY
 }
 
 function getShouldStickToBottom(container: HTMLElement) {
-  if (window.isChatViewportNearBottom) {
-    return window.isChatViewportNearBottom(STICKY_SCROLL_BOTTOM_THRESHOLD_PX);
-  }
-  return isScrollViewportNearBottom(container);
+  return isChatViewportNearBottom(STICKY_SCROLL_BOTTOM_THRESHOLD_PX) || isScrollViewportNearBottom(container);
 }
 
 function createBotMessageElements(options: { scrollToBottom?: boolean } = {}) {
   const { scrollToBottom = true } = options;
-  if (!window.chatMessages) return null;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return null;
   const wrapper = document.createElement("div");
   wrapper.className = "message-wrapper bot-message-wrapper";
 
@@ -39,36 +48,24 @@ function createBotMessageElements(options: { scrollToBottom?: boolean } = {}) {
   const actionGroup = document.createElement("div");
   actionGroup.className = "message-actions";
 
-  const copyBtn = window.createCopyBtn
-    ? window.createCopyBtn(() => msg.dataset.fullText || "")
-    : document.createElement("button");
+  const copyBtn = createCopyBtn(() => msg.dataset.fullText || "");
   copyBtn.classList.add("message-action-btn");
 
-  const saveBtn = window.createMemoSaveBtn
-    ? window.createMemoSaveBtn(() => msg.dataset.fullText || "")
-    : document.createElement("button");
+  const saveBtn = createMemoSaveBtn(() => msg.dataset.fullText || "");
   saveBtn.classList.add("message-action-btn");
 
   actionGroup.append(copyBtn, saveBtn);
   wrapper.append(msg, actionGroup);
-  window.chatMessages.appendChild(wrapper);
+  chatMessages.appendChild(wrapper);
   if (scrollToBottom) {
-    if (window.scrollMessageToBottom) {
-      window.scrollMessageToBottom();
-    } else if (window.scrollMessageToTop) {
-      window.scrollMessageToTop(wrapper);
-    }
+    scrollMessageToBottom();
   }
 
   return { wrapper, msg };
 }
 
 function renderBotMessageContent(target: HTMLElement, raw: string) {
-  if (window.renderSanitizedHTML && window.formatLLMOutput) {
-    window.renderSanitizedHTML(target, window.formatLLMOutput(raw));
-  } else {
-    window.setTextWithLineBreaks?.(target, raw);
-  }
+  renderSanitizedHTML(target, formatLLMOutput(raw));
 }
 
 function renderBotMessage(
@@ -80,11 +77,7 @@ function renderBotMessage(
   const { scrollToBottom = true } = options;
   renderBotMessageContent(msg, raw);
   if (scrollToBottom) {
-    if (window.scrollMessageToBottom) {
-      window.scrollMessageToBottom();
-    } else if (window.scrollMessageToTop) {
-      window.scrollMessageToTop(wrapper);
-    }
+    scrollMessageToBottom();
   }
 }
 
@@ -94,7 +87,8 @@ function renderBotMessage(
 
 /* ユーザーメッセージを即時描画 */
 function renderUserMessage(text: string) {
-  if (!window.chatMessages) return;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return;
   const wrapper = document.createElement("div");
   wrapper.className = "message-wrapper user-message-wrapper";
 
@@ -103,42 +97,40 @@ function renderUserMessage(text: string) {
 
   // テキスト → <br> 置換後、<br> だけ許可してサニタイズ描画
   const htmlText = text.replace(/\n/g, "<br>");
-  window.renderSanitizedHTML?.(msg, htmlText, ["br"]);
+  renderSanitizedHTML(msg, htmlText, ["br"]);
   msg.style.animation = "floatUp 0.5s ease-out";
 
-  const copyBtn = window.createCopyBtn ? window.createCopyBtn(() => text) : document.createElement("button");
+  const copyBtn = createCopyBtn(() => text);
   copyBtn.classList.add("message-action-btn");
   const actionGroup = document.createElement("div");
   actionGroup.className = "message-actions";
 
   actionGroup.append(copyBtn);
   wrapper.append(msg, actionGroup);
-  window.chatMessages.appendChild(wrapper);
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.scrollMessageToTop) {
-    window.scrollMessageToTop(wrapper);
-  }
+  chatMessages.appendChild(wrapper);
+  scrollMessageToBottom();
 
   // ローカル保存は <br> 付き HTML で互換維持
-  if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(htmlText, "user");
+  saveMessageToLocalStorage(htmlText, "user");
 }
 
 /* Bot メッセージを即時描画 */
 function renderBotMessageImmediate(text: string) {
-  if (!window.chatMessages) return;
-  const shouldStickToBottom = getShouldStickToBottom(window.chatMessages);
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return;
+  const shouldStickToBottom = getShouldStickToBottom(chatMessages);
   const elements = createBotMessageElements({ scrollToBottom: shouldStickToBottom });
   if (!elements) return;
   const { wrapper, msg } = elements;
   msg.dataset.fullText = text;
   renderBotMessage(wrapper, msg, text, { scrollToBottom: shouldStickToBottom });
-  if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(text, "bot");
+  saveMessageToLocalStorage(text, "bot");
 }
 
 function startStreamingBotMessage(): StreamingBotMessageHandle | null {
-  if (!window.chatMessages) return null;
-  const scrollContainer = window.chatMessages;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return null;
+  const scrollContainer = chatMessages;
   const shouldStickToBottomAtStart = getShouldStickToBottom(scrollContainer);
   const elements = createBotMessageElements({ scrollToBottom: shouldStickToBottomAtStart });
   if (!elements) return null;
@@ -320,7 +312,7 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
     msg.classList.remove("bot-message--streaming");
     msg.dataset.fullText = receivedRaw;
     renderBotMessage(wrapper, msg, receivedRaw, { scrollToBottom: shouldStickToBottom });
-    if (window.saveMessageToLocalStorage) window.saveMessageToLocalStorage(receivedRaw, "bot");
+    saveMessageToLocalStorage(receivedRaw, "bot");
   };
 
   const scheduleAnimation = () => {
@@ -368,9 +360,10 @@ function startStreamingBotMessage(): StreamingBotMessageHandle | null {
 
 /* ローカル／サーバ履歴共通描画 */
 function buildHistoryMessageElement(text: string, sender: string) {
-  if (!window.chatMessages) return;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return;
   const wrapper = document.createElement("div");
-  const copyBtn = window.createCopyBtn ? window.createCopyBtn(() => text) : document.createElement("button");
+  const copyBtn = createCopyBtn(() => text);
 
   if (sender === "user") {
     wrapper.className = "message-wrapper user-message-wrapper";
@@ -382,9 +375,9 @@ function buildHistoryMessageElement(text: string, sender: string) {
 
     // 既存履歴は <br> が含まれているため、<br> だけ許可して描画
     if (text.includes("<")) {
-      window.renderSanitizedHTML?.(msg, text, ["br"]);
+      renderSanitizedHTML(msg, text, ["br"]);
     } else {
-      window.setTextWithLineBreaks?.(msg, text);
+      setTextWithLineBreaks(msg, text);
     }
 
     actionGroup.append(copyBtn);
@@ -396,16 +389,12 @@ function buildHistoryMessageElement(text: string, sender: string) {
     msg.dataset.fullText = text;
     const actionGroup = document.createElement("div");
     actionGroup.className = "message-actions";
-    const saveBtn = window.createMemoSaveBtn
-      ? window.createMemoSaveBtn(() => msg.dataset.fullText || "")
-      : document.createElement("button");
+    const saveBtn = createMemoSaveBtn(() => msg.dataset.fullText || "");
     copyBtn.classList.add("message-action-btn");
     saveBtn.classList.add("message-action-btn");
 
     // Bot はマークアップ済み → 広めのタグ許可でサニタイズ
-    if (window.renderSanitizedHTML && window.formatLLMOutput) {
-      window.renderSanitizedHTML(msg, window.formatLLMOutput(text));
-    }
+    renderSanitizedHTML(msg, formatLLMOutput(text));
     actionGroup.append(copyBtn, saveBtn);
     wrapper.append(msg, actionGroup);
   }
@@ -413,30 +402,21 @@ function buildHistoryMessageElement(text: string, sender: string) {
 }
 
 function displayMessage(text: string, sender: string, options: DisplayMessageOptions = {}) {
-  if (!window.chatMessages) return;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return;
 
   const wrapper = buildHistoryMessageElement(text, sender);
   if (!wrapper) return;
 
   const { prepend = false, autoScroll = true } = options;
   if (prepend) {
-    window.chatMessages.insertBefore(wrapper, window.chatMessages.firstChild);
+    chatMessages.insertBefore(wrapper, chatMessages.firstChild);
   } else {
-    window.chatMessages.appendChild(wrapper);
+    chatMessages.appendChild(wrapper);
   }
 
   if (!autoScroll) return;
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.scrollMessageToTop) {
-    window.scrollMessageToTop(wrapper);
-  }
+  scrollMessageToBottom();
 }
 
-// ---- window へ公開 ------------------------------
-window.renderUserMessage = renderUserMessage;
-window.renderBotMessageImmediate = renderBotMessageImmediate;
-window.startStreamingBotMessage = startStreamingBotMessage;
-window.displayMessage = displayMessage;
-
-export {};
+export { renderUserMessage, renderBotMessageImmediate, startStreamingBotMessage, displayMessage };

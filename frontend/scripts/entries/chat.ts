@@ -1,18 +1,27 @@
 import "../core/csrf";
-import "../core/dom";
-import "../chat/message_utils";
-import "../chat/chat_ui";
-import "../chat/chat_messages";
-import "../chat/chat_history";
-import "../chat/chat_rooms";
-import "../chat/chat_share";
-import "../chat/chat_controller";
-import "../setup/setup";
-import "../core/main";
-import "../setup/task_manager";
-import "../setup/new_prompt_modal";
+import { initSharedDomRefs } from "../core/dom";
+import { initChatUi } from "../chat/chat_ui";
+import { initChatShare } from "../chat/chat_share";
+import { initMainApp } from "../core/main";
+import { initTaskManager } from "../setup/task_manager";
+import { initNewPromptModal } from "../setup/new_prompt_modal";
 import "../components/popup_menu";
 import "../components/chat/popup_menu";
 import "../components/user_icon";
+
+function bootstrapChatEntry() {
+  initSharedDomRefs();
+  initChatUi();
+  initChatShare();
+  initTaskManager();
+  initNewPromptModal();
+  initMainApp();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootstrapChatEntry);
+} else {
+  bootstrapChatEntry();
+}
 
 export {};

@@ -1,4 +1,13 @@
 // Task title updater
+import {
+  getCurrentEditingCard,
+  getLoggedInState,
+  setCurrentEditingCard,
+  setTaskOrderEditingState
+} from "../core/app_state";
+import { loadTaskCards } from "./setup_task_cards";
+import { initToggleTasks } from "./setup_task_toggle";
+import { invalidateTasksCache } from "./setup_tasks_cache";
 
 function updateTaskTitle(card: HTMLElement, newTitle: string) {
   const truncatedTitle = newTitle;
@@ -7,9 +16,9 @@ function updateTaskTitle(card: HTMLElement, newTitle: string) {
   const header = card.querySelector<HTMLElement>(".task-header");
   if (header) {
     header.textContent = truncatedTitle;
-  } else if (typeof window.loadTaskCards === "function") {
+  } else {
     // ヘッダーが存在しない異常状態では一覧を再描画して整える
-    window.loadTaskCards();
+    loadTaskCards();
     return;
   }
 
@@ -29,7 +38,7 @@ function hideModal(modalEl: HTMLElement | null) {
   modalEl.style.display = "none";
 }
 
-const initTaskManager = () => {
+function initTaskManager() {
   const modalEl = document.getElementById("taskEditModal");
   const closeBtn = document.getElementById("closeTaskEditModal");
   const cancelBtn = document.getElementById("cancelTaskEditModal");
@@ -69,7 +78,7 @@ const initTaskManager = () => {
     const outputExamples = outputExamplesEl.value.trim();
 
     // 2. 編集前のタスク名を dataset から取得
-    const editingCard = window.currentEditingCard;
+    const editingCard = getCurrentEditingCard();
     if (!editingCard) {
       alert("編集対象が見つかりませんでした。");
       return;
@@ -123,7 +132,7 @@ const initTaskManager = () => {
         card.dataset.output_skeleton = outputSkeleton;
         card.dataset.input_examples = inputExamples;
         card.dataset.output_examples = outputExamples;
-        if (window.invalidateTasksCache) window.invalidateTasksCache();
+        invalidateTasksCache();
 
         // 6. タイトルを書き換え
         updateTaskTitle(card, taskName);
@@ -136,12 +145,6 @@ const initTaskManager = () => {
         console.error("edit_task error:", error);
       });
   });
-};
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initTaskManager);
-} else {
-  initTaskManager();
 }
 
 // Task ordering and editing
@@ -155,7 +158,7 @@ let taskOffsetY = 0;
 
 // タスクカード読み込み後に並び替え編集ボタンを追加する処理
 function initTaskOrderEditing() {
-  if (!window.loggedIn) return; // ★ 未ログインなら何もしない
+  if (!getLoggedInState()) return; // ★ 未ログインなら何もしない
 
   // ヘッダー要素を取得
   const header = document.querySelector(".task-selection-header");
@@ -185,7 +188,7 @@ function initTaskOrderEditing() {
 function toggleTaskOrderEditing() {
   // 編集モードをトグルする
   isEditingOrder = !isEditingOrder;
-  window.isEditingOrder = isEditingOrder;
+  setTaskOrderEditingState(isEditingOrder);
 
   if (isEditingOrder) {
     // 編集モード開始時：
@@ -263,7 +266,7 @@ function toggleTaskOrderEditing() {
               if (wrapper) {
                 wrapper.remove();
               }
-              if (window.invalidateTasksCache) window.invalidateTasksCache();
+              invalidateTasksCache();
               // 並び順の更新は非同期で行うので、ここでページ再読み込みは行わずにDOM上を更新
               saveTaskOrder();
             })
@@ -307,7 +310,7 @@ function toggleTaskOrderEditing() {
         if (!targetCard) return;
 
         // 対象カードの data 属性から値を取得してモーダルのフォームにセット
-        window.currentEditingCard = targetCard;
+        setCurrentEditingCard(targetCard);
         const taskNameEl = document.getElementById("taskName") as HTMLInputElement | null;
         const promptTemplateEl = document.getElementById("promptTemplate") as HTMLTextAreaElement | null;
         const responseRulesEl = document.getElementById("responseRules") as HTMLTextAreaElement | null;
@@ -344,9 +347,7 @@ function toggleTaskOrderEditing() {
       card.style.display = "";
       card.style.position = "";
     });
-    if (typeof window.initToggleTasks === "function") {
-      window.initToggleTasks();
-    }
+    initToggleTasks();
 
     // 画面全体の再読み込みは行わず、必要な部分のみDOMの更新を行う
     // ※もしタスク一覧全体の更新が必要なら、非同期で新たにタスク一覧をfetchして再レンダリングする処理をここに追加
@@ -512,8 +513,8 @@ function saveTaskOrder() {
     .then((data) => {
       if (data.error) {
         alert("並び順の保存に失敗: " + data.error);
-      } else if (window.invalidateTasksCache) {
-        window.invalidateTasksCache();
+      } else {
+        invalidateTasksCache();
       }
     })
     .catch((err) => {
@@ -521,7 +522,4 @@ function saveTaskOrder() {
     });
 }
 
-// エクスポート（他のスクリプトから利用できるように）
-window.initTaskOrderEditing = initTaskOrderEditing;
-
-export {};
+export { initTaskManager, initTaskOrderEditing };

@@ -17,6 +17,7 @@
  */
 
 import { initAiModelSelect } from "./setup_ai_model_select";
+import { closeChatShareModal } from "../chat/chat_share";
 import { loadTaskCards } from "./setup_task_cards";
 import { initSetupTaskCards, resetTaskLaunchInProgress } from "./setup_task_launch";
 import { initToggleTasks } from "./setup_task_toggle";
@@ -37,7 +38,7 @@ function showSetupForm() {
   if (chatContainer) chatContainer.style.display = "none";
   if (setupContainer) setupContainer.style.display = "block";
   if (setupInfoElement) setupInfoElement.value = "";
-  window.closeChatShareModal?.();
+  closeChatShareModal();
 
   // サイドバーの状態をクリーンアップ
   const sidebar = document.querySelector(".sidebar");
@@ -50,11 +51,4 @@ function showSetupForm() {
   scheduleSetupViewportFit();
 }
 
-// ---- グローバル公開 -------------------------------------------------------------
-window.showSetupForm = showSetupForm;
-window.initToggleTasks = initToggleTasks;
-window.initSetupTaskCards = initSetupTaskCards;
-window.loadTaskCards = loadTaskCards;
-window.invalidateTasksCache = invalidateTasksCache;
-
-export {};
+export { showSetupForm, initToggleTasks, initSetupTaskCards, loadTaskCards, invalidateTasksCache };

@@ -1,5 +1,10 @@
 // chat_rooms.ts – ルーム一覧・作成／削除／改名
 // --------------------------------------------------
+import { getCurrentChatRoomId, setCurrentChatRoomId } from "../core/app_state";
+import { getSharedDomRefs } from "../core/dom";
+import { loadChatHistory, loadLocalChatHistory } from "./chat_history";
+import { closeChatShareModal, refreshChatShareState } from "./chat_share";
+import { closeSidebar, showChatInterface } from "./chat_ui";
 
 type ChatRoom = {
   id: string;
@@ -17,7 +22,7 @@ function loadChatRooms() {
         console.error("get_chat_rooms:", data.error);
         return;
       }
-      const chatRoomListEl = window.chatRoomListEl;
+      const chatRoomListEl = getSharedDomRefs().chatRoomListEl;
       if (!chatRoomListEl) return;
       const rooms: ChatRoom[] = Array.isArray(data.rooms) ? data.rooms : [];
       chatRoomListEl.innerHTML = "";
@@ -34,7 +39,7 @@ function loadChatRooms() {
 function createRoomCard(room: ChatRoom) {
   const card = document.createElement("div");
   card.className = "chat-room-card";
-  if (room.id === window.currentChatRoomId) card.classList.add("active");
+  if (room.id === getCurrentChatRoomId()) card.classList.add("active");
 
   const title = document.createElement("span");
   title.textContent = room.title || "新規チャット";
@@ -141,14 +146,13 @@ function decorateMenuItem(el: HTMLElement, color: string, hover: string) {
 function switchChatRoom(roomId: string) {
   // 選択状態をローカル保持しつつ、履歴はローカル→サーバーの順で復元する
   // Persist selected room locally, then restore history from local cache and server.
-  window.currentChatRoomId = roomId;
-  localStorage.setItem("currentChatRoomId", roomId);
-  window.showChatInterface?.();
-  window.refreshChatShareState?.();
-  window.closeChatSidebar?.();
+  setCurrentChatRoomId(roomId);
+  showChatInterface();
+  refreshChatShareState();
+  closeSidebar();
   loadChatRooms();
-  window.loadLocalChatHistory?.();
-  window.loadChatHistory?.();
+  loadLocalChatHistory();
+  loadChatHistory();
 }
 
 /* ルーム作成 */
@@ -176,15 +180,15 @@ function deleteChatRoom(roomId: string) {
     .then((data) => {
       if (data.error) alert("削除失敗: " + data.error);
       else {
-      // 現在開いているルーム削除時はUI状態も同時に初期化する
-      // Reset active room UI state when deleting the currently opened room.
-      if (roomId === window.currentChatRoomId) {
-        window.currentChatRoomId = null;
-        if (window.chatMessages) window.chatMessages.innerHTML = "";
-        localStorage.removeItem("currentChatRoomId");
-        window.refreshChatShareState?.();
-        window.closeChatShareModal?.();
-      }
+        // 現在開いているルーム削除時はUI状態も同時に初期化する
+        // Reset active room UI state when deleting the currently opened room.
+        if (roomId === getCurrentChatRoomId()) {
+          setCurrentChatRoomId(null);
+          const { chatMessages } = getSharedDomRefs();
+          if (chatMessages) chatMessages.innerHTML = "";
+          refreshChatShareState();
+          closeChatShareModal();
+        }
         loadChatRooms();
       }
     })
@@ -206,11 +210,4 @@ function renameChatRoom(roomId: string, newTitle: string) {
     .catch((err) => alert("名前変更失敗: " + err));
 }
 
-// ---- window へ公開 ------------------------------
-window.loadChatRooms = loadChatRooms;
-window.switchChatRoom = switchChatRoom;
-window.createNewChatRoom = createNewChatRoom;
-window.deleteChatRoom = deleteChatRoom;
-window.renameChatRoom = renameChatRoom;
-
-export {};
+export { loadChatRooms, switchChatRoom, createNewChatRoom, deleteChatRoom, renameChatRoom };

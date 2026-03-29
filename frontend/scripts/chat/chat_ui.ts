@@ -1,5 +1,9 @@
 // chat_ui.ts  – チャット画面 UI 共通ユーティリティ
 // --------------------------------------------------
+import { getCurrentChatRoomId, hydrateCurrentChatRoomIdFromStorage } from "../core/app_state";
+import { getSharedDomRefs } from "../core/dom";
+import { copyTextToClipboard } from "./message_utils";
+import { refreshChatShareState } from "./chat_share";
 
 let markedParser: any = null;
 let markedLoadPromise: Promise<void> | null = null;
@@ -282,11 +286,7 @@ function onCodeBlockCopyButtonClick(event: Event) {
   const defaultLabel = textSpan ? textSpan.dataset.defaultLabel || textSpan.textContent || "" : "";
   if (textSpan) textSpan.dataset.defaultLabel = defaultLabel;
 
-  const copyPromise = window.copyTextToClipboard
-    ? window.copyTextToClipboard(code)
-    : (navigator.clipboard && navigator.clipboard.writeText
-      ? navigator.clipboard.writeText(code)
-      : Promise.reject(new Error("Clipboard API unavailable")));
+  const copyPromise = copyTextToClipboard(code);
 
   copyPromise.then(() => {
     if (icon) {
@@ -393,30 +393,29 @@ function ensureMarkedParser() {
   return markedLoadPromise;
 }
 
-// グローバル初期化
-window.currentChatRoomId = window.currentChatRoomId || null;
-
 /* チャット画面を表示（セットアップ画面を隠す） */
 function showChatInterface() {
-  if (!window.setupContainer || !window.chatContainer) return;
-  window.setupContainer.style.display = "none";
-  window.chatContainer.style.display = "flex";
-  window.refreshChatShareState?.();
+  const { setupContainer, chatContainer } = getSharedDomRefs();
+  if (!setupContainer || !chatContainer) return;
+
+  setupContainer.style.display = "none";
+  chatContainer.style.display = "flex";
+  refreshChatShareState();
 
   // Markdown パーサはチャット画面表示時に遅延読み込みする
   if (!markdownEnhancementDisabled) void ensureMarkedParser();
 
-  if (!window.currentChatRoomId && localStorage.getItem("currentChatRoomId")) {
-    window.currentChatRoomId = localStorage.getItem("currentChatRoomId");
+  if (!getCurrentChatRoomId()) {
+    hydrateCurrentChatRoomIdFromStorage();
   }
 }
 
 /* タイピングインジケータ */
 function showTypingIndicator() {
-  window.chatMessages?.setAttribute("aria-busy", "true");
+  getSharedDomRefs().chatMessages?.setAttribute("aria-busy", "true");
 }
 function hideTypingIndicator() {
-  window.chatMessages?.removeAttribute("aria-busy");
+  getSharedDomRefs().chatMessages?.removeAttribute("aria-busy");
 }
 
 /* LLM 出力の Markdown を HTML に変換 */
@@ -490,19 +489,21 @@ function initCodeBlockCopyButtons() {
   document.addEventListener("click", onCodeBlockCopyButtonClick);
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initSidebarToggle);
-  document.addEventListener("DOMContentLoaded", initCodeBlockCopyButtons);
-} else {
+let chatUiInitialized = false;
+
+function initChatUi() {
+  if (chatUiInitialized) return;
+  chatUiInitialized = true;
+  hydrateCurrentChatRoomIdFromStorage();
   initSidebarToggle();
   initCodeBlockCopyButtons();
 }
 
-// ---- window へ公開 -------------------------------
-window.showChatInterface = showChatInterface;
-window.showTypingIndicator = showTypingIndicator;
-window.hideTypingIndicator = hideTypingIndicator;
-window.formatLLMOutput = formatLLMOutput;
-window.closeChatSidebar = closeSidebar;
-
-export {};
+export {
+  initChatUi,
+  showChatInterface,
+  showTypingIndicator,
+  hideTypingIndicator,
+  formatLLMOutput,
+  closeSidebar
+};

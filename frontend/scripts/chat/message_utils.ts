@@ -1,5 +1,6 @@
 // message_utils.ts – 共通メッセージユーティリティ
 // --------------------------------------------------
+import { getSharedDomRefs } from "../core/dom";
 
 // DOMPurify が利用可能な場合は使用し、未ロード時は安全なテキスト描画にフォールバック
 
@@ -175,7 +176,7 @@ function setTextWithLineBreaks(element: HTMLElement, text: string) {
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 
 function isChatViewportNearBottom(thresholdPx = CHAT_SCROLL_BOTTOM_THRESHOLD_PX) {
-  const container = window.chatMessages;
+  const container = getSharedDomRefs().chatMessages;
   if (!container) return true;
   const distanceToBottom = container.scrollHeight - (container.scrollTop + container.clientHeight);
   return distanceToBottom <= thresholdPx;
@@ -183,8 +184,9 @@ function isChatViewportNearBottom(thresholdPx = CHAT_SCROLL_BOTTOM_THRESHOLD_PX)
 
 // 新しいメッセージを表示領域の末尾へ追従
 function scrollMessageToBottom() {
-  if (!window.chatMessages) return;
-  window.chatMessages.scrollTop = window.chatMessages.scrollHeight;
+  const chatMessages = getSharedDomRefs().chatMessages;
+  if (!chatMessages) return;
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function setActionButtonIcon(btn: HTMLButtonElement, iconClass: string) {
@@ -387,15 +389,17 @@ function createMemoSaveBtn(getText: () => string) {
   return btn;
 }
 
-// ---- window へ公開 ------------------------------
-window.renderSanitizedHTML = renderSanitizedHTML;
-window.setTextWithLineBreaks = setTextWithLineBreaks;
-window.isChatViewportNearBottom = isChatViewportNearBottom;
-// 既存呼び出し互換のために旧名も残す
-window.scrollMessageToBottom = scrollMessageToBottom;
-window.scrollMessageToTop = scrollMessageToBottom;
-window.copyTextToClipboard = copyTextToClipboard;
-window.createCopyBtn = createCopyBtn;
-window.createMemoSaveBtn = createMemoSaveBtn;
+function scrollMessageToTop(_element?: HTMLElement) {
+  scrollMessageToBottom();
+}
 
-export {};
+export {
+  renderSanitizedHTML,
+  setTextWithLineBreaks,
+  isChatViewportNearBottom,
+  scrollMessageToBottom,
+  scrollMessageToTop,
+  copyTextToClipboard,
+  createCopyBtn,
+  createMemoSaveBtn
+};

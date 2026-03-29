@@ -1,4 +1,5 @@
 import { PROMPT_SHARE_TEXT, PROMPT_SHARE_TITLE } from "./constants";
+import { copyTextToClipboard } from "../chat/message_utils";
 import type { PromptData } from "./types";
 
 type PromptShareModalElements = {
@@ -129,13 +130,7 @@ export function initPromptShareDialog(options: InitPromptShareDialogOptions) {
     }
 
     try {
-      if (window.copyTextToClipboard) {
-        await window.copyTextToClipboard(shareUrl);
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        throw new Error("このブラウザではコピー機能が利用できません。");
-      }
+      await copyTextToClipboard(shareUrl);
       setPromptShareStatus("リンクをコピーしました。");
     } catch (error) {
       setPromptShareStatus(error instanceof Error ? error.message : String(error), true);

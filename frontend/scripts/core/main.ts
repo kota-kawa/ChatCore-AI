@@ -1,22 +1,21 @@
-/**
- * main.ts
- *
- * ■ ページ初期化（DOMContentLoaded）
- *   - ログイン状態を /api/current_user で確認し、設定ボタンを「ログイン／ユーザーアイコン」に切替
- *   - localStorage から前回の currentChatRoomId を復元
- *   - タスクカードと「もっと見る」ボタンの初期化 (initToggleTasks / initSetupTaskCards)
- *   - 最初はセットアップ画面を表示
- *   - 復帰時にチャット履歴をロード（ローカル＋サーバー）
- *
- * ■ UI 操作のイベント登録
- *   - 新規チャット／これまでのチャットを見る／送信／Enter 送信
- *   - テキストエリアの自動高さ調整
- *   - 「戻る」ボタンでセットアップ画面へ
- *   - 画面クリックでチャットルームの３点メニューを閉じる
- *
- * ■ ユーザーメニュー表示 toggleUserMenu()
- *   - 「設定」「ログアウト」メニューを動的生成・表示・非表示
- */
+import { stopGeneration, sendMessage } from "../chat/chat_controller";
+import { loadChatRooms, switchChatRoom } from "../chat/chat_rooms";
+import { showChatInterface } from "../chat/chat_ui";
+import {
+  getLoggedInState,
+  hydrateCurrentChatRoomIdFromStorage,
+  setCurrentChatRoomId,
+  setLoggedInState
+} from "./app_state";
+import { getSharedDomRefs } from "./dom";
+import {
+  initSetupTaskCards,
+  initToggleTasks,
+  invalidateTasksCache,
+  loadTaskCards,
+  showSetupForm
+} from "../setup/setup";
+import { initTaskOrderEditing } from "../setup/task_manager";
 
 const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
 const AUTH_STATE_CACHE_AT_KEY = "chatcore.auth.cachedAt";
@@ -56,15 +55,6 @@ function writeCachedAuthState(loggedIn: boolean) {
   }
 }
 
-function notifyAuthState(loggedIn: boolean) {
-  window.loggedIn = loggedIn;
-  document.dispatchEvent(
-    new CustomEvent("authstatechange", {
-      detail: { loggedIn }
-    })
-  );
-}
-
 function consumeAuthSuccessHint() {
   const url = new URL(window.location.href);
   if (url.searchParams.get(AUTH_SUCCESS_QUERY_PARAM) !== AUTH_SUCCESS_QUERY_VALUE) {
@@ -79,42 +69,32 @@ function consumeAuthSuccessHint() {
   return true;
 }
 
-function initApp() {
+function initMainApp() {
   const authButtons = document.getElementById("auth-buttons");
   const newPromptBtn = document.getElementById("openNewPromptModal");
-  const accessChatBtn = document.getElementById("access-chat-btn");
   const userIconEl = document.getElementById("userIcon");
   const loginBtn = document.getElementById("login-btn");
-  const newChatBtn = document.getElementById("new-chat-btn");
-  const sendBtn = document.getElementById("send-btn");
-  const userInput = document.getElementById("user-input") as HTMLInputElement | null;
-  const backToSetupBtn = document.getElementById("back-to-setup");
-  const chatMessages = document.getElementById("chat-messages");
-
-  const callShowSetupForm = () => {
-    if (typeof window.showSetupForm === "function") window.showSetupForm();
-  };
-
-  const callSendMessage = () => {
-    if (typeof window.sendMessage === "function") window.sendMessage();
-  };
+  const {
+    accessChatBtn,
+    newChatBtn,
+    sendBtn,
+    userInput,
+    backToSetupBtn,
+    chatMessages
+  } = getSharedDomRefs();
 
   const applyAuthUI = (loggedIn: boolean) => {
     if (!authButtons || !userIconEl) return;
 
     if (loggedIn) {
-      // ログイン時：認証ボタンは隠し、ユーザーアイコンを表示
       authButtons.style.display = "none";
       userIconEl.style.display = "";
 
       if (newPromptBtn) newPromptBtn.style.display = "";
       if (accessChatBtn) accessChatBtn.style.display = "";
 
-      if (window.initTaskOrderEditing) {
-        window.initTaskOrderEditing();
-      }
+      initTaskOrderEditing();
     } else {
-      // 未ログイン時：認証ボタンだけ表示、ユーザーアイコンは隠す
       authButtons.style.display = "flex";
       userIconEl.style.display = "none";
 
@@ -124,39 +104,35 @@ function initApp() {
         };
       }
 
-      // タスク編集ボタンが残っていたら削除
       const editBtn = document.getElementById("edit-task-order-btn");
       if (editBtn) editBtn.remove();
 
-      // 新規プロンプト＆過去チャット閲覧ボタンを非表示
       if (newPromptBtn) newPromptBtn.style.display = "none";
       if (accessChatBtn) accessChatBtn.style.display = "none";
     }
   };
 
   const refreshTasksForAuthStateChange = () => {
-    if (window.invalidateTasksCache) window.invalidateTasksCache();
-    if (window.loadTaskCards) window.loadTaskCards({ forceRefresh: true });
+    invalidateTasksCache();
+    loadTaskCards({ forceRefresh: true });
   };
 
   consumeAuthSuccessHint();
 
-  // 前回の認証状態を先に反映し、初期表示のポップインを抑える
   const cachedAuthState = readCachedAuthState();
   if (cachedAuthState !== null) {
-    notifyAuthState(cachedAuthState);
+    setLoggedInState(cachedAuthState);
     applyAuthUI(cachedAuthState);
   }
 
-  // ▼ログイン状態確認とUI制御
   const canFallBackToCachedState = isCachedAuthStateFresh() && cachedAuthState !== null;
   fetch("/api/current_user", { credentials: "same-origin" })
     .then((res) => res.json())
     .then((data) => {
-      const previousLoggedIn = Boolean(window.loggedIn);
+      const previousLoggedIn = getLoggedInState();
       const loggedIn = Boolean(data.logged_in);
       writeCachedAuthState(loggedIn);
-      notifyAuthState(loggedIn);
+      setLoggedInState(loggedIn);
       applyAuthUI(loggedIn);
 
       if (loggedIn !== previousLoggedIn) {
@@ -166,34 +142,26 @@ function initApp() {
     .catch((err) => {
       console.error("Error checking login status:", err);
       if (!canFallBackToCachedState) {
-        notifyAuthState(false);
+        setLoggedInState(false);
         applyAuthUI(false);
       }
     });
 
-  // ▼ローカルに保存されていれば現在のチャットルームを復元
-  if (localStorage.getItem("currentChatRoomId")) {
-    window.currentChatRoomId = localStorage.getItem("currentChatRoomId");
-  }
+  hydrateCurrentChatRoomIdFromStorage();
 
-  // ▼初期化
-  if (typeof window.initToggleTasks === "function") window.initToggleTasks();
-  if (typeof window.initSetupTaskCards === "function") window.initSetupTaskCards();
+  initToggleTasks();
+  initSetupTaskCards();
 
-  // 初期表示はセットアップ
-  callShowSetupForm();
+  showSetupForm();
 
-  // 新規チャット
   if (newChatBtn) {
     newChatBtn.addEventListener("click", () => {
-      window.currentChatRoomId = null;
-      localStorage.removeItem("currentChatRoomId");
+      setCurrentChatRoomId(null);
       if (chatMessages) chatMessages.innerHTML = "";
-      callShowSetupForm();
+      showSetupForm();
     });
   }
 
-  // 「これまでのチャットを見る」
   if (accessChatBtn) {
     accessChatBtn.addEventListener("click", () => {
       fetch("/api/get_chat_rooms")
@@ -201,55 +169,48 @@ function initApp() {
         .then((data) => {
           const rooms = Array.isArray(data.rooms) ? data.rooms : [];
           if (rooms.length > 0) {
-            // 1件目が最も新しいルームなので切り替え
-            if (typeof window.switchChatRoom === "function") window.switchChatRoom(String(rooms[0].id));
+            switchChatRoom(String(rooms[0].id));
           } else {
-            // ルームがない場合は空のチャット画面を表示
-            if (typeof window.showChatInterface === "function") window.showChatInterface();
-            if (typeof window.loadChatRooms === "function") window.loadChatRooms();
+            showChatInterface();
+            loadChatRooms();
             if (chatMessages) chatMessages.innerHTML = "";
           }
         })
         .catch((err) => {
           console.error("ルーム一覧取得失敗:", err);
-          if (typeof window.showChatInterface === "function") window.showChatInterface();
-          if (typeof window.loadChatRooms === "function") window.loadChatRooms();
+          showChatInterface();
+          loadChatRooms();
           if (chatMessages) chatMessages.innerHTML = "";
         });
     });
   }
 
-  // 送信 / 停止
   if (sendBtn) {
     sendBtn.addEventListener("click", () => {
       if (sendBtn.classList.contains("send-btn--stop")) {
-        window.stopGeneration?.();
+        void stopGeneration();
       } else {
-        callSendMessage();
+        sendMessage();
       }
     });
   }
 
-  // Enter 送信 (Shift+Enter で改行)
   if (userInput) {
     userInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        callSendMessage();
+        sendMessage();
       }
     });
 
-    // テキストエリア高さ自動調整
     userInput.addEventListener("input", () => {
       userInput.style.height = "auto";
       userInput.style.height = `${userInput.scrollHeight}px`;
     });
   }
 
-  // 戻るボタン
-  if (backToSetupBtn) backToSetupBtn.addEventListener("click", callShowSetupForm);
+  if (backToSetupBtn) backToSetupBtn.addEventListener("click", showSetupForm);
 
-  // 画面クリックでサイドメニューの 3 点メニューを閉じる
   document.addEventListener("click", () => {
     document.querySelectorAll<HTMLElement>(".room-actions-menu").forEach((menu) => {
       menu.style.display = "none";
@@ -257,25 +218,16 @@ function initApp() {
   });
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initApp);
-} else {
-  initApp();
-}
-
-/* ▼ユーザーメニュー（設定 / ログアウト） ---------------------------------------*/
 function toggleUserMenu() {
   let menu = document.getElementById("user-menu") as HTMLDivElement | null;
 
   if (!menu) {
-    // メニュー要素を生成
     menu = document.createElement("div");
     menu.id = "user-menu";
 
-    // スタイル設定（モバイル時は static、PC時は右上絶対配置）
     Object.assign(menu.style, {
       position: "absolute",
-      top: "60px", // 設定アイコン下に 10px マージン
+      top: "60px",
       right: "10px",
       background: "#fff",
       border: "1px solid #ddd",
@@ -288,7 +240,6 @@ function toggleUserMenu() {
 
     document.body.appendChild(menu);
 
-    // メニュー内容
     menu.innerHTML = `
       <div id="menu-settings" style="
            padding:8px 16px; cursor:pointer; display:flex; align-items:center;
@@ -302,7 +253,6 @@ function toggleUserMenu() {
         <i class="bi bi-box-arrow-right" style="margin-right:6px;font-size:16px;"></i> ログアウト
       </div>`;
 
-    // イベント登録
     const settingsEl = document.getElementById("menu-settings");
     const logoutEl = document.getElementById("menu-logout");
     if (settingsEl) {
@@ -347,7 +297,6 @@ function toggleUserMenu() {
       });
     }
 
-    // メニュー外クリックで非表示
     document.addEventListener("click", function docClick(e) {
       const btn = document.getElementById("settings-btn");
       const target = e.target as Node | null;
@@ -358,10 +307,7 @@ function toggleUserMenu() {
     });
   }
 
-  // 表示/非表示トグル
   menu.style.display = menu.style.display === "block" ? "none" : "block";
 }
 
-window.toggleUserMenu = toggleUserMenu;
-
-export {};
+export { initMainApp, toggleUserMenu };

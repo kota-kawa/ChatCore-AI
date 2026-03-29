@@ -1,5 +1,15 @@
 // chat_controller.ts – 送信ボタン／バックエンド通信
 // --------------------------------------------------
+import { getCurrentChatRoomId } from "../core/app_state";
+import { getSharedDomRefs } from "../core/dom";
+import { loadChatHistory } from "./chat_history";
+import {
+  renderBotMessageImmediate,
+  renderUserMessage,
+  startStreamingBotMessage
+} from "./chat_messages";
+import { formatLLMOutput, hideTypingIndicator, showTypingIndicator } from "./chat_ui";
+import { isChatViewportNearBottom, scrollMessageToBottom } from "./message_utils";
 
 type StreamEventPayload = {
   event: string;
@@ -401,7 +411,7 @@ const streamLastEventIdByRoom = new Map<string, number>();
 
 function setGeneratingState(generating: boolean) {
   isGenerating = generating;
-  const btn = window.sendBtn;
+  const btn = getSharedDomRefs().sendBtn;
   if (!btn) return;
   if (generating) {
     btn.classList.add("send-btn--stop");
@@ -423,12 +433,13 @@ async function stopGeneration() {
     currentAbortController.abort();
     currentAbortController = null;
   }
-  if (window.currentChatRoomId) {
+  const currentChatRoomId = getCurrentChatRoomId();
+  if (currentChatRoomId) {
     try {
       await fetch("/api/chat_stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_room_id: window.currentChatRoomId })
+        body: JSON.stringify({ chat_room_id: currentChatRoomId })
       });
     } catch {
       // ベストエフォート
@@ -438,14 +449,12 @@ async function stopGeneration() {
 }
 
 function shouldAutoScrollForGeneration() {
-  if (window.isChatViewportNearBottom) {
-    return window.isChatViewportNearBottom();
-  }
-  return true;
+  return isChatViewportNearBottom();
 }
 
 function createThinkingPlaceholder() {
-  if (!window.chatMessages) return null;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages) return null;
   const shouldScrollToBottom = shouldAutoScrollForGeneration();
 
   const wrapper = document.createElement("div");
@@ -459,15 +468,11 @@ function createThinkingPlaceholder() {
 
   const loader = appendConstellationLoader(thinking, "thinking-message__constellation");
   wrapper.appendChild(thinking);
-  window.chatMessages.appendChild(wrapper);
+  chatMessages.appendChild(wrapper);
   setupZodiacLoader(loader);
 
   if (shouldScrollToBottom) {
-    if (window.scrollMessageToBottom) {
-      window.scrollMessageToBottom();
-    } else if (window.scrollMessageToTop) {
-      window.scrollMessageToTop(wrapper);
-    }
+    scrollMessageToBottom();
   }
 
   return wrapper;
@@ -538,7 +543,7 @@ async function consumeStreamingChatResponse(
   let streamHandle: StreamingBotMessageHandle | null = null;
 
   const dismissThinkingState = () => {
-    window.hideTypingIndicator?.();
+    hideTypingIndicator();
     thinkingWrap?.remove();
     thinkingWrap = null;
   };
@@ -546,7 +551,7 @@ async function consumeStreamingChatResponse(
   const ensureStreamHandle = () => {
     if (streamHandle) return streamHandle;
     dismissThinkingState();
-    streamHandle = window.startStreamingBotMessage?.() || null;
+    streamHandle = startStreamingBotMessage();
     if (!streamHandle) {
       throw new Error("ストリーム描画を開始できませんでした。");
     }
@@ -560,7 +565,7 @@ async function consumeStreamingChatResponse(
       activeStreamHandle.showError(message);
       return;
     }
-    window.renderBotMessageImmediate?.("エラー: " + message);
+    renderBotMessageImmediate("エラー: " + message);
   };
 
   const processBlock = (block: string) => {
@@ -585,7 +590,7 @@ async function consumeStreamingChatResponse(
       } else {
         dismissThinkingState();
         if (responseText) {
-          window.renderBotMessageImmediate?.(responseText);
+          renderBotMessageImmediate(responseText);
         }
       }
       return;
@@ -648,19 +653,20 @@ async function consumeStreamingChatResponse(
 /* 送信ボタン or Enter 押下 */
 function sendMessage() {
   if (isGenerating) return;
-  if (!window.userInput) return;
-  const message = window.userInput.value.trim();
+  const { userInput, aiModelSelect } = getSharedDomRefs();
+  if (!userInput) return;
+  const message = userInput.value.trim();
   if (!message) return;
-  const aiModel = window.aiModelSelect ? window.aiModelSelect.value : "openai/gpt-oss-120b";
-  window.showTypingIndicator?.();
+  const aiModel = aiModelSelect ? aiModelSelect.value : "openai/gpt-oss-120b";
+  showTypingIndicator();
   generateResponse(message, aiModel);
-  window.userInput.value = "";
-  window.userInput.style.height = "auto";
+  userInput.value = "";
+  userInput.style.height = "auto";
 }
 
 /* サーバー POST → Bot 応答を描画 */
 async function generateResponse(message: string, aiModel: string) {
-  if (!window.chatMessages) return;
+  if (!getSharedDomRefs().chatMessages) return;
 
   // 生成中フラグと AbortController を同期管理し、重複送信とリークを防ぐ
   // Keep generation state and AbortController in sync to avoid duplicate sends/leaks.
@@ -669,13 +675,13 @@ async function generateResponse(message: string, aiModel: string) {
   currentAbortController = abortController;
 
   // marked の遅延読み込みを先行して開始し、初回描画の崩れを減らす
-  window.formatLLMOutput?.("");
+  formatLLMOutput("");
   // ユーザーメッセージを即描画
-  window.renderUserMessage?.(message);
+  renderUserMessage(message);
 
   // Bot 側の Thinking プレースホルダー
   const thinkingWrap = createThinkingPlaceholder();
-  const roomId = window.currentChatRoomId || "";
+  const roomId = getCurrentChatRoomId() || "";
   if (roomId) {
     streamLastEventIdByRoom.set(roomId, 0);
   }
@@ -686,7 +692,7 @@ async function generateResponse(message: string, aiModel: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message,
-        chat_room_id: window.currentChatRoomId,
+        chat_room_id: getCurrentChatRoomId(),
         model: aiModel
       }),
       signal: abortController.signal
@@ -714,24 +720,24 @@ async function generateResponse(message: string, aiModel: string) {
     }
 
     const data = await response.json();
-    window.hideTypingIndicator?.();
+    hideTypingIndicator();
     thinkingWrap?.remove();
     if (response.ok && data && typeof data.response === "string" && data.response) {
-      window.renderBotMessageImmediate?.(data.response);
+      renderBotMessageImmediate(data.response);
     } else {
-      window.renderBotMessageImmediate?.("エラー: " + extractApiErrorMessage(data, response.status));
+      renderBotMessageImmediate("エラー: " + extractApiErrorMessage(data, response.status));
     }
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       // ユーザーが停止ボタンを押した場合はエラー表示しない
-      window.hideTypingIndicator?.();
+      hideTypingIndicator();
       thinkingWrap?.remove();
       return;
     }
-    window.hideTypingIndicator?.();
+    hideTypingIndicator();
     thinkingWrap?.remove();
     const errorMessage = err instanceof Error ? err.message : String(err);
-    window.renderBotMessageImmediate?.("エラー: " + errorMessage);
+    renderBotMessageImmediate("エラー: " + errorMessage);
   } finally {
     setGeneratingState(false);
     currentAbortController = null;
@@ -759,7 +765,7 @@ async function connectToGenerationStream(roomId: string): Promise<void> {
     );
     if (!response.ok) {
       thinkingWrap?.remove();
-      window.loadChatHistory?.(false);
+      loadChatHistory(false);
       return;
     }
     await consumeStreamingChatResponse(response, thinkingWrap, {
@@ -774,17 +780,11 @@ async function connectToGenerationStream(roomId: string): Promise<void> {
       return;
     }
     thinkingWrap?.remove();
-    window.loadChatHistory?.(false);
+    loadChatHistory(false);
   } finally {
     setGeneratingState(false);
     currentAbortController = null;
   }
 }
 
-// ---- window へ公開 ------------------------------
-window.sendMessage = sendMessage;
-window.generateResponse = generateResponse;
-window.stopGeneration = stopGeneration;
-window.connectToGenerationStream = connectToGenerationStream;
-
-export {};
+export { sendMessage, generateResponse, stopGeneration, connectToGenerationStream };

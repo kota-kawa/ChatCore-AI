@@ -1,5 +1,6 @@
 import { readCachedTasks, writeCachedTasks } from "./setup_tasks_cache";
 import { initSetupTaskCards } from "./setup_task_launch";
+import { initTaskOrderEditing } from "./task_manager";
 import { getFallbackTasks, formatMultilineHtml, createTaskSignature } from "./setup_task_utils";
 import { initToggleTasks } from "./setup_task_toggle";
 import type { LoadTaskCardsOptions, TaskItem } from "./setup_types";
@@ -16,7 +17,7 @@ function hydrateSSRTaskCards() {
   container.dataset.tasksSignature = createTaskSignature(getFallbackTasks());
   initSetupTaskCards();
   initToggleTasks();
-  if (typeof window.initTaskOrderEditing === "function") window.initTaskOrderEditing();
+  initTaskOrderEditing();
   scheduleSetupViewportFit();
 }
 
@@ -226,7 +227,7 @@ export function loadTaskCards(options: LoadTaskCardsOptions = {}) {
     // クリック／並び替え関係の初期化
     initSetupTaskCards();
     initToggleTasks();
-    if (typeof window.initTaskOrderEditing === "function") window.initTaskOrderEditing();
+    initTaskOrderEditing();
     scheduleSetupViewportFit();
   };
 

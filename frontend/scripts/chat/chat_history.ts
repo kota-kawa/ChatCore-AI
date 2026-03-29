@@ -1,5 +1,10 @@
 // chat_history.ts – 履歴のロード／保存
 // --------------------------------------------------
+import { getCurrentChatRoomId } from "../core/app_state";
+import { getSharedDomRefs } from "../core/dom";
+import { connectToGenerationStream } from "./chat_controller";
+import { displayMessage } from "./chat_messages";
+import { scrollMessageToBottom, scrollMessageToTop } from "./message_utils";
 
 type ChatHistoryMessage = {
   id?: number;
@@ -72,11 +77,12 @@ function updateHistoryPagination(roomId: string, pagination: ChatHistoryPaginati
 }
 
 function removeHistoryLoadMoreButton() {
-  window.chatMessages?.querySelector(".chat-history-load-more-btn")?.remove();
+  getSharedDomRefs().chatMessages?.querySelector(".chat-history-load-more-btn")?.remove();
 }
 
 function renderHistoryLoadMoreButton(roomId: string) {
-  if (!window.chatMessages || window.currentChatRoomId !== roomId) return;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages || getCurrentChatRoomId() !== roomId) return;
   removeHistoryLoadMoreButton();
 
   const state = historyPaginationState.get(roomId);
@@ -89,7 +95,7 @@ function renderHistoryLoadMoreButton(roomId: string) {
   button.addEventListener("click", () => {
     void loadOlderChatHistory(roomId);
   });
-  window.chatMessages.insertBefore(button, window.chatMessages.firstChild);
+  chatMessages.insertBefore(button, chatMessages.firstChild);
 }
 
 async function fetchChatHistoryPage(roomId: string, beforeId?: number | null) {
@@ -110,12 +116,13 @@ async function fetchChatHistoryPage(roomId: string, beforeId?: number | null) {
 }
 
 async function loadOlderChatHistory(roomId: string) {
-  if (!window.chatMessages || window.currentChatRoomId !== roomId) return;
+  const { chatMessages } = getSharedDomRefs();
+  if (!chatMessages || getCurrentChatRoomId() !== roomId) return;
 
   const state = historyPaginationState.get(roomId);
   if (!state || !state.hasMore || state.nextBeforeId === null) return;
 
-  const button = window.chatMessages.querySelector<HTMLButtonElement>(".chat-history-load-more-btn");
+  const button = chatMessages.querySelector<HTMLButtonElement>(".chat-history-load-more-btn");
   if (button) {
     button.disabled = true;
     button.textContent = "読み込み中...";
@@ -123,19 +130,19 @@ async function loadOlderChatHistory(roomId: string) {
 
   try {
     const data = await fetchChatHistoryPage(roomId, state.nextBeforeId);
-    if (window.currentChatRoomId !== roomId || !window.chatMessages) return;
+    if (getCurrentChatRoomId() !== roomId || !chatMessages) return;
 
     const olderMessages = normalizeHistoryMessages(data.messages);
-    const previousScrollHeight = window.chatMessages.scrollHeight;
-    const previousScrollTop = window.chatMessages.scrollTop;
+    const previousScrollHeight = chatMessages.scrollHeight;
+    const previousScrollTop = chatMessages.scrollTop;
 
     removeHistoryLoadMoreButton();
     [...olderMessages].reverse().forEach((message) => {
-      window.displayMessage?.(message.message, message.sender, { prepend: true, autoScroll: false });
+      displayMessage(message.message, message.sender, { prepend: true, autoScroll: false });
     });
 
-    const scrollDelta = window.chatMessages.scrollHeight - previousScrollHeight;
-    window.chatMessages.scrollTop = previousScrollTop + scrollDelta;
+    const scrollDelta = chatMessages.scrollHeight - previousScrollHeight;
+    chatMessages.scrollTop = previousScrollTop + scrollDelta;
 
     prependStoredHistory(
       roomId,
@@ -156,7 +163,7 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
   stopChatGenerationPolling();
 
   const poll = () => {
-    if (window.currentChatRoomId !== roomId) {
+    if (getCurrentChatRoomId() !== roomId) {
       stopChatGenerationPolling();
       return;
     }
@@ -164,7 +171,7 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
     fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`)
       .then((r) => r.json())
       .then((data) => {
-        if (window.currentChatRoomId !== roomId) {
+        if (getCurrentChatRoomId() !== roomId) {
           stopChatGenerationPolling();
           return;
         }
@@ -202,32 +209,34 @@ function pollChatGenerationStatus(roomId: string, refreshHistoryOnCompletion = f
 
 /* サーバーから履歴取得 */
 function loadChatHistory(shouldPollStatus = true) {
-  if (!window.currentChatRoomId) {
+  const roomId = getCurrentChatRoomId();
+  const { chatMessages } = getSharedDomRefs();
+
+  if (!roomId) {
     stopChatGenerationPolling();
     historyPaginationState.clear();
-    if (window.chatMessages) window.chatMessages.innerHTML = "";
+    if (chatMessages) chatMessages.innerHTML = "";
     return;
   }
-  const roomId = window.currentChatRoomId;
 
   fetchChatHistoryPage(roomId)
     .then(async (data) => {
-      if (!window.chatMessages) return;
+      if (!chatMessages) return;
 
       const msgs = normalizeHistoryMessages(data.messages);
       updateHistoryPagination(roomId, data.pagination);
 
       const scrollToBottom = () => {
-        if (window.scrollMessageToBottom) {
-          window.scrollMessageToBottom();
-        } else if (window.chatMessages?.lastElementChild && window.scrollMessageToTop) {
-          window.scrollMessageToTop(window.chatMessages.lastElementChild as HTMLElement);
+        if (chatMessages.lastElementChild) {
+          scrollMessageToTop(chatMessages.lastElementChild as HTMLElement);
+        } else {
+          scrollMessageToBottom();
         }
       };
 
       const renderMsgs = (list: ChatHistoryMessage[]) => {
         list.forEach((message) => {
-          window.displayMessage?.(message.message, message.sender, { autoScroll: false });
+          displayMessage(message.message, message.sender, { autoScroll: false });
         });
       };
 
@@ -239,7 +248,7 @@ function loadChatHistory(shouldPollStatus = true) {
       };
 
       if (!shouldPollStatus) {
-        window.chatMessages.innerHTML = "";
+        chatMessages.innerHTML = "";
         renderHistoryLoadMoreButton(roomId);
         saveToLocalStorage(msgs);
         renderMsgs(msgs);
@@ -262,9 +271,9 @@ function loadChatHistory(shouldPollStatus = true) {
         // ステータス取得失敗時は通常描画にフォールバック
       }
 
-      if (window.currentChatRoomId !== roomId) return;
+      if (getCurrentChatRoomId() !== roomId) return;
 
-      window.chatMessages.innerHTML = "";
+      chatMessages.innerHTML = "";
       stopChatGenerationPolling();
 
       if (isGenerating) {
@@ -273,7 +282,7 @@ function loadChatHistory(shouldPollStatus = true) {
         renderMsgs(msgs);
         renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
-        window.connectToGenerationStream?.(roomId);
+        void connectToGenerationStream(roomId);
       } else if (hasReplayableJob) {
         let lastAssistantIdx = -1;
         for (let i = msgs.length - 1; i >= 0; i -= 1) {
@@ -291,7 +300,7 @@ function loadChatHistory(shouldPollStatus = true) {
         renderMsgs(msgsWithoutLast);
         renderHistoryLoadMoreButton(roomId);
         scrollToBottom();
-        window.connectToGenerationStream?.(roomId);
+        void connectToGenerationStream(roomId);
       } else {
         saveToLocalStorage(msgs);
         renderHistoryLoadMoreButton(roomId);
@@ -305,8 +314,10 @@ function loadChatHistory(shouldPollStatus = true) {
 
 /* ローカルストレージから履歴読み込み */
 function loadLocalChatHistory() {
-  if (!window.currentChatRoomId || !window.chatMessages) return;
-  const key = `chatHistory_${window.currentChatRoomId}`;
+  const roomId = getCurrentChatRoomId();
+  const { chatMessages } = getSharedDomRefs();
+  if (!roomId || !chatMessages) return;
+  const key = `chatHistory_${roomId}`;
   let history: { text: string; sender: string }[] = [];
   try {
     const stored = localStorage.getItem(key);
@@ -314,23 +325,24 @@ function loadLocalChatHistory() {
   } catch {
     history = [];
   }
-  window.chatMessages.innerHTML = "";
+  chatMessages.innerHTML = "";
   removeHistoryLoadMoreButton();
   history.forEach((item) => {
-    window.displayMessage?.(item.text, item.sender, { autoScroll: false });
+    displayMessage(item.text, item.sender, { autoScroll: false });
   });
 
-  if (window.scrollMessageToBottom) {
-    window.scrollMessageToBottom();
-  } else if (window.chatMessages.lastElementChild && window.scrollMessageToTop) {
-    window.scrollMessageToTop(window.chatMessages.lastElementChild as HTMLElement);
+  if (chatMessages.lastElementChild) {
+    scrollMessageToTop(chatMessages.lastElementChild as HTMLElement);
+  } else {
+    scrollMessageToBottom();
   }
 }
 
 /* メッセージ1件をローカル保存 */
 function saveMessageToLocalStorage(text: string, sender: string) {
-  if (!window.currentChatRoomId) return;
-  const key = `chatHistory_${window.currentChatRoomId}`;
+  const roomId = getCurrentChatRoomId();
+  if (!roomId) return;
+  const key = `chatHistory_${roomId}`;
   let history: { text: string; sender: string }[] = [];
   try {
     const stored = localStorage.getItem(key);
@@ -342,9 +354,4 @@ function saveMessageToLocalStorage(text: string, sender: string) {
   localStorage.setItem(key, JSON.stringify(history));
 }
 
-// ---- window へ公開 ------------------------------
-window.loadChatHistory = loadChatHistory;
-window.loadLocalChatHistory = loadLocalChatHistory;
-window.saveMessageToLocalStorage = saveMessageToLocalStorage;
-
-export {};
+export { loadChatHistory, loadLocalChatHistory, saveMessageToLocalStorage };

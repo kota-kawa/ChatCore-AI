@@ -1,3 +1,7 @@
+import { setLoggedInState } from "../core/app_state";
+import { formatLLMOutput } from "../chat/chat_ui";
+import { copyTextToClipboard, renderSanitizedHTML } from "../chat/message_utils";
+
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
 
@@ -29,12 +33,7 @@ const setupMemoModal = () => {
   let currentShareMemoId = "";
 
   const notifyAuthState = (loggedIn: boolean) => {
-    window.loggedIn = loggedIn;
-    document.dispatchEvent(
-      new CustomEvent("authstatechange", {
-        detail: { loggedIn }
-      })
-    );
+    setLoggedInState(loggedIn);
   };
 
   const applyAuthUI = (loggedIn: boolean) => {
@@ -114,11 +113,7 @@ const setupMemoModal = () => {
     if (dateEl) dateEl.textContent = memo.date || "";
     renderTags(memo.tags || []);
     const renderContent = (el: Element, text: string) => {
-      if (window.renderSanitizedHTML && window.formatLLMOutput) {
-        window.renderSanitizedHTML(el as HTMLElement, window.formatLLMOutput(text));
-      } else {
-        el.textContent = text;
-      }
+      renderSanitizedHTML(el as HTMLElement, formatLLMOutput(text));
     };
     if (inputEl) renderContent(inputEl, memo.input || "");
     if (responseEl) renderContent(responseEl, memo.response || "");
@@ -230,13 +225,7 @@ const setupMemoModal = () => {
     }
 
     try {
-      if (window.copyTextToClipboard) {
-        await window.copyTextToClipboard(shareUrl);
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        throw new Error("このブラウザではコピー機能が利用できません。");
-      }
+      await copyTextToClipboard(shareUrl);
       setShareStatus("リンクをコピーしました。");
     } catch (error) {
       setShareStatus(error instanceof Error ? error.message : String(error), true);
@@ -359,9 +348,7 @@ const setupMemoModal = () => {
   excerptEls.forEach((el) => {
     const text = el.textContent || "";
     if (!text) return;
-    if (window.renderSanitizedHTML && window.formatLLMOutput) {
-      window.renderSanitizedHTML(el, window.formatLLMOutput(text));
-    }
+    renderSanitizedHTML(el, formatLLMOutput(text));
   });
 };
 

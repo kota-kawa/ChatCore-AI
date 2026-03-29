@@ -1,3 +1,8 @@
+import { isTaskOrderEditing, setCurrentChatRoomId } from "../core/app_state";
+import { generateResponse } from "../chat/chat_controller";
+import { createNewChatRoom, loadChatRooms } from "../chat/chat_rooms";
+import { showChatInterface } from "../chat/chat_ui";
+
 let isTaskLaunchInProgress = false;
 
 export function resetTaskLaunchInProgress() {
@@ -12,7 +17,7 @@ export function initSetupTaskCards() {
 }
 
 function handleTaskCardClick(e: Event) {
-  if (window.isEditingOrder) return; // 並び替え中は無視
+  if (isTaskOrderEditing()) return; // 並び替え中は無視
   if (isTaskLaunchInProgress) return; // 多重送信防止
 
   const target = e.target as Element | null;
@@ -38,34 +43,27 @@ function handleTaskCardClick(e: Event) {
   const newRoomId = Date.now().toString();
   const roomTitle = setupInfo || "新規チャット";
 
-  // currentChatRoomId はグローバルまたは他で定義されている前提
-  window.currentChatRoomId = newRoomId;
-  localStorage.setItem("currentChatRoomId", newRoomId);
+  setCurrentChatRoomId(newRoomId);
 
   // ① ルームをサーバーに作成
-  if (typeof window.createNewChatRoom === "function") {
-    window.createNewChatRoom(newRoomId, roomTitle)
-      .then(() => {
-        if (typeof window.showChatInterface === "function") window.showChatInterface();
-        // 新しいチャットではメッセージ表示をリセット
-        if (chatMessages) chatMessages.innerHTML = "";
-        if (typeof window.loadChatRooms === "function") window.loadChatRooms();
-        localStorage.removeItem(`chatHistory_${newRoomId}`);
+  createNewChatRoom(newRoomId, roomTitle)
+    .then(() => {
+      showChatInterface();
+      // 新しいチャットではメッセージ表示をリセット
+      if (chatMessages) chatMessages.innerHTML = "";
+      loadChatRooms();
+      localStorage.removeItem(`chatHistory_${newRoomId}`);
 
-        // ② 最初のメッセージ
-        const firstMsg = setupInfo
-          ? `【タスク】${taskName}\n【状況・作業環境】${setupInfo}`
-          : `【タスク】${taskName}`;
+      // ② 最初のメッセージ
+      const firstMsg = setupInfo
+        ? `【タスク】${taskName}\n【状況・作業環境】${setupInfo}`
+        : `【タスク】${taskName}`;
 
-        // ③ Bot 応答生成
-        if (typeof window.generateResponse === "function") window.generateResponse(firstMsg, aiModel);
-      })
-      .catch((err) => {
-        isTaskLaunchInProgress = false;
-        alert("チャットルーム作成に失敗: " + err);
-      });
-  } else {
-    isTaskLaunchInProgress = false;
-    console.error("createNewChatRoom is not defined");
-  }
+      // ③ Bot 応答生成
+      generateResponse(firstMsg, aiModel);
+    })
+    .catch((err) => {
+      isTaskLaunchInProgress = false;
+      alert("チャットルーム作成に失敗: " + err);
+    });
 }
