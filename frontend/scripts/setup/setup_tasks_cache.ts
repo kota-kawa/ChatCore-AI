@@ -1,8 +1,7 @@
 import type { TaskItem } from "./setup_types";
+import { CACHE_TTL_MS, STORAGE_KEYS } from "../core/constants";
 
-const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
-const TASKS_CACHE_KEY_PREFIX = "chatcore.tasks.v2.";
-const TASKS_CACHE_TTL_MS = 30_000;
+const TASKS_CACHE_KEY_PREFIX = STORAGE_KEYS.tasksCachePrefix;
 
 type TaskCachePayload = {
   cachedAt: number;
@@ -12,7 +11,7 @@ type TaskCachePayload = {
 function getTasksCacheKey() {
   let scope = "guest";
   try {
-    if (localStorage.getItem(AUTH_STATE_CACHE_KEY) === "1") {
+    if (localStorage.getItem(STORAGE_KEYS.authStateCache) === "1") {
       scope = "auth";
     }
   } catch {
@@ -29,7 +28,7 @@ export function readCachedTasks() {
     if (!payload || !Array.isArray(payload.tasks) || typeof payload.cachedAt !== "number") {
       return null;
     }
-    if (Date.now() - payload.cachedAt > TASKS_CACHE_TTL_MS) {
+    if (Date.now() - payload.cachedAt > CACHE_TTL_MS.tasks) {
       return null;
     }
     return payload.tasks;

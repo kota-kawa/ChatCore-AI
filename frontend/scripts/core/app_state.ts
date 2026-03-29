@@ -1,4 +1,4 @@
-const CURRENT_CHAT_ROOM_STORAGE_KEY = "currentChatRoomId";
+import { STORAGE_KEYS } from "./constants";
 
 let loggedInState: boolean | null = null;
 let currentChatRoomIdLoaded = false;
@@ -33,7 +33,7 @@ function ensureCurrentChatRoomIdLoaded() {
   if (currentChatRoomIdLoaded) return;
   currentChatRoomIdLoaded = true;
   try {
-    currentChatRoomIdState = localStorage.getItem(CURRENT_CHAT_ROOM_STORAGE_KEY);
+    currentChatRoomIdState = localStorage.getItem(STORAGE_KEYS.currentChatRoomId);
   } catch {
     currentChatRoomIdState = null;
   }
@@ -53,18 +53,13 @@ export function setCurrentChatRoomId(roomId: string | null, options: { persist?:
 
   try {
     if (roomId) {
-      localStorage.setItem(CURRENT_CHAT_ROOM_STORAGE_KEY, roomId);
+      localStorage.setItem(STORAGE_KEYS.currentChatRoomId, roomId);
     } else {
-      localStorage.removeItem(CURRENT_CHAT_ROOM_STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
     }
   } catch {
     // localStorage が利用不可でも状態はメモリ上で保持する
   }
-}
-
-export function hydrateCurrentChatRoomIdFromStorage() {
-  ensureCurrentChatRoomIdLoaded();
-  return currentChatRoomIdState;
 }
 
 export function setTaskOrderEditingState(isEditingOrder: boolean) {

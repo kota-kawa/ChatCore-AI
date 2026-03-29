@@ -1,6 +1,5 @@
 // chat_ui.ts  – チャット画面 UI 共通ユーティリティ
 // --------------------------------------------------
-import { getCurrentChatRoomId, hydrateCurrentChatRoomIdFromStorage } from "../core/app_state";
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
@@ -474,10 +473,6 @@ function showChatInterface() {
 
   // Markdown パーサはチャット画面表示時に遅延読み込みする
   if (!markdownEnhancementDisabled) void ensureMarkedParser();
-
-  if (!getCurrentChatRoomId()) {
-    hydrateCurrentChatRoomIdFromStorage();
-  }
 }
 
 /* タイピングインジケータ */
@@ -564,7 +559,6 @@ let chatUiInitialized = false;
 function initChatUi() {
   if (chatUiInitialized) return;
   chatUiInitialized = true;
-  hydrateCurrentChatRoomIdFromStorage();
   initSidebarToggle();
   initCodeBlockCopyButtons();
 }

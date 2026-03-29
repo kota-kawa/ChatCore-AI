@@ -3,10 +3,10 @@ import { loadChatRooms, switchChatRoom } from "../chat/chat_rooms";
 import { showChatInterface } from "../chat/chat_ui";
 import {
   getLoggedInState,
-  hydrateCurrentChatRoomIdFromStorage,
   setCurrentChatRoomId,
   setLoggedInState
 } from "./app_state";
+import { API_PATHS, AUTH_SUCCESS_HINT, CACHE_TTL_MS, ROUTES, STORAGE_KEYS } from "./constants";
 import { getSharedDomRefs } from "./dom";
 import {
   initSetupTaskCards,
@@ -17,15 +17,9 @@ import {
 } from "../setup/setup";
 import { initTaskOrderEditing } from "../setup/task_manager";
 
-const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
-const AUTH_STATE_CACHE_AT_KEY = "chatcore.auth.cachedAt";
-const AUTH_STATE_CACHE_TTL_MS = 30_000;
-const AUTH_SUCCESS_QUERY_PARAM = "auth";
-const AUTH_SUCCESS_QUERY_VALUE = "success";
-
 function readCachedAuthState() {
   try {
-    const cached = localStorage.getItem(AUTH_STATE_CACHE_KEY);
+    const cached = localStorage.getItem(STORAGE_KEYS.authStateCache);
     if (cached === "1") return true;
     if (cached === "0") return false;
   } catch {
@@ -36,11 +30,11 @@ function readCachedAuthState() {
 
 function isCachedAuthStateFresh() {
   try {
-    const cachedAtRaw = localStorage.getItem(AUTH_STATE_CACHE_AT_KEY);
+    const cachedAtRaw = localStorage.getItem(STORAGE_KEYS.authStateCachedAt);
     if (!cachedAtRaw) return false;
     const cachedAt = Number(cachedAtRaw);
     if (!Number.isFinite(cachedAt)) return false;
-    return Date.now() - cachedAt <= AUTH_STATE_CACHE_TTL_MS;
+    return Date.now() - cachedAt <= CACHE_TTL_MS.authState;
   } catch {
     return false;
   }
@@ -48,8 +42,8 @@ function isCachedAuthStateFresh() {
 
 function writeCachedAuthState(loggedIn: boolean) {
   try {
-    localStorage.setItem(AUTH_STATE_CACHE_KEY, loggedIn ? "1" : "0");
-    localStorage.setItem(AUTH_STATE_CACHE_AT_KEY, String(Date.now()));
+    localStorage.setItem(STORAGE_KEYS.authStateCache, loggedIn ? "1" : "0");
+    localStorage.setItem(STORAGE_KEYS.authStateCachedAt, String(Date.now()));
   } catch {
     // localStorage が使えない環境では保存をスキップ
   }
@@ -57,12 +51,12 @@ function writeCachedAuthState(loggedIn: boolean) {
 
 function consumeAuthSuccessHint() {
   const url = new URL(window.location.href);
-  if (url.searchParams.get(AUTH_SUCCESS_QUERY_PARAM) !== AUTH_SUCCESS_QUERY_VALUE) {
+  if (url.searchParams.get(AUTH_SUCCESS_HINT.queryParam) !== AUTH_SUCCESS_HINT.successValue) {
     return false;
   }
 
   writeCachedAuthState(true);
-  url.searchParams.delete(AUTH_SUCCESS_QUERY_PARAM);
+  url.searchParams.delete(AUTH_SUCCESS_HINT.queryParam);
 
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, document.title, nextUrl || "/");
@@ -100,7 +94,7 @@ function initMainApp() {
 
       if (loginBtn) {
         loginBtn.onclick = () => {
-          window.location.href = "/login";
+          window.location.href = ROUTES.login;
         };
       }
 
@@ -126,7 +120,7 @@ function initMainApp() {
   }
 
   const canFallBackToCachedState = isCachedAuthStateFresh() && cachedAuthState !== null;
-  fetch("/api/current_user", { credentials: "same-origin" })
+  fetch(API_PATHS.currentUser, { credentials: "same-origin" })
     .then((res) => res.json())
     .then((data) => {
       const previousLoggedIn = getLoggedInState();
@@ -147,8 +141,6 @@ function initMainApp() {
       }
     });
 
-  hydrateCurrentChatRoomIdFromStorage();
-
   initToggleTasks();
   initSetupTaskCards();
 
@@ -164,7 +156,7 @@ function initMainApp() {
 
   if (accessChatBtn) {
     accessChatBtn.addEventListener("click", () => {
-      fetch("/api/get_chat_rooms")
+      fetch(API_PATHS.getChatRooms)
         .then((res) => res.json())
         .then((data) => {
           const rooms = Array.isArray(data.rooms) ? data.rooms : [];
@@ -257,12 +249,12 @@ function toggleUserMenu() {
     const logoutEl = document.getElementById("menu-logout");
     if (settingsEl) {
       settingsEl.addEventListener("click", () => {
-        window.location.href = "/settings";
+        window.location.href = ROUTES.settings;
       });
     }
     if (logoutEl) {
       logoutEl.addEventListener("click", () => {
-        void fetch("/logout", {
+        void fetch(ROUTES.logout, {
           method: "POST",
           credentials: "same-origin"
         })
@@ -271,10 +263,10 @@ function toggleUserMenu() {
               window.location.href = response.url;
               return;
             }
-            window.location.href = "/login";
+            window.location.href = ROUTES.login;
           })
           .catch(() => {
-            window.location.href = "/login";
+            window.location.href = ROUTES.login;
           });
       });
     }

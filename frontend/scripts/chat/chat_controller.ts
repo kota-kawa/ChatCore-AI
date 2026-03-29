@@ -3,6 +3,7 @@
 import { ChatJsonResponseSchema, StreamEventDataSchema } from "../../types/chat";
 import type { StreamEventPayload, StreamingBotMessageHandle } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
+import { API_PATHS } from "../core/constants";
 import { getSharedDomRefs } from "../core/dom";
 import { extractApiErrorMessage, parseJsonText, readJsonBody } from "../core/runtime_validation";
 import { loadChatHistory } from "./chat_history";
@@ -363,11 +364,14 @@ function appendConstellationLoader(parent: HTMLElement, modifierClass: string) {
 }
 
 let currentAbortController: AbortController | null = null;
-let isGenerating = false;
 const streamLastEventIdByRoom = new Map<string, number>();
 
-function setGeneratingState(generating: boolean) {
-  isGenerating = generating;
+function isGenerating() {
+  return currentAbortController !== null;
+}
+
+function syncGeneratingUi() {
+  const generating = isGenerating();
   const btn = getSharedDomRefs().sendBtn;
   if (!btn) return;
   if (generating) {
@@ -385,15 +389,27 @@ function setGeneratingState(generating: boolean) {
   }
 }
 
+function beginGeneration(controller: AbortController) {
+  currentAbortController = controller;
+  syncGeneratingUi();
+}
+
+function clearGeneration(controller?: AbortController) {
+  if (controller && currentAbortController !== controller) return;
+  currentAbortController = null;
+  syncGeneratingUi();
+}
+
 async function stopGeneration() {
-  if (currentAbortController) {
-    currentAbortController.abort();
-    currentAbortController = null;
+  const abortController = currentAbortController;
+  if (abortController) {
+    abortController.abort();
+    clearGeneration(abortController);
   }
   const currentChatRoomId = getCurrentChatRoomId();
   if (currentChatRoomId) {
     try {
-      await fetch("/api/chat_stop", {
+      await fetch(API_PATHS.chatStop, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_room_id: currentChatRoomId })
@@ -402,7 +418,6 @@ async function stopGeneration() {
       // ベストエフォート
     }
   }
-  setGeneratingState(false);
 }
 
 function shouldAutoScrollForGeneration() {
@@ -614,7 +629,7 @@ async function consumeStreamingChatResponse(
 
 /* 送信ボタン or Enter 押下 */
 function sendMessage() {
-  if (isGenerating) return;
+  if (isGenerating()) return;
   const { userInput, aiModelSelect } = getSharedDomRefs();
   if (!userInput) return;
   const message = userInput.value.trim();
@@ -630,11 +645,8 @@ function sendMessage() {
 async function generateResponse(message: string, aiModel: string) {
   if (!getSharedDomRefs().chatMessages) return;
 
-  // 生成中フラグと AbortController を同期管理し、重複送信とリークを防ぐ
-  // Keep generation state and AbortController in sync to avoid duplicate sends/leaks.
-  setGeneratingState(true);
   const abortController = new AbortController();
-  currentAbortController = abortController;
+  beginGeneration(abortController);
 
   // marked の遅延読み込みを先行して開始し、初回描画の崩れを減らす
   formatLLMOutput("");
@@ -649,7 +661,7 @@ async function generateResponse(message: string, aiModel: string) {
   }
 
   try {
-    const response = await fetch("/api/chat", {
+    const response = await fetch(API_PATHS.chat, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -705,8 +717,7 @@ async function generateResponse(message: string, aiModel: string) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     renderBotMessageImmediate("エラー: " + errorMessage);
   } finally {
-    setGeneratingState(false);
-    currentAbortController = null;
+    clearGeneration(abortController);
   }
 }
 
@@ -714,9 +725,9 @@ async function generateResponse(message: string, aiModel: string) {
 async function connectToGenerationStream(roomId: string): Promise<void> {
   // 画面再表示時の途中生成を復元するため、サーバーの既存ストリームへ接続し直す
   // Reconnect to server-side generation stream to resume in-progress output after return.
-  setGeneratingState(true);
+  if (isGenerating()) return;
   const abortController = new AbortController();
-  currentAbortController = abortController;
+  beginGeneration(abortController);
 
   const thinkingWrap = createThinkingPlaceholder();
   const reconnectLastEventId = streamLastEventIdByRoom.get(roomId);
@@ -726,7 +737,7 @@ async function connectToGenerationStream(roomId: string): Promise<void> {
   }
   try {
     const response = await fetch(
-      `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+      `${API_PATHS.chatGenerationStream}?room_id=${encodeURIComponent(roomId)}`,
       { signal: abortController.signal, headers }
     );
     if (!response.ok) {
@@ -748,8 +759,7 @@ async function connectToGenerationStream(roomId: string): Promise<void> {
     thinkingWrap?.remove();
     loadChatHistory(false);
   } finally {
-    setGeneratingState(false);
-    currentAbortController = null;
+    clearGeneration(abortController);
   }
 }
 

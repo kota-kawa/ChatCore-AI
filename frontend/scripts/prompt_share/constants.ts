@@ -1,4 +1,6 @@
-export const AUTH_STATE_CACHE_KEY = "chatcore.auth.loggedIn";
+import { STORAGE_KEYS } from "../core/constants";
+
+export const AUTH_STATE_CACHE_KEY = STORAGE_KEYS.authStateCache;
 export const PROMPTS_CACHE_KEY = "prompt_share.prompts.v1";
 export const PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const ACCEPTED_PROMPT_IMAGE_TYPES = new Set([
