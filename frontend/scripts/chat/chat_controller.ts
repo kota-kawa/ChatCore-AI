@@ -4,6 +4,7 @@
 type StreamEventPayload = {
   event: string;
   data: Record<string, unknown>;
+  id?: number;
 };
 
 function extractApiErrorMessage(payload: unknown, fallbackStatus?: number) {
@@ -396,6 +397,7 @@ function appendConstellationLoader(parent: HTMLElement, modifierClass: string) {
 
 let currentAbortController: AbortController | null = null;
 let isGenerating = false;
+const streamLastEventIdByRoom = new Map<string, number>();
 
 function setGeneratingState(generating: boolean) {
   isGenerating = generating;
@@ -484,11 +486,20 @@ function parseStreamEventBlock(block: string): StreamEventPayload | null {
   if (lines.length === 0) return null;
 
   let event = "message";
+  let eventId: number | undefined;
   const dataLines: string[] = [];
 
   lines.forEach((line) => {
     if (line.startsWith("event:")) {
       event = line.slice(6).trim();
+      return;
+    }
+    if (line.startsWith("id:")) {
+      const rawId = line.slice(3).trim();
+      const parsedId = Number.parseInt(rawId, 10);
+      if (Number.isFinite(parsedId) && parsedId > 0) {
+        eventId = parsedId;
+      }
       return;
     }
     if (line.startsWith("data:")) {
@@ -501,6 +512,7 @@ function parseStreamEventBlock(block: string): StreamEventPayload | null {
   try {
     return {
       event,
+      id: eventId,
       data: JSON.parse(dataLines.join("\n")) as Record<string, unknown>
     };
   } catch (error) {
@@ -509,7 +521,11 @@ function parseStreamEventBlock(block: string): StreamEventPayload | null {
   }
 }
 
-async function consumeStreamingChatResponse(response: Response, thinkingWrap: HTMLElement | null) {
+async function consumeStreamingChatResponse(
+  response: Response,
+  thinkingWrap: HTMLElement | null,
+  options: { onEventId?: (id: number) => void } = {}
+) {
   if (!response.body) {
     throw new Error("ストリーム応答を受信できませんでした。");
   }
@@ -550,6 +566,9 @@ async function consumeStreamingChatResponse(response: Response, thinkingWrap: HT
   const processBlock = (block: string) => {
     const parsed = parseStreamEventBlock(block);
     if (!parsed) return;
+    if (typeof parsed.id === "number" && parsed.id > 0) {
+      options.onEventId?.(parsed.id);
+    }
 
     if (parsed.event === "chunk") {
       const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
@@ -656,6 +675,10 @@ async function generateResponse(message: string, aiModel: string) {
 
   // Bot 側の Thinking プレースホルダー
   const thinkingWrap = createThinkingPlaceholder();
+  const roomId = window.currentChatRoomId || "";
+  if (roomId) {
+    streamLastEventIdByRoom.set(roomId, 0);
+  }
 
   try {
     const response = await fetch("/api/chat", {
@@ -673,7 +696,15 @@ async function generateResponse(message: string, aiModel: string) {
     // SSE応答なら逐次描画、JSON応答なら一括描画へ分岐する
     // Branch by response type: SSE incremental render vs JSON single render.
     if (contentType.includes("text/event-stream")) {
-      await consumeStreamingChatResponse(response, thinkingWrap);
+      await consumeStreamingChatResponse(response, thinkingWrap, {
+        onEventId: (id) => {
+          if (!roomId) return;
+          streamLastEventIdByRoom.set(roomId, id);
+        }
+      });
+      if (roomId) {
+        streamLastEventIdByRoom.delete(roomId);
+      }
       return;
     }
 
@@ -716,17 +747,27 @@ async function connectToGenerationStream(roomId: string): Promise<void> {
   currentAbortController = abortController;
 
   const thinkingWrap = createThinkingPlaceholder();
+  const reconnectLastEventId = streamLastEventIdByRoom.get(roomId);
+  const headers: Record<string, string> = {};
+  if (typeof reconnectLastEventId === "number" && reconnectLastEventId > 0) {
+    headers["Last-Event-ID"] = String(reconnectLastEventId);
+  }
   try {
     const response = await fetch(
       `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
-      { signal: abortController.signal }
+      { signal: abortController.signal, headers }
     );
     if (!response.ok) {
       thinkingWrap?.remove();
       window.loadChatHistory?.(false);
       return;
     }
-    await consumeStreamingChatResponse(response, thinkingWrap);
+    await consumeStreamingChatResponse(response, thinkingWrap, {
+      onEventId: (id) => {
+        streamLastEventIdByRoom.set(roomId, id);
+      }
+    });
+    streamLastEventIdByRoom.delete(roomId);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       thinkingWrap?.remove();

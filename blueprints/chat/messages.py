@@ -18,6 +18,7 @@ from services.chat_service import (
 )
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
+    ChatGenerationEvent,
     ChatGenerationService,
     ChatGenerationJob,
     build_generation_key,
@@ -25,6 +26,8 @@ from services.chat_generation import (
     get_chat_generation_service,
     get_generation_job,
     has_active_generation,
+    has_replayable_generation,
+    iter_generation_events,
     start_generation_job,
 )
 from services.auth_limits import (
@@ -120,30 +123,40 @@ BASE_SYSTEM_PROMPT = """
 """
 
 
-def _sse_event(event: str, payload: dict[str, Any]) -> bytes:
+def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None = None) -> bytes:
     # SSE 形式で JSON ペイロードを1イベントとして返す
     # Encode one JSON payload as an SSE event.
     body = json.dumps(payload, ensure_ascii=False)
-    return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
+    id_line = f"id: {sequence_id}\n" if sequence_id is not None else ""
+    return f"{id_line}event: {event}\ndata: {body}\n\n".encode("utf-8")
 
 
 def _iter_llm_stream_events(
     job: ChatGenerationJob,
+    *,
+    after_sequence_id: int = 0,
 ) -> Iterator[bytes]:
     # 生成ジョブのイベント列を SSE として配信する
     # Convert background generation job events into SSE payloads.
-    for event in job.iter_events():
-        yield _sse_event(event.event, event.payload)
+    for event in job.iter_events(after_sequence_id=after_sequence_id):
+        yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
+
+
+def _iter_serialized_stream_events(
+    events: Iterator[ChatGenerationEvent],
+) -> Iterator[bytes]:
+    for event in events:
+        yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
 
 
 def _build_llm_stream_response(
-    job: ChatGenerationJob,
+    events: Iterator[bytes],
 ) -> StreamingResponse:
     # バックグラウンド生成ジョブを StreamingResponse へ変換して SSE 配信する
     # Wrap the background generation job with StreamingResponse for SSE delivery.
 
     return StreamingResponse(
-        _iter_llm_stream_events(job),
+        events,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -151,6 +164,19 @@ def _build_llm_stream_response(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _parse_last_event_id(request: Request) -> int:
+    raw_value = request.headers.get("last-event-id")
+    if raw_value is None:
+        raw_value = request.query_params.get("last_event_id")
+    if raw_value is None:
+        return 0
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
 
 
 def _parse_task_launch_message(message: str) -> dict[str, str] | None:
@@ -641,7 +667,7 @@ async def chat(
                 status_code=409,
             )
 
-        return _build_llm_stream_response(job)
+        return _build_llm_stream_response(_iter_llm_stream_events(job))
 
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
@@ -801,16 +827,35 @@ async def chat_generation_stream(
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
+    last_event_id = _parse_last_event_id(request)
     job = get_generation_job(generation_key, service=resolved_chat_generation_service)
-    if job is None:
-        if has_active_generation(generation_key, service=resolved_chat_generation_service):
+    if job is not None:
+        return _build_llm_stream_response(
+            _iter_llm_stream_events(job, after_sequence_id=last_event_id)
+        )
+
+    replayable = has_replayable_generation(
+        generation_key,
+        service=resolved_chat_generation_service,
+    )
+    active = has_active_generation(generation_key, service=resolved_chat_generation_service)
+    if not replayable and not active:
+        return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
+
+    if not resolved_chat_generation_service.supports_distributed_streaming():
+        if active:
             return jsonify(
                 {"error": "生成ジョブは進行中ですが、このインスタンスでは再接続できません。"},
                 status_code=409,
             )
         return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
 
-    return _build_llm_stream_response(job)
+    distributed_events = iter_generation_events(
+        generation_key,
+        after_sequence_id=last_event_id,
+        service=resolved_chat_generation_service,
+    )
+    return _build_llm_stream_response(_iter_serialized_stream_events(distributed_events))
 
 
 @chat_bp.get("/api/chat_generation_status", name="chat.chat_generation_status")
@@ -852,10 +897,12 @@ async def chat_generation_status(
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    job = get_generation_job(generation_key, service=resolved_chat_generation_service)
     is_generating = has_active_generation(
         generation_key,
         service=resolved_chat_generation_service,
     )
-    has_replayable_job = job is not None
+    has_replayable_job = has_replayable_generation(
+        generation_key,
+        service=resolved_chat_generation_service,
+    )
     return jsonify({"is_generating": is_generating, "has_replayable_job": has_replayable_job})

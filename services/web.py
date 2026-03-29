@@ -10,25 +10,31 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from starlette.responses import JSONResponse, RedirectResponse
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_INTERNAL_ERROR_MESSAGE = "内部エラーが発生しました。"
+from .web_constants import BASE_DIR, DEFAULT_INTERNAL_ERROR_MESSAGE, FRONTEND_URL
+from .web_json import (
+    get_json as _get_json,
+    jsonify as _jsonify,
+)
+from .web_session import (
+    flash as _flash,
+    get_flashed_messages as _get_flashed_messages,
+    set_session_permanent as _set_session_permanent,
+)
+from .web_urls import (
+    build_frontend_url as _build_frontend_url,
+    sanitize_next_path as _sanitize_next_path,
+    url_for as _url_for,
+)
+
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 async def get_json(request: Request) -> Any | None:
-    # JSONパース失敗時は例外を外へ出さず None を返す
-    # Return None instead of raising when JSON parsing fails.
-    try:
-        return await request.json()
-    except Exception:
-        return None
+    return await _get_json(request)
 
 
 def jsonify(payload: Any, status_code: int = 200) -> JSONResponse:
-    # FastAPI 互換のJSONエンコードを通してレスポンスを返す
-    # Build a JSON response via FastAPI-compatible jsonable encoding.
-    return JSONResponse(content=jsonable_encoder(payload), status_code=status_code)
+    return _jsonify(payload, status_code=status_code)
 
 
 def log_and_internal_server_error(
@@ -89,91 +95,30 @@ def validate_payload_model(
 
 
 def set_session_permanent(session: dict, value: bool) -> None:
-    # セッション永続化フラグを明示的に付与/削除する
-    # Explicitly set or clear the session permanence flag.
-    if value:
-        session["_permanent"] = True
-    else:
-        session.pop("_permanent", None)
+    return _set_session_permanent(session, value)
 
 
 def flash(request: Request, message: str, category: str = "message") -> None:
-    # セッションに一時メッセージを積む
-    # Push a flash message into session storage.
-    flashes: List[Tuple[str, str]] = request.session.setdefault("_flashes", [])
-    flashes.append((category, message))
+    return _flash(request, message, category=category)
 
 
 def get_flashed_messages(
     request: Request, *, with_categories: bool = False
 ) -> List[str] | List[Tuple[str, str]]:
-    # 1回読み取りで消費されるフラッシュメッセージを取得する
-    # Pop one-time flash messages from session.
-    flashes = request.session.pop("_flashes", [])
-    if with_categories:
-        return flashes
-    return [message for _, message in flashes]
+    return _get_flashed_messages(request, with_categories=with_categories)
 
 
 def url_for(request: Request, endpoint: str, **values: Any) -> str:
-    # FastAPI の URL 生成に query/path パラメータ分離を加え、Flask互換呼び出しを吸収する
-    # Extend FastAPI URL building with path/query split for Flask-style compatibility.
-    external = values.pop("_external", False)
-    if "filename" in values and "path" not in values:
-        values["path"] = values.pop("filename")
-
-    path_param_names: List[str] = []
-    for route in request.app.router.routes:
-        if getattr(route, "name", None) == endpoint:
-            path_param_names = list(getattr(route, "param_convertors", {}).keys())
-            break
-
-    path_params = {}
-    for key in list(values.keys()):
-        if key in path_param_names:
-            path_params[key] = values.pop(key)
-
-    url = request.url_for(endpoint, **path_params)
-    if values:
-        url = url.include_query_params(**values)
-
-    if external:
-        return str(url)
-
-    if url.query:
-        return f"{url.path}?{url.query}"
-    return url.path
-
-
-def frontend_url(path: str = "", *, query: str | None = None) -> str:
-    # フロントエンドURLを安全に連結して返す
-    # Build an absolute frontend URL with normalized path/query.
-    base = FRONTEND_URL.rstrip("/")
-    if path:
-        normalized = path if path.startswith("/") else f"/{path}"
-        url = f"{base}{normalized}"
-    else:
-        url = f"{base}/"
-    if query:
-        return f"{url}?{query}"
-    return url
+    return _url_for(request, endpoint, **values)
 
 
 def sanitize_next_path(next_path: Any, default: str = "/") -> str:
-    # `next` は同一サイト内の相対パスのみ許可し、外部URLは拒否する
-    # Allow only same-site relative paths for `next`; reject external URLs.
-    if not isinstance(next_path, str):
-        return default
+    return _sanitize_next_path(next_path, default=default)
 
-    candidate = next_path.strip()
-    if not candidate.startswith("/"):
-        return default
-
-    parsed = urlsplit(candidate)
-    if parsed.scheme or parsed.netloc:
-        return default
-
-    return candidate
+def frontend_url(path: str = "", *, query: str | None = None) -> str:
+    # 既存互換のため、モジュールの FRONTEND_URL を毎回参照してURLを組み立てる
+    # Preserve legacy behavior by reading services.web.FRONTEND_URL dynamically.
+    return _build_frontend_url(FRONTEND_URL, path, query=query)
 
 
 def redirect_to_frontend(

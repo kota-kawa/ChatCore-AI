@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import threading
 import time
 import uuid
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
+_EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
+_EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
+_TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 
 class ChatGenerationAlreadyRunningError(RuntimeError):
@@ -27,6 +31,7 @@ class ChatGenerationAlreadyRunningError(RuntimeError):
 
 @dataclass(frozen=True)
 class ChatGenerationEvent:
+    sequence_id: int
     event: str
     payload: dict[str, Any]
 
@@ -39,13 +44,16 @@ class ChatGenerationJob:
         model: str,
         persist_response: Callable[[str], None],
         on_finished: Callable[[], None] | None = None,
+        on_event: Callable[[ChatGenerationEvent], None] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
         self._persist_response = persist_response
         self._on_finished = on_finished
         self._on_finished_called = False
+        self._on_event = on_event
         self._events: list[ChatGenerationEvent] = []
+        self._next_sequence_id = 1
         self._condition = threading.Condition()
         self._thread: threading.Thread | None = None
         self._cancelled: bool = False
@@ -63,17 +71,10 @@ class ChatGenerationJob:
 
     def cancel(self) -> None:
         """生成をキャンセルし、aborted イベントを発行して完了とする."""
-        callback: Callable[[], None] | None = None
         if self.is_done:
             return
         self._cancelled = True
-        with self._condition:
-            if not self.is_done:
-                self._events.append(ChatGenerationEvent(event="aborted", payload={}))
-                callback = self._mark_done()
-                self._condition.notify_all()
-        if callback is not None:
-            callback()
+        self._publish("aborted", {}, done=True)
 
     def wait(self, timeout: float | None = None) -> bool:
         thread = self._thread
@@ -82,10 +83,16 @@ class ChatGenerationJob:
         thread.join(timeout)
         return self.is_done
 
-    def iter_events(self) -> Iterator[ChatGenerationEvent]:
+    def iter_events(self, *, after_sequence_id: int = 0) -> Iterator[ChatGenerationEvent]:
         cursor = 0
         while True:
             with self._condition:
+                while (
+                    cursor < len(self._events)
+                    and self._events[cursor].sequence_id <= after_sequence_id
+                ):
+                    cursor += 1
+
                 while cursor >= len(self._events) and not self.is_done:
                     self._condition.wait(timeout=0.5)
 
@@ -101,11 +108,27 @@ class ChatGenerationJob:
 
     def _publish(self, event: str, payload: dict[str, Any], *, done: bool = False) -> None:
         callback: Callable[[], None] | None = None
+        event_callback = self._on_event
+        published_event: ChatGenerationEvent | None = None
         with self._condition:
-            self._events.append(ChatGenerationEvent(event=event, payload=payload))
+            if self.is_done:
+                return
+            sequence_id = self._next_sequence_id
+            self._next_sequence_id += 1
+            published_event = ChatGenerationEvent(
+                sequence_id=sequence_id,
+                event=event,
+                payload=payload,
+            )
+            self._events.append(published_event)
             if done:
                 callback = self._mark_done()
             self._condition.notify_all()
+        if event_callback is not None and published_event is not None:
+            try:
+                event_callback(published_event)
+            except Exception:
+                logger.exception("Failed to publish distributed chat generation event.")
         if callback is not None:
             callback()
 
@@ -196,6 +219,92 @@ class ChatGenerationService:
     def _active_lock_key(self, job_key: str) -> str:
         return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
 
+    def _event_stream_key(self, job_key: str) -> str:
+        return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
+
+    def _event_channel_name(self, job_key: str) -> str:
+        return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
+
+    def _serialize_event(self, event: ChatGenerationEvent) -> str:
+        return json.dumps(
+            {
+                "id": event.sequence_id,
+                "event": event.event,
+                "payload": event.payload,
+            },
+            ensure_ascii=False,
+        )
+
+    def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
+        try:
+            loaded = json.loads(raw)
+        except Exception:
+            return None
+        if not isinstance(loaded, dict):
+            return None
+        sequence_id = loaded.get("id")
+        event_name = loaded.get("event")
+        payload = loaded.get("payload")
+        if not isinstance(sequence_id, int) or sequence_id <= 0:
+            return None
+        if not isinstance(event_name, str) or not event_name:
+            return None
+        if not isinstance(payload, dict):
+            payload = {}
+        return ChatGenerationEvent(
+            sequence_id=sequence_id,
+            event=event_name,
+            payload=payload,
+        )
+
+    def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return
+        serialized = self._serialize_event(event)
+        stream_key = self._event_stream_key(job_key)
+        channel = self._event_channel_name(job_key)
+        ttl_seconds = max(
+            self._job_retention_seconds + self._active_job_lock_ttl_seconds,
+            self._job_retention_seconds,
+            1,
+        )
+        try:
+            pipeline = redis_client.pipeline()
+            pipeline.rpush(stream_key, serialized)
+            pipeline.expire(stream_key, ttl_seconds)
+            pipeline.publish(channel, serialized)
+            pipeline.execute()
+        except Exception:
+            logger.exception("Failed to publish chat generation event to Redis.")
+
+    def _read_distributed_events(
+        self,
+        job_key: str,
+        *,
+        after_sequence_id: int = 0,
+    ) -> list[ChatGenerationEvent]:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return []
+        try:
+            raw_items = redis_client.lrange(self._event_stream_key(job_key), 0, -1)
+        except Exception:
+            logger.exception("Failed to read Redis chat generation event stream.")
+            return []
+
+        events: list[ChatGenerationEvent] = []
+        for item in raw_items:
+            if not isinstance(item, str):
+                continue
+            event = self._deserialize_event(item)
+            if event is None:
+                continue
+            if event.sequence_id <= after_sequence_id:
+                continue
+            events.append(event)
+        return events
+
     def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
         redis_client = self._get_redis_client()
         if redis_client is None:
@@ -251,6 +360,9 @@ return 0
             logger.exception("Redis chat generation lock existence check failed.")
             return False
 
+    def supports_distributed_streaming(self) -> bool:
+        return self._get_redis_client() is not None
+
     def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
         running_jobs: list[ChatGenerationJob] = []
         with self._jobs_lock:
@@ -296,10 +408,102 @@ return 0
                 return True
         return self._has_distributed_active_lock(job_key)
 
+    def has_replayable_generation(self, job_key: str) -> bool:
+        self._cleanup_expired_jobs()
+        with self._jobs_lock:
+            local_job = self._jobs.get(job_key)
+            if local_job is not None:
+                return True
+
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return False
+        try:
+            return bool(redis_client.exists(self._event_stream_key(job_key)))
+        except Exception:
+            logger.exception("Redis chat generation replay-state check failed.")
+            return False
+
     def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
         self._cleanup_expired_jobs()
         with self._jobs_lock:
             return self._jobs.get(job_key)
+
+    def iter_generation_events(
+        self,
+        job_key: str,
+        *,
+        after_sequence_id: int = 0,
+    ) -> Iterator[ChatGenerationEvent]:
+        job = self.get_generation_job(job_key)
+        if job is not None:
+            yield from job.iter_events(after_sequence_id=after_sequence_id)
+            return
+
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return
+
+        cursor = max(after_sequence_id, 0)
+
+        terminal_seen = False
+        for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
+            cursor = max(cursor, event.sequence_id)
+            if event.event in _TERMINAL_EVENTS:
+                terminal_seen = True
+            yield event
+        if terminal_seen:
+            return
+
+        if not self.has_active_generation(job_key):
+            return
+
+        channel = self._event_channel_name(job_key)
+        pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+        try:
+            pubsub.subscribe(channel)
+
+            for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
+                cursor = max(cursor, event.sequence_id)
+                if event.event in _TERMINAL_EVENTS:
+                    terminal_seen = True
+                yield event
+            if terminal_seen:
+                return
+
+            while True:
+                message = pubsub.get_message(timeout=1.0)
+                if message and message.get("type") == "message":
+                    raw_data = message.get("data")
+                    if isinstance(raw_data, bytes):
+                        try:
+                            raw_data = raw_data.decode("utf-8")
+                        except Exception:
+                            raw_data = None
+                    if isinstance(raw_data, str):
+                        event = self._deserialize_event(raw_data)
+                        if event is not None and event.sequence_id > cursor:
+                            cursor = event.sequence_id
+                            yield event
+                            if event.event in _TERMINAL_EVENTS:
+                                return
+                    continue
+
+                if not self.has_active_generation(job_key):
+                    saw_new = False
+                    for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
+                        saw_new = True
+                        cursor = max(cursor, event.sequence_id)
+                        yield event
+                        if event.event in _TERMINAL_EVENTS:
+                            return
+                    if not saw_new:
+                        return
+        finally:
+            try:
+                pubsub.close()
+            except Exception:
+                logger.exception("Failed to close Redis pubsub for chat generation stream.")
 
     def start_generation_job(
         self,
@@ -325,6 +529,7 @@ return 0
                 model=model,
                 persist_response=persist_response,
                 on_finished=lambda: self._release_active_job_lock(job_key, lock_token),
+                on_event=lambda event: self._publish_distributed_event(job_key, event),
             )
             self._jobs[job_key] = job
 
@@ -392,6 +597,36 @@ def get_generation_job(
         else get_chat_generation_service()
     )
     return target.get_generation_job(job_key)
+
+
+def has_replayable_generation(
+    job_key: str,
+    *,
+    service: ChatGenerationService | None = None,
+) -> bool:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.has_replayable_generation(job_key)
+
+
+def iter_generation_events(
+    job_key: str,
+    *,
+    after_sequence_id: int = 0,
+    service: ChatGenerationService | None = None,
+) -> Iterator[ChatGenerationEvent]:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.iter_generation_events(
+        job_key,
+        after_sequence_id=after_sequence_id,
+    )
 
 
 def start_generation_job(

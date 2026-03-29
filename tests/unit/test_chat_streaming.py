@@ -17,6 +17,7 @@ from blueprints.chat.messages import (
 )
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
+    ChatGenerationService,
     build_generation_key,
     clear_generation_job_state,
     has_active_generation,
@@ -24,6 +25,73 @@ from services.chat_generation import (
 )
 from services.llm import LlmConfigurationError
 from tests.helpers.request_helpers import build_request
+
+
+class _FakeRedisPipeline:
+    def __init__(self, redis_client):
+        self._redis = redis_client
+        self._commands = []
+
+    def rpush(self, key, value):
+        self._commands.append(("rpush", key, value))
+        return self
+
+    def expire(self, key, ttl):
+        self._commands.append(("expire", key, ttl))
+        return self
+
+    def publish(self, channel, message):
+        self._commands.append(("publish", channel, message))
+        return self
+
+    def execute(self):
+        for command, key, value in self._commands:
+            getattr(self._redis, command)(key, value)
+        self._commands.clear()
+        return True
+
+
+class _FakeRedis:
+    def __init__(self):
+        self._values = {}
+        self._lists = {}
+
+    def set(self, key, value, nx=False, ex=None):
+        if nx and key in self._values:
+            return False
+        self._values[key] = value
+        return True
+
+    def exists(self, key):
+        if key in self._values:
+            return 1
+        if key in self._lists and len(self._lists[key]) > 0:
+            return 1
+        return 0
+
+    def lrange(self, key, start, end):
+        values = list(self._lists.get(key, []))
+        if not values:
+            return []
+        if end < 0:
+            end = len(values) - 1
+        return values[start : end + 1]
+
+    def rpush(self, key, value):
+        self._lists.setdefault(key, []).append(value)
+        return len(self._lists[key])
+
+    def expire(self, key, ttl):
+        return True
+
+    def publish(self, channel, message):
+        return 1
+
+    def pipeline(self):
+        return _FakeRedisPipeline(self)
+
+    def eval(self, *_args, **_kwargs):
+        return 1
 
 
 def make_request(json_body, session=None):
@@ -445,6 +513,88 @@ class ChatStreamingTestCase(unittest.TestCase):
                 stream_response = asyncio.run(chat_generation_stream(stream_request))
 
         self.assertEqual(stream_response.status_code, 404)
+
+    def test_chat_generation_stream_skips_already_received_events_via_last_event_id(self):
+        session = {"user_id": 81}
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            return_value=iter(["A", "B"]),
+        ):
+            job_key = build_generation_key(chat_room_id="room-last-id", user_id=81)
+            job = start_generation_job(
+                job_key,
+                conversation_messages=[{"role": "user", "content": "test"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+            list(_iter_llm_stream_events(job))
+
+        stream_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=b"room_id=room-last-id",
+            headers=[(b"last-event-id", b"1")],
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                stream_response = asyncio.run(chat_generation_stream(stream_request))
+
+        async def _consume():
+            chunks = []
+            async for chunk in stream_response.body_iterator:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        body = asyncio.run(_consume()).decode("utf-8")
+        self.assertEqual(body.count("event: chunk"), 1)
+        self.assertIn('"text": "B"', body)
+        self.assertIn("event: done", body)
+
+    def test_chat_generation_stream_replays_distributed_events_without_local_job(self):
+        session = {"user_id": 88}
+        fake_redis = _FakeRedis()
+        service = ChatGenerationService(redis_client_getter=lambda: fake_redis)
+        job_key = build_generation_key(chat_room_id="room-distributed", user_id=88)
+
+        fake_redis.rpush(
+            service._event_stream_key(job_key),
+            json.dumps({"id": 1, "event": "chunk", "payload": {"text": "分散"}}),
+        )
+        fake_redis.rpush(
+            service._event_stream_key(job_key),
+            json.dumps({"id": 2, "event": "done", "payload": {"response": "分散完了"}}),
+        )
+
+        stream_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=b"room_id=room-distributed",
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                stream_response = asyncio.run(
+                    chat_generation_stream(
+                        stream_request,
+                        chat_generation_service=service,
+                    )
+                )
+
+        self.assertIsInstance(stream_response, StreamingResponse)
+
+        async def _consume():
+            chunks = []
+            async for chunk in stream_response.body_iterator:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        body = asyncio.run(_consume()).decode("utf-8")
+        self.assertIn("event: chunk", body)
+        self.assertIn('"text": "分散"', body)
+        self.assertIn("event: done", body)
+        self.assertIn('"response": "分散完了"', body)
 
 
 if __name__ == "__main__":
