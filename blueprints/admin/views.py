@@ -5,11 +5,15 @@ from functools import wraps
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import Request
+from fastapi import Depends, Request
 from starlette.responses import RedirectResponse
 
 from services.async_utils import run_blocking
-from services.auth_limits import consume_admin_login_limit
+from services.auth_limits import (
+    AuthLimitService,
+    consume_admin_login_limit,
+    get_auth_limit_service,
+)
 from services.db import Error, get_db_connection
 from services.security import verify_password
 from services.session_middleware import rotate_session_identifier
@@ -34,6 +38,15 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 
 ADMIN_PASSWORD_HASH = (os.getenv("ADMIN_PASSWORD_HASH") or "").strip()
 logger = logging.getLogger(__name__)
+
+
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
 
 
 def _verify_admin_password(password: str) -> bool:
@@ -113,11 +126,18 @@ async def login(request: Request):
 
 
 @admin_bp.post("/api/login", name="admin.api_login")
-async def api_login(request: Request):
+async def api_login(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     payload = await _get_payload(request)
     password = payload.get("password") or ""
     next_url = sanitize_next_path(payload.get("next"), default="/admin")
-    allowed, limit_error = consume_admin_login_limit(request)
+    allowed, limit_error = consume_admin_login_limit(
+        request,
+        service=resolved_auth_limit_service,
+    )
     if not allowed:
         return jsonify({"status": "fail", "error": limit_error}, status_code=429)
 

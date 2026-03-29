@@ -18,14 +18,14 @@ def make_request(*, headers=None):
 class GuestChatLimitTestCase(unittest.TestCase):
     def setUp(self):
         self.original_guest_limit = os.environ.get("GUEST_CHAT_DAILY_LIMIT")
-        auth_limits._in_memory_windows.clear()
+        auth_limits.clear_in_memory_rate_limit_state()
 
     def tearDown(self):
         if self.original_guest_limit is None:
             os.environ.pop("GUEST_CHAT_DAILY_LIMIT", None)
         else:
             os.environ["GUEST_CHAT_DAILY_LIMIT"] = self.original_guest_limit
-        auth_limits._in_memory_windows.clear()
+        auth_limits.clear_in_memory_rate_limit_state()
 
     def test_guest_chat_limit_blocks_after_reaching_cap(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "2"

@@ -1,14 +1,23 @@
 import logging
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, Request
 
-from services.auth_limits import consume_rate_limit, get_request_client_ip
+from services.auth_limits import (
+    AuthLimitService,
+    consume_rate_limit,
+    get_auth_limit_service,
+    get_request_client_ip,
+)
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
 from services.llm import LlmServiceError
-from services.llm_daily_limit import consume_llm_daily_quota
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_llm_daily_quota,
+    get_llm_daily_limit_service,
+)
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -32,13 +41,37 @@ PROMPT_ASSIST_PER_IP_LIMIT = 20
 PROMPT_ASSIST_PER_USER_LIMIT = 30
 
 
-def _consume_prompt_assist_limits(request: Request, user_id: int | str) -> tuple[bool, str | None]:
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
+
+
+def _resolve_llm_daily_limit_service(
+    request: Request,
+    service: LlmDailyLimitService | None,
+) -> LlmDailyLimitService:
+    if isinstance(service, LlmDailyLimitService):
+        return service
+    return get_llm_daily_limit_service(request)
+
+
+def _consume_prompt_assist_limits(
+    request: Request,
+    user_id: int | str,
+    *,
+    auth_limit_service: AuthLimitService | None = None,
+) -> tuple[bool, str | None]:
     client_ip = get_request_client_ip(request)
     allowed, _, retry_after = consume_rate_limit(
         "prompt_assist:ip",
         client_ip,
         limit=PROMPT_ASSIST_PER_IP_LIMIT,
         window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
+        service=auth_limit_service,
     )
     if not allowed:
         return (
@@ -54,6 +87,7 @@ def _consume_prompt_assist_limits(request: Request, user_id: int | str) -> tuple
         str(user_id),
         limit=PROMPT_ASSIST_PER_USER_LIMIT,
         window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
+        service=auth_limit_service,
     )
     if not allowed:
         return (
@@ -472,7 +506,16 @@ async def add_task(request: Request):
 
 
 @chat_bp.post("/api/prompt-assist", name="chat.prompt_assist")
-async def prompt_assist(request: Request):
+async def prompt_assist(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
@@ -493,11 +536,15 @@ async def prompt_assist(request: Request):
         _consume_prompt_assist_limits,
         request,
         user_id,
+        auth_limit_service=resolved_auth_limit_service,
     )
     if not can_access:
         return jsonify({"error": limit_message}, status_code=429)
 
-    can_access_llm, _, daily_limit = await run_blocking(consume_llm_daily_quota)
+    can_access_llm, _, daily_limit = await run_blocking(
+        consume_llm_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
     if not can_access_llm:
         return jsonify(
             {

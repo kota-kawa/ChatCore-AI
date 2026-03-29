@@ -9,10 +9,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 
 from blueprints.chat import cleanup_ephemeral_chats
+from services.auth_limits import AuthLimitService
+from services.chat_generation import ChatGenerationService
 from services.db import close_db_pool
 from services.default_tasks import ensure_default_tasks_seeded
 from services.default_shared_prompts import ensure_default_shared_prompts
 from services.health import get_liveness_status, get_readiness_status
+from services.llm_daily_limit import LlmDailyLimitService
 from services.logging_config import configure_logging
 from services.csrf import get_or_create_csrf_token
 from services.request_context import RequestContextMiddleware
@@ -61,7 +64,7 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app_instance: FastAPI):
     # 起動時にデフォルトタスクを投入する（未投入分のみ）
     # Seed default tasks on startup (insert only missing rows).
     try:
@@ -94,12 +97,18 @@ async def lifespan(_: FastAPI):
     try:
         yield
     finally:
+        chat_generation_service = getattr(app_instance.state, "chat_generation_service", None)
+        if isinstance(chat_generation_service, ChatGenerationService):
+            chat_generation_service.reset_in_memory_state(cancel_running=True)
         cleanup_stop_event.set()
         cleanup_thread.join(timeout=1)
         close_db_pool()
 
 
 app = FastAPI(lifespan=lifespan)
+app.state.auth_limit_service = AuthLimitService()
+app.state.llm_daily_limit_service = LlmDailyLimitService()
+app.state.chat_generation_service = ChatGenerationService()
 
 app.add_middleware(
     PermanentSessionMiddleware,

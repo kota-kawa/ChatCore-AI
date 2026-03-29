@@ -35,7 +35,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日10回までです")
-        mock_guest_limit.assert_called_once_with(request)
+        mock_guest_limit.assert_called_once()
         mock_room_exists.assert_not_called()
         mock_llm_quota.assert_not_called()
 

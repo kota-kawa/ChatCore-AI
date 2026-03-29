@@ -18,6 +18,7 @@ from blueprints.chat.messages import (
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     build_generation_key,
+    clear_generation_job_state,
     has_active_generation,
     start_generation_job,
 )
@@ -35,6 +36,12 @@ def make_request(json_body, session=None):
 
 
 class ChatStreamingTestCase(unittest.TestCase):
+    def setUp(self):
+        clear_generation_job_state(cancel_running=True)
+
+    def tearDown(self):
+        clear_generation_job_state(cancel_running=True)
+
     def test_truncate_conversation_for_llm_keeps_system_and_recent_history(self):
         messages = [{"role": "system", "content": "system"}]
         for index in range(60):

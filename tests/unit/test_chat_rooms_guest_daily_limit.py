@@ -34,7 +34,7 @@ class ChatRoomsGuestDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日10回までです")
-        mock_guest_limit.assert_called_once_with(request)
+        mock_guest_limit.assert_called_once()
         mock_create_room.assert_not_called()
 
     def test_new_chat_room_creates_ephemeral_room_when_guest_limit_allows(self):

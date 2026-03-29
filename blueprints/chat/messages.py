@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from functools import partial
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
@@ -18,15 +18,25 @@ from services.chat_service import (
 )
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
+    ChatGenerationService,
     ChatGenerationJob,
     build_generation_key,
     cancel_generation_job,
+    get_chat_generation_service,
     get_generation_job,
     has_active_generation,
     start_generation_job,
 )
-from services.auth_limits import consume_guest_chat_daily_limit
-from services.llm_daily_limit import consume_llm_daily_quota
+from services.auth_limits import (
+    AuthLimitService,
+    consume_guest_chat_daily_limit,
+    get_auth_limit_service,
+)
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_llm_daily_quota,
+    get_llm_daily_limit_service,
+)
 from services.llm import (
     get_llm_response,
     GEMINI_DEFAULT_MODEL,
@@ -56,6 +66,33 @@ CHAT_HISTORY_PAGE_SIZE_MAX = 100
 LLM_CONTEXT_MAX_HISTORY_MESSAGES = 40
 LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
 LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
+
+
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
+
+
+def _resolve_llm_daily_limit_service(
+    request: Request,
+    service: LlmDailyLimitService | None,
+) -> LlmDailyLimitService:
+    if isinstance(service, LlmDailyLimitService):
+        return service
+    return get_llm_daily_limit_service(request)
+
+
+def _resolve_chat_generation_service(
+    request: Request,
+    service: ChatGenerationService | None,
+) -> ChatGenerationService:
+    if isinstance(service, ChatGenerationService):
+        return service
+    return get_chat_generation_service(request)
 
 BASE_SYSTEM_PROMPT = """
 あなたは、ユーザーをサポートする優秀なAIアシスタントです。
@@ -437,7 +474,12 @@ def _paginate_ephemeral_chat_history(
 
 
 @chat_bp.post("/api/chat", name="chat.chat")
-async def chat(request: Request):
+async def chat(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+    chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
+):
     # 1リクエストで「入力検証 → 履歴取得 → LLM応答 → 永続化」までを一貫処理する
     # Handle validation, history load, LLM response, and persistence in one request flow.
     await run_blocking(cleanup_ephemeral_chats)
@@ -460,8 +502,21 @@ async def chat(request: Request):
     # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
     # Enforce guest daily quota with a server-side counter.
     session = request.session
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
+    resolved_chat_generation_service = _resolve_chat_generation_service(
+        request,
+        chat_generation_service,
+    )
     if "user_id" not in session:
-        allowed, message = await run_blocking(consume_guest_chat_daily_limit, request)
+        allowed, message = await run_blocking(
+            consume_guest_chat_daily_limit,
+            request,
+            service=resolved_auth_limit_service,
+        )
         if not allowed:
             return jsonify({"error": message or "1日10回までです"}, status_code=429)
 
@@ -542,13 +597,16 @@ async def chat(request: Request):
         return jsonify({"error": str(exc)}, status_code=400)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    if has_active_generation(generation_key):
+    if has_active_generation(generation_key, service=resolved_chat_generation_service):
         return jsonify(
             {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
             status_code=409,
         )
 
-    can_access_llm, _, daily_limit = await run_blocking(consume_llm_daily_quota)
+    can_access_llm, _, daily_limit = await run_blocking(
+        consume_llm_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
     if not can_access_llm:
         return jsonify(
             {
@@ -575,6 +633,7 @@ async def chat(request: Request):
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                service=resolved_chat_generation_service,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -604,7 +663,10 @@ async def chat(request: Request):
 
 
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")
-async def chat_stop(request: Request):
+async def chat_stop(
+    request: Request,
+    chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
+):
     # 生成中ジョブを停止する前に、対象ルームのアクセス権を再検証する
     # Re-validate room access before cancelling in-flight generation jobs.
     data, error_response = await require_json_dict(request)
@@ -616,6 +678,10 @@ async def chat_stop(request: Request):
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
 
     session = request.session
+    resolved_chat_generation_service = _resolve_chat_generation_service(
+        request,
+        chat_generation_service,
+    )
     sid = None
     user_id = session.get("user_id")
 
@@ -640,7 +706,11 @@ async def chat_stop(request: Request):
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    cancelled = await run_blocking(cancel_generation_job, generation_key)
+    cancelled = await run_blocking(
+        cancel_generation_job,
+        generation_key,
+        service=resolved_chat_generation_service,
+    )
     return jsonify({"cancelled": cancelled})
 
 
@@ -691,7 +761,10 @@ async def get_chat_history(request: Request):
 
 
 @chat_bp.get("/api/chat_generation_stream", name="chat.chat_generation_stream")
-async def chat_generation_stream(request: Request):
+async def chat_generation_stream(
+    request: Request,
+    chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
+):
     # 既存生成ジョブへ再接続するためのSSEエンドポイント
     # SSE endpoint for reconnecting to an existing generation job.
     await run_blocking(cleanup_ephemeral_chats)
@@ -700,6 +773,10 @@ async def chat_generation_stream(request: Request):
         return jsonify({"error": "room_id is required"}, status_code=400)
 
     session = request.session
+    resolved_chat_generation_service = _resolve_chat_generation_service(
+        request,
+        chat_generation_service,
+    )
     sid = None
     user_id = session.get("user_id")
 
@@ -724,21 +801,33 @@ async def chat_generation_stream(request: Request):
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    job = get_generation_job(generation_key)
+    job = get_generation_job(generation_key, service=resolved_chat_generation_service)
     if job is None:
+        if has_active_generation(generation_key, service=resolved_chat_generation_service):
+            return jsonify(
+                {"error": "生成ジョブは進行中ですが、このインスタンスでは再接続できません。"},
+                status_code=409,
+            )
         return jsonify({"error": "生成ジョブが見つかりません"}, status_code=404)
 
     return _build_llm_stream_response(job)
 
 
 @chat_bp.get("/api/chat_generation_status", name="chat.chat_generation_status")
-async def chat_generation_status(request: Request):
+async def chat_generation_status(
+    request: Request,
+    chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
+):
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
 
     session = request.session
+    resolved_chat_generation_service = _resolve_chat_generation_service(
+        request,
+        chat_generation_service,
+    )
     sid = None
     user_id = session.get("user_id")
 
@@ -763,7 +852,10 @@ async def chat_generation_status(request: Request):
             return jsonify({"error": "該当ルームが存在しません"}, status_code=404)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    job = get_generation_job(generation_key)
-    is_generating = job is not None and not job.is_done
+    job = get_generation_job(generation_key, service=resolved_chat_generation_service)
+    is_generating = has_active_generation(
+        generation_key,
+        service=resolved_chat_generation_service,
+    )
     has_replayable_job = job is not None
     return jsonify({"is_generating": is_generating, "has_replayable_job": has_replayable_job})

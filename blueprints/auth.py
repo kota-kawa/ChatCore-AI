@@ -73,9 +73,11 @@ from services.web import (
     url_for,
 )
 from services.auth_limits import (
+    AuthLimitService,
     consume_auth_email_send_limits,
     consume_passkey_auth_options_limit,
     consume_passkey_auth_verify_limit,
+    get_auth_limit_service,
 )
 from services.request_models import AuthCodeRequest, EmailRequest
 from services.async_utils import run_blocking
@@ -111,7 +113,11 @@ from services.users import (
     GOOGLE_AUTH_PROVIDER,
 )
 from services.email_service import send_email
-from services.llm_daily_limit import consume_auth_email_daily_quota
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_auth_email_daily_quota,
+    get_llm_daily_limit_service,
+)
 from services.runtime_config import is_production_env
 from services.security import constant_time_compare, generate_verification_code
 from blueprints.verification import (
@@ -204,6 +210,24 @@ def _google_login_unavailable_response() -> Any:
 
 def _passkey_unavailable_response() -> Any:
     return jsonify({"status": "fail", "error": PASSKEY_UNAVAILABLE_ERROR}, status_code=503)
+
+
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
+
+
+def _resolve_llm_daily_limit_service(
+    request: Request,
+    service: LlmDailyLimitService | None,
+) -> LlmDailyLimitService:
+    if isinstance(service, LlmDailyLimitService):
+        return service
+    return get_llm_daily_limit_service(request)
 
 def _user_id_from_session(session: dict[str, Any]) -> int | None:
     user_id = session.get("user_id")
@@ -427,7 +451,16 @@ async def logout(request: Request):
 
 
 @auth_bp.post("/api/auth/send_email_code", name="auth.api_send_email_code")
-async def api_send_email_code(request: Request):
+async def api_send_email_code(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
     data, error_response = await require_json_dict(request, status="fail")
     if error_response is not None:
         return error_response
@@ -443,8 +476,16 @@ async def api_send_email_code(request: Request):
 
     user = await run_blocking(get_user_by_email, payload.email)
     if user and user.get("is_verified"):
-        return await api_send_login_code(request)
-    return await api_send_verification_email(request)
+        return await api_send_login_code(
+            request,
+            auth_limit_service=resolved_auth_limit_service,
+            llm_daily_limit_service=resolved_llm_daily_limit_service,
+        )
+    return await api_send_verification_email(
+        request,
+        auth_limit_service=resolved_auth_limit_service,
+        llm_daily_limit_service=resolved_llm_daily_limit_service,
+    )
 
 
 @auth_bp.post("/api/auth/verify_email_code", name="auth.api_verify_email_code")
@@ -612,7 +653,11 @@ async def api_passkey_register_verify(request: Request):
 
 
 @auth_bp.post("/api/passkeys/authenticate/options", name="auth.api_passkey_authenticate_options")
-async def api_passkey_authenticate_options(request: Request):
+async def api_passkey_authenticate_options(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     if (
         generate_authentication_options is None
         or options_to_json is None
@@ -621,7 +666,10 @@ async def api_passkey_authenticate_options(request: Request):
     ):
         return _passkey_unavailable_response()
 
-    allowed, limit_error = consume_passkey_auth_options_limit(request)
+    allowed, limit_error = consume_passkey_auth_options_limit(
+        request,
+        service=resolved_auth_limit_service,
+    )
     if not allowed:
         return jsonify({"status": "fail", "error": limit_error}, status_code=429)
 
@@ -637,14 +685,21 @@ async def api_passkey_authenticate_options(request: Request):
 
 
 @auth_bp.post("/api/passkeys/authenticate/verify", name="auth.api_passkey_authenticate_verify")
-async def api_passkey_authenticate_verify(request: Request):
+async def api_passkey_authenticate_verify(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     if (
         verify_authentication_response is None
         or base64url_to_bytes is None
     ):
         return _passkey_unavailable_response()
 
-    allowed, limit_error = consume_passkey_auth_verify_limit(request)
+    allowed, limit_error = consume_passkey_auth_verify_limit(
+        request,
+        service=resolved_auth_limit_service,
+    )
     if not allowed:
         return jsonify({"status": "fail", "error": limit_error}, status_code=429)
 
@@ -1030,7 +1085,16 @@ async def google_callback(request: Request):
     )
 
 @auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")
-async def api_send_login_code(request: Request):
+async def api_send_login_code(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
     """
     ログイン用の認証コード送信 API
     - POST JSON: { "email": "ユーザーのメールアドレス" }
@@ -1055,7 +1119,11 @@ async def api_send_login_code(request: Request):
         return validation_error
 
     email = payload.email
-    allowed, limit_error = consume_auth_email_send_limits(request, email)
+    allowed, limit_error = consume_auth_email_send_limits(
+        request,
+        email,
+        service=resolved_auth_limit_service,
+    )
     if not allowed:
         return jsonify({"status": "fail", "error": limit_error}, status_code=429)
 
@@ -1065,7 +1133,10 @@ async def api_send_login_code(request: Request):
             {"status": "fail", "error": "ユーザーが存在しないか、認証されていません"},
             status_code=400,
         )
-    can_send_email, _, daily_limit = await run_blocking(consume_auth_email_daily_quota)
+    can_send_email, _, daily_limit = await run_blocking(
+        consume_auth_email_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
     if not can_send_email:
         return jsonify(
             {

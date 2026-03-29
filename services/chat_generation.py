@@ -3,15 +3,22 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
+
+from fastapi import Request
+
+from services.cache import get_redis_client
 
 from .llm import LlmConfigurationError, LlmServiceError, get_llm_response_stream
 
 logger = logging.getLogger(__name__)
 
 JOB_RETENTION_SECONDS = 300
+DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
+_ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
 
 
 class ChatGenerationAlreadyRunningError(RuntimeError):
@@ -31,10 +38,13 @@ class ChatGenerationJob:
         conversation_messages: list[dict[str, str]],
         model: str,
         persist_response: Callable[[str], None],
+        on_finished: Callable[[], None] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
         self._persist_response = persist_response
+        self._on_finished = on_finished
+        self._on_finished_called = False
         self._events: list[ChatGenerationEvent] = []
         self._condition = threading.Condition()
         self._thread: threading.Thread | None = None
@@ -53,15 +63,17 @@ class ChatGenerationJob:
 
     def cancel(self) -> None:
         """生成をキャンセルし、aborted イベントを発行して完了とする."""
+        callback: Callable[[], None] | None = None
         if self.is_done:
             return
         self._cancelled = True
         with self._condition:
             if not self.is_done:
                 self._events.append(ChatGenerationEvent(event="aborted", payload={}))
-                self.is_done = True
-                self.finished_at = time.monotonic()
+                callback = self._mark_done()
                 self._condition.notify_all()
+        if callback is not None:
+            callback()
 
     def wait(self, timeout: float | None = None) -> bool:
         thread = self._thread
@@ -88,12 +100,24 @@ class ChatGenerationJob:
             yield event
 
     def _publish(self, event: str, payload: dict[str, Any], *, done: bool = False) -> None:
+        callback: Callable[[], None] | None = None
         with self._condition:
             self._events.append(ChatGenerationEvent(event=event, payload=payload))
             if done:
-                self.is_done = True
-                self.finished_at = time.monotonic()
+                callback = self._mark_done()
             self._condition.notify_all()
+        if callback is not None:
+            callback()
+
+    def _mark_done(self) -> Callable[[], None] | None:
+        if self.is_done:
+            return None
+        self.is_done = True
+        self.finished_at = time.monotonic()
+        if self._on_finished_called or self._on_finished is None:
+            return None
+        self._on_finished_called = True
+        return self._on_finished
 
     def _run(self) -> None:
         chunks: list[str] = []
@@ -117,6 +141,13 @@ class ChatGenerationJob:
             self.error_message = "内部エラーが発生しました。"
             self._publish("error", {"message": self.error_message}, done=True)
             return
+        except Exception:
+            if self._cancelled:
+                return
+            logger.exception("Unexpected error while generating chat response.")
+            self.error_message = "内部エラーが発生しました。"
+            self._publish("error", {"message": self.error_message}, done=True)
+            return
 
         if self._cancelled:
             return
@@ -135,10 +166,6 @@ class ChatGenerationJob:
         self._publish("done", {"response": bot_reply}, done=True)
 
 
-_jobs: dict[str, ChatGenerationJob] = {}
-_jobs_lock = threading.Lock()
-
-
 def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: str | None = None) -> str:
     if user_id is not None:
         return f"user:{user_id}:{chat_room_id}"
@@ -147,42 +174,224 @@ def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: 
     raise ValueError("Either user_id or sid is required to build a generation key.")
 
 
-def _cleanup_expired_jobs(now: float | None = None) -> None:
-    current_time = time.monotonic() if now is None else now
-    expired_keys: list[str] = []
+class ChatGenerationService:
+    def __init__(
+        self,
+        *,
+        job_retention_seconds: int = JOB_RETENTION_SECONDS,
+        active_job_lock_ttl_seconds: int = DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS,
+        redis_client_getter: Callable[[], Any | None] | None = None,
+    ) -> None:
+        self._job_retention_seconds = job_retention_seconds
+        self._active_job_lock_ttl_seconds = max(active_job_lock_ttl_seconds, 1)
+        self._redis_client_getter = redis_client_getter
+        self._jobs: dict[str, ChatGenerationJob] = {}
+        self._jobs_lock = threading.Lock()
 
-    with _jobs_lock:
-        for key, job in _jobs.items():
-            if not job.is_done or job.finished_at is None:
-                continue
-            if current_time - job.finished_at >= JOB_RETENTION_SECONDS:
-                expired_keys.append(key)
+    def _get_redis_client(self) -> Any | None:
+        if self._redis_client_getter is not None:
+            return self._redis_client_getter()
+        return get_redis_client()
 
-        for key in expired_keys:
-            _jobs.pop(key, None)
+    def _active_lock_key(self, job_key: str) -> str:
+        return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
+
+    def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return True, None
+
+        lock_key = self._active_lock_key(job_key)
+        lock_token = uuid.uuid4().hex
+        try:
+            acquired = redis_client.set(
+                lock_key,
+                lock_token,
+                nx=True,
+                ex=self._active_job_lock_ttl_seconds,
+            )
+        except Exception:
+            logger.exception(
+                "Redis chat generation lock acquisition failed; falling back to in-memory."
+            )
+            return True, None
+
+        if acquired:
+            return True, lock_token
+        return False, None
+
+    def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
+        if not lock_token:
+            return
+
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return
+
+        lua_script = """
+local key = KEYS[1]
+local token = ARGV[1]
+if redis.call('GET', key) == token then
+  return redis.call('DEL', key)
+end
+return 0
+"""
+        try:
+            redis_client.eval(lua_script, 1, self._active_lock_key(job_key), lock_token)
+        except Exception:
+            logger.exception("Redis chat generation lock release failed.")
+
+    def _has_distributed_active_lock(self, job_key: str) -> bool:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return False
+        try:
+            return bool(redis_client.exists(self._active_lock_key(job_key)))
+        except Exception:
+            logger.exception("Redis chat generation lock existence check failed.")
+            return False
+
+    def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
+        running_jobs: list[ChatGenerationJob] = []
+        with self._jobs_lock:
+            if cancel_running:
+                running_jobs = [
+                    job
+                    for job in self._jobs.values()
+                    if not job.is_done
+                ]
+            self._jobs.clear()
+
+        for job in running_jobs:
+            job.cancel()
+
+    def _cleanup_expired_jobs(self, now: float | None = None) -> None:
+        current_time = time.monotonic() if now is None else now
+        expired_keys: list[str] = []
+
+        with self._jobs_lock:
+            for key, job in self._jobs.items():
+                if not job.is_done or job.finished_at is None:
+                    continue
+                if current_time - job.finished_at >= self._job_retention_seconds:
+                    expired_keys.append(key)
+
+            for key in expired_keys:
+                self._jobs.pop(key, None)
+
+    def cancel_generation_job(self, job_key: str) -> bool:
+        """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
+        with self._jobs_lock:
+            job = self._jobs.get(job_key)
+        if job is None or job.is_done:
+            return False
+        job.cancel()
+        return True
+
+    def has_active_generation(self, job_key: str) -> bool:
+        self._cleanup_expired_jobs()
+        with self._jobs_lock:
+            job = self._jobs.get(job_key)
+            if job is not None and not job.is_done:
+                return True
+        return self._has_distributed_active_lock(job_key)
+
+    def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
+        self._cleanup_expired_jobs()
+        with self._jobs_lock:
+            return self._jobs.get(job_key)
+
+    def start_generation_job(
+        self,
+        job_key: str,
+        *,
+        conversation_messages: list[dict[str, str]],
+        model: str,
+        persist_response: Callable[[str], None],
+    ) -> ChatGenerationJob:
+        self._cleanup_expired_jobs()
+        acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
+        if not acquired_lock:
+            raise ChatGenerationAlreadyRunningError(job_key)
+
+        with self._jobs_lock:
+            existing_job = self._jobs.get(job_key)
+            if existing_job is not None and not existing_job.is_done:
+                self._release_active_job_lock(job_key, lock_token)
+                raise ChatGenerationAlreadyRunningError(job_key)
+
+            job = ChatGenerationJob(
+                conversation_messages=conversation_messages,
+                model=model,
+                persist_response=persist_response,
+                on_finished=lambda: self._release_active_job_lock(job_key, lock_token),
+            )
+            self._jobs[job_key] = job
+
+        try:
+            job.start()
+        except Exception:
+            with self._jobs_lock:
+                self._jobs.pop(job_key, None)
+            self._release_active_job_lock(job_key, lock_token)
+            raise
+        return job
 
 
-def cancel_generation_job(job_key: str) -> bool:
-    """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
-    with _jobs_lock:
-        job = _jobs.get(job_key)
-    if job is None or job.is_done:
-        return False
-    job.cancel()
-    return True
+_default_chat_generation_service = ChatGenerationService()
 
 
-def has_active_generation(job_key: str) -> bool:
-    _cleanup_expired_jobs()
-    with _jobs_lock:
-        job = _jobs.get(job_key)
-        return job is not None and not job.is_done
+def get_chat_generation_service(request: Request = None) -> ChatGenerationService:
+    if request is not None:
+        app = request.scope.get("app")
+        state = getattr(app, "state", None)
+        service = getattr(state, "chat_generation_service", None)
+        if isinstance(service, ChatGenerationService):
+            return service
+    return _default_chat_generation_service
 
 
-def get_generation_job(job_key: str) -> ChatGenerationJob | None:
-    _cleanup_expired_jobs()
-    with _jobs_lock:
-        return _jobs.get(job_key)
+def clear_generation_job_state(*, cancel_running: bool = False) -> None:
+    get_chat_generation_service().reset_in_memory_state(cancel_running=cancel_running)
+
+
+def cancel_generation_job(
+    job_key: str,
+    *,
+    service: ChatGenerationService | None = None,
+) -> bool:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.cancel_generation_job(job_key)
+
+
+def has_active_generation(
+    job_key: str,
+    *,
+    service: ChatGenerationService | None = None,
+) -> bool:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.has_active_generation(job_key)
+
+
+def get_generation_job(
+    job_key: str,
+    *,
+    service: ChatGenerationService | None = None,
+) -> ChatGenerationJob | None:
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.get_generation_job(job_key)
 
 
 def start_generation_job(
@@ -191,20 +400,16 @@ def start_generation_job(
     conversation_messages: list[dict[str, str]],
     model: str,
     persist_response: Callable[[str], None],
+    service: ChatGenerationService | None = None,
 ) -> ChatGenerationJob:
-    _cleanup_expired_jobs()
-
-    with _jobs_lock:
-        existing_job = _jobs.get(job_key)
-        if existing_job is not None and not existing_job.is_done:
-            raise ChatGenerationAlreadyRunningError(job_key)
-
-        job = ChatGenerationJob(
-            conversation_messages=conversation_messages,
-            model=model,
-            persist_response=persist_response,
-        )
-        _jobs[job_key] = job
-
-    job.start()
-    return job
+    target = (
+        service
+        if isinstance(service, ChatGenerationService)
+        else get_chat_generation_service()
+    )
+    return target.start_generation_job(
+        job_key,
+        conversation_messages=conversation_messages,
+        model=model,
+        persist_response=persist_response,
+    )

@@ -9,7 +9,7 @@ class LlmDailyLimitTestCase(unittest.TestCase):
     def setUp(self):
         self.original_limit = os.environ.get("LLM_DAILY_API_LIMIT")
         self.original_auth_email_limit = os.environ.get("AUTH_EMAIL_DAILY_SEND_LIMIT")
-        llm_daily_limit._in_memory_daily_counts.clear()
+        llm_daily_limit.clear_in_memory_daily_limit_state()
 
     def tearDown(self):
         if self.original_limit is None:
@@ -22,7 +22,7 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         else:
             os.environ["AUTH_EMAIL_DAILY_SEND_LIMIT"] = self.original_auth_email_limit
 
-        llm_daily_limit._in_memory_daily_counts.clear()
+        llm_daily_limit.clear_in_memory_daily_limit_state()
 
     def test_custom_limit_blocks_after_reaching_cap(self):
         os.environ["LLM_DAILY_API_LIMIT"] = "2"

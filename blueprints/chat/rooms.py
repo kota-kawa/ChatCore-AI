@@ -1,9 +1,13 @@
 import logging
 from typing import Any
 
-from fastapi import Request
+from fastapi import Depends, Request
 
-from services.auth_limits import consume_guest_chat_daily_limit
+from services.auth_limits import (
+    AuthLimitService,
+    consume_guest_chat_daily_limit,
+    get_auth_limit_service,
+)
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.chat_service import (
@@ -31,6 +35,15 @@ from services.web import (
 from . import chat_bp, cleanup_ephemeral_chats, ephemeral_store, get_session_id
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
 
 
 def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
@@ -96,7 +109,11 @@ def _delete_room_for_user(room_id: str, user_id: int) -> tuple[dict[str, str], i
 
 
 @chat_bp.post("/api/new_chat_room", name="chat.new_chat_room")
-async def new_chat_room(request: Request):
+async def new_chat_room(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
     if error_response is not None:
@@ -136,7 +153,11 @@ async def new_chat_room(request: Request):
     else:
         # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
         # Enforce guest daily quota with a server-side counter.
-        allowed, message = await run_blocking(consume_guest_chat_daily_limit, request)
+        allowed, message = await run_blocking(
+            consume_guest_chat_daily_limit,
+            request,
+            service=resolved_auth_limit_service,
+        )
         if not allowed:
             return jsonify({"error": message or "1日10回までです"}, status_code=429)
 

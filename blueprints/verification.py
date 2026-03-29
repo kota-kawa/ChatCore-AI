@@ -4,11 +4,19 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from services.async_utils import run_blocking
-from services.auth_limits import consume_auth_email_send_limits
+from services.auth_limits import (
+    AuthLimitService,
+    consume_auth_email_send_limits,
+    get_auth_limit_service,
+)
 from services.auth_session import establish_authenticated_session
 from services.csrf import require_csrf
 from services.email_service import send_email
-from services.llm_daily_limit import consume_auth_email_daily_quota
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_auth_email_daily_quota,
+    get_llm_daily_limit_service,
+)
 from services.request_models import AuthCodeRequest, EmailRequest
 from services.security import constant_time_compare, generate_verification_code
 from services.users import (
@@ -38,8 +46,30 @@ def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code_issued_at", None)
     session.pop("verification_code_attempts", None)
 
+
+def _resolve_auth_limit_service(
+    request: Request,
+    service: AuthLimitService | None,
+) -> AuthLimitService:
+    if isinstance(service, AuthLimitService):
+        return service
+    return get_auth_limit_service(request)
+
+
+def _resolve_llm_daily_limit_service(
+    request: Request,
+    service: LlmDailyLimitService | None,
+) -> LlmDailyLimitService:
+    if isinstance(service, LlmDailyLimitService):
+        return service
+    return get_llm_daily_limit_service(request)
+
 @verification_bp.post("/api/send_verification_email", name="verification.api_send_verification_email")
-async def api_send_verification_email(request: Request):
+async def api_send_verification_email(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
     """
     register.html から「確認メール送信」ボタン押下で呼ばれる
     - メールアドレスをDBに登録 (is_verified=False)
@@ -64,12 +94,25 @@ async def api_send_verification_email(request: Request):
     if validation_error is not None:
         return validation_error
 
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
+
     email = payload.email
-    allowed, limit_error = consume_auth_email_send_limits(request, email)
+    allowed, limit_error = consume_auth_email_send_limits(
+        request,
+        email,
+        service=resolved_auth_limit_service,
+    )
     if not allowed:
         return jsonify({"status": "fail", "error": limit_error}, status_code=429)
 
-    can_send_email, _, daily_limit = await run_blocking(consume_auth_email_daily_quota)
+    can_send_email, _, daily_limit = await run_blocking(
+        consume_auth_email_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
     if not can_send_email:
         return jsonify(
             {
