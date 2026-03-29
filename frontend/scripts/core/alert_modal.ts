@@ -180,7 +180,7 @@ class GlobalConfirmModal {
 
     const messageEl = this.rootEl.querySelector(".cc-alert-modal__message");
     const closeBtn = this.rootEl.querySelector(".cc-alert-modal__close");
-    const cancelBtn = this.rootEl.querySelector('[data-cc-confirm-cancel="true"]');
+    const cancelBtn = this.rootEl.querySelector('button[data-cc-confirm-cancel="true"]');
     const okBtn = this.rootEl.querySelector('[data-cc-confirm-ok="true"]');
 
     if (
