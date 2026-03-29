@@ -5,9 +5,16 @@ from services import email_service
 
 
 class FakeSMTP:
-    def __init__(self, *, fail_on_starttls: bool = False, fail_on_login: bool = False):
+    def __init__(
+        self,
+        *,
+        fail_on_starttls: bool = False,
+        fail_on_login: bool = False,
+        fail_on_send_message: bool = False,
+    ):
         self.fail_on_starttls = fail_on_starttls
         self.fail_on_login = fail_on_login
+        self.fail_on_send_message = fail_on_send_message
         self.starttls_called = False
         self.login_args = None
         self.sent_message = None
@@ -31,6 +38,8 @@ class FakeSMTP:
             raise RuntimeError("login failed")
 
     def send_message(self, message):
+        if self.fail_on_send_message:
+            raise RuntimeError("send_message failed")
         self.sent_message = message
 
 
@@ -72,13 +81,14 @@ class EmailServiceCredentialsTestCase(unittest.TestCase):
             {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
             clear=True,
         ):
-            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp):
+            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp) as mock_smtp:
                 email_service.send_email(
                     to_address="receiver@example.com",
                     subject="subject",
                     body_text="body",
                 )
 
+        mock_smtp.assert_called_once_with("smtp.gmail.com", 587)
         self.assertTrue(fake_smtp.starttls_called)
         self.assertEqual(fake_smtp.login_args, ("sender@example.com", "app-password"))
         self.assertEqual(fake_smtp.sent_message["To"], "receiver@example.com")
@@ -117,6 +127,35 @@ class EmailServiceCredentialsTestCase(unittest.TestCase):
                     )
 
         self.assertTrue(fake_smtp.closed)
+
+    def test_send_email_closes_connection_when_send_message_raises(self):
+        fake_smtp = FakeSMTP(fail_on_send_message=True)
+        with patch.dict(
+            "os.environ",
+            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
+            clear=True,
+        ):
+            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp):
+                with self.assertRaises(RuntimeError):
+                    email_service.send_email(
+                        to_address="receiver@example.com",
+                        subject="subject",
+                        body_text="body",
+                    )
+
+        self.assertTrue(fake_smtp.closed)
+
+    def test_send_email_does_not_open_smtp_when_credentials_are_missing(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("services.email_service.smtplib.SMTP") as mock_smtp:
+                with self.assertRaises(RuntimeError):
+                    email_service.send_email(
+                        to_address="receiver@example.com",
+                        subject="subject",
+                        body_text="body",
+                    )
+
+        mock_smtp.assert_not_called()
 
 
 if __name__ == "__main__":

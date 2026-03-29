@@ -8,6 +8,7 @@ import httpx
 from blueprints.auth import auth_bp
 from blueprints.memo import memo_bp
 from services.csrf import CSRF_HEADER_NAME, CSRF_SESSION_KEY
+from services.db import Error
 from tests.helpers.app_helpers import build_session_test_app
 
 
@@ -176,6 +177,59 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
             self.assertEqual(response.status_code, 401)
             self.assertEqual(response.json(), {"status": "fail", "error": "ログインが必要です"})
+
+        asyncio.run(scenario())
+
+    def test_memo_recent_endpoint_falls_back_to_empty_when_db_read_fails(self):
+        async def scenario():
+            async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
+                with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
+                    response = await client.get("/memo/api/recent?limit=5")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"memos": []})
+
+        asyncio.run(scenario())
+
+    def test_memo_recent_endpoint_db_failure_is_stable_under_concurrency(self):
+        async def scenario():
+            async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
+                with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
+                    responses = await asyncio.gather(
+                        client.get("/memo/api/recent?limit=5"),
+                        client.get("/memo/api/recent?limit=5"),
+                        client.get("/memo/api/recent?limit=5"),
+                        client.get("/memo/api/recent?limit=5"),
+                    )
+
+            for response in responses:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"memos": []})
+
+        asyncio.run(scenario())
+
+    def test_memo_create_endpoint_returns_500_when_db_transaction_fails(self):
+        async def scenario():
+            async with self._make_client() as client:
+                await self._set_session(client, {"user_id": 7})
+                with patch("blueprints.memo._insert_memo", side_effect=Error("tx failed")):
+                    response = await self._post_with_csrf(
+                        client,
+                        "/memo/api",
+                        json={
+                            "input_content": "hello",
+                            "ai_response": "ok",
+                            "title": "",
+                            "tags": "",
+                        },
+                    )
+
+            self.assertEqual(response.status_code, 500)
+            payload = response.json()
+            self.assertEqual(payload.get("status"), "fail")
+            self.assertIn("error", payload)
 
         asyncio.run(scenario())
 
