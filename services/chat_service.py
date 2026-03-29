@@ -158,7 +158,10 @@ def create_or_get_shared_chat_token(room_id: str) -> str:
                     row = cursor.fetchone()
                     conn.commit()
                     return row[0] if row else token
-                except Error as exc:
+                except ResourceNotFoundError:
+                    # Missing room is a business condition, not a write failure.
+                    raise
+                except Exception as exc:
                     rollback_connection(conn)
                     if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
                         collision_detected = True
@@ -166,9 +169,6 @@ def create_or_get_shared_chat_token(room_id: str) -> str:
                     if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
-                    raise
-                except BaseException:
-                    rollback_connection(conn)
                     raise
                 finally:
                     cursor.close()
