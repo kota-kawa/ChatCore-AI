@@ -456,6 +456,6 @@ stop_legacy_services
 
 trap - ERR
 
-docker image prune -f >/dev/null 2>&1 || true
+docker system prune -a -f >/dev/null 2>&1 || true
 compose ps
 echo "Active deployment color: ${TARGET_COLOR}"
