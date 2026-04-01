@@ -14,7 +14,13 @@ import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from 
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
 import { formatDateTime } from "../lib/datetime";
-import { toPromptListEntry, toPromptRecord } from "../scripts/user/settings/types";
+import {
+  parseMyPromptsResponse,
+  parsePromptListResponse,
+  parsePromptManageMutationResponse,
+  type PromptListEntry,
+  type PromptRecord
+} from "../scripts/user/settings/types";
 import { truncateTitle } from "../scripts/user/settings/utils";
 
 type SettingsSection = "profile" | "prompts" | "prompt-list" | "notifications" | "security";
@@ -30,9 +36,6 @@ type ProfileFormState = {
   email: string;
   bio: string;
 };
-
-type PromptRecord = ReturnType<typeof toPromptRecord>;
-type PromptListEntry = ReturnType<typeof toPromptListEntry>;
 
 type EditPromptFormState = {
   id: string;
@@ -442,7 +445,7 @@ export default function UserSettingsPage() {
     setMyPromptsLoading(true);
     setMyPromptsError(null);
     try {
-      const { payload } = await fetchJsonOrThrow<{ prompts?: unknown[] }>(
+      const { payload } = await fetchJsonOrThrow(
         "/prompt_manage/api/my_prompts",
         {
           credentials: "same-origin"
@@ -451,9 +454,7 @@ export default function UserSettingsPage() {
           defaultMessage: "プロンプトの取得に失敗しました。"
         }
       );
-
-      const prompts = Array.isArray(payload.prompts) ? payload.prompts.map(toPromptRecord) : [];
-      setMyPrompts(prompts);
+      setMyPrompts(parseMyPromptsResponse(payload));
     } catch (error) {
       setMyPrompts([]);
       setMyPromptsError(error instanceof Error ? error.message : "プロンプトの取得に失敗しました。");
@@ -466,7 +467,7 @@ export default function UserSettingsPage() {
     setPromptListLoading(true);
     setPromptListError(null);
     try {
-      const { payload } = await fetchJsonOrThrow<{ prompts?: unknown[] }>(
+      const { payload } = await fetchJsonOrThrow(
         "/prompt_manage/api/prompt_list",
         {
           credentials: "same-origin"
@@ -475,9 +476,7 @@ export default function UserSettingsPage() {
           defaultMessage: "プロンプトリストの取得に失敗しました。"
         }
       );
-
-      const entries = Array.isArray(payload.prompts) ? payload.prompts.map(toPromptListEntry) : [];
-      setPromptListEntries(entries);
+      setPromptListEntries(parsePromptListResponse(payload));
     } catch (error) {
       setPromptListEntries([]);
       setPromptListError(error instanceof Error ? error.message : "プロンプトリストの取得に失敗しました。");
@@ -683,7 +682,7 @@ export default function UserSettingsPage() {
     }
 
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await fetchJsonOrThrow(
         `/prompt_manage/api/prompts/${promptId}`,
         {
           method: "DELETE",
@@ -693,7 +692,8 @@ export default function UserSettingsPage() {
           defaultMessage: "プロンプトの削除に失敗しました。"
         }
       );
-      alert(asString(payload.message) || "削除しました。");
+      const response = parsePromptManageMutationResponse(payload);
+      alert(response.message || "削除しました。");
       await loadMyPrompts();
     } catch (error) {
       alert(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。");
@@ -726,7 +726,7 @@ export default function UserSettingsPage() {
 
     setPromptSaving(true);
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await fetchJsonOrThrow(
         `/prompt_manage/api/prompts/${editPromptForm.id}`,
         {
           method: "PUT",
@@ -746,7 +746,8 @@ export default function UserSettingsPage() {
           defaultMessage: "プロンプトの更新に失敗しました。"
         }
       );
-      alert(asString(payload.message) || "更新しました。");
+      const response = parsePromptManageMutationResponse(payload);
+      alert(response.message || "更新しました。");
       setEditPromptForm(null);
       await loadMyPrompts();
     } catch (error) {
@@ -769,7 +770,7 @@ export default function UserSettingsPage() {
     }
 
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await fetchJsonOrThrow(
         `/prompt_manage/api/prompt_list/${entryId}`,
         {
           method: "DELETE",
@@ -779,7 +780,8 @@ export default function UserSettingsPage() {
           defaultMessage: "プロンプトリストの削除に失敗しました。"
         }
       );
-      alert(asString(payload.message) || "プロンプトを削除しました。");
+      const response = parsePromptManageMutationResponse(payload);
+      alert(response.message || "プロンプトを削除しました。");
       await loadPromptList();
     } catch (error) {
       alert(error instanceof Error ? error.message : "プロンプトリストの削除に失敗しました。");

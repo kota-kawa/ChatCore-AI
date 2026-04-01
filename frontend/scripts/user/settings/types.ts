@@ -1,63 +1,146 @@
-export type PromptRecord = {
-  id?: string | number;
-  title: string;
-  content: string;
-  category: string;
-  inputExamples: string;
-  outputExamples: string;
-  createdAt?: string;
-};
+import { z } from "zod";
 
-const asString = (value: unknown) => {
-  if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  return String(value);
-};
+const PromptIdSchema = z.union([z.string(), z.number()]);
+const NullableStringSchema = z.string().nullable().optional().transform((value) => value ?? "");
+const OptionalDateTimeSchema = z.string().nullable().optional().transform((value) => {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+});
 
-const asId = (value: unknown) => {
-  if (typeof value === "string" || typeof value === "number") return value;
-  return undefined;
-};
+const PromptRecordApiSchema = z.object({
+  id: PromptIdSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  category: NullableStringSchema,
+  input_examples: NullableStringSchema,
+  output_examples: NullableStringSchema,
+  created_at: OptionalDateTimeSchema
+});
+
+export const PromptRecordSchema = z.object({
+  id: PromptIdSchema.optional(),
+  title: z.string(),
+  content: z.string(),
+  category: z.string(),
+  inputExamples: z.string(),
+  outputExamples: z.string(),
+  createdAt: z.string().optional()
+});
+
+export type PromptRecord = z.infer<typeof PromptRecordSchema>;
+
+function parseWithSchema<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  raw: unknown,
+  invalidMessage: string
+): z.infer<TSchema> {
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(invalidMessage);
+  }
+  return parsed.data;
+}
+
+function normalizePromptRecord(prompt: z.infer<typeof PromptRecordApiSchema>): PromptRecord {
+  return {
+    id: prompt.id,
+    title: prompt.title,
+    content: prompt.content,
+    category: prompt.category,
+    inputExamples: prompt.input_examples,
+    outputExamples: prompt.output_examples,
+    createdAt: prompt.created_at
+  };
+}
 
 export const toPromptRecord = (raw: unknown): PromptRecord => {
-  const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  return {
-    id: asId(obj.id),
-    title: asString(obj.title),
-    content: asString(obj.content),
-    category: asString(obj.category),
-    inputExamples: asString(obj.input_examples),
-    outputExamples: asString(obj.output_examples),
-    createdAt: asString(obj.created_at) || undefined
-  };
+  const prompt = parseWithSchema(PromptRecordApiSchema, raw, "プロンプトデータの形式が不正です。");
+  return normalizePromptRecord(prompt);
 };
 
-export type PromptListEntry = {
-  id?: string | number;
-  promptId?: string | number;
-  prompt: PromptRecord;
-  title: string;
-  content: string;
-  category: string;
-  inputExamples: string;
-  outputExamples: string;
-  createdAt?: string;
-};
+export const PromptListEntrySchema = z.object({
+  id: PromptIdSchema.optional(),
+  promptId: PromptIdSchema.optional(),
+  prompt: PromptRecordSchema,
+  title: z.string(),
+  content: z.string(),
+  category: z.string(),
+  inputExamples: z.string(),
+  outputExamples: z.string(),
+  createdAt: z.string().optional()
+});
 
-export const toPromptListEntry = (raw: unknown): PromptListEntry => {
-  const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  const nestedPrompt = toPromptRecord(obj.prompt);
-  const fallbackPrompt = toPromptRecord(obj);
-  const prompt = nestedPrompt.title || nestedPrompt.content ? nestedPrompt : fallbackPrompt;
+export type PromptListEntry = z.infer<typeof PromptListEntrySchema>;
+
+const PromptListEntryBaseApiSchema = z.object({
+  id: PromptIdSchema.optional(),
+  prompt_id: PromptIdSchema.optional(),
+  created_at: OptionalDateTimeSchema
+});
+
+const PromptListEntryWithNestedPromptApiSchema = PromptListEntryBaseApiSchema.extend({
+  prompt: PromptRecordApiSchema
+});
+
+const PromptListEntryLegacyApiSchema = PromptListEntryBaseApiSchema.merge(PromptRecordApiSchema);
+const PromptListEntryApiSchema = z.union([PromptListEntryWithNestedPromptApiSchema, PromptListEntryLegacyApiSchema]);
+
+function normalizePromptListEntry(entry: z.infer<typeof PromptListEntryApiSchema>): PromptListEntry {
+  const prompt = normalizePromptRecord("prompt" in entry ? entry.prompt : entry);
   return {
-    id: asId(obj.id),
-    promptId: asId(obj.prompt_id),
+    id: entry.id,
+    promptId: entry.prompt_id,
     prompt,
     title: prompt.title,
     content: prompt.content,
     category: prompt.category,
     inputExamples: prompt.inputExamples,
     outputExamples: prompt.outputExamples,
-    createdAt: asString(obj.created_at) || undefined
+    createdAt: entry.created_at
   };
+}
+
+export const toPromptListEntry = (raw: unknown): PromptListEntry => {
+  const entry = parseWithSchema(PromptListEntryApiSchema, raw, "プロンプトリストデータの形式が不正です。");
+  return normalizePromptListEntry(entry);
 };
+
+const MyPromptsApiResponseSchema = z.object({
+  prompts: z.array(PromptRecordApiSchema).default([])
+});
+
+const PromptListApiResponseSchema = z.object({
+  prompts: z.array(PromptListEntryApiSchema).default([])
+});
+
+const PromptManageMutationApiResponseSchema = z.object({
+  message: z.string().optional()
+});
+
+export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
+
+export function parseMyPromptsResponse(raw: unknown): PromptRecord[] {
+  const response = parseWithSchema(
+    MyPromptsApiResponseSchema,
+    raw,
+    "プロンプト一覧レスポンスの形式が不正です。"
+  );
+  return response.prompts.map(normalizePromptRecord);
+}
+
+export function parsePromptListResponse(raw: unknown): PromptListEntry[] {
+  const response = parseWithSchema(
+    PromptListApiResponseSchema,
+    raw,
+    "プロンプトリストレスポンスの形式が不正です。"
+  );
+  return response.prompts.map(normalizePromptListEntry);
+}
+
+export function parsePromptManageMutationResponse(raw: unknown): PromptManageMutationResponse {
+  return parseWithSchema(
+    PromptManageMutationApiResponseSchema,
+    raw,
+    "操作結果レスポンスの形式が不正です。"
+  );
+}
