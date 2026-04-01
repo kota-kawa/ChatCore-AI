@@ -4,16 +4,11 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormE
 import "../../scripts/core/csrf";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
-
-type PromptRecord = {
-  id?: string | number;
-  title: string;
-  content: string;
-  category: string;
-  inputExamples: string;
-  outputExamples: string;
-  createdAt?: string;
-};
+import {
+  parseMyPromptsResponse,
+  parsePromptManageMutationResponse,
+  type PromptRecord
+} from "../../scripts/user/settings/types";
 
 type PromptEditFormState = {
   id: string;
@@ -24,12 +19,6 @@ type PromptEditFormState = {
   outputExamples: string;
 };
 
-type PromptListApiResponse = {
-  prompts?: unknown[];
-  message?: unknown;
-  error?: unknown;
-};
-
 const TITLE_CHAR_LIMIT = 17;
 const CONTENT_CHAR_LIMIT = 160;
 
@@ -38,39 +27,11 @@ function truncateText(text: string, limit: number) {
   return chars.length > limit ? `${chars.slice(0, limit).join("")}...` : text;
 }
 
-function asString(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  return String(value);
-}
-
-function asOptionalString(value: unknown): string | undefined {
-  const normalized = asString(value).trim();
-  return normalized ? normalized : undefined;
-}
-
 function asId(value: unknown): string {
   if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
   return "";
-}
-
-function toPromptRecord(raw: unknown): PromptRecord {
-  const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
-  return {
-    id: (typeof obj.id === "string" || typeof obj.id === "number") ? obj.id : undefined,
-    title: asString(obj.title),
-    content: asString(obj.content),
-    category: asString(obj.category),
-    inputExamples: asString(obj.input_examples),
-    outputExamples: asString(obj.output_examples),
-    createdAt: asOptionalString(obj.created_at)
-  };
 }
 
 function toDisplayDate(createdAt?: string): string {
@@ -289,13 +250,12 @@ export default function PromptManagePage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const { payload } = await fetchJsonOrThrow<PromptListApiResponse>(
+      const { payload } = await fetchJsonOrThrow(
         "/prompt_manage/api/my_prompts",
         { credentials: "same-origin" },
         { defaultMessage: "プロンプトの取得に失敗しました。" }
       );
-      const records = Array.isArray(payload.prompts) ? payload.prompts.map(toPromptRecord) : [];
-      setPrompts(records);
+      setPrompts(parseMyPromptsResponse(payload));
     } catch (error) {
       setPrompts([]);
       setLoadError(error instanceof Error ? error.message : "プロンプトの取得に失敗しました。");
@@ -356,7 +316,7 @@ export default function PromptManagePage() {
     }
 
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await fetchJsonOrThrow(
         `/prompt_manage/api/prompts/${promptId}`,
         {
           method: "DELETE",
@@ -369,8 +329,8 @@ export default function PromptManagePage() {
           defaultMessage: "プロンプトの削除に失敗しました。"
         }
       );
-
-      alert(typeof payload.message === "string" ? payload.message : "削除しました。");
+      const response = parsePromptManageMutationResponse(payload);
+      alert(response.message || "削除しました。");
       setPrompts((prev) => prev.filter((entry) => asId(entry.id) !== promptId));
     } catch (error) {
       alert(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。");
@@ -403,7 +363,7 @@ export default function PromptManagePage() {
 
     setIsSaving(true);
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await fetchJsonOrThrow(
         `/prompt_manage/api/prompts/${editFormState.id}`,
         {
           method: "PUT",
@@ -423,8 +383,8 @@ export default function PromptManagePage() {
           defaultMessage: "プロンプトの更新に失敗しました。"
         }
       );
-
-      alert(typeof payload.message === "string" ? payload.message : "更新しました。");
+      const response = parsePromptManageMutationResponse(payload);
+      alert(response.message || "更新しました。");
       setEditFormState(null);
       await loadMyPrompts();
     } catch (error) {
