@@ -12,6 +12,7 @@ from services.csrf import require_csrf
 from services.db import Error, get_db_connection
 from services.error_messages import ERROR_LOGIN_REQUIRED, ERROR_TOKEN_REQUIRED
 from services.memo_share import create_or_get_shared_memo_token, get_shared_memo_payload
+from services.datetime_serialization import serialize_datetime_iso
 from services.request_models import ShareMemoRequest
 from services.web import (
     flash,
@@ -84,12 +85,11 @@ def _fetch_recent_memos(user_id: int, limit: int = 10) -> list[dict[str, Any]]:
 
 def _serialize_memo(memo: dict[str, Any]) -> dict[str, Any]:
     created_at = memo.get("created_at")
-    created_at_str = created_at.strftime("%Y-%m-%d %H:%M") if created_at else None
     return {
         "id": memo.get("id"),
         "title": memo.get("title"),
         "tags": memo.get("tags"),
-        "created_at": created_at_str,
+        "created_at": serialize_datetime_iso(created_at),
         "input_content": memo.get("input_content") or "",
         "ai_response": memo.get("ai_response") or "",
     }

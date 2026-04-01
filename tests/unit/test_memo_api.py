@@ -39,7 +39,29 @@ class MemoApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
-        self.assertEqual(payload["memos"][0]["created_at"], "2024-01-01 09:30")
+        self.assertEqual(payload["memos"][0]["created_at"], "2024-01-01T09:30:00")
+
+    def test_recent_memos_serializes_none_created_at(self):
+        sample = {
+            "id": 1,
+            "title": "サンプル",
+            "tags": "仕事",
+            "created_at": None,
+            "input_content": "input",
+            "ai_response": "response",
+        }
+        request = make_request(
+            path="/memo/api/recent",
+            query_string=b"limit=5",
+            session={"user_id": 7},
+        )
+
+        with patch("blueprints.memo._fetch_recent_memos", return_value=[sample]):
+            response = asyncio.run(api_recent_memos(request, limit=5))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertIsNone(payload["memos"][0]["created_at"])
 
     def test_recent_memos_requires_login(self):
         request = make_request(path="/memo/api/recent", query_string=b"limit=5")
@@ -163,7 +185,7 @@ class MemoApiTestCase(unittest.TestCase):
                     "memo": {
                         "id": 5,
                         "title": "共有メモ",
-                        "created_at": "2024-01-01 09:30",
+                        "created_at": "2024-01-01T09:30:00",
                         "tags": "仕事",
                         "input_content": "input",
                         "ai_response": "response",

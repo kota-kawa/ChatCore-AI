@@ -4,6 +4,7 @@ from typing import Any
 
 from .api_errors import ForbiddenOperationError, ResourceNotFoundError
 from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from .datetime_serialization import serialize_datetime_iso
 from .error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
 
 UNIQUE_VIOLATION_PGCODE = "23505"
@@ -218,7 +219,7 @@ def get_shared_chat_room_payload(
                     {
                         "message": message,
                         "sender": sender,
-                        "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "timestamp": serialize_datetime_iso(timestamp),
                     }
                 )
 
@@ -226,7 +227,7 @@ def get_shared_chat_room_payload(
                 "room": {
                     "id": room_id,
                     "title": title,
-                    "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_at": serialize_datetime_iso(created_at),
                 },
                 "messages": messages,
             }

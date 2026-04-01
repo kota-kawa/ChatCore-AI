@@ -1,6 +1,7 @@
 import type { PromptData, PromptType } from "./types";
 import { CONTENT_CHAR_LIMIT, TITLE_CHAR_LIMIT } from "./constants";
 import { escapeHtml } from "../core/html";
+import { formatDate } from "../../lib/datetime";
 
 export function truncateText(text: string, limit: number) {
   const safeText = text || "";
@@ -17,14 +18,7 @@ export function truncateContent(content: string) {
 }
 
 export function formatPromptDate(createdAt?: string) {
-  if (!createdAt) return "";
-  const parsedDate = new Date(createdAt);
-  if (Number.isNaN(parsedDate.getTime())) return "";
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(parsedDate);
+  return formatDate(createdAt);
 }
 
 export { escapeHtml };

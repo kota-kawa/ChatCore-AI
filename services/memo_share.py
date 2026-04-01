@@ -5,6 +5,7 @@ from typing import Any
 
 from .api_errors import ResourceNotFoundError
 from .db import get_db_connection
+from .datetime_serialization import serialize_datetime_iso
 from .error_messages import ERROR_MEMO_NOT_FOUND_FOR_SHARE, ERROR_SHARED_LINK_NOT_FOUND
 
 UNIQUE_VIOLATION_PGCODE = "23505"
@@ -80,7 +81,7 @@ def get_shared_memo_payload(token: str) -> dict[str, Any]:
                     "id": row.get("id"),
                     "title": row.get("title") or "保存したメモ",
                     "tags": row.get("tags") or "",
-                    "created_at": created_at.strftime("%Y-%m-%d %H:%M") if created_at else None,
+                    "created_at": serialize_datetime_iso(created_at),
                     "input_content": row.get("input_content") or "",
                     "ai_response": row.get("ai_response") or "",
                 }

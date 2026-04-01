@@ -54,6 +54,11 @@ from services.llm import (
     is_retryable_llm_error,
     validate_model_name,
 )
+from services.chat_contract import (
+    CHAT_HISTORY_PAGE_SIZE_DEFAULT,
+    CHAT_HISTORY_PAGE_SIZE_MAX,
+)
+from services.datetime_serialization import serialize_datetime_iso
 from services.request_models import ChatMessageRequest
 from services.web import (
     jsonify,
@@ -75,8 +80,6 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
-CHAT_HISTORY_PAGE_SIZE_DEFAULT = 50
-CHAT_HISTORY_PAGE_SIZE_MAX = 100
 LLM_CONTEXT_MAX_HISTORY_MESSAGES = 40
 LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
 LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
@@ -467,7 +470,7 @@ def _fetch_chat_history(
                     "id": message_id,
                     "message": msg,
                     "sender": sender,
-                    "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp": serialize_datetime_iso(ts),
                 }
             )
 
