@@ -2,6 +2,7 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import MarkdownContent from "../../../components/MarkdownContent";
+import { formatDateTime } from "../../../lib/datetime";
 import { fetchJson } from "../../../scripts/core/runtime_validation";
 
 type SharedMemo = {
@@ -70,7 +71,7 @@ export default function SharedMemoPage() {
           <article className="shared-memo-shell">
             <header className="shared-memo-header">
               <h1>{title}</h1>
-              {memo.created_at ? <p>保存日時: {memo.created_at}</p> : null}
+              {memo.created_at ? <p>保存日時: {formatDateTime(memo.created_at) || memo.created_at}</p> : null}
               <div className="shared-memo-tags">
                 {tags.length ? tags.map((tag) => <span key={tag}>{tag}</span>) : <span>タグなし</span>}
               </div>

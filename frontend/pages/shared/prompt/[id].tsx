@@ -1,6 +1,7 @@
 import Head from "next/head";
 import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../../components/MarkdownContent";
+import { formatDateTime } from "../../../lib/datetime";
 
 type SharedPrompt = {
   id?: number | string;
@@ -30,16 +31,7 @@ type SharedPromptPageProps = {
 type SharedPromptResponse = SharedPromptPayload;
 
 function formatDate(value?: string) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(parsed);
+  return formatDateTime(value) || value || "";
 }
 
 function normalizeHostHeader(header: string | string[] | undefined) {

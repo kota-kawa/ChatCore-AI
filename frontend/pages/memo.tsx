@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import useSWR from "swr";
 
 import "../scripts/core/csrf";
+import { formatDateTime } from "../lib/datetime";
 import { formatLLMOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
 import { setLoggedInState } from "../scripts/core/app_state";
@@ -257,7 +258,7 @@ export default function MemoPage() {
     setSelectedMemo({
       id: String(memo.id),
       title: memo.title || "保存したメモ",
-      date: memo.created_at || "",
+      date: formatDateTime(memo.created_at) || memo.created_at || "",
       tags,
       input: parseMemoText(memo.input_content),
       response: parseMemoText(memo.ai_response)
@@ -616,7 +617,9 @@ export default function MemoPage() {
                                 {displayTitle}
                               </h3>
                               {memo.created_at ? (
-                                <time className="memo-item__date">{memo.created_at}</time>
+                                <time className="memo-item__date">
+                                  {formatDateTime(memo.created_at) || memo.created_at}
+                                </time>
                               ) : null}
                             </div>
                             <button

@@ -23,6 +23,11 @@ import { isNearBottom } from "../lib/chat_page/dom";
 import { nextMessageId } from "../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../lib/chat_page/streaming";
 import {
+  normalizeChatHistoryMessages,
+  normalizeChatHistoryPagination,
+  normalizeChatRooms,
+} from "../lib/chat_page/api_contract";
+import {
   appendStoredHistory,
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
@@ -39,6 +44,7 @@ import {
 import { FALLBACK_TASKS, normalizeTaskList } from "../lib/chat_page/task_utils";
 import type {
   ChatHistoryPayload,
+  ChatHistoryPagination,
   ChatRoom,
   GenerationStatusPayload,
   NormalizedTask,
@@ -246,15 +252,17 @@ export default function HomePage() {
       throw new Error(extractApiErrorMessage(rawPayload, "履歴取得に失敗しました。", response.status));
     }
 
-    const historyMessages = Array.isArray(rawPayload.messages) ? rawPayload.messages : [];
-    const pagination = rawPayload.pagination || {};
+    const historyMessages = normalizeChatHistoryMessages(rawPayload.messages);
+    const pagination = normalizeChatHistoryPagination(rawPayload.pagination);
+
+    const normalizedPagination: ChatHistoryPagination = {
+      hasMore: pagination.hasMore,
+      nextBeforeId: pagination.nextBeforeId,
+    };
 
     return {
       messages: historyMessages,
-      pagination: {
-        has_more: pagination.has_more === true,
-        next_before_id: typeof pagination.next_before_id === "number" ? pagination.next_before_id : null,
-      },
+      pagination: normalizedPagination,
     };
   }, []);
 
@@ -502,8 +510,8 @@ export default function HomePage() {
           text: typeof entry.message === "string" ? entry.message : "",
         }));
 
-        setHistoryHasMore(pagination.has_more === true);
-        setHistoryNextBeforeId(typeof pagination.next_before_id === "number" ? pagination.next_before_id : null);
+        setHistoryHasMore(pagination.hasMore);
+        setHistoryNextBeforeId(pagination.nextBeforeId);
 
         if (!shouldCheckGeneration) {
           setMessages(uiMessages);
@@ -590,8 +598,8 @@ export default function HomePage() {
       }));
 
       setMessages((previous) => [...uiMessages, ...previous]);
-      setHistoryHasMore(pagination.has_more === true);
-      setHistoryNextBeforeId(typeof pagination.next_before_id === "number" ? pagination.next_before_id : null);
+      setHistoryHasMore(pagination.hasMore);
+      setHistoryNextBeforeId(pagination.nextBeforeId);
 
       prependStoredHistory(
         roomId,
@@ -618,21 +626,7 @@ export default function HomePage() {
         return;
       }
 
-      const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-      const normalizedRooms: ChatRoom[] = rooms
-        .map((room): ChatRoom | null => {
-          if (!room || typeof room !== "object") return null;
-          const payload = room as { id?: unknown; title?: unknown; created_at?: unknown };
-          if (payload.id === undefined || payload.id === null) return null;
-          return {
-            id: String(payload.id),
-            title: typeof payload.title === "string" && payload.title.trim() ? payload.title : "新規チャット",
-            created_at: typeof payload.created_at === "string" ? payload.created_at : undefined,
-          };
-        })
-        .filter((room): room is ChatRoom => room !== null);
-
-      setChatRooms(normalizedRooms);
+      setChatRooms(normalizeChatRooms(data.rooms));
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
     }
@@ -979,20 +973,8 @@ export default function HomePage() {
   const handleAccessChat = useCallback(async () => {
     try {
       const response = await fetch("/api/get_chat_rooms", { credentials: "same-origin" });
-      const payload = (await readJsonBodySafe(response)) as { rooms?: Array<{ id?: unknown; title?: unknown }> };
-      const rooms = Array.isArray(payload.rooms)
-        ? payload.rooms
-            .map((room) => {
-              if (!room || typeof room !== "object") return null;
-              const item = room as { id?: unknown; title?: unknown };
-              if (item.id === undefined || item.id === null) return null;
-              return {
-                id: String(item.id),
-                title: typeof item.title === "string" ? item.title : "新規チャット",
-              } as ChatRoom;
-            })
-            .filter((room): room is ChatRoom => room !== null)
-        : [];
+      const payload = (await readJsonBodySafe(response)) as { rooms?: unknown };
+      const rooms = normalizeChatRooms(payload.rooms);
 
       if (rooms.length > 0) {
         setChatRooms(rooms);

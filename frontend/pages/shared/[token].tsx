@@ -1,6 +1,7 @@
 import Head from "next/head";
 import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../components/MarkdownContent";
+import { formatDateTime } from "../../lib/datetime";
 
 type SharedMessage = {
   message: string;
@@ -154,7 +155,9 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
             <header className="shared-chat-header">
               <h1 className="shared-chat-header__title">{title}</h1>
               {payload.room?.created_at ? (
-                <p className="shared-chat-header__meta">作成日: {payload.room.created_at}</p>
+                <p className="shared-chat-header__meta">
+                  作成日: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+                </p>
               ) : null}
             </header>
 

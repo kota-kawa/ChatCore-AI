@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormE
 
 import "../../scripts/core/csrf";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
+import { formatDateTime } from "../../lib/datetime";
 
 type PromptRecord = {
   id?: string | number;
@@ -76,11 +77,7 @@ function toDisplayDate(createdAt?: string): string {
   if (!createdAt) {
     return "";
   }
-  const parsed = new Date(createdAt);
-  if (Number.isNaN(parsed.getTime())) {
-    return createdAt;
-  }
-  return parsed.toLocaleString();
+  return formatDateTime(createdAt) || createdAt;
 }
 
 function createEditFormState(prompt: PromptRecord): PromptEditFormState {

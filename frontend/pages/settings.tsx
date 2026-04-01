@@ -13,6 +13,7 @@ import "../scripts/core/csrf";
 import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from "../scripts/core/passkeys";
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
+import { formatDateTime } from "../lib/datetime";
 import { toPromptListEntry, toPromptRecord } from "../scripts/user/settings/types";
 import { truncateTitle } from "../scripts/user/settings/utils";
 
@@ -80,14 +81,7 @@ function asIdString(value: unknown): string {
 }
 
 function toDisplayDate(rawDate?: string): string {
-  if (!rawDate) {
-    return "";
-  }
-  const parsed = new Date(rawDate);
-  if (Number.isNaN(parsed.getTime())) {
-    return rawDate;
-  }
-  return parsed.toLocaleString();
+  return formatDateTime(rawDate) || rawDate || "";
 }
 
 function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
@@ -121,11 +115,7 @@ function formatPasskeyDateTime(value: string): string {
   if (!value) {
     return "未使用";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "未使用";
-  }
-  return date.toLocaleString();
+  return formatDateTime(value) || "未使用";
 }
 
 function SettingsSidebar({

@@ -19,6 +19,7 @@ from services.chat_service import (
     rename_chat_room_in_db,
     validate_room_owner,
 )
+from services.datetime_serialization import serialize_datetime_iso
 
 from services.request_models import (
     ChatRoomIdRequest,
@@ -77,7 +78,7 @@ def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
                 {
                     "id": room_id,
                     "title": title,
-                    "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_at": serialize_datetime_iso(created_at),
                 }
             )
         return rooms

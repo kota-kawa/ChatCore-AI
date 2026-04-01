@@ -91,13 +91,13 @@ class ChatRoomSharingTestCase(unittest.TestCase):
                 "room": {
                     "id": "room-1",
                     "title": "共有テスト",
-                    "created_at": "2026-03-21 12:00:00",
+                    "created_at": "2026-03-21T12:00:00",
                 },
                 "messages": [
                     {
                         "message": "こんにちは",
                         "sender": "user",
-                        "timestamp": "2026-03-21 12:00:01",
+                        "timestamp": "2026-03-21T12:00:01",
                     }
                 ],
             },

@@ -114,7 +114,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             payload = response.json()
             self.assertEqual(payload["memos"][0]["id"], 1)
-            self.assertEqual(payload["memos"][0]["created_at"], "2024-01-01 09:30")
+            self.assertEqual(payload["memos"][0]["created_at"], "2024-01-01T09:30:00")
 
         asyncio.run(scenario())
 

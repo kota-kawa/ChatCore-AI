@@ -15,6 +15,7 @@ from blueprints.chat.messages import (
     chat_generation_stream,
     get_chat_history,
 )
+from services.chat_contract import CHAT_HISTORY_PAGE_SIZE_DEFAULT
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationService,
@@ -324,7 +325,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                     "id": index + 1,
                     "message": message,
                     "sender": sender,
-                    "timestamp": "2026-03-17 00:00:00",
+                    "timestamp": "2026-03-17T00:00:00",
                 }
                 for index, (stored_room_id, message, sender) in enumerate(stored_messages)
                 if stored_room_id == room_id
@@ -424,6 +425,34 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(payload["pagination"]["limit"], 25)
         self.assertTrue(payload["pagination"]["has_more"])
         fetch_history.assert_called_once_with("room-7", 25, 88)
+
+    def test_get_chat_history_falls_back_to_shared_default_limit(self):
+        session = {"user_id": 24}
+        history_request = build_request(
+            method="GET",
+            path="/api/get_chat_history",
+            session=session,
+            query_string=b"room_id=room-7",
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                with patch(
+                    "blueprints.chat.messages._fetch_chat_history",
+                    return_value={
+                        "messages": [],
+                        "pagination": {
+                            "limit": CHAT_HISTORY_PAGE_SIZE_DEFAULT,
+                            "has_more": False,
+                            "next_before_id": None,
+                        },
+                    },
+                ) as fetch_history:
+                    history_response = asyncio.run(get_chat_history(history_request))
+
+        payload = json.loads(history_response.body.decode("utf-8"))
+        self.assertEqual(payload["pagination"]["limit"], CHAT_HISTORY_PAGE_SIZE_DEFAULT)
+        fetch_history.assert_called_once_with("room-7", CHAT_HISTORY_PAGE_SIZE_DEFAULT, None)
 
 
     def test_chat_generation_status_includes_has_replayable_job(self):

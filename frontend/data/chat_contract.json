@@ -1,0 +1,12 @@
+{
+  "api": {
+    "request_case": "snake_case",
+    "response_case": "snake_case",
+    "frontend_internal_case": "camelCase",
+    "datetime_serialization": "iso-8601"
+  },
+  "chat_history": {
+    "page_size_default": 50,
+    "page_size_max": 100
+  }
+}
