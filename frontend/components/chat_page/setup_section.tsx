@@ -1,0 +1,334 @@
+import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from "react";
+
+import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import type { NormalizedTask } from "../../lib/chat_page/types";
+
+type SetupSectionProps = {
+  isChatVisible: boolean;
+  loggedIn: boolean;
+  setupInfo: string;
+  selectedModel: string;
+  modelMenuOpen: boolean;
+  selectedModelLabel: string;
+  tasks: NormalizedTask[];
+  isTaskOrderEditing: boolean;
+  isNewPromptModalOpen: boolean;
+  tasksExpanded: boolean;
+  showTaskToggleButton: boolean;
+  visibleTaskCountText: string;
+  draggingTaskIndex: number | null;
+  modelSelectRef: MutableRefObject<HTMLDivElement | null>;
+  setSetupInfo: Dispatch<SetStateAction<string>>;
+  setSelectedModel: Dispatch<SetStateAction<string>>;
+  setModelMenuOpen: Dispatch<SetStateAction<boolean>>;
+  toggleTaskOrderEditing: () => void;
+  closeNewPromptModal: () => void;
+  openNewPromptModal: () => void;
+  handleTaskDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void;
+  handleTaskDragOver: (event: DragEvent<HTMLDivElement>, index: number) => void;
+  handleTaskDragEnd: () => void;
+  handleTaskCardLaunch: (task: NormalizedTask) => Promise<void>;
+  handleTaskDelete: (taskName: string) => Promise<void>;
+  openTaskEditModal: (task: NormalizedTask) => void;
+  setTaskDetail: Dispatch<SetStateAction<NormalizedTask | null>>;
+  setTasksExpanded: Dispatch<SetStateAction<boolean>>;
+  handleAccessChat: () => Promise<void>;
+};
+
+export function SetupSection({
+  isChatVisible,
+  loggedIn,
+  setupInfo,
+  selectedModel,
+  modelMenuOpen,
+  selectedModelLabel,
+  tasks,
+  isTaskOrderEditing,
+  isNewPromptModalOpen,
+  tasksExpanded,
+  showTaskToggleButton,
+  visibleTaskCountText,
+  draggingTaskIndex,
+  modelSelectRef,
+  setSetupInfo,
+  setSelectedModel,
+  setModelMenuOpen,
+  toggleTaskOrderEditing,
+  closeNewPromptModal,
+  openNewPromptModal,
+  handleTaskDragStart,
+  handleTaskDragOver,
+  handleTaskDragEnd,
+  handleTaskCardLaunch,
+  handleTaskDelete,
+  openTaskEditModal,
+  setTaskDetail,
+  setTasksExpanded,
+  handleAccessChat,
+}: SetupSectionProps) {
+  return (
+    <div id="setup-container" style={{ display: isChatVisible ? "none" : "block" }}>
+      <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
+        <h2 style={{ textAlign: "center", marginBottom: "1.5rem" }}>Chat Core</h2>
+
+        <div className="form-group">
+          <label className="form-label">現在の状況・作業環境（入力なしでもOK）</label>
+          <textarea
+            id="setup-info"
+            rows={4}
+            placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
+            value={setupInfo}
+            onChange={(event) => {
+              setSetupInfo(event.target.value);
+            }}
+          ></textarea>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">AIモデル選択</label>
+
+          <select
+            id="ai-model"
+            className="model-select-native"
+            value={selectedModel}
+            onChange={(event) => {
+              setSelectedModel(event.target.value);
+            }}
+          >
+            {MODEL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <div ref={modelSelectRef} className={`model-select ${modelMenuOpen ? "is-open" : ""}`.trim()}>
+            <button
+              type="button"
+              className="model-select-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={modelMenuOpen ? "true" : "false"}
+              onClick={() => {
+                setModelMenuOpen((previous) => !previous);
+              }}
+            >
+              {selectedModelLabel}
+            </button>
+
+            <div className="model-select-menu" role="listbox">
+              {MODEL_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`model-select-option ${selectedModel === option.value ? "is-selected" : ""}`.trim()}
+                  role="option"
+                  aria-selected={selectedModel === option.value ? "true" : "false"}
+                  onClick={() => {
+                    setSelectedModel(option.value);
+                    setModelMenuOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="task-selection-header">
+          <p id="task-selection-text">実行したいタスクを選択（クリックで即実行）</p>
+
+          {loggedIn && (
+            <>
+              <button
+                id="edit-task-order-btn"
+                className="primary-button"
+                type="button"
+                data-tooltip={isTaskOrderEditing ? "並び替え編集を終了" : "タスクの並び順を編集"}
+                data-tooltip-placement="bottom"
+                style={{ margin: 0 }}
+                onClick={() => {
+                  toggleTaskOrderEditing();
+                }}
+              >
+                <i className={`bi ${isTaskOrderEditing ? "bi-check" : "bi-arrows-move"}`}></i>
+              </button>
+
+              <button
+                id="openNewPromptModal"
+                className={`circle-button new-prompt-modal-btn ${isNewPromptModalOpen ? "is-rotated" : ""}`.trim()}
+                type="button"
+                data-tooltip="新しいプロンプトを作成"
+                data-tooltip-placement="bottom"
+                onClick={() => {
+                  if (isNewPromptModalOpen) {
+                    closeNewPromptModal();
+                  } else {
+                    openNewPromptModal();
+                  }
+                }}
+              >
+                <i className="bi bi-plus-lg"></i>
+              </button>
+            </>
+          )}
+        </div>
+
+        <div
+          className={`task-selection ${
+            tasks.length > 6 ? "tasks-collapsed" : ""
+          } ${tasksExpanded || isTaskOrderEditing ? "tasks-expanded" : ""}`.trim()}
+          id="task-selection"
+        >
+          {tasks.map((task, index) => (
+            <div
+              key={`${task.name}-${index}`}
+              className={`task-wrapper ${isTaskOrderEditing ? "editable" : ""} ${
+                draggingTaskIndex === index ? "dragging" : ""
+              }`.trim()}
+              draggable={isTaskOrderEditing}
+              onDragStart={(event) => {
+                handleTaskDragStart(event, index);
+              }}
+              onDragOver={(event) => {
+                handleTaskDragOver(event, index);
+              }}
+              onDragEnd={handleTaskDragEnd}
+            >
+              <div
+                className={`prompt-card ${isTaskOrderEditing ? "editable" : ""}`.trim()}
+                data-task={task.name}
+                data-prompt_template={task.prompt_template}
+                data-response_rules={task.response_rules}
+                data-output_skeleton={task.output_skeleton}
+                data-input_examples={task.input_examples}
+                data-output_examples={task.output_examples}
+                data-is_default={task.is_default ? "true" : "false"}
+                onClick={() => {
+                  if (isTaskOrderEditing) return;
+                  void handleTaskCardLaunch(task);
+                }}
+              >
+                {isTaskOrderEditing && (
+                  <>
+                    <div
+                      className="delete-container"
+                      style={{
+                        position: "absolute",
+                        top: "-10px",
+                        left: "-10px",
+                        zIndex: 10,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="card-delete-btn"
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "50%",
+                          border: "none",
+                          color: "white",
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        data-tooltip="このタスクを削除"
+                        data-tooltip-placement="top"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleTaskDelete(task.name);
+                        }}
+                      >
+                        <i className="bi bi-trash"></i>
+                      </button>
+                    </div>
+
+                    <div
+                      className="edit-container"
+                      style={{
+                        position: "absolute",
+                        top: "-10px",
+                        right: "-10px",
+                        zIndex: 10,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="card-edit-btn"
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "50%",
+                          border: "none",
+                          color: "white",
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        data-tooltip="このタスクを編集"
+                        data-tooltip-placement="top"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openTaskEditModal(task);
+                        }}
+                      >
+                        <i className="bi bi-pencil"></i>
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                <div className="header-container">
+                  <div className="task-header">{task.name}</div>
+                  <button
+                    type="button"
+                    className="btn btn-outline-success btn-md task-detail-toggle"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setTaskDetail(task);
+                    }}
+                  >
+                    <i className="bi bi-caret-down"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {showTaskToggleButton && (
+            <button
+              type="button"
+              id="toggle-tasks-btn"
+              className="primary-button"
+              style={{ width: "100%", marginTop: "0.1rem" }}
+              onClick={() => {
+                setTasksExpanded((previous) => !previous);
+              }}
+            >
+              {tasksExpanded ? <i className="bi bi-chevron-up"></i> : <i className="bi bi-chevron-down"></i>} {visibleTaskCountText}
+            </button>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: "0.2rem" }}>
+          {loggedIn && (
+            <button
+              id="access-chat-btn"
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                void handleAccessChat();
+              }}
+            >
+              <i className="bi bi-chat-left-text"></i> これまでのチャットを見る
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
