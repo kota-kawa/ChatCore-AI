@@ -55,6 +55,10 @@
 
 .chat-header .icon-button {
   border-radius: 9999px;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  justify-content: center;
 }
 
 /* ヘッダー内モデル選択ドロップダウン */
