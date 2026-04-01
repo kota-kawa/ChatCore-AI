@@ -545,6 +545,7 @@ export default function HomePage() {
   const [setupInfo, setSetupInfo] = useState("");
 
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [chatHeaderModelMenuOpen, setChatHeaderModelMenuOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
 
   const [tasks, setTasks] = useState<NormalizedTask[]>(FALLBACK_TASKS);
@@ -596,6 +597,7 @@ export default function HomePage() {
   const [shareLoading, setShareLoading] = useState(false);
 
   const modelSelectRef = useRef<HTMLDivElement | null>(null);
+  const chatHeaderModelSelectRef = useRef<HTMLDivElement | null>(null);
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const newPromptAssistRootRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
@@ -619,8 +621,17 @@ export default function HomePage() {
   const selectedModelLabel = useMemo(() => {
     const options: Array<{ value: string; label: string }> = [
       { value: "openai/gpt-oss-120b", label: "GROQ | GPT-OSS 120B（標準・高品質な応答）" },
-      { value: "gpt-5-mini-2025-08-07", label: "OPENAI | GPT-5 MINI（高品質・推論が必要な作業向け）" },
-      { value: "gemini-2.5-flash", label: "GEMINI | 2.5 FLASH（軽い作業向け）" },
+      { value: "gpt-5-mini-2025-08-07", label: "OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）" },
+      { value: "gemini-2.5-flash", label: "Gemini | 2.5 Flash（軽い作業向け）" },
+    ];
+    return options.find((option) => option.value === selectedModel)?.label ?? options[0].label;
+  }, [selectedModel]);
+
+  const selectedModelShortLabel = useMemo(() => {
+    const options: Array<{ value: string; label: string }> = [
+      { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B" },
+      { value: "gpt-5-mini-2025-08-07", label: "GPT-5 mini" },
+      { value: "gemini-2.5-flash", label: "Gemini 2.5" },
     ];
     return options.find((option) => option.value === selectedModel)?.label ?? options[0].label;
   }, [selectedModel]);
@@ -1988,6 +1999,10 @@ export default function HomePage() {
         setModelMenuOpen(false);
       }
 
+      if (chatHeaderModelMenuOpen && chatHeaderModelSelectRef.current && !chatHeaderModelSelectRef.current.contains(target)) {
+        setChatHeaderModelMenuOpen(false);
+      }
+
       if (openRoomActionsFor && !target.closest(".room-actions-menu") && !target.closest(".room-actions-icon")) {
         setOpenRoomActionsFor(null);
       }
@@ -2001,7 +2016,7 @@ export default function HomePage() {
     return () => {
       document.removeEventListener("click", onOutsideClick);
     };
-  }, [modelMenuOpen, openRoomActionsFor, sidebarOpen]);
+  }, [modelMenuOpen, chatHeaderModelMenuOpen, openRoomActionsFor, sidebarOpen]);
 
   useEffect(() => {
     const onResize = () => {
@@ -2221,8 +2236,8 @@ export default function HomePage() {
                 }}
               >
                 <option value="openai/gpt-oss-120b">GROQ | GPT-OSS 120B（標準・高品質な応答）</option>
-                <option value="gpt-5-mini-2025-08-07">OPENAI | GPT-5 MINI（高品質・推論が必要な作業向け）</option>
-                <option value="gemini-2.5-flash">GEMINI | 2.5 FLASH（軽い作業向け）</option>
+                <option value="gpt-5-mini-2025-08-07">OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）</option>
+                <option value="gemini-2.5-flash">Gemini | 2.5 Flash（軽い作業向け）</option>
               </select>
 
               <div ref={modelSelectRef} className={`model-select ${modelMenuOpen ? "is-open" : ""}`.trim()}>
@@ -2261,7 +2276,7 @@ export default function HomePage() {
                       setModelMenuOpen(false);
                     }}
                   >
-                    OPENAI | GPT-5 MINI（高品質・推論が必要な作業向け）
+                    OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）
                   </button>
                   <button
                     type="button"
@@ -2273,7 +2288,7 @@ export default function HomePage() {
                       setModelMenuOpen(false);
                     }}
                   >
-                    GEMINI | 2.5 FLASH（軽い作業向け）
+                    Gemini | 2.5 Flash（軽い作業向け）
                   </button>
                 </div>
               </div>
@@ -2492,6 +2507,63 @@ export default function HomePage() {
               <span>Chat Core</span>
             </div>
             <div className="header-right">
+              <div
+                ref={chatHeaderModelSelectRef}
+                className={`chat-header-model-select ${chatHeaderModelMenuOpen ? "is-open" : ""}`.trim()}
+              >
+                <button
+                  type="button"
+                  className="chat-header-model-trigger"
+                  aria-haspopup="listbox"
+                  aria-expanded={chatHeaderModelMenuOpen ? "true" : "false"}
+                  onClick={() => {
+                    setChatHeaderModelMenuOpen((previous) => !previous);
+                  }}
+                >
+                  <i className="bi bi-cpu"></i>
+                  <span>{selectedModelShortLabel}</span>
+                  <i className="bi bi-chevron-down chat-header-model-chevron"></i>
+                </button>
+                <div className="chat-header-model-menu" role="listbox">
+                  <button
+                    type="button"
+                    className={`chat-header-model-option ${selectedModel === "openai/gpt-oss-120b" ? "is-selected" : ""}`.trim()}
+                    role="option"
+                    aria-selected={selectedModel === "openai/gpt-oss-120b" ? "true" : "false"}
+                    onClick={() => {
+                      setSelectedModel("openai/gpt-oss-120b");
+                      setChatHeaderModelMenuOpen(false);
+                    }}
+                  >
+                    GROQ | GPT-OSS 120B（標準・高品質な応答）
+                  </button>
+                  <button
+                    type="button"
+                    className={`chat-header-model-option ${selectedModel === "gpt-5-mini-2025-08-07" ? "is-selected" : ""}`.trim()}
+                    role="option"
+                    aria-selected={selectedModel === "gpt-5-mini-2025-08-07" ? "true" : "false"}
+                    onClick={() => {
+                      setSelectedModel("gpt-5-mini-2025-08-07");
+                      setChatHeaderModelMenuOpen(false);
+                    }}
+                  >
+                    OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）
+                  </button>
+                  <button
+                    type="button"
+                    className={`chat-header-model-option ${selectedModel === "gemini-2.5-flash" ? "is-selected" : ""}`.trim()}
+                    role="option"
+                    aria-selected={selectedModel === "gemini-2.5-flash" ? "true" : "false"}
+                    onClick={() => {
+                      setSelectedModel("gemini-2.5-flash");
+                      setChatHeaderModelMenuOpen(false);
+                    }}
+                  >
+                    Gemini | 2.5 Flash（軽い作業向け）
+                  </button>
+                </div>
+              </div>
+
               <button
                 id="share-chat-btn"
                 className={`icon-button chat-share-btn ${hasCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
