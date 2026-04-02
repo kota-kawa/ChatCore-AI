@@ -1,79 +1,48 @@
-import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, MutableRefObject, SetStateAction } from "react";
-
 import { BotMessageHtml } from "./bot_message_html";
 import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
-import type { ChatRoom, UiChatMessage } from "../../lib/chat_page/types";
+import { useHomePageChatContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MODEL_OPTIONS, roomMenuBaseStyle, roomMenuItemBaseStyle } from "../../lib/chat_page/constants";
 
-type ChatMainSectionProps = {
-  isChatVisible: boolean;
-  chatHeaderModelMenuOpen: boolean;
-  selectedModel: string;
-  selectedModelShortLabel: string;
-  hasCurrentRoom: boolean;
-  sidebarOpen: boolean;
-  chatRooms: ChatRoom[];
-  currentRoomId: string | null;
-  openRoomActionsFor: string | null;
-  historyHasMore: boolean;
-  historyNextBeforeId: number | null;
-  isLoadingOlder: boolean;
-  messages: UiChatMessage[];
-  chatInput: string;
-  isGenerating: boolean;
-  chatHeaderModelSelectRef: MutableRefObject<HTMLDivElement | null>;
-  chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
-  showSetupForm: () => void;
-  setChatHeaderModelMenuOpen: Dispatch<SetStateAction<boolean>>;
-  setSelectedModel: Dispatch<SetStateAction<string>>;
-  openShareModal: () => void;
-  handleNewChat: () => void;
-  switchChatRoom: (roomId: string) => void;
-  setOpenRoomActionsFor: Dispatch<SetStateAction<string | null>>;
-  handleRenameRoom: (roomId: string, roomTitle: string) => Promise<void>;
-  handleDeleteRoom: (roomId: string, roomTitle: string) => Promise<void>;
-  setSidebarOpen: Dispatch<SetStateAction<boolean>>;
-  loadOlderChatHistory: () => Promise<void>;
-  setChatInput: Dispatch<SetStateAction<string>>;
-  handleChatInputKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
-  handleSendMessage: () => void;
-};
+export function ChatMainSection() {
+  const {
+    isChatVisible,
+    chatHeaderModelMenuOpen,
+    selectedModel,
+    selectedModelShortLabel,
+    chatHeaderModelSelectRef,
+    showSetupForm,
+    setChatHeaderModelMenuOpen,
+    setSelectedModel,
+  } = useHomePageUiContext();
 
-export function ChatMainSection({
-  isChatVisible,
-  chatHeaderModelMenuOpen,
-  selectedModel,
-  selectedModelShortLabel,
-  hasCurrentRoom,
-  sidebarOpen,
-  chatRooms,
-  currentRoomId,
-  openRoomActionsFor,
-  historyHasMore,
-  historyNextBeforeId,
-  isLoadingOlder,
-  messages,
-  chatInput,
-  isGenerating,
-  chatHeaderModelSelectRef,
-  chatMessagesRef,
-  showSetupForm,
-  setChatHeaderModelMenuOpen,
-  setSelectedModel,
-  openShareModal,
-  handleNewChat,
-  switchChatRoom,
-  setOpenRoomActionsFor,
-  handleRenameRoom,
-  handleDeleteRoom,
-  setSidebarOpen,
-  loadOlderChatHistory,
-  setChatInput,
-  handleChatInputKeyDown,
-  handleSendMessage,
-}: ChatMainSectionProps) {
+  const {
+    hasCurrentRoom,
+    sidebarOpen,
+    chatRooms,
+    currentRoomId,
+    openRoomActionsFor,
+    historyHasMore,
+    historyNextBeforeId,
+    isLoadingOlder,
+    messages,
+    chatMessagesRef,
+    chatInput,
+    isGenerating,
+    openShareModal,
+    handleNewChat,
+    switchChatRoom,
+    setOpenRoomActionsFor,
+    handleRenameRoom,
+    handleDeleteRoom,
+    setSidebarOpen,
+    loadOlderChatHistory,
+    setChatInput,
+    handleChatInputKeyDown,
+    handleSendMessage,
+  } = useHomePageChatContext();
+
   return (
     <div id="chat-container" style={{ display: isChatVisible ? "flex" : "none" }}>
       <div className="chat-header">

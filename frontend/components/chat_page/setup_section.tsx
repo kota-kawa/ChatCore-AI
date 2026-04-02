@@ -1,71 +1,43 @@
-import type { Dispatch, DragEvent, MutableRefObject, SetStateAction } from "react";
-
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
-import type { NormalizedTask } from "../../lib/chat_page/types";
+import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
-type SetupSectionProps = {
-  isChatVisible: boolean;
-  loggedIn: boolean;
-  setupInfo: string;
-  selectedModel: string;
-  modelMenuOpen: boolean;
-  selectedModelLabel: string;
-  tasks: NormalizedTask[];
-  isTaskOrderEditing: boolean;
-  isNewPromptModalOpen: boolean;
-  tasksExpanded: boolean;
-  showTaskToggleButton: boolean;
-  visibleTaskCountText: string;
-  draggingTaskIndex: number | null;
-  modelSelectRef: MutableRefObject<HTMLDivElement | null>;
-  setSetupInfo: Dispatch<SetStateAction<string>>;
-  setSelectedModel: Dispatch<SetStateAction<string>>;
-  setModelMenuOpen: Dispatch<SetStateAction<boolean>>;
-  toggleTaskOrderEditing: () => void;
-  closeNewPromptModal: () => void;
-  openNewPromptModal: () => void;
-  handleTaskDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void;
-  handleTaskDragOver: (event: DragEvent<HTMLDivElement>, index: number) => void;
-  handleTaskDragEnd: () => void;
-  handleTaskCardLaunch: (task: NormalizedTask) => Promise<void>;
-  handleTaskDelete: (taskName: string) => Promise<void>;
-  openTaskEditModal: (task: NormalizedTask) => void;
-  setTaskDetail: Dispatch<SetStateAction<NormalizedTask | null>>;
-  setTasksExpanded: Dispatch<SetStateAction<boolean>>;
-  handleAccessChat: () => Promise<void>;
-};
+export function SetupSection() {
+  const {
+    isChatVisible,
+    loggedIn,
+    setupInfo,
+    selectedModel,
+    modelMenuOpen,
+    selectedModelLabel,
+    modelSelectRef,
+    setSetupInfo,
+    setSelectedModel,
+    setModelMenuOpen,
+  } = useHomePageUiContext();
 
-export function SetupSection({
-  isChatVisible,
-  loggedIn,
-  setupInfo,
-  selectedModel,
-  modelMenuOpen,
-  selectedModelLabel,
-  tasks,
-  isTaskOrderEditing,
-  isNewPromptModalOpen,
-  tasksExpanded,
-  showTaskToggleButton,
-  visibleTaskCountText,
-  draggingTaskIndex,
-  modelSelectRef,
-  setSetupInfo,
-  setSelectedModel,
-  setModelMenuOpen,
-  toggleTaskOrderEditing,
-  closeNewPromptModal,
-  openNewPromptModal,
-  handleTaskDragStart,
-  handleTaskDragOver,
-  handleTaskDragEnd,
-  handleTaskCardLaunch,
-  handleTaskDelete,
-  openTaskEditModal,
-  setTaskDetail,
-  setTasksExpanded,
-  handleAccessChat,
-}: SetupSectionProps) {
+  const {
+    tasks,
+    isTaskOrderEditing,
+    isNewPromptModalOpen,
+    tasksExpanded,
+    showTaskToggleButton,
+    visibleTaskCountText,
+    draggingTaskIndex,
+    toggleTaskOrderEditing,
+    closeNewPromptModal,
+    openNewPromptModal,
+    handleTaskDragStart,
+    handleTaskDragOver,
+    handleTaskDragEnd,
+    handleTaskCardLaunch,
+    handleTaskDelete,
+    openTaskEditModal,
+    setTaskDetail,
+    setTasksExpanded,
+  } = useHomePageTaskContext();
+
+  const { handleAccessChat } = useHomePageChatContext();
+
   return (
     <div id="setup-container" style={{ display: isChatVisible ? "none" : "block" }}>
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
