@@ -56,14 +56,14 @@ function setShareUrl(shareUrl: string) {
 function openChatShareModal() {
   const { modal } = getShareModalElements();
   if (!modal) return;
-  modal.style.display = "flex";
+  modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
 }
 
 function closeChatShareModal() {
   const { modal } = getShareModalElements();
   if (!modal) return;
-  modal.style.display = "none";
+  modal.classList.remove("is-open");
   modal.setAttribute("aria-hidden", "true");
 }
 
@@ -167,7 +167,6 @@ function refreshChatShareState() {
   const hasRoom = Boolean(getCurrentChatRoomId());
   shareBtn.disabled = !hasRoom;
   shareBtn.classList.toggle("chat-share-btn--disabled", !hasRoom);
-  shareBtn.setAttribute("aria-disabled", hasRoom ? "false" : "true");
 }
 
 function initChatShare() {
@@ -188,7 +187,7 @@ function initChatShare() {
   setStatus("共有するチャットルームを選択してください。");
 
   if (webShareBtn && !navigator.share) {
-    webShareBtn.style.display = "none";
+    webShareBtn.hidden = true;
   }
 
   shareBtn.addEventListener("click", () => {
@@ -213,7 +212,7 @@ function initChatShare() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (modal.style.display === "none") return;
+    if (!modal.classList.contains("is-open")) return;
     closeChatShareModal();
   });
 }

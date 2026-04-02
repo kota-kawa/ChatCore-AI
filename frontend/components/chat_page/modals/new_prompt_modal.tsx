@@ -50,8 +50,8 @@ export function NewPromptModal({
   return (
     <div
       id="newPromptModal"
-      className={`new-prompt-modal ${isOpen ? "show" : ""}`.trim()}
-      style={{ display: isOpen ? "flex" : "none" }}
+      className={`new-prompt-modal modal-base ${isOpen ? "is-open show" : ""}`.trim()}
+      aria-hidden={isOpen ? "false" : "true"}
       onClick={(event) => {
         if (event.target === event.currentTarget && !isPromptSubmitting) {
           onClose();
@@ -149,7 +149,7 @@ export function NewPromptModal({
             </label>
           </div>
 
-          <div id="new-guardrail-fields" style={{ display: guardrailEnabled ? "block" : "none" }}>
+          <div id="new-guardrail-fields" hidden={!guardrailEnabled}>
             <div className="form-group">
               <label htmlFor="new-prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
               <textarea
@@ -178,7 +178,7 @@ export function NewPromptModal({
             </div>
           </div>
 
-          <button type="submit" className="submit-btn" disabled={isPromptSubmitting}>
+          <button type="submit" className="primary-button new-prompt-submit-btn" disabled={isPromptSubmitting}>
             {isPromptSubmitting ? (
               <>
                 <i className="bi bi-stars"></i> AIと投稿を準備中...

@@ -11,7 +11,7 @@
   /* アイコンを中央に配置 */
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: var(--text-xl, 1.125rem);
   /* アイコンのサイズ調整 */
   border: none;
   /* ボーダーがあれば削除 */
@@ -20,7 +20,7 @@
 
 /* タスクラッパーが編集状態の場合、内部のカードに振動アニメーションを適用 */
 .task-wrapper.editable .prompt-card {
-  animation: shake 0.5s infinite;
+  animation: shake var(--transition-slow, 0.3s ease) infinite;
   /* 削除・編集ボタンがカード外に配置されるため overflow を visible に */
   overflow: visible !important;
 }
@@ -41,7 +41,7 @@
 /* プレースホルダー（見えないが枠を保持） */
 .prompt-card.placeholder {
   visibility: hidden;
-  border: 1px dashed #aaa;
+  border: 1px dashed var(--text-secondary, #6b7280);
 }
 
 /* shake アニメーション定義（小刻みな動き） */

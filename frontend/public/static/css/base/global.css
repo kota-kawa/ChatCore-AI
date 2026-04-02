@@ -63,6 +63,21 @@ body.sidebar-visible {
   overflow: hidden;
 }
 
+.modal-base {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--modal-overlay);
+}
+
+.modal-base.is-open {
+  display: flex;
+}
+
 ::selection {
   background: rgba(25, 195, 125, 0.2);
   color: inherit;

@@ -68,16 +68,7 @@ export default function HomePage() {
         <div className="chat-page-shell">
           <action-menu></action-menu>
 
-          <div
-            id="auth-buttons"
-            style={{
-              display: loggedIn ? "none" : "flex",
-              position: "fixed",
-              top: 10,
-              right: 10,
-              zIndex: 2000,
-            }}
-          >
+          <div id="auth-buttons" hidden={loggedIn}>
             <button id="login-btn" className="auth-btn" onClick={() => {
               window.location.href = "/login";
             }}>
@@ -86,7 +77,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          <user-icon id="userIcon" style={{ display: loggedIn ? "" : "none" }}></user-icon>
+          <user-icon id="userIcon" hidden={!loggedIn}></user-icon>
 
           <SetupSection />
 

@@ -39,9 +39,9 @@ export function SetupSection() {
   const { handleAccessChat } = useHomePageChatContext();
 
   return (
-    <div id="setup-container" style={{ display: isChatVisible ? "none" : "block" }}>
+    <div id="setup-container" data-visible={isChatVisible ? "false" : "true"}>
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
-        <h2 style={{ textAlign: "center", marginBottom: "1.5rem" }}>Chat Core</h2>
+        <h2 className="setup-form-title">Chat Core</h2>
 
         <div className="form-group">
           <label className="form-label">現在の状況・作業環境（入力なしでもOK）</label>
@@ -118,7 +118,6 @@ export function SetupSection() {
                 type="button"
                 data-tooltip={isTaskOrderEditing ? "並び替え編集を終了" : "タスクの並び順を編集"}
                 data-tooltip-placement="bottom"
-                style={{ margin: 0 }}
                 onClick={() => {
                   toggleTaskOrderEditing();
                 }}
@@ -183,29 +182,10 @@ export function SetupSection() {
               >
                 {isTaskOrderEditing && (
                   <>
-                    <div
-                      className="delete-container"
-                      style={{
-                        position: "absolute",
-                        top: "-10px",
-                        left: "-10px",
-                        zIndex: 10,
-                      }}
-                    >
+                    <div className="task-card-action-container task-card-action-container--delete">
                       <button
                         type="button"
                         className="card-delete-btn"
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          border: "none",
-                          color: "white",
-                          fontSize: "14px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
                         data-tooltip="このタスクを削除"
                         data-tooltip-placement="top"
                         onClick={(event) => {
@@ -217,29 +197,10 @@ export function SetupSection() {
                       </button>
                     </div>
 
-                    <div
-                      className="edit-container"
-                      style={{
-                        position: "absolute",
-                        top: "-10px",
-                        right: "-10px",
-                        zIndex: 10,
-                      }}
-                    >
+                    <div className="task-card-action-container task-card-action-container--edit">
                       <button
                         type="button"
                         className="card-edit-btn"
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          border: "none",
-                          color: "white",
-                          fontSize: "14px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
                         data-tooltip="このタスクを編集"
                         data-tooltip-placement="top"
                         onClick={(event) => {
@@ -257,7 +218,7 @@ export function SetupSection() {
                   <div className="task-header">{task.name}</div>
                   <button
                     type="button"
-                    className="btn btn-outline-success btn-md task-detail-toggle"
+                    className="task-detail-toggle"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -275,8 +236,7 @@ export function SetupSection() {
             <button
               type="button"
               id="toggle-tasks-btn"
-              className="primary-button"
-              style={{ width: "100%", marginTop: "0.1rem" }}
+              className="primary-button task-toggle-btn"
               onClick={() => {
                 setTasksExpanded((previous) => !previous);
               }}
@@ -286,7 +246,7 @@ export function SetupSection() {
           )}
         </div>
 
-        <div style={{ textAlign: "center", marginTop: "0.2rem" }}>
+        <div className="setup-access-chat">
           {loggedIn && (
             <button
               id="access-chat-btn"

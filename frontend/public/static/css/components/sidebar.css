@@ -63,6 +63,13 @@
   text-overflow: ellipsis;
 }
 
+.chat-room-card-actions {
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin-left: auto;
+}
+
 .chat-room-card:hover {
   background: rgba(0, 0, 0, 0.04);
   border-color: transparent;
@@ -112,7 +119,7 @@
   top: 50%;
   right: 40px;
   transform: translateY(-50%);
-  background: #fff;
+  background: var(--surface-primary, #fff);
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   border-radius: var(--radius-sm, 8px);
   display: none;
@@ -122,8 +129,12 @@
   overflow: hidden;
 }
 
+.room-actions-menu.is-open {
+  display: flex;
+}
+
 .chat-room-card.active .room-actions-menu {
-  color: var(--text-dark);
+  color: var(--text-dark, #1a1a1a);
 }
 
 .room-actions-menu .menu-item {
@@ -137,6 +148,33 @@
   display: flex;
   align-items: center;
   -webkit-tap-highlight-color: transparent;
+  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+}
+
+.room-actions-menu .menu-item:last-child {
+  border-bottom: none;
+}
+
+.room-actions-menu .menu-item__icon {
+  margin-right: 0.375rem;
+}
+
+.room-actions-menu .menu-item--rename {
+  color: var(--info-color, #2563eb);
+  background: var(--surface-secondary, #f9fafb);
+}
+
+.room-actions-menu .menu-item--rename:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.room-actions-menu .menu-item--delete {
+  color: var(--danger-color, #dc2626);
+  background: var(--surface-secondary, #f9fafb);
+}
+
+.room-actions-menu .menu-item--delete:hover {
+  background: rgba(220, 38, 38, 0.12);
 }
 
 .room-actions-menu .menu-item:hover {

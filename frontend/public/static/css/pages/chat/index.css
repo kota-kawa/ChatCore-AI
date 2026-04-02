@@ -27,8 +27,6 @@ body.chat-page :where(
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,
-  .submit-btn,
-  .custom-btn-primary,
   .custom-btn-secondary,
   .custom-modal-close,
   .chat-share-close-btn,
@@ -59,12 +57,12 @@ body.chat-page :where(
     0 14px 24px var(--chat-button-shadow-color),
     var(--chat-button-edge-highlight);
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease,
-    background 0.2s ease,
-    color 0.2s ease,
-    opacity 0.2s ease;
+    transform var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    filter var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease),
+    color var(--transition-normal, 0.2s ease),
+    opacity var(--transition-normal, 0.2s ease);
 }
 
 body.chat-page :where(
@@ -86,7 +84,7 @@ body.chat-page :where(
   border-color: transparent;
 }
 
-body.chat-page :where(.primary-button, .new-chat-btn, #auth-buttons .auth-btn, #send-btn, .submit-btn, .custom-btn-primary) {
+body.chat-page :where(.primary-button, .new-chat-btn, #auth-buttons .auth-btn, #send-btn) {
   color: #ffffff;
 }
 
@@ -132,32 +130,37 @@ body.chat-page .code-block-copy-btn {
 }
 
 body.chat-page .custom-btn-secondary {
-  --chat-button-base: #6c757d;
-  --chat-button-accent: #5a646c;
+  --chat-button-base: var(--neutral-button, #6c757d);
+  --chat-button-accent: var(--neutral-button-hover, #5a646c);
   --chat-button-shadow-color: rgba(75, 85, 99, 0.28);
 }
 
 body.chat-page .cc-alert-modal__button {
-  --chat-button-base: #2563eb;
-  --chat-button-accent: #1d4ed8;
+  --chat-button-base: var(--info-color, #2563eb);
+  --chat-button-accent: var(--info-hover, #1d4ed8);
   --chat-button-shadow-color: rgba(37, 99, 235, 0.28);
 }
 
 body.chat-page .card-delete-btn {
-  --chat-button-base: #dc3545;
-  --chat-button-accent: #b91c1c;
+  --chat-button-base: var(--danger-color, #dc3545);
+  --chat-button-accent: var(--danger-hover, #b91c1c);
   --chat-button-shadow-color: rgba(220, 38, 38, 0.26);
 }
 
 body.chat-page .card-edit-btn {
-  --chat-button-base: #007bff;
-  --chat-button-accent: #0b5ed7;
+  --chat-button-base: var(--info-color, #007bff);
+  --chat-button-accent: var(--info-hover, #0b5ed7);
   --chat-button-shadow-color: rgba(37, 99, 235, 0.24);
 }
 
+body.chat-page .task-card-action-container .card-delete-btn i,
+body.chat-page .task-card-action-container .card-edit-btn i {
+  color: inherit;
+}
+
 body.chat-page #send-btn.send-btn--stop {
-  --chat-button-base: #ef4444;
-  --chat-button-accent: #dc2626;
+  --chat-button-base: var(--danger-color, #ef4444);
+  --chat-button-accent: var(--danger-hover, #dc2626);
   --chat-button-shadow-color: rgba(220, 38, 38, 0.28);
 }
 
@@ -186,7 +189,7 @@ body.chat-page .cc-alert-modal__close {
 body.chat-page .task-detail-modal-close,
 body.chat-page .new-modal-close-btn,
 body.chat-page .prompt-assist__close {
-  color: #225742;
+  color: var(--success-strong, #225742);
 }
 
 body.chat-page .copy-btn,
@@ -199,8 +202,8 @@ body.chat-page .model-select-option {
 
 /* Model select is informational UI, so keep high-contrast neutral styling. */
 body.chat-page .model-select-trigger {
-  background: #ffffff !important;
-  color: #1f2d28 !important;
+  background: var(--surface-primary, #ffffff) !important;
+  color: var(--text-dark, #1a1a1a) !important;
   border: 1px solid #d3e3dc !important;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08) !important;
 }
@@ -219,8 +222,8 @@ body.chat-page .model-select-menu {
 }
 
 body.chat-page .model-select-option {
-  background: #ffffff !important;
-  color: #1f2d28 !important;
+  background: var(--surface-primary, #ffffff) !important;
+  color: var(--text-dark, #1a1a1a) !important;
   border: 1px solid #e1ece7 !important;
   box-shadow: none !important;
 }
@@ -248,8 +251,6 @@ body.chat-page :where(
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,
-  .submit-btn,
-  .custom-btn-primary,
   .custom-btn-secondary,
   .custom-modal-close,
   .chat-share-close-btn,
@@ -286,8 +287,6 @@ body.chat-page :where(
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,
-  .submit-btn,
-  .custom-btn-primary,
   .custom-btn-secondary,
   .custom-modal-close,
   .chat-share-close-btn,

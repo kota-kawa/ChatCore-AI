@@ -16,6 +16,7 @@
   --setup-card-min-height: 68px;
   --setup-card-font-size: 1.05rem;
   --setup-toggle-size: 40px;
+  display: block;
   background: var(--surface);
   padding: var(--setup-container-padding-y) var(--setup-container-padding-x);
   border-radius: 24px;
@@ -27,6 +28,10 @@
   animation: slideUp 0.6s ease-out;
   position: relative;
   overflow: hidden;
+}
+
+#setup-container[data-visible="false"] {
+  display: none;
 }
 
 #setup-container::before {
@@ -45,10 +50,11 @@
   z-index: 1;
 }
 
-.setup-form h2 {
+.setup-form-title {
+  text-align: center;
   font-size: var(--setup-title-font-size);
   font-weight: 700;
-  color: #0f5132;
+  color: var(--success-strong, #0f5132);
   letter-spacing: 0.03em;
   margin-bottom: var(--setup-title-margin-bottom) !important;
 }
@@ -64,9 +70,9 @@
   position: static;
   background: transparent;
   padding: 0;
-  font-size: 0.95rem;
+  font-size: var(--text-base, 0.9375rem);
   font-weight: 600;
-  color: #0f5132;
+  color: var(--success-strong, #0f5132);
   letter-spacing: 0.02em;
 }
 
@@ -76,9 +82,13 @@
   padding: var(--setup-field-padding-y) var(--setup-field-padding-x);
   border: 1px solid #dfe9e5;
   border-radius: 14px;
-  font-size: 1rem;
+  font-size: var(--text-md, 1rem);
+  line-height: var(--leading-normal, 1.5);
   background: rgba(255, 255, 255, 0.95);
-  transition: border 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  transition:
+    border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease);
 }
 
 #setup-info {
@@ -116,11 +126,14 @@
   background: rgba(255, 255, 255, 0.95);
   padding: var(--setup-field-padding-y) var(--setup-select-padding-right) var(--setup-field-padding-y) var(--setup-field-padding-x);
   text-align: left;
-  font-size: 1rem;
-  line-height: 1.4;
+  font-size: var(--text-md, 1rem);
+  line-height: var(--leading-tight, 1.4);
   color: #1f2d28;
   cursor: pointer;
-  transition: border 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  transition:
+    border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease);
   position: relative;
 }
 
@@ -134,7 +147,7 @@
   border-right: 2px solid #4f635b;
   border-bottom: 2px solid #4f635b;
   transform: translateY(-60%) rotate(45deg);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-normal, 0.2s ease);
 }
 
 .model-select.is-open .model-select-trigger,
@@ -175,13 +188,15 @@
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: #1f2d28;
+  color: var(--text-dark, #1a1a1a);
   text-align: left;
   padding: 0.7rem 0.75rem;
   cursor: pointer;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  transition: background 0.2s ease, color 0.2s ease;
+  font-size: var(--text-base, 0.9375rem);
+  line-height: var(--leading-tight, 1.4);
+  transition:
+    background var(--transition-normal, 0.2s ease),
+    color var(--transition-normal, 0.2s ease);
 }
 
 .model-select-option:hover {
@@ -221,7 +236,10 @@
   padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
   border-radius: 16px;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+  transition:
+    transform var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    border var(--transition-normal, 0.2s ease);
   border: 1px solid #e3ebe7;
   width: 100%;
   text-align: center;
@@ -248,8 +266,8 @@
   background-color: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(25, 195, 125, 0.3);
   border-radius: 10px;
-  font-size: 0.9rem;
-  line-height: 1.4;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-tight, 1.4);
   z-index: 1000;
   width: calc(100% - 1rem);
   text-align: center;
@@ -291,7 +309,7 @@
 }
 
 .task-detail-toggle i {
-  font-size: 1.15rem;
+  font-size: var(--text-xl, 1.125rem);
 }
 
 #setup-container.setup-fit-compact {
@@ -356,11 +374,11 @@
 }
 
 #setup-container.setup-fit-tight .form-label {
-  font-size: 0.82rem;
+  font-size: var(--text-xs, 0.8125rem);
 }
 
 #setup-container.setup-fit-tight .task-selection-header p#task-selection-text {
-  font-size: 0.82rem;
+  font-size: var(--text-xs, 0.8125rem);
 }
 
 #setup-container.setup-fit-tight #openNewPromptModal,
@@ -377,12 +395,7 @@
 
 /* モーダルの全体（背景部分含む） */
 #io-modal {
-  position: fixed;
-  inset: 0;
   z-index: 9999;
-  display: none;
-  align-items: center;
-  justify-content: center;
   padding: clamp(1rem, 3.2vw, 2.2rem);
   background:
     radial-gradient(120% 95% at 50% -15%, rgba(46, 93, 73, 0.28), transparent 56%),
@@ -444,7 +457,7 @@
   margin: 0.15rem 0 0;
   font-size: clamp(1.25rem, 2.3vw, 1.5rem);
   line-height: 1.25;
-  color: #123428;
+  color: var(--text-dark, #1a1a1a);
 }
 
 .task-detail-modal-close {
@@ -454,12 +467,15 @@
   border: 1px solid #d9e9e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #225742;
+  color: var(--success-strong, #0f5132);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition:
+    transform var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    border-color var(--transition-normal, 0.2s ease);
 }
 
 .task-detail-modal-close:hover {
@@ -484,16 +500,16 @@
 
 .task-detail-section-title {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm, 0.875rem);
   font-weight: 700;
-  color: #0f5132;
+  color: var(--success-strong, #0f5132);
 }
 
 .task-detail-section-body {
   margin-top: 0.52rem;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: #1f2d28;
+  font-size: var(--text-base, 0.9375rem);
+  line-height: var(--leading-relaxed, 1.6);
+  color: var(--text-dark, #1a1a1a);
   word-break: break-word;
   max-height: 220px;
   overflow: auto;
@@ -509,6 +525,7 @@
   align-items: center;
   gap: 0.6rem;
   flex-wrap: nowrap;
+  margin-bottom: 1rem;
 }
 
 /* 「新しいプロンプトを投稿」ボタンを左側のテキストから右へ押し出す */
@@ -525,7 +542,49 @@
   flex: 1;
   margin: 0;
   font-weight: 600;
-  color: #0f5132;
+  color: var(--success-strong, #0f5132);
+}
+
+.task-toggle-btn {
+  width: 100%;
+  margin-top: 0.1rem;
+}
+
+.setup-access-chat {
+  text-align: center;
+  margin-top: 0.2rem;
+}
+
+.task-card-action-container {
+  position: absolute;
+  top: -10px;
+  z-index: 10;
+}
+
+.task-card-action-container--delete {
+  left: -10px;
+}
+
+.task-card-action-container--edit {
+  right: -10px;
+}
+
+.task-card-action-container .card-delete-btn,
+.task-card-action-container .card-edit-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  color: var(--text-light, #ffffff);
+  font-size: var(--text-sm, 0.875rem);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-card-action-container .card-delete-btn i,
+.task-card-action-container .card-edit-btn i {
+  color: inherit;
 }
 
 /* ===== Mobile Responsive Styles ===== */
@@ -566,7 +625,7 @@
   }
 
   .io-container {
-    font-size: 0.8rem;
+    font-size: var(--text-xs, 0.8125rem);
     width: calc(100% - 0.5rem);
   }
 
@@ -594,7 +653,7 @@
   }
 
   .task-detail-section-body {
-    font-size: 0.9rem;
+    font-size: var(--text-sm, 0.875rem);
     max-height: 185px;
   }
 }

@@ -3,7 +3,7 @@ import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { useHomePageChatContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
-import { MODEL_OPTIONS, roomMenuBaseStyle, roomMenuItemBaseStyle } from "../../lib/chat_page/constants";
+import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 
 export function ChatMainSection() {
   const {
@@ -44,7 +44,7 @@ export function ChatMainSection() {
   } = useHomePageChatContext();
 
   return (
-    <div id="chat-container" style={{ display: isChatVisible ? "flex" : "none" }}>
+    <div id="chat-container" data-visible={isChatVisible ? "true" : "false"}>
       <div className="chat-header">
         <div className="header-left">
           <button
@@ -104,7 +104,6 @@ export function ChatMainSection() {
             data-tooltip="このチャットを共有"
             data-tooltip-placement="bottom"
             disabled={!hasCurrentRoom}
-            aria-disabled={hasCurrentRoom ? "false" : "true"}
             onClick={() => {
               if (!hasCurrentRoom) return;
               openShareModal();
@@ -145,61 +144,34 @@ export function ChatMainSection() {
                 >
                   <span>{room.title || "新規チャット"}</span>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      position: "relative",
-                      marginLeft: "auto",
-                    }}
-                  >
+                  <div className="chat-room-card-actions">
                     <i
                       className="bi bi-three-dots-vertical room-actions-icon"
-                      style={{ cursor: "pointer", fontSize: "18px" }}
                       onClick={(event) => {
                         event.stopPropagation();
                         setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
                       }}
                     ></i>
 
-                    <div className="room-actions-menu" style={{ ...roomMenuBaseStyle, display: roomMenuOpen ? "block" : "none" }}>
+                    <div className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}>
                       <div
-                        className="menu-item"
-                        style={{ ...roomMenuItemBaseStyle, color: "#007bff", background: "#f9f9f9" }}
-                        onMouseEnter={(event) => {
-                          (event.currentTarget as HTMLDivElement).style.backgroundColor = "#e6f0ff";
-                        }}
-                        onMouseLeave={(event) => {
-                          (event.currentTarget as HTMLDivElement).style.backgroundColor = "#f9f9f9";
-                        }}
+                        className="menu-item menu-item--rename"
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleRenameRoom(room.id, room.title);
                         }}
                       >
-                        <i className="bi bi-pencil-square" style={{ marginRight: "6px" }}></i> 名前変更
+                        <i className="bi bi-pencil-square menu-item__icon"></i> 名前変更
                       </div>
 
                       <div
-                        className="menu-item"
-                        style={{
-                          ...roomMenuItemBaseStyle,
-                          color: "#dc3545",
-                          background: "#f9f9f9",
-                          borderBottom: "none",
-                        }}
-                        onMouseEnter={(event) => {
-                          (event.currentTarget as HTMLDivElement).style.backgroundColor = "#ffe6e6";
-                        }}
-                        onMouseLeave={(event) => {
-                          (event.currentTarget as HTMLDivElement).style.backgroundColor = "#f9f9f9";
-                        }}
+                        className="menu-item menu-item--delete"
                         onClick={(event) => {
                           event.stopPropagation();
                           void handleDeleteRoom(room.id, room.title);
                         }}
                       >
-                        <i className="bi bi-trash" style={{ marginRight: "6px" }}></i> 削除
+                        <i className="bi bi-trash menu-item__icon"></i> 削除
                       </div>
                     </div>
                   </div>
@@ -252,7 +224,7 @@ export function ChatMainSection() {
               if (message.sender === "user") {
                 return (
                   <div key={message.id} className="message-wrapper user-message-wrapper">
-                    <div className="user-message" style={{ whiteSpace: "pre-wrap" }}>
+                    <div className="user-message">
                       {message.text}
                     </div>
                     <div className="message-actions">

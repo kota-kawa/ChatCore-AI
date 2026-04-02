@@ -467,8 +467,8 @@ function showChatInterface() {
   const { setupContainer, chatContainer } = getSharedDomRefs();
   if (!setupContainer || !chatContainer) return;
 
-  setupContainer.style.display = "none";
-  chatContainer.style.display = "flex";
+  setupContainer.setAttribute("data-visible", "false");
+  chatContainer.setAttribute("data-visible", "true");
   refreshChatShareState();
 
   // Markdown パーサはチャット画面表示時に遅延読み込みする

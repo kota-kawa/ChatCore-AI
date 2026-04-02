@@ -18,7 +18,16 @@ export function TaskEditModal({
   onSave,
 }: TaskEditModalProps) {
   return (
-    <div id="taskEditModal" className="custom-modal" style={{ display: taskEditModalOpen ? "flex" : "none" }}>
+    <div
+      id="taskEditModal"
+      className={`custom-modal modal-base ${taskEditModalOpen ? "is-open" : ""}`.trim()}
+      aria-hidden={taskEditModalOpen ? "false" : "true"}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          closeTaskEditModal();
+        }
+      }}
+    >
       <div className="custom-modal-dialog">
         <div className="custom-modal-content">
           <div className="custom-modal-header">
@@ -37,7 +46,7 @@ export function TaskEditModal({
             <form id="taskEditForm" onSubmit={(event) => event.preventDefault()}>
               <div className="custom-form-group">
                 <label htmlFor="taskName" className="custom-form-label">
-                  <span style={{ color: "green" }}>タイトル</span>
+                  <span className="custom-form-label__required">タイトル</span>
                 </label>
                 <input
                   type="text"
@@ -58,7 +67,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="promptTemplate" className="custom-form-label">
-                  <span style={{ color: "green" }}>プロンプトテンプレート</span>
+                  <span className="custom-form-label__required">プロンプトテンプレート</span>
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -79,7 +88,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="responseRules" className="custom-form-label">
-                  <span style={{ color: "green" }}>回答ルール</span>
+                  <span className="custom-form-label__required">回答ルール</span>
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -100,7 +109,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="outputSkeleton" className="custom-form-label">
-                  <span style={{ color: "green" }}>出力テンプレート</span>
+                  <span className="custom-form-label__required">出力テンプレート</span>
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -121,7 +130,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="inputExamples" className="custom-form-label">
-                  <span style={{ color: "green" }}>入力例</span>
+                  <span className="custom-form-label__required">入力例</span>
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -142,7 +151,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="outputExamples" className="custom-form-label">
-                  <span style={{ color: "green" }}>出力例</span>
+                  <span className="custom-form-label__required">出力例</span>
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -174,7 +183,7 @@ export function TaskEditModal({
             </button>
             <button
               type="button"
-              className="custom-btn-primary"
+              className="primary-button"
               id="saveTaskChanges"
               onClick={() => {
                 onSave();

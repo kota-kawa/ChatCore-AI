@@ -85,7 +85,7 @@ chat-action-menu {
 }
 
 .message-wrapper--streaming {
-  animation: streamMessageAppear 0.3s ease-out;
+  animation: streamMessageAppear var(--transition-slow, 0.3s ease-out);
 }
 
 .user-message-wrapper {
@@ -104,13 +104,13 @@ chat-action-menu {
 .user-message,
 .bot-message {
   position: relative;
-  line-height: 1.65;
-  font-size: 0.938rem;
+  line-height: var(--leading-loose, 1.65);
+  font-size: var(--text-base, 0.9375rem);
 }
 
 .user-message {
   background: var(--primary-color, #19c37d);
-  color: #fff;
+  color: var(--text-light, #ffffff);
   padding: 0.75rem 1.05rem;
   border-radius: 20px 20px 4px 20px;
   animation: floatUp 0.4s ease-out;
@@ -234,6 +234,7 @@ chat-action-menu {
   border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0;
   color: var(--text-secondary, #6b7280);
   font-style: italic;
+  line-height: var(--leading-normal, 1.5);
 }
 
 /* Code Block Container */
@@ -294,7 +295,7 @@ chat-action-menu {
   border: none;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  line-height: 1.55;
+  line-height: var(--leading-normal, 1.5);
 }
 
 .bot-message code {
@@ -357,7 +358,7 @@ chat-action-menu {
   border-collapse: collapse;
   margin: 0.65rem 0;
   width: 100%;
-  font-size: 0.9rem;
+  font-size: var(--text-sm, 0.875rem);
   display: block;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -374,7 +375,7 @@ chat-action-menu {
 .bot-message th {
   background: var(--primary-subtle, rgba(25, 195, 125, 0.06));
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--text-sm, 0.875rem);
 }
 
 .bot-message hr {
@@ -429,7 +430,7 @@ chat-action-menu {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(15, 23, 42, 0.12);
   color: var(--text-secondary, #6b7280);
-  font-size: 0.95rem;
+  font-size: var(--text-base, 0.9375rem);
   cursor: pointer;
   opacity: 0.76;
   transition:
@@ -626,10 +627,10 @@ chat-action-menu {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(8px);
   transition:
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    background 0.15s ease,
-    color 0.15s ease;
+    opacity var(--transition-normal, 0.2s ease),
+    transform var(--transition-normal, 0.2s ease),
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
   opacity: 1;
   -webkit-tap-highlight-color: transparent;
 }
@@ -694,12 +695,12 @@ chat-action-menu {
 
   .user-message {
     padding: 0.65rem 0.9rem;
-    font-size: 0.9rem;
+    font-size: var(--text-sm, 0.875rem);
     border-radius: 18px 18px 4px 18px;
   }
 
   .bot-message {
-    font-size: 0.9rem;
+    font-size: var(--text-sm, 0.875rem);
     padding: 0.15rem 0;
   }
 
@@ -756,19 +757,19 @@ chat-action-menu {
   .bot-message th,
   .bot-message td {
     padding: 0.35rem 0.45rem;
-    font-size: 0.82rem;
+    font-size: var(--text-xs, 0.8125rem);
   }
 
   .copy-btn {
     width: 1.75rem;
     height: 1.75rem;
-    font-size: 0.88rem;
+    font-size: var(--text-sm, 0.875rem);
   }
 
   .memo-save-btn {
     width: 1.75rem;
     height: 1.75rem;
-    font-size: 0.88rem;
+    font-size: var(--text-sm, 0.875rem);
   }
 
   .message-actions {

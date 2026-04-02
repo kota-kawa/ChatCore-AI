@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { ModelOption } from "./types";
 import chatContract from "../../data/chat_contract.json";
 
@@ -29,29 +28,6 @@ export const THINKING_CONSTELLATION_LINKS: Array<[number, number]> = [
   [2, 3],
   [3, 4],
 ];
-
-export const roomMenuBaseStyle: CSSProperties = {
-  position: "absolute",
-  top: "50%",
-  right: 0,
-  transform: "translateY(-50%)",
-  background: "#fff",
-  border: "1px solid #ddd",
-  borderRadius: "6px",
-  boxShadow: "0 2px 4px rgba(0,0,0,.1)",
-  zIndex: 10,
-  minWidth: "140px",
-  overflow: "hidden",
-};
-
-export const roomMenuItemBaseStyle: CSSProperties = {
-  padding: "8px 16px",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  fontSize: "14px",
-  borderBottom: "1px solid #ddd",
-};
 
 export const MODEL_OPTIONS: ModelOption[] = [
   { value: "openai/gpt-oss-120b", label: "GROQ | GPT-OSS 120B（標準・高品質な応答）", shortLabel: "GPT-OSS 120B" },

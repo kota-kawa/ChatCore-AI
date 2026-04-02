@@ -3,6 +3,12 @@
 */
 
 
+/* hidden 属性を使う UI の表示制御を優先 */
+#auth-buttons[hidden],
+user-icon[hidden] {
+  display: none !important;
+}
+
 /* ログイン前のボタンと同じ右上固定表示に */
 .settings-btn {
   position: absolute;

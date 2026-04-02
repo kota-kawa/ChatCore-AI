@@ -1,22 +1,14 @@
 /* task-edit-modal.css */
 /* Custom Modal 全体のスタイル */
 #taskEditModal.custom-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.45); /* 背景の半透明黒 */
-  display: none; /* 初期は非表示 */
-  align-items: center;
-  justify-content: center;
+  background-color: var(--modal-overlay, rgba(0, 0, 0, 0.45)); /* 背景の半透明黒 */
   z-index: 10000;
   backdrop-filter: blur(6px);
 }
 
 /* モーダルのダイアログ部分 */
 .custom-modal-dialog {
-  background-color: #fff;
+  background-color: var(--modal-surface, #fff);
   border-radius: 16px;
   width: 90%;
   max-width: 520px;
@@ -47,7 +39,7 @@
 }
 
 .custom-modal-title {
-  font-size: 1.25rem;
+  font-size: var(--text-2xl, 1.25rem);
   font-weight: bold;
   margin: 0;
 }
@@ -72,13 +64,15 @@
 .custom-modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
   padding: 12px 20px;
   background: #f9fbfa;
 }
 
 /* ボタンスタイル */
 .custom-btn-secondary,
-.custom-btn-primary {
+.custom-modal-footer .primary-button {
   padding: 8px 16px;
   border: none;
   border-radius: 10px;
@@ -86,14 +80,8 @@
 }
 
 .custom-btn-secondary {
-  background-color: #6c757d;
-  color: #fff;
-  margin-right: 10px;
-}
-
-.custom-btn-primary {
-  background: var(--primary-color);
-  color: #fff;
+  background-color: var(--neutral-button, #6c757d);
+  color: var(--text-light, #fff);
 }
 
 /* フォーム関連 */
@@ -104,17 +92,24 @@
 .custom-form-label {
   display: block;
   margin-bottom: 5px;
-  font-size: 1rem;
-  color: #000;
+  font-size: var(--text-md, 1rem);
+  color: var(--text-dark, #1a1a1a);
+}
+
+.custom-form-label__required {
+  color: var(--success-color, #15803d);
 }
 
 .custom-form-control {
   width: 100%;
   padding: 0.75rem 0.85rem;
-  font-size: 1rem;
+  font-size: var(--text-md, 1rem);
+  line-height: var(--leading-normal, 1.5);
   border: 1px solid #dfe9e5;
   border-radius: 10px;
-  transition: border 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease);
 }
 
 .custom-form-control:focus {
@@ -124,7 +119,7 @@
 }
 
 .custom-form-text {
-  font-size: 0.85rem;
+  font-size: var(--text-sm, 0.875rem);
   color: #666;
   margin-top: 5px;
 }

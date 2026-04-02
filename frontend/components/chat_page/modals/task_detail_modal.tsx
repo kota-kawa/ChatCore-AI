@@ -10,7 +10,7 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
   return (
     <div
       id="io-modal"
-      style={{ display: taskDetail ? "flex" : "none" }}
+      className={`modal-base ${taskDetail ? "is-open" : ""}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="taskDetailTitle"

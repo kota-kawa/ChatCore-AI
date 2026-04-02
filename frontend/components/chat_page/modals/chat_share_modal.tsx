@@ -30,12 +30,11 @@ export function ChatShareModal({
   return (
     <div
       id="chat-share-modal"
-      className="chat-share-modal"
+      className={`chat-share-modal modal-base ${shareModalOpen ? "is-open" : ""}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-hidden={shareModalOpen ? "false" : "true"}
       aria-labelledby="chat-share-title"
-      style={{ display: shareModalOpen ? "flex" : "none" }}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeShareModal();
@@ -94,7 +93,7 @@ export function ChatShareModal({
             title="端末で共有"
             disabled={shareLoading}
             onClick={shareWithNativeSheet}
-            style={{ display: supportsNativeShare ? "inline-flex" : "none" }}
+            hidden={!supportsNativeShare}
           >
             <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
           </button>
