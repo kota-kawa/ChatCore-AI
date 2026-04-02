@@ -70,6 +70,11 @@ export type PromptStatus = {
   variant: PromptStatusVariant;
 };
 
+export type ShareStatus = {
+  message: string;
+  error: boolean;
+};
+
 export type TaskEditFormState = {
   old_task: string;
   new_task: string;

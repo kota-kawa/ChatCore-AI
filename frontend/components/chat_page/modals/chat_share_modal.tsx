@@ -1,7 +1,4 @@
-type ShareStatus = {
-  message: string;
-  error: boolean;
-};
+import type { ShareStatus } from "../../../lib/chat_page/types";
 
 type ChatShareModalProps = {
   shareModalOpen: boolean;
