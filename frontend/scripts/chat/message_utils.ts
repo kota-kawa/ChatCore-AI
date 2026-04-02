@@ -1,8 +1,8 @@
 // message_utils.ts – 共通メッセージユーティリティ
 // --------------------------------------------------
-import { z } from "zod";
 import { getSharedDomRefs } from "../core/dom";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
+import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
 
 // DOMPurify が利用可能な場合は使用し、未ロード時は安全なテキスト描画にフォールバック
 
@@ -226,10 +226,6 @@ function copyTextWithExecCommand(text: string) {
 
   return copied;
 }
-
-const MemoSaveResponseSchema = z.object({
-  status: z.string().optional()
-}).passthrough();
 
 async function copyTextToClipboard(text: string) {
   const clipboardWrite = navigator.clipboard?.writeText?.bind(navigator.clipboard);

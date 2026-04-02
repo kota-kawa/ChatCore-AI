@@ -1,33 +1,16 @@
 import { z } from "zod";
 
-const PromptIdSchema = z.union([z.string(), z.number()]);
-const NullableStringSchema = z.string().nullable().optional().transform((value) => value ?? "");
-const OptionalDateTimeSchema = z.string().nullable().optional().transform((value) => {
-  const normalized = value?.trim();
-  return normalized ? normalized : undefined;
-});
-
-const PromptRecordApiSchema = z.object({
-  id: PromptIdSchema.optional(),
-  title: z.string(),
-  content: z.string(),
-  category: NullableStringSchema,
-  input_examples: NullableStringSchema,
-  output_examples: NullableStringSchema,
-  created_at: OptionalDateTimeSchema
-});
-
-export const PromptRecordSchema = z.object({
-  id: PromptIdSchema.optional(),
-  title: z.string(),
-  content: z.string(),
-  category: z.string(),
-  inputExamples: z.string(),
-  outputExamples: z.string(),
-  createdAt: z.string().optional()
-});
-
-export type PromptRecord = z.infer<typeof PromptRecordSchema>;
+import {
+  MyPromptsApiResponseSchema,
+  PromptListApiResponseSchema,
+  PromptListEntryApiSchema,
+  PromptListEntryLegacyApiSchema,
+  PromptManageMutationApiResponseSchema,
+  PromptRecordApiSchema,
+  type PromptListEntryApi,
+  type PromptListEntryLegacyApi,
+  type PromptRecordApi
+} from "../../../types/generated/api_schemas";
 
 function parseWithSchema<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
@@ -41,81 +24,70 @@ function parseWithSchema<TSchema extends z.ZodTypeAny>(
   return parsed.data;
 }
 
-function normalizePromptRecord(prompt: z.infer<typeof PromptRecordApiSchema>): PromptRecord {
+function normalizeNullableString(value: string | null | undefined): string {
+  return value ?? "";
+}
+
+function normalizeOptionalDateTime(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizePromptRecord(prompt: PromptRecordApi): {
+  id?: string | number;
+  title: string;
+  content: string;
+  category: string;
+  inputExamples: string;
+  outputExamples: string;
+  createdAt?: string;
+} {
   return {
-    id: prompt.id,
+    id: prompt.id ?? undefined,
     title: prompt.title,
     content: prompt.content,
-    category: prompt.category,
-    inputExamples: prompt.input_examples,
-    outputExamples: prompt.output_examples,
-    createdAt: prompt.created_at
+    category: normalizeNullableString(prompt.category),
+    inputExamples: normalizeNullableString(prompt.input_examples),
+    outputExamples: normalizeNullableString(prompt.output_examples),
+    createdAt: normalizeOptionalDateTime(prompt.created_at)
   };
 }
 
+export const PromptRecordSchema = PromptRecordApiSchema.transform(normalizePromptRecord);
+export type PromptRecord = z.infer<typeof PromptRecordSchema>;
+
 export const toPromptRecord = (raw: unknown): PromptRecord => {
-  const prompt = parseWithSchema(PromptRecordApiSchema, raw, "プロンプトデータの形式が不正です。");
-  return normalizePromptRecord(prompt);
+  return parseWithSchema(PromptRecordSchema, raw, "プロンプトデータの形式が不正です。");
 };
 
-export const PromptListEntrySchema = z.object({
-  id: PromptIdSchema.optional(),
-  promptId: PromptIdSchema.optional(),
-  prompt: PromptRecordSchema,
-  title: z.string(),
-  content: z.string(),
-  category: z.string(),
-  inputExamples: z.string(),
-  outputExamples: z.string(),
-  createdAt: z.string().optional()
-});
+function isPromptListEntryWithNestedPrompt(
+  entry: PromptListEntryApi | PromptListEntryLegacyApi
+): entry is PromptListEntryApi {
+  return "prompt" in entry;
+}
 
-export type PromptListEntry = z.infer<typeof PromptListEntrySchema>;
-
-const PromptListEntryBaseApiSchema = z.object({
-  id: PromptIdSchema.optional(),
-  prompt_id: PromptIdSchema.optional(),
-  created_at: OptionalDateTimeSchema
-});
-
-const PromptListEntryWithNestedPromptApiSchema = PromptListEntryBaseApiSchema.extend({
-  prompt: PromptRecordApiSchema
-});
-
-const PromptListEntryLegacyApiSchema = PromptListEntryBaseApiSchema.merge(PromptRecordApiSchema);
-const PromptListEntryApiSchema = z.union([PromptListEntryWithNestedPromptApiSchema, PromptListEntryLegacyApiSchema]);
-
-function normalizePromptListEntry(entry: z.infer<typeof PromptListEntryApiSchema>): PromptListEntry {
-  const prompt = normalizePromptRecord("prompt" in entry ? entry.prompt : entry);
+function normalizePromptListEntry(entry: PromptListEntryApi | PromptListEntryLegacyApi) {
+  const prompt = normalizePromptRecord(isPromptListEntryWithNestedPrompt(entry) ? entry.prompt : entry);
   return {
-    id: entry.id,
-    promptId: entry.prompt_id,
+    id: entry.id ?? undefined,
+    promptId: entry.prompt_id ?? undefined,
     prompt,
     title: prompt.title,
     content: prompt.content,
     category: prompt.category,
     inputExamples: prompt.inputExamples,
     outputExamples: prompt.outputExamples,
-    createdAt: entry.created_at
+    createdAt: normalizeOptionalDateTime(entry.created_at)
   };
 }
 
+const PromptListEntryApiUnionSchema = z.union([PromptListEntryApiSchema, PromptListEntryLegacyApiSchema]);
+export const PromptListEntrySchema = PromptListEntryApiUnionSchema.transform(normalizePromptListEntry);
+export type PromptListEntry = z.infer<typeof PromptListEntrySchema>;
+
 export const toPromptListEntry = (raw: unknown): PromptListEntry => {
-  const entry = parseWithSchema(PromptListEntryApiSchema, raw, "プロンプトリストデータの形式が不正です。");
-  return normalizePromptListEntry(entry);
+  return parseWithSchema(PromptListEntrySchema, raw, "プロンプトリストデータの形式が不正です。");
 };
-
-const MyPromptsApiResponseSchema = z.object({
-  prompts: z.array(PromptRecordApiSchema).default([])
-});
-
-const PromptListApiResponseSchema = z.object({
-  prompts: z.array(PromptListEntryApiSchema).default([])
-});
-
-const PromptManageMutationApiResponseSchema = z.object({
-  message: z.string().optional()
-});
 
 export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
 
@@ -125,7 +97,7 @@ export function parseMyPromptsResponse(raw: unknown): PromptRecord[] {
     raw,
     "プロンプト一覧レスポンスの形式が不正です。"
   );
-  return response.prompts.map(normalizePromptRecord);
+  return (response.prompts ?? []).map((prompt) => normalizePromptRecord(prompt));
 }
 
 export function parsePromptListResponse(raw: unknown): PromptListEntry[] {
@@ -134,7 +106,7 @@ export function parsePromptListResponse(raw: unknown): PromptListEntry[] {
     raw,
     "プロンプトリストレスポンスの形式が不正です。"
   );
-  return response.prompts.map(normalizePromptListEntry);
+  return (response.prompts ?? []).map((entry) => normalizePromptListEntry(entry));
 }
 
 export function parsePromptManageMutationResponse(raw: unknown): PromptManageMutationResponse {

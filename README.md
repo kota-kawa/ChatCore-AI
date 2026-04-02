@@ -86,6 +86,7 @@ alembic upgrade head
 - Default task definitions are centralized in `frontend/data/default_tasks.json` and seeded on startup.
 - `alembic/versions/` contains incremental migration history.
 - `db/performance_indexes.sql` is kept as a direct SQL fallback for index-only updates.
+- API schema single source: backend Pydantic models (`services/request_models.py`, `services/response_models.py`) are converted into frontend Zod schemas at `frontend/types/generated/api_schemas.ts` via `python3 scripts/generate_frontend_zod_schemas.py` (or `npm --prefix frontend run generate:api-schemas`).
 
 ## Challenges & Solutions
 
@@ -159,6 +160,7 @@ flowchart LR
   Trade-off: extra infrastructure and operational overhead.
 - **Why PostgreSQL as the primary datastore**: Core entities (users, chats, prompts, admin data) are relational and consistency-sensitive. PostgreSQL provides strong integrity guarantees plus mature indexing/migration workflows.
 - **Why Next.js for frontend**: Next.js supports route-based UI composition and production-ready optimization while allowing incremental migration from legacy static/script assets.
+- **Why backend-driven API schemas**: Request/response contracts are authored once in backend Pydantic models and generated into frontend Zod schemas. This removes manual double maintenance and prevents backend/frontend contract drift.
 
 ## Engineering Highlights (for reviewers)
 - **Hybrid session middleware** (`services/session_middleware.py`): Built a custom ASGI middleware that transparently falls back from Redis-backed sessions to signed-cookie sessions when Redis is unavailable or fails mid-request — no session loss, no user disruption. Also implements session fixation prevention by rotating the session identifier on login.
@@ -263,6 +265,7 @@ alembic upgrade head
 - 既定タスク定義は `frontend/data/default_tasks.json` を単一ソースとして起動時に投入
 - `alembic/versions/`: 段階的な変更履歴
 - `db/performance_indexes.sql`: インデックスのみを直接適用するフォールバックSQL
+- APIスキーマの単一ソース: バックエンドPydantic（`services/request_models.py`, `services/response_models.py`）を `python3 scripts/generate_frontend_zod_schemas.py`（または `npm --prefix frontend run generate:api-schemas`）でフロントエンドZod（`frontend/types/generated/api_schemas.ts`）へ生成
 
 ## 課題と解決策（Challenges & Solutions）
 
@@ -335,6 +338,7 @@ flowchart LR
   トレードオフ: 追加インフラの運用コストが発生します。
 - **なぜ PostgreSQL を主データストアにしたか**: ユーザー・チャット・プロンプト・管理データは関係性と整合性が重要なため、整合性保証・インデックス・マイグレーションが成熟した PostgreSQL を採用しています。
 - **なぜ Next.js を採用したか**: ルート単位でUIを構成しつつ本番最適化を行え、既存の静的アセット/スクリプト構成から段階的に移行しやすいためです。
+- **なぜ API スキーマをバックエンド主導にしたか**: リクエスト/レスポンス契約をバックエンドPydanticに集約し、フロントエンドZodは生成で同期します。手書き二重管理をなくし、契約ドリフトを防ぐためです。
 
 ## レビュー観点の強み
 - **ハイブリッドセッションミドルウェア** (`services/session_middleware.py`): Redis バックエンドから署名付き Cookie への透過的フォールバックを実装したカスタム ASGI ミドルウェア。Redis 障害時もセッション消失なし・ユーザー影響ゼロで吸収。ログイン時のセッション ID 再発行によるセッション固定攻撃対策も実装。
