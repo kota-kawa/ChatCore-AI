@@ -343,8 +343,11 @@ class ActionMenu extends HTMLElement {
   }
 
   updateMenuSize() {
-    const chatContainer = document.getElementById("chat-container");
-    const isInChatMode = Boolean(chatContainer && (chatContainer as HTMLElement).style.display === "flex");
+    const chatContainer = document.getElementById("chat-container") as HTMLElement | null;
+    const setupContainer = document.getElementById("setup-container") as HTMLElement | null;
+    const chatVisibleState = chatContainer?.getAttribute("data-visible");
+    const setupVisibleState = setupContainer?.getAttribute("data-visible");
+    const isInChatMode = chatVisibleState === "true" || setupVisibleState === "false";
     const isChatPage = document.body.classList.contains("chat-page");
 
     // CSSカスタムプロパティでコンテキストを設定
@@ -359,14 +362,22 @@ class ActionMenu extends HTMLElement {
 
   observeScreenChanges() {
     const chatContainer = document.getElementById("chat-container");
+    const setupContainer = document.getElementById("setup-container");
+    const observer = new MutationObserver(() => {
+      this.updateMenuSize();
+    });
+
+    // MutationObserverで画面切り替え属性の変化を監視
     if (chatContainer) {
-      // MutationObserverでchat-containerのstyle変化を監視
-      const observer = new MutationObserver(() => {
-        this.updateMenuSize();
-      });
       observer.observe(chatContainer, {
         attributes: true,
-        attributeFilter: ["style"]
+        attributeFilter: ["style", "data-visible"]
+      });
+    }
+    if (setupContainer) {
+      observer.observe(setupContainer, {
+        attributes: true,
+        attributeFilter: ["style", "data-visible"]
       });
     }
 
