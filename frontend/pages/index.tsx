@@ -13,6 +13,7 @@ export default function HomePage() {
 
   const {
     loggedIn,
+    authResolved,
     isNewPromptModalOpen,
     closeNewPromptModal,
     setTaskDetail,
@@ -53,6 +54,13 @@ export default function HomePage() {
     shareWithNativeSheet,
   } = controller;
 
+  const floatingAuthUiStyle = {
+    position: "fixed" as const,
+    top: "max(10px, env(safe-area-inset-top, 0px))",
+    right: "max(10px, env(safe-area-inset-right, 0px))",
+    zIndex: 2000
+  };
+
   return (
     <>
       <Head>
@@ -68,7 +76,13 @@ export default function HomePage() {
         <div className="chat-page-shell">
           <action-menu></action-menu>
 
-          <div id="auth-buttons" hidden={loggedIn}>
+          <div
+            id="auth-buttons"
+            style={{
+              ...floatingAuthUiStyle,
+              display: authResolved && !loggedIn ? "" : "none"
+            }}
+          >
             <button id="login-btn" className="auth-btn" onClick={() => {
               window.location.href = "/login";
             }}>
@@ -77,7 +91,13 @@ export default function HomePage() {
             </button>
           </div>
 
-          <user-icon id="userIcon" hidden={!loggedIn}></user-icon>
+          <user-icon
+            id="userIcon"
+            style={{
+              ...floatingAuthUiStyle,
+              display: authResolved && loggedIn ? "" : "none"
+            }}
+          ></user-icon>
 
           <SetupSection />
 

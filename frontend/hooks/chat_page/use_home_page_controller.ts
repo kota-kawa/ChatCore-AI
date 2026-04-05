@@ -1673,6 +1673,7 @@ export function useHomePageController() {
 
   return {
     loggedIn,
+    authResolved,
     isChatVisible,
     setupInfo,
     selectedModel,
