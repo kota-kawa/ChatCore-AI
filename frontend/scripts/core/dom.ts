@@ -2,7 +2,7 @@ export type SharedDomRefs = {
   setupContainer: HTMLElement | null;
   chatContainer: HTMLElement | null;
   chatMessages: HTMLElement | null;
-  userInput: HTMLInputElement | null;
+  userInput: HTMLTextAreaElement | HTMLInputElement | null;
   sendBtn: HTMLElement | null;
   backToSetupBtn: HTMLElement | null;
   newChatBtn: HTMLElement | null;
@@ -20,7 +20,7 @@ export function initSharedDomRefs(): SharedDomRefs {
     setupContainer: document.getElementById("setup-container"),
     chatContainer: document.getElementById("chat-container"),
     chatMessages: document.getElementById("chat-messages"),
-    userInput: document.getElementById("user-input") as HTMLInputElement | null,
+    userInput: document.getElementById("user-input") as HTMLTextAreaElement | HTMLInputElement | null,
     sendBtn: document.getElementById("send-btn"),
     backToSetupBtn: document.getElementById("back-to-setup"),
     newChatBtn: document.getElementById("new-chat-btn"),

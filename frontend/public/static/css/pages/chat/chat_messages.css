@@ -432,7 +432,7 @@ chat-action-menu {
   color: var(--text-secondary, #6b7280);
   font-size: var(--text-base, 0.9375rem);
   cursor: pointer;
-  opacity: 0.76;
+  opacity: 0.92;
   transition:
     opacity var(--transition-normal, 0.2s ease),
     color var(--transition-fast, 0.15s ease),
@@ -517,11 +517,11 @@ chat-action-menu {
 
 @media (hover: none), (pointer: coarse) {
   .copy-btn {
-    opacity: 0.88;
+    opacity: 0.94;
   }
 
   .memo-save-btn {
-    opacity: 0.88;
+    opacity: 0.94;
   }
 }
 

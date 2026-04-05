@@ -12,7 +12,7 @@
   order: 1;
   flex-grow: 1;
   margin: 0;
-  color: var(--new-prompt-primary-color);
+  color: var(--primary-dark);
   font-weight: 700;
 }
 
@@ -29,7 +29,7 @@
   position: relative;
   background:
     radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%),
-    linear-gradient(135deg, var(--new-prompt-primary-color) 0%, var(--new-prompt-accent-color) 100%);
+    linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
   color: var(--text-light, #ffffff);
   width: 44px;
   height: 44px;
@@ -133,7 +133,7 @@
 
 .new-prompt-modal__eyebrow {
   margin: 0 0 0.18rem;
-  color: #0f7a51;
+  color: var(--primary-dark);
   font-size: var(--text-2xs, 0.75rem);
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -329,7 +329,7 @@
   width: 100%;
   min-height: 48px;
   background:
-    linear-gradient(135deg, var(--new-prompt-accent-color) 0%, var(--new-prompt-accent-color-strong) 100%);
+    linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
   color: var(--text-light, #ffffff);
   border: none;
   border-radius: 16px;

@@ -14,7 +14,7 @@
 .input-wrapper {
   display: flex;
   gap: 0;
-  align-items: center;
+  align-items: flex-end;
   max-width: 800px;
   margin: 0 auto;
   background: var(--surface-secondary, #f9fafb);
@@ -37,6 +37,8 @@
 #user-input {
   flex: 1;
   min-width: 0;
+  min-height: 2.5rem;
+  max-height: min(38vh, 11rem);
   padding: 0.55rem 0.5rem;
   border: none;
   /* iOS で入力時のズームを防止（16px 以上） */
@@ -45,6 +47,8 @@
   color: var(--text-dark, #1a1a1a);
   outline: none;
   line-height: var(--leading-normal, 1.5);
+  resize: none;
+  overflow-y: hidden;
   /* iOS のデフォルトスタイルをリセット */
   -webkit-appearance: none;
   appearance: none;
@@ -56,11 +60,12 @@
 }
 
 #send-btn {
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  --send-btn-visual-inset: 4px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 50%;
   margin: 0;
   padding: 0;
@@ -71,47 +76,61 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: var(--primary-color, #19c37d);
+  position: relative;
+  background: transparent !important;
   color: var(--text-light, #ffffff);
   border: none;
   cursor: pointer;
   transition:
     background var(--transition-fast, 0.15s ease),
     transform var(--transition-fast, 0.15s ease);
-  box-shadow: none;
+  box-shadow: none !important;
   /* タッチフィードバック */
   -webkit-tap-highlight-color: transparent;
 }
 
-#send-btn:hover {
-  background: var(--primary-hover, #15a86b);
-  transform: none;
-  filter: none;
+#send-btn::before {
+  content: "";
+  position: absolute;
+  inset: var(--send-btn-visual-inset);
+  border-radius: 50%;
+  background:
+    var(--chat-button-sheen, radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%)),
+    linear-gradient(
+      135deg,
+      var(--chat-button-base, var(--primary-color, #19c37d)) 0%,
+      var(--chat-button-accent, var(--primary-hover, #15a86b)) 100%
+    );
+  box-shadow:
+    0 14px 24px var(--chat-button-shadow-color, rgba(15, 122, 81, 0.22)),
+    var(--chat-button-edge-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.24));
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease);
+  pointer-events: none;
 }
 
 #send-btn:active {
-  transform: scale(0.88);
+  transform: scale(0.92);
 }
 
 #send-btn i {
-  font-size: var(--text-base, 0.9375rem);
   position: relative;
+  z-index: 1;
+  font-size: var(--text-base, 0.9375rem);
   left: -1px;
 }
 
 /* 生成中: 停止ボタン */
 #send-btn.send-btn--stop {
-  background: var(--danger-color, #ef4444);
+  --chat-button-base: var(--danger-color, #ef4444);
+  --chat-button-accent: var(--danger-hover, #dc2626);
+  --chat-button-shadow-color: rgba(220, 38, 38, 0.28);
   animation: sendBtnStopPulse 1.8s ease-in-out infinite;
 }
 
-#send-btn.send-btn--stop:hover {
-  background: var(--danger-hover, #dc2626);
-  animation: none;
-}
-
 #send-btn.send-btn--stop:active {
-  transform: scale(0.88);
+  transform: scale(0.92);
 }
 
 #send-btn.send-btn--stop i {
@@ -158,11 +177,12 @@
   }
 
   #send-btn {
-    flex-basis: 32px;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    --send-btn-visual-inset: 5px;
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   #send-btn i {

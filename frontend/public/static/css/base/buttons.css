@@ -142,6 +142,8 @@ user-icon[hidden] {
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 1.05rem;
+  min-width: 44px;
+  min-height: 44px;
   cursor: pointer;
   transition:
     background var(--transition-fast, 0.15s ease),
@@ -174,8 +176,10 @@ user-icon[hidden] {
   /* モバイルではアイコンのみ＆円形 */
   #auth-buttons .auth-btn {
     padding: 0;                     /* 余白はなし */
-    width: 2.5rem;                  /* 高さと同じに */
-    height: 2.5rem;                 /* 幅と同じに */
+    width: 44px;                    /* 高さと同じに */
+    height: 44px;                   /* 幅と同じに */
+    min-width: 44px;
+    min-height: 44px;
     justify-content: center;        /* アイコンを中央寄せ */
     border-radius: 50%;             /* 完全な円形 */
   }

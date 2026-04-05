@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { BotMessageHtml } from "./bot_message_html";
 import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
@@ -42,6 +43,26 @@ export function ChatMainSection() {
     handleChatInputKeyDown,
     handleSendMessage,
   } = useHomePageChatContext();
+
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
+    if (!element) return;
+
+    const computed = window.getComputedStyle(element);
+    const lineHeight = Number.parseFloat(computed.lineHeight) || 24;
+    const verticalPadding = Number.parseFloat(computed.paddingTop) + Number.parseFloat(computed.paddingBottom);
+    const verticalBorder = Number.parseFloat(computed.borderTopWidth) + Number.parseFloat(computed.borderBottomWidth);
+    const maxHeight = lineHeight * 6 + verticalPadding + verticalBorder;
+
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, maxHeight)}px`;
+    element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
+  };
+
+  useEffect(() => {
+    adjustChatInputHeight(chatInputRef.current);
+  }, [chatInput]);
 
   return (
     <div id="chat-container" data-visible={isChatVisible ? "true" : "false"}>
@@ -269,16 +290,18 @@ export function ChatMainSection() {
 
           <div className="input-container">
             <div className="input-wrapper">
-              <input
-                type="text"
+              <textarea
+                ref={chatInputRef}
                 id="user-input"
+                rows={1}
                 placeholder="メッセージを入力..."
                 value={chatInput}
                 onChange={(event) => {
                   setChatInput(event.target.value);
+                  adjustChatInputHeight(event.currentTarget);
                 }}
                 onKeyDown={handleChatInputKeyDown}
-              />
+              ></textarea>
               <button
                 type="button"
                 id="send-btn"

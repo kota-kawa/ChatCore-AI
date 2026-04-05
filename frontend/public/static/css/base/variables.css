@@ -21,6 +21,10 @@
 
   --primary-color: #19c37d;
   --primary-hover: #15a86b;
+  --primary-dark: #0f7a51;
+  --primary-dark-hover: #0d6945;
+  --primary-strong: #0f8a40;
+  --primary-soft: #e8f9f3;
   --primary-gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
   --primary-subtle: rgba(25, 195, 125, 0.08);
   --primary-border: rgba(25, 195, 125, 0.18);
@@ -83,7 +87,7 @@
   --sai-left: env(safe-area-inset-left, 0px);
   --sai-right: env(safe-area-inset-right, 0px);
 
-  --ps-primary-color: #19c37d;
+  --ps-primary-color: var(--primary-color);
   --ps-accent-color: #11998e;
   --ps-text-color: #333;
   --ps-light-bg: #f0fdf4;
@@ -92,9 +96,9 @@
   --ps-border-color: #dddddd;
   --ps-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 
-  --new-prompt-primary-color: #0f7a51;
-  --new-prompt-accent-color: #16a34a;
-  --new-prompt-accent-color-strong: #0f8a40;
+  --new-prompt-primary-color: var(--primary-dark);
+  --new-prompt-accent-color: var(--primary-color);
+  --new-prompt-accent-color-strong: var(--primary-hover);
   --new-prompt-text-color: #1f2937;
   --new-prompt-muted-text-color: #52606d;
   --new-prompt-light-bg: #edf8f2;

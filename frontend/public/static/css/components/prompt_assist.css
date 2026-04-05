@@ -420,7 +420,7 @@
 .prompt-assist__action:disabled,
 .prompt-assist__apply-all:disabled {
   cursor: wait;
-  opacity: 0.76;
+  opacity: 0.9;
   transform: none;
   box-shadow: none;
 }

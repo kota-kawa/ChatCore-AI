@@ -1074,7 +1074,8 @@ export function useHomePageController() {
   }, [chatInput, generateResponse, isGenerating, selectedModel, stopGeneration]);
 
   const handleChatInputKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.nativeEvent.isComposing) return;
       if (event.key !== "Enter" || event.shiftKey) return;
       event.preventDefault();
       handleSendMessage();
@@ -1379,15 +1380,21 @@ export function useHomePageController() {
   }, [isChatVisible, sidebarOpen]);
 
   useEffect(() => {
-    if (isNewPromptModalOpen) {
-      document.body.classList.add("new-prompt-modal-open");
-      document.body.style.overflow = "hidden";
-      return;
-    }
-
-    document.body.classList.remove("new-prompt-modal-open");
-    document.body.style.overflow = "";
+    document.body.classList.toggle("new-prompt-modal-open", isNewPromptModalOpen);
   }, [isNewPromptModalOpen]);
+
+  const hasBlockingModalOpen =
+    isNewPromptModalOpen || shareModalOpen || taskEditModalOpen || Boolean(taskDetail);
+
+  useEffect(() => {
+    if (!hasBlockingModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [hasBlockingModalOpen]);
 
   useEffect(() => {
     bindSetupViewportFit();
@@ -1405,19 +1412,19 @@ export function useHomePageController() {
   }, [currentRoomId]);
 
   useEffect(() => {
-    const restore = prependScrollRestoreRef.current;
-    if (!restore || !chatMessagesRef.current) return;
-
-    const container = chatMessagesRef.current;
-    const delta = container.scrollHeight - restore.prevScrollHeight;
-    container.scrollTop = restore.prevScrollTop + delta;
-    prependScrollRestoreRef.current = null;
-  }, [messages]);
-
-  useEffect(() => {
-    if (!pendingAutoScrollRef.current) return;
     const container = chatMessagesRef.current;
     if (!container) return;
+
+    const restore = prependScrollRestoreRef.current;
+    if (restore) {
+      const delta = container.scrollHeight - restore.prevScrollHeight;
+      container.scrollTop = restore.prevScrollTop + delta;
+      prependScrollRestoreRef.current = null;
+      pendingAutoScrollRef.current = false;
+      return;
+    }
+
+    if (!pendingAutoScrollRef.current) return;
     pendingAutoScrollRef.current = false;
     container.scrollTop = container.scrollHeight;
   }, [messages]);

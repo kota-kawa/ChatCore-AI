@@ -7,8 +7,8 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
     <style jsx global>{`
       body.auth-page,
       .auth-page-root {
-        --accent: #00ff88;
-        --accent-soft: #ccff99;
+        --accent: var(--primary-color, #19c37d);
+        --accent-soft: var(--primary-soft, #e8f9f3);
         --bg-1: #0e401e;
         --bg-2: #164f2f;
         --glass: rgba(12, 28, 20, 0.72);
@@ -87,7 +87,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         color: var(--accent);
         margin: 12px 0 10px;
         letter-spacing: 0.06em;
-        text-shadow: 0 8px 24px rgba(0, 255, 136, 0.25);
+        text-shadow: 0 8px 24px rgba(25, 195, 125, 0.25);
       }
 
       .subtitle {
@@ -142,7 +142,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       .email-input:focus {
         background: rgba(10, 20, 15, 0.7);
         border-color: var(--accent);
-        box-shadow: 0 0 0 4px rgba(0, 255, 136, 0.12);
+        box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.12);
       }
 
       .submit-btn,
@@ -174,16 +174,16 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       }
 
       .passkey-btn {
-        --auth-button-base: #00ff88;
-        --auth-button-accent: #8cffc1;
-        --auth-button-shadow-color: rgba(0, 255, 136, 0.25);
-        color: #072b1a;
+        --auth-button-base: var(--primary-color, #19c37d);
+        --auth-button-accent: var(--primary-hover, #15a86b);
+        --auth-button-shadow-color: rgba(25, 195, 125, 0.25);
+        color: #052517;
       }
 
       .submit-btn {
-        --auth-button-base: #eafff3;
-        --auth-button-accent: #d8f8e6;
-        --auth-button-shadow-color: rgba(9, 43, 26, 0.2);
+        --auth-button-base: #f2fcf7;
+        --auth-button-accent: #e4f7ef;
+        --auth-button-shadow-color: rgba(15, 122, 81, 0.18);
         color: #0a2a18;
       }
 
