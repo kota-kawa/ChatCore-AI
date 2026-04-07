@@ -1185,7 +1185,6 @@ export default function PromptSharePage() {
                 const isSaveToListPending = saveToListPendingIds.has(promptId);
                 const isDropdownOpen = openDropdownPromptId === promptId;
                 const safeCategory = prompt.category || "未分類";
-                const safeAuthor = prompt.author || "匿名ユーザー";
                 const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
 
                 return (
@@ -1323,16 +1322,6 @@ export default function PromptSharePage() {
                     <p className="prompt-card__content">{truncateContent(prompt.content)}</p>
 
                     <div className="prompt-meta">
-                      <div className="prompt-meta-info">
-                        <span className="prompt-meta-pill">
-                          <i className="bi bi-person"></i>
-                          {safeAuthor}
-                        </span>
-                        <span className="prompt-meta-pill">
-                          <i className="bi bi-calendar3"></i>
-                          {safeCreatedAt}
-                        </span>
-                      </div>
                       <div className="prompt-actions">
                         <button
                           className="prompt-action-btn comment-btn"
@@ -1405,6 +1394,10 @@ export default function PromptSharePage() {
                           <i className={`bi ${isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark"}`}></i>
                         </button>
                       </div>
+                      <span className="prompt-meta-date">
+                        <i className="bi bi-calendar3"></i>
+                        {safeCreatedAt}
+                      </span>
                     </div>
                   </div>
                 );

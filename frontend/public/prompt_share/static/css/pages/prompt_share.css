@@ -537,6 +537,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   align-items: center;
   gap: 0.38rem;
   min-width: 0;
+  padding-left: 0.08rem;
 }
 
 .prompt-share-page .prompt-card__category-pill {
@@ -550,6 +551,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   border: 2px solid #d0e4fa;
   background: #eaf3ff;
   padding: 0.2rem 0.55rem;
+  margin-left: 0.14rem;
   line-height: 1.2;
   letter-spacing: 0.01em;
 }
@@ -642,8 +644,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .prompt-share-page .prompt-meta {
   margin-top: auto;
   display: flex;
-  flex-direction: column;
-  gap: 0.58rem;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.6rem;
 }
 
 .prompt-share-page .prompt-meta-info {
@@ -671,13 +674,28 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   align-items: center;
-  justify-items: center;
-  column-gap: 0.2rem;
-  border-top: 2px solid #eef3f7;
-  padding-top: 0.62rem;
+  gap: 0.2rem;
+  border-top: none;
+  padding-top: 0;
+  flex-shrink: 0;
+}
+
+.prompt-share-page .prompt-meta-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  color: #7a8fa3;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.prompt-share-page .prompt-meta-date i {
+  font-size: 0.7rem;
+  color: #9ab0c5;
 }
 
 .prompt-share-page .prompt-action-btn {
@@ -701,9 +719,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .meatball-menu {
-  border: 2px solid #e2ecf7;
+  border: none;
   border-radius: 10px;
-  background: #f4f9ff;
+  background: transparent;
   color: #4a6580;
   cursor: pointer;
   display: inline-flex;
@@ -712,8 +730,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   width: 34px;
   height: 34px;
   padding: 0;
-  box-shadow: 0 2px 6px rgba(97, 143, 186, 0.2);
-  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  box-shadow: none;
+  transition: transform 0.14s ease, background 0.14s ease, color 0.14s ease;
   user-select: none;
 }
 
@@ -723,17 +741,29 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-action-btn:hover {
-  background: rgba(72, 147, 224, 0.1);
-  color: #1a5fa8;
   transform: translateY(-1px);
 }
 
+.prompt-share-page .prompt-action-btn.comment-btn:hover {
+  background: rgba(26, 115, 232, 0.12);
+  color: #1a73e8;
+}
+
+.prompt-share-page .prompt-action-btn.like-btn:hover {
+  background: rgba(217, 48, 37, 0.12);
+  color: #d93025;
+}
+
+.prompt-share-page .prompt-action-btn.bookmark-btn:hover {
+  background: rgba(26, 122, 74, 0.12);
+  color: #1a7a4a;
+}
+
 .prompt-share-page .meatball-menu:hover {
-  background: #e0f0ff;
-  border-color: #9ec8f0;
+  background: transparent;
   color: #1a5fa8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(87, 134, 177, 0.24);
+  box-shadow: none;
 }
 
 .prompt-share-page .prompt-action-btn:active {
@@ -748,7 +778,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
 .prompt-share-page .meatball-menu:active {
   transform: translateY(0);
-  box-shadow: 0 2px 5px rgba(97, 143, 186, 0.2);
+  box-shadow: none;
 }
 
 .prompt-share-page .bookmark-btn.bookmarked {
@@ -768,8 +798,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .meatball-menu[aria-expanded="true"] {
-  background: #f3f8fe;
-  border-color: rgba(72, 147, 224, 0.24);
+  background: transparent;
   color: #2f73c7;
 }
 
@@ -1861,6 +1890,16 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   --ps-button-accent: rgba(22, 101, 52, 0.9);
   --ps-button-shadow-color: rgba(22, 163, 74, 0.24);
   color: #ffffff;
+}
+
+.prompt-share-page .prompt-card .meatball-menu,
+.prompt-share-page .prompt-card .meatball-menu:hover,
+.prompt-share-page .prompt-card .meatball-menu:active,
+.prompt-share-page .prompt-card .meatball-menu[aria-expanded="true"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
 }
 
 .prompt-share-page :where(
