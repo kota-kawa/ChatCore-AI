@@ -68,6 +68,12 @@ export function SetupSection() {
 
     const previousTaskRects = previousTaskRectsRef.current;
     if (isTaskOrderEditing && previousTaskRects.size > 0) {
+      const flipTargets: Array<{
+        taskWrapper: HTMLDivElement;
+        deltaX: number;
+        deltaY: number;
+      }> = [];
+
       nextTaskRects.forEach((nextRect, taskDomKey) => {
         const previousRect = previousTaskRects.get(taskDomKey);
         if (!previousRect) return;
@@ -79,19 +85,30 @@ export function SetupSection() {
         const deltaY = previousRect.top - nextRect.top;
         if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
 
-        taskWrapper.style.transition = "none";
-        taskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
-        void taskWrapper.offsetWidth;
-        taskWrapper.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
-        taskWrapper.style.transform = "translate3d(0, 0, 0)";
+        flipTargets.push({
+          taskWrapper,
+          deltaX,
+          deltaY,
+        });
+      });
 
-        const clearTransition = (event: TransitionEvent) => {
-          if (event.propertyName !== "transform") return;
+      if (flipTargets.length > 0) {
+        flipTargets.forEach(({ taskWrapper, deltaX, deltaY }) => {
+          taskWrapper.style.transition = "none";
+          taskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+        });
+
+        void document.body.offsetHeight;
+
+        flipTargets.forEach(({ taskWrapper }) => {
           taskWrapper.style.transition = "";
-          taskWrapper.style.transform = "";
-          taskWrapper.removeEventListener("transitionend", clearTransition);
-        };
-        taskWrapper.addEventListener("transitionend", clearTransition);
+          taskWrapper.style.transform = "translate3d(0, 0, 0)";
+        });
+      }
+    } else if (!isTaskOrderEditing) {
+      taskWrapperRefs.current.forEach((taskWrapper) => {
+        taskWrapper.style.transition = "";
+        taskWrapper.style.transform = "";
       });
     }
 

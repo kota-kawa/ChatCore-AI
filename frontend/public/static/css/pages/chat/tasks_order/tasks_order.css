@@ -44,10 +44,16 @@
 .task-wrapper.editable {
   padding-top: 12px;
   will-change: transform;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 
 /* ドラッグ中のカード */
+.task-wrapper.editable.dragging {
+  transition: none;
+  z-index: 40;
+}
+
 .task-wrapper.editable.dragging .prompt-card {
   animation: none;
   opacity: 0.8;

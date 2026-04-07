@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -172,6 +173,7 @@ export function useHomePageController() {
     supportsNativeShare,
   } = useHomePageShareState();
 
+  const draggingTaskIndexRef = useRef<number | null>(null);
   const hasCurrentRoom = Boolean(currentRoomId);
 
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
@@ -1151,6 +1153,8 @@ export function useHomePageController() {
       if (next) {
         setTasksExpanded(true);
       } else {
+        draggingTaskIndexRef.current = null;
+        setDraggingTaskIndex(null);
         void saveTaskOrder(tasks);
       }
       return next;
@@ -1160,9 +1164,10 @@ export function useHomePageController() {
   const handleTaskDragStart = useCallback(
     (event: React.DragEvent<HTMLDivElement>, index: number) => {
       if (!isTaskOrderEditing) return;
+      draggingTaskIndexRef.current = index;
       setDraggingTaskIndex(index);
       event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", String(index));
+      event.dataTransfer.setData("text/plain", "task-reorder");
     },
     [isTaskOrderEditing],
   );
@@ -1173,9 +1178,8 @@ export function useHomePageController() {
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
 
-      const dragIndexRaw = event.dataTransfer.getData("text/plain");
-      const dragIndex = Number.parseInt(dragIndexRaw, 10);
-      if (!Number.isFinite(dragIndex)) return;
+      const dragIndex = draggingTaskIndexRef.current;
+      if (typeof dragIndex !== "number") return;
       if (dragIndex === hoverIndex) return;
 
       setTasks((previous) => {
@@ -1187,7 +1191,7 @@ export function useHomePageController() {
         if (!moved) return previous;
         next.splice(hoverIndex, 0, moved);
 
-        event.dataTransfer.setData("text/plain", String(hoverIndex));
+        draggingTaskIndexRef.current = hoverIndex;
         setDraggingTaskIndex(hoverIndex);
 
         return next;
@@ -1197,6 +1201,7 @@ export function useHomePageController() {
   );
 
   const handleTaskDragEnd = useCallback(() => {
+    draggingTaskIndexRef.current = null;
     setDraggingTaskIndex(null);
   }, []);
 
