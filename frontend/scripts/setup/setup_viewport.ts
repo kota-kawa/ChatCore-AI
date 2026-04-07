@@ -17,6 +17,12 @@ function applySetupViewportFit() {
 
   setupContainer.classList.remove(SETUP_FIT_COMPACT_CLASS, SETUP_FIT_TIGHT_CLASS);
 
+  // 「もっと見る」でタスクを展開中はカードサイズを固定し、密度調整で縮小しない
+  const taskSelection = setupContainer.querySelector<HTMLElement>("#task-selection");
+  if (taskSelection?.classList.contains("tasks-expanded")) {
+    return;
+  }
+
   const shellStyles = window.getComputedStyle(shell);
   const shellPaddingTop = Number.parseFloat(shellStyles.paddingTop) || 0;
   const shellPaddingBottom = Number.parseFloat(shellStyles.paddingBottom) || 0;
