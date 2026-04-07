@@ -9,8 +9,6 @@ import {
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
-const DRAG_REORDER_COOLDOWN_MS = 48;
-
 export function SetupSection() {
   const {
     isChatVisible,
@@ -37,7 +35,6 @@ export function SetupSection() {
     closeNewPromptModal,
     openNewPromptModal,
     handleTaskDragStart,
-    handleTaskDragOver,
     handleTaskDragEnd,
     handleTaskCardLaunch,
     handleTaskDelete,
@@ -47,18 +44,32 @@ export function SetupSection() {
   } = useHomePageTaskContext();
 
   const { handleAccessChat } = useHomePageChatContext();
+
+  // DOM refs
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const previousTaskRectsRef = useRef<Map<string, DOMRect>>(new Map());
   const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
   const taskObjectSequenceRef = useRef(0);
+
+  // Drag state refs
   const activePointerIdRef = useRef<number | null>(null);
   const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
   const draggingTaskDomKeyRef = useRef<string | null>(null);
   const draggingTaskIndexRef = useRef<number | null>(null);
-  const dragReorderStateRef = useRef<{ lastHoverIndex: number | null; lastReorderTs: number }>({
-    lastHoverIndex: null,
-    lastReorderTs: 0,
-  });
+  const dropTargetIndexRef = useRef<number | null>(null);
+  const startRectsRef = useRef<Map<string, DOMRect>>(new Map());
+
+  // Drop completion refs (for useLayoutEffect animation)
+  const justDroppedDomKeyRef = useRef<string | null>(null);
+  const isDropCompletingRef = useRef(false);
+
+  // Keep a live ref to tasks to avoid stale closures in callbacks
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
+  // Sync dragging index from React state → ref
+  useEffect(() => {
+    draggingTaskIndexRef.current = draggingTaskIndex;
+  }, [draggingTaskIndex]);
 
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
@@ -76,67 +87,81 @@ export function SetupSection() {
     taskWrapperRefs.current.delete(taskDomKey);
   }, []);
 
-  const clearDraggedTaskTransform = useCallback(() => {
-    const draggingTaskDomKey = draggingTaskDomKeyRef.current;
-    if (!draggingTaskDomKey) return;
+  // Apply transforms to non-dragged items to visually show where the dragged card will land
+  const applyDragTransforms = useCallback(() => {
+    const dragIndex = draggingTaskIndexRef.current;
+    const dropTarget = dropTargetIndexRef.current;
+    if (dragIndex === null || dropTarget === null) return;
 
-    const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
-    if (!draggingTaskWrapper) return;
+    const currentTasks = tasksRef.current;
+    const startRects = startRectsRef.current;
 
-    draggingTaskWrapper.style.transform = "";
-  }, []);
+    currentTasks.forEach((task, originalIndex) => {
+      const domKey = getTaskDomKey(task);
+      const wrapper = taskWrapperRefs.current.get(domKey);
+      if (!wrapper) return;
+      if (originalIndex === dragIndex) return; // dragged card handled separately
 
-  const maybeReorderByPointerPosition = useCallback(
-    (clientX: number, clientY: number) => {
-      const dragIndex = draggingTaskIndexRef.current;
-      if (typeof dragIndex !== "number") return;
+      // Determine which slot this item shifts to
+      let shiftedIndex = originalIndex;
+      if (dropTarget > dragIndex && originalIndex > dragIndex && originalIndex <= dropTarget) {
+        shiftedIndex = originalIndex - 1; // shift back
+      } else if (dropTarget < dragIndex && originalIndex >= dropTarget && originalIndex < dragIndex) {
+        shiftedIndex = originalIndex + 1; // shift forward
+      }
 
-      const hoveredElement = document.elementFromPoint(clientX, clientY);
-      const hoveredTaskWrapper = hoveredElement?.closest<HTMLDivElement>(".task-wrapper[data-task-index]");
-      if (!hoveredTaskWrapper) return;
-
-      const hoverIndexRaw = hoveredTaskWrapper.dataset.taskIndex;
-      const hoverIndex = hoverIndexRaw ? Number.parseInt(hoverIndexRaw, 10) : Number.NaN;
-      if (!Number.isFinite(hoverIndex) || hoverIndex === dragIndex) return;
-
-      const now = performance.now();
-      const reorderState = dragReorderStateRef.current;
-      if (reorderState.lastHoverIndex === hoverIndex && now - reorderState.lastReorderTs < DRAG_REORDER_COOLDOWN_MS) {
+      if (shiftedIndex === originalIndex) {
+        wrapper.style.transform = "translate3d(0, 0, 0)";
         return;
       }
 
-      const draggingTaskDomKey = draggingTaskDomKeyRef.current;
-      const draggingTaskWrapper = draggingTaskDomKey ? taskWrapperRefs.current.get(draggingTaskDomKey) : null;
-      if (!draggingTaskWrapper) return;
+      // Calculate the transform using captured start rects
+      const targetTask = currentTasks[shiftedIndex];
+      if (!targetTask) return;
+      const targetDomKey = getTaskDomKey(targetTask);
+      const targetRect = startRects.get(targetDomKey);
+      const myRect = startRects.get(domKey);
+      if (!targetRect || !myRect) return;
 
-      const draggingRect = draggingTaskWrapper.getBoundingClientRect();
-      const hoverRect = hoveredTaskWrapper.getBoundingClientRect();
+      const dx = targetRect.left - myRect.left;
+      const dy = targetRect.top - myRect.top;
+      wrapper.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    });
+  }, [getTaskDomKey]);
 
-      const draggingCenterX = draggingRect.left + draggingRect.width / 2;
-      const draggingCenterY = draggingRect.top + draggingRect.height / 2;
-      const hoverCenterX = hoverRect.left + hoverRect.width / 2;
-      const hoverCenterY = hoverRect.top + hoverRect.height / 2;
+  // Find the slot closest to the dragged card's visual center and update transforms
+  const updateDropTarget = useCallback(
+    (draggedCenterX: number, draggedCenterY: number) => {
+      const dragIndex = draggingTaskIndexRef.current;
+      if (dragIndex === null) return;
 
-      const axisDeltaX = hoverCenterX - draggingCenterX;
-      const axisDeltaY = hoverCenterY - draggingCenterY;
-      const isHorizontalSwap = Math.abs(axisDeltaX) > Math.abs(axisDeltaY);
-      const movingForward = hoverIndex > dragIndex;
+      const currentTasks = tasksRef.current;
+      const startRects = startRectsRef.current;
 
-      if (isHorizontalSwap) {
-        if (movingForward && clientX < hoverCenterX) return;
-        if (!movingForward && clientX > hoverCenterX) return;
-      } else {
-        if (movingForward && clientY < hoverCenterY) return;
-        if (!movingForward && clientY > hoverCenterY) return;
+      let bestIndex = dropTargetIndexRef.current ?? dragIndex;
+      let bestDist = Infinity;
+
+      currentTasks.forEach((task, i) => {
+        const domKey = getTaskDomKey(task);
+        const rect = startRects.get(domKey);
+        if (!rect || rect.width === 0) return;
+
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dist = Math.hypot(draggedCenterX - cx, draggedCenterY - cy);
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIndex = i;
+        }
+      });
+
+      if (bestIndex !== dropTargetIndexRef.current) {
+        dropTargetIndexRef.current = bestIndex;
+        applyDragTransforms();
       }
-
-      dragReorderStateRef.current = {
-        lastHoverIndex: hoverIndex,
-        lastReorderTs: now,
-      };
-      handleTaskDragOver(hoverIndex);
     },
-    [handleTaskDragOver],
+    [getTaskDomKey, applyDragTransforms],
   );
 
   const finishPointerDrag = useCallback(
@@ -154,20 +179,30 @@ export function SetupSection() {
           try {
             draggingTaskWrapper.releasePointerCapture(activePointerId);
           } catch {
-            // pointer capture is already released
+            // already released
           }
         }
       }
 
-      clearDraggedTaskTransform();
+      const dragIndex = draggingTaskIndexRef.current;
+      const dropTarget = dropTargetIndexRef.current;
+
+      // Signal useLayoutEffect to run drop-completion animation
+      justDroppedDomKeyRef.current = draggingTaskDomKey;
+      isDropCompletingRef.current = true;
+
       activePointerIdRef.current = null;
       dragStartPointRef.current = null;
       draggingTaskDomKeyRef.current = null;
       draggingTaskIndexRef.current = null;
-      dragReorderStateRef.current = { lastHoverIndex: null, lastReorderTs: 0 };
-      handleTaskDragEnd();
+      dropTargetIndexRef.current = null;
+      startRectsRef.current = new Map();
+
+      const finalDragIndex = typeof dragIndex === "number" ? dragIndex : 0;
+      const finalDropTarget = typeof dropTarget === "number" ? dropTarget : finalDragIndex;
+      handleTaskDragEnd(finalDragIndex, finalDropTarget);
     },
-    [clearDraggedTaskTransform, handleTaskDragEnd],
+    [handleTaskDragEnd],
   );
 
   const handleTaskPointerDown = useCallback(
@@ -182,11 +217,32 @@ export function SetupSection() {
 
       finishPointerDrag();
 
+      // Clear any existing transforms and force reflow before capturing rects
+      taskWrapperRefs.current.forEach((wrapper) => {
+        wrapper.style.transition = "none";
+        wrapper.style.transform = "";
+      });
+      void document.body.offsetHeight;
+
+      // Capture start rects (natural positions, no transforms)
+      const startRects = new Map<string, DOMRect>();
+      taskWrapperRefs.current.forEach((element, domKey) => {
+        startRects.set(domKey, element.getBoundingClientRect());
+      });
+      startRectsRef.current = startRects;
+
+      // Restore CSS transition on non-dragged items
+      taskWrapperRefs.current.forEach((wrapper, domKey) => {
+        if (domKey !== taskDomKey) {
+          wrapper.style.transition = "";
+        }
+      });
+
       activePointerIdRef.current = event.pointerId;
       dragStartPointRef.current = { x: event.clientX, y: event.clientY };
       draggingTaskDomKeyRef.current = taskDomKey;
       draggingTaskIndexRef.current = index;
-      dragReorderStateRef.current = { lastHoverIndex: index, lastReorderTs: performance.now() };
+      dropTargetIndexRef.current = index;
       handleTaskDragStart(index);
 
       if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -196,10 +252,6 @@ export function SetupSection() {
     },
     [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing],
   );
-
-  useEffect(() => {
-    draggingTaskIndexRef.current = draggingTaskIndex;
-  }, [draggingTaskIndex]);
 
   useEffect(() => {
     if (!isTaskOrderEditing) {
@@ -216,13 +268,18 @@ export function SetupSection() {
       if (!dragStartPoint || !draggingTaskDomKey) return;
 
       const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
-      if (draggingTaskWrapper) {
-        const deltaX = event.clientX - dragStartPoint.x;
-        const deltaY = event.clientY - dragStartPoint.y;
-        draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
-      }
+      const myStartRect = startRectsRef.current.get(draggingTaskDomKey);
+      if (!draggingTaskWrapper || !myStartRect) return;
 
-      maybeReorderByPointerPosition(event.clientX, event.clientY);
+      // Move dragged card to follow pointer
+      const deltaX = event.clientX - dragStartPoint.x;
+      const deltaY = event.clientY - dragStartPoint.y;
+      draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+
+      // Compute dragged card's visual center and update drop target
+      const draggedCenterX = myStartRect.left + myStartRect.width / 2 + deltaX;
+      const draggedCenterY = myStartRect.top + myStartRect.height / 2 + deltaY;
+      updateDropTarget(draggedCenterX, draggedCenterY);
 
       if (event.cancelable) {
         event.preventDefault();
@@ -242,7 +299,7 @@ export function SetupSection() {
       window.removeEventListener("pointerup", handleWindowPointerUp);
       window.removeEventListener("pointercancel", handleWindowPointerUp);
     };
-  }, [finishPointerDrag, isTaskOrderEditing, maybeReorderByPointerPosition]);
+  }, [finishPointerDrag, isTaskOrderEditing, updateDropTarget]);
 
   useEffect(() => {
     return () => {
@@ -250,60 +307,48 @@ export function SetupSection() {
     };
   }, [finishPointerDrag]);
 
+  // Post-drop animation and cleanup
   useLayoutEffect(() => {
-    const nextTaskRects = new Map<string, DOMRect>();
-    taskWrapperRefs.current.forEach((element, taskDomKey) => {
-      nextTaskRects.set(taskDomKey, element.getBoundingClientRect());
-    });
+    if (isDropCompletingRef.current) {
+      isDropCompletingRef.current = false;
+      const droppedDomKey = justDroppedDomKeyRef.current;
+      justDroppedDomKeyRef.current = null;
 
-    const previousTaskRects = previousTaskRectsRef.current;
-    if (isTaskOrderEditing && previousTaskRects.size > 0) {
-      const flipTargets: Array<{
-        taskWrapper: HTMLDivElement;
-        deltaX: number;
-        deltaY: number;
-      }> = [];
-
-      nextTaskRects.forEach((nextRect, taskDomKey) => {
-        const previousRect = previousTaskRects.get(taskDomKey);
-        if (!previousRect) return;
-
-        const taskWrapper = taskWrapperRefs.current.get(taskDomKey);
-        if (!taskWrapper || taskWrapper.classList.contains("dragging")) return;
-
-        const deltaX = previousRect.left - nextRect.left;
-        const deltaY = previousRect.top - nextRect.top;
-        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
-
-        flipTargets.push({
-          taskWrapper,
-          deltaX,
-          deltaY,
+      if (!isTaskOrderEditing) {
+        // Editing ended: just clear everything
+        taskWrapperRefs.current.forEach((wrapper) => {
+          wrapper.style.transition = "";
+          wrapper.style.transform = "";
         });
-      });
-
-      if (flipTargets.length > 0) {
-        flipTargets.forEach(({ taskWrapper, deltaX, deltaY }) => {
-          taskWrapper.style.transition = "none";
-          taskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
-        });
-
-        void document.body.offsetHeight;
-
-        flipTargets.forEach(({ taskWrapper }) => {
-          taskWrapper.style.transition = "";
-          taskWrapper.style.transform = "translate3d(0, 0, 0)";
-        });
+        return;
       }
-    } else if (!isTaskOrderEditing) {
-      taskWrapperRefs.current.forEach((taskWrapper) => {
-        taskWrapper.style.transition = "";
-        taskWrapper.style.transform = "";
+
+      // Non-dragged items are already at their correct visual positions — clear instantly
+      taskWrapperRefs.current.forEach((wrapper, domKey) => {
+        if (domKey === droppedDomKey) return;
+        wrapper.style.transition = "none";
+        wrapper.style.transform = "";
       });
+
+      // Animate dropped card snapping to its new natural position
+      if (droppedDomKey) {
+        const droppedWrapper = taskWrapperRefs.current.get(droppedDomKey);
+        if (droppedWrapper) {
+          droppedWrapper.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+          droppedWrapper.style.transform = "";
+        }
+      }
+
+      return;
     }
 
-    previousTaskRectsRef.current = nextTaskRects;
-  }, [isTaskOrderEditing, tasks]);
+    if (!isTaskOrderEditing) {
+      taskWrapperRefs.current.forEach((wrapper) => {
+        wrapper.style.transition = "";
+        wrapper.style.transform = "";
+      });
+    }
+  }, [isTaskOrderEditing, tasks, draggingTaskIndex]);
 
   return (
     <div id="setup-container" data-visible={isChatVisible ? "false" : "true"}>

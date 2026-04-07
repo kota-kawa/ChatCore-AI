@@ -35,7 +35,6 @@ type HomePageTaskContextValue = Pick<
   | "closeNewPromptModal"
   | "openNewPromptModal"
   | "handleTaskDragStart"
-  | "handleTaskDragOver"
   | "handleTaskDragEnd"
   | "handleTaskCardLaunch"
   | "handleTaskDelete"
@@ -112,7 +111,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     closeNewPromptModal: controller.closeNewPromptModal,
     openNewPromptModal: controller.openNewPromptModal,
     handleTaskDragStart: controller.handleTaskDragStart,
-    handleTaskDragOver: controller.handleTaskDragOver,
     handleTaskDragEnd: controller.handleTaskDragEnd,
     handleTaskCardLaunch: controller.handleTaskCardLaunch,
     handleTaskDelete: controller.handleTaskDelete,

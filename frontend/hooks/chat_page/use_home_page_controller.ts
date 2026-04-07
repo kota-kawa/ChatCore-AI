@@ -1170,35 +1170,21 @@ export function useHomePageController() {
     [isTaskOrderEditing],
   );
 
-  const handleTaskDragOver = useCallback(
-    (hoverIndex: number) => {
-      if (!isTaskOrderEditing) return;
-
-      const dragIndex = draggingTaskIndexRef.current;
-      if (typeof dragIndex !== "number") return;
-      if (dragIndex === hoverIndex) return;
-
-      setTasks((previous) => {
-        if (dragIndex < 0 || dragIndex >= previous.length) return previous;
-        if (hoverIndex < 0 || hoverIndex >= previous.length) return previous;
-
-        const next = [...previous];
-        const [moved] = next.splice(dragIndex, 1);
-        if (!moved) return previous;
-        next.splice(hoverIndex, 0, moved);
-
-        draggingTaskIndexRef.current = hoverIndex;
-        setDraggingTaskIndex(hoverIndex);
-
-        return next;
-      });
-    },
-    [isTaskOrderEditing],
-  );
-
-  const handleTaskDragEnd = useCallback(() => {
+  const handleTaskDragEnd = useCallback((dragIndex: number, dropTargetIndex: number) => {
     draggingTaskIndexRef.current = null;
     setDraggingTaskIndex(null);
+
+    if (dragIndex === dropTargetIndex) return;
+
+    setTasks((previous) => {
+      if (dragIndex < 0 || dragIndex >= previous.length) return previous;
+      if (dropTargetIndex < 0 || dropTargetIndex >= previous.length) return previous;
+      const next = [...previous];
+      const [moved] = next.splice(dragIndex, 1);
+      if (!moved) return previous;
+      next.splice(dropTargetIndex, 0, moved);
+      return next;
+    });
   }, []);
 
   const handleTaskDelete = useCallback(
@@ -1700,7 +1686,6 @@ export function useHomePageController() {
     closeNewPromptModal,
     openNewPromptModal,
     handleTaskDragStart,
-    handleTaskDragOver,
     handleTaskDragEnd,
     handleTaskCardLaunch,
     handleTaskDelete,
