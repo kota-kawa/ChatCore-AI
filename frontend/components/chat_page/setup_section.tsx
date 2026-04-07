@@ -1,3 +1,5 @@
+import { useCallback, useLayoutEffect, useRef } from "react";
+
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
@@ -37,6 +39,64 @@ export function SetupSection() {
   } = useHomePageTaskContext();
 
   const { handleAccessChat } = useHomePageChatContext();
+  const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const previousTaskRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
+  const taskObjectSequenceRef = useRef(0);
+
+  const getTaskDomKey = useCallback((taskObject: object) => {
+    const existing = taskObjectKeyMapRef.current.get(taskObject);
+    if (existing) return existing;
+    const nextKey = `task-dom-${taskObjectSequenceRef.current++}`;
+    taskObjectKeyMapRef.current.set(taskObject, nextKey);
+    return nextKey;
+  }, []);
+
+  const setTaskWrapperRef = useCallback((taskDomKey: string, node: HTMLDivElement | null) => {
+    if (node) {
+      taskWrapperRefs.current.set(taskDomKey, node);
+      return;
+    }
+    taskWrapperRefs.current.delete(taskDomKey);
+  }, []);
+
+  useLayoutEffect(() => {
+    const nextTaskRects = new Map<string, DOMRect>();
+    taskWrapperRefs.current.forEach((element, taskDomKey) => {
+      nextTaskRects.set(taskDomKey, element.getBoundingClientRect());
+    });
+
+    const previousTaskRects = previousTaskRectsRef.current;
+    if (isTaskOrderEditing && previousTaskRects.size > 0) {
+      nextTaskRects.forEach((nextRect, taskDomKey) => {
+        const previousRect = previousTaskRects.get(taskDomKey);
+        if (!previousRect) return;
+
+        const taskWrapper = taskWrapperRefs.current.get(taskDomKey);
+        if (!taskWrapper || taskWrapper.classList.contains("dragging")) return;
+
+        const deltaX = previousRect.left - nextRect.left;
+        const deltaY = previousRect.top - nextRect.top;
+        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+        taskWrapper.style.transition = "none";
+        taskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+        void taskWrapper.offsetWidth;
+        taskWrapper.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+        taskWrapper.style.transform = "translate3d(0, 0, 0)";
+
+        const clearTransition = (event: TransitionEvent) => {
+          if (event.propertyName !== "transform") return;
+          taskWrapper.style.transition = "";
+          taskWrapper.style.transform = "";
+          taskWrapper.removeEventListener("transitionend", clearTransition);
+        };
+        taskWrapper.addEventListener("transitionend", clearTransition);
+      });
+    }
+
+    previousTaskRectsRef.current = nextTaskRects;
+  }, [isTaskOrderEditing, tasks]);
 
   return (
     <div id="setup-container" data-visible={isChatVisible ? "false" : "true"}>
@@ -151,9 +211,14 @@ export function SetupSection() {
           } ${tasksExpanded || isTaskOrderEditing ? "tasks-expanded" : ""}`.trim()}
           id="task-selection"
         >
-          {tasks.map((task, index) => (
+          {tasks.map((task, index) => {
+            const taskDomKey = getTaskDomKey(task);
+            return (
             <div
-              key={`${task.name}-${index}`}
+              key={taskDomKey}
+              ref={(node) => {
+                setTaskWrapperRef(taskDomKey, node);
+              }}
               className={`task-wrapper ${isTaskOrderEditing ? "editable" : ""} ${
                 draggingTaskIndex === index ? "dragging" : ""
               }`.trim()}
@@ -230,7 +295,8 @@ export function SetupSection() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {showTaskToggleButton && (
             <button

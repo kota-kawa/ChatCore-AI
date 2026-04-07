@@ -1171,6 +1171,7 @@ export function useHomePageController() {
     (event: React.DragEvent<HTMLDivElement>, hoverIndex: number) => {
       if (!isTaskOrderEditing) return;
       event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
 
       const dragIndexRaw = event.dataTransfer.getData("text/plain");
       const dragIndex = Number.parseInt(dragIndexRaw, 10);

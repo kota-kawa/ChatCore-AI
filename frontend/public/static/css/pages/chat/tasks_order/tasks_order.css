@@ -43,6 +43,7 @@
 /* 編集モード時：ボタンが上にはみ出る分の余白を確保 */
 .task-wrapper.editable {
   padding-top: 12px;
+  will-change: transform;
 }
 
 
