@@ -18,11 +18,26 @@
 }
 
 
-/* タスクラッパーが編集状態の場合、内部のカードに振動アニメーションを適用 */
+/* 編集状態のカード揺れ（iOS の並び替え編集に近いテンポ） */
 .task-wrapper.editable .prompt-card {
-  animation: shake var(--transition-slow, 0.3s ease) infinite;
+  animation: ios-jiggle 180ms ease-in-out infinite alternate;
+  transform-origin: 50% 82%;
+  will-change: transform;
   /* 削除・編集ボタンがカード外に配置されるため overflow を visible に */
   overflow: visible !important;
+}
+
+/* 全カードが同時に揺れないよう位相をずらす */
+.task-wrapper.editable:nth-child(2n) .prompt-card {
+  animation-delay: -90ms;
+}
+
+.task-wrapper.editable:nth-child(3n) .prompt-card {
+  animation-delay: -45ms;
+}
+
+.task-wrapper.editable:nth-child(5n) .prompt-card {
+  animation-delay: -120ms;
 }
 
 /* 編集モード時：ボタンが上にはみ出る分の余白を確保 */
@@ -32,10 +47,12 @@
 
 
 /* ドラッグ中のカード */
-.prompt-card.dragging {
+.task-wrapper.editable.dragging .prompt-card {
+  animation: none;
   opacity: 0.8;
   cursor: grabbing;
   transform: scale(1.05);
+  z-index: 30;
 }
 
 /* プレースホルダー（見えないが枠を保持） */
@@ -44,33 +61,19 @@
   border: 1px dashed var(--text-secondary, #6b7280);
 }
 
-/* shake アニメーション定義（小刻みな動き） */
-@keyframes shake {
+/* iOS 風の微小な左右回転 + 微小な上下移動 */
+@keyframes ios-jiggle {
   0% {
-    transform: translate(0, 0);
-  }
-
-  10% {
-    transform: translate(1px, -1px);
-  }
-
-  20% {
-    transform: translate(-1px, 1px);
-  }
-
-  30% {
-    transform: translate(1px, 1px);
-  }
-
-  40% {
-    transform: translate(-1px, -1px);
-  }
-
-  50% {
-    transform: translate(0, 0);
+    transform: rotate(-1.7deg) translate3d(0, 0.25px, 0);
   }
 
   100% {
-    transform: translate(0, 0);
+    transform: rotate(1.7deg) translate3d(0, -0.25px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-wrapper.editable .prompt-card {
+    animation: none;
   }
 }
