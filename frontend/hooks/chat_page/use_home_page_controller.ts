@@ -1487,13 +1487,17 @@ export function useHomePageController() {
     if (!loggedIn && isTaskOrderEditing) {
       setIsTaskOrderEditing(false);
     }
+  }, [authResolved, isTaskOrderEditing, loggedIn]);
+
+  useEffect(() => {
+    if (!authResolved) return;
     void refreshTasks(true);
     if (loggedIn) {
       void loadChatRooms();
     } else {
       setChatRooms([]);
     }
-  }, [authResolved, isTaskOrderEditing, loadChatRooms, loggedIn, refreshTasks]);
+  }, [authResolved, loadChatRooms, loggedIn, refreshTasks]);
 
   useEffect(() => {
     if (tasks.length <= 6) {
