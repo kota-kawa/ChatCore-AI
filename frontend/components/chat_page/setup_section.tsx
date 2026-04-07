@@ -1,4 +1,10 @@
-import { useCallback, useLayoutEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
@@ -43,6 +49,9 @@ export function SetupSection() {
   const previousTaskRectsRef = useRef<Map<string, DOMRect>>(new Map());
   const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
   const taskObjectSequenceRef = useRef(0);
+  const activePointerIdRef = useRef<number | null>(null);
+  const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
+  const draggingTaskDomKeyRef = useRef<string | null>(null);
 
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
@@ -59,6 +68,122 @@ export function SetupSection() {
     }
     taskWrapperRefs.current.delete(taskDomKey);
   }, []);
+
+  const clearDraggedTaskTransform = useCallback(() => {
+    const draggingTaskDomKey = draggingTaskDomKeyRef.current;
+    if (!draggingTaskDomKey) return;
+
+    const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
+    if (!draggingTaskWrapper) return;
+
+    draggingTaskWrapper.style.transform = "";
+  }, []);
+
+  const finishPointerDrag = useCallback(
+    (pointerId?: number) => {
+      const activePointerId = activePointerIdRef.current;
+      const draggingTaskDomKey = draggingTaskDomKeyRef.current;
+      const hasActivePointerDrag = activePointerId !== null || draggingTaskDomKey !== null;
+      if (!hasActivePointerDrag) return;
+
+      if (typeof pointerId === "number" && activePointerId !== pointerId) return;
+
+      if (activePointerId !== null && draggingTaskDomKey) {
+        const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
+        if (draggingTaskWrapper?.hasPointerCapture(activePointerId)) {
+          try {
+            draggingTaskWrapper.releasePointerCapture(activePointerId);
+          } catch {
+            // pointer capture is already released
+          }
+        }
+      }
+
+      clearDraggedTaskTransform();
+      activePointerIdRef.current = null;
+      dragStartPointRef.current = null;
+      draggingTaskDomKeyRef.current = null;
+      handleTaskDragEnd();
+    },
+    [clearDraggedTaskTransform, handleTaskDragEnd],
+  );
+
+  const handleTaskPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, index: number, taskDomKey: string) => {
+      if (!isTaskOrderEditing) return;
+      if (event.pointerType !== "touch" && event.button !== 0) return;
+
+      const target = event.target as Element | null;
+      if (target?.closest("button, a, input, textarea, select, label")) {
+        return;
+      }
+
+      finishPointerDrag();
+
+      activePointerIdRef.current = event.pointerId;
+      dragStartPointRef.current = { x: event.clientX, y: event.clientY };
+      draggingTaskDomKeyRef.current = taskDomKey;
+      handleTaskDragStart(index);
+
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+      event.preventDefault();
+    },
+    [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing],
+  );
+
+  useEffect(() => {
+    if (!isTaskOrderEditing) {
+      finishPointerDrag();
+      return;
+    }
+
+    const handleWindowPointerMove = (event: PointerEvent) => {
+      const activePointerId = activePointerIdRef.current;
+      if (activePointerId === null || event.pointerId !== activePointerId) return;
+
+      const dragStartPoint = dragStartPointRef.current;
+      const draggingTaskDomKey = draggingTaskDomKeyRef.current;
+      if (!dragStartPoint || !draggingTaskDomKey) return;
+
+      const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
+      if (draggingTaskWrapper) {
+        const deltaX = event.clientX - dragStartPoint.x;
+        const deltaY = event.clientY - dragStartPoint.y;
+        draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+      }
+
+      const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
+      const hoveredTaskWrapper = hoveredElement?.closest<HTMLDivElement>(".task-wrapper[data-task-index]");
+      if (hoveredTaskWrapper) {
+        const hoverIndexRaw = hoveredTaskWrapper.dataset.taskIndex;
+        const hoverIndex = hoverIndexRaw ? Number.parseInt(hoverIndexRaw, 10) : Number.NaN;
+        if (Number.isFinite(hoverIndex)) {
+          handleTaskDragOver(hoverIndex);
+        }
+      }
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+    };
+
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      finishPointerDrag(event.pointerId);
+    };
+
+    window.addEventListener("pointermove", handleWindowPointerMove, { passive: false });
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+      finishPointerDrag();
+    };
+  }, [finishPointerDrag, handleTaskDragOver, isTaskOrderEditing]);
 
   useLayoutEffect(() => {
     const nextTaskRects = new Map<string, DOMRect>();
@@ -231,87 +356,84 @@ export function SetupSection() {
           {tasks.map((task, index) => {
             const taskDomKey = getTaskDomKey(task);
             return (
-            <div
-              key={taskDomKey}
-              ref={(node) => {
-                setTaskWrapperRef(taskDomKey, node);
-              }}
-              className={`task-wrapper ${isTaskOrderEditing ? "editable" : ""} ${
-                draggingTaskIndex === index ? "dragging" : ""
-              }`.trim()}
-              draggable={isTaskOrderEditing}
-              onDragStart={(event) => {
-                handleTaskDragStart(event, index);
-              }}
-              onDragOver={(event) => {
-                handleTaskDragOver(event, index);
-              }}
-              onDragEnd={handleTaskDragEnd}
-            >
               <div
-                className={`prompt-card ${isTaskOrderEditing ? "editable" : ""}`.trim()}
-                data-task={task.name}
-                data-prompt_template={task.prompt_template}
-                data-response_rules={task.response_rules}
-                data-output_skeleton={task.output_skeleton}
-                data-input_examples={task.input_examples}
-                data-output_examples={task.output_examples}
-                data-is_default={task.is_default ? "true" : "false"}
-                onClick={() => {
-                  if (isTaskOrderEditing) return;
-                  void handleTaskCardLaunch(task);
+                key={taskDomKey}
+                ref={(node) => {
+                  setTaskWrapperRef(taskDomKey, node);
+                }}
+                className={`task-wrapper ${isTaskOrderEditing ? "editable" : ""} ${
+                  draggingTaskIndex === index ? "dragging" : ""
+                }`.trim()}
+                data-task-index={index}
+                data-task-dom-key={taskDomKey}
+                onPointerDown={(event) => {
+                  handleTaskPointerDown(event, index, taskDomKey);
                 }}
               >
-                {isTaskOrderEditing && (
-                  <>
-                    <div className="task-card-action-container task-card-action-container--delete">
-                      <button
-                        type="button"
-                        className="card-delete-btn"
-                        data-tooltip="このタスクを削除"
-                        data-tooltip-placement="top"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleTaskDelete(task.name);
-                        }}
-                      >
-                        <i className="bi bi-trash"></i>
-                      </button>
-                    </div>
+                <div
+                  className={`prompt-card ${isTaskOrderEditing ? "editable" : ""}`.trim()}
+                  data-task={task.name}
+                  data-prompt_template={task.prompt_template}
+                  data-response_rules={task.response_rules}
+                  data-output_skeleton={task.output_skeleton}
+                  data-input_examples={task.input_examples}
+                  data-output_examples={task.output_examples}
+                  data-is_default={task.is_default ? "true" : "false"}
+                  onClick={() => {
+                    if (isTaskOrderEditing) return;
+                    void handleTaskCardLaunch(task);
+                  }}
+                >
+                  {isTaskOrderEditing && (
+                    <>
+                      <div className="task-card-action-container task-card-action-container--delete">
+                        <button
+                          type="button"
+                          className="card-delete-btn"
+                          data-tooltip="このタスクを削除"
+                          data-tooltip-placement="top"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleTaskDelete(task.name);
+                          }}
+                        >
+                          <i className="bi bi-trash"></i>
+                        </button>
+                      </div>
 
-                    <div className="task-card-action-container task-card-action-container--edit">
-                      <button
-                        type="button"
-                        className="card-edit-btn"
-                        data-tooltip="このタスクを編集"
-                        data-tooltip-placement="top"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openTaskEditModal(task);
-                        }}
-                      >
-                        <i className="bi bi-pencil"></i>
-                      </button>
-                    </div>
-                  </>
-                )}
+                      <div className="task-card-action-container task-card-action-container--edit">
+                        <button
+                          type="button"
+                          className="card-edit-btn"
+                          data-tooltip="このタスクを編集"
+                          data-tooltip-placement="top"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openTaskEditModal(task);
+                          }}
+                        >
+                          <i className="bi bi-pencil"></i>
+                        </button>
+                      </div>
+                    </>
+                  )}
 
-                <div className="header-container">
-                  <div className="task-header">{task.name}</div>
-                  <button
-                    type="button"
-                    className="task-detail-toggle"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setTaskDetail(task);
-                    }}
-                  >
-                    <i className="bi bi-caret-down"></i>
-                  </button>
+                  <div className="header-container">
+                    <div className="task-header">{task.name}</div>
+                    <button
+                      type="button"
+                      className="task-detail-toggle"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setTaskDetail(task);
+                      }}
+                    >
+                      <i className="bi bi-caret-down"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
             );
           })}
 

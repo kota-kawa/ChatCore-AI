@@ -1162,21 +1162,17 @@ export function useHomePageController() {
   }, [saveTaskOrder, tasks]);
 
   const handleTaskDragStart = useCallback(
-    (event: React.DragEvent<HTMLDivElement>, index: number) => {
+    (index: number) => {
       if (!isTaskOrderEditing) return;
       draggingTaskIndexRef.current = index;
       setDraggingTaskIndex(index);
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", "task-reorder");
     },
     [isTaskOrderEditing],
   );
 
   const handleTaskDragOver = useCallback(
-    (event: React.DragEvent<HTMLDivElement>, hoverIndex: number) => {
+    (hoverIndex: number) => {
       if (!isTaskOrderEditing) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
 
       const dragIndex = draggingTaskIndexRef.current;
       if (typeof dragIndex !== "number") return;
