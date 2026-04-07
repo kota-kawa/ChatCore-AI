@@ -9,6 +9,8 @@ import {
 import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
+const DRAG_REORDER_COOLDOWN_MS = 48;
+
 export function SetupSection() {
   const {
     isChatVisible,
@@ -52,6 +54,10 @@ export function SetupSection() {
   const activePointerIdRef = useRef<number | null>(null);
   const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
   const draggingTaskDomKeyRef = useRef<string | null>(null);
+  const dragReorderStateRef = useRef<{ lastHoverIndex: number | null; lastReorderTs: number }>({
+    lastHoverIndex: null,
+    lastReorderTs: 0,
+  });
 
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
@@ -79,6 +85,59 @@ export function SetupSection() {
     draggingTaskWrapper.style.transform = "";
   }, []);
 
+  const maybeReorderByPointerPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      const dragIndex = draggingTaskIndex;
+      if (typeof dragIndex !== "number") return;
+
+      const hoveredElement = document.elementFromPoint(clientX, clientY);
+      const hoveredTaskWrapper = hoveredElement?.closest<HTMLDivElement>(".task-wrapper[data-task-index]");
+      if (!hoveredTaskWrapper) return;
+
+      const hoverIndexRaw = hoveredTaskWrapper.dataset.taskIndex;
+      const hoverIndex = hoverIndexRaw ? Number.parseInt(hoverIndexRaw, 10) : Number.NaN;
+      if (!Number.isFinite(hoverIndex) || hoverIndex === dragIndex) return;
+
+      const now = performance.now();
+      const reorderState = dragReorderStateRef.current;
+      if (reorderState.lastHoverIndex === hoverIndex && now - reorderState.lastReorderTs < DRAG_REORDER_COOLDOWN_MS) {
+        return;
+      }
+
+      const draggingTaskDomKey = draggingTaskDomKeyRef.current;
+      const draggingTaskWrapper = draggingTaskDomKey ? taskWrapperRefs.current.get(draggingTaskDomKey) : null;
+      if (!draggingTaskWrapper) return;
+
+      const draggingRect = draggingTaskWrapper.getBoundingClientRect();
+      const hoverRect = hoveredTaskWrapper.getBoundingClientRect();
+
+      const draggingCenterX = draggingRect.left + draggingRect.width / 2;
+      const draggingCenterY = draggingRect.top + draggingRect.height / 2;
+      const hoverCenterX = hoverRect.left + hoverRect.width / 2;
+      const hoverCenterY = hoverRect.top + hoverRect.height / 2;
+
+      const axisDeltaX = hoverCenterX - draggingCenterX;
+      const axisDeltaY = hoverCenterY - draggingCenterY;
+      const isHorizontalSwap = Math.abs(axisDeltaX) > Math.abs(axisDeltaY);
+      const movingForward = hoverIndex > dragIndex;
+
+      if (isHorizontalSwap) {
+        if (movingForward && clientX < hoverCenterX) return;
+        if (!movingForward && clientX > hoverCenterX) return;
+      } else {
+        if (movingForward && clientY < hoverCenterY) return;
+        if (!movingForward && clientY > hoverCenterY) return;
+      }
+
+      dragReorderStateRef.current = {
+        lastHoverIndex: hoverIndex,
+        lastReorderTs: now,
+      };
+      handleTaskDragOver(hoverIndex);
+    },
+    [draggingTaskIndex, handleTaskDragOver],
+  );
+
   const finishPointerDrag = useCallback(
     (pointerId?: number) => {
       const activePointerId = activePointerIdRef.current;
@@ -103,6 +162,7 @@ export function SetupSection() {
       activePointerIdRef.current = null;
       dragStartPointRef.current = null;
       draggingTaskDomKeyRef.current = null;
+      dragReorderStateRef.current = { lastHoverIndex: null, lastReorderTs: 0 };
       handleTaskDragEnd();
     },
     [clearDraggedTaskTransform, handleTaskDragEnd],
@@ -123,6 +183,7 @@ export function SetupSection() {
       activePointerIdRef.current = event.pointerId;
       dragStartPointRef.current = { x: event.clientX, y: event.clientY };
       draggingTaskDomKeyRef.current = taskDomKey;
+      dragReorderStateRef.current = { lastHoverIndex: index, lastReorderTs: performance.now() };
       handleTaskDragStart(index);
 
       if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -154,15 +215,7 @@ export function SetupSection() {
         draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
       }
 
-      const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
-      const hoveredTaskWrapper = hoveredElement?.closest<HTMLDivElement>(".task-wrapper[data-task-index]");
-      if (hoveredTaskWrapper) {
-        const hoverIndexRaw = hoveredTaskWrapper.dataset.taskIndex;
-        const hoverIndex = hoverIndexRaw ? Number.parseInt(hoverIndexRaw, 10) : Number.NaN;
-        if (Number.isFinite(hoverIndex)) {
-          handleTaskDragOver(hoverIndex);
-        }
-      }
+      maybeReorderByPointerPosition(event.clientX, event.clientY);
 
       if (event.cancelable) {
         event.preventDefault();
@@ -183,7 +236,7 @@ export function SetupSection() {
       window.removeEventListener("pointercancel", handleWindowPointerUp);
       finishPointerDrag();
     };
-  }, [finishPointerDrag, handleTaskDragOver, isTaskOrderEditing]);
+  }, [finishPointerDrag, isTaskOrderEditing, maybeReorderByPointerPosition]);
 
   useLayoutEffect(() => {
     const nextTaskRects = new Map<string, DOMRect>();
