@@ -54,6 +54,7 @@ export function SetupSection() {
   const activePointerIdRef = useRef<number | null>(null);
   const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
   const draggingTaskDomKeyRef = useRef<string | null>(null);
+  const draggingTaskIndexRef = useRef<number | null>(null);
   const dragReorderStateRef = useRef<{ lastHoverIndex: number | null; lastReorderTs: number }>({
     lastHoverIndex: null,
     lastReorderTs: 0,
@@ -87,7 +88,7 @@ export function SetupSection() {
 
   const maybeReorderByPointerPosition = useCallback(
     (clientX: number, clientY: number) => {
-      const dragIndex = draggingTaskIndex;
+      const dragIndex = draggingTaskIndexRef.current;
       if (typeof dragIndex !== "number") return;
 
       const hoveredElement = document.elementFromPoint(clientX, clientY);
@@ -135,7 +136,7 @@ export function SetupSection() {
       };
       handleTaskDragOver(hoverIndex);
     },
-    [draggingTaskIndex, handleTaskDragOver],
+    [handleTaskDragOver],
   );
 
   const finishPointerDrag = useCallback(
@@ -162,6 +163,7 @@ export function SetupSection() {
       activePointerIdRef.current = null;
       dragStartPointRef.current = null;
       draggingTaskDomKeyRef.current = null;
+      draggingTaskIndexRef.current = null;
       dragReorderStateRef.current = { lastHoverIndex: null, lastReorderTs: 0 };
       handleTaskDragEnd();
     },
@@ -183,6 +185,7 @@ export function SetupSection() {
       activePointerIdRef.current = event.pointerId;
       dragStartPointRef.current = { x: event.clientX, y: event.clientY };
       draggingTaskDomKeyRef.current = taskDomKey;
+      draggingTaskIndexRef.current = index;
       dragReorderStateRef.current = { lastHoverIndex: index, lastReorderTs: performance.now() };
       handleTaskDragStart(index);
 
@@ -193,6 +196,10 @@ export function SetupSection() {
     },
     [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing],
   );
+
+  useEffect(() => {
+    draggingTaskIndexRef.current = draggingTaskIndex;
+  }, [draggingTaskIndex]);
 
   useEffect(() => {
     if (!isTaskOrderEditing) {
@@ -234,9 +241,14 @@ export function SetupSection() {
       window.removeEventListener("pointermove", handleWindowPointerMove);
       window.removeEventListener("pointerup", handleWindowPointerUp);
       window.removeEventListener("pointercancel", handleWindowPointerUp);
-      finishPointerDrag();
     };
   }, [finishPointerDrag, isTaskOrderEditing, maybeReorderByPointerPosition]);
+
+  useEffect(() => {
+    return () => {
+      finishPointerDrag();
+    };
+  }, [finishPointerDrag]);
 
   useLayoutEffect(() => {
     const nextTaskRects = new Map<string, DOMRect>();
