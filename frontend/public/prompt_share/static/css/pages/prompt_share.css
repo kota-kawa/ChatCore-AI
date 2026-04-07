@@ -530,6 +530,24 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   gap: 0.5rem;
 }
 
+.prompt-share-page .prompt-card__created-at {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin-left: auto;
+  margin-right: 0.5rem;
+  color: #7a8fa3;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.prompt-share-page .prompt-card__created-at i {
+  font-size: 0.68rem;
+  color: #9ab0c5;
+}
+
 .prompt-share-page .prompt-card__badges {
   flex: 1;
   display: flex;
@@ -643,10 +661,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
 .prompt-share-page .prompt-meta {
   margin-top: auto;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.6rem;
+  display: block;
 }
 
 .prompt-share-page .prompt-meta-info {
@@ -674,28 +689,14 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 0.2rem;
+  justify-items: center;
+  column-gap: 0.2rem;
+  width: 100%;
   border-top: none;
-  padding-top: 0;
-  flex-shrink: 0;
-}
-
-.prompt-share-page .prompt-meta-date {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-left: auto;
-  color: #7a8fa3;
-  font-size: 0.72rem;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.prompt-share-page .prompt-meta-date i {
-  font-size: 0.7rem;
-  color: #9ab0c5;
+  padding-top: 0.42rem;
 }
 
 .prompt-share-page .prompt-action-btn {

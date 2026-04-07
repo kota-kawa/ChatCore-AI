@@ -1207,6 +1207,10 @@ export default function PromptSharePage() {
                           <span>{getPromptTypeLabel(promptTypeValue)}</span>
                         </span>
                       </div>
+                      <span className="prompt-card__created-at">
+                        <i className="bi bi-calendar3"></i>
+                        {safeCreatedAt}
+                      </span>
                       <button
                         className="meatball-menu"
                         type="button"
@@ -1394,10 +1398,6 @@ export default function PromptSharePage() {
                           <i className={`bi ${isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark"}`}></i>
                         </button>
                       </div>
-                      <span className="prompt-meta-date">
-                        <i className="bi bi-calendar3"></i>
-                        {safeCreatedAt}
-                      </span>
                     </div>
                   </div>
                 );
