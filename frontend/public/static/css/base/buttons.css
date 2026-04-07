@@ -254,3 +254,67 @@ user-icon[hidden] {
       background-color: rgba(255, 255, 255, 0.15);
     }
   }
+
+/* ボタンの影を全体で無効化 */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+.btn,
+.auth-btn,
+.primary-button,
+.icon-button,
+.circle-button,
+.cc-texture-btn,
+a.cc-texture-btn {
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+button:hover,
+button:focus,
+button:focus-visible,
+button:active,
+input[type="button"]:hover,
+input[type="button"]:focus,
+input[type="button"]:focus-visible,
+input[type="button"]:active,
+input[type="submit"]:hover,
+input[type="submit"]:focus,
+input[type="submit"]:focus-visible,
+input[type="submit"]:active,
+input[type="reset"]:hover,
+input[type="reset"]:focus,
+input[type="reset"]:focus-visible,
+input[type="reset"]:active,
+.btn:hover,
+.btn:focus,
+.btn:focus-visible,
+.btn:active,
+.auth-btn:hover,
+.auth-btn:focus,
+.auth-btn:focus-visible,
+.auth-btn:active,
+.primary-button:hover,
+.primary-button:focus,
+.primary-button:focus-visible,
+.primary-button:active,
+.icon-button:hover,
+.icon-button:focus,
+.icon-button:focus-visible,
+.icon-button:active,
+.circle-button:hover,
+.circle-button:focus,
+.circle-button:focus-visible,
+.circle-button:active,
+.cc-texture-btn:hover,
+.cc-texture-btn:focus,
+.cc-texture-btn:focus-visible,
+.cc-texture-btn:active,
+a.cc-texture-btn:hover,
+a.cc-texture-btn:focus,
+a.cc-texture-btn:focus-visible,
+a.cc-texture-btn:active {
+  box-shadow: none !important;
+  filter: none !important;
+}

@@ -4,11 +4,11 @@ chatTemplate.innerHTML = `
   <style>
     :host {
       display: contents;
-      --cc-fab-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
-      --cc-fab-hover-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      --cc-fab-shadow: none;
+      --cc-fab-hover-shadow: none;
       --cc-fab-hover-transform: scale(1.1);
       --cc-fab-hover-filter: none;
-      --cc-fab-menu-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+      --cc-fab-menu-shadow: none;
       --cc-fab-menu-bg: linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
       --cc-fab-share-bg: linear-gradient(135deg, #1a73e8, #4a9bf5);
       --cc-fab-star-bg: linear-gradient(135deg, #19c37d, #0fa86a);
@@ -18,11 +18,11 @@ chatTemplate.innerHTML = `
     }
 
     :host([data-chat-page="true"]) {
-      --cc-fab-shadow: 0 14px 24px rgba(15, 122, 81, 0.22), var(--cc-fab-edge-highlight);
-      --cc-fab-hover-shadow: 0 18px 30px rgba(7, 21, 17, 0.28), var(--cc-fab-edge-highlight);
+      --cc-fab-shadow: none;
+      --cc-fab-hover-shadow: none;
       --cc-fab-hover-transform: scale(1.08);
       --cc-fab-hover-filter: saturate(1.06);
-      --cc-fab-menu-shadow: 0 16px 28px rgba(7, 21, 17, 0.3), var(--cc-fab-edge-highlight);
+      --cc-fab-menu-shadow: none;
       --cc-fab-menu-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
       --cc-fab-share-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #4a9bf5);
       --cc-fab-star-bg: var(--cc-fab-sheen), linear-gradient(135deg, #19c37d, #0fa86a);
