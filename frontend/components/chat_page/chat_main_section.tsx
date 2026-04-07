@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { BotMessageHtml } from "./bot_message_html";
+import { UserMessageHtml } from "./user_message_html";
 import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
@@ -246,7 +247,7 @@ export function ChatMainSection() {
                 return (
                   <div key={message.id} className="message-wrapper user-message-wrapper">
                     <div className="user-message">
-                      {message.text}
+                      <UserMessageHtml text={message.text} />
                     </div>
                     <div className="message-actions">
                       <CopyActionButton

@@ -233,6 +233,15 @@ function normalizeLLMTextForDisplay(rawText: string) {
   return formattedParts.join("\n\n").trim();
 }
 
+function normalizeUserTextForDisplay(rawText: string) {
+  return stripInvisibleCharacters(
+    rawText
+      .replace(/\r\n?/g, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .trimEnd()
+  );
+}
+
 function formatMarkdownFallback(markdown: string) {
   const applyInlineMarkdownLite = (text: string) => {
     let html = escapeHtml(text);
@@ -499,6 +508,22 @@ function formatLLMOutput(text: string) {
   return typeof parsed === "string" ? parsed : normalized;
 }
 
+/* ユーザー入力の Markdown を HTML に変換 */
+function formatUserInputForDisplay(text: string) {
+  const normalized = normalizeUserTextForDisplay(text);
+  if (!markedParser) {
+    if (!markdownEnhancementDisabled) void ensureMarkedParser();
+    return formatMarkdownFallback(normalized);
+  }
+
+  const parsed = markedParser(normalized, {
+    async: false,
+    gfm: true,
+    breaks: true
+  });
+  return typeof parsed === "string" ? parsed : formatMarkdownFallback(normalized);
+}
+
 /*  サイドバートグル処理  */
 function isOverlaySidebarViewport() {
   return window.matchMedia("(max-width: 960px)").matches;
@@ -583,5 +608,6 @@ export {
   showTypingIndicator,
   hideTypingIndicator,
   formatLLMOutput,
+  formatUserInputForDisplay,
   closeSidebar
 };

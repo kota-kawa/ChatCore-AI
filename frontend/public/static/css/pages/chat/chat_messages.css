@@ -116,6 +116,64 @@ chat-action-menu {
   animation: floatUp 0.4s ease-out;
   border: none;
   box-shadow: 0 1px 3px rgba(25, 195, 125, 0.2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.user-message > * {
+  margin: 0.45rem 0;
+}
+
+.user-message > :first-child {
+  margin-top: 0;
+}
+
+.user-message > :last-child {
+  margin-bottom: 0;
+}
+
+.user-message p {
+  margin: 0.35rem 0;
+}
+
+.user-message ul,
+.user-message ol {
+  margin: 0.4rem 0 0.4rem 1rem;
+  padding-left: 0.75rem;
+}
+
+.user-message li + li {
+  margin-top: 0.25rem;
+}
+
+.user-message a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.user-message code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+
+.user-message pre {
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  background: rgba(7, 21, 17, 0.28);
+  border-radius: var(--radius-sm, 8px);
+  overflow-x: auto;
+}
+
+.user-message pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #f5f9f7;
+  font-size: 0.84rem;
 }
 
 .bot-message {
