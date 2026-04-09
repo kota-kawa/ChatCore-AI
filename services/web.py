@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Tuple, TypeVar
 from urllib.parse import urlencode
 
 from fastapi import Request
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from starlette.responses import JSONResponse, RedirectResponse
 
 from .api_errors import ApiServiceError
@@ -18,8 +18,11 @@ from .web_constants import (
 from .web_json import (
     get_json as _get_json,
     jsonify as _jsonify,
+    log_and_internal_server_error as _log_and_internal_server_error,
     jsonify_rate_limited as _jsonify_rate_limited,
     jsonify_service_error as _jsonify_service_error,
+    require_json_dict as _require_json_dict,
+    validate_payload_model as _validate_payload_model,
 )
 from .web_session import (
     flash as _flash,
@@ -79,13 +82,13 @@ def log_and_internal_server_error(
     message: str = DEFAULT_INTERNAL_ERROR_MESSAGE,
     error_key: str = "error",
 ) -> JSONResponse:
-    # ログ出力と500レスポンス生成を共通化する
-    # Centralize exception logging and HTTP 500 response creation.
-    logger.exception(context)
-    payload: Dict[str, Any] = {error_key: message}
-    if status is not None:
-        payload["status"] = status
-    return jsonify(payload, status_code=500)
+    return _log_and_internal_server_error(
+        logger,
+        context,
+        status=status,
+        message=message,
+        error_key=error_key,
+    )
 
 
 async def require_json_dict(
@@ -94,16 +97,11 @@ async def require_json_dict(
     error_message: str = ERROR_INVALID_JSON,
     status: str | None = None,
 ) -> tuple[Dict[str, Any] | None, JSONResponse | None]:
-    # リクエストボディがdictであることを保証し、違う場合は400を返す
-    # Ensure request body is a dict; otherwise return HTTP 400 response.
-    data = await get_json(request)
-    if isinstance(data, dict):
-        return data, None
-
-    payload: Dict[str, Any] = {"error": error_message}
-    if status is not None:
-        payload["status"] = status
-    return None, jsonify(payload, status_code=400)
+    return await _require_json_dict(
+        request,
+        error_message=error_message,
+        status=status,
+    )
 
 
 def validate_payload_model(
@@ -114,18 +112,13 @@ def validate_payload_model(
     status: str | None = None,
     error_key: str = "error",
 ) -> tuple[ModelT | None, JSONResponse | None]:
-    # Pydantic v2/v1 両対応でバリデーションし、失敗時は統一エラーを返す
-    # Validate payload with Pydantic v2/v1 compatibility and return unified errors.
-    try:
-        validate = getattr(model_class, "model_validate", None)
-        if callable(validate):
-            return validate(data), None
-        return model_class.parse_obj(data), None  # pragma: no cover - pydantic v1 fallback
-    except ValidationError:
-        payload: Dict[str, Any] = {error_key: error_message}
-        if status is not None:
-            payload["status"] = status
-        return None, jsonify(payload, status_code=400)
+    return _validate_payload_model(
+        data,
+        model_class,
+        error_message=error_message,
+        status=status,
+        error_key=error_key,
+    )
 
 
 def set_session_permanent(session: dict, value: bool) -> None:
@@ -148,6 +141,7 @@ def url_for(request: Request, endpoint: str, **values: Any) -> str:
 
 def sanitize_next_path(next_path: Any, default: str = "/") -> str:
     return _sanitize_next_path(next_path, default=default)
+
 
 def frontend_url(path: str = "", *, query: str | None = None) -> str:
     # 既存互換のため、モジュールの FRONTEND_URL を毎回参照してURLを組み立てる
