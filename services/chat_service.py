@@ -65,6 +65,56 @@ def create_chat_room_in_db(room_id: str, user_id: int, title: str) -> None:
     raise RuntimeError("Failed to create chat room after retry attempts.")
 
 
+def delete_chat_room_if_no_assistant_messages(room_id: str, user_id: int) -> bool:
+    # assistant 発言が一度もないルームだけ履歴ごと削除する
+    # Delete the room and its history only when no assistant message exists yet.
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "SELECT user_id FROM chat_rooms WHERE id = %s",
+                    (room_id,),
+                )
+                row = cursor.fetchone()
+                if not row or row[0] != user_id:
+                    return False
+
+                cursor.execute(
+                    """
+                    SELECT 1
+                      FROM chat_history
+                     WHERE chat_room_id = %s
+                       AND sender = 'assistant'
+                     LIMIT 1
+                    """,
+                    (room_id,),
+                )
+                if cursor.fetchone():
+                    return False
+
+                cursor.execute("DELETE FROM chat_history WHERE chat_room_id = %s", (room_id,))
+                cursor.execute(
+                    "DELETE FROM chat_rooms WHERE id = %s AND user_id = %s",
+                    (room_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
+
+
 def rename_chat_room_in_db(room_id: str, new_title: str) -> None:
     # 既存チャットルームのタイトルを更新する
     # Update the title of an existing chat room.

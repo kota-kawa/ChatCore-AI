@@ -138,6 +138,17 @@ class EphemeralChatStore:
             del self._memory[sid]
         return True
 
+    def delete_room_if_no_assistant_messages(self, sid: str, room_id: str) -> bool:
+        room = self.get_room(sid, room_id)
+        if not room:
+            return False
+
+        messages = room.get("messages") or []
+        if any(message.get("role") == "assistant" for message in messages):
+            return False
+
+        return self.delete_room(sid, room_id)
+
     def rename_room(self, sid: str, room_id: str, new_title: str) -> bool:
         room = self.get_room(sid, room_id)
         if not room:

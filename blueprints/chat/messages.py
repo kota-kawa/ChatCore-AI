@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.chat_service import (
+    delete_chat_room_if_no_assistant_messages,
     save_message_to_db,
     get_chat_room_messages,
     validate_room_owner,
@@ -178,6 +179,43 @@ def _build_llm_stream_response(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _discard_room_without_assistant_response(
+    chat_room_id: str,
+    *,
+    user_id: int | None = None,
+    sid: str | None = None,
+) -> bool:
+    if user_id is not None:
+        return delete_chat_room_if_no_assistant_messages(chat_room_id, user_id)
+    if sid is not None:
+        return ephemeral_store.delete_room_if_no_assistant_messages(sid, chat_room_id)
+    return False
+
+
+def _cleanup_failed_room_without_assistant_response(
+    chat_room_id: str,
+    *,
+    user_id: int | None = None,
+    sid: str | None = None,
+) -> None:
+    try:
+        deleted = _discard_room_without_assistant_response(
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
+        if deleted:
+            logger.info(
+                "Discarded chat room without assistant response after failed generation.",
+                extra={"chat_room_id": chat_room_id, "user_id": user_id, "sid": sid},
+            )
+    except Exception:
+        logger.exception(
+            "Failed to discard chat room without assistant response.",
+            extra={"chat_room_id": chat_room_id, "user_id": user_id, "sid": sid},
+        )
 
 
 def _parse_last_event_id(request: Request) -> int:
@@ -651,6 +689,12 @@ async def chat(
     try:
         validate_model_name(model)
     except LlmInvalidModelError as exc:
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
         return jsonify({"error": str(exc)}, status_code=400)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
@@ -665,6 +709,12 @@ async def chat(
         service=resolved_llm_daily_limit_service,
     )
     if not can_access_llm:
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
         return jsonify_rate_limited(
             (
                 f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
@@ -688,6 +738,12 @@ async def chat(
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                on_error=partial(
+                    _cleanup_failed_room_without_assistant_response,
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                ),
                 service=resolved_chat_generation_service,
             )
         except ChatGenerationAlreadyRunningError:
@@ -701,8 +757,20 @@ async def chat(
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
     except LlmInvalidModelError as exc:
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
         return jsonify({"error": str(exc)}, status_code=400)
     except LlmRateLimitError as exc:
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
         return jsonify_rate_limited(
             "AI提供元が混み合っています。時間をおいて再試行してください。",
             retry_after=(
@@ -713,6 +781,12 @@ async def chat(
         )
     except LlmAuthenticationError:
         logger.exception("LLM authentication/configuration error while generating chat response.")
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
+        )
         return jsonify(
             {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
             status_code=502,
@@ -722,6 +796,12 @@ async def chat(
         logger.exception(
             "Failed to get LLM response (retryable=%s).",
             retryable,
+        )
+        await run_blocking(
+            _cleanup_failed_room_without_assistant_response,
+            chat_room_id,
+            user_id=user_id,
+            sid=sid,
         )
         return jsonify(
             {

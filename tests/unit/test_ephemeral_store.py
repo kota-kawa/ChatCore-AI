@@ -66,6 +66,29 @@ class EphemeralChatStoreMemoryTest(unittest.TestCase):
 
             self.assertFalse(store.room_exists("sid", "room"))
 
+    def test_delete_room_if_no_assistant_messages_deletes_user_only_room(self):
+        with patch("services.ephemeral_store.get_redis_client", return_value=None):
+            store = EphemeralChatStore(expiration_seconds=60)
+            store.create_room("sid", "room", "title")
+            store.append_message("sid", "room", "user", "hello")
+
+            deleted = store.delete_room_if_no_assistant_messages("sid", "room")
+
+            self.assertTrue(deleted)
+            self.assertFalse(store.room_exists("sid", "room"))
+
+    def test_delete_room_if_no_assistant_messages_keeps_room_with_assistant_reply(self):
+        with patch("services.ephemeral_store.get_redis_client", return_value=None):
+            store = EphemeralChatStore(expiration_seconds=60)
+            store.create_room("sid", "room", "title")
+            store.append_message("sid", "room", "user", "hello")
+            store.append_message("sid", "room", "assistant", "hi")
+
+            deleted = store.delete_room_if_no_assistant_messages("sid", "room")
+
+            self.assertFalse(deleted)
+            self.assertTrue(store.room_exists("sid", "room"))
+
     def test_redis_created_at_is_iso_string(self):
         dummy_redis = DummyRedis()
         with patch("services.ephemeral_store.get_redis_client", return_value=dummy_redis):

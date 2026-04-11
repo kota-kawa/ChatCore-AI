@@ -54,6 +54,7 @@ class ChatGenerationJob:
         persist_response: Callable[[str], None],
         on_finished: Callable[[], None] | None = None,
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
+        on_error: Callable[[], None] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -61,6 +62,7 @@ class ChatGenerationJob:
         self._on_finished = on_finished
         self._on_finished_called = False
         self._on_event = on_event
+        self._on_error = on_error
         self._events: list[ChatGenerationEvent] = []
         self._next_sequence_id = 1
         self._condition = threading.Condition()
@@ -155,6 +157,22 @@ class ChatGenerationJob:
         self._on_finished_called = True
         return self._on_finished
 
+    def _handle_error(
+        self,
+        message: str,
+        payload: dict[str, Any],
+        *,
+        invoke_error_callback: bool = False,
+    ) -> None:
+        self.error_message = message
+        self._publish("error", payload, done=True)
+        if not invoke_error_callback or self._on_error is None:
+            return
+        try:
+            self._on_error()
+        except Exception:
+            logger.exception("Failed to run chat generation error callback.")
+
     def _run(self) -> None:
         chunks: list[str] = []
         try:
@@ -168,58 +186,62 @@ class ChatGenerationJob:
         except LlmConfigurationError as exc:
             if self._cancelled:
                 return
-            self.error_message = str(exc) or "LLM設定エラーが発生しました。"
-            self._publish(
-                "error",
-                {"message": self.error_message, "retryable": False},
-                done=True,
+            error_message = str(exc) or "LLM設定エラーが発生しました。"
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": False},
+                invoke_error_callback=not chunks,
             )
             return
         except LlmAuthenticationError:
             if self._cancelled:
                 return
-            self.error_message = "LLMプロバイダ認証エラーが発生しました。設定を確認してください。"
-            self._publish(
-                "error",
-                {"message": self.error_message, "retryable": False},
-                done=True,
+            error_message = "LLMプロバイダ認証エラーが発生しました。設定を確認してください。"
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": False},
+                invoke_error_callback=not chunks,
             )
             return
         except LlmRateLimitError as exc:
             if self._cancelled:
                 return
-            self.error_message = "AI提供元が混み合っています。時間をおいて再試行してください。"
+            error_message = "AI提供元が混み合っています。時間をおいて再試行してください。"
             payload: dict[str, Any] = {
-                "message": self.error_message,
+                "message": error_message,
                 "retryable": True,
             }
             if exc.retry_after_seconds is not None:
                 payload["retry_after_seconds"] = exc.retry_after_seconds
-            self._publish("error", payload, done=True)
+            self._handle_error(
+                error_message,
+                payload,
+                invoke_error_callback=not chunks,
+            )
             return
         except LlmServiceError as exc:
             if self._cancelled:
                 return
             retryable = is_retryable_llm_error(exc)
             if retryable:
-                self.error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
+                error_message = "一時的な内部エラーが発生しました。時間をおいて再試行してください。"
             else:
-                self.error_message = "内部エラーが発生しました。"
-            self._publish(
-                "error",
-                {"message": self.error_message, "retryable": retryable},
-                done=True,
+                error_message = "内部エラーが発生しました。"
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": retryable},
+                invoke_error_callback=not chunks,
             )
             return
         except Exception:
             if self._cancelled:
                 return
             logger.exception("Unexpected error while generating chat response.")
-            self.error_message = "内部エラーが発生しました。"
-            self._publish(
-                "error",
-                {"message": self.error_message, "retryable": False},
-                done=True,
+            error_message = "内部エラーが発生しました。"
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": False},
+                invoke_error_callback=not chunks,
             )
             return
 
@@ -233,11 +255,11 @@ class ChatGenerationJob:
             self._persist_response(bot_reply)
         except Exception:
             logger.exception("Failed to persist background chat response.")
-            self.error_message = "応答は生成されましたが、履歴保存に失敗しました。"
-            self._publish(
-                "error",
-                {"message": self.error_message, "retryable": True},
-                done=True,
+            error_message = "応答は生成されましたが、履歴保存に失敗しました。"
+            self._handle_error(
+                error_message,
+                {"message": error_message, "retryable": True},
+                invoke_error_callback=not bot_reply,
             )
             return
 
@@ -586,6 +608,7 @@ return 0
         conversation_messages: list[dict[str, str]],
         model: str,
         persist_response: Callable[[str], None],
+        on_error: Callable[[], None] | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -604,6 +627,7 @@ return 0
                 persist_response=persist_response,
                 on_finished=lambda: self._release_active_job_lock(job_key, lock_token),
                 on_event=lambda event: self._publish_distributed_event(job_key, event),
+                on_error=on_error,
             )
             self._jobs[job_key] = job
 
@@ -709,6 +733,7 @@ def start_generation_job(
     conversation_messages: list[dict[str, str]],
     model: str,
     persist_response: Callable[[str], None],
+    on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
 ) -> ChatGenerationJob:
     target = (
@@ -721,4 +746,5 @@ def start_generation_job(
         conversation_messages=conversation_messages,
         model=model,
         persist_response=persist_response,
+        on_error=on_error,
     )

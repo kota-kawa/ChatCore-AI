@@ -205,6 +205,77 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIsInstance(response, StreamingResponse)
         self.assertEqual(response.media_type, "text/event-stream")
 
+    def test_chat_discards_authenticated_room_when_invalid_model_leaves_no_assistant_reply(self):
+        request = make_request(
+            {"message": "こんにちは", "chat_room_id": "room-auth", "model": "invalid-model"},
+            session={"user_id": 42},
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                with patch("blueprints.chat.messages.save_message_to_db"):
+                    with patch(
+                        "blueprints.chat.messages.get_chat_room_messages",
+                        return_value=[{"role": "user", "content": "こんにちは"}],
+                    ):
+                        with patch(
+                            "blueprints.chat.messages.delete_chat_room_if_no_assistant_messages",
+                            return_value=True,
+                        ) as mock_delete_room:
+                            response = asyncio.run(chat(request))
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("invalid-model", payload["error"])
+        mock_delete_room.assert_called_once_with("room-auth", 42)
+
+    def test_streaming_generation_error_discards_guest_room_without_assistant_reply(self):
+        request = make_request(
+            {"message": "こんにちは", "chat_room_id": "room-guest", "model": "gemini-2.5-flash"},
+            session={},
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.get_session_id", return_value="sid-1"):
+                    with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
+                        with patch(
+                            "blueprints.chat.messages.ephemeral_store.get_messages",
+                            return_value=[{"role": "user", "content": "こんにちは"}],
+                        ):
+                            with patch("blueprints.chat.messages.ephemeral_store.append_message"):
+                                with patch(
+                                    "blueprints.chat.messages.consume_llm_daily_quota",
+                                    return_value=(True, 1, 300),
+                                ):
+                                    with patch(
+                                        "services.chat_generation.get_llm_response_stream",
+                                        side_effect=LlmConfigurationError(
+                                            "OPENAI_API_KEY が未設定です。"
+                                        ),
+                                    ):
+                                        with patch(
+                                            "blueprints.chat.messages.ephemeral_store.delete_room_if_no_assistant_messages",
+                                            return_value=True,
+                                        ) as mock_delete_room:
+                                            response = asyncio.run(chat(request))
+
+                                            async def _consume():
+                                                chunks = []
+                                                async for chunk in response.body_iterator:
+                                                    chunks.append(chunk)
+                                                return b"".join(chunks)
+
+                                            body = asyncio.run(_consume()).decode("utf-8")
+
+        self.assertIsInstance(response, StreamingResponse)
+        self.assertIn("event: error", body)
+        self.assertIn("OPENAI_API_KEY が未設定です。", body)
+        mock_delete_room.assert_called_once_with("sid-1", "room-guest")
+
     def test_background_generation_job_persists_final_reply_for_guest(self):
         persisted_messages = []
 
