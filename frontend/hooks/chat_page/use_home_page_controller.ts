@@ -10,7 +10,7 @@ import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
 import { useHomePageTaskState } from "./use_home_page_task_state";
 import { useHomePageUiState } from "./use_home_page_ui_state";
-import { CHAT_HISTORY_PAGE_SIZE } from "../../lib/chat_page/constants";
+import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
@@ -1070,6 +1070,8 @@ export function useHomePageController() {
 
     const message = chatInput.trim();
     if (!message) return;
+
+    if (message.length > MAX_CHAT_MESSAGE_LENGTH) return;
 
     setChatInput("");
     void generateResponse(message, selectedModel, roomId);

@@ -5,7 +5,7 @@ import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { useHomePageChatContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
-import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 
 export function ChatMainSection() {
   const {
@@ -317,6 +317,13 @@ export function ChatMainSection() {
                 <i className={`bi ${isGenerating ? "bi-stop-fill" : "bi-send"}`}></i>
               </button>
             </div>
+            {chatInput.length > 0 && (
+              <div className={`chat-input-counter${chatInput.length > MAX_CHAT_MESSAGE_LENGTH ? " chat-input-counter--over" : ""}`}>
+                {chatInput.length > MAX_CHAT_MESSAGE_LENGTH
+                  ? `文字数制限を超えています（${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字）`
+                  : `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字`}
+              </div>
+            )}
           </div>
 
           <chat-action-menu></chat-action-menu>

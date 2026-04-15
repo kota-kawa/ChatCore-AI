@@ -10,6 +10,7 @@ function toPositiveInteger(value: unknown, fallback: number) {
 const chatHistoryContract = (chatContract as { chat_history?: { page_size_default?: number } }).chat_history;
 const chatHistoryPageSizeDefault = chatHistoryContract?.page_size_default;
 
+export const MAX_CHAT_MESSAGE_LENGTH = 30000;
 export const DEFAULT_MODEL = "openai/gpt-oss-120b";
 export const CHAT_HISTORY_PAGE_SIZE = toPositiveInteger(chatHistoryPageSizeDefault, 50);
 export const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;

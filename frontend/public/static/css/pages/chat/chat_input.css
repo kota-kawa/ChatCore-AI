@@ -194,6 +194,22 @@
   }
 }
 
+/* 文字数カウンター */
+.chat-input-counter {
+  max-width: 800px;
+  margin: 0.3rem auto 0;
+  text-align: right;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-muted, #9ca3af);
+  padding: 0 0.5rem;
+  transition: color var(--transition-normal, 0.2s ease);
+}
+
+.chat-input-counter--over {
+  color: var(--danger-color, #ef4444);
+  font-weight: 600;
+}
+
 /* ===== Thinking インジケータ (constellation 含む - そのまま保持) ===== */
 .thinking-message {
   --constellation-panel-border: rgba(25, 195, 125, 0.3);
