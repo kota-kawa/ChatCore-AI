@@ -61,11 +61,11 @@
 
 #send-btn {
   --send-btn-visual-inset: 4px;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   border-radius: 50%;
   margin: 0;
   padding: 0;
@@ -178,11 +178,11 @@
 
   #send-btn {
     --send-btn-visual-inset: 5px;
-    flex-basis: 44px;
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
+    flex-basis: 52px;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
   }
 
   #send-btn i {
