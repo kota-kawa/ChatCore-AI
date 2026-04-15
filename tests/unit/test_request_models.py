@@ -64,7 +64,7 @@ class RequestModelsTestCase(unittest.TestCase):
             _validate(
                 ChatMessageRequest,
                 {
-                    "message": "a" * 8001,
+                    "message": "a" * 30001,
                     "chat_room_id": "room-1",
                 },
             )

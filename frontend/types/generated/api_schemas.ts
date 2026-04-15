@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 0baa832c11fb9d7f4cd357504386c8f6cedb4cbddd939823120cd9e13ee9cf10
+// Schema fingerprint: ca3a0760ce683083eb21393c813b585c87c0eecdcb4752cd1d12bc8113320566
 
 import { z } from "zod";
 
@@ -23,7 +23,7 @@ export type RenameChatRoomRequest = z.infer<typeof RenameChatRoomRequestSchema>;
 export const ShareChatRoomRequestSchema = z.object({ "room_id": z.string().min(1).max(128) });
 export type ShareChatRoomRequest = z.infer<typeof ShareChatRoomRequestSchema>;
 
-export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(8000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null) });
+export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null) });
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;
 
 export const UpdateTasksOrderRequestSchema = z.object({ "order": z.array(z.string().min(1)).min(1) });
