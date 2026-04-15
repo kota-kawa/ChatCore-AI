@@ -1030,7 +1030,7 @@ export function useHomePageController() {
 
       const roomId = Date.now().toString();
       const currentSetupInfo = setupInfo.trim();
-      const roomTitle = currentSetupInfo || "新規チャット";
+      const roomTitle = (currentSetupInfo || "新規チャット").slice(0, 255);
       const firstMessage = currentSetupInfo
         ? `【タスク】${task.name}\n【状況・作業環境】${currentSetupInfo}`
         : `【タスク】${task.name}`;
