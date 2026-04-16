@@ -22,46 +22,270 @@ html {
 }
 
 html,
-body,
-body * {
+body {
+  --scrollbar-size-current: var(--scrollbar-size);
+  --scrollbar-track-current: var(--page-scrollbar-track, var(--scrollbar-track));
+  --scrollbar-thumb-current: var(--page-scrollbar-thumb, var(--scrollbar-thumb));
+  --scrollbar-thumb-hover-current: var(--page-scrollbar-thumb-hover, var(--scrollbar-thumb-hover));
+  --scrollbar-thumb-active-current: var(--page-scrollbar-thumb-active, var(--scrollbar-thumb-active));
+  --scrollbar-thumb-border-current: var(--page-scrollbar-thumb-border, var(--scrollbar-thumb-border));
   scrollbar-width: thin;
-  scrollbar-color: var(--page-scrollbar-thumb, var(--scrollbar-thumb)) var(--page-scrollbar-track, var(--scrollbar-track));
+  scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
 }
 
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
-body *::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-  height: var(--scrollbar-size);
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar {
+  width: var(--scrollbar-size-current);
+  height: var(--scrollbar-size-current);
 }
 
 html::-webkit-scrollbar-track,
 body::-webkit-scrollbar-track,
-body *::-webkit-scrollbar-track {
-  background: var(--page-scrollbar-track, var(--scrollbar-track));
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar-track {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      var(--scrollbar-track-current) 16%,
+      var(--scrollbar-track-current) 84%,
+      transparent 100%
+    );
   border-radius: var(--scrollbar-radius);
 }
 
 html::-webkit-scrollbar-thumb,
 body::-webkit-scrollbar-thumb,
-body *::-webkit-scrollbar-thumb {
-  background: var(--page-scrollbar-thumb, var(--scrollbar-thumb));
-  border: 2px solid var(--page-scrollbar-thumb-border, var(--scrollbar-thumb-border));
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(180deg, var(--scrollbar-thumb-current) 0%, var(--scrollbar-thumb-hover-current) 100%);
+  background-clip: padding-box;
+  border: 2px solid var(--scrollbar-thumb-border-current);
   border-radius: var(--scrollbar-radius);
   min-height: 36px;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 html::-webkit-scrollbar-thumb:hover,
 body::-webkit-scrollbar-thumb:hover,
-body *::-webkit-scrollbar-thumb:hover {
-  background: var(--page-scrollbar-thumb-hover, var(--scrollbar-thumb-hover));
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-current);
+}
+
+html::-webkit-scrollbar-thumb:active,
+body::-webkit-scrollbar-thumb:active,
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active-current);
 }
 
 html::-webkit-scrollbar-corner,
 body::-webkit-scrollbar-corner,
-body *::-webkit-scrollbar-corner {
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+)::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu,
+  textarea,
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre,
+  .bot-message table,
+  .shared-chat-message--assistant .md-content table,
+  .memo-modal__markdown table
+) {
+  --scrollbar-size-current: var(--scrollbar-size-thin, var(--scrollbar-size));
+  --scrollbar-track-current: var(--page-scrollbar-track, var(--scrollbar-track));
+  --scrollbar-thumb-current: var(--page-scrollbar-thumb, var(--scrollbar-thumb));
+  --scrollbar-thumb-hover-current: var(--page-scrollbar-thumb-hover, var(--scrollbar-thumb-hover));
+  --scrollbar-thumb-active-current: var(--page-scrollbar-thumb-active, var(--scrollbar-thumb-active));
+  --scrollbar-thumb-border-current: var(--page-scrollbar-thumb-border, var(--scrollbar-thumb-border));
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
+}
+
+:where(
+  .sidebar,
+  .chat-messages,
+  .model-select-menu,
+  .task-detail-modal-shell,
+  .task-detail-section-body,
+  .new-prompt-modal-content,
+  .custom-modal-body,
+  .post-modal-scroll,
+  .memo-modal__body,
+  .settings-content,
+  .settings-sidebar .nav-menu
+) {
+  scrollbar-gutter: stable;
+}
+
+:where(
+  .user-message pre,
+  .bot-message pre,
+  .code-block-container pre,
+  .memo-modal__markdown pre,
+  .memo-modal__markdown .code-block-container pre,
+  .shared-chat-message--assistant .md-content pre,
+  .md-content pre
+) {
+  --scrollbar-track-current: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-current: rgba(226, 232, 240, 0.28);
+  --scrollbar-thumb-hover-current: rgba(226, 232, 240, 0.4);
+  --scrollbar-thumb-active-current: rgba(226, 232, 240, 0.52);
+  --scrollbar-thumb-border-current: rgba(30, 41, 59, 0.9);
 }
 
 /* サイドバー表示時にbodyスクロールを止める */

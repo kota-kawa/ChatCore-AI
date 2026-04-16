@@ -65,12 +65,14 @@
   --modal-border: rgba(0, 0, 0, 0.08);
   --modal-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
 
-  --scrollbar-size: 8px;
+  --scrollbar-size: 10px;
+  --scrollbar-size-thin: 8px;
   --scrollbar-radius: 999px;
   --scrollbar-track: rgba(148, 163, 184, 0.16);
-  --scrollbar-thumb: rgba(100, 116, 139, 0.34);
-  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.48);
-  --scrollbar-thumb-border: rgba(255, 255, 255, 0.72);
+  --scrollbar-thumb: rgba(100, 116, 139, 0.38);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.52);
+  --scrollbar-thumb-active: rgba(51, 65, 85, 0.6);
+  --scrollbar-thumb-border: rgba(255, 255, 255, 0.82);
 
   --cc-button-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%);
   --cc-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
