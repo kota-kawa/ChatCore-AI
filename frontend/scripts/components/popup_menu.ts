@@ -8,7 +8,7 @@ template.innerHTML = `
       --cc-fab-shadow: none;
       --cc-fab-hover-shadow: none;
       --cc-fab-hover-transform: scale(1.08);
-      --cc-fab-hover-filter: saturate(1.06);
+      --cc-fab-hover-filter: brightness(1.07) saturate(1.12);
       --cc-fab-menu-shadow: none;
       --cc-fab-menu-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
       --cc-fab-share-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #4a9bf5);
@@ -20,7 +20,7 @@ template.innerHTML = `
       --cc-fab-shadow: none;
       --cc-fab-hover-shadow: none;
       --cc-fab-hover-transform: scale(1.08);
-      --cc-fab-hover-filter: saturate(1.06);
+      --cc-fab-hover-filter: brightness(1.07) saturate(1.12);
       --cc-fab-menu-shadow: none;
       --cc-fab-menu-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
       --cc-fab-share-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #4a9bf5);
@@ -56,7 +56,7 @@ template.innerHTML = `
       display: flex;
       justify-content: center;
       align-items: center;
-      transition: transform 0.3s ease, box-shadow 0.3s ease, filter 0.3s ease;
+      transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease, filter 0.22s ease;
       box-shadow: var(--cc-fab-shadow);
       position: relative;
     }
@@ -64,6 +64,26 @@ template.innerHTML = `
       transform: var(--cc-fab-hover-transform);
       filter: var(--cc-fab-hover-filter);
       box-shadow: var(--cc-fab-hover-shadow);
+    }
+    .btn--menu:hover {
+      box-shadow:
+        0 0 0 5px rgba(25, 195, 125, 0.18),
+        0 6px 20px rgba(0, 0, 0, 0.18);
+    }
+    .btn--share:hover {
+      box-shadow:
+        0 0 0 5px rgba(26, 115, 232, 0.20),
+        0 6px 20px rgba(0, 0, 0, 0.16);
+    }
+    .btn--star:hover {
+      box-shadow:
+        0 0 0 5px rgba(25, 195, 125, 0.20),
+        0 6px 20px rgba(0, 0, 0, 0.16);
+    }
+    .btn--comment:hover {
+      box-shadow:
+        0 0 0 5px rgba(217, 119, 6, 0.20),
+        0 6px 20px rgba(0, 0, 0, 0.16);
     }
     .btn svg {
       width: 24px;
