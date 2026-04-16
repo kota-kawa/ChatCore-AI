@@ -55,14 +55,14 @@
   min-width: 0;
   min-height: 2.5rem;
   max-height: min(40vh, 11.5rem);
-  padding: 0.72rem 0.1rem 0.72rem 0;
+  padding: 0.66rem 0.1rem 0.66rem 0;
   border: none;
   /* iOS で入力時のズームを防止（16px 以上） */
   font-size: var(--text-md, 1rem);
   background: transparent;
   color: var(--text-dark, #1a1a1a);
   outline: none;
-  line-height: var(--leading-normal, 1.5);
+  line-height: 1.45;
   resize: none;
   overflow-y: hidden;
   overscroll-behavior: contain;
@@ -75,6 +75,7 @@
 
 #user-input::placeholder {
   color: #adb5bd;
+  line-height: inherit;
 }
 
 #send-btn {
@@ -191,7 +192,7 @@
   }
 
   #user-input {
-    padding: 0.5rem 0 0.5rem 0;
+    padding: 0.46rem 0 0.46rem 0;
     font-size: var(--text-md, 1rem);
   }
 
