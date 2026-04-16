@@ -366,6 +366,7 @@ export function SetupSection() {
           <textarea
             id="setup-info"
             rows={4}
+            maxLength={MAX_SETUP_INFO_LENGTH}
             placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
             value={setupInfo}
             onChange={(event) => {
