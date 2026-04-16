@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
 export function SetupSection() {
@@ -366,6 +366,13 @@ export function SetupSection() {
               setSetupInfo(event.target.value);
             }}
           ></textarea>
+          {setupInfo.length > 0 && (
+            <div className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}>
+              {setupInfo.length > MAX_SETUP_INFO_LENGTH
+                ? `文字数制限を超えています（${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字）`
+                : `${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字`}
+            </div>
+          )}
         </div>
 
         <div className="form-group">
