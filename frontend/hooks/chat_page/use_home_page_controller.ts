@@ -91,6 +91,8 @@ export function useHomePageController() {
     setIsTaskOrderEditing,
     taskDetail,
     setTaskDetail,
+    launchingTaskName,
+    setLaunchingTaskName,
     draggingTaskIndex,
     setDraggingTaskIndex,
     taskLaunchInProgressRef,
@@ -983,10 +985,11 @@ export function useHomePageController() {
   const showSetupForm = useCallback(() => {
     setIsChatVisible(false);
     setSidebarOpen(false);
+    setLaunchingTaskName(null);
     setSetupInfo("");
     closeShareModal();
     scheduleSetupViewportFit();
-  }, [closeShareModal]);
+  }, [closeShareModal, setLaunchingTaskName]);
 
   const handleAccessChat = useCallback(async () => {
     try {
@@ -1027,6 +1030,7 @@ export function useHomePageController() {
       if (taskLaunchInProgressRef.current) return;
 
       taskLaunchInProgressRef.current = true;
+      setLaunchingTaskName(task.name);
 
       const roomId = Date.now().toString();
       const currentSetupInfo = setupInfo.trim();
@@ -1038,8 +1042,12 @@ export function useHomePageController() {
       persistCurrentRoomId(roomId);
 
       try {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 150);
+        });
         await createNewChatRoom(roomId, roomTitle);
         setIsChatVisible(true);
+        setLaunchingTaskName(null);
         setMessages([]);
         setChatInput("");
         setOpenRoomActionsFor(null);
@@ -1051,12 +1059,22 @@ export function useHomePageController() {
         void loadChatRooms();
         await generateResponse(firstMessage, selectedModel, roomId);
       } catch (error) {
+        setLaunchingTaskName(null);
         window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         taskLaunchInProgressRef.current = false;
       }
     },
-    [createNewChatRoom, generateResponse, isTaskOrderEditing, loadChatRooms, persistCurrentRoomId, selectedModel, setupInfo],
+    [
+      createNewChatRoom,
+      generateResponse,
+      isTaskOrderEditing,
+      loadChatRooms,
+      persistCurrentRoomId,
+      selectedModel,
+      setLaunchingTaskName,
+      setupInfo,
+    ],
   );
 
   const handleSendMessage = useCallback(() => {
@@ -1679,6 +1697,7 @@ export function useHomePageController() {
     tasksExpanded,
     showTaskToggleButton,
     visibleTaskCountText,
+    launchingTaskName,
     draggingTaskIndex,
     modelSelectRef,
     setSetupInfo,

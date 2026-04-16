@@ -251,7 +251,9 @@
   transition:
     transform var(--transition-normal, 0.2s ease),
     box-shadow var(--transition-normal, 0.2s ease),
-    border var(--transition-normal, 0.2s ease);
+    border var(--transition-normal, 0.2s ease),
+    opacity var(--transition-normal, 0.2s ease),
+    filter var(--transition-normal, 0.2s ease);
   border: 1px solid #e3ebe7;
   width: 100%;
   text-align: center;
@@ -266,6 +268,33 @@
   transform: translateY(-3px);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
   border-color: rgba(25, 195, 125, 0.45);
+}
+
+.task-selection[data-launching="true"] {
+  pointer-events: none;
+}
+
+.task-selection[data-launching="true"] .prompt-card:not([data-launching="true"]) {
+  opacity: 0.68;
+  transform: translateY(-2px) scale(0.985);
+  filter: saturate(0.92);
+}
+
+.prompt-card[data-launching="true"] {
+  animation: prompt-card-launch-sink 0.18s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  border-color: rgba(25, 195, 125, 0.42);
+}
+
+@keyframes prompt-card-launch-sink {
+  from {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  to {
+    transform: translateY(10px) scale(0.985);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+  }
 }
 
 /* 入出力例コンテナ：カード内で絶対配置 */

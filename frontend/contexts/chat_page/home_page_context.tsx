@@ -30,6 +30,7 @@ type HomePageTaskContextValue = Pick<
   | "tasksExpanded"
   | "showTaskToggleButton"
   | "visibleTaskCountText"
+  | "launchingTaskName"
   | "draggingTaskIndex"
   | "toggleTaskOrderEditing"
   | "closeNewPromptModal"
@@ -106,6 +107,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     tasksExpanded: controller.tasksExpanded,
     showTaskToggleButton: controller.showTaskToggleButton,
     visibleTaskCountText: controller.visibleTaskCountText,
+    launchingTaskName: controller.launchingTaskName,
     draggingTaskIndex: controller.draggingTaskIndex,
     toggleTaskOrderEditing: controller.toggleTaskOrderEditing,
     closeNewPromptModal: controller.closeNewPromptModal,

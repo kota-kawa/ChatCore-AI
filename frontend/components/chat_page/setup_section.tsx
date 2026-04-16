@@ -30,6 +30,7 @@ export function SetupSection() {
     tasksExpanded,
     showTaskToggleButton,
     visibleTaskCountText,
+    launchingTaskName,
     draggingTaskIndex,
     toggleTaskOrderEditing,
     closeNewPromptModal,
@@ -469,6 +470,7 @@ export function SetupSection() {
             tasks.length > 6 ? "tasks-collapsed" : ""
           } ${tasksExpanded || isTaskOrderEditing ? "tasks-expanded" : ""}`.trim()}
           id="task-selection"
+          data-launching={launchingTaskName ? "true" : "false"}
         >
           {tasks.map((task, index) => {
             const taskDomKey = getTaskDomKey(task);
@@ -489,6 +491,7 @@ export function SetupSection() {
               >
                 <div
                   className={`prompt-card ${isTaskOrderEditing ? "editable" : ""}`.trim()}
+                  data-launching={launchingTaskName === task.name ? "true" : "false"}
                   data-task={task.name}
                   data-prompt_template={task.prompt_template}
                   data-response_rules={task.response_rules}

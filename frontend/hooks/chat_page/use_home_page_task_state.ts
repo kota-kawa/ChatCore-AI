@@ -18,6 +18,7 @@ export function useHomePageTaskState() {
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [isTaskOrderEditing, setIsTaskOrderEditing] = useState(false);
   const [taskDetail, setTaskDetail] = useState<NormalizedTask | null>(null);
+  const [launchingTaskName, setLaunchingTaskName] = useState<string | null>(null);
   const [draggingTaskIndex, setDraggingTaskIndex] = useState<number | null>(null);
   const taskLaunchInProgressRef = useRef(false);
 
@@ -41,6 +42,8 @@ export function useHomePageTaskState() {
     setIsTaskOrderEditing,
     taskDetail,
     setTaskDetail,
+    launchingTaskName,
+    setLaunchingTaskName,
     draggingTaskIndex,
     setDraggingTaskIndex,
     taskLaunchInProgressRef,
