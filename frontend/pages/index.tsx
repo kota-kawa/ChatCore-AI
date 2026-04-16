@@ -14,6 +14,7 @@ export default function HomePage() {
   const {
     loggedIn,
     authResolved,
+    pageViewState,
     isNewPromptModalOpen,
     closeNewPromptModal,
     setTaskDetail,
@@ -99,9 +100,15 @@ export default function HomePage() {
             }}
           ></user-icon>
 
-          <SetupSection />
+          <div
+            className="chat-page-stage"
+            data-view={pageViewState}
+            aria-busy={pageViewState === "launching" ? "true" : undefined}
+          >
+            <SetupSection />
 
-          <ChatMainSection />
+            <ChatMainSection />
+          </div>
 
           <TaskDetailModal
             taskDetail={taskDetail}

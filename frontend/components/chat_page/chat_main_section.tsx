@@ -4,12 +4,15 @@ import { UserMessageHtml } from "./user_message_html";
 import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
-import { useHomePageChatContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
+import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 
 export function ChatMainSection() {
   const {
+    pageViewState,
     isChatVisible,
+    isChatLaunching,
+    setupInfo,
     chatHeaderModelMenuOpen,
     selectedModel,
     selectedModelShortLabel,
@@ -18,6 +21,8 @@ export function ChatMainSection() {
     setChatHeaderModelMenuOpen,
     setSelectedModel,
   } = useHomePageUiContext();
+
+  const { launchingTaskName } = useHomePageTaskContext();
 
   const {
     hasCurrentRoom,
@@ -46,6 +51,7 @@ export function ChatMainSection() {
   } = useHomePageChatContext();
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const launchSetupSummary = setupInfo.trim();
 
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -66,7 +72,12 @@ export function ChatMainSection() {
   }, [chatInput]);
 
   return (
-    <div id="chat-container" data-visible={isChatVisible ? "true" : "false"}>
+    <div
+      id="chat-container"
+      data-view={pageViewState}
+      data-launching={isChatLaunching ? "true" : "false"}
+      aria-hidden={isChatVisible ? "false" : "true"}
+    >
       <div className="chat-header">
         <div className="header-left">
           <button
@@ -125,9 +136,9 @@ export function ChatMainSection() {
             type="button"
             data-tooltip="このチャットを共有"
             data-tooltip-placement="bottom"
-            disabled={!hasCurrentRoom}
+            disabled={!hasCurrentRoom || isChatLaunching}
             onClick={() => {
-              if (!hasCurrentRoom) return;
+              if (!hasCurrentRoom || isChatLaunching) return;
               openShareModal();
             }}
           >
@@ -218,7 +229,32 @@ export function ChatMainSection() {
             <i className="bi bi-arrow-bar-right"></i>
           </button>
 
-          <div className="chat-messages" id="chat-messages" ref={chatMessagesRef} aria-busy={isGenerating ? "true" : undefined}>
+          <div
+            className="chat-messages"
+            id="chat-messages"
+            ref={chatMessagesRef}
+            aria-busy={isGenerating || isChatLaunching ? "true" : undefined}
+          >
+            {isChatLaunching && (
+              <div className="chat-launch-placeholder" role="status" aria-live="polite">
+                <div className="chat-launch-placeholder__eyebrow">Preparing chat</div>
+                <div className="chat-launch-placeholder__title">
+                  {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
+                </div>
+                {launchSetupSummary && (
+                  <p className="chat-launch-placeholder__summary">{launchSetupSummary}</p>
+                )}
+                <div className="chat-launch-placeholder__meta">
+                  {launchingTaskName && <span className="chat-launch-placeholder__task-pill">Task selected</span>}
+                  <div className="chat-launch-placeholder__pulse" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {historyHasMore && historyNextBeforeId !== null && (
               <button
                 type="button"
@@ -295,8 +331,9 @@ export function ChatMainSection() {
                 ref={chatInputRef}
                 id="user-input"
                 rows={1}
-                placeholder="メッセージを入力..."
+                placeholder={isChatLaunching ? "チャットを準備しています..." : "メッセージを入力..."}
                 value={chatInput}
+                disabled={isChatLaunching}
                 onChange={(event) => {
                   setChatInput(event.target.value);
                   adjustChatInputHeight(event.currentTarget);
@@ -310,6 +347,7 @@ export function ChatMainSection() {
                 aria-label={isGenerating ? "停止" : "送信"}
                 data-tooltip={isGenerating ? "生成を停止" : "メッセージを送信"}
                 data-tooltip-placement="top"
+                disabled={isChatLaunching}
                 onClick={() => {
                   handleSendMessage();
                 }}

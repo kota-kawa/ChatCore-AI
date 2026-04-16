@@ -6,7 +6,10 @@ type HomePageControllerState =
 type HomePageUiContextValue = Pick<
   HomePageControllerState,
   | "loggedIn"
+  | "pageViewState"
   | "isChatVisible"
+  | "isSetupVisible"
+  | "isChatLaunching"
   | "setupInfo"
   | "selectedModel"
   | "modelMenuOpen"
@@ -84,7 +87,10 @@ type HomePageContextProviderProps = {
 export function HomePageContextProvider({ controller, children }: HomePageContextProviderProps) {
   const uiValue: HomePageUiContextValue = {
     loggedIn: controller.loggedIn,
+    pageViewState: controller.pageViewState,
     isChatVisible: controller.isChatVisible,
+    isSetupVisible: controller.isSetupVisible,
+    isChatLaunching: controller.isChatLaunching,
     setupInfo: controller.setupInfo,
     selectedModel: controller.selectedModel,
     modelMenuOpen: controller.modelMenuOpen,

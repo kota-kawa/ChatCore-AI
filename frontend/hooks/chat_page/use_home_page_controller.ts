@@ -59,6 +59,13 @@ import {
 } from "../../scripts/setup/setup_tasks_cache";
 import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
+const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
+
+function waitForDuration(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
 
 export function useHomePageController() {
   const {
@@ -66,8 +73,11 @@ export function useHomePageController() {
     setLoggedIn,
     authResolved,
     setAuthResolved,
+    pageViewState,
+    setPageViewState,
     isChatVisible,
-    setIsChatVisible,
+    isSetupVisible,
+    isChatLaunching,
     setupInfo,
     setSetupInfo,
     modelMenuOpen,
@@ -655,7 +665,7 @@ export function useHomePageController() {
   const switchChatRoom = useCallback(
     (roomId: string) => {
       persistCurrentRoomId(roomId);
-      setIsChatVisible(true);
+      setPageViewState("chat");
       setSidebarOpen(false);
       setOpenRoomActionsFor(null);
       setShareStatus({ message: "共有リンクを準備しています...", error: false });
@@ -664,7 +674,7 @@ export function useHomePageController() {
       void loadChatHistory(roomId, true);
       void loadChatRooms();
     },
-    [loadChatHistory, loadChatRooms, loadLocalChatHistory, persistCurrentRoomId],
+    [loadChatHistory, loadChatRooms, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string) => {
@@ -983,13 +993,13 @@ export function useHomePageController() {
   }, [shareUrl]);
 
   const showSetupForm = useCallback(() => {
-    setIsChatVisible(false);
+    setPageViewState("setup");
     setSidebarOpen(false);
     setLaunchingTaskName(null);
     setSetupInfo("");
     closeShareModal();
     scheduleSetupViewportFit();
-  }, [closeShareModal, setLaunchingTaskName]);
+  }, [closeShareModal, setLaunchingTaskName, setPageViewState]);
 
   const handleAccessChat = useCallback(async () => {
     try {
@@ -1003,18 +1013,18 @@ export function useHomePageController() {
         return;
       }
 
-      setIsChatVisible(true);
+      setPageViewState("chat");
       setMessages([]);
       persistCurrentRoomId(null);
       void loadChatRooms();
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
-      setIsChatVisible(true);
+      setPageViewState("chat");
       setMessages([]);
       persistCurrentRoomId(null);
       void loadChatRooms();
     }
-  }, [loadChatRooms, persistCurrentRoomId, switchChatRoom]);
+  }, [loadChatRooms, persistCurrentRoomId, setPageViewState, switchChatRoom]);
 
   const handleNewChat = useCallback(() => {
     persistCurrentRoomId(null);
@@ -1040,26 +1050,33 @@ export function useHomePageController() {
         : `【タスク】${task.name}`;
 
       persistCurrentRoomId(roomId);
+      setMessages([]);
+      setChatInput("");
+      setOpenRoomActionsFor(null);
+      setShareUrl("");
+      setShareStatus({ message: "共有リンクを準備しています...", error: false });
+      setHistoryHasMore(false);
+      setHistoryNextBeforeId(null);
+      setIsLoadingOlder(false);
+      setSidebarOpen(false);
+      setPageViewState("launching");
 
       try {
-        await new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 280);
-        });
-        await createNewChatRoom(roomId, roomTitle);
-        setIsChatVisible(true);
-        setLaunchingTaskName(null);
-        setMessages([]);
-        setChatInput("");
-        setOpenRoomActionsFor(null);
-        setShareUrl("");
-        setShareStatus({ message: "共有リンクを準備しています...", error: false });
-
+        await Promise.all([
+          createNewChatRoom(roomId, roomTitle),
+          waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
+        ]);
         removeStoredHistory(roomId);
+        setPageViewState("chat");
+        setLaunchingTaskName(null);
 
         void loadChatRooms();
         await generateResponse(firstMessage, selectedModel, roomId);
       } catch (error) {
+        setPageViewState("setup");
         setLaunchingTaskName(null);
+        setMessages([]);
+        persistCurrentRoomId(null);
         window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         taskLaunchInProgressRef.current = false;
@@ -1073,6 +1090,7 @@ export function useHomePageController() {
       persistCurrentRoomId,
       selectedModel,
       setLaunchingTaskName,
+      setPageViewState,
       setupInfo,
     ],
   );
@@ -1380,12 +1398,12 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
-    if (!isChatVisible || !sidebarOpen) {
+    if (pageViewState !== "chat" || !sidebarOpen) {
       document.body.classList.remove("sidebar-visible");
       return;
     }
     document.body.classList.add("sidebar-visible");
-  }, [isChatVisible, sidebarOpen]);
+  }, [pageViewState, sidebarOpen]);
 
   useEffect(() => {
     document.body.classList.toggle("new-prompt-modal-open", isNewPromptModalOpen);
@@ -1410,10 +1428,10 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
-    if (!isChatVisible) {
+    if (pageViewState === "setup") {
       scheduleSetupViewportFit();
     }
-  }, [authResolved, isChatVisible, loggedIn, tasks.length, tasksExpanded]);
+  }, [authResolved, loggedIn, pageViewState, tasks.length, tasksExpanded]);
 
   useEffect(() => {
     currentRoomIdRef.current = currentRoomId;
@@ -1686,7 +1704,10 @@ export function useHomePageController() {
   return {
     loggedIn,
     authResolved,
+    pageViewState,
     isChatVisible,
+    isSetupVisible,
+    isChatLaunching,
     setupInfo,
     selectedModel,
     modelMenuOpen,

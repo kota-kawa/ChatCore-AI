@@ -16,7 +16,6 @@
   --setup-card-min-height: 68px;
   --setup-card-font-size: 1.05rem;
   --setup-toggle-size: 40px;
-  display: block;
   background: var(--surface);
   padding: var(--setup-container-padding-y) var(--setup-container-padding-x);
   border-radius: 24px;
@@ -28,10 +27,35 @@
   animation: slideUp 0.6s ease-out;
   position: relative;
   overflow: hidden;
+  transform-origin: 50% 38%;
+  will-change: opacity, transform, filter;
+  transition:
+    opacity 0.24s ease,
+    transform 0.56s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.42s ease,
+    box-shadow 0.42s ease;
 }
 
-#setup-container[data-visible="false"] {
-  display: none;
+#setup-container[data-view="setup"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: none;
+  pointer-events: auto;
+}
+
+#setup-container[data-view="launching"] {
+  opacity: 0.28;
+  transform: translateY(-28px) scale(0.962);
+  filter: blur(6px) saturate(0.88);
+  pointer-events: none;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.08);
+}
+
+#setup-container[data-view="chat"] {
+  opacity: 0;
+  transform: translateY(-42px) scale(0.936);
+  filter: blur(10px) saturate(0.82);
+  pointer-events: none;
 }
 
 #setup-container::before {

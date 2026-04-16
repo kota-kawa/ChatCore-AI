@@ -15,32 +15,34 @@
   overflow: hidden;
   flex-direction: column;
   min-height: 0;
+  opacity: 0;
+  transform: translateY(56px) scale(0.952);
+  filter: blur(8px) saturate(0.9);
+  pointer-events: none;
+  will-change: opacity, transform, filter;
+  transition:
+    opacity 0.3s ease,
+    transform 0.62s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.48s ease,
+    box-shadow 0.48s ease;
 }
 
-#chat-container[data-visible="true"] {
-  animation: chat-container-float-in 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+#chat-container[data-view="launching"],
+#chat-container[data-view="chat"] {
+  opacity: 1;
+  filter: blur(0);
 }
 
-#chat-container[data-visible="false"] {
-  display: none;
+#chat-container[data-view="launching"] {
+  transform: translateY(18px) scale(0.986);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 30px 56px -18px rgba(0, 0, 0, 0.12);
 }
 
-@keyframes chat-container-float-in {
-  from {
-    opacity: 0;
-    transform: translateY(56px) scale(0.948);
-    filter: blur(3px);
-  }
-
-  60% {
-    filter: blur(0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
-  }
+#chat-container[data-view="chat"] {
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
 /* ヘッダー */

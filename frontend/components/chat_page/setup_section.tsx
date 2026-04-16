@@ -11,7 +11,8 @@ import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } 
 
 export function SetupSection() {
   const {
-    isChatVisible,
+    pageViewState,
+    isSetupVisible,
     loggedIn,
     setupInfo,
     selectedModel,
@@ -352,7 +353,11 @@ export function SetupSection() {
   }, [isTaskOrderEditing, tasks, draggingTaskIndex]);
 
   return (
-    <div id="setup-container" data-visible={isChatVisible ? "false" : "true"}>
+    <div
+      id="setup-container"
+      data-view={pageViewState}
+      aria-hidden={isSetupVisible ? "false" : "true"}
+    >
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
         <h2 className="setup-form-title">Chat Core</h2>
 
