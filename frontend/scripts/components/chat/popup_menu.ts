@@ -202,8 +202,14 @@ chatTemplate.innerHTML = `
     .btn--star:hover svg  { transform: rotate(20deg)  scale(1.2); }
     .btn--comment:hover svg { transform: rotate(-20deg) scale(1.2); }
 
+    @keyframes menuBtnWiggle {
+      0%   { transform: scale(1.08) rotate(0deg); }
+      45%  { transform: scale(1.08) rotate(-20deg); }
+      100% { transform: scale(1.08) rotate(0deg); }
+    }
+
     #chatActionMenuButton:not(:checked) + .actions-menu .btn--menu:hover {
-      transform: scale(1.08) rotate(-20deg);
+      animation: menuBtnWiggle 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     }
 
     @media (max-width: 768px) {

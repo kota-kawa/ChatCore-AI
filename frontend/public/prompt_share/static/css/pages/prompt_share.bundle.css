@@ -2261,37 +2261,69 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   border: none;
   border-radius: 50%;
   color: #ffffff;
-  background: var(--ps-primary);
-  box-shadow: 0 10px 22px rgba(26, 115, 232, 0.35);
+  background: linear-gradient(145deg, #2979e8 0%, #185abc 55%, #3f94f5 100%);
+  background-size: 200% 200%;
+  background-position: 30% 0%;
+  box-shadow:
+    0 0 0 0px rgba(79, 156, 245, 0),
+    0 5px 18px rgba(26, 115, 232, 0.42),
+    0 2px 5px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 1000;
-  transition: background 0.16s ease, transform 0.16s ease;
+  transition:
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-position 0.45s ease,
+    filter 0.28s ease;
 }
 
 .new-prompt-btn:hover {
-  background: var(--ps-primary-strong);
-  transform: translateY(-1px);
+  background-position: 100% 100%;
+  transform: scale(1.13) translateY(-2px);
+  filter: brightness(1.06) saturate(1.16);
+  box-shadow:
+    0 0 0 9px rgba(79, 156, 245, 0.16),
+    0 12px 32px rgba(26, 115, 232, 0.52),
+    0 4px 10px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.new-prompt-btn:active {
+  transform: scale(0.88) translateY(1px);
+  filter: brightness(0.92) saturate(1);
+  box-shadow:
+    0 0 0 3px rgba(79, 156, 245, 0.08),
+    0 3px 10px rgba(26, 115, 232, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  background-position: 50% 50%;
+  transition-duration: 0.07s;
 }
 
 .new-prompt-btn i {
   font-size: 1.36rem;
-  transition: transform 0.2s ease;
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.new-prompt-btn:active i {
+  transform: scale(0.86);
+  transition-duration: 0.07s;
 }
 
 .new-prompt-btn i.rotating {
-  animation: newPromptIconSpin 0.8s cubic-bezier(0.645, 0.045, 0.355, 1);
+  animation: newPromptIconSpin 0.72s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 @keyframes newPromptIconSpin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  0%   { transform: rotate(0deg) scale(1); }
+  30%  { transform: rotate(200deg) scale(1.15); }
+  60%  { transform: rotate(325deg) scale(0.92); }
+  78%  { transform: rotate(372deg) scale(1.05); }
+  90%  { transform: rotate(352deg) scale(0.98); }
+  100% { transform: rotate(360deg) scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2315,8 +2347,12 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .prompt-share-page .meatball-menu:hover,
   .prompt-share-page .prompt-action-btn:active,
   .prompt-share-page .meatball-menu:active,
-  .new-prompt-btn:hover {
+  .new-prompt-btn:hover,
+  .new-prompt-btn:active {
     transform: none;
+    filter: none;
+    box-shadow: 0 5px 18px rgba(26, 115, 232, 0.42);
+    background-position: 30% 0%;
   }
 
   .prompt-share-page .prompt-actions-dropdown,
@@ -2587,7 +2623,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
-  .new-prompt-btn,
   .prompt-actions-dropdown .dropdown-item
 ) {
   --ps-button-base: rgba(255, 255, 255, 0.98);
@@ -2611,7 +2646,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
 .prompt-share-page :where(
   .submit-btn,
-  .new-prompt-btn,
   .search-box button
 ) {
   --ps-button-base: var(--ps-primary);
@@ -2669,7 +2703,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
-  .new-prompt-btn,
   .prompt-actions-dropdown .dropdown-item
 ):hover:not(:disabled) {
   transform: translateY(-1px);
@@ -2688,7 +2721,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .close-btn,
   .prompt-image-clear-btn,
   .submit-btn,
-  .new-prompt-btn,
   .prompt-actions-dropdown .dropdown-item
 ):active:not(:disabled) {
   transform: scale(0.97);
@@ -2713,7 +2745,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     .close-btn,
     .prompt-image-clear-btn,
     .submit-btn,
-    .new-prompt-btn,
     .prompt-actions-dropdown .dropdown-item
   ) {
     transition-duration: 0.01ms !important;
@@ -2728,7 +2759,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     .close-btn,
     .prompt-image-clear-btn,
     .submit-btn,
-    .new-prompt-btn,
     .prompt-actions-dropdown .dropdown-item
   ):hover:not(:disabled),
   .prompt-share-page :where(
@@ -2740,7 +2770,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     .close-btn,
     .prompt-image-clear-btn,
     .submit-btn,
-    .new-prompt-btn,
     .prompt-actions-dropdown .dropdown-item
   ):active:not(:disabled) {
     transform: none;
