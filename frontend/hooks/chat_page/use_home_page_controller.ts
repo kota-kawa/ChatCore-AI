@@ -1043,7 +1043,7 @@ export function useHomePageController() {
 
       try {
         await new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 150);
+          window.setTimeout(resolve, 280);
         });
         await createNewChatRoom(roomId, roomTitle);
         setIsChatVisible(true);

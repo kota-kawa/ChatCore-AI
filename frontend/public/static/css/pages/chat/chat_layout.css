@@ -18,7 +18,7 @@
 }
 
 #chat-container[data-visible="true"] {
-  animation: chat-container-float-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: chat-container-float-in 0.38s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
 #chat-container[data-visible="false"] {

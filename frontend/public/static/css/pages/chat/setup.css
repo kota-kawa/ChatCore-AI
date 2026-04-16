@@ -281,7 +281,7 @@
 }
 
 .prompt-card[data-launching="true"] {
-  animation: prompt-card-launch-sink 0.18s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation: prompt-card-launch-sink 0.32s cubic-bezier(0.22, 0.8, 0.2, 1) forwards;
   border-color: rgba(25, 195, 125, 0.42);
 }
 
