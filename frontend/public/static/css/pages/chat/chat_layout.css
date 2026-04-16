@@ -18,7 +18,7 @@
 }
 
 #chat-container[data-visible="true"] {
-  animation: chat-container-float-in 0.38s cubic-bezier(0.2, 0.9, 0.2, 1);
+  animation: chat-container-float-in 0.75s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #chat-container[data-visible="false"] {
@@ -28,12 +28,18 @@
 @keyframes chat-container-float-in {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.988);
+    transform: translateY(56px) scale(0.948);
+    filter: blur(3px);
+  }
+
+  60% {
+    filter: blur(0);
   }
 
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 
