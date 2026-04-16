@@ -344,10 +344,8 @@ class ActionMenu extends HTMLElement {
 
   updateMenuSize() {
     const chatContainer = document.getElementById("chat-container") as HTMLElement | null;
-    const setupContainer = document.getElementById("setup-container") as HTMLElement | null;
-    const chatVisibleState = chatContainer?.getAttribute("data-visible");
-    const setupVisibleState = setupContainer?.getAttribute("data-visible");
-    const isInChatMode = chatVisibleState === "true" || setupVisibleState === "false";
+    const pageViewState = chatContainer?.getAttribute("data-view");
+    const isInChatMode = pageViewState === "chat" || pageViewState === "launching";
     const isChatPage = document.body.classList.contains("chat-page");
 
     // CSSカスタムプロパティでコンテキストを設定
@@ -362,7 +360,6 @@ class ActionMenu extends HTMLElement {
 
   observeScreenChanges() {
     const chatContainer = document.getElementById("chat-container");
-    const setupContainer = document.getElementById("setup-container");
     const observer = new MutationObserver(() => {
       this.updateMenuSize();
     });
@@ -371,13 +368,7 @@ class ActionMenu extends HTMLElement {
     if (chatContainer) {
       observer.observe(chatContainer, {
         attributes: true,
-        attributeFilter: ["style", "data-visible"]
-      });
-    }
-    if (setupContainer) {
-      observer.observe(setupContainer, {
-        attributes: true,
-        attributeFilter: ["style", "data-visible"]
+        attributeFilter: ["data-view"]
       });
     }
 
