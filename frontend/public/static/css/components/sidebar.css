@@ -14,25 +14,6 @@
   gap: 0.15rem;
 }
 
-/* スクロールバーを上品に */
-.sidebar::-webkit-scrollbar {
-  width: calc(var(--scrollbar-size) - 2px);
-}
-
-.sidebar::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-.sidebar::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 2px solid var(--scrollbar-thumb-border);
-  border-radius: var(--scrollbar-radius, 999px);
-}
-
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
 /* ルームカード */
 .chat-room-card {
   background: transparent;

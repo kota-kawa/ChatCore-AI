@@ -58,6 +58,12 @@ body *::-webkit-scrollbar-thumb:hover {
   background: var(--page-scrollbar-thumb-hover, var(--scrollbar-thumb-hover));
 }
 
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+body *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* サイドバー表示時にbodyスクロールを止める */
 body.sidebar-visible {
   overflow: hidden;

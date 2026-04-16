@@ -65,7 +65,7 @@
   --modal-border: rgba(0, 0, 0, 0.08);
   --modal-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
 
-  --scrollbar-size: 10px;
+  --scrollbar-size: 8px;
   --scrollbar-radius: 999px;
   --scrollbar-track: rgba(148, 163, 184, 0.16);
   --scrollbar-thumb: rgba(100, 116, 139, 0.34);

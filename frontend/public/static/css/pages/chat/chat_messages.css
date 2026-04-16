@@ -57,25 +57,6 @@ chat-action-menu {
   cursor: progress;
 }
 
-/* スクロールバーを上品に */
-.chat-messages::-webkit-scrollbar {
-  width: calc(var(--scrollbar-size) - 1px);
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 2px solid var(--scrollbar-thumb-border);
-  border-radius: var(--scrollbar-radius, 999px);
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
-
 /* メッセージラッパ */
 .message-wrapper {
   position: relative;
