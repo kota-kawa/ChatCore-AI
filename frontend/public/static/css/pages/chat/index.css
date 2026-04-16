@@ -430,13 +430,12 @@ body.chat-page .io-modal-content {
 }
 
 body.chat-page .task-detail-modal-shell {
-  --scrollbar-size-current: 10px;
-  --scrollbar-track-current: rgba(214, 225, 219, 0.76);
-  --scrollbar-thumb-current: rgba(30, 107, 76, 0.26);
-  --scrollbar-thumb-hover-current: rgba(24, 89, 63, 0.42);
-  --scrollbar-thumb-active-current: rgba(16, 72, 50, 0.52);
-  --scrollbar-thumb-border-current: rgba(255, 255, 255, 0.96);
-  padding-right: 0.1rem;
+  --scrollbar-size-current: 5px;
+  --scrollbar-track-current: transparent;
+  --scrollbar-thumb-current: rgba(30, 107, 76, 0.20);
+  --scrollbar-thumb-hover-current: rgba(24, 89, 63, 0.38);
+  --scrollbar-thumb-active-current: rgba(16, 72, 50, 0.54);
+  --scrollbar-thumb-border-current: transparent;
 }
 
 body.chat-page .task-detail-section {
@@ -447,58 +446,35 @@ body.chat-page .task-detail-section {
 }
 
 body.chat-page .task-detail-section-body {
-  --scrollbar-size-current: 10px;
-  --scrollbar-track-current: rgba(214, 225, 219, 0.76);
-  --scrollbar-thumb-current: rgba(30, 107, 76, 0.26);
-  --scrollbar-thumb-hover-current: rgba(24, 89, 63, 0.42);
-  --scrollbar-thumb-active-current: rgba(16, 72, 50, 0.52);
-  --scrollbar-thumb-border-current: rgba(255, 255, 255, 0.96);
-  padding-right: 0.2rem;
+  --scrollbar-size-current: 5px;
+  --scrollbar-track-current: transparent;
+  --scrollbar-thumb-current: rgba(30, 107, 76, 0.20);
+  --scrollbar-thumb-hover-current: rgba(24, 89, 63, 0.38);
+  --scrollbar-thumb-active-current: rgba(16, 72, 50, 0.54);
+  --scrollbar-thumb-border-current: transparent;
+  padding-right: 0.35rem;
 }
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-track {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(231, 238, 234, 0.1) 0%,
-      var(--scrollbar-track-current) 16%,
-      var(--scrollbar-track-current) 84%,
-      rgba(231, 238, 234, 0.1) 100%
-    );
-  border-radius: var(--scrollbar-radius);
+  background: transparent;
+  border-radius: 999px;
+  margin-block: 6px;
 }
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-thumb {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(41, 130, 93, 0.28) 0%,
-      rgba(25, 101, 70, 0.44) 100%
-    );
-  background-clip: padding-box;
-  border: 2px solid var(--scrollbar-thumb-border-current);
-  border-radius: var(--scrollbar-radius);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    0 6px 14px rgba(15, 23, 42, 0.08);
+  background: rgba(30, 107, 76, 0.20);
+  border: none;
+  border-radius: 999px;
+  box-shadow: none;
+  transition: background 0.18s ease;
 }
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-thumb:hover {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(32, 116, 82, 0.42) 0%,
-      rgba(20, 84, 59, 0.58) 100%
-    );
+  background: rgba(24, 89, 63, 0.40);
 }
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-thumb:active {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(24, 97, 68, 0.5) 0%,
-      rgba(15, 71, 49, 0.64) 100%
-    );
+  background: rgba(16, 72, 50, 0.58);
 }
 
 body.chat-page .custom-modal-dialog {
