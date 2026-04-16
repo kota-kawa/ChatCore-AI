@@ -5,8 +5,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
-# Setup launch messages prepend task/setup labels, so keep slight API headroom above the UI limit.
-MAX_CHAT_MESSAGE_LENGTH = 35000
+# Keep backend validation aligned with the frontend chat input limit.
+MAX_CHAT_MESSAGE_LENGTH = 30000
 MAX_CHAT_ROOM_ID_LENGTH = 128
 MAX_MODEL_NAME_LENGTH = 64
 MAX_PROMPT_ASSIST_TEXT_LENGTH = 4000
