@@ -21,14 +21,14 @@ function hasCustomAvatar(value: unknown) {
 
 function readCachedProfile() {
   try {
-    const avatarUrl = normalizeText(sessionStorage.getItem(AVATAR_CACHE_KEY));
-    if (!hasCustomAvatar(avatarUrl)) {
+    const avatarUrl = normalizeText(localStorage.getItem(AVATAR_CACHE_KEY));
+    if (!avatarUrl) {
       return null;
     }
 
     return {
       avatarUrl,
-      username: normalizeText(sessionStorage.getItem(USERNAME_CACHE_KEY))
+      username: normalizeText(localStorage.getItem(USERNAME_CACHE_KEY))
     };
   } catch {
     return null;
@@ -36,29 +36,25 @@ function readCachedProfile() {
 }
 
 function writeCachedProfile(avatarUrl: string, username: string) {
-  if (!hasCustomAvatar(avatarUrl)) {
-    clearCachedProfile();
-    return;
-  }
-
+  const url = avatarUrl || DEFAULT_AVATAR_URL;
   try {
-    sessionStorage.setItem(AVATAR_CACHE_KEY, avatarUrl);
+    localStorage.setItem(AVATAR_CACHE_KEY, url);
     if (username) {
-      sessionStorage.setItem(USERNAME_CACHE_KEY, username);
+      localStorage.setItem(USERNAME_CACHE_KEY, username);
     } else {
-      sessionStorage.removeItem(USERNAME_CACHE_KEY);
+      localStorage.removeItem(USERNAME_CACHE_KEY);
     }
   } catch {
-    // sessionStorage が使えなくても表示は継続する
+    // localStorage が使えなくても表示は継続する
   }
 }
 
 function clearCachedProfile() {
   try {
-    sessionStorage.removeItem(AVATAR_CACHE_KEY);
-    sessionStorage.removeItem(USERNAME_CACHE_KEY);
+    localStorage.removeItem(AVATAR_CACHE_KEY);
+    localStorage.removeItem(USERNAME_CACHE_KEY);
   } catch {
-    // sessionStorage が使えなくても表示は継続する
+    // localStorage が使えなくても表示は継続する
   }
 }
 
@@ -307,14 +303,10 @@ class UserIcon extends HTMLElement {
 
       const avatar = normalizeText(data.avatar_url);
       const name = normalizeText(data.username);
+      const resolvedAvatar = hasCustomAvatar(avatar) ? avatar : DEFAULT_AVATAR_URL;
 
-      if (hasCustomAvatar(avatar)) {
-        writeCachedProfile(avatar, name);
-        this.setAvatar(avatar, name);
-      } else {
-        clearCachedProfile();
-        this.setAvatar(DEFAULT_AVATAR_URL, name);
-      }
+      writeCachedProfile(resolvedAvatar, name);
+      this.setAvatar(resolvedAvatar, name);
       this._profileLoaded = true;
     } catch (err) {
       if (requestVersion !== this._profileRequestVersion) {
