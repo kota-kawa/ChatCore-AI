@@ -3,8 +3,64 @@
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username を取得
-//  - 取得失敗時はデフォルト画像・空文字にフォールバック
+//  - カスタム画像がある場合はデフォルト画像を先に出さない
 // ────────────────────────────────────────────────
+
+const DEFAULT_AVATAR_URL = "/static/user-icon.png";
+const AVATAR_CACHE_KEY = "chatcore.userIcon.avatarUrl";
+const USERNAME_CACHE_KEY = "chatcore.userIcon.username";
+
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasCustomAvatar(value: unknown) {
+  const avatarUrl = normalizeText(value);
+  return avatarUrl !== "" && avatarUrl !== DEFAULT_AVATAR_URL;
+}
+
+function readCachedProfile() {
+  try {
+    const avatarUrl = normalizeText(sessionStorage.getItem(AVATAR_CACHE_KEY));
+    if (!hasCustomAvatar(avatarUrl)) {
+      return null;
+    }
+
+    return {
+      avatarUrl,
+      username: normalizeText(sessionStorage.getItem(USERNAME_CACHE_KEY))
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedProfile(avatarUrl: string, username: string) {
+  if (!hasCustomAvatar(avatarUrl)) {
+    clearCachedProfile();
+    return;
+  }
+
+  try {
+    sessionStorage.setItem(AVATAR_CACHE_KEY, avatarUrl);
+    if (username) {
+      sessionStorage.setItem(USERNAME_CACHE_KEY, username);
+    } else {
+      sessionStorage.removeItem(USERNAME_CACHE_KEY);
+    }
+  } catch {
+    // sessionStorage が使えなくても表示は継続する
+  }
+}
+
+function clearCachedProfile() {
+  try {
+    sessionStorage.removeItem(AVATAR_CACHE_KEY);
+    sessionStorage.removeItem(USERNAME_CACHE_KEY);
+  } catch {
+    // sessionStorage が使えなくても表示は継続する
+  }
+}
 
 const tpl = document.createElement("template");
 tpl.innerHTML = `
@@ -28,11 +84,17 @@ tpl.innerHTML = `
       cursor: pointer;
       padding: .25rem;
       border-radius: 50%;
-      transition: transform .2s ease;
+      transition: transform .2s ease, opacity .2s ease;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       box-shadow: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+    :host([data-avatar-ready="true"]) .btn {
+      opacity: 1;
+      pointer-events: auto;
     }
     :host([data-chat-page="true"]) .btn {
       --cc-user-btn-base: rgba(255, 255, 255, 0.98);
@@ -83,7 +145,7 @@ tpl.innerHTML = `
   </style>
 
   <button class="btn" aria-label="アカウントメニューを開く">
-    <img class="avatar" src="/static/user-icon.png" alt="ユーザーアイコン">
+    <img class="avatar" alt="ユーザーアイコン" hidden>
   </button>
 
   <div class="dropdown">
@@ -93,6 +155,7 @@ tpl.innerHTML = `
 `;
 
 async function postLogoutAndRedirect() {
+  clearCachedProfile();
   try {
     const response = await fetch("/logout", {
       method: "POST",
@@ -114,6 +177,8 @@ class UserIcon extends HTMLElement {
   private avatarImg: HTMLImageElement;
   private bodyClassObserver: MutationObserver | null = null;
   private _profileLoaded = false;
+  private _profileRequest: Promise<void> | null = null;
+  private _profileRequestVersion = 0;
   private _handleAuthState: (evt?: Event) => void;
 
   constructor() {
@@ -133,6 +198,7 @@ class UserIcon extends HTMLElement {
     this.dropdown = dropdown;
     this.avatarImg = avatarImg;
     this._handleAuthState = this._handleAuthStateInternal.bind(this);
+    this.setAvatarPending();
 
     // ドロップダウン開閉
     this.btn.addEventListener("click", (e) => {
@@ -187,39 +253,100 @@ class UserIcon extends HTMLElement {
     const loggedIn = Boolean(customEvent?.detail?.loggedIn);
 
     if (loggedIn) {
-      if (!this._profileLoaded) {
-        this.loadProfile();
+      if (!this._profileLoaded && !this.restoreCachedAvatar()) {
+        this.setAvatarPending();
       }
+      void this.loadProfile();
     } else {
       this._profileLoaded = false;
+      this._profileRequestVersion += 1;
+      this._profileRequest = null;
       this.dropdown.style.display = "none";
-      this.avatarImg.src = "/static/user-icon.png";
-      this.avatarImg.alt = "ユーザーアイコン";
+      clearCachedProfile();
+      this.setAvatarPending();
     }
   }
 
   async loadProfile() {
+    if (this._profileLoaded) {
+      return;
+    }
+    if (this._profileRequest) {
+      await this._profileRequest;
+      return;
+    }
+
+    const requestVersion = ++this._profileRequestVersion;
+    this._profileRequest = this.loadProfileInternal(requestVersion);
+
+    try {
+      await this._profileRequest;
+    } finally {
+      this._profileRequest = null;
+    }
+  }
+
+  private async loadProfileInternal(requestVersion: number) {
     try {
       const res = await fetch("/api/user/profile", { credentials: "same-origin" });
+      if (requestVersion !== this._profileRequestVersion) {
+        return;
+      }
       if (res.status === 401) {
         // 未ログイン時は静かに何もしない
         this._profileLoaded = false;
+        clearCachedProfile();
+        this.setAvatarPending();
         return;
       }
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
+      if (requestVersion !== this._profileRequestVersion) {
+        return;
+      }
 
-      const avatar = data.avatar_url || "/static/user-icon.png";
-      const name = typeof data.username === "string" ? data.username.trim() : "";
+      const avatar = normalizeText(data.avatar_url);
+      const name = normalizeText(data.username);
 
-      this.avatarImg.src = avatar;
-      // alt 属性にもセット
-      this.avatarImg.alt = name ? `${name}のアイコン` : "ユーザーアイコン";
+      if (hasCustomAvatar(avatar)) {
+        writeCachedProfile(avatar, name);
+        this.setAvatar(avatar, name);
+      } else {
+        clearCachedProfile();
+        this.setAvatar(DEFAULT_AVATAR_URL, name);
+      }
       this._profileLoaded = true;
     } catch (err) {
+      if (requestVersion !== this._profileRequestVersion) {
+        return;
+      }
       console.warn("user_icon: profile load failed", err);
       this._profileLoaded = false;
     }
+  }
+
+  private restoreCachedAvatar() {
+    const cachedProfile = readCachedProfile();
+    if (!cachedProfile) {
+      return false;
+    }
+
+    this.setAvatar(cachedProfile.avatarUrl, cachedProfile.username);
+    return true;
+  }
+
+  private setAvatarPending() {
+    this.removeAttribute("data-avatar-ready");
+    this.avatarImg.hidden = true;
+    this.avatarImg.removeAttribute("src");
+    this.avatarImg.alt = "ユーザーアイコン";
+  }
+
+  private setAvatar(avatarUrl: string, username: string) {
+    this.avatarImg.hidden = false;
+    this.avatarImg.src = avatarUrl;
+    this.avatarImg.alt = username ? `${username}のアイコン` : "ユーザーアイコン";
+    this.setAttribute("data-avatar-ready", "true");
   }
 }
 
