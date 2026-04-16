@@ -1514,17 +1514,36 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   justify-content: center;
   cursor: pointer;
   z-index: 1000;
-  transition: background 0.16s ease, transform 0.16s ease;
+  transition:
+    background 0.22s ease,
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
 }
 
 .new-prompt-btn:hover {
   background: var(--ps-primary-strong);
-  transform: translateY(-1px);
+  transform: scale(1.08);
+  filter: brightness(1.07) saturate(1.12);
+  box-shadow:
+    0 0 0 5px rgba(26, 115, 232, 0.18),
+    0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.new-prompt-btn:active {
+  transform: scale(0.94);
+  filter: brightness(0.96);
+  transition-duration: 0.1s;
 }
 
 .new-prompt-btn i {
   font-size: 1.36rem;
-  transition: transform 0.2s ease;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.new-prompt-btn:active i {
+  transform: rotate(-90deg);
+  transition-duration: 0.18s;
 }
 
 .new-prompt-btn i.rotating {
@@ -1561,8 +1580,11 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .prompt-share-page .meatball-menu:hover,
   .prompt-share-page .prompt-action-btn:active,
   .prompt-share-page .meatball-menu:active,
-  .new-prompt-btn:hover {
+  .new-prompt-btn:hover,
+  .new-prompt-btn:active,
+  .new-prompt-btn:active i {
     transform: none;
+    filter: none;
   }
 
   .prompt-share-page .prompt-actions-dropdown,
