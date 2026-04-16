@@ -202,6 +202,10 @@ chatTemplate.innerHTML = `
     .btn--star:hover svg  { transform: rotate(20deg)  scale(1.2); }
     .btn--comment:hover svg { transform: rotate(-20deg) scale(1.2); }
 
+    #chatActionMenuButton:not(:checked) + .actions-menu .btn--menu:hover {
+      transform: scale(1.08) rotate(-20deg);
+    }
+
     @media (max-width: 768px) {
       .actions-menu {
         /* 固定inputの上に配置 (input ~56px + safe-area + 余白) */

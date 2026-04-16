@@ -239,6 +239,10 @@ template.innerHTML = `
     .btn--share:hover svg { transform: rotate(-20deg) scale(1.2); }
     .btn--star:hover svg  { transform: rotate(20deg)  scale(1.2); }
     .btn--comment:hover svg { transform: rotate(-20deg) scale(1.2); }
+
+    #actionMenuButton:not(:checked) + .actions-menu .btn--menu:hover {
+      transform: scale(1.08) rotate(-20deg);
+    }
   
   
   /* スマホ表示時の調整（画面幅768px以下） - プロンプト投稿ボタンと同じサイズに */
