@@ -9,6 +9,17 @@ function applySetupViewportFit() {
   const shell = document.querySelector<HTMLElement>(".chat-page-shell");
   if (!setupContainer || !shell) return;
 
+  const activeElement = document.activeElement as HTMLElement | null;
+  const isEditingWithinSetup =
+    !!activeElement &&
+    setupContainer.contains(activeElement) &&
+    activeElement.matches("input, textarea, select, [contenteditable='true']");
+
+  // 入力中は virtual keyboard による viewport 変化でボタンやカードが縮まないよう、現状サイズを維持する
+  if (isEditingWithinSetup) {
+    return;
+  }
+
   // セットアップ画面非表示時は密度調整クラスを解除しておく
   if (setupContainer.style.display === "none") {
     setupContainer.classList.remove(SETUP_FIT_COMPACT_CLASS, SETUP_FIT_TIGHT_CLASS);
