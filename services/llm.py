@@ -47,6 +47,7 @@ LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 LLM_MAX_RETRIES = 1
 
 REDACTED_SENSITIVE_VALUE = "[REDACTED-SENSITIVE]"
+OPENAI_MARKDOWN_REENABLE_PREFIX = "Formatting re-enabled"
 _SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
     re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b"),
@@ -307,6 +308,32 @@ def _sanitize_conversation_messages(
     return sanitized_messages
 
 
+def _prepare_openai_responses_input(
+    conversation_messages: ConversationMessages,
+) -> ConversationMessages:
+    prepared_messages: ConversationMessages = []
+    markdown_reenabled = False
+
+    for message in conversation_messages:
+        role = str(message.get("role", "user"))
+        content = message.get("content", "")
+        normalized_content = content if isinstance(content, str) else str(content)
+
+        if role == "system":
+            role = "developer"
+            if not markdown_reenabled:
+                stripped_content = normalized_content.lstrip()
+                if not stripped_content.startswith(OPENAI_MARKDOWN_REENABLE_PREFIX):
+                    normalized_content = (
+                        f"{OPENAI_MARKDOWN_REENABLE_PREFIX}\n{normalized_content}"
+                    )
+                markdown_reenabled = True
+
+        prepared_messages.append({"role": role, "content": normalized_content})
+
+    return prepared_messages
+
+
 def get_groq_response(
     conversation_messages: ConversationMessages, model_name: str
 ) -> str | None:
@@ -439,7 +466,9 @@ def get_openai_response(
     if openai_client is None:
         raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
 
-    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    sanitized_messages = _prepare_openai_responses_input(
+        _sanitize_conversation_messages(conversation_messages)
+    )
     try:
         response = openai_client.responses.create(
             model=model_name,
@@ -463,7 +492,9 @@ def get_openai_response_stream(
     if openai_client is None:
         raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
 
-    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    sanitized_messages = _prepare_openai_responses_input(
+        _sanitize_conversation_messages(conversation_messages)
+    )
     try:
         with openai_client.responses.stream(
             model=model_name,

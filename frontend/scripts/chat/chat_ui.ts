@@ -1,23 +1,12 @@
 // chat_ui.ts  – チャット画面 UI 共通ユーティリティ
 // --------------------------------------------------
+import hljs from "highlight.js";
+import { Marked } from "marked";
+
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
 import { refreshChatShareState } from "./chat_share";
-
-type HighlightResult = {
-  value: string;
-};
-
-type HighlightJsLike = {
-  getLanguage?: (language: string) => unknown;
-  highlight?: (code: string, options: { language: string }) => HighlightResult;
-  highlightAuto?: (code: string) => HighlightResult;
-};
-
-type MarkedRenderer = {
-  code: (token: unknown) => string;
-};
 
 type MarkedParseOptions = {
   async?: boolean;
@@ -25,49 +14,9 @@ type MarkedParseOptions = {
   breaks?: boolean;
 };
 
-type MarkedLike = {
-  use: (options: { renderer: MarkedRenderer }) => void;
-  parse: (markdown: string, options?: MarkedParseOptions) => string | Promise<string>;
-};
-
-type MarkedCtor = new () => MarkedLike;
-
-type MarkedModuleLike = {
-  Marked: MarkedCtor;
-};
-
-type DynamicImporter = (modulePath: string) => Promise<unknown>;
-
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
-let markedLoadPromise: Promise<void> | null = null;
-let hljs: HighlightJsLike | null = null;
 let markdownEnhancementDisabled = false;
-const dynamicImport = new Function("modulePath", "return import(modulePath);") as DynamicImporter;
 const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
-
-function isHighlightResult(value: unknown): value is HighlightResult {
-  return isRecord(value) && typeof value.value === "string";
-}
-
-function isHighlightJsLike(value: unknown): value is HighlightJsLike {
-  if (!isRecord(value)) return false;
-  const hasGetLanguage = value.getLanguage === undefined || typeof value.getLanguage === "function";
-  const hasHighlight = value.highlight === undefined || typeof value.highlight === "function";
-  const hasHighlightAuto = value.highlightAuto === undefined || typeof value.highlightAuto === "function";
-  return hasGetLanguage && hasHighlight && hasHighlightAuto;
-}
-
-function resolveHighlightJsModule(moduleValue: unknown): HighlightJsLike | null {
-  if (isHighlightJsLike(moduleValue)) return moduleValue;
-  if (isRecord(moduleValue) && isHighlightJsLike(moduleValue.default)) {
-    return moduleValue.default;
-  }
-  return null;
-}
-
-function isMarkedModuleLike(value: unknown): value is MarkedModuleLike {
-  return isRecord(value) && typeof value.Marked === "function";
-}
 
 function readMarkedCodeToken(token: unknown) {
   if (!isRecord(token)) {
@@ -77,23 +26,6 @@ function readMarkedCodeToken(token: unknown) {
     text: typeof token.text === "string" ? token.text : "",
     lang: typeof token.lang === "string" ? token.lang : "plaintext"
   };
-}
-
-async function importOptionalModule(modulePath: string): Promise<unknown | null> {
-  try {
-    return await dynamicImport(modulePath);
-  } catch (error) {
-    console.warn(`Optional module '${modulePath}' could not be loaded.`, error);
-    return null;
-  }
-}
-
-async function importFirstAvailableModule(modulePaths: string[]): Promise<unknown | null> {
-  for (const modulePath of modulePaths) {
-    const loaded = await importOptionalModule(modulePath);
-    if (loaded) return loaded;
-  }
-  return null;
 }
 
 function stripInvisibleCharacters(value: string) {
@@ -401,74 +333,47 @@ function onCodeBlockCopyButtonClick(event: Event) {
 function ensureMarkedParser() {
   if (markedParser) return Promise.resolve();
   if (markdownEnhancementDisabled) return Promise.resolve();
-  if (markedLoadPromise) return markedLoadPromise;
+  try {
+    const renderer = {
+      code(token: unknown) {
+        const { text, lang } = readMarkedCodeToken(token);
+        const language = lang.split(" ")[0] || "plaintext";
 
-  markedLoadPromise = (async () => {
-    try {
-      // 依存解決に失敗しても UI を壊さないよう、CDN モジュールを優先してベストエフォートで読み込む
-      const markedModuleRaw = await importFirstAvailableModule([
-        "https://esm.sh/marked@15.0.12?bundle"
-      ]);
-      const hljsModuleRaw = await importFirstAvailableModule([
-        "https://esm.sh/highlight.js@11.11.1?bundle"
-      ]);
-      const markedModule = isMarkedModuleLike(markedModuleRaw) ? markedModuleRaw : null;
-      if (!markedModule) {
-        markdownEnhancementDisabled = true;
-        console.warn("Marked runtime module is unavailable. Falling back to lightweight markdown formatter.");
-        return;
-      }
-
-      const { Marked } = markedModule;
-      hljs = resolveHighlightJsModule(hljsModuleRaw);
-      
-      const renderer = {
-        code(token: unknown) {
-          const { text, lang } = readMarkedCodeToken(token);
-          const language = lang.split(" ")[0] || "plaintext";
-          
-          let highlighted = text;
-          try {
-            if (hljs?.getLanguage?.(language)) {
-              const highlightedResult = hljs.highlight?.(text, { language });
-              highlighted = isHighlightResult(highlightedResult) ? highlightedResult.value : escapeHtml(text);
-            } else if (hljs?.highlightAuto) {
-              const highlightedResult = hljs.highlightAuto(text);
-              highlighted = isHighlightResult(highlightedResult) ? highlightedResult.value : escapeHtml(text);
-            } else {
-              highlighted = escapeHtml(text);
-            }
-          } catch (e) {
-            console.error("Highlight error:", e);
-            highlighted = escapeHtml(text);
+        let highlighted = text;
+        try {
+          if (hljs.getLanguage(language)) {
+            highlighted = hljs.highlight(text, { language }).value;
+          } else {
+            highlighted = hljs.highlightAuto(text).value;
           }
-
-          return `
-            <div class="code-block-container">
-              <div class="code-block-header">
-                <span class="code-block-lang">${language}</span>
-                <button class="code-block-copy-btn" type="button">
-                  <i class="bi bi-clipboard"></i>
-                  <span>Copy code</span>
-                </button>
-              </div>
-              <pre><code class="hljs language-${language}">${highlighted}</code></pre>
-            </div>`;
+        } catch (error) {
+          console.error("Highlight error:", error);
+          highlighted = escapeHtml(text);
         }
-      };
 
-      const marked = new Marked();
-      marked.use({ renderer });
-      markedParser = marked.parse.bind(marked);
-    } catch (error) {
-      markdownEnhancementDisabled = true;
-      console.warn("Failed to initialize markdown enhancement. Falling back to lightweight formatter.", error);
-    } finally {
-      markedLoadPromise = null;
-    }
-  })();
+        return `
+          <div class="code-block-container">
+            <div class="code-block-header">
+              <span class="code-block-lang">${language}</span>
+              <button class="code-block-copy-btn" type="button">
+                <i class="bi bi-clipboard"></i>
+                <span>Copy code</span>
+              </button>
+            </div>
+            <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+          </div>`;
+      }
+    };
 
-  return markedLoadPromise;
+    const marked = new Marked();
+    marked.use({ renderer });
+    markedParser = marked.parse.bind(marked);
+  } catch (error) {
+    markdownEnhancementDisabled = true;
+    console.warn("Failed to initialize markdown enhancement. Falling back to lightweight formatter.", error);
+  }
+
+  return Promise.resolve();
 }
 
 /* チャット画面を表示（セットアップ画面を隠す） */

@@ -139,6 +139,60 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertEqual(len(tasks), len(expected_names))
         self.assertSetEqual(task_names, expected_names)
 
+    def test_repository_email_task_uses_code_block_for_ready_to_send_body(self):
+        load_default_tasks.cache_clear()
+        try:
+            tasks = load_default_tasks()
+        finally:
+            load_default_tasks.cache_clear()
+
+        email_task = next(task for task in tasks if task["name"] == "📧 メール作成")
+        self.assertIn("コードブロック", email_task["prompt_template"])
+        self.assertIn("コードブロック", email_task["response_rules"])
+        self.assertIn("```text", email_task["output_skeleton"])
+        self.assertIn("新機能説明会", email_task["input_examples"])
+        self.assertIn("```text", email_task["output_examples"])
+
+    def test_repository_reply_task_uses_code_blocks_for_ready_to_send_replies(self):
+        load_default_tasks.cache_clear()
+        try:
+            tasks = load_default_tasks()
+        finally:
+            load_default_tasks.cache_clear()
+
+        reply_task = next(task for task in tasks if task["name"] == "📨 メッセージへの返答")
+        self.assertIn("コードブロック", reply_task["prompt_template"])
+        self.assertIn("コードブロック", reply_task["response_rules"])
+        self.assertIn("```text", reply_task["output_skeleton"])
+
+    def test_repository_table_or_format_sensitive_tasks_include_examples(self):
+        load_default_tasks.cache_clear()
+        try:
+            tasks = load_default_tasks()
+        finally:
+            load_default_tasks.cache_clear()
+
+        comparison_task = next(task for task in tasks if task["name"] == "🔄 比較・検討")
+        meeting_task = next(task for task in tasks if task["name"] == "📊 議事録・メモ整理")
+
+        self.assertTrue(comparison_task["input_examples"])
+        self.assertIn("| 観点 |", comparison_task["output_examples"])
+        self.assertTrue(meeting_task["input_examples"])
+        self.assertIn("| 担当 | 内容 | 期限 |", meeting_task["output_examples"])
+
+    def test_repository_problem_solving_task_requests_concise_rationale_only(self):
+        load_default_tasks.cache_clear()
+        try:
+            tasks = load_default_tasks()
+        finally:
+            load_default_tasks.cache_clear()
+
+        answer_task = next(task for task in tasks if task["name"] == "📋 問題へ回答")
+        self.assertIn("簡潔", answer_task["prompt_template"])
+        self.assertIn("必要な範囲", answer_task["response_rules"])
+        self.assertIn("根拠・手順", answer_task["output_skeleton"])
+        self.assertNotIn("途中の考え方", answer_task["prompt_template"])
+
 
 if __name__ == "__main__":
     unittest.main()

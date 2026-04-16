@@ -27,6 +27,25 @@ class _MockStream(list):
 
 
 class LlmServiceTestCase(unittest.TestCase):
+    def test_prepare_openai_responses_input_converts_system_to_developer_and_reenables_markdown(self):
+        prepared = llm._prepare_openai_responses_input(
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "Follow the task contract."},
+                {"role": "user", "content": "hello"},
+            ]
+        )
+
+        self.assertEqual(prepared[0]["role"], "developer")
+        self.assertTrue(
+            prepared[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
+        )
+        self.assertEqual(prepared[1]["role"], "developer")
+        self.assertFalse(
+            prepared[1]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
+        )
+        self.assertEqual(prepared[2]["role"], "user")
+
     def test_get_llm_response_routes_to_groq(self):
         mock_groq = MagicMock()
         mock_groq.chat.completions.create.return_value = _mock_openai_response("groq-ok")
@@ -61,12 +80,20 @@ class LlmServiceTestCase(unittest.TestCase):
 
         with patch.object(llm, "openai_client", mock_openai):
             response = llm.get_llm_response(
-                [{"role": "user", "content": "hello"}],
+                [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "hello"},
+                ],
                 llm.GPT_5_MINI_2025_08_07_MODEL,
             )
 
         self.assertEqual(response, "openai-ok")
         mock_openai.responses.create.assert_called_once()
+        passed_messages = mock_openai.responses.create.call_args.kwargs["input"]
+        self.assertEqual(passed_messages[0]["role"], "developer")
+        self.assertTrue(
+            passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
+        )
 
     def test_get_llm_response_rejects_invalid_model(self):
         with self.assertRaises(llm.LlmInvalidModelError) as cm:
@@ -248,13 +275,21 @@ class LlmServiceTestCase(unittest.TestCase):
         with patch.object(llm, "openai_client", mock_openai):
             response = list(
                 llm.get_openai_response_stream(
-                    [{"role": "user", "content": "hello"}],
+                    [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": "hello"},
+                    ],
                     llm.GPT_5_MINI_2025_08_07_MODEL,
                 )
             )
 
         self.assertEqual(response, ["openai", "-stream"])
         mock_openai.responses.stream.assert_called_once()
+        passed_messages = mock_openai.responses.stream.call_args.kwargs["input"]
+        self.assertEqual(passed_messages[0]["role"], "developer")
+        self.assertTrue(
+            passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
+        )
 
     def test_get_llm_response_stream_routes_to_openai(self):
         with patch.object(
