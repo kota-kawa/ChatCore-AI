@@ -97,21 +97,39 @@
 
 .room-actions-menu {
   position: absolute;
-  top: 50%;
-  right: 40px;
-  transform: translateY(-50%);
-  background: var(--surface-primary, #fff);
-  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-  border-radius: var(--radius-sm, 8px);
+  top: calc(100% + 5px);
+  right: 0;
+  min-width: 144px;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 12px;
   display: none;
   flex-direction: column;
-  z-index: 10;
-  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.08));
+  z-index: 100;
   overflow: hidden;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.10),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  transform-origin: top right;
 }
 
 .room-actions-menu.is-open {
   display: flex;
+  animation: roomMenuOpen 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes roomMenuOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .chat-room-card.active .room-actions-menu {
@@ -119,51 +137,49 @@
 }
 
 .room-actions-menu .menu-item {
-  padding: 0.55rem 0.9rem;
+  padding: 0.5rem 0.85rem;
   white-space: nowrap;
   cursor: pointer;
-  font-size: 0.85rem;
-  transition: background var(--transition-fast, 0.15s ease);
-  /* タッチ端末用 min-height */
-  min-height: 40px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  min-height: 38px;
   display: flex;
   align-items: center;
+  gap: 0.45rem;
+  transition: background 0.1s ease;
   -webkit-tap-highlight-color: transparent;
-  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
-}
-
-.room-actions-menu .menu-item:last-child {
   border-bottom: none;
 }
 
+.room-actions-menu .menu-item:last-child {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .room-actions-menu .menu-item__icon {
-  margin-right: 0.375rem;
+  margin-right: 0;
+  font-size: 0.88em;
+  flex-shrink: 0;
 }
 
 .room-actions-menu .menu-item--rename {
-  color: var(--info-color, #2563eb);
-  background: var(--surface-secondary, #f9fafb);
+  color: #1c1c1e;
 }
 
 .room-actions-menu .menu-item--rename:hover {
-  background: rgba(37, 99, 235, 0.12);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .room-actions-menu .menu-item--delete {
-  color: var(--danger-color, #dc2626);
-  background: var(--surface-secondary, #f9fafb);
+  color: #dc2626;
 }
 
 .room-actions-menu .menu-item--delete:hover {
-  background: rgba(220, 38, 38, 0.12);
-}
-
-.room-actions-menu .menu-item:hover {
-  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  background: rgba(220, 38, 38, 0.07);
 }
 
 .room-actions-menu .menu-item:active {
-  background: rgba(25, 195, 125, 0.15);
+  opacity: 0.7;
+  transition: none;
 }
 
 /* ─── モバイル (≤992px) タッチ向け調整 ─── */
@@ -191,11 +207,7 @@
   }
 
   .room-actions-menu {
-    right: auto;
-    left: 0;
-    top: 100%;
-    transform: none;
-    min-width: 140px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    right: 0;
+    left: auto;
   }
 }
