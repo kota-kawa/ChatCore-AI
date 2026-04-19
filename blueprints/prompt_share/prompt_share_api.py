@@ -132,56 +132,39 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         cursor.execute(
             """
             SELECT
-                id,
-                title,
-                category,
-                content,
-                author,
-                input_examples,
-                output_examples,
-                ai_model,
-                prompt_type,
-                reference_image_url,
-                created_at
-            FROM prompts
-            WHERE is_public = TRUE
-              AND deleted_at IS NULL
-            ORDER BY created_at DESC
-            """
+                p.id,
+                p.title,
+                p.category,
+                p.content,
+                p.author,
+                p.input_examples,
+                p.output_examples,
+                p.ai_model,
+                p.prompt_type,
+                p.reference_image_url,
+                p.created_at,
+                CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
+                CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
+            FROM prompts AS p
+            LEFT JOIN task_with_examples AS b
+              ON b.user_id = %s
+             AND b.name = p.title
+             AND b.deleted_at IS NULL
+            LEFT JOIN prompt_list_entries AS ple
+              ON ple.user_id = %s
+             AND ple.prompt_id = p.id
+            WHERE p.is_public = TRUE
+              AND p.deleted_at IS NULL
+            ORDER BY p.created_at DESC
+            """,
+            (user_id, user_id),
         )
-        prompts = [_serialize_prompt_row(dict(row)) for row in cursor.fetchall()]
-
-        bookmark_titles = set()
-        saved_prompt_ids = set()
-        if user_id:
-            cursor.execute(
-                """
-                SELECT name
-                  FROM task_with_examples
-                 WHERE user_id = %s
-                   AND deleted_at IS NULL
-                """,
-                (user_id,),
-            )
-            bookmarks = cursor.fetchall()
-            bookmark_titles = {bookmark["name"] for bookmark in bookmarks}
-
-            cursor.execute(
-                """
-                SELECT prompt_id
-                FROM prompt_list_entries
-                WHERE user_id = %s
-                """,
-                (user_id,),
-            )
-            saved_entries = cursor.fetchall()
-            for entry in saved_entries:
-                if entry["prompt_id"] is not None:
-                    saved_prompt_ids.add(entry["prompt_id"])
-
-        for prompt in prompts:
-            prompt["bookmarked"] = prompt["title"] in bookmark_titles
-            prompt["saved_to_list"] = prompt["id"] in saved_prompt_ids
+        prompts = []
+        for row in cursor.fetchall():
+            prompt = _serialize_prompt_row(dict(row))
+            prompt["bookmarked"] = bool(prompt.get("bookmarked"))
+            prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
+            prompts.append(prompt)
         return prompts
     finally:
         if cursor is not None:
@@ -423,7 +406,7 @@ async def get_prompts(request: Request):
     user_id = session.get("user_id")
     try:
         prompts = await run_blocking(_get_prompts_with_flags, user_id)
-        return jsonify({"prompts": prompts})
+        return jsonify({"status": "success", "prompts": prompts})
     except Exception:
         return log_and_internal_server_error(
             logger,
@@ -437,7 +420,7 @@ async def get_prompt_detail(prompt_id: int):
         prompt = await run_blocking(_get_public_prompt_by_id, prompt_id)
         if not prompt:
             return jsonify({"error": "プロンプトが見つかりません"}, status_code=404)
-        return jsonify({"prompt": prompt})
+        return jsonify({"status": "success", "prompt": prompt})
     except Exception:
         return log_and_internal_server_error(
             logger,

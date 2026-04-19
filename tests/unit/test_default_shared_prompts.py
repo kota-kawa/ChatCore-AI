@@ -15,6 +15,7 @@ class FakeCursor:
         self.inserted_prompts = []
         self.executed_queries = []
         self._fetchone_result = None
+        self._fetchall_result = None
         self.closed = False
 
     def execute(self, query, params=None):
@@ -30,9 +31,9 @@ class FakeCursor:
             self._fetchone_result = (self.owner_id,)
             return
 
-        if "SELECT 1 FROM prompts" in normalized and "title = %s" in normalized:
-            title = params[1]
-            self._fetchone_result = (1,) if title in self.existing_prompt_titles else None
+        if "SELECT title FROM prompts" in normalized and "title IN" in normalized:
+            titles = params[1:]
+            self._fetchall_result = [(title,) for title in titles if title in self.existing_prompt_titles]
             return
 
         if "INSERT INTO prompts" in normalized:
@@ -47,6 +48,11 @@ class FakeCursor:
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
+        return result
+
+    def fetchall(self):
+        result = self._fetchall_result or []
+        self._fetchall_result = None
         return result
 
     def close(self):
@@ -68,6 +74,10 @@ class DefaultSharedPromptsTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertEqual(len(fake_cursor.inserted_prompts), len(DEFAULT_SHARED_PROMPTS))
         self.assertIsNotNone(fake_cursor.owner_id)
+        self.assertEqual(
+            len([query for query, _ in fake_cursor.executed_queries if "SELECT title FROM prompts" in query]),
+            1,
+        )
 
     def test_skips_when_all_samples_already_exist(self):
         existing_titles = {prompt["title"] for prompt in DEFAULT_SHARED_PROMPTS}
@@ -85,6 +95,10 @@ class DefaultSharedPromptsTestCase(unittest.TestCase):
         self.assertEqual(fake_cursor.inserted_prompts, [])
         self.assertFalse(
             any("INSERT INTO users" in query for query, _ in fake_cursor.executed_queries)
+        )
+        self.assertEqual(
+            len([query for query, _ in fake_cursor.executed_queries if "SELECT title FROM prompts" in query]),
+            1,
         )
 
 

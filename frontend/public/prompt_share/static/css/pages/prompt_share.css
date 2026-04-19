@@ -432,8 +432,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   position: relative;
   z-index: 1;
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding: 0;
   border: none;
   background: transparent;
@@ -444,6 +445,36 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   font-size: 0.84rem;
   font-weight: 600;
   color: #68809b;
+}
+
+.prompt-load-more {
+  appearance: none;
+  border: 1px solid rgba(69, 88, 110, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1c263e;
+  padding: 0.62rem 0.95rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.prompt-load-more:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(69, 88, 110, 0.3);
+  background: #ffffff;
+}
+
+.prompt-load-more:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.prompt-load-more:focus-visible {
+  outline: 2px solid rgba(69, 88, 110, 0.32);
+  outline-offset: 2px;
 }
 
 #promptResults {

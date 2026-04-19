@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 VERIFICATION_CODE_TTL_SECONDS = 300
 VERIFICATION_CODE_MAX_ATTEMPTS = 5
+AUTH_FAILURE_STATUS_CODE = 401
 
 
 def _clear_registration_verification_session(session: dict) -> None:
@@ -193,18 +194,27 @@ async def api_verify_registration_code(request: Request):
     user_id = session.get("temp_user_id")
 
     if not session_code or not user_id:
-        return jsonify({"status": "fail", "error": "セッション情報がありません。最初からやり直してください"}, status_code=400)
+        return jsonify(
+            {"status": "fail", "error": "セッション情報がありません。最初からやり直してください"},
+            status_code=AUTH_FAILURE_STATUS_CODE,
+        )
 
     issued_at = int(session.get("verification_code_issued_at") or 0)
     attempts = int(session.get("verification_code_attempts") or 0)
 
     if issued_at <= 0 or int(time.time()) - issued_at > VERIFICATION_CODE_TTL_SECONDS:
         _clear_registration_verification_session(session)
-        return jsonify({"status": "fail", "error": "認証コードの有効期限が切れています。"}, status_code=400)
+        return jsonify(
+            {"status": "fail", "error": "認証コードの有効期限が切れています。"},
+            status_code=AUTH_FAILURE_STATUS_CODE,
+        )
 
     if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
         _clear_registration_verification_session(session)
-        return jsonify({"status": "fail", "error": "認証コードの試行回数が上限に達しました。"}, status_code=400)
+        return jsonify(
+            {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
+            status_code=AUTH_FAILURE_STATUS_CODE,
+        )
 
     submitted_code = str(user_code or "")
     if not constant_time_compare(submitted_code, str(session_code)):
@@ -212,8 +222,14 @@ async def api_verify_registration_code(request: Request):
         session["verification_code_attempts"] = attempts
         if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
             _clear_registration_verification_session(session)
-            return jsonify({"status": "fail", "error": "認証コードの試行回数が上限に達しました。"}, status_code=400)
-        return jsonify({"status": "fail", "error": "認証コードが一致しません。"}, status_code=400)
+            return jsonify(
+                {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
+                status_code=AUTH_FAILURE_STATUS_CODE,
+            )
+        return jsonify(
+            {"status": "fail", "error": "認証コードが一致しません。"},
+            status_code=AUTH_FAILURE_STATUS_CODE,
+        )
 
     # ここから成功処理 ----------------------------------------------------
     # Success path starts here.
@@ -222,7 +238,10 @@ async def api_verify_registration_code(request: Request):
         _clear_registration_verification_session(session)
         session.pop("user_id", None)
         session.pop("user_email", None)
-        return jsonify({"status": "fail", "error": "ユーザーが存在しません"}, status_code=400)
+        return jsonify(
+            {"status": "fail", "error": "ユーザーが存在しません"},
+            status_code=AUTH_FAILURE_STATUS_CODE,
+        )
 
     await run_blocking(set_user_verified, user_id)                 # ユーザーを認証済みに
     # Mark user as verified.

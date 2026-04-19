@@ -135,19 +135,28 @@ def ensure_default_shared_prompts() -> int:
             try:
                 owner_user_id = _ensure_sample_owner(cursor)
                 inserted = 0
+                existing_titles: set[str] = set()
 
-                for prompt in DEFAULT_SHARED_PROMPTS:
+                if DEFAULT_SHARED_PROMPTS:
+                    titles = [prompt["title"] for prompt in DEFAULT_SHARED_PROMPTS]
+                    placeholders = ", ".join(["%s"] * len(titles))
                     cursor.execute(
-                        """
-                        SELECT 1
+                        f"""
+                        SELECT title
                           FROM prompts
                          WHERE user_id = %s
-                           AND title = %s
                            AND deleted_at IS NULL
+                           AND title IN ({placeholders})
                         """,
-                        (owner_user_id, prompt["title"]),
+                        (owner_user_id, *titles),
                     )
-                    if cursor.fetchone():
+                    existing_titles = {
+                        str(row["title"] if isinstance(row, dict) else row[0])
+                        for row in (cursor.fetchall() or [])
+                    }
+
+                for prompt in DEFAULT_SHARED_PROMPTS:
+                    if prompt["title"] in existing_titles:
                         continue
 
                     cursor.execute(
@@ -166,6 +175,7 @@ def ensure_default_shared_prompts() -> int:
                             prompt["output_examples"],
                         ),
                     )
+                    existing_titles.add(prompt["title"])
                     inserted += 1
 
                 if inserted > 0:
