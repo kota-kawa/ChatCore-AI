@@ -162,50 +162,72 @@ export function ChatMainSection() {
           <div id="chat-room-list">
             {chatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
+              const roomTitle = room.title || "新規チャット";
+              const roomMenuId = `room-actions-menu-${room.id}`;
 
               return (
                 <div
                   key={room.id}
                   className={`chat-room-card ${currentRoomId === room.id ? "active" : ""}`.trim()}
-                  onClick={(event) => {
-                    const target = event.target as Element;
-                    if (target.closest(".room-actions-icon") || target.closest(".room-actions-menu")) {
-                      return;
-                    }
-                    switchChatRoom(room.id);
-                  }}
                 >
-                  <span>{room.title || "新規チャット"}</span>
+                  <button
+                    type="button"
+                    className="chat-room-card__trigger"
+                    aria-current={currentRoomId === room.id ? "page" : undefined}
+                    onClick={() => {
+                      switchChatRoom(room.id);
+                    }}
+                  >
+                    <span>{roomTitle}</span>
+                  </button>
 
                   <div className="chat-room-card-actions">
-                    <i
-                      className="bi bi-three-dots-vertical room-actions-icon"
+                    <button
+                      type="button"
+                      className="room-actions-icon"
+                      aria-label={`${roomTitle} の操作メニューを開く`}
+                      aria-haspopup="menu"
+                      aria-expanded={roomMenuOpen ? "true" : "false"}
+                      aria-controls={roomMenuId}
                       onClick={(event) => {
                         event.stopPropagation();
                         setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
                       }}
-                    ></i>
+                    >
+                      <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
+                    </button>
 
-                    <div className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}>
-                      <div
+                    <div
+                      id={roomMenuId}
+                      className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}
+                      role="menu"
+                      aria-hidden={roomMenuOpen ? "false" : "true"}
+                    >
+                      <button
+                        type="button"
                         className="menu-item menu-item--rename"
+                        role="menuitem"
                         onClick={(event) => {
                           event.stopPropagation();
+                          setOpenRoomActionsFor(null);
                           void handleRenameRoom(room.id, room.title);
                         }}
                       >
                         <i className="bi bi-pencil-square menu-item__icon"></i> 名前変更
-                      </div>
+                      </button>
 
-                      <div
+                      <button
+                        type="button"
                         className="menu-item menu-item--delete"
+                        role="menuitem"
                         onClick={(event) => {
                           event.stopPropagation();
+                          setOpenRoomActionsFor(null);
                           void handleDeleteRoom(room.id, room.title);
                         }}
                       >
                         <i className="bi bi-trash menu-item__icon"></i> 削除
-                      </div>
+                      </button>
                     </div>
                   </div>
                 </div>

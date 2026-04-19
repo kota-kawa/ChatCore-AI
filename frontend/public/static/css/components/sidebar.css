@@ -37,6 +37,25 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.chat-room-card__trigger {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-room-card:focus-within {
+  border-color: rgba(25, 195, 125, 0.4);
+  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.16);
+}
+
 .chat-room-card span {
   flex: 1;
   white-space: nowrap;
@@ -88,6 +107,19 @@
   padding: 0.3rem;
   margin: -0.3rem -0.3rem -0.3rem 0.2rem;
   -webkit-tap-highlight-color: transparent;
+  background: transparent;
+  border: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.room-actions-icon:focus-visible,
+.room-actions-menu .menu-item:focus-visible,
+.chat-room-card__trigger:focus-visible {
+  outline: 2px solid rgba(25, 195, 125, 0.7);
+  outline-offset: 2px;
 }
 
 .chat-room-card:hover .room-actions-icon,
@@ -149,6 +181,10 @@
   transition: background 0.1s ease;
   -webkit-tap-highlight-color: transparent;
   border-bottom: none;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 
 .room-actions-menu .menu-item:last-child {
@@ -165,7 +201,8 @@
   color: #1c1c1e;
 }
 
-.room-actions-menu .menu-item--rename:hover {
+.room-actions-menu .menu-item--rename:hover,
+.room-actions-menu .menu-item--rename:focus-visible {
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -173,7 +210,8 @@
   color: #dc2626;
 }
 
-.room-actions-menu .menu-item--delete:hover {
+.room-actions-menu .menu-item--delete:hover,
+.room-actions-menu .menu-item--delete:focus-visible {
   background: rgba(220, 38, 38, 0.07);
 }
 

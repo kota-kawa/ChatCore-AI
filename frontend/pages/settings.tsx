@@ -37,6 +37,11 @@ type ProfileFormState = {
   bio: string;
 };
 
+type ProfileSaveStatus = {
+  tone: "success" | "error";
+  message: string;
+};
+
 type EditPromptFormState = {
   id: string;
   title: string;
@@ -137,17 +142,18 @@ function SettingsSidebar({
       <ul className="nav-menu">
         {SETTINGS_NAV_ITEMS.map((item) => (
           <li key={item.section}>
-            <a
-              href="#"
+            <button
+              type="button"
               className={`nav-link${activeSection === item.section ? " active" : ""}`}
               data-section={item.section}
+              aria-current={activeSection === item.section ? "page" : undefined}
               onClick={(event) => {
                 event.preventDefault();
                 onSectionSelect(item.section);
               }}
             >
               <i className={item.iconClass}></i> {item.label}
-            </a>
+            </button>
           </li>
         ))}
       </ul>
@@ -387,6 +393,7 @@ export default function UserSettingsPage() {
   const [initialAvatarUrl, setInitialAvatarUrl] = useState(DEFAULT_AVATAR_URL);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveStatus, setProfileSaveStatus] = useState<ProfileSaveStatus | null>(null);
 
   const [myPrompts, setMyPrompts] = useState<PromptRecord[]>([]);
   const [myPromptsLoading, setMyPromptsLoading] = useState(false);
@@ -571,6 +578,7 @@ export default function UserSettingsPage() {
   const handleProfileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = event.target;
+      setProfileSaveStatus(null);
       setProfileForm((prev) => ({
         ...prev,
         [name]: value
@@ -596,6 +604,7 @@ export default function UserSettingsPage() {
     };
     reader.readAsDataURL(file);
 
+    setProfileSaveStatus(null);
     setSelectedAvatarFile(file);
   }, []);
 
@@ -606,6 +615,7 @@ export default function UserSettingsPage() {
     if (avatarInputRef.current) {
       avatarInputRef.current.value = "";
     }
+    setProfileSaveStatus(null);
   }, [initialAvatarUrl, initialProfileForm]);
 
   const handleProfileSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -620,6 +630,7 @@ export default function UserSettingsPage() {
     }
 
     setProfileSaving(true);
+    setProfileSaveStatus(null);
     try {
       const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
@@ -634,7 +645,7 @@ export default function UserSettingsPage() {
       );
 
       const successMessage = asString(payload.message) || "プロフィールを更新しました";
-      alert(successMessage);
+      setProfileSaveStatus({ tone: "success", message: successMessage });
 
       const persistedAvatarUrl = asString(payload.avatar_url) || avatarPreviewUrl;
       setAvatarPreviewUrl(persistedAvatarUrl || DEFAULT_AVATAR_URL);
@@ -652,7 +663,10 @@ export default function UserSettingsPage() {
         avatarInputRef.current.value = "";
       }
     } catch (error) {
-      alert("エラー: " + (error instanceof Error ? error.message : String(error)));
+      setProfileSaveStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
     } finally {
       setProfileSaving(false);
     }
@@ -900,6 +914,15 @@ export default function UserSettingsPage() {
             <div id="profile-section" className={`settings-section${isSectionActive("profile") ? " active" : ""}`}>
               <div className="settings-card">
                 <h2>ユーザープロフィール設定</h2>
+                {profileSaveStatus ? (
+                  <p
+                    className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}`}
+                    role={profileSaveStatus.tone === "error" ? "alert" : "status"}
+                    aria-live={profileSaveStatus.tone === "error" ? "assertive" : "polite"}
+                  >
+                    {profileSaveStatus.message}
+                  </p>
+                ) : null}
                 <form id="userSettingsForm" onSubmit={handleProfileSubmit}>
                   <div className="form-group avatar-group">
                     <label className="form-label" htmlFor="avatarInput">

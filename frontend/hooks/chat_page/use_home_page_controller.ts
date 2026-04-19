@@ -531,20 +531,21 @@ export function useHomePageController() {
         });
 
         if (!response.ok) {
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId) return previous;
-            return removeThinkingMessages(previous);
-          });
+          const rawPayload = await readJsonBodySafe(response);
+          appendAssistantErrorMessage(
+            roomId,
+            extractApiErrorMessage(rawPayload, "チャットの応答取得に失敗しました。", response.status),
+          );
           return;
         }
 
         await consumeStreamingChatResponse(response, roomId);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId) return previous;
-            return removeThinkingMessages(previous);
-          });
+          appendAssistantErrorMessage(
+            roomId,
+            error instanceof Error ? error.message : "チャットの応答取得に失敗しました。",
+          );
         }
       } finally {
         if (abortControllerRef.current === abortController) {
@@ -553,7 +554,7 @@ export function useHomePageController() {
         }
       }
     },
-    [consumeStreamingChatResponse, removeThinkingMessages],
+    [appendAssistantErrorMessage, consumeStreamingChatResponse],
   );
 
   const loadChatHistory = useCallback(
