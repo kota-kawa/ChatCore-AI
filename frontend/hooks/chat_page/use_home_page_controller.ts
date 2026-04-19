@@ -10,6 +10,7 @@ import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
 import { useHomePageTaskState } from "./use_home_page_task_state";
 import { useHomePageUiState } from "./use_home_page_ui_state";
+import { setLoggedInState } from "../../scripts/core/app_state";
 import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
@@ -1521,11 +1522,7 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
-    document.dispatchEvent(
-      new CustomEvent("authstatechange", {
-        detail: { loggedIn },
-      }),
-    );
+    setLoggedInState(loggedIn);
   }, [loggedIn]);
 
   useEffect(() => {
