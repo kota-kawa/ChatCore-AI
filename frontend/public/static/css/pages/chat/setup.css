@@ -248,7 +248,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   padding: 0.35rem;
   max-height: 230px;
   overflow-y: auto;
-  z-index: 1200;
+  z-index: var(--z-dropdown, 30);
 }
 
 .model-select.is-open .model-select-menu {
@@ -404,7 +404,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-radius: 10px;
   font-size: var(--text-sm, 0.875rem);
   line-height: var(--leading-tight, 1.4);
-  z-index: 1000;
+  z-index: var(--z-dropdown, 30);
   width: calc(100% - 1rem);
   text-align: center;
   will-change: transform;
@@ -531,7 +531,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* モーダルの全体（背景部分含む） */
 #io-modal {
-  z-index: 9999;
+  z-index: var(--z-modal-priority, 85);
   padding: clamp(1rem, 3.2vw, 2.2rem);
   background:
     radial-gradient(120% 95% at 50% -15%, rgba(46, 93, 73, 0.28), transparent 56%),

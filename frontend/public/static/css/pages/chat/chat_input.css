@@ -7,7 +7,7 @@
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
   position: sticky;
   bottom: 0;
-  z-index: 1000;
+  z-index: var(--z-sticky-bar, 40);
   flex-shrink: 0;
 }
 
@@ -164,11 +164,9 @@
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   .input-container {
-    position: fixed;
+    position: sticky;
     bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 1100;
+    z-index: var(--z-sticky-bar, 40);
     /* safe-area対応（iPhoneのホームインジケータ） */
     padding:
       0.5rem
@@ -177,12 +175,6 @@
       calc(0.65rem + env(safe-area-inset-left, 0px));
     background: var(--surface-primary, #fff);
     border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
-  }
-
-  /* 固定inputの高さ分の余白をmessagesに追加 */
-  .chat-messages {
-    /* input高さ(~56px) + safe-area分 */
-    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
   }
 
   .input-wrapper {

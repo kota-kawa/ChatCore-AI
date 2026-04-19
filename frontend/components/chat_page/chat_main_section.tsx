@@ -252,7 +252,7 @@ export function ChatMainSection() {
           </button>
 
           <div
-            className="chat-messages"
+            className="chat-messages scroll-pb-24"
             id="chat-messages"
             ref={chatMessagesRef}
             aria-busy={isGenerating || isChatLaunching ? "true" : undefined}
@@ -347,7 +347,7 @@ export function ChatMainSection() {
             })}
           </div>
 
-          <div className="input-container">
+          <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
             <div className="input-wrapper">
               <textarea
                 ref={chatInputRef}

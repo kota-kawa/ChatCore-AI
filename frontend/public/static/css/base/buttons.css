@@ -14,7 +14,7 @@ user-icon[hidden] {
   position: absolute;
   top: 10px;
   right: 10px;
-  z-index: 9999;
+  z-index: var(--z-floating-controls, 65);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -170,7 +170,7 @@ user-icon[hidden] {
 @media (max-width: 768px) {
   /* セットアップ画面より手前に表示 */
   #auth-buttons {
-    z-index: 9999 !important;
+    z-index: var(--z-floating-controls, 65) !important;
   }
 
   /* モバイルではアイコンのみ＆円形 */

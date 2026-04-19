@@ -118,4 +118,20 @@
   --breakpoint-sm: 576px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 992px;
+
+  --z-raised: 1;
+  --z-header: 10;
+  --z-dropdown: 30;
+  --z-sticky-bar: 40;
+  --z-chat-sidebar-toggle: 44;
+  --z-chat-sidebar-overlay: 45;
+  --z-chat-sidebar: 46;
+  --z-chat-header: 50;
+  --z-floating-action-menu: 60;
+  --z-floating-controls: 65;
+  --z-user-menu: 70;
+  --z-modal: 80;
+  --z-modal-priority: 85;
+  --z-tooltip: 90;
+  --z-alert-modal: 95;
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import useSWR from "swr";
 
 import "../scripts/core/csrf";
+import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
 import { formatLLMOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
@@ -422,7 +423,7 @@ export default function MemoPage() {
             position: "fixed",
             top: "10px",
             right: "10px",
-            zIndex: 2000
+            zIndex: "var(--z-floating-controls)"
           }}
         >
           <button id="login-btn" className="auth-btn" onClick={() => {
@@ -582,7 +583,7 @@ export default function MemoPage() {
 
               {!memoLoadError && isLoading && memos.length === 0 ? (
                 <div className="memo-history__empty">
-                  メモを読み込んでいます...
+                  <InlineLoading label="メモを読み込んでいます..." className="mx-auto" />
                 </div>
               ) : null}
 

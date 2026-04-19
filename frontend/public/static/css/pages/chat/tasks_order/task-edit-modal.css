@@ -2,7 +2,7 @@
 /* Custom Modal 全体のスタイル */
 #taskEditModal.custom-modal {
   background-color: var(--modal-overlay, rgba(0, 0, 0, 0.45)); /* 背景の半透明黒 */
-  z-index: 10000;
+  z-index: var(--z-modal-priority, 85);
   backdrop-filter: blur(6px);
 }
 

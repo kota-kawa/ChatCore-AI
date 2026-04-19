@@ -38,7 +38,7 @@
     top: 1rem;
     left: calc(260px + 1rem); /* サイドバー幅 + 余白 */
     right: auto;              /* 右固定を解除 */
-    z-index: 10000;
+    z-index: var(--z-floating-controls, 65);
   }
 }
 
@@ -51,7 +51,7 @@
     top: 1.5rem !important;   /* チャット画面より低い位置に調整 */
     left: 0.75rem !important;
     right: auto !important;
-    z-index: 10000;
+    z-index: var(--z-floating-controls, 65);
   }
 }
 
@@ -268,7 +268,7 @@ body.settings-page,
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: 1000; /* 他の要素より手前に */
+  z-index: var(--z-sticky-bar, 40); /* 他の要素より手前に */
 }
 
 .settings-sidebar .sidebar-header {

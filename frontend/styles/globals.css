@@ -6,7 +6,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 2147483000;
+  z-index: var(--z-tooltip, 90);
   pointer-events: none;
   opacity: 0;
   transform: translateY(4px) scale(0.98);
@@ -84,7 +84,7 @@
 .cc-alert-modal {
   position: fixed;
   inset: 0;
-  z-index: 2147483200;
+  z-index: var(--z-alert-modal, 95);
   display: none;
   align-items: center;
   justify-content: center;
@@ -217,6 +217,16 @@
   margin: 0;
   color: #374151;
   line-height: 1.7;
+}
+
+@layer components {
+  .cc-inline-loading {
+    @apply inline-flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm backdrop-blur;
+  }
+
+  .cc-inline-loading__spinner {
+    @apply h-4 w-4 animate-spin text-emerald-600;
+  }
 }
 
 .global-error-boundary__card .cc-texture-btn {
