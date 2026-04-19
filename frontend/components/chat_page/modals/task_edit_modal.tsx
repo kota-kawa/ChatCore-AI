@@ -54,6 +54,8 @@ export function TaskEditModal({
                   id="taskName"
                   name="name"
                   placeholder="例：メール作成"
+                  required
+                  aria-required="true"
                   value={taskEditForm.new_task}
                   onChange={(event) => {
                     setTaskEditForm((previous) => ({
@@ -67,7 +69,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="promptTemplate" className="custom-form-label">
-                  <span className="custom-form-label__required">プロンプトテンプレート</span>
+                  プロンプトテンプレート
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -88,7 +90,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="responseRules" className="custom-form-label">
-                  <span className="custom-form-label__required">回答ルール</span>
+                  回答ルール
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -109,7 +111,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="outputSkeleton" className="custom-form-label">
-                  <span className="custom-form-label__required">出力テンプレート</span>
+                  出力テンプレート
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -130,7 +132,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="inputExamples" className="custom-form-label">
-                  <span className="custom-form-label__required">入力例</span>
+                  入力例
                 </label>
                 <textarea
                   className="custom-form-control"
@@ -151,7 +153,7 @@ export function TaskEditModal({
 
               <div className="custom-form-group">
                 <label htmlFor="outputExamples" className="custom-form-label">
-                  <span className="custom-form-label__required">出力例</span>
+                  出力例
                 </label>
                 <textarea
                   className="custom-form-control"

@@ -6,6 +6,17 @@ function getStoredHistoryKey(roomId: string) {
   return `chatHistory_${roomId}`;
 }
 
+function isQuotaExceededError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const { name, code } = error as { name?: unknown; code?: unknown };
+  return name === "QuotaExceededError" || code === 22 || code === 1014;
+}
+
+function persistStoredHistory(key: string, entries: StoredHistoryEntry[]) {
+  localStorage.setItem(key, JSON.stringify(entries));
+}
+
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
     const raw = localStorage.getItem(getStoredHistoryKey(roomId));
@@ -30,10 +41,32 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
 }
 
 export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]) {
+  const storageKey = getStoredHistoryKey(roomId);
   try {
-    localStorage.setItem(getStoredHistoryKey(roomId), JSON.stringify(entries));
-  } catch {
-    // ignore localStorage failures
+    persistStoredHistory(storageKey, entries);
+  } catch (error) {
+    if (!isQuotaExceededError(error) || entries.length <= 1) {
+      return;
+    }
+
+    // Preserve the newest messages when storage is near quota.
+    let retainedEntries = entries;
+    while (retainedEntries.length > 1) {
+      const nextLength = Math.max(1, Math.floor(retainedEntries.length * 0.75));
+      retainedEntries =
+        nextLength === retainedEntries.length
+          ? retainedEntries.slice(1)
+          : retainedEntries.slice(retainedEntries.length - nextLength);
+
+      try {
+        persistStoredHistory(storageKey, retainedEntries);
+        return;
+      } catch (retryError) {
+        if (!isQuotaExceededError(retryError)) {
+          return;
+        }
+      }
+    }
   }
 }
 
