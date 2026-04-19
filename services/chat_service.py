@@ -181,7 +181,7 @@ def validate_room_owner(
             cursor.close()
 
 
-def create_or_get_shared_chat_token(room_id: str) -> str:
+def create_or_get_shared_chat_token(room_id: str, user_id: int) -> str:
     # 共有リンク用トークンを作成し、既存がある場合は再利用する
     # Create share token for a room and reuse the existing one when present.
     for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
@@ -192,9 +192,15 @@ def create_or_get_shared_chat_token(room_id: str) -> str:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 try:
-                    cursor.execute("SELECT 1 FROM chat_rooms WHERE id = %s", (room_id,))
-                    if not cursor.fetchone():
+                    cursor.execute(
+                        "SELECT user_id FROM chat_rooms WHERE id = %s",
+                        (room_id,),
+                    )
+                    room_owner = cursor.fetchone()
+                    if not room_owner:
                         raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
+                    if room_owner[0] != user_id:
+                        raise ForbiddenOperationError("他ユーザーのチャットルームは共有できません")
 
                     cursor.execute(
                         """
@@ -209,7 +215,7 @@ def create_or_get_shared_chat_token(room_id: str) -> str:
                     row = cursor.fetchone()
                     conn.commit()
                     return row[0] if row else token
-                except ResourceNotFoundError:
+                except (ResourceNotFoundError, ForbiddenOperationError):
                     # Missing room is a business condition, not a write failure.
                     raise
                 except Exception as exc:

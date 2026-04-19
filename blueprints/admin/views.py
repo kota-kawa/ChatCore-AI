@@ -1,6 +1,7 @@
 import inspect
 import logging
 import os
+import re
 from functools import wraps
 from typing import Optional
 from urllib.parse import urlencode
@@ -40,6 +41,27 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 
 ADMIN_PASSWORD_HASH = (os.getenv("ADMIN_PASSWORD_HASH") or "").strip()
 logger = logging.getLogger(__name__)
+SQL_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+SIMPLE_COLUMN_TYPE_PATTERNS = (
+    re.compile(
+        r"^(?:SMALLINT|INTEGER|INT|BIGINT|SERIAL|BIGSERIAL|TEXT|BOOLEAN|BOOL|DATE|JSON|JSONB|UUID|BYTEA|REAL|DOUBLE PRECISION)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^TIMESTAMP(?:\s*\(\s*\d{1,2}\s*\))?(?:\s+(?:WITH|WITHOUT)\s+TIME\s+ZONE)?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^TIMESTAMPTZ\b", re.IGNORECASE),
+    re.compile(r"^VARCHAR\s*\(\s*[1-9]\d{0,4}\s*\)", re.IGNORECASE),
+    re.compile(r"^CHARACTER\s+VARYING\s*\(\s*[1-9]\d{0,4}\s*\)", re.IGNORECASE),
+    re.compile(r"^CHAR\s*\(\s*[1-9]\d{0,4}\s*\)", re.IGNORECASE),
+    re.compile(r"^NUMERIC\s*\(\s*\d{1,4}\s*(?:,\s*\d{1,4}\s*)?\)", re.IGNORECASE),
+    re.compile(r"^DECIMAL\s*\(\s*\d{1,4}\s*(?:,\s*\d{1,4}\s*)?\)", re.IGNORECASE),
+)
+DEFAULT_VALUE_PATTERN = re.compile(
+    r"^(NULL|TRUE|FALSE|CURRENT_DATE|CURRENT_TIMESTAMP|NOW\(\)|-?\d+(?:\.\d+)?|'(?:''|[^'])*')(?=\s|$)",
+    re.IGNORECASE,
+)
 
 
 def _resolve_auth_limit_service(
@@ -73,6 +95,176 @@ def _normalize_fragment(fragment: str) -> str:
 
 def _has_multiple_statements(fragment: str) -> bool:
     return ";" in fragment
+
+
+def _normalize_sql_whitespace(fragment: str) -> str:
+    return re.sub(r"\s+", " ", fragment).strip()
+
+
+def _is_safe_sql_identifier(name: str) -> bool:
+    return bool(SQL_IDENTIFIER_PATTERN.fullmatch(name))
+
+
+def _validate_sql_identifier(name: str, label: str) -> str:
+    normalized = name.strip()
+    if not _is_safe_sql_identifier(normalized):
+        raise ValueError(f"Invalid {label}.")
+    return normalized
+
+
+def _split_sql_csv(fragment: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_quote = False
+    i = 0
+
+    while i < len(fragment):
+        ch = fragment[i]
+        if ch == "'":
+            current.append(ch)
+            if in_quote and i + 1 < len(fragment) and fragment[i + 1] == "'":
+                current.append(fragment[i + 1])
+                i += 2
+                continue
+            in_quote = not in_quote
+            i += 1
+            continue
+
+        if not in_quote:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth < 0:
+                    raise ValueError("Invalid column definition.")
+            elif ch == "," and depth == 0:
+                part = "".join(current).strip()
+                if not part:
+                    raise ValueError("Invalid column definition.")
+                parts.append(part)
+                current = []
+                i += 1
+                continue
+
+        current.append(ch)
+        i += 1
+
+    if in_quote or depth != 0:
+        raise ValueError("Invalid column definition.")
+
+    tail = "".join(current).strip()
+    if not tail:
+        raise ValueError("Invalid column definition.")
+    parts.append(tail)
+    return parts
+
+
+def _consume_column_type(fragment: str) -> tuple[str, str]:
+    for pattern in SIMPLE_COLUMN_TYPE_PATTERNS:
+        match = pattern.match(fragment)
+        if match is None:
+            continue
+        matched = match.group(0)
+        remainder = fragment[match.end() :].strip()
+        return _normalize_sql_whitespace(matched).upper(), remainder
+    raise ValueError("Unsupported column type.")
+
+
+def _consume_default_value(fragment: str) -> tuple[str, str]:
+    match = DEFAULT_VALUE_PATTERN.match(fragment)
+    if match is None:
+        raise ValueError("Unsupported DEFAULT value.")
+    matched = match.group(0)
+    remainder = fragment[match.end() :].strip()
+    normalized = matched if matched.startswith("'") else matched.upper()
+    return normalized, remainder
+
+
+def _parse_column_definition(definition: str) -> dict[str, object]:
+    parts = definition.strip().split(None, 1)
+    if len(parts) != 2:
+        raise ValueError("Invalid column definition.")
+
+    column_name = _validate_sql_identifier(parts[0], "column name")
+    column_type, remainder = _consume_column_type(parts[1].strip())
+    modifiers: list[str] = []
+    seen_tokens: set[str] = set()
+
+    while remainder:
+        not_null_match = re.match(r"^NOT\s+NULL(?=\s|$)", remainder, re.IGNORECASE)
+        null_match = re.match(r"^NULL(?=\s|$)", remainder, re.IGNORECASE)
+        primary_key_match = re.match(r"^PRIMARY\s+KEY(?=\s|$)", remainder, re.IGNORECASE)
+        unique_match = re.match(r"^UNIQUE(?=\s|$)", remainder, re.IGNORECASE)
+        default_match = re.match(r"^DEFAULT\s+", remainder, re.IGNORECASE)
+
+        if not_null_match:
+            if "NULLABILITY" in seen_tokens:
+                raise ValueError("Duplicate NULL constraint.")
+            seen_tokens.add("NULLABILITY")
+            modifiers.append("NOT NULL")
+            remainder = remainder[not_null_match.end() :].strip()
+            continue
+        if null_match:
+            if "NULLABILITY" in seen_tokens:
+                raise ValueError("Duplicate NULL constraint.")
+            seen_tokens.add("NULLABILITY")
+            modifiers.append("NULL")
+            remainder = remainder[null_match.end() :].strip()
+            continue
+        if primary_key_match:
+            if "PRIMARY KEY" in seen_tokens:
+                raise ValueError("Duplicate PRIMARY KEY constraint.")
+            seen_tokens.add("PRIMARY KEY")
+            modifiers.append("PRIMARY KEY")
+            remainder = remainder[primary_key_match.end() :].strip()
+            continue
+        if unique_match:
+            if "UNIQUE" in seen_tokens:
+                raise ValueError("Duplicate UNIQUE constraint.")
+            seen_tokens.add("UNIQUE")
+            modifiers.append("UNIQUE")
+            remainder = remainder[unique_match.end() :].strip()
+            continue
+        if default_match:
+            if "DEFAULT" in seen_tokens:
+                raise ValueError("Duplicate DEFAULT constraint.")
+            seen_tokens.add("DEFAULT")
+            default_value, remainder = _consume_default_value(remainder[default_match.end() :].strip())
+            modifiers.append(f"DEFAULT {default_value}")
+            continue
+        raise ValueError("Unsupported column constraint.")
+
+    return {
+        "name": column_name,
+        "type": column_type,
+        "modifiers": modifiers,
+    }
+
+
+def _parse_column_definitions(column_definitions: str) -> list[dict[str, object]]:
+    parsed_columns = [_parse_column_definition(part) for part in _split_sql_csv(column_definitions)]
+    if not parsed_columns:
+        raise ValueError("At least one column is required.")
+    return parsed_columns
+
+
+def _validate_table_options(table_options: str) -> str:
+    normalized = _normalize_fragment(table_options)
+    if not normalized:
+        return ""
+    raise ValueError("Table options are not supported.")
+
+
+def _build_column_sql(column_definition: dict[str, object]):
+    psql = _require_pg_sql()
+    statement = psql.SQL("{} {}").format(
+        _sql_identifier(str(column_definition["name"])),
+        psql.SQL(str(column_definition["type"])),
+    )
+    for modifier in column_definition["modifiers"]:
+        statement += psql.SQL(" ") + psql.SQL(str(modifier))
+    return statement
 
 
 def frontend_admin_dashboard_url(request: Request, **params) -> str:
@@ -273,11 +465,14 @@ def _build_create_table_sql(
     table_name: str, column_definitions: str, table_options: str = ""
 ):
     psql = _require_pg_sql()
+    parsed_columns = _parse_column_definitions(column_definitions)
+    validated_options = _validate_table_options(table_options)
     statement = psql.SQL("CREATE TABLE {} ({})").format(
-        _sql_identifier(table_name), psql.SQL(column_definitions)
+        _sql_identifier(table_name),
+        psql.SQL(", ").join(_build_column_sql(column) for column in parsed_columns),
     )
-    if table_options:
-        statement = statement + psql.SQL(" ") + psql.SQL(table_options)
+    if validated_options:
+        statement = statement + psql.SQL(" ") + psql.SQL(validated_options)
     return statement
 
 
@@ -288,10 +483,15 @@ def _build_drop_table_sql(table_name: str):
 
 def _build_add_column_sql(table_name: str, column_name: str, column_type: str):
     psql = _require_pg_sql()
+    parsed_definition = _parse_column_definition(f"{column_name} {column_type}")
     return psql.SQL("ALTER TABLE {} ADD COLUMN {} {}").format(
         _sql_identifier(table_name),
-        _sql_identifier(column_name),
-        psql.SQL(column_type),
+        _sql_identifier(str(parsed_definition["name"])),
+        psql.SQL(
+            " ".join(
+                [str(parsed_definition["type"]), *[str(item) for item in parsed_definition["modifiers"]]]
+            )
+        ),
     )
 
 
@@ -316,7 +516,7 @@ def _load_dashboard_data(selected_table: Optional[str]) -> dict:
         missing_selected_table = False
 
         if selected_table:
-            if selected_table in tables:
+            if _is_safe_sql_identifier(selected_table) and selected_table in tables:
                 column_names, rows = _fetch_table_preview(cursor, selected_table)
                 column_details = _fetch_table_columns(cursor, selected_table)
                 existing_columns = [column["name"] for column in column_details]
@@ -441,7 +641,11 @@ async def api_dashboard(request: Request):
     if guard is not None:
         return guard
 
-    selected_table: Optional[str] = request.query_params.get("table")
+    selected_table_raw = (request.query_params.get("table") or "").strip()
+    selected_table: Optional[str] = selected_table_raw or None
+    if selected_table is not None and not _is_safe_sql_identifier(selected_table):
+        selected_table = None
+        flash(request, "Invalid table selection.", "error")
     tables: list[str] = []
     column_names: list[str] = []
     column_details: list[dict[str, object]] = []
@@ -495,18 +699,21 @@ async def create_table(request: Request):
         flash(request, "カラム定義に複数の文を含めることはできません。", "error")
         return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
-    if table_options:
-        normalized_options = _normalize_fragment(table_options)
-        if _has_multiple_statements(normalized_options):
-            flash(request, "テーブルオプションに複数の文を含めることはできません。", "error")
-            return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
-        table_options = normalized_options
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        _parse_column_definitions(column_definitions)
+        table_options = _validate_table_options(table_options)
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
     try:
         await run_blocking(
             _create_table_in_db, table_name, column_definitions, table_options
         )
         flash(request, f"Table '{table_name}' created successfully.", "success")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
     except Error:
         logger.exception("Failed to create table.")
         flash(request, "Failed to create table due to an internal error.", "error")
@@ -538,14 +745,13 @@ async def api_create_table(request: Request):
             {"status": "fail", "error": "Invalid column definition."}, status_code=400
         )
 
-    if table_options:
-        normalized_options = _normalize_fragment(table_options)
-        if _has_multiple_statements(normalized_options):
-            flash(request, "テーブルオプションに複数の文を含めることはできません。", "error")
-            return jsonify(
-                {"status": "fail", "error": "Invalid table options."}, status_code=400
-            )
-        table_options = normalized_options
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        _parse_column_definitions(column_definitions)
+        table_options = _validate_table_options(table_options)
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return jsonify({"status": "fail", "error": str(exc)}, status_code=400)
 
     try:
         await run_blocking(
@@ -553,6 +759,9 @@ async def api_create_table(request: Request):
         )
         flash(request, f"Table '{table_name}' created successfully.", "success")
         return jsonify({"status": "success", "redirect": frontend_admin_dashboard_url(request)})
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return jsonify({"status": "fail", "error": str(exc)}, status_code=400)
     except Error:
         flash(request, "Failed to create table due to an internal error.", "error")
         return log_and_internal_server_error(
@@ -570,6 +779,12 @@ async def delete_table(request: Request):
 
     if not table_name:
         flash(request, "Table name is required for deletion.", "error")
+        return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
+
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
         return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
     try:
@@ -599,6 +814,12 @@ async def api_delete_table(request: Request):
         return jsonify(
             {"status": "fail", "error": "Table name is required."}, status_code=400
         )
+
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return jsonify({"status": "fail", "error": str(exc)}, status_code=400)
 
     try:
         deleted = await run_blocking(_drop_table_if_exists, table_name)
@@ -634,6 +855,16 @@ async def add_column(request: Request):
 
     if _has_multiple_statements(column_type):
         flash(request, "カラム定義に複数の文を含めることはできません。", "error")
+        return RedirectResponse(
+            frontend_admin_dashboard_url(request, table=table_name), status_code=302
+        )
+
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        column_name = _validate_sql_identifier(column_name, "column name")
+        _parse_column_definition(f"{column_name} {column_type}")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
         return RedirectResponse(
             frontend_admin_dashboard_url(request, table=table_name), status_code=302
         )
@@ -682,6 +913,14 @@ async def api_add_column(request: Request):
         )
 
     try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        column_name = _validate_sql_identifier(column_name, "column name")
+        _parse_column_definition(f"{column_name} {column_type}")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return jsonify({"status": "fail", "error": str(exc)}, status_code=400)
+
+    try:
         status = await run_blocking(_add_column_if_valid, table_name, column_name, column_type)
         if status == "missing_table":
             flash(request, f"テーブル '{table_name}' は存在しません。", "error")
@@ -718,6 +957,15 @@ async def delete_column(request: Request):
 
     if not table_name or not column_name:
         flash(request, "テーブル名とカラム名は必須です。", "error")
+        return RedirectResponse(
+            frontend_admin_dashboard_url(request, table=table_name), status_code=302
+        )
+
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        column_name = _validate_sql_identifier(column_name, "column name")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
         return RedirectResponse(
             frontend_admin_dashboard_url(request, table=table_name), status_code=302
         )
@@ -769,6 +1017,13 @@ async def api_delete_column(request: Request):
         return jsonify(
             {"status": "fail", "error": "Required fields are missing."}, status_code=400
         )
+
+    try:
+        table_name = _validate_sql_identifier(table_name, "table name")
+        column_name = _validate_sql_identifier(column_name, "column name")
+    except ValueError as exc:
+        flash(request, str(exc), "error")
+        return jsonify({"status": "fail", "error": str(exc)}, status_code=400)
 
     try:
         status, target_column = await run_blocking(

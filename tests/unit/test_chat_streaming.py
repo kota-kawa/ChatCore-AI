@@ -525,6 +525,38 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(payload["pagination"]["limit"], CHAT_HISTORY_PAGE_SIZE_DEFAULT)
         fetch_history.assert_called_once_with("room-7", CHAT_HISTORY_PAGE_SIZE_DEFAULT, None)
 
+    def test_get_chat_history_rejects_guest_room_not_registered_in_session(self):
+        history_request = build_request(
+            method="GET",
+            path="/api/get_chat_history",
+            session={"guest_room_ids": ["room-owned"]},
+            query_string=b"room_id=room-target",
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.get_session_id", return_value="sid-1"):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists") as mock_room_exists:
+                    history_response = asyncio.run(get_chat_history(history_request))
+
+        self.assertEqual(history_response.status_code, 404)
+        mock_room_exists.assert_not_called()
+
+    def test_chat_generation_stream_rejects_guest_room_not_registered_in_session(self):
+        stream_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session={"guest_room_ids": ["room-owned"]},
+            query_string=b"room_id=room-target",
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.get_session_id", return_value="sid-1"):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists") as mock_room_exists:
+                    stream_response = asyncio.run(chat_generation_stream(stream_request))
+
+        self.assertEqual(stream_response.status_code, 404)
+        mock_room_exists.assert_not_called()
+
 
     def test_chat_generation_status_includes_has_replayable_job(self):
         session = {"user_id": 99}

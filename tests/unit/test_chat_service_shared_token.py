@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from services.api_errors import ResourceNotFoundError
+from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.chat_service import create_or_get_shared_chat_token
 
 
@@ -12,8 +12,8 @@ class UniqueViolation(Exception):
 
 
 class FakeCursor:
-    def __init__(self, *, room_exists=True, insert_results=None, fail_attempts=None):
-        self.room_exists = room_exists
+    def __init__(self, *, room_owner_id=1, insert_results=None, fail_attempts=None):
+        self.room_owner_id = room_owner_id
         self.insert_results = list(insert_results or [])
         self.fail_attempts = set(fail_attempts or [])
         self.executed = []
@@ -25,8 +25,8 @@ class FakeCursor:
         self.executed.append((query, params))
         normalized = " ".join(query.split())
 
-        if normalized == "SELECT 1 FROM chat_rooms WHERE id = %s":
-            self._fetchone_result = (1,) if self.room_exists else None
+        if normalized == "SELECT user_id FROM chat_rooms WHERE id = %s":
+            self._fetchone_result = None if self.room_owner_id is None else (self.room_owner_id,)
             return
 
         if "INSERT INTO shared_chat_rooms" in normalized:
@@ -79,12 +79,12 @@ class FakeConnection:
 
 class ChatServiceSharedTokenTestCase(unittest.TestCase):
     def test_create_or_get_shared_chat_token_raises_404_when_room_missing(self):
-        fake_cursor = FakeCursor(room_exists=False)
+        fake_cursor = FakeCursor(room_owner_id=None)
         fake_connection = FakeConnection(fake_cursor)
 
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ResourceNotFoundError) as exc_info:
-                create_or_get_shared_chat_token("missing-room")
+                create_or_get_shared_chat_token("missing-room", 10)
 
         self.assertEqual(exc_info.exception.status_code, 404)
         self.assertEqual(exc_info.exception.message, "該当ルームが見つかりません")
@@ -93,13 +93,28 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_connection.closed)
 
+    def test_create_or_get_shared_chat_token_raises_403_when_room_is_not_owned(self):
+        fake_cursor = FakeCursor(room_owner_id=99)
+        fake_connection = FakeConnection(fake_cursor)
+
+        with patch("services.chat_service.get_db_connection", return_value=fake_connection):
+            with self.assertRaises(ForbiddenOperationError) as exc_info:
+                create_or_get_shared_chat_token("room-1", 10)
+
+        self.assertEqual(exc_info.exception.status_code, 403)
+        self.assertEqual(exc_info.exception.message, "他ユーザーのチャットルームは共有できません")
+        self.assertEqual(fake_connection.commit_calls, 0)
+        self.assertEqual(fake_connection.rollback_calls, 0)
+        self.assertTrue(fake_cursor.closed)
+        self.assertTrue(fake_connection.closed)
+
     def test_create_or_get_shared_chat_token_uses_on_conflict_and_reuses_existing_token(self):
-        fake_cursor = FakeCursor(room_exists=True, insert_results=["existing-share-token"])
+        fake_cursor = FakeCursor(room_owner_id=3, insert_results=["existing-share-token"])
         fake_connection = FakeConnection(fake_cursor)
 
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with patch("services.chat_service.secrets.token_urlsafe", return_value="new-token"):
-                token = create_or_get_shared_chat_token("room-1")
+                token = create_or_get_shared_chat_token("room-1", 3)
 
         self.assertEqual(token, "existing-share-token")
         self.assertEqual(fake_connection.commit_calls, 1)
@@ -111,7 +126,7 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
 
     def test_create_or_get_shared_chat_token_retries_on_unique_token_collision(self):
         fake_cursor = FakeCursor(
-            room_exists=True,
+            room_owner_id=5,
             insert_results=["fresh-token"],
             fail_attempts={1},
         )
@@ -122,7 +137,7 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
                 "services.chat_service.secrets.token_urlsafe",
                 side_effect=["colliding-token", "fresh-token"],
             ):
-                token = create_or_get_shared_chat_token("room-1")
+                token = create_or_get_shared_chat_token("room-1", 5)
 
         self.assertEqual(token, "fresh-token")
         self.assertEqual(fake_cursor.insert_attempts, 2)
