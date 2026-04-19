@@ -46,137 +46,112 @@ def _serialize_prompt_list_entry(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        query = """
-            SELECT
-                id,
-                title,
-                category,
-                content,
-                input_examples,
-                output_examples,
-                prompt_type,
-                reference_image_url,
-                created_at
-            FROM prompts
-            WHERE user_id = %s
-              AND deleted_at IS NULL
-            ORDER BY created_at DESC
-        """
-        cursor.execute(query, (user_id,))
-        return cursor.fetchall()
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                SELECT
+                    id,
+                    title,
+                    category,
+                    content,
+                    input_examples,
+                    output_examples,
+                    prompt_type,
+                    reference_image_url,
+                    created_at
+                FROM prompts
+                WHERE user_id = %s
+                  AND deleted_at IS NULL
+                ORDER BY created_at DESC
+            """
+            cursor.execute(query, (user_id,))
+            return cursor.fetchall()
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _fetch_saved_prompts(user_id: int) -> list[dict[str, Any]]:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        query = """
-            SELECT id,
-                   name,
-                   prompt_template,
-                   response_rules,
-                   output_skeleton,
-                   input_examples,
-                   output_examples,
-                   created_at
-            FROM task_with_examples
-            WHERE user_id = %s
-              AND deleted_at IS NULL
-            ORDER BY created_at DESC, id DESC
-        """
-        cursor.execute(query, (user_id,))
-        return cursor.fetchall()
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                SELECT id,
+                       name,
+                       prompt_template,
+                       response_rules,
+                       output_skeleton,
+                       input_examples,
+                       output_examples,
+                       created_at
+                FROM task_with_examples
+                WHERE user_id = %s
+                  AND deleted_at IS NULL
+                ORDER BY created_at DESC, id DESC
+            """
+            cursor.execute(query, (user_id,))
+            return cursor.fetchall()
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
-        query = """
-            SELECT ple.id AS entry_id,
-                   ple.prompt_id,
-                   p.title,
-                   p.category,
-                   p.content,
-                   p.author,
-                   p.prompt_type,
-                   p.reference_image_url,
-                   p.input_examples,
-                   p.output_examples,
-                   p.created_at AS prompt_created_at,
-                   ple.created_at AS saved_at
-            FROM prompt_list_entries ple
-            JOIN prompts p ON p.id = ple.prompt_id
-                          AND p.deleted_at IS NULL
-            WHERE ple.user_id = %s
-            ORDER BY ple.created_at DESC, ple.id DESC
-        """
-        cursor.execute(query, (user_id,))
-        return [_serialize_prompt_list_entry(dict(row)) for row in cursor.fetchall()]
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                SELECT ple.id AS entry_id,
+                       ple.prompt_id,
+                       p.title,
+                       p.category,
+                       p.content,
+                       p.author,
+                       p.prompt_type,
+                       p.reference_image_url,
+                       p.input_examples,
+                       p.output_examples,
+                       p.created_at AS prompt_created_at,
+                       ple.created_at AS saved_at
+                FROM prompt_list_entries ple
+                JOIN prompts p ON p.id = ple.prompt_id
+                              AND p.deleted_at IS NULL
+                WHERE ple.user_id = %s
+                ORDER BY ple.created_at DESC, ple.id DESC
+            """
+            cursor.execute(query, (user_id,))
+            return [_serialize_prompt_list_entry(dict(row)) for row in cursor.fetchall()]
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _delete_prompt_list_entry_for_user(user_id: int, entry_id: int) -> int:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor()
-        query = "DELETE FROM prompt_list_entries WHERE id = %s AND user_id = %s"
-        cursor.execute(query, (entry_id, user_id))
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        if cursor is not None:
+        try:
+            query = "DELETE FROM prompt_list_entries WHERE id = %s AND user_id = %s"
+            cursor.execute(query, (entry_id, user_id))
+            conn.commit()
+            return cursor.rowcount
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _delete_saved_prompt_for_user(user_id: int, prompt_id: int) -> int:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor()
-        query = """
-            UPDATE task_with_examples
-               SET deleted_at = CURRENT_TIMESTAMP
-             WHERE id = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-        """
-        cursor.execute(query, (prompt_id, user_id))
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                UPDATE task_with_examples
+                   SET deleted_at = CURRENT_TIMESTAMP
+                 WHERE id = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+            """
+            cursor.execute(query, (prompt_id, user_id))
+            conn.commit()
+            return cursor.rowcount
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _update_prompt_for_user(
@@ -188,60 +163,50 @@ def _update_prompt_for_user(
     input_examples: str,
     output_examples: str,
 ) -> int:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor()
-        query = """
-            UPDATE prompts
-            SET title = %s, category = %s, content = %s, input_examples = %s, output_examples = %s
-            WHERE id = %s
-              AND user_id = %s
-              AND deleted_at IS NULL
-        """
-        cursor.execute(
-            query,
-            (
-                title,
-                category,
-                content,
-                input_examples,
-                output_examples,
-                prompt_id,
-                user_id,
-            ),
-        )
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                UPDATE prompts
+                SET title = %s, category = %s, content = %s, input_examples = %s, output_examples = %s
+                WHERE id = %s
+                  AND user_id = %s
+                  AND deleted_at IS NULL
+            """
+            cursor.execute(
+                query,
+                (
+                    title,
+                    category,
+                    content,
+                    input_examples,
+                    output_examples,
+                    prompt_id,
+                    user_id,
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 def _delete_prompt_for_user(user_id: int, prompt_id: int) -> int:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
+    with get_db_connection() as conn:
         cursor = conn.cursor()
-        query = """
-            UPDATE prompts
-               SET deleted_at = CURRENT_TIMESTAMP
-             WHERE id = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-        """
-        cursor.execute(query, (prompt_id, user_id))
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        if cursor is not None:
+        try:
+            query = """
+                UPDATE prompts
+                   SET deleted_at = CURRENT_TIMESTAMP
+                 WHERE id = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+            """
+            cursor.execute(query, (prompt_id, user_id))
+            conn.commit()
+            return cursor.rowcount
+        finally:
             cursor.close()
-        if conn is not None:
-            conn.close()
 
 
 @prompt_manage_api_bp.get("/my_prompts", name="prompt_manage_api.get_my_prompts")

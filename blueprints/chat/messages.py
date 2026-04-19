@@ -23,6 +23,7 @@ from services.chat_generation import (
     ChatGenerationEvent,
     ChatGenerationService,
     ChatGenerationJob,
+    ChatGenerationStreamTimeoutError,
     build_generation_key,
     cancel_generation_job,
     get_chat_generation_service,
@@ -215,8 +216,11 @@ def _iter_llm_stream_events(
 def _iter_serialized_stream_events(
     events: Iterator[ChatGenerationEvent],
 ) -> Iterator[bytes]:
-    for event in events:
-        yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
+    try:
+        for event in events:
+            yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
+    except ChatGenerationStreamTimeoutError as exc:
+        yield _sse_event("error", exc.payload)
 
 
 def _build_llm_stream_response(
