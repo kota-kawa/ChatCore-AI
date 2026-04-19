@@ -145,7 +145,7 @@ template.innerHTML = `
       width: 25px;
       height: 3px;
       background: #fff;
-      transition: transform 0.2s ease;
+      transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .btn--menu span {
       top: 50%;
@@ -185,7 +185,18 @@ template.innerHTML = `
       left: 8px;
       opacity: 0;
       transform: scale(0) rotate(0deg);
+      /* 閉じるアニメーション */
+      transition:
+        top      0.38s cubic-bezier(0.4, 0, 0.65, 1),
+        left     0.38s cubic-bezier(0.4, 0, 0.65, 1),
+        opacity  0.28s ease,
+        transform 0.4s  cubic-bezier(0.4, 0, 0.65, 1);
     }
+    /* 閉じるとき逆順カスケード: comment→star→share */
+    .actions-menu .btn--comment { transition-delay: 0s; }
+    .actions-menu .btn--star    { transition-delay: 0.07s; }
+    .actions-menu .btn--share   { transition-delay: 0.14s; }
+
     .actions-menu .btn--menu {
       position: absolute;
       top: 0;
@@ -203,8 +214,16 @@ template.innerHTML = `
     #actionMenuButton:checked + .actions-menu > .btn {
       opacity: 1;
       transform: scale(1) rotate(360deg);
-      transition: all 0.6s cubic-bezier(0.645, 0.045, 0.355, 1);
+      transition:
+        top      0.52s cubic-bezier(0.34, 1.56, 0.64, 1),
+        left     0.52s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity  0.4s  ease,
+        transform 0.52s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+    /* 開くとき順順カスケード: share→star→comment */
+    #actionMenuButton:checked + .actions-menu > .btn--share   { transition-delay: 0s; }
+    #actionMenuButton:checked + .actions-menu > .btn--star    { transition-delay: 0.07s; }
+    #actionMenuButton:checked + .actions-menu > .btn--comment { transition-delay: 0.14s; }
 
     /* 展開位置 */
     #actionMenuButton:checked + .actions-menu > .btn--share {
