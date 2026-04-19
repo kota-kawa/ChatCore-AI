@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import { useMemo } from "react";
+import { sanitizeClassAttributeValue } from "../scripts/core/html";
 
 const ALLOWED_TAGS = new Set([
   "p", "br", "strong", "em", "code", "pre", "ul", "ol", "li",
@@ -31,6 +32,13 @@ function sanitizeNode(node: Node): Node | null {
     if (!ALLOWED_ATTRS.has(name)) return;
     const value = el.getAttribute(name) || "";
     if ((name === "href" || name === "src") && /^javascript:/i.test(value.trim())) return;
+    if (name === "class") {
+      const safeClassNames = sanitizeClassAttributeValue(value);
+      if (safeClassNames) {
+        clean.setAttribute("class", safeClassNames);
+      }
+      return;
+    }
     clean.setAttribute(name, value);
   });
   if (tag === "a") {

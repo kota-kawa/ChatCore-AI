@@ -186,6 +186,7 @@ export function useHomePageController() {
   } = useHomePageShareState();
 
   const draggingTaskIndexRef = useRef<number | null>(null);
+  const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
   const hasCurrentRoom = Boolean(currentRoomId);
 
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
@@ -199,7 +200,34 @@ export function useHomePageController() {
     }
   }, []);
 
+  const clearTrackedTimeouts = useCallback(() => {
+    trackedTimeoutIdsRef.current.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId);
+    });
+    trackedTimeoutIdsRef.current.clear();
+  }, []);
+
+  const scheduleTrackedTimeout = useCallback((callback: () => void, delayMs: number) => {
+    const timeoutId = window.setTimeout(() => {
+      trackedTimeoutIdsRef.current.delete(timeoutId);
+      callback();
+    }, delayMs);
+    trackedTimeoutIdsRef.current.add(timeoutId);
+    return timeoutId;
+  }, []);
+
+  const disconnectActiveGeneration = useCallback(() => {
+    const abortController = abortControllerRef.current;
+    if (!abortController) return;
+    abortController.abort();
+    abortControllerRef.current = null;
+    setIsGenerating(false);
+  }, []);
+
   const persistCurrentRoomId = useCallback((roomId: string | null) => {
+    if (currentRoomIdRef.current !== roomId) {
+      disconnectActiveGeneration();
+    }
     currentRoomIdRef.current = roomId;
     setCurrentRoomId(roomId);
     try {
@@ -211,7 +239,7 @@ export function useHomePageController() {
     } catch {
       // ignore localStorage failures
     }
-  }, []);
+  }, [disconnectActiveGeneration]);
 
   const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
     return list.filter((message) => message.sender !== "thinking");
@@ -470,7 +498,7 @@ export function useHomePageController() {
 
   const connectToGenerationStream = useCallback(
     async (roomId: string) => {
-      if (isGenerating) return;
+      if (abortControllerRef.current) return;
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -525,7 +553,7 @@ export function useHomePageController() {
         }
       }
     },
-    [consumeStreamingChatResponse, isGenerating, removeThinkingMessages],
+    [consumeStreamingChatResponse, removeThinkingMessages],
   );
 
   const loadChatHistory = useCallback(
@@ -693,7 +721,7 @@ export function useHomePageController() {
 
   const generateResponse = useCallback(
     async (message: string, model: string, roomId: string) => {
-      if (isGenerating) return;
+      if (abortControllerRef.current) return;
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -788,18 +816,12 @@ export function useHomePageController() {
         }
       }
     },
-    [appendAssistantErrorMessage, consumeStreamingChatResponse, isGenerating, removeThinkingMessages, scheduleAutoScrollIfNeeded],
+    [appendAssistantErrorMessage, consumeStreamingChatResponse, removeThinkingMessages, scheduleAutoScrollIfNeeded],
   );
 
   const stopGeneration = useCallback(async () => {
-    const abortController = abortControllerRef.current;
-    if (abortController) {
-      abortController.abort();
-      abortControllerRef.current = null;
-      setIsGenerating(false);
-    }
-
     const roomId = currentRoomIdRef.current;
+    disconnectActiveGeneration();
     if (!roomId) return;
 
     try {
@@ -812,7 +834,7 @@ export function useHomePageController() {
     } catch {
       // best effort
     }
-  }, []);
+  }, [disconnectActiveGeneration]);
 
   const refreshTasks = useCallback(
     async (forceRefresh = false) => {
@@ -1357,7 +1379,7 @@ export function useHomePageController() {
         invalidateTasksCache();
         await refreshTasks(true);
 
-        window.setTimeout(() => {
+        scheduleTrackedTimeout(() => {
           closeNewPromptModal();
         }, 550);
       } catch (error) {
@@ -1377,6 +1399,7 @@ export function useHomePageController() {
       newPromptOutputExample,
       newPromptTitle,
       refreshTasks,
+      scheduleTrackedTimeout,
     ],
   );
 
@@ -1390,12 +1413,14 @@ export function useHomePageController() {
   useEffect(() => {
     document.body.classList.add("chat-page");
     return () => {
+      clearTrackedTimeouts();
+      disconnectActiveGeneration();
       document.body.classList.remove("chat-page");
       document.body.classList.remove("sidebar-visible");
       document.body.classList.remove("new-prompt-modal-open");
       document.body.style.overflow = "";
     };
-  }, []);
+  }, [clearTrackedTimeouts, disconnectActiveGeneration]);
 
   useEffect(() => {
     if (pageViewState !== "chat" || !sidebarOpen) {
@@ -1581,25 +1606,16 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
-    if (!isNewPromptModalOpen) return;
+    if (!isNewPromptModalOpen && !shareModalOpen) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (isPromptSubmitting) return;
-      closeNewPromptModal();
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [closeNewPromptModal, isNewPromptModalOpen, isPromptSubmitting]);
-
-  useEffect(() => {
-    if (!shareModalOpen) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (isNewPromptModalOpen) {
+        if (isPromptSubmitting) return;
+        closeNewPromptModal();
+        return;
+      }
+      if (shareModalOpen) {
         closeShareModal();
       }
     };
@@ -1608,7 +1624,7 @@ export function useHomePageController() {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [closeShareModal, shareModalOpen]);
+  }, [closeNewPromptModal, closeShareModal, isNewPromptModalOpen, isPromptSubmitting, shareModalOpen]);
 
   useEffect(() => {
     const onCodeCopyClick = (event: MouseEvent) => {
@@ -1631,14 +1647,14 @@ export function useHomePageController() {
           if (icon) {
             icon.classList.remove("bi-clipboard", "bi-x-lg");
             icon.classList.add("bi-check-lg");
-            window.setTimeout(() => {
+            scheduleTrackedTimeout(() => {
               icon.classList.remove("bi-check-lg", "bi-x-lg");
               icon.classList.add("bi-clipboard");
             }, 2000);
           }
           if (textSpan) {
             textSpan.textContent = "Copied!";
-            window.setTimeout(() => {
+            scheduleTrackedTimeout(() => {
               textSpan.textContent = defaultLabel;
             }, 2000);
           }
@@ -1647,14 +1663,14 @@ export function useHomePageController() {
           if (icon) {
             icon.classList.remove("bi-clipboard", "bi-check-lg");
             icon.classList.add("bi-x-lg");
-            window.setTimeout(() => {
+            scheduleTrackedTimeout(() => {
               icon.classList.remove("bi-check-lg", "bi-x-lg");
               icon.classList.add("bi-clipboard");
             }, 2000);
           }
           if (textSpan) {
             textSpan.textContent = "Failed";
-            window.setTimeout(() => {
+            scheduleTrackedTimeout(() => {
               textSpan.textContent = defaultLabel;
             }, 2000);
           }
@@ -1665,7 +1681,7 @@ export function useHomePageController() {
     return () => {
       document.removeEventListener("click", onCodeCopyClick);
     };
-  }, []);
+  }, [scheduleTrackedTimeout]);
 
   useEffect(() => {
     if (promptAssistControllerRef.current) return;

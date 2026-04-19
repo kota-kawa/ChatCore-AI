@@ -1,6 +1,7 @@
 // message_utils.ts – 共通メッセージユーティリティ
 // --------------------------------------------------
 import { getSharedDomRefs } from "../core/dom";
+import { sanitizeClassAttributeValue } from "../core/html";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
 
@@ -80,6 +81,14 @@ function sanitizeHtmlWithoutPurifier(
         return;
       }
 
+      if (name === "class") {
+        const safeClassNames = sanitizeClassAttributeValue(value);
+        if (safeClassNames) {
+          clean.setAttribute("class", safeClassNames);
+        }
+        return;
+      }
+
       clean.setAttribute(name, value);
     });
 
@@ -98,6 +107,22 @@ function sanitizeHtmlWithoutPurifier(
   });
 
   return root.innerHTML;
+}
+
+function sanitizeAllowedClasses(html: string) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  Array.from(template.content.querySelectorAll("[class]")).forEach((node) => {
+    const safeClassNames = sanitizeClassAttributeValue(node.getAttribute("class"));
+    if (safeClassNames) {
+      node.setAttribute("class", safeClassNames);
+      return;
+    }
+    node.removeAttribute("class");
+  });
+
+  return template.innerHTML;
 }
 
 function renderSanitizedHTML(
@@ -142,6 +167,7 @@ function renderSanitizedHTML(
       ALLOWED_TAGS: allowed,
       ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"]
     });
+    clean = sanitizeAllowedClasses(clean);
     if (isBotMessage) {
       clean = compactBotMessageHtml(clean);
     }
