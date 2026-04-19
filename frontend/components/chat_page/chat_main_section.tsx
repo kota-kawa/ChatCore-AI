@@ -91,7 +91,6 @@ export function ChatMainSection() {
           >
             <i className="bi bi-arrow-left"></i>
           </button>
-          <span>Chat Core</span>
         </div>
         <div className="header-right">
           <div
