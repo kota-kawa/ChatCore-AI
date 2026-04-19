@@ -82,11 +82,14 @@
 }
 
 .chat-header .icon-button {
-  border-radius: 9999px;
+  border-radius: 50%;
   width: 2.75rem;
   height: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 /* ヘッダー内モデル選択ドロップダウン */
@@ -440,6 +443,14 @@
 
   .header-left i {
     font-size: 1.25rem;
+  }
+
+  .chat-header .icon-button {
+    width: 2.5rem;
+    height: 2.5rem;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    border-radius: 50%;
   }
 
   .sidebar {
