@@ -1,4 +1,3 @@
-import { formatMultilineHtml } from "../../../scripts/core/html";
 import type { NormalizedTask } from "../../../lib/chat_page/types";
 
 type TaskDetailModalProps = {
@@ -7,6 +6,12 @@ type TaskDetailModalProps = {
 };
 
 export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
+  const renderMultilineText = (value: string) => (
+    <div className="task-detail-section-body" style={{ whiteSpace: "pre-wrap" }}>
+      {value}
+    </div>
+  );
+
   return (
     <div
       id="io-modal"
@@ -57,59 +62,34 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
 
               <section className="task-detail-section">
                 <h6 className="task-detail-section-title">プロンプトテンプレート</h6>
-                <div
-                  className="task-detail-section-body"
-                  dangerouslySetInnerHTML={{
-                    __html: formatMultilineHtml(taskDetail.prompt_template),
-                  }}
-                ></div>
+                {renderMultilineText(taskDetail.prompt_template)}
               </section>
 
               {taskDetail.response_rules && (
                 <section className="task-detail-section">
                   <h6 className="task-detail-section-title">回答ルール</h6>
-                  <div
-                    className="task-detail-section-body"
-                    dangerouslySetInnerHTML={{
-                      __html: formatMultilineHtml(taskDetail.response_rules),
-                    }}
-                  ></div>
+                  {renderMultilineText(taskDetail.response_rules)}
                 </section>
               )}
 
               {taskDetail.output_skeleton && (
                 <section className="task-detail-section">
                   <h6 className="task-detail-section-title">出力テンプレート</h6>
-                  <div
-                    className="task-detail-section-body"
-                    dangerouslySetInnerHTML={{
-                      __html: formatMultilineHtml(taskDetail.output_skeleton),
-                    }}
-                  ></div>
+                  {renderMultilineText(taskDetail.output_skeleton)}
                 </section>
               )}
 
               {taskDetail.input_examples && (
                 <section className="task-detail-section">
                   <h6 className="task-detail-section-title">入力例</h6>
-                  <div
-                    className="task-detail-section-body"
-                    dangerouslySetInnerHTML={{
-                      __html: formatMultilineHtml(taskDetail.input_examples),
-                    }}
-                  ></div>
+                  {renderMultilineText(taskDetail.input_examples)}
                 </section>
               )}
 
               {taskDetail.output_examples && (
                 <section className="task-detail-section">
                   <h6 className="task-detail-section-title">出力例</h6>
-                  <div
-                    className="task-detail-section-body"
-                    dangerouslySetInnerHTML={{
-                      __html: formatMultilineHtml(taskDetail.output_examples),
-                    }}
-                  ></div>
+                  {renderMultilineText(taskDetail.output_examples)}
                 </section>
               )}
 
