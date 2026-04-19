@@ -77,6 +77,9 @@ from services.error_messages import (
 from . import (
     chat_bp,
     get_session_id,
+    get_guest_room_ids,
+    register_guest_room,
+    unregister_guest_room,
     cleanup_ephemeral_chats,
     ephemeral_store,
 )
@@ -112,6 +115,25 @@ def _resolve_chat_generation_service(
     if isinstance(service, ChatGenerationService):
         return service
     return get_chat_generation_service(request)
+
+
+async def _validate_guest_room_access(session: dict, chat_room_id: str):
+    sid = get_session_id(session)
+    registered_room_ids = get_guest_room_ids(session)
+
+    if registered_room_ids and chat_room_id not in registered_room_ids:
+        return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+
+    room_exists = await run_blocking(ephemeral_store.room_exists, sid, chat_room_id)
+    if not room_exists:
+        unregister_guest_room(session, chat_room_id)
+        return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+
+    if not registered_room_ids:
+        # Migrate legacy guest sessions that predate explicit room ownership tracking.
+        register_guest_room(session, chat_room_id)
+
+    return sid, None
 
 BASE_SYSTEM_PROMPT = """
 あなたは、ユーザーの会話相手であり、作業をサポートするAIアシスタントです。
@@ -726,9 +748,9 @@ async def chat(
         await run_blocking(save_message_to_db, chat_room_id, formatted_user_message, "user")
         all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
     else:
-        sid = get_session_id(session)
-        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
 
         escaped = html.escape(user_message)
         formatted_user_message = escaped.replace("\n", "<br>")
@@ -937,9 +959,9 @@ async def chat_stop(
                 "Failed to validate chat room ownership before stop.",
             )
     else:
-        sid = get_session_id(session)
-        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     cancelled = await run_blocking(
@@ -990,9 +1012,9 @@ async def get_chat_history(request: Request):
                 "Failed to fetch chat history.",
             )
     else:
-        sid = get_session_id(session)
-        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
 
         messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
@@ -1038,9 +1060,9 @@ async def chat_generation_stream(
                 "Failed to validate chat room ownership before generation stream.",
             )
     else:
-        sid = get_session_id(session)
-        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     last_event_id = _parse_last_event_id(request)
@@ -1111,9 +1133,9 @@ async def chat_generation_status(
                 "Failed to validate chat room ownership before generation status fetch.",
             )
     else:
-        sid = get_session_id(session)
-        if not await run_blocking(ephemeral_store.room_exists, sid, chat_room_id):
-            return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     is_generating = has_active_generation(

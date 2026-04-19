@@ -431,7 +431,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="space-y-2">
                         <label className={labelClass} htmlFor="add-column-type">
-                          カラム定義（例：VARCHAR(255) NOT NULL）
+                          カラム定義（例：VARCHAR(255) NOT NULL / NUMERIC(10,2) DEFAULT 0）
                         </label>
                         <input type="text" id="add-column-type" name="column_type" required className={inputClass} />
                       </div>
@@ -490,28 +490,17 @@ export default function AdminDashboard() {
                       </div>
                       <div className="space-y-2">
                         <label className={labelClass} htmlFor="column-definitions">
-                          カラム定義（SQL）
+                          カラム定義
                         </label>
                         <textarea
                           id="column-definitions"
                           name="columns"
-                          placeholder="id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL"
+                          placeholder="id BIGSERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL"
                           required
                           className={`${inputClass} min-h-[140px]`}
                         ></textarea>
                       </div>
-                      <div className="space-y-2">
-                        <label className={labelClass} htmlFor="table-options">
-                          テーブルオプション（例：ENGINE=InnoDB DEFAULT CHARSET=utf8mb4）
-                        </label>
-                        <input
-                          type="text"
-                          id="table-options"
-                          name="table_options"
-                          placeholder="ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
-                          className={inputClass}
-                        />
-                      </div>
+                      <p className="text-xs text-slate-500">現在は PostgreSQL の基本的なカラム定義のみ対応しています。テーブルオプションは利用できません。</p>
                       <button type="submit" className={buttonClass}>
                         作成
                       </button>

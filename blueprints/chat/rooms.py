@@ -42,7 +42,14 @@ from services.error_messages import (
     ERROR_TOKEN_REQUIRED,
 )
 
-from . import chat_bp, cleanup_ephemeral_chats, ephemeral_store, get_session_id
+from . import (
+    chat_bp,
+    cleanup_ephemeral_chats,
+    ephemeral_store,
+    get_session_id,
+    register_guest_room,
+    unregister_guest_room,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +194,7 @@ async def new_chat_room(
 
         sid = get_session_id(session)
         await run_blocking(ephemeral_store.create_room, sid, room_id, title)
+        register_guest_room(session, room_id)
 
         return jsonify(
             {
@@ -253,6 +261,7 @@ async def delete_chat_room(request: Request):
         sid = get_session_id(session)
         if not await run_blocking(ephemeral_store.delete_room, sid, room_id):
             return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+        unregister_guest_room(session, room_id)
         return jsonify({"message": "エフェメラルチャットルームを削除しました"}, status_code=200)
 
 
@@ -334,7 +343,7 @@ async def share_chat_room(request: Request):
         if legacy_response is not None:
             return legacy_response
 
-        share_token_result = await run_blocking(create_or_get_shared_chat_token, room_id)
+        share_token_result = await run_blocking(create_or_get_shared_chat_token, room_id, user_id)
         if isinstance(share_token_result, tuple) and len(share_token_result) == 2:
             share_token, status_code = share_token_result
             if status_code == 404 or not share_token:

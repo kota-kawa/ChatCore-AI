@@ -135,6 +135,67 @@ class AdminApiTestCase(unittest.TestCase):
         self.assertEqual(payload["selected_table"], "users")
         self.assertEqual(payload["column_names"], ["id"])
 
+    def test_dashboard_rejects_invalid_table_query(self):
+        request = make_request(session={"is_admin": True}, query_string=b"table=users;DROP TABLE users")
+
+        with patch("blueprints.admin.views._load_dashboard_data") as mock_load_dashboard_data:
+            mock_load_dashboard_data.return_value = {
+                "tables": ["users"],
+                "selected_table": None,
+                "column_names": [],
+                "column_details": [],
+                "existing_columns": [],
+                "rows": [],
+                "missing_selected_table": False,
+            }
+            response = asyncio.run(admin_views.api_dashboard(request))
+
+        self.assertEqual(response.status_code, 200)
+        mock_load_dashboard_data.assert_called_once_with(None)
+        payload = json.loads(response.body.decode())
+        self.assertIsNone(payload["selected_table"])
+
+    def test_api_create_table_rejects_unsupported_column_sql(self):
+        request = make_request(
+            method="POST",
+            path="/admin/api/create-table",
+            json_body={
+                "table_name": "sample_table",
+                "columns": "id INT PRIMARY KEY, note TEXT CHECK (length(note) > 0)",
+            },
+            session={"is_admin": True},
+        )
+
+        with patch("blueprints.admin.views._create_table_in_db") as mock_create_table:
+            response = asyncio.run(admin_views.api_create_table(request))
+
+        self.assertEqual(response.status_code, 400)
+        mock_create_table.assert_not_called()
+        payload = json.loads(response.body.decode())
+        self.assertEqual(payload["status"], "fail")
+        self.assertIn("Unsupported column constraint", payload["error"])
+
+    def test_api_add_column_rejects_sql_injection_payload(self):
+        request = make_request(
+            method="POST",
+            path="/admin/api/add-column",
+            json_body={
+                "table_name": "sample_table",
+                "column_name": "dangerous_column",
+                "column_type": "INT) DROP TABLE users --",
+            },
+            session={"is_admin": True},
+        )
+
+        with patch("blueprints.admin.views._add_column_if_valid") as mock_add_column:
+            response = asyncio.run(admin_views.api_add_column(request))
+
+        self.assertEqual(response.status_code, 400)
+        mock_add_column.assert_not_called()
+        payload = json.loads(response.body.decode())
+        self.assertEqual(payload["status"], "fail")
+        self.assertTrue(payload["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
