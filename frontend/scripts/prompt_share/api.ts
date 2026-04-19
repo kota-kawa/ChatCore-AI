@@ -1,4 +1,4 @@
-import type { PromptData } from "./types";
+import type { PromptData, PromptFeedResponse } from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
 
 type ApiResponse = {
@@ -58,14 +58,25 @@ export function savePromptToList(prompt: PromptData) {
 }
 
 export function fetchPromptList() {
-  return fetchJsonOrThrow<{ prompts?: PromptData[] }>("/prompt_share/api/prompts", undefined, {
+  return fetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
     defaultMessage: "プロンプト一覧の取得に失敗しました。"
   }).then(({ payload }) => payload);
 }
 
-export function fetchPromptSearchResults(query: string) {
-  return fetchJsonOrThrow<{ prompts?: PromptData[] }>(
-    `/search/prompts?q=${encodeURIComponent(query)}`,
+export function fetchPromptSearchResults(
+  query: string,
+  options?: { page?: number; perPage?: number }
+) {
+  const params = new URLSearchParams({ q: query });
+  if (options?.page) {
+    params.set("page", String(options.page));
+  }
+  if (options?.perPage) {
+    params.set("per_page", String(options.perPage));
+  }
+
+  return fetchJsonOrThrow<PromptFeedResponse>(
+    `/search/prompts?${params.toString()}`,
     undefined,
     {
       defaultMessage: "検索に失敗しました。"

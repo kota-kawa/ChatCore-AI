@@ -10,18 +10,43 @@ from services.web import jsonify, log_and_internal_server_error
 
 search_bp = APIRouter(prefix="/search")
 logger = logging.getLogger(__name__)
+SEARCH_DEFAULT_PAGE = 1
+SEARCH_DEFAULT_PER_PAGE = 20
+SEARCH_MAX_PER_PAGE = 100
 
 
-def _search_public_prompts(query):
+def _parse_positive_int(raw_value: str | None, default: int) -> int:
+    try:
+        value = int(str(raw_value or "").strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _search_public_prompts(query, page, per_page):
     # 公開プロンプトを title/content/category/author で部分一致検索する
     # Search public prompts with partial matching across multiple columns.
+    page = max(int(page), SEARCH_DEFAULT_PAGE)
+    per_page = max(1, min(int(per_page), SEARCH_MAX_PER_PAGE))
+    if not query:
+        return {
+            "prompts": [],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": 0,
+                "total_pages": 0,
+                "has_next": False,
+                "has_prev": False,
+            },
+        }
+
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        if not query:
-            return []
+        offset = (page - 1) * per_page
         sql = """
             SELECT
               id,
@@ -44,10 +69,50 @@ def _search_public_prompts(query):
                 author  LIKE %s
               )
             ORDER BY created_at DESC
+            LIMIT %s
+            OFFSET %s
+        """
+        count_sql = """
+            SELECT COUNT(*) AS total
+            FROM prompts
+            WHERE is_public = TRUE
+              AND deleted_at IS NULL
+              AND (
+                title   LIKE %s OR
+                content LIKE %s OR
+                category LIKE %s OR
+                author  LIKE %s
+              )
         """
         like_query = f"%{query}%"
-        cursor.execute(sql, (like_query, like_query, like_query, like_query))
-        return cursor.fetchall()
+        count_params = (like_query, like_query, like_query, like_query)
+        cursor.execute(count_sql, count_params)
+        count_row = cursor.fetchone() or {}
+        total = int(count_row.get("total") or 0)
+
+        cursor.execute(
+            sql,
+            (
+                like_query,
+                like_query,
+                like_query,
+                like_query,
+                per_page,
+                offset,
+            ),
+        )
+        total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+        return {
+            "prompts": cursor.fetchall(),
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > SEARCH_DEFAULT_PAGE and total > 0,
+            },
+        }
     finally:
         if cursor is not None:
             cursor.close()
@@ -62,9 +127,14 @@ async def search_prompts(request: Request):
     Search public prompts by query parameter `q`.
     """
     query = request.query_params.get('q', '').strip()
+    page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)
+    per_page = _parse_positive_int(
+        request.query_params.get("per_page"),
+        SEARCH_DEFAULT_PER_PAGE,
+    )
     try:
-        prompts = await run_blocking(_search_public_prompts, query)
-        return jsonify({'prompts': prompts})
+        payload = await run_blocking(_search_public_prompts, query, page, per_page)
+        return jsonify({"status": "success", **payload})
     except Exception:
         return log_and_internal_server_error(
             logger,

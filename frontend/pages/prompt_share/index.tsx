@@ -45,7 +45,11 @@ import {
   writeCachedAuthState,
   writePromptCache
 } from "../../scripts/prompt_share/storage";
-import type { PromptData, PromptType } from "../../scripts/prompt_share/types";
+import type {
+  PromptData,
+  PromptPagination,
+  PromptType
+} from "../../scripts/prompt_share/types";
 
 type PromptCategory = {
   value: string;
@@ -71,6 +75,8 @@ type PromptPostStatus = {
   message: string;
   variant: PromptPostStatusVariant;
 };
+
+const SEARCH_RESULTS_PER_PAGE = 20;
 
 const PROMPT_CATEGORIES: PromptCategory[] = [
   { value: "all", iconClass: "bi bi-grid", label: "全て" },
@@ -143,6 +149,9 @@ export default function PromptSharePage() {
   const [isPromptsLoading, setIsPromptsLoading] = useState(true);
   const [promptCountMeta, setPromptCountMeta] = useState("公開プロンプトを読み込み中...");
   const [promptFeedback, setPromptFeedback] = useState<PromptFeedback | null>(null);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const [searchPagination, setSearchPagination] = useState<PromptPagination | null>(null);
+  const [isLoadingMoreSearchResults, setIsLoadingMoreSearchResults] = useState(false);
 
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
   const [detailPrompt, setDetailPrompt] = useState<PromptRecord | null>(null);
@@ -320,6 +329,8 @@ export default function PromptSharePage() {
     }
     return prompts.filter((prompt) => (prompt.category || "") === appliedCategoryFilter);
   }, [prompts, appliedCategoryFilter]);
+  const hasMoreSearchResults =
+    activeSearchQuery.trim().length > 0 && Boolean(searchPagination?.has_next);
 
   const shareSnsLinks = useMemo(() => {
     if (!shareUrl) {
@@ -456,6 +467,8 @@ export default function PromptSharePage() {
         const promptRecords = toPromptRecords(normalizedPrompts);
 
         setPrompts(promptRecords);
+        setActiveSearchQuery("");
+        setSearchPagination(null);
         setSelectedCategory(categoryToApply);
         setAppliedCategoryFilter(categoryToApply);
         setSelectedCategoryTitle(getCategoryTitle(categoryToApply));
@@ -501,13 +514,18 @@ export default function PromptSharePage() {
     setSelectedCategoryTitle(`検索結果: 「${query}」`);
 
     try {
-      const data = await fetchPromptSearchResults(query);
+      const data = await fetchPromptSearchResults(query, {
+        page: 1,
+        perPage: SEARCH_RESULTS_PER_PAGE
+      });
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
         : [];
       const promptRecords = toPromptRecords(normalizedPrompts);
 
       setPrompts(promptRecords);
+      setActiveSearchQuery(query);
+      setSearchPagination(data.pagination || null);
       setAppliedCategoryFilter(null);
 
       if (promptRecords.length > 0) {
@@ -518,7 +536,9 @@ export default function PromptSharePage() {
           variant: "empty"
         });
       }
-      setPromptCountMeta(`検索結果: ${promptRecords.length}件`);
+      setPromptCountMeta(
+        `検索結果: ${promptRecords.length}件 / ${Number(data.pagination?.total || promptRecords.length)}件`
+      );
     } catch (error) {
       console.error("検索エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
@@ -531,6 +551,43 @@ export default function PromptSharePage() {
       setIsPromptsLoading(false);
     }
   }, [loadPrompts, searchInput, toPromptRecords]);
+
+  const loadMoreSearchResults = useCallback(async () => {
+    const query = activeSearchQuery.trim();
+    const nextPage = Number(searchPagination?.page || 0) + 1;
+    if (!query || !searchPagination?.has_next || nextPage <= 1) {
+      return;
+    }
+
+    setIsLoadingMoreSearchResults(true);
+    try {
+      const data = await fetchPromptSearchResults(query, {
+        page: nextPage,
+        perPage: Number(searchPagination.per_page || SEARCH_RESULTS_PER_PAGE)
+      });
+      const normalizedPrompts = Array.isArray(data.prompts)
+        ? data.prompts.map(normalizePromptData)
+        : [];
+      const promptRecords = toPromptRecords(normalizedPrompts);
+      const nextPrompts = [...promptsRef.current, ...promptRecords];
+
+      setPrompts(nextPrompts);
+      setSearchPagination(data.pagination || null);
+      setPromptFeedback(null);
+      setPromptCountMeta(
+        `検索結果: ${nextPrompts.length}件 / ${Number(data.pagination?.total || nextPrompts.length)}件`
+      );
+    } catch (error) {
+      console.error("追加検索エラー:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      setPromptFeedback({
+        message: `追加読み込みに失敗しました: ${message}`,
+        variant: "error"
+      });
+    } finally {
+      setIsLoadingMoreSearchResults(false);
+    }
+  }, [activeSearchQuery, searchPagination, toPromptRecords]);
 
   const buildPromptShareUrl = useCallback((prompt: PromptRecord | null) => {
     const promptId = getPromptId(prompt);
@@ -1161,6 +1218,18 @@ export default function PromptSharePage() {
               <p id="promptCountMeta" className="prompt-count-meta">
                 {promptCountMeta}
               </p>
+              {hasMoreSearchResults ? (
+                <button
+                  type="button"
+                  className="prompt-load-more"
+                  onClick={() => {
+                    void loadMoreSearchResults();
+                  }}
+                  disabled={isLoadingMoreSearchResults}
+                >
+                  {isLoadingMoreSearchResults ? "読み込み中..." : "さらに読み込む"}
+                </button>
+              ) : null}
             </div>
 
             <div id="promptResults"></div>

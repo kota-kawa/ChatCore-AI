@@ -52,7 +52,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             response = asyncio.run(api_verify_registration_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("有効期限", payload["error"])
         self.assertNotIn("verification_code", session)
         self.assertNotIn("verification_code_issued_at", session)
@@ -75,7 +75,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             response = asyncio.run(api_verify_registration_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("試行回数", payload["error"])
         self.assertNotIn("verification_code", session)
         self.assertNotIn("verification_code_issued_at", session)
@@ -118,7 +118,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             response = asyncio.run(api_verify_login_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("有効期限", payload["error"])
         self.assertNotIn("login_verification_code", session)
         self.assertNotIn("login_verification_code_issued_at", session)
@@ -137,7 +137,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             response = asyncio.run(api_verify_login_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("試行回数", payload["error"])
         self.assertNotIn("login_verification_code", session)
         self.assertNotIn("login_verification_code_issued_at", session)
@@ -188,7 +188,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
                 response = asyncio.run(api_verify_login_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("ユーザーが存在しない", payload["error"])
         self.assertNotIn("login_verification_code", session)
         self.assertNotIn("login_temp_user_id", session)
@@ -266,7 +266,7 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
                 response = asyncio.run(api_verify_registration_code(request))
 
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 401)
         self.assertIn("ユーザーが存在しません", payload["error"])
         self.assertNotIn("verification_code", session)
         self.assertNotIn("temp_user_id", session)

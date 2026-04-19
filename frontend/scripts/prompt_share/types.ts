@@ -1,5 +1,14 @@
 export type PromptType = "text" | "image";
 
+export type PromptPagination = {
+  page?: number;
+  per_page?: number;
+  total?: number;
+  total_pages?: number;
+  has_next?: boolean;
+  has_prev?: boolean;
+};
+
 export type PromptData = {
   id?: string | number;
   title: string;
@@ -14,6 +23,14 @@ export type PromptData = {
   bookmarked?: boolean;
   saved_to_list?: boolean;
   created_at?: string;
+};
+
+export type PromptFeedResponse = {
+  status?: string;
+  prompts?: PromptData[];
+  pagination?: PromptPagination;
+  error?: string;
+  message?: string;
 };
 
 export type CurrentUserResponse = {
