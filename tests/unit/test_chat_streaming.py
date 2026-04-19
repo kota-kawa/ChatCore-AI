@@ -95,6 +95,30 @@ class _FakeRedis:
         return 1
 
 
+class _SilentPubSub:
+    def __init__(self):
+        self.channels = []
+        self.closed = False
+
+    def subscribe(self, channel):
+        self.channels.append(channel)
+
+    def get_message(self, timeout=0.0):
+        return None
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeRedisWithPubSub(_FakeRedis):
+    def __init__(self):
+        super().__init__()
+        self.pubsub_instance = _SilentPubSub()
+
+    def pubsub(self, ignore_subscribe_messages=True):
+        return self.pubsub_instance
+
+
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -727,6 +751,45 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('"text": "分散"', body)
         self.assertIn("event: done", body)
         self.assertIn('"response": "分散完了"', body)
+
+    def test_chat_generation_stream_times_out_stalled_distributed_job(self):
+        session = {"user_id": 90}
+        fake_redis = _FakeRedisWithPubSub()
+        service = ChatGenerationService(
+            redis_client_getter=lambda: fake_redis,
+            distributed_stream_idle_timeout_seconds=0.0,
+        )
+        job_key = build_generation_key(chat_room_id="room-stalled", user_id=90)
+        fake_redis.set(service._active_lock_key(job_key), "lock-token")
+
+        stream_request = build_request(
+            method="GET",
+            path="/api/chat_generation_stream",
+            session=session,
+            query_string=b"room_id=room-stalled",
+        )
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
+                stream_response = asyncio.run(
+                    chat_generation_stream(
+                        stream_request,
+                        chat_generation_service=service,
+                    )
+                )
+
+        self.assertIsInstance(stream_response, StreamingResponse)
+
+        async def _consume():
+            chunks = []
+            async for chunk in stream_response.body_iterator:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        body = asyncio.run(_consume()).decode("utf-8")
+        self.assertIn("event: error", body)
+        self.assertIn('"retryable": true', body)
+        self.assertIn("応答ストリームが一定時間更新されなかったため接続を終了しました。", body)
+        self.assertTrue(fake_redis.pubsub_instance.closed)
 
 
 if __name__ == "__main__":

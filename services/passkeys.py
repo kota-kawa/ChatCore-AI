@@ -8,13 +8,15 @@ from urllib.parse import urlsplit
 
 from fastapi import Request
 
-from .db import get_db_connection
+from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from .web import FRONTEND_URL
 
 DEFAULT_PASSKEY_RP_NAME = "Chat Core"
 PASSKEY_CHALLENGE_TTL_SECONDS = 300
 PASSKEY_REGISTRATION_SESSION_KEY = "passkey_registration"
 PASSKEY_AUTHENTICATION_SESSION_KEY = "passkey_authentication"
+DB_WRITE_MAX_ATTEMPTS = 3
+DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 def get_passkey_rp_name() -> str:
@@ -216,52 +218,61 @@ def create_passkey(
     normalized_aaguid = (aaguid or "").strip() or None
     normalized_device_type = (credential_device_type or "").strip() or None
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute(
-                """
-                INSERT INTO user_passkeys (
-                    user_id,
-                    credential_id,
-                    public_key,
-                    sign_count,
-                    aaguid,
-                    credential_device_type,
-                    credential_backed_up,
-                    label,
-                    last_used_at
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO user_passkeys (
+                        user_id,
+                        credential_id,
+                        public_key,
+                        sign_count,
+                        aaguid,
+                        credential_device_type,
+                        credential_backed_up,
+                        label,
+                        last_used_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    RETURNING id,
+                              credential_id,
+                              sign_count,
+                              aaguid,
+                              credential_device_type,
+                              credential_backed_up,
+                              label,
+                              created_at,
+                              last_used_at
+                    """,
+                    (
+                        user_id,
+                        credential_id,
+                        public_key,
+                        int(sign_count),
+                        normalized_aaguid,
+                        normalized_device_type,
+                        bool(credential_backed_up),
+                        normalized_label,
+                    ),
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-                RETURNING id,
-                          credential_id,
-                          sign_count,
-                          aaguid,
-                          credential_device_type,
-                          credential_backed_up,
-                          label,
-                          created_at,
-                          last_used_at
-                """,
-                (
-                    user_id,
-                    credential_id,
-                    public_key,
-                    int(sign_count),
-                    normalized_aaguid,
-                    normalized_device_type,
-                    bool(credential_backed_up),
-                    normalized_label,
-                ),
-            )
-            conn.commit()
-            row = cursor.fetchone()
-            return dict(row) if row else None
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+                conn.commit()
+                row = cursor.fetchone()
+                return dict(row) if row else None
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to create passkey after retry attempts.")
 
 
 def update_passkey_usage(
@@ -271,50 +282,69 @@ def update_passkey_usage(
     credential_backed_up: bool | None = None,
     credential_device_type: str | None = None,
 ) -> None:
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                UPDATE user_passkeys
-                   SET sign_count = %s,
-                       credential_backed_up = COALESCE(%s, credential_backed_up),
-                       credential_device_type = COALESCE(%s, credential_device_type),
-                       last_used_at = CURRENT_TIMESTAMP
-                 WHERE id = %s
-                """,
-                (
-                    int(sign_count),
-                    credential_backed_up,
-                    (credential_device_type or "").strip() or None,
-                    passkey_id,
-                ),
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    UPDATE user_passkeys
+                       SET sign_count = %s,
+                           credential_backed_up = COALESCE(%s, credential_backed_up),
+                           credential_device_type = COALESCE(%s, credential_device_type),
+                           last_used_at = CURRENT_TIMESTAMP
+                     WHERE id = %s
+                    """,
+                    (
+                        int(sign_count),
+                        credential_backed_up,
+                        (credential_device_type or "").strip() or None,
+                        passkey_id,
+                    ),
+                )
+                conn.commit()
+                return
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to update passkey usage after retry attempts.")
 
 
 def delete_passkey(user_id: int, passkey_id: int) -> bool:
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                DELETE FROM user_passkeys
-                 WHERE id = %s
-                   AND user_id = %s
-                """,
-                (passkey_id, user_id),
-            )
-            deleted = cursor.rowcount > 0
-            conn.commit()
-            return deleted
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    DELETE FROM user_passkeys
+                     WHERE id = %s
+                       AND user_id = %s
+                    """,
+                    (passkey_id, user_id),
+                )
+                deleted = cursor.rowcount > 0
+                conn.commit()
+                return deleted
+            except Error as exc:
+                rollback_connection(conn)
+                if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                raise
+            except BaseException:
+                rollback_connection(conn)
+                raise
+            finally:
+                cursor.close()
+
+    raise RuntimeError("Failed to delete passkey after retry attempts.")

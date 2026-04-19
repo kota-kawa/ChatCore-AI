@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
+DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
@@ -36,6 +37,15 @@ _TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 class ChatGenerationAlreadyRunningError(RuntimeError):
     pass
+
+
+class ChatGenerationStreamTimeoutError(RuntimeError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.payload = {
+            "message": message,
+            "retryable": True,
+        }
 
 
 @dataclass(frozen=True)
@@ -280,10 +290,17 @@ class ChatGenerationService:
         *,
         job_retention_seconds: int = JOB_RETENTION_SECONDS,
         active_job_lock_ttl_seconds: int = DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS,
+        distributed_stream_idle_timeout_seconds: float = (
+            DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS
+        ),
         redis_client_getter: Callable[[], Any | None] | None = None,
     ) -> None:
         self._job_retention_seconds = job_retention_seconds
         self._active_job_lock_ttl_seconds = max(active_job_lock_ttl_seconds, 1)
+        self._distributed_stream_idle_timeout_seconds = max(
+            float(distributed_stream_idle_timeout_seconds),
+            0.0,
+        )
         self._redis_client_getter = redis_client_getter
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
@@ -556,6 +573,7 @@ return 0
 
         channel = self._event_channel_name(job_key)
         pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+        idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
         try:
             pubsub.subscribe(channel)
 
@@ -563,6 +581,7 @@ return 0
                 cursor = max(cursor, event.sequence_id)
                 if event.event in _TERMINAL_EVENTS:
                     terminal_seen = True
+                idle_deadline = time.monotonic() + self._distributed_stream_idle_timeout_seconds
                 yield event
             if terminal_seen:
                 return
@@ -580,6 +599,9 @@ return 0
                         event = self._deserialize_event(raw_data)
                         if event is not None and event.sequence_id > cursor:
                             cursor = event.sequence_id
+                            idle_deadline = (
+                                time.monotonic() + self._distributed_stream_idle_timeout_seconds
+                            )
                             yield event
                             if event.event in _TERMINAL_EVENTS:
                                 return
@@ -590,11 +612,24 @@ return 0
                     for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
                         saw_new = True
                         cursor = max(cursor, event.sequence_id)
+                        idle_deadline = (
+                            time.monotonic() + self._distributed_stream_idle_timeout_seconds
+                        )
                         yield event
                         if event.event in _TERMINAL_EVENTS:
                             return
                     if not saw_new:
                         return
+                    continue
+
+                if time.monotonic() >= idle_deadline:
+                    logger.warning(
+                        "Timed out waiting for distributed chat generation events.",
+                        extra={"job_key": job_key, "after_sequence_id": after_sequence_id},
+                    )
+                    raise ChatGenerationStreamTimeoutError(
+                        "応答ストリームが一定時間更新されなかったため接続を終了しました。再試行してください。"
+                    )
         finally:
             try:
                 pubsub.close()

@@ -38,6 +38,13 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
 
 class SoftDeleteQueryTestCase(unittest.TestCase):
     def test_delete_task_marks_row_deleted_instead_of_hard_deleting(self):

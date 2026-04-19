@@ -131,27 +131,26 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
 def _update_user_profile(user_id, username, email, bio, avatar_url):
     # 入力されたプロフィール項目のみを users テーブルへ更新する
     # Update users table with submitted profile fields.
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            UPDATE users
-               SET username = %s,
-                   email = %s,
-                   bio = %s,
-                   avatar_url = COALESCE(%s, avatar_url)
-             WHERE id = %s
-            """,
-            (username, email, bio, avatar_url, user_id),
-        )
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        cursor.close()
-        conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE users
+                   SET username = %s,
+                       email = %s,
+                       bio = %s,
+                       avatar_url = COALESCE(%s, avatar_url)
+                 WHERE id = %s
+                """,
+                (username, email, bio, avatar_url, user_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
 
 # --- プロフィール取得 ---
