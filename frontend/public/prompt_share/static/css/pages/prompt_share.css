@@ -820,7 +820,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   visibility: hidden;
   transform: translateY(-2px);
   transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
-  z-index: 45;
+  z-index: var(--z-dropdown, 30);
 }
 
 .prompt-share-page .prompt-actions-dropdown.is-open {
@@ -858,7 +858,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   justify-content: center;
   position: fixed;
   inset: 0;
-  z-index: 12000;
+  z-index: var(--z-modal-priority, 85);
   background:
     radial-gradient(circle at top, rgba(79, 156, 245, 0.14), transparent 34%),
     rgba(18, 22, 30, 0.58);
@@ -1519,7 +1519,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 1000;
+  z-index: var(--z-floating-action-menu, 60);
   transition:
     transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -1633,7 +1633,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
 @media (max-width: 768px) {
   .prompt-share-page #auth-buttons {
-    z-index: 9999 !important;
+    z-index: var(--z-floating-controls, 65) !important;
   }
 
   .prompt-share-page #auth-buttons .auth-btn {

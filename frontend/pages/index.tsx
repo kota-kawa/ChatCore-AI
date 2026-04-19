@@ -59,7 +59,7 @@ export default function HomePage() {
     position: "fixed" as const,
     top: "max(10px, env(safe-area-inset-top, 0px))",
     right: "max(10px, env(safe-area-inset-right, 0px))",
-    zIndex: 2000
+    zIndex: "var(--z-floating-controls)"
   };
 
   return (

@@ -65,7 +65,7 @@ tpl.innerHTML = `
       position: fixed;
       top: 10px;
       right: 10px;
-      z-index: 10000;
+      z-index: var(--z-user-menu, 70);
       font-family: inherit;
       user-select: none;
       --cc-user-btn-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);

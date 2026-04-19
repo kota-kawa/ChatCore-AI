@@ -55,7 +55,7 @@
   justify-content: space-between;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   position: relative;
-  z-index: 10;
+  z-index: var(--z-chat-header, 50);
   flex-shrink: 0;
 }
 
@@ -137,7 +137,7 @@
     0 4px 16px rgba(0, 0, 0, 0.12),
     0 1px 4px rgba(0, 0, 0, 0.08);
   min-width: 240px;
-  z-index: 1200;
+  z-index: var(--z-dropdown, 30);
   overflow: hidden;
 }
 
@@ -343,7 +343,7 @@
     left: 0.75rem;
     display: inline-flex;
     color: var(--success-strong, #0f5132) !important;
-    z-index: 1400;
+    z-index: var(--z-chat-sidebar-toggle, 44);
     font-size: 1.3rem;
   }
 
@@ -360,7 +360,7 @@
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
     transform: translateX(-104%);
     transition: transform var(--transition-sidebar, 0.28s cubic-bezier(0.32, 0.72, 0, 1));
-    z-index: 1500;
+    z-index: var(--z-chat-sidebar, 46);
   }
 
   .sidebar.open {
@@ -376,7 +376,7 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--transition-normal, 0.2s ease);
-    z-index: 1490;
+    z-index: var(--z-chat-sidebar-overlay, 45);
   }
 
   body.chat-page.sidebar-visible .chat-main::after {
@@ -412,7 +412,7 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 1600;
+    z-index: var(--z-chat-header, 50);
     box-sizing: border-box;
     padding:
       calc(0.35rem + env(safe-area-inset-top, 0px))

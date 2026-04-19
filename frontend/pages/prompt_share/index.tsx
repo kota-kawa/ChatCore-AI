@@ -1059,7 +1059,7 @@ export default function PromptSharePage() {
             position: "fixed",
             top: 10,
             right: 10,
-            zIndex: 2000
+            zIndex: "var(--z-floating-controls)"
           }}
         >
           <button

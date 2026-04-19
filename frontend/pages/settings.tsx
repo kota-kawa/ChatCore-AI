@@ -13,6 +13,7 @@ import "../scripts/core/csrf";
 import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from "../scripts/core/passkeys";
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
+import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
 import {
   parseMyPromptsResponse,
@@ -1020,7 +1021,7 @@ export default function UserSettingsPage() {
                   <h3 className="section-title">My Prompts</h3>
                 </div>
 
-                {myPromptsLoading ? <p>読み込み中...</p> : null}
+                {myPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
                 {!myPromptsLoading && myPromptsError ? <p>{myPromptsError}</p> : null}
                 {!myPromptsLoading && !myPromptsError && myPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
 
@@ -1037,7 +1038,7 @@ export default function UserSettingsPage() {
                   <h3 className="section-title">Prompt List</h3>
                 </div>
 
-                {promptListLoading ? <p>読み込み中...</p> : null}
+                {promptListLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
                 {!promptListLoading && promptListError ? <p>{promptListError}</p> : null}
                 {!promptListLoading && !promptListError && promptListEntries.length === 0 ? (
                   <p>プロンプトリストは存在しません。</p>
