@@ -9,6 +9,7 @@
   min-height: 0;
   position: relative;
   background: var(--surface-primary, #fff);
+  overflow: hidden;
 }
 
 /* カスタム要素がフレックスレイアウトで場所を取らないようにする */

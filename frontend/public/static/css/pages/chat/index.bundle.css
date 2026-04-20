@@ -684,6 +684,19 @@ body.chat-page .chat-share-sns a:hover {
     width: 100%;
   }
 
+  .chat-page-stage[data-view="launching"],
+  .chat-page-stage[data-view="chat"] {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chat-page-stage[data-view="launching"] #chat-container,
+  .chat-page-stage[data-view="chat"] #chat-container {
+    height: 100%;
+  }
+
   .chat-page-stage::after {
     inset: 0;
     border-radius: 0;

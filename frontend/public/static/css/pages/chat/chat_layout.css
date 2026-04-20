@@ -401,27 +401,27 @@
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   #chat-container {
-    --mobile-chat-header-height: calc(3.25rem + env(safe-area-inset-top, 0px));
     height: 100vh;
     height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
     border-radius: 0;
     border: none;
     box-shadow: none;
-    padding-top: var(--mobile-chat-header-height);
+    box-sizing: border-box;
   }
 
   .chat-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: var(--z-chat-header, 50);
     box-sizing: border-box;
     padding:
       calc(0.35rem + env(safe-area-inset-top, 0px))
       calc(1rem + env(safe-area-inset-right, 0px))
       0.6rem
       calc(1rem + env(safe-area-inset-left, 0px));
+  }
+
+  .chat-main {
+    min-height: 0;
   }
 
   /* 右上固定の user-icon と重ならないように共有ボタン分の余白を確保 */
