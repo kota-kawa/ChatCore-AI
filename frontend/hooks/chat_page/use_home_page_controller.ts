@@ -710,8 +710,10 @@ export function useHomePageController() {
   }, []);
 
   const switchChatRoom = useCallback(
-    (roomId: string, roomMode?: ChatRoomMode) => {
-      if (currentRoomIdRef.current === roomId) {
+    (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
+      const forceReload = options?.forceReload === true;
+
+      if (currentRoomIdRef.current === roomId && !forceReload) {
         setPageViewState("chat");
         setSidebarOpen(false);
         setOpenRoomActionsFor(null);
@@ -719,7 +721,9 @@ export function useHomePageController() {
       }
 
       const nextRoom = chatRooms.find((room) => room.id === roomId);
-      persistCurrentRoomId(roomId);
+      if (currentRoomIdRef.current !== roomId) {
+        persistCurrentRoomId(roomId);
+      }
       setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
       setPageViewState("chat");
       setSidebarOpen(false);
@@ -1065,7 +1069,7 @@ export function useHomePageController() {
       (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
 
     if (preferredLoadedRoom) {
-      switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode);
+      switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
       return;
     }
 
@@ -1092,7 +1096,7 @@ export function useHomePageController() {
       setChatRooms(rooms);
 
       if (preferredFetchedRoom) {
-        switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode);
+        switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
         return;
       }
 
