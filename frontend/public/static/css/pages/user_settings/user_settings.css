@@ -136,10 +136,11 @@
 }
 
 .prompt-card {
+  --prompt-card-radius: 16px;
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: var(--prompt-card-radius);
   border: 1px solid rgba(15, 23, 42, 0.06);
   box-shadow: 
     0 1px 3px rgba(0, 0, 0, 0.05),
@@ -147,6 +148,8 @@
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   height: 100%;
+  isolation: isolate;
+  background-clip: padding-box;
 }
 
 .prompt-card:hover {
@@ -272,9 +275,11 @@
 }
 
 .prompt-card__footer {
+  margin-top: auto;
   padding: 0.85rem 1.25rem;
-  background: #fcfdfe;
+  background: linear-gradient(180deg, rgba(252, 253, 254, 0.94) 0%, rgba(247, 250, 252, 0.98) 100%);
   border-top: 1px solid rgba(15, 23, 42, 0.04);
+  border-radius: 0 0 calc(var(--prompt-card-radius) - 1px) calc(var(--prompt-card-radius) - 1px);
 }
 
 .prompt-card__actions {

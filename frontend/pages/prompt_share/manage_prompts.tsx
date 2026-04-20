@@ -75,32 +75,36 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
 
   return (
     <article className="prompt-card" data-prompt-id={promptId}>
-      <h3 title={prompt.title}>{truncatedTitle}</h3>
-      <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
-      <div className="meta">
-        <span>カテゴリ: {prompt.category || "未設定"}</span>
-        <br />
-        <span>投稿日: {toDisplayDate(prompt.createdAt)}</span>
+      <div className="prompt-card__main">
+        <h3 title={prompt.title}>{truncatedTitle}</h3>
+        <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
+        <div className="meta">
+          <span>カテゴリ: {prompt.category || "未設定"}</span>
+          <br />
+          <span>投稿日: {toDisplayDate(prompt.createdAt)}</span>
+        </div>
       </div>
       <p className="d-none input-examples">{prompt.inputExamples}</p>
       <p className="d-none output-examples">{prompt.outputExamples}</p>
-      <div className="btn-group">
-        <button
-          type="button"
-          className="btn btn-sm btn-warning edit-btn"
-          data-id={promptId}
-          onClick={() => onEdit(prompt)}
-        >
-          <i className="bi bi-pencil"></i> 編集
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm btn-danger delete-btn"
-          data-id={promptId}
-          onClick={() => onDelete(prompt)}
-        >
-          <i className="bi bi-trash"></i> 削除
-        </button>
+      <div className="prompt-card__footer">
+        <div className="btn-group">
+          <button
+            type="button"
+            className="btn btn-sm btn-warning edit-btn"
+            data-id={promptId}
+            onClick={() => onEdit(prompt)}
+          >
+            <i className="bi bi-pencil"></i> 編集
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger delete-btn"
+            data-id={promptId}
+            onClick={() => onDelete(prompt)}
+          >
+            <i className="bi bi-trash"></i> 削除
+          </button>
+        </div>
       </div>
     </article>
   );

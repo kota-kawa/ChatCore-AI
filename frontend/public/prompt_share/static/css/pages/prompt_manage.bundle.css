@@ -85,9 +85,10 @@ body.prompt-manage-page,
 /* 6. カードデザイン              */
 /* ─────────────────────────── */
 .prompt-card {
+  --prompt-card-radius: 8px;
   background: var(--ps-card-bg);
   border: 1px solid var(--ps-border-color);
-  border-radius: 8px;
+  border-radius: var(--prompt-card-radius);
   padding: 1.5rem;
   box-shadow: var(--ps-shadow);
   transition: transform 0.3s ease,
@@ -95,6 +96,9 @@ body.prompt-manage-page,
               border-color 0.3s ease;
   position: relative;
   cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  background-clip: padding-box;
 }
 .prompt-card:hover {
   transform: translateY(-5px);
@@ -246,11 +250,24 @@ body.prompt-manage-page,
   flex-direction: column;
   /* グリッドの行いっぱいに伸ばす */
   height: 100%;
+  padding: 0;
+}
+
+.prompt-card__main {
+  padding: 1.5rem 1.5rem 0;
+}
+
+.prompt-card__footer {
+  margin-top: auto;
+  padding: 1rem 1.5rem 1.2rem;
+  background: linear-gradient(180deg, rgba(250, 252, 251, 0.92) 0%, rgba(245, 249, 247, 0.98) 100%);
+  border-top: 1px solid rgba(17, 153, 142, 0.08);
+  border-radius: 0 0 calc(var(--prompt-card-radius) - 1px) calc(var(--prompt-card-radius) - 1px);
 }
 
 .prompt-card .btn-group {
   /* ボタン群を常にカードの下端に押し出す */
-  margin-top: auto;
+  margin-top: 0;
 }
 
 
@@ -268,7 +285,13 @@ body.prompt-manage-page,
     width: 100%;
   }
   .prompt-card {
-    padding: 1.2rem;
+    padding: 0;
+  }
+  .prompt-card__main {
+    padding: 1.2rem 1.2rem 0;
+  }
+  .prompt-card__footer {
+    padding: 0.95rem 1.2rem 1.1rem;
   }
   .btn-group {
     gap: 0.75rem;
