@@ -1037,8 +1037,10 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .prompt-share-page .prompt-action-btn:focus-visible,
 .prompt-share-page .meatball-menu:focus-visible,
 .prompt-share-page .close-btn:focus-visible,
+.prompt-share-page .prompt-share-dialog__close:focus-visible,
 .prompt-share-page .new-prompt-btn:focus-visible,
-.prompt-share-page .submit-btn:focus-visible {
+.prompt-share-page .submit-btn:focus-visible,
+.prompt-share-page .prompt-share-dialog__sns a:focus-visible {
   outline: 3px solid rgba(26, 115, 232, 0.35);
   outline-offset: 2px;
 }
@@ -1790,7 +1792,15 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 #promptShareModal .post-modal-content {
-  width: min(92%, 560px);
+  width: min(92%, 620px);
+  border-radius: 24px;
+  border: 1px solid rgba(181, 208, 239, 0.42);
+  background:
+    radial-gradient(circle at top right, rgba(110, 176, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(246, 250, 255, 0.965) 100%);
+  box-shadow:
+    0 32px 80px rgba(18, 24, 34, 0.28),
+    0 12px 30px rgba(79, 156, 245, 0.14);
 }
 
 .prompt-share-page .close-btn {
@@ -1894,9 +1904,54 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-dialog {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.prompt-share-dialog__close {
+  position: absolute;
+  top: 0.95rem;
+  right: 0.95rem;
+  z-index: 2;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 203, 228, 0.86);
+  background: rgba(255, 255, 255, 0.92);
+  color: #5f7288;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(32, 33, 36, 0.12);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.prompt-share-dialog__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.prompt-share-dialog__close:hover {
+  transform: translateY(-1px);
+  border-color: #b4c9e3;
+  background: #ffffff;
+  color: var(--ps-text-strong);
+}
+
+.prompt-share-dialog__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-right: 3.25rem;
+}
+
+.prompt-share-dialog__header h2 {
+  margin: 0;
 }
 
 .prompt-share-dialog__lead {
@@ -1906,15 +1961,22 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   line-height: 1.65;
 }
 
+.prompt-share-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
 .prompt-share-dialog__row input {
   width: 100%;
   min-height: 48px;
-  border-radius: 14px;
-  border: 1px solid #dce7f3;
-  background: #f8fbff;
+  border-radius: 16px;
+  border: 1px solid rgba(189, 211, 234, 0.9);
+  background: rgba(248, 251, 255, 0.94);
   color: #24476e;
   font: inherit;
-  padding: 0.8rem 0.95rem;
+  padding: 0.9rem 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .prompt-share-dialog__status {
@@ -1961,18 +2023,18 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   justify-content: center;
   gap: 0.45rem;
   min-height: 46px;
-  border-radius: 14px;
-  border: 1px solid #dce7f3;
-  background: #f8fbff;
+  border-radius: 16px;
+  border: 1px solid rgba(189, 211, 234, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   color: #28517b;
   text-decoration: none;
   font-size: 0.9rem;
-  font-weight: 600;
-  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  font-weight: 700;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
 }
 
 .prompt-share-dialog__sns a:hover {
-  background: #e9f3ff;
+  background: #ffffff;
   border-color: #9ec8f0;
   transform: translateY(-1px);
 }
@@ -2871,7 +2933,15 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     grid-template-columns: 1fr;
   }
 
-  .prompt-share-page .close-btn {
+  .prompt-share-dialog {
+    padding: 1.2rem;
+  }
+
+  .prompt-share-dialog__header {
+    padding-right: 2.7rem;
+  }
+
+  .prompt-share-dialog__close {
     width: 2.05rem;
     height: 2.05rem;
     top: 0.8rem;

@@ -1996,72 +1996,51 @@ export default function PromptSharePage() {
           <div className="post-modal-content prompt-share-dialog" tabIndex={-1}>
             <button
               type="button"
-              className="close-btn"
+              className="prompt-share-dialog__close"
               id="closePromptShareModal"
               aria-label="共有モーダルを閉じる"
               onClick={() => {
                 closeModal("share");
               }}
             >
-              &times;
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6 16.9 4.29z" />
+              </svg>
             </button>
 
-            <h2 id="promptShareModalTitle">プロンプトを共有</h2>
-            <p className="prompt-share-dialog__lead">
-              このプロンプト専用のURLをコピーしたり、そのまま共有できます。
-            </p>
+            <header className="prompt-share-dialog__header">
+              <h2 id="promptShareModalTitle">プロンプトを共有</h2>
+              <p className="prompt-share-dialog__lead">
+                このプロンプト専用のURLをコピーしたり、そのまま共有できます。
+              </p>
+            </header>
 
-            <div className="prompt-share-dialog__row">
-              <input
-                type="text"
-                id="prompt-share-link-input"
-                readOnly
-                placeholder="共有リンクを準備しています"
-                value={shareUrl}
-              />
-            </div>
+            <div className="prompt-share-dialog__body">
+              <div className="prompt-share-dialog__row">
+                <input
+                  type="text"
+                  id="prompt-share-link-input"
+                  readOnly
+                  placeholder="共有リンクを準備しています"
+                  value={shareUrl}
+                />
+              </div>
 
-            <p
-              id="prompt-share-status"
-              className={`prompt-share-dialog__status${shareStatus.isError ? " prompt-share-dialog__status--error" : ""}`}
-            >
-              {shareStatus.text}
-            </p>
-
-            <div className="prompt-share-dialog__actions">
-              <button
-                type="button"
-                id="prompt-share-copy-btn"
-                className="submit-btn prompt-share-icon-btn"
-                aria-label="リンクをコピー"
-                title="リンクをコピー"
-                ref={promptShareCopyButtonRef}
-                disabled={shareActionLoading}
-                onClick={async () => {
-                  const currentShareUrl = shareUrl.trim();
-                  if (!currentShareUrl) {
-                    setPromptShareStatus("先に共有リンクを表示してください。", true);
-                    return;
-                  }
-
-                  try {
-                    await copyTextToClipboard(currentShareUrl);
-                    setPromptShareStatus("リンクをコピーしました。");
-                  } catch (error) {
-                    setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
-                  }
-                }}
+              <p
+                id="prompt-share-status"
+                className={`prompt-share-dialog__status${shareStatus.isError ? " prompt-share-dialog__status--error" : ""}`}
               >
-                <i className="bi bi-files" aria-hidden="true"></i>
-              </button>
+                {shareStatus.text}
+              </p>
 
-              {supportsNativeShare ? (
+              <div className="prompt-share-dialog__actions">
                 <button
                   type="button"
-                  id="prompt-share-web-btn"
+                  id="prompt-share-copy-btn"
                   className="submit-btn prompt-share-icon-btn"
-                  aria-label="端末で共有"
-                  title="端末で共有"
+                  aria-label="リンクをコピー"
+                  title="リンクをコピー"
+                  ref={promptShareCopyButtonRef}
                   disabled={shareActionLoading}
                   onClick={async () => {
                     const currentShareUrl = shareUrl.trim();
@@ -2070,54 +2049,81 @@ export default function PromptSharePage() {
                       return;
                     }
 
-                    if (typeof navigator.share !== "function") {
-                      setPromptShareStatus("このブラウザはネイティブ共有に対応していません。", true);
-                      return;
-                    }
-
                     try {
-                      await navigator.share({
-                        title: PROMPT_SHARE_TITLE,
-                        text: PROMPT_SHARE_TEXT,
-                        url: currentShareUrl
-                      });
-                      setPromptShareStatus("共有シートを開きました。");
+                      await copyTextToClipboard(currentShareUrl);
+                      setPromptShareStatus("リンクをコピーしました。");
                     } catch (error) {
-                      if (error instanceof Error && error.name === "AbortError") {
-                        return;
-                      }
                       setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
                     }
                   }}
                 >
-                  <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                  <i className="bi bi-files" aria-hidden="true"></i>
                 </button>
-              ) : null}
-            </div>
 
-            <div className="prompt-share-dialog__sns">
-              <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
-                <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
-                  ></path>
-                </svg>
-                <span>X</span>
-              </a>
-              <a id="prompt-share-sns-line" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line}>
-                <i className="bi bi-chat-dots"></i>
-                <span>LINE</span>
-              </a>
-              <a
-                id="prompt-share-sns-facebook"
-                target="_blank"
-                rel="noopener noreferrer"
-                href={shareSnsLinks.facebook}
-              >
-                <i className="bi bi-facebook"></i>
-                <span>Facebook</span>
-              </a>
+                {supportsNativeShare ? (
+                  <button
+                    type="button"
+                    id="prompt-share-web-btn"
+                    className="submit-btn prompt-share-icon-btn"
+                    aria-label="端末で共有"
+                    title="端末で共有"
+                    disabled={shareActionLoading}
+                    onClick={async () => {
+                      const currentShareUrl = shareUrl.trim();
+                      if (!currentShareUrl) {
+                        setPromptShareStatus("先に共有リンクを表示してください。", true);
+                        return;
+                      }
+
+                      if (typeof navigator.share !== "function") {
+                        setPromptShareStatus("このブラウザはネイティブ共有に対応していません。", true);
+                        return;
+                      }
+
+                      try {
+                        await navigator.share({
+                          title: PROMPT_SHARE_TITLE,
+                          text: PROMPT_SHARE_TEXT,
+                          url: currentShareUrl
+                        });
+                        setPromptShareStatus("共有シートを開きました。");
+                      } catch (error) {
+                        if (error instanceof Error && error.name === "AbortError") {
+                          return;
+                        }
+                        setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
+                      }
+                    }}
+                  >
+                    <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="prompt-share-dialog__sns">
+                <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
+                  <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
+                    ></path>
+                  </svg>
+                  <span>X</span>
+                </a>
+                <a id="prompt-share-sns-line" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line}>
+                  <i className="bi bi-chat-dots"></i>
+                  <span>LINE</span>
+                </a>
+                <a
+                  id="prompt-share-sns-facebook"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  href={shareSnsLinks.facebook}
+                >
+                  <i className="bi bi-facebook"></i>
+                  <span>Facebook</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
