@@ -266,7 +266,7 @@ export function ChatMainSection() {
             ref={chatMessagesRef}
             aria-busy={isGenerating || isChatLaunching ? "true" : undefined}
           >
-            {isChatLaunching && (
+            {isChatLaunching ? (
               <div className="chat-launch-placeholder" role="status" aria-live="polite">
                 <div className="chat-launch-placeholder__eyebrow">Preparing chat</div>
                 <div className="chat-launch-placeholder__title">
@@ -284,76 +284,78 @@ export function ChatMainSection() {
                   </div>
                 </div>
               </div>
-            )}
+            ) : (
+              <>
+                {historyHasMore && historyNextBeforeId !== null && (
+                  <button
+                    type="button"
+                    className="chat-history-load-more-btn"
+                    disabled={isLoadingOlder}
+                    onClick={() => {
+                      void loadOlderChatHistory();
+                    }}
+                  >
+                    {isLoadingOlder ? "読み込み中..." : "過去のメッセージを読み込む"}
+                  </button>
+                )}
 
-            {historyHasMore && historyNextBeforeId !== null && (
-              <button
-                type="button"
-                className="chat-history-load-more-btn"
-                disabled={isLoadingOlder}
-                onClick={() => {
-                  void loadOlderChatHistory();
-                }}
-              >
-                {isLoadingOlder ? "読み込み中..." : "過去のメッセージを読み込む"}
-              </button>
-            )}
+                {messages.map((message) => {
+                  if (message.sender === "thinking") {
+                    return (
+                      <div key={message.id} className="message-wrapper bot-message-wrapper thinking-message-wrapper">
+                        <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
+                          <ThinkingConstellation />
+                        </div>
+                      </div>
+                    );
+                  }
 
-            {messages.map((message) => {
-              if (message.sender === "thinking") {
-                return (
-                  <div key={message.id} className="message-wrapper bot-message-wrapper thinking-message-wrapper">
-                    <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
-                      <ThinkingConstellation />
-                    </div>
-                  </div>
-                );
-              }
+                  if (message.sender === "user") {
+                    return (
+                      <div key={message.id} className="message-wrapper user-message-wrapper">
+                        <div className="user-message">
+                          <UserMessageHtml text={message.text} />
+                        </div>
+                        <div className="message-actions">
+                          <CopyActionButton
+                            getText={() => {
+                              return message.text;
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
 
-              if (message.sender === "user") {
-                return (
-                  <div key={message.id} className="message-wrapper user-message-wrapper">
-                    <div className="user-message">
-                      <UserMessageHtml text={message.text} />
-                    </div>
-                    <div className="message-actions">
-                      <CopyActionButton
-                        getText={() => {
-                          return message.text;
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={message.id}
-                  className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
-                >
-                  <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
-                    <BotMessageHtml text={message.text} />
-                  </div>
-                  {!message.streaming && (
-                    <div className="message-actions">
-                      <CopyActionButton
-                        getText={() => {
-                          return message.text;
-                        }}
-                      />
-                      {!message.error && (
-                        <MemoSaveActionButton
-                          getText={() => {
-                            return message.text;
-                          }}
-                        />
+                  return (
+                    <div
+                      key={message.id}
+                      className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
+                    >
+                      <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
+                        <BotMessageHtml text={message.text} />
+                      </div>
+                      {!message.streaming && (
+                        <div className="message-actions">
+                          <CopyActionButton
+                            getText={() => {
+                              return message.text;
+                            }}
+                          />
+                          {!message.error && (
+                            <MemoSaveActionButton
+                              getText={() => {
+                                return message.text;
+                              }}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </>
+            )}
           </div>
 
           <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
