@@ -9,6 +9,7 @@ export function useHomePageUiState() {
   const [authResolved, setAuthResolved] = useState(false);
   const [pageViewState, setPageViewState] = useState<HomePageViewState>("setup");
   const [setupInfo, setSetupInfo] = useState("");
+  const [temporaryModeEnabled, setTemporaryModeEnabled] = useState(false);
 
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [chatHeaderModelMenuOpen, setChatHeaderModelMenuOpen] = useState(false);
@@ -41,6 +42,8 @@ export function useHomePageUiState() {
     isChatLaunching,
     setupInfo,
     setSetupInfo,
+    temporaryModeEnabled,
+    setTemporaryModeEnabled,
     modelMenuOpen,
     setModelMenuOpen,
     chatHeaderModelMenuOpen,

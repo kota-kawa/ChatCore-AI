@@ -11,6 +11,7 @@ type HomePageUiContextValue = Pick<
   | "isSetupVisible"
   | "isChatLaunching"
   | "setupInfo"
+  | "temporaryModeEnabled"
   | "selectedModel"
   | "modelMenuOpen"
   | "selectedModelLabel"
@@ -19,6 +20,7 @@ type HomePageUiContextValue = Pick<
   | "chatHeaderModelMenuOpen"
   | "chatHeaderModelSelectRef"
   | "setSetupInfo"
+  | "setTemporaryModeEnabled"
   | "setSelectedModel"
   | "setModelMenuOpen"
   | "setChatHeaderModelMenuOpen"
@@ -54,6 +56,7 @@ type HomePageChatContextValue = Pick<
   | "sidebarOpen"
   | "chatRooms"
   | "currentRoomId"
+  | "currentRoomMode"
   | "openRoomActionsFor"
   | "historyHasMore"
   | "historyNextBeforeId"
@@ -92,6 +95,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     isSetupVisible: controller.isSetupVisible,
     isChatLaunching: controller.isChatLaunching,
     setupInfo: controller.setupInfo,
+    temporaryModeEnabled: controller.temporaryModeEnabled,
     selectedModel: controller.selectedModel,
     modelMenuOpen: controller.modelMenuOpen,
     selectedModelLabel: controller.selectedModelLabel,
@@ -100,6 +104,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     chatHeaderModelMenuOpen: controller.chatHeaderModelMenuOpen,
     chatHeaderModelSelectRef: controller.chatHeaderModelSelectRef,
     setSetupInfo: controller.setSetupInfo,
+    setTemporaryModeEnabled: controller.setTemporaryModeEnabled,
     setSelectedModel: controller.setSelectedModel,
     setModelMenuOpen: controller.setModelMenuOpen,
     setChatHeaderModelMenuOpen: controller.setChatHeaderModelMenuOpen,
@@ -133,6 +138,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     sidebarOpen: controller.sidebarOpen,
     chatRooms: controller.chatRooms,
     currentRoomId: controller.currentRoomId,
+    currentRoomMode: controller.currentRoomMode,
     openRoomActionsFor: controller.openRoomActionsFor,
     historyHasMore: controller.historyHasMore,
     historyNextBeforeId: controller.historyNextBeforeId,

@@ -64,9 +64,9 @@ def _resolve_auth_limit_service(
     return get_auth_limit_service(request)
 
 
-def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
-    # 認証ユーザーのチャットルーム一覧を新しい順で取得する
-    # Fetch authenticated user's chat rooms ordered by newest first.
+def _fetch_persisted_user_rooms(user_id: int) -> list[dict[str, Any]]:
+    # 永続保存されたチャットルーム一覧のみを取得する
+    # Fetch only persisted chat rooms ordered by newest first.
     conn = None
     cursor = None
     try:
@@ -76,6 +76,7 @@ def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
             SELECT id, title, COALESCE(mode, 'normal'), created_at
             FROM chat_rooms
             WHERE user_id = %s
+              AND COALESCE(mode, 'normal') <> 'temporary'
             ORDER BY created_at DESC
         """
         cursor.execute(query, (user_id,))
@@ -96,6 +97,45 @@ def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
             cursor.close()
         if conn is not None:
             conn.close()
+
+
+def _fetch_temporary_user_rooms(user_id: int) -> list[dict[str, Any]]:
+    temporary_sid = get_temporary_user_store_key(user_id)
+    rooms = ephemeral_store.list_rooms(temporary_sid)
+    return [
+        {
+            "id": str(room.get("id") or ""),
+            "title": str(room.get("title") or "新規チャット"),
+            "mode": "temporary",
+            "created_at": str(room.get("created_at") or ""),
+        }
+        for room in rooms
+        if room.get("id")
+    ]
+
+
+def _sort_rooms_newest_first(rooms: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rooms,
+        key=lambda room: str(room.get("created_at") or ""),
+        reverse=True,
+    )
+
+
+def _resolve_authenticated_room_mode(
+    user_id: int,
+    room_id: str,
+    forbidden_message: str,
+) -> tuple[str | None, Any]:
+    temporary_sid = get_temporary_user_store_key(user_id)
+    if ephemeral_store.room_exists(temporary_sid, room_id):
+        return "temporary", None
+
+    owner_result = validate_room_owner(room_id, user_id, forbidden_message)
+    legacy_response = _legacy_error_response(owner_result)
+    if legacy_response is not None:
+        return None, legacy_response
+    return str(owner_result or "normal"), None
 
 
 def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
@@ -163,14 +203,15 @@ async def new_chat_room(
 
     session = request.session
     if "user_id" in session:
-        # ログインユーザーの場合はDBに保存（利用回数制限なし）
-        # Persist for authenticated users in DB without daily free limit.
+        # ログインユーザーは通常ルームだけ DB 永続化し、temporary は一時ストアだけで扱う
+        # Persist only normal rooms for authenticated users; keep temporary rooms ephemeral.
         user_id = session["user_id"]
         try:
-            await run_blocking(create_chat_room_in_db, room_id, user_id, title, mode)
             if mode == "temporary":
                 temporary_sid = get_temporary_user_store_key(user_id)
                 await run_blocking(ephemeral_store.create_room, temporary_sid, room_id, title)
+            else:
+                await run_blocking(create_chat_room_in_db, room_id, user_id, title, mode)
             return jsonify(
                 {
                     "message": "チャットルームが作成されました。",
@@ -223,8 +264,9 @@ async def get_chat_rooms(request: Request):
         # Authenticated users read room list from DB.
         user_id = session["user_id"]
         try:
-            rooms = await run_blocking(_fetch_user_rooms, user_id)
-            return jsonify({"rooms": rooms})
+            persisted_rooms = await run_blocking(_fetch_persisted_user_rooms, user_id)
+            temporary_rooms = await run_blocking(_fetch_temporary_user_rooms, user_id)
+            return jsonify({"rooms": _sort_rooms_newest_first([*temporary_rooms, *persisted_rooms])})
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -256,16 +298,22 @@ async def delete_chat_room(request: Request):
     session = request.session
     if "user_id" in session:
         try:
-            room_mode = await run_blocking(
-                validate_room_owner,
-                room_id,
+            room_mode, legacy_response = await run_blocking(
+                _resolve_authenticated_room_mode,
                 session["user_id"],
+                room_id,
                 "他ユーザーのチャットルームは削除できません",
             )
-            response_payload = await run_blocking(_delete_room_for_user, room_id, session["user_id"])
+            if legacy_response is not None:
+                return legacy_response
             if room_mode == "temporary":
                 temporary_sid = get_temporary_user_store_key(session["user_id"])
-                await run_blocking(ephemeral_store.delete_room, temporary_sid, room_id)
+                deleted = await run_blocking(ephemeral_store.delete_room, temporary_sid, room_id)
+                if not deleted:
+                    return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+                return jsonify({"message": "未保存チャットを削除しました"}, status_code=200)
+
+            response_payload = await run_blocking(_delete_room_for_user, room_id, session["user_id"])
             return jsonify(response_payload, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -303,20 +351,22 @@ async def rename_chat_room(request: Request):
     session = request.session
     if "user_id" in session:
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
-                room_id,
+            room_mode, legacy_response = await run_blocking(
+                _resolve_authenticated_room_mode,
                 session["user_id"],
+                room_id,
                 "他ユーザーのチャットルームは変更できません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
 
-            await run_blocking(rename_chat_room_in_db, room_id, new_title)
-            if owner_result == "temporary":
+            if room_mode == "temporary":
                 temporary_sid = get_temporary_user_store_key(session["user_id"])
-                await run_blocking(ephemeral_store.rename_room, temporary_sid, room_id, new_title)
+                renamed = await run_blocking(ephemeral_store.rename_room, temporary_sid, room_id, new_title)
+                if not renamed:
+                    return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
+            else:
+                await run_blocking(rename_chat_room_in_db, room_id, new_title)
             return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -353,16 +403,15 @@ async def share_chat_room(request: Request):
 
     room_id = payload.room_id
     try:
-        owner_result = await run_blocking(
-            validate_room_owner,
-            room_id,
+        room_mode, legacy_response = await run_blocking(
+            _resolve_authenticated_room_mode,
             user_id,
+            room_id,
             "他ユーザーのチャットルームは共有できません",
         )
-        legacy_response = _legacy_error_response(owner_result)
         if legacy_response is not None:
             return legacy_response
-        if owner_result == "temporary":
+        if room_mode == "temporary":
             return jsonify({"error": "temporary chat は共有できません"}, status_code=400)
 
         share_token_result = await run_blocking(create_or_get_shared_chat_token, room_id, user_id)

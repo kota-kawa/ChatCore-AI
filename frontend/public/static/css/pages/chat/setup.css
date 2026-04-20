@@ -235,6 +235,98 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   transform: translateY(-30%) rotate(-135deg);
 }
 
+.chat-save-mode-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid #dfe9e5;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2d28;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border var(--transition-normal, 0.2s ease),
+    box-shadow var(--transition-normal, 0.2s ease),
+    background var(--transition-normal, 0.2s ease),
+    transform var(--transition-normal, 0.2s ease);
+}
+
+.chat-save-mode-toggle:hover {
+  border-color: rgba(25, 195, 125, 0.42);
+  box-shadow: 0 10px 24px rgba(25, 195, 125, 0.12);
+}
+
+.chat-save-mode-toggle.is-active {
+  border-color: rgba(14, 116, 144, 0.3);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(255, 255, 255, 0.96));
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.12);
+}
+
+.chat-save-mode-toggle:focus-visible {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.2);
+}
+
+.chat-save-mode-toggle__icon {
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(25, 195, 125, 0.12);
+  color: var(--success-strong, #0f5132);
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.chat-save-mode-toggle.is-active .chat-save-mode-toggle__icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0f4c81;
+}
+
+.chat-save-mode-toggle__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-save-mode-toggle__text strong {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #173227;
+}
+
+.chat-save-mode-toggle__text small {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #5f7169;
+}
+
+.chat-save-mode-toggle__state {
+  min-width: 3rem;
+  padding: 0.32rem 0.72rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #475569;
+  font-size: 0.77rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.chat-save-mode-toggle.is-active .chat-save-mode-toggle__state {
+  background: rgba(14, 165, 233, 0.16);
+  color: #075985;
+}
+
 .model-select-menu {
   position: absolute;
   top: calc(100% + 0.45rem);

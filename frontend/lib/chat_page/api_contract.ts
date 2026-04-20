@@ -29,11 +29,13 @@ export function normalizeChatRoom(raw: unknown): ChatRoom | null {
 
   const rawTitle = asString(record.title);
   const rawCreatedAt = asString(record.created_at);
+  const rawMode = asString(record.mode);
 
   return {
     id: String(rawId),
     title: rawTitle && rawTitle.trim() ? rawTitle : "新規チャット",
     createdAt: rawCreatedAt,
+    mode: rawMode === "temporary" ? "temporary" : "normal",
   };
 }
 

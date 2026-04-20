@@ -29,6 +29,7 @@ export function ChatMainSection() {
     sidebarOpen,
     chatRooms,
     currentRoomId,
+    currentRoomMode,
     openRoomActionsFor,
     historyHasMore,
     historyNextBeforeId,
@@ -52,6 +53,7 @@ export function ChatMainSection() {
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const launchSetupSummary = setupInfo.trim();
+  const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
 
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -91,6 +93,9 @@ export function ChatMainSection() {
           >
             <i className="bi bi-arrow-left"></i>
           </button>
+          {currentRoomMode === "temporary" && (
+            <span className="chat-room-mode-badge">未保存</span>
+          )}
         </div>
         <div className="header-right">
           <div
@@ -131,13 +136,13 @@ export function ChatMainSection() {
 
           <button
             id="share-chat-btn"
-            className={`icon-button chat-share-btn ${hasCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
+            className={`icon-button chat-share-btn ${canShareCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
             type="button"
-            data-tooltip="このチャットを共有"
+            data-tooltip={currentRoomMode === "temporary" ? "未保存チャットは共有できません" : "このチャットを共有"}
             data-tooltip-placement="bottom"
-            disabled={!hasCurrentRoom || isChatLaunching}
+            disabled={!canShareCurrentRoom}
             onClick={() => {
-              if (!hasCurrentRoom || isChatLaunching) return;
+              if (!canShareCurrentRoom) return;
               openShareModal();
             }}
           >
@@ -177,7 +182,12 @@ export function ChatMainSection() {
                       switchChatRoom(room.id);
                     }}
                   >
-                    <span>{roomTitle}</span>
+                    <span className="chat-room-card__title-row">
+                      <span>{roomTitle}</span>
+                      {room.mode === "temporary" && (
+                        <span className="chat-room-card__mode-badge">未保存</span>
+                      )}
+                    </span>
                   </button>
 
                   <div className="chat-room-card-actions">

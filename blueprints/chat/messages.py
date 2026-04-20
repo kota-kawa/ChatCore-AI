@@ -569,6 +569,26 @@ def _ensure_ephemeral_room(sid: str, chat_room_id: str, title: str = "新規チ�
     ephemeral_store.create_room(sid, chat_room_id, title)
 
 
+def _resolve_authenticated_room_target(
+    chat_room_id: str,
+    user_id: int,
+    forbidden_message: str,
+) -> tuple[str | None, str | None, Any]:
+    temporary_sid = get_temporary_user_store_key(user_id)
+    if ephemeral_store.room_exists(temporary_sid, chat_room_id):
+        return "temporary", temporary_sid, None
+
+    owner_result = validate_room_owner(chat_room_id, user_id, forbidden_message)
+    legacy_response = _legacy_error_response(owner_result)
+    if legacy_response is not None:
+        return None, None, legacy_response
+
+    room_mode = _resolved_room_mode(owner_result)
+    if room_mode == "temporary":
+        return room_mode, temporary_sid, None
+    return room_mode, None, None
+
+
 def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
     if char_budget <= 0:
         return ""
@@ -781,16 +801,14 @@ async def chat(
         # ログインユーザーはDB永続履歴、ゲストは ephemeral_store を利用する
         # Use DB-backed history for signed-in users and ephemeral store for guests.
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームには投稿できません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
-            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1064,16 +1082,14 @@ async def chat_stop(
 
     if user_id is not None:
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャットルームは操作できません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
-            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1081,8 +1097,6 @@ async def chat_stop(
                 logger,
                 "Failed to validate chat room ownership before stop.",
             )
-        if room_mode == "temporary":
-            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -1112,16 +1126,14 @@ async def get_chat_history(request: Request):
     if "user_id" in session:
         room_mode = "normal"
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
                 chat_room_id,
                 session["user_id"],
                 "他ユーザーのチャット履歴は見れません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
-            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1131,7 +1143,6 @@ async def get_chat_history(request: Request):
             )
 
         if room_mode == "temporary":
-            sid = get_temporary_user_store_key(session["user_id"])
             messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
             payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
             payload["room_mode"] = room_mode
@@ -1196,16 +1207,14 @@ async def chat_generation_stream(
 
     if user_id is not None:
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
-            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1213,8 +1222,6 @@ async def chat_generation_stream(
                 logger,
                 "Failed to validate chat room ownership before generation stream.",
             )
-        if room_mode == "temporary":
-            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -1273,16 +1280,14 @@ async def chat_generation_status(
 
     if user_id is not None:
         try:
-            owner_result = await run_blocking(
-                validate_room_owner,
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
                 chat_room_id,
                 user_id,
                 "他ユーザーのチャット履歴は見れません",
             )
-            legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
-            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1290,8 +1295,6 @@ async def chat_generation_status(
                 logger,
                 "Failed to validate chat room ownership before generation status fetch.",
             )
-        if room_mode == "temporary":
-            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:

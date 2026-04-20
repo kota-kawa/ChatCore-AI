@@ -15,11 +15,13 @@ export function SetupSection() {
     isSetupVisible,
     loggedIn,
     setupInfo,
+    temporaryModeEnabled,
     selectedModel,
     modelMenuOpen,
     selectedModelLabel,
     modelSelectRef,
     setSetupInfo,
+    setTemporaryModeEnabled,
     setSelectedModel,
     setModelMenuOpen,
   } = useHomePageUiContext();
@@ -431,6 +433,32 @@ export function SetupSection() {
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="form-group">
+          <span className="form-label">チャット保存</span>
+          <button
+            id="temporary-chat-mode-btn"
+            type="button"
+            className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
+            aria-pressed={temporaryModeEnabled ? "true" : "false"}
+            onClick={() => {
+              setTemporaryModeEnabled((previous) => !previous);
+            }}
+          >
+            <span className="chat-save-mode-toggle__icon" aria-hidden="true">
+              <i className={`bi ${temporaryModeEnabled ? "bi-eye-slash" : "bi-save"}`}></i>
+            </span>
+            <span className="chat-save-mode-toggle__text">
+              <strong>{temporaryModeEnabled ? "保存しないモード" : "通常モード"}</strong>
+              <small>
+                {temporaryModeEnabled
+                  ? "この状態で開始したチャットは履歴に残さず、一時的にだけ保持します。"
+                  : "開始したチャットを通常どおり履歴へ保存します。"}
+              </small>
+            </span>
+            <span className="chat-save-mode-toggle__state">{temporaryModeEnabled ? "ON" : "OFF"}</span>
+          </button>
         </div>
 
         <div className="task-selection-header">

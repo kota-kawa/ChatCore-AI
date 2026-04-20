@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 
-import type { ChatRoom, UiChatMessage } from "../../lib/chat_page/types";
+import type { ChatRoom, ChatRoomMode, UiChatMessage } from "../../lib/chat_page/types";
 
 export function useHomePageChatState() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomMode, setCurrentRoomMode] = useState<ChatRoomMode>("normal");
   const [messages, setMessages] = useState<UiChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -27,6 +28,8 @@ export function useHomePageChatState() {
     setChatRooms,
     currentRoomId,
     setCurrentRoomId,
+    currentRoomMode,
+    setCurrentRoomMode,
     messages,
     setMessages,
     chatInput,

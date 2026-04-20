@@ -172,3 +172,37 @@ class EphemeralChatStore:
         if not room:
             return []
         return room.get("messages") or []
+
+    def list_rooms(self, sid: str) -> list[dict]:
+        # sid 単位の一時ルーム一覧を返す
+        # Return ephemeral room metadata for the given sid.
+        rooms: list[dict] = []
+
+        if self._redis is not None:
+            key_prefix = self._key(sid, "")
+            for key in self._redis.scan_iter(match=f"{key_prefix}*"):
+                room_id = key[len(key_prefix):]
+                if not room_id:
+                    continue
+                room = self.get_room(sid, room_id)
+                if not room:
+                    continue
+                rooms.append(
+                    {
+                        "id": room_id,
+                        "title": str(room.get("title") or "新規チャット"),
+                        "created_at": room.get("created_at") or "",
+                    }
+                )
+            return rooms
+
+        self.cleanup()
+        for room_id, room in (self._memory.get(sid) or {}).items():
+            rooms.append(
+                {
+                    "id": room_id,
+                    "title": str(room.get("title") or "新規チャット"),
+                    "created_at": room.get("created_at") or "",
+                }
+            )
+        return rooms

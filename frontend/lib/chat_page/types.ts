@@ -1,3 +1,5 @@
+export type ChatRoomMode = "normal" | "temporary";
+
 export type NormalizedTask = {
   name: string;
   prompt_template: string;
@@ -12,6 +14,7 @@ export type ChatRoom = {
   id: string;
   title: string;
   createdAt?: string;
+  mode: ChatRoomMode;
 };
 
 export type ChatSender = "user" | "assistant" | "thinking";
@@ -40,6 +43,7 @@ export type ChatHistoryPayload = {
   error?: string;
   messages?: ChatHistoryMessagePayload[];
   pagination?: ChatHistoryPaginationPayload;
+  room_mode?: string;
 };
 
 export type ChatHistoryPagination = {

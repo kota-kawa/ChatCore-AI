@@ -4,13 +4,13 @@ import unittest
 from unittest.mock import patch
 
 from blueprints.chat.messages import chat
-from blueprints.chat.rooms import new_chat_room
+from blueprints.chat.rooms import get_chat_rooms, new_chat_room
 from starlette.responses import StreamingResponse
 from tests.helpers.request_helpers import build_request
 
 
 class ChatTemporaryModeTestCase(unittest.TestCase):
-    def test_new_chat_room_creates_temporary_authenticated_room_in_ephemeral_store(self):
+    def test_new_chat_room_creates_temporary_authenticated_room_without_db_persistence(self):
         request = build_request(
             method="POST",
             path="/api/new_chat_room",
@@ -26,8 +26,41 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["mode"], "temporary")
-        create_room.assert_called_once_with("temp-room", 7, "Temp", "temporary")
+        create_room.assert_not_called()
         create_ephemeral.assert_called_once_with("temporary-user:7", "temp-room", "Temp")
+
+    def test_get_chat_rooms_merges_persisted_and_temporary_authenticated_rooms(self):
+        request = build_request(
+            method="GET",
+            path="/api/get_chat_rooms",
+            session={"user_id": 7},
+        )
+
+        persisted_rooms = [
+            {
+                "id": "room-normal",
+                "title": "保存チャット",
+                "mode": "normal",
+                "created_at": "2026-04-20T10:00:00+09:00",
+            }
+        ]
+        temporary_rooms = [
+            {
+                "id": "room-temp",
+                "title": "未保存チャット",
+                "mode": "temporary",
+                "created_at": "2026-04-20T11:00:00",
+            }
+        ]
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=persisted_rooms):
+                with patch("blueprints.chat.rooms._fetch_temporary_user_rooms", return_value=temporary_rooms):
+                    response = asyncio.run(get_chat_rooms(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual([room["id"] for room in payload["rooms"]], ["room-temp", "room-normal"])
 
     def test_chat_uses_ephemeral_store_for_authenticated_temporary_room(self):
         request = build_request(

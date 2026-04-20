@@ -38,6 +38,7 @@ import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_util
 import type {
   ChatHistoryPayload,
   ChatHistoryPagination,
+  ChatRoomMode,
   GenerationStatusPayload,
   NormalizedTask,
   PromptAssistController,
@@ -81,6 +82,8 @@ export function useHomePageController() {
     isChatLaunching,
     setupInfo,
     setSetupInfo,
+    temporaryModeEnabled,
+    setTemporaryModeEnabled,
     modelMenuOpen,
     setModelMenuOpen,
     chatHeaderModelMenuOpen,
@@ -145,6 +148,8 @@ export function useHomePageController() {
     setChatRooms,
     currentRoomId,
     setCurrentRoomId,
+    currentRoomMode,
+    setCurrentRoomMode,
     messages,
     setMessages,
     chatInput,
@@ -318,10 +323,12 @@ export function useHomePageController() {
       hasMore: pagination.hasMore,
       nextBeforeId: pagination.nextBeforeId,
     };
+    const roomMode: ChatRoomMode = rawPayload.room_mode === "temporary" ? "temporary" : "normal";
 
     return {
       messages: historyMessages,
       pagination: normalizedPagination,
+      roomMode,
     };
   }, []);
 
@@ -561,7 +568,7 @@ export function useHomePageController() {
   const loadChatHistory = useCallback(
     async (roomId: string, shouldCheckGeneration = true) => {
       try {
-        const { messages: historyMessages, pagination } = await fetchChatHistoryPage(roomId);
+        const { messages: historyMessages, pagination, roomMode } = await fetchChatHistoryPage(roomId);
         if (currentRoomIdRef.current !== roomId) return;
 
         const uiMessages: UiChatMessage[] = historyMessages.map((entry) => ({
@@ -570,6 +577,7 @@ export function useHomePageController() {
           text: typeof entry.message === "string" ? entry.message : "",
         }));
 
+        setCurrentRoomMode(roomMode);
         setHistoryHasMore(pagination.hasMore);
         setHistoryNextBeforeId(pagination.nextBeforeId);
 
@@ -686,15 +694,26 @@ export function useHomePageController() {
         return;
       }
 
-      setChatRooms(normalizeChatRooms(data.rooms));
+      const rooms = normalizeChatRooms(data.rooms);
+      setChatRooms(rooms);
+
+      const activeRoomId = currentRoomIdRef.current;
+      if (activeRoomId) {
+        const activeRoom = rooms.find((room) => room.id === activeRoomId);
+        if (activeRoom) {
+          setCurrentRoomMode(activeRoom.mode);
+        }
+      }
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
     }
   }, []);
 
   const switchChatRoom = useCallback(
-    (roomId: string) => {
+    (roomId: string, roomMode?: ChatRoomMode) => {
+      const nextRoom = chatRooms.find((room) => room.id === roomId);
       persistCurrentRoomId(roomId);
+      setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
       setPageViewState("chat");
       setSidebarOpen(false);
       setOpenRoomActionsFor(null);
@@ -704,15 +723,15 @@ export function useHomePageController() {
       void loadChatHistory(roomId, true);
       void loadChatRooms();
     },
-    [loadChatHistory, loadChatRooms, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
+    [chatRooms, loadChatHistory, loadChatRooms, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
   );
 
-  const createNewChatRoom = useCallback(async (roomId: string, title: string) => {
+  const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
     const response = await fetch("/api/new_chat_room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ id: roomId, title }),
+      body: JSON.stringify({ id: roomId, title, mode }),
     });
 
     const payload = (await readJsonBodySafe(response)) as { error?: string };
@@ -926,6 +945,11 @@ export function useHomePageController() {
         setShareUrl("");
         return;
       }
+      if (currentRoomMode === "temporary") {
+        setShareStatus({ message: "未保存チャットは共有できません。", error: true });
+        setShareUrl("");
+        return;
+      }
 
       if (!forceRefresh && shareCacheRef.current.has(roomId)) {
         const cached = shareCacheRef.current.get(roomId) || "";
@@ -963,13 +987,17 @@ export function useHomePageController() {
         setShareActionLoading(false);
       }
     },
-    [setShareActionLoading],
+    [currentRoomMode, setShareActionLoading],
   );
 
   const openShareModal = useCallback(() => {
+    if (currentRoomMode === "temporary") {
+      setShareStatus({ message: "未保存チャットは共有できません。", error: true });
+      return;
+    }
     setShareModalOpen(true);
     void createShareLink(false);
-  }, [createShareLink]);
+  }, [createShareLink, currentRoomMode]);
 
   const copyShareLink = useCallback(async () => {
     if (!shareUrl.trim()) {
@@ -1033,25 +1061,28 @@ export function useHomePageController() {
 
       if (rooms.length > 0) {
         setChatRooms(rooms);
-        switchChatRoom(rooms[0].id);
+        switchChatRoom(rooms[0].id, rooms[0].mode);
         return;
       }
 
       setPageViewState("chat");
       setMessages([]);
       persistCurrentRoomId(null);
+      setCurrentRoomMode("normal");
       void loadChatRooms();
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
       setPageViewState("chat");
       setMessages([]);
       persistCurrentRoomId(null);
+      setCurrentRoomMode("normal");
       void loadChatRooms();
     }
   }, [loadChatRooms, persistCurrentRoomId, setPageViewState, switchChatRoom]);
 
   const handleNewChat = useCallback(() => {
     persistCurrentRoomId(null);
+    setCurrentRoomMode("normal");
     setMessages([]);
     setShareUrl("");
     setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
@@ -1067,6 +1098,7 @@ export function useHomePageController() {
       setLaunchingTaskName(task.name);
 
       const roomId = Date.now().toString();
+      const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
       const currentSetupInfo = setupInfo.trim();
       const roomTitle = (currentSetupInfo || "新規チャット").slice(0, 255);
       const firstMessage = currentSetupInfo
@@ -1074,6 +1106,7 @@ export function useHomePageController() {
         : `【タスク】${task.name}`;
 
       persistCurrentRoomId(roomId);
+      setCurrentRoomMode(roomMode);
       setMessages([]);
       setChatInput("");
       setOpenRoomActionsFor(null);
@@ -1087,7 +1120,7 @@ export function useHomePageController() {
 
       try {
         await Promise.all([
-          createNewChatRoom(roomId, roomTitle),
+          createNewChatRoom(roomId, roomTitle, roomMode),
           waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
         ]);
         removeStoredHistory(roomId);
@@ -1101,6 +1134,7 @@ export function useHomePageController() {
         setLaunchingTaskName(null);
         setMessages([]);
         persistCurrentRoomId(null);
+        setCurrentRoomMode("normal");
         window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         taskLaunchInProgressRef.current = false;
@@ -1116,6 +1150,7 @@ export function useHomePageController() {
       setLaunchingTaskName,
       setPageViewState,
       setupInfo,
+      temporaryModeEnabled,
     ],
   );
 
@@ -1539,6 +1574,7 @@ export function useHomePageController() {
       void loadChatRooms();
     } else {
       setChatRooms([]);
+      setCurrentRoomMode("normal");
     }
   }, [authResolved, loadChatRooms, loggedIn, refreshTasks]);
 
@@ -1723,6 +1759,7 @@ export function useHomePageController() {
     isSetupVisible,
     isChatLaunching,
     setupInfo,
+    temporaryModeEnabled,
     selectedModel,
     modelMenuOpen,
     selectedModelLabel,
@@ -1736,6 +1773,7 @@ export function useHomePageController() {
     draggingTaskIndex,
     modelSelectRef,
     setSetupInfo,
+    setTemporaryModeEnabled,
     setSelectedModel,
     setModelMenuOpen,
     toggleTaskOrderEditing,
@@ -1755,6 +1793,7 @@ export function useHomePageController() {
     sidebarOpen,
     chatRooms,
     currentRoomId,
+    currentRoomMode,
     openRoomActionsFor,
     historyHasMore,
     historyNextBeforeId,
