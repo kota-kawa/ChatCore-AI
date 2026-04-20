@@ -626,6 +626,12 @@ export default function UserSettingsPage() {
 
   useEffect(() => {
     document.body.classList.add("settings-page");
+
+    const importCustomElements = async () => {
+      await import("../scripts/components/popup_menu");
+    };
+    void importCustomElements();
+
     void loadProfile();
     void loadPasskeys();
 
@@ -1043,6 +1049,8 @@ export default function UserSettingsPage() {
       </Head>
 
       <div className="user-settings-page">
+        <action-menu></action-menu>
+
         <div className="user-settings-layout">
           <SettingsSidebar activeSection={activeSection} onSectionSelect={handleSectionSelect} />
 
