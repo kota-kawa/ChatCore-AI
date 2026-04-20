@@ -159,7 +159,7 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
             cursor.execute(
                 """
                 SELECT id, email, is_verified, created_at,
-                       username, bio, avatar_url
+                       username, bio, avatar_url, llm_profile_context
                   FROM users
                  WHERE id = %s
                 """,

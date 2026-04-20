@@ -36,6 +36,7 @@ type ProfileFormState = {
   username: string;
   email: string;
   bio: string;
+  llmProfileContext: string;
 };
 
 type ProfileSaveStatus = {
@@ -125,6 +126,25 @@ function formatPasskeyDateTime(value: string): string {
     return "未使用";
   }
   return formatDateTime(value) || "未使用";
+}
+
+function buildDefaultLlmProfileContext(profile: Pick<ProfileFormState, "username" | "email" | "bio">): string {
+  const lines: string[] = [];
+  const username = profile.username.trim();
+  const email = profile.email.trim();
+  const bio = profile.bio.trim();
+
+  if (username) {
+    lines.push(`名前: ${username}`);
+  }
+  if (email) {
+    lines.push(`メールアドレス: ${email}`);
+  }
+  if (bio) {
+    lines.push(`自己紹介: ${bio}`);
+  }
+
+  return lines.join("\n");
 }
 
 function SettingsSidebar({
@@ -383,18 +403,22 @@ export default function UserSettingsPage() {
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     username: "",
     email: "",
-    bio: ""
+    bio: "",
+    llmProfileContext: ""
   });
   const [initialProfileForm, setInitialProfileForm] = useState<ProfileFormState>({
     username: "",
     email: "",
-    bio: ""
+    bio: "",
+    llmProfileContext: ""
   });
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(DEFAULT_AVATAR_URL);
   const [initialAvatarUrl, setInitialAvatarUrl] = useState(DEFAULT_AVATAR_URL);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<ProfileSaveStatus | null>(null);
+  const [llmProfileContextUsesGeneratedDefault, setLlmProfileContextUsesGeneratedDefault] = useState(false);
+  const [initialLlmProfileContextUsesGeneratedDefault, setInitialLlmProfileContextUsesGeneratedDefault] = useState(false);
 
   const [myPrompts, setMyPrompts] = useState<PromptRecord[]>([]);
   const [myPromptsLoading, setMyPromptsLoading] = useState(false);
@@ -432,15 +456,27 @@ export default function UserSettingsPage() {
       const nextProfile: ProfileFormState = {
         username: asString(payload.username),
         email: asString(payload.email),
-        bio: asString(payload.bio)
+        bio: asString(payload.bio),
+        llmProfileContext: ""
+      };
+      const rawLlmProfileContext = payload.llm_profile_context;
+      const shouldUseGeneratedDefault = rawLlmProfileContext === null || rawLlmProfileContext === undefined;
+      const nextLlmProfileContext = shouldUseGeneratedDefault
+        ? buildDefaultLlmProfileContext(nextProfile)
+        : asString(rawLlmProfileContext);
+      const nextResolvedProfile: ProfileFormState = {
+        ...nextProfile,
+        llmProfileContext: nextLlmProfileContext
       };
       const nextAvatarUrl = asString(payload.avatar_url) || DEFAULT_AVATAR_URL;
 
-      setProfileForm(nextProfile);
-      setInitialProfileForm(nextProfile);
+      setProfileForm(nextResolvedProfile);
+      setInitialProfileForm(nextResolvedProfile);
       setAvatarPreviewUrl(nextAvatarUrl);
       setInitialAvatarUrl(nextAvatarUrl);
       setSelectedAvatarFile(null);
+      setLlmProfileContextUsesGeneratedDefault(shouldUseGeneratedDefault);
+      setInitialLlmProfileContextUsesGeneratedDefault(shouldUseGeneratedDefault);
       if (avatarInputRef.current) {
         avatarInputRef.current.value = "";
       }
@@ -580,12 +616,24 @@ export default function UserSettingsPage() {
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = event.target;
       setProfileSaveStatus(null);
-      setProfileForm((prev) => ({
-        ...prev,
-        [name]: value
-      }));
+      setProfileForm((prev) => {
+        const nextProfile = {
+          ...prev,
+          [name]: value
+        };
+
+        if (name === "llmProfileContext") {
+          setLlmProfileContextUsesGeneratedDefault(false);
+          return nextProfile;
+        }
+
+        if (llmProfileContextUsesGeneratedDefault) {
+          nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+        }
+        return nextProfile;
+      });
     },
-    []
+    [llmProfileContextUsesGeneratedDefault]
   );
 
   const handleAvatarFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -613,11 +661,12 @@ export default function UserSettingsPage() {
     setProfileForm(initialProfileForm);
     setAvatarPreviewUrl(initialAvatarUrl);
     setSelectedAvatarFile(null);
+    setLlmProfileContextUsesGeneratedDefault(initialLlmProfileContextUsesGeneratedDefault);
     if (avatarInputRef.current) {
       avatarInputRef.current.value = "";
     }
     setProfileSaveStatus(null);
-  }, [initialAvatarUrl, initialProfileForm]);
+  }, [initialAvatarUrl, initialLlmProfileContextUsesGeneratedDefault, initialProfileForm]);
 
   const handleProfileSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -626,6 +675,7 @@ export default function UserSettingsPage() {
     formData.append("username", profileForm.username.trim());
     formData.append("email", profileForm.email.trim());
     formData.append("bio", profileForm.bio.trim());
+    formData.append("llm_profile_context", profileForm.llmProfileContext.trim());
     if (selectedAvatarFile) {
       formData.append("avatar", selectedAvatarFile);
     }
@@ -655,11 +705,14 @@ export default function UserSettingsPage() {
       const persistedProfile: ProfileFormState = {
         username: profileForm.username.trim(),
         email: profileForm.email.trim(),
-        bio: profileForm.bio.trim()
+        bio: profileForm.bio.trim(),
+        llmProfileContext: profileForm.llmProfileContext.trim()
       };
       setProfileForm(persistedProfile);
       setInitialProfileForm(persistedProfile);
       setSelectedAvatarFile(null);
+      setLlmProfileContextUsesGeneratedDefault(false);
+      setInitialLlmProfileContextUsesGeneratedDefault(false);
       if (avatarInputRef.current) {
         avatarInputRef.current.value = "";
       }
@@ -1000,6 +1053,24 @@ export default function UserSettingsPage() {
                       value={profileForm.bio}
                       onChange={handleProfileInputChange}
                     ></textarea>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="llmProfileContext">
+                      AI に伝えておきたい情報
+                    </label>
+                    <textarea
+                      id="llmProfileContext"
+                      name="llmProfileContext"
+                      rows={6}
+                      className="custom-form-control"
+                      placeholder={"例: 私の名前は山田太郎です。\nメールは taro@example.com です。\n普段は日本語で、結論から短く答えてください。"}
+                      value={profileForm.llmProfileContext}
+                      onChange={handleProfileInputChange}
+                    ></textarea>
+                    <p className="form-help-text">
+                      未設定時はプロフィール情報が初期値として入ります。保存後は、この欄に残っている内容だけが AI に渡されます。
+                    </p>
                   </div>
 
                   <div className="button-group">

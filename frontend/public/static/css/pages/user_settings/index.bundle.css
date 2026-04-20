@@ -1265,6 +1265,13 @@ body.settings-page,
   color: var(--settings-text-muted);
 }
 
+.form-help-text {
+  margin: 0.55rem 0 0;
+  color: var(--settings-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
 
 /* アバタープレビュー */
 .avatar-group {

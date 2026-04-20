@@ -69,6 +69,7 @@ from services.chat_contract import (
     CHAT_HISTORY_PAGE_SIZE_DEFAULT,
     CHAT_HISTORY_PAGE_SIZE_MAX,
 )
+from services.users import get_user_by_id
 from services.datetime_serialization import serialize_datetime_iso
 from services.request_models import ChatMessageRequest
 from services.web import (
@@ -201,6 +202,33 @@ def _build_base_system_prompt(current_time: datetime | None = None) -> str:
         ]
     )
     return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{runtime_context}"
+
+
+def _build_user_profile_prompt(user: dict[str, Any] | None) -> str | None:
+    if not isinstance(user, dict):
+        return None
+
+    llm_profile_context = str(user.get("llm_profile_context") or "").strip()
+    if not llm_profile_context:
+        return None
+
+    sections = [
+        "<user_profile_context>",
+        "以下はユーザー本人が設定ページで登録した情報です。回答を個人に合わせるために使ってください。",
+        "<custom_user_prompt>",
+        llm_profile_context,
+        "</custom_user_prompt>",
+    ]
+    sections.extend(
+        [
+            "<user_profile_policies>",
+            "- 上記はユーザーの属性・背景・希望として扱ってください。",
+            "- 安全ルールや他の system 指示に反しない範囲で、語り方や提案内容へ反映してください。",
+            "</user_profile_policies>",
+            "</user_profile_context>",
+        ]
+    )
+    return "\n".join(sections)
 
 
 def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None = None) -> bytes:
@@ -814,6 +842,14 @@ async def chat(
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
     room_summary = ""
     memory_facts: list[str] = []
+    user_profile_prompt = None
+    if user_id is not None:
+        try:
+            user = await run_blocking(get_user_by_id, user_id)
+            user_profile_prompt = _build_user_profile_prompt(user)
+        except Exception:
+            logger.warning("Failed to load user profile context; proceeding without it.")
+
     if user_id is not None and room_mode == "normal":
         try:
             summary_payload = await run_blocking(get_room_summary, chat_room_id)
@@ -841,6 +877,7 @@ async def chat(
 
     conversation_messages = build_context_messages(
         base_system_prompt=_build_base_system_prompt(),
+        user_profile_prompt=user_profile_prompt,
         task_prompt=task_prompt,
         room_summary=room_summary,
         memory_facts=memory_facts,

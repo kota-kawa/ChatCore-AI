@@ -201,12 +201,16 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
 def build_context_messages(
     *,
     base_system_prompt: str,
+    user_profile_prompt: str | None,
     task_prompt: str | None,
     room_summary: str,
     memory_facts: list[str],
     recent_messages: list[dict[str, str]],
 ) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": base_system_prompt}]
+
+    if user_profile_prompt:
+        messages.append({"role": "system", "content": user_profile_prompt})
 
     if task_prompt:
         messages.append({"role": "system", "content": task_prompt})

@@ -128,7 +128,7 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     return f"/static/uploads/{stored_filename}"
 
 
-def _update_user_profile(user_id, username, email, bio, avatar_url):
+def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_context):
     # 入力されたプロフィール項目のみを users テーブルへ更新する
     # Update users table with submitted profile fields.
     with get_db_connection() as conn:
@@ -140,10 +140,11 @@ def _update_user_profile(user_id, username, email, bio, avatar_url):
                    SET username = %s,
                        email = %s,
                        bio = %s,
+                       llm_profile_context = %s,
                        avatar_url = COALESCE(%s, avatar_url)
                  WHERE id = %s
                 """,
-                (username, email, bio, avatar_url, user_id),
+                (username, email, bio, llm_profile_context, avatar_url, user_id),
             )
             conn.commit()
         except Exception:
@@ -175,7 +176,8 @@ async def user_profile(request: Request):
             'username'  : user.get('username', ''),
             'email'     : user.get('email', ''),
             'bio'       : user.get('bio', ''),
-            'avatar_url': user.get('avatar_url', '')
+            'avatar_url': user.get('avatar_url', ''),
+            'llm_profile_context': user.get('llm_profile_context'),
         })
 
     # ---------- POST ----------
@@ -183,6 +185,7 @@ async def user_profile(request: Request):
     username = (form.get('username') or '').strip()
     email = (form.get('email') or '').strip()
     bio = (form.get('bio') or '').strip()
+    llm_profile_context = (form.get('llm_profile_context') or '').strip()
     avatar_f = form.get('avatar')      # 画像ファイル (任意)
     # Optional avatar file from multipart form.
 
@@ -212,10 +215,19 @@ async def user_profile(request: Request):
     # DB 更新
     # Persist profile updates to database.
     try:
-        await run_blocking(_update_user_profile, user_id, username, email, bio, avatar_url)
+        await run_blocking(
+            _update_user_profile,
+            user_id,
+            username,
+            email,
+            bio,
+            avatar_url,
+            llm_profile_context,
+        )
         return jsonify({
             'message': 'プロフィールを更新しました',
-            'avatar_url': avatar_url         # 新しい画像 URL（ない場合は null）
+            'avatar_url': avatar_url,        # 新しい画像 URL（ない場合は null）
+            'llm_profile_context': llm_profile_context,
             # Newly uploaded avatar URL (null when unchanged).
         })
     except Exception:

@@ -38,6 +38,7 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
                 email="alice@example.com",
                 bio="hello",
                 avatar_url=None,
+                llm_profile_context="日本語で簡潔に答えてください",
             )
 
         self.assertTrue(fake_connection.committed)
@@ -47,8 +48,19 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
         self.assertEqual(len(fake_connection._cursor.executed), 1)
         query, params = fake_connection._cursor.executed[0]
         self.assertIn("UPDATE users", query)
+        self.assertIn("llm_profile_context = %s", query)
         self.assertIn("avatar_url = COALESCE(%s, avatar_url)", query)
-        self.assertEqual(params, ("alice", "alice@example.com", "hello", None, 10))
+        self.assertEqual(
+            params,
+            (
+                "alice",
+                "alice@example.com",
+                "hello",
+                "日本語で簡潔に答えてください",
+                None,
+                10,
+            ),
+        )
         self.assertNotIn("alice@example.com", query)
 
     def test_update_user_profile_passes_avatar_url_as_parameter(self):
@@ -63,13 +75,21 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
                 email="bob@example.com",
                 bio="bio",
                 avatar_url="/static/uploads/bob.png",
+                llm_profile_context="箇条書きを優先",
             )
 
         query, params = fake_connection._cursor.executed[0]
         self.assertIn("UPDATE users", query)
         self.assertEqual(
             params,
-            ("bob", "bob@example.com", "bio", "/static/uploads/bob.png", 11),
+            (
+                "bob",
+                "bob@example.com",
+                "bio",
+                "箇条書きを優先",
+                "/static/uploads/bob.png",
+                11,
+            ),
         )
 
     def test_update_user_profile_rolls_back_on_failure(self):
@@ -85,6 +105,7 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
                     email="charlie@example.com",
                     bio="bio",
                     avatar_url=None,
+                    llm_profile_context="丁寧に答える",
                 )
 
         self.assertFalse(fake_connection.committed)

@@ -20,6 +20,7 @@ class ChatContextAndStateTestCase(unittest.TestCase):
     def test_build_context_messages_includes_summary_memory_and_recent_messages(self):
         context_messages = build_context_messages(
             base_system_prompt="base",
+            user_profile_prompt="profile",
             task_prompt="task",
             room_summary="summary text",
             memory_facts=["ユーザー名: Kota", "回答スタイルの希望: 箇条書き"],
@@ -31,9 +32,10 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         )
 
         self.assertEqual(context_messages[0]["content"], "base")
-        self.assertEqual(context_messages[1]["content"], "task")
-        self.assertIn("summary text", context_messages[2]["content"])
-        self.assertIn("Kota", context_messages[3]["content"])
+        self.assertEqual(context_messages[1]["content"], "profile")
+        self.assertEqual(context_messages[2]["content"], "task")
+        self.assertIn("summary text", context_messages[3]["content"])
+        self.assertIn("Kota", context_messages[4]["content"])
         self.assertEqual(context_messages[-1]["content"], "third")
 
     def test_extract_memory_facts_handles_explicit_and_structured_preferences(self):
