@@ -156,7 +156,7 @@ export function NewPromptModal({
                 ref={inputExampleRef}
                 id="new-prompt-input-example"
                 rows={3}
-                placeholder="例: 夏休みの思い出をテーマにした短いエッセイを書いてください。"
+                placeholder={"例: タスク名\\nプロンプトテンプレート\\n回答ルール\\n出力テンプレート"}
                 value={newPromptInputExample}
                 onChange={(event) => {
                   setNewPromptInputExample(event.target.value);
@@ -169,7 +169,9 @@ export function NewPromptModal({
                 ref={outputExampleRef}
                 id="new-prompt-output-example"
                 rows={3}
-                placeholder="例: 夏休みのある日、私は家族と一緒に海辺へ出かけました..."
+                placeholder={
+                  "例: ## セクション名\\n- 項目\\n\\n## ステップ\\n### ステップ1\\n- 実施内容"
+                }
                 value={newPromptOutputExample}
                 onChange={(event) => {
                   setNewPromptOutputExample(event.target.value);

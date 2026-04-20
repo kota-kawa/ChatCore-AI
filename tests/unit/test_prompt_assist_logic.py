@@ -63,6 +63,22 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertIn("<output_schema>", messages[1]["content"])
         self.assertIn("上書きしない", messages[1]["content"])
 
+    def test_build_prompt_assist_messages_for_generate_examples_requires_generic_examples(self):
+        messages = _build_prompt_assist_messages(
+            "task_modal",
+            "generate_examples",
+            {
+                "title": "問題解決",
+                "prompt_content": "問題への対処案を整理したい",
+                "input_examples": "",
+                "output_examples": "",
+            },
+        )
+
+        self.assertIn("汎用テンプレート", messages[0]["content"])
+        self.assertIn("固有名詞、日時、商品名、人名、具体的な題材", messages[1]["content"])
+        self.assertIn("見出し、箇条書き、表の列名、ステップ名", messages[1]["content"])
+
     def test_normalize_prompt_assist_response_filters_fields_and_limits_warnings(self):
         current_fields = {
             "title": "旅行計画",
