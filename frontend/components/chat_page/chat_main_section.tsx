@@ -52,7 +52,7 @@ export function ChatMainSection() {
   } = useHomePageChatContext();
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const launchSetupSummary = setupInfo.trim();
+  const hasLaunchSetupInfo = setupInfo.trim().length > 0;
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
 
   const handleRoomCardKeyDown = (
@@ -284,8 +284,8 @@ export function ChatMainSection() {
                 <div className="chat-launch-placeholder__title">
                   {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
                 </div>
-                {launchSetupSummary && (
-                  <p className="chat-launch-placeholder__summary">{launchSetupSummary}</p>
+                {hasLaunchSetupInfo && (
+                  <p className="chat-launch-placeholder__summary">入力内容をチャットに反映しています。</p>
                 )}
                 <div className="chat-launch-placeholder__meta">
                   {launchingTaskName && <span className="chat-launch-placeholder__task-pill">Task selected</span>}
