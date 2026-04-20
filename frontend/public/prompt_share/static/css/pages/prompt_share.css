@@ -842,8 +842,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .like-btn.liked {
-  color: var(--ps-like);
-  background: var(--ps-like-tint);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--ps-like-strong) 0%, var(--ps-like) 100%);
+  box-shadow: 0 12px 24px var(--ps-like-shadow);
 }
 
 .prompt-share-page .meatball-menu {
@@ -2292,10 +2293,13 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-action-btn.like-btn.liked {
-  --ps-button-base: color-mix(in srgb, var(--ps-like) 90%, white);
-  --ps-button-accent: color-mix(in srgb, var(--ps-like-strong) 92%, white);
+  --ps-button-base: var(--ps-like-strong);
+  --ps-button-accent: var(--ps-like);
   --ps-button-shadow-color: var(--ps-like-shadow);
   color: #ffffff;
+  background:
+    var(--cc-button-sheen),
+    linear-gradient(135deg, var(--ps-like-strong) 0%, var(--ps-like) 100%);
 }
 
 .prompt-share-page .prompt-action-btn.bookmark-btn.bookmarked {
