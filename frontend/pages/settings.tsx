@@ -210,50 +210,60 @@ function PromptCard({
 
   return (
     <article className="prompt-card" data-prompt-id={promptId}>
-      <div className="prompt-card__header">
-        <div className="prompt-card__eyebrow">
-          <span className="prompt-card__chip prompt-card__chip--category">{categoryLabel}</span>
-          <span className="prompt-card__meta-item">
-            <i className="bi bi-calendar3" aria-hidden="true"></i>
-            {createdAtLabel}
-          </span>
+      <div className="prompt-card__main">
+        <div className="prompt-card__header">
+          <div className="prompt-card__eyebrow">
+            <span className="prompt-card__badge prompt-card__badge--category">{categoryLabel}</span>
+            <time className="prompt-card__date" dateTime={prompt.createdAt}>
+              <i className="bi bi-clock-history" aria-hidden="true"></i>
+              {createdAtLabel}
+            </time>
+          </div>
+          <h3 className="prompt-card__title" title={prompt.title}>{truncateTitle(prompt.title)}</h3>
         </div>
-        <h3 className="prompt-card__title" title={prompt.title}>{truncateTitle(prompt.title)}</h3>
+        <div className="prompt-card__body">
+          <p className="prompt-card__description" title={prompt.content}>
+            {contentPreview || "内容が設定されていません。"}
+          </p>
+          {(inputPreview || outputPreview) ? (
+            <div className="prompt-card__preview-sections">
+              {inputPreview ? (
+                <div className="prompt-card__preview-item">
+                  <span className="prompt-card__preview-label">Input</span>
+                  <p className="prompt-card__preview-text" title={prompt.inputExamples}>{inputPreview}</p>
+                </div>
+              ) : null}
+              {outputPreview ? (
+                <div className="prompt-card__preview-item">
+                  <span className="prompt-card__preview-label">Output</span>
+                  <p className="prompt-card__preview-text" title={prompt.outputExamples}>{outputPreview}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
-      <p className="prompt-card__content" title={prompt.content}>{contentPreview || "内容はまだありません。"}</p>
-      {(inputPreview || outputPreview) ? (
-        <div className="prompt-card__details">
-          {inputPreview ? (
-            <div className="prompt-card__detail">
-              <span className="prompt-card__detail-label">入力例</span>
-              <p className="prompt-card__detail-text" title={prompt.inputExamples}>{inputPreview}</p>
-            </div>
-          ) : null}
-          {outputPreview ? (
-            <div className="prompt-card__detail">
-              <span className="prompt-card__detail-label">出力例</span>
-              <p className="prompt-card__detail-text" title={prompt.outputExamples}>{outputPreview}</p>
-            </div>
-          ) : null}
+      <div className="prompt-card__footer">
+        <div className="prompt-card__actions">
+          <button
+            type="button"
+            className="prompt-card__action-btn prompt-card__action-btn--edit"
+            onClick={() => onEdit(prompt)}
+            aria-label="編集"
+          >
+            <i className="bi bi-pencil-square"></i>
+            <span>編集</span>
+          </button>
+          <button
+            type="button"
+            className="prompt-card__action-btn prompt-card__action-btn--delete"
+            onClick={() => onDelete(prompt)}
+            aria-label="削除"
+          >
+            <i className="bi bi-trash3"></i>
+            <span>削除</span>
+          </button>
         </div>
-      ) : null}
-      <div className="btn-group prompt-card__actions">
-        <button
-          type="button"
-          className="btn btn-sm btn-warning edit-btn"
-          data-id={promptId}
-          onClick={() => onEdit(prompt)}
-        >
-          <i className="bi bi-pencil"></i> 編集
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm btn-danger delete-btn"
-          data-id={promptId}
-          onClick={() => onDelete(prompt)}
-        >
-          <i className="bi bi-trash"></i> 削除
-        </button>
       </div>
     </article>
   );
@@ -275,45 +285,55 @@ function PromptListCard({
 
   return (
     <article className="prompt-card" data-prompt-list-entry-id={entryId}>
-      <div className="prompt-card__header">
-        <div className="prompt-card__eyebrow">
-          <span className="prompt-card__chip prompt-card__chip--saved">保存済み</span>
-          {categoryLabel ? <span className="prompt-card__chip prompt-card__chip--category">{categoryLabel}</span> : null}
+      <div className="prompt-card__main">
+        <div className="prompt-card__header">
+          <div className="prompt-card__eyebrow">
+            <span className="prompt-card__badge prompt-card__badge--saved">
+              <i className="bi bi-bookmark-fill me-1"></i>保存済み
+            </span>
+            {categoryLabel ? (
+              <span className="prompt-card__badge prompt-card__badge--category">{categoryLabel}</span>
+            ) : null}
+            <time className="prompt-card__date" dateTime={entry.createdAt}>
+              {createdAtLabel}
+            </time>
+          </div>
+          <h3 className="prompt-card__title" title={entry.title}>{truncateTitle(entry.title)}</h3>
         </div>
-        <h3 className="prompt-card__title" title={entry.title}>{truncateTitle(entry.title)}</h3>
-      </div>
-      <p className="prompt-card__content" title={entry.content}>{contentPreview || "内容はまだありません。"}</p>
-      <div className="prompt-card__meta-row">
-        <span className="prompt-card__meta-item">
-          <i className="bi bi-bookmark-check" aria-hidden="true"></i>
-          {createdAtLabel}
-        </span>
-      </div>
-      {(inputPreview || outputPreview) ? (
-        <div className="prompt-card__details">
-          {inputPreview ? (
-            <div className="prompt-card__detail">
-              <span className="prompt-card__detail-label">入力例</span>
-              <p className="prompt-card__detail-text" title={entry.inputExamples}>{inputPreview}</p>
+        <div className="prompt-card__body">
+          <p className="prompt-card__description" title={entry.content}>
+            {contentPreview || "内容が設定されていません。"}
+          </p>
+          {(inputPreview || outputPreview) ? (
+            <div className="prompt-card__preview-sections">
+              {inputPreview ? (
+                <div className="prompt-card__preview-item">
+                  <span className="prompt-card__preview-label">Input</span>
+                  <p className="prompt-card__preview-text" title={entry.inputExamples}>{inputPreview}</p>
+                </div>
+              ) : null}
+              {outputPreview ? (
+                <div className="prompt-card__preview-item">
+                  <span className="prompt-card__preview-label">Output</span>
+                  <p className="prompt-card__preview-text" title={entry.outputExamples}>{outputPreview}</p>
+                </div>
+              ) : null}
             </div>
           ) : null}
-          {outputPreview ? (
-            <div className="prompt-card__detail">
-              <span className="prompt-card__detail-label">出力例</span>
-              <p className="prompt-card__detail-text" title={entry.outputExamples}>{outputPreview}</p>
-            </div>
-          ) : null}
         </div>
-      ) : null}
-      <div className="btn-group prompt-card__actions">
-        <button
-          type="button"
-          className="btn btn-sm btn-danger remove-prompt-list-btn"
-          data-id={entryId}
-          onClick={() => onDelete(entry)}
-        >
-          <i className="bi bi-trash"></i> 削除
-        </button>
+      </div>
+      <div className="prompt-card__footer">
+        <div className="prompt-card__actions">
+          <button
+            type="button"
+            className="prompt-card__action-btn prompt-card__action-btn--delete"
+            onClick={() => onDelete(entry)}
+            aria-label="削除"
+          >
+            <i className="bi bi-trash3"></i>
+            <span>削除</span>
+          </button>
+        </div>
       </div>
     </article>
   );
