@@ -769,6 +769,21 @@ body.prompt-share-page,
   --ps-danger: #d93025;
   --ps-shadow-soft: 0 1px 3px rgba(60, 64, 67, 0.18);
   --ps-shadow-hover: 0 8px 24px rgba(60, 64, 67, 0.2);
+  --ps-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
+  --ps-fab-blue-gradient: linear-gradient(135deg, #1f7bff 0%, #155fce 52%, #61b2ff 100%);
+  --ps-fab-blue-shadow:
+    0 10px 24px rgba(21, 95, 206, 0.34),
+    0 2px 6px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --ps-fab-blue-shadow-hover:
+    0 0 0 5px rgba(85, 166, 255, 0.18),
+    0 16px 34px rgba(21, 95, 206, 0.42),
+    0 5px 14px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  --ps-fab-blue-shadow-active:
+    0 0 0 3px rgba(85, 166, 255, 0.12),
+    0 8px 18px rgba(21, 95, 206, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
   --page-scrollbar-track: rgba(218, 220, 224, 0.78);
   --page-scrollbar-thumb: rgba(26, 115, 232, 0.28);
@@ -1648,9 +1663,25 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     radial-gradient(circle at top, rgba(79, 156, 245, 0.14), transparent 34%),
     rgba(18, 22, 30, 0.58);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.18s ease, visibility 0.18s ease;
+  isolation: isolate;
+  transition: opacity 0.28s ease, visibility 0.28s ease, backdrop-filter 0.32s ease;
+  pointer-events: none;
+}
+
+.post-modal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(129, 184, 255, 0.20), transparent 28%),
+    radial-gradient(circle at 82% 20%, rgba(88, 165, 255, 0.16), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
+  opacity: 0;
+  transform: scale(1.04);
+  transition: opacity 0.36s ease, transform 0.42s ease;
   pointer-events: none;
 }
 
@@ -1658,6 +1689,11 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+.post-modal.show::before {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .post-modal-content {
@@ -1669,14 +1705,23 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   background:
     radial-gradient(circle at top left, rgba(79, 156, 245, 0.16), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.98) 100%);
-  box-shadow: 0 28px 60px rgba(18, 24, 34, 0.28);
+  box-shadow:
+    0 30px 70px rgba(18, 24, 34, 0.30),
+    0 10px 26px rgba(37, 99, 235, 0.10);
   padding: 1.3rem 1.15rem 1.15rem;
   position: relative;
   isolation: isolate;
-  transform: translateY(8px);
+  transform: translateY(26px) scale(0.965);
+  transform-origin: 50% 42%;
   opacity: 0;
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  filter: blur(10px);
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.30s ease,
+    filter 0.42s ease,
+    box-shadow 0.42s ease;
   overflow-wrap: anywhere;
+  will-change: transform, opacity, filter;
 }
 
 .post-modal-content--composer {
@@ -1693,8 +1738,12 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .post-modal.show .post-modal-content {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   opacity: 1;
+  filter: blur(0);
+  box-shadow:
+    0 38px 88px rgba(18, 24, 34, 0.34),
+    0 16px 36px rgba(37, 99, 235, 0.12);
 }
 
 .post-modal-content--composer::before {
@@ -1704,6 +1753,29 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   height: 4px;
   border-radius: 26px 26px 0 0;
   background: linear-gradient(90deg, #185abc 0%, #4f9cf5 100%);
+}
+
+.post-modal .composer-hero,
+.post-modal .post-form > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease;
+}
+
+.post-modal .composer-hero {
+  transition-delay: 0.06s;
+}
+
+.post-modal .post-form > * {
+  transition-delay: 0.14s;
+}
+
+.post-modal.show .composer-hero,
+.post-modal.show .post-form > * {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 #promptDetailModal .post-modal-content {
@@ -2287,23 +2359,21 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   right: auto;
   bottom: clamp(14px, 2.8vw, 28px);
   left: clamp(14px, 2vw, 28px);
-  width: 56px;
-  height: 56px;
-  border: none;
+  width: 60px;
+  height: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
   color: #ffffff;
-  background: linear-gradient(145deg, #2979e8 0%, #185abc 55%, #3f94f5 100%);
+  background: var(--ps-fab-sheen), var(--ps-fab-blue-gradient);
   background-size: 200% 200%;
-  background-position: 30% 0%;
-  box-shadow:
-    0 0 0 0px rgba(79, 156, 245, 0),
-    0 5px 18px rgba(26, 115, 232, 0.42),
-    0 2px 5px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.20);
+  background-position: 24% 24%;
+  box-shadow: var(--ps-fab-blue-shadow);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  overflow: visible;
+  isolation: isolate;
   z-index: var(--z-floating-action-menu, 60);
   transition:
     transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -2312,26 +2382,55 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     filter 0.28s ease;
 }
 
+.new-prompt-btn::before,
+.new-prompt-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.new-prompt-btn::before {
+  inset: -4px;
+  z-index: -2;
+  background: radial-gradient(circle, rgba(97, 178, 255, 0.34) 0%, rgba(31, 123, 255, 0) 72%);
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.new-prompt-btn::after {
+  z-index: -1;
+  background: linear-gradient(120deg, transparent 18%, rgba(255, 255, 255, 0.34) 50%, transparent 82%);
+  opacity: 0;
+  transform: translateX(-120%) skewX(-18deg);
+}
+
 .new-prompt-btn:hover {
   background-position: 100% 100%;
-  transform: scale(1.13) translateY(-2px);
-  filter: brightness(1.06) saturate(1.16);
-  box-shadow:
-    0 0 0 9px rgba(79, 156, 245, 0.16),
-    0 12px 32px rgba(26, 115, 232, 0.52),
-    0 4px 10px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transform: scale(1.08) translateY(-1px);
+  filter: brightness(1.07) saturate(1.12);
+  box-shadow: var(--ps-fab-blue-shadow-hover);
 }
 
 .new-prompt-btn:active {
-  transform: scale(0.88) translateY(1px);
-  filter: brightness(0.92) saturate(1);
-  box-shadow:
-    0 0 0 3px rgba(79, 156, 245, 0.08),
-    0 3px 10px rgba(26, 115, 232, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  background-position: 50% 50%;
+  transform: scale(0.92) translateY(1px);
+  filter: brightness(0.94) saturate(1.02);
+  box-shadow: var(--ps-fab-blue-shadow-active);
+  background-position: 56% 56%;
   transition-duration: 0.07s;
+}
+
+.new-prompt-btn.launching {
+  animation: newPromptButtonLaunch 0.56s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.new-prompt-btn.launching::before {
+  animation: newPromptButtonPulse 0.56s ease-out;
+}
+
+.new-prompt-btn.launching::after {
+  animation: newPromptButtonSheen 0.62s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .new-prompt-btn i {
@@ -2357,13 +2456,64 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   100% { transform: rotate(360deg) scale(1); }
 }
 
+@keyframes newPromptButtonLaunch {
+  0% {
+    transform: scale(1);
+  }
+  24% {
+    transform: scale(0.94);
+  }
+  58% {
+    transform: scale(1.08) translateY(-2px);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes newPromptButtonPulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+  28% {
+    opacity: 0.52;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@keyframes newPromptButtonSheen {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  16% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(120%) skewX(-18deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .post-modal,
+  .post-modal::before,
+  .post-modal-content,
+  .post-modal .composer-hero,
+  .post-modal .post-form > *,
   .category-card,
   .prompt-share-page .prompt-card,
   .prompt-share-page .prompt-action-btn,
   .prompt-share-page .meatball-menu,
   .prompt-share-page .prompt-actions-dropdown,
   .new-prompt-btn,
+  .new-prompt-btn::before,
+  .new-prompt-btn::after,
+  .new-prompt-btn.launching,
   .new-prompt-btn i,
   .new-prompt-btn i.rotating {
     transition-duration: 0.01ms !important;
@@ -2382,8 +2532,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   .new-prompt-btn:active {
     transform: none;
     filter: none;
-    box-shadow: 0 5px 18px rgba(26, 115, 232, 0.42);
-    background-position: 30% 0%;
+    box-shadow: var(--ps-fab-blue-shadow);
+    background-position: 24% 24%;
   }
 
   .prompt-share-page .prompt-actions-dropdown,
@@ -2393,6 +2543,13 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
   .new-prompt-btn i.rotating {
     animation: none;
+  }
+
+  .post-modal.show .post-modal-content,
+  .post-modal.show .composer-hero,
+  .post-modal.show .post-form > * {
+    transform: none;
+    filter: none;
   }
 }
 
@@ -2558,8 +2715,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   }
 
   .new-prompt-btn {
-    width: 52px;
-    height: 52px;
+    width: 56px;
+    height: 56px;
   }
 
   .new-prompt-btn i {
@@ -2616,6 +2773,11 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
   .prompt-meta-pill {
     font-size: 0.7rem;
+  }
+
+  .new-prompt-btn {
+    width: 50px;
+    height: 50px;
   }
 
   .prompt-action-btn i {

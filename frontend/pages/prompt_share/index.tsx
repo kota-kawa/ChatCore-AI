@@ -204,6 +204,7 @@ export default function PromptSharePage() {
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const promptImageInputRef = useRef<HTMLInputElement | null>(null);
+  const promptNewButtonRef = useRef<HTMLButtonElement | null>(null);
   const promptNewButtonIconRef = useRef<HTMLElement | null>(null);
 
   const promptAssistRootRef = useRef<HTMLDivElement | null>(null);
@@ -385,6 +386,14 @@ export default function PromptSharePage() {
     icon.classList.remove("rotating");
     void icon.offsetWidth;
     icon.classList.add("rotating");
+  }, []);
+
+  const triggerNewPromptButtonLaunch = useCallback(() => {
+    const button = promptNewButtonRef.current;
+    if (!button) return;
+    button.classList.remove("launching");
+    void button.offsetWidth;
+    button.classList.add("launching");
   }, []);
 
   const resetPostModalState = useCallback(() => {
@@ -676,10 +685,11 @@ export default function PromptSharePage() {
       return;
     }
 
+    triggerNewPromptButtonLaunch();
     triggerNewPromptIconRotation();
     setPromptPostStatus("カテゴリやタイトルを軽く入れてから AI 補助を使うと、提案が安定します。", "info");
     openModal("post", promptPostTitleInputRef.current);
-  }, [isLoggedIn, openModal, setPromptPostStatus, triggerNewPromptIconRotation]);
+  }, [isLoggedIn, openModal, setPromptPostStatus, triggerNewPromptButtonLaunch, triggerNewPromptIconRotation]);
 
   const handleCategoryClick = useCallback(
     (category: string) => {
@@ -927,6 +937,20 @@ export default function PromptSharePage() {
     icon.addEventListener("animationend", handleAnimationEnd);
     return () => {
       icon.removeEventListener("animationend", handleAnimationEnd);
+    };
+  }, []);
+
+  useEffect(() => {
+    const button = promptNewButtonRef.current;
+    if (!button) {
+      return;
+    }
+    const handleAnimationEnd = () => {
+      button.classList.remove("launching");
+    };
+    button.addEventListener("animationend", handleAnimationEnd);
+    return () => {
+      button.removeEventListener("animationend", handleAnimationEnd);
     };
   }, []);
 
@@ -2040,6 +2064,7 @@ export default function PromptSharePage() {
           data-tooltip="新しいプロンプトを投稿"
           data-tooltip-placement="left"
           type="button"
+          ref={promptNewButtonRef}
           onClick={openComposerModal}
         >
           <i className="bi bi-plus-lg" ref={promptNewButtonIconRef}></i>
