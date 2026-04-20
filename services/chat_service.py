@@ -13,17 +13,22 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 
 
-def save_message_to_db(chat_room_id: str, message: str, sender: str) -> None:
+def save_message_to_db(chat_room_id: str, message: str, sender: str) -> int | None:
     # チャットメッセージを履歴テーブルへ追加する
     # Insert a chat message into the history table.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
-                query = "INSERT INTO chat_history (chat_room_id, message, sender) VALUES (%s, %s, %s)"
+                query = """
+                    INSERT INTO chat_history (chat_room_id, message, sender)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                """
                 cursor.execute(query, (chat_room_id, message, sender))
+                row = cursor.fetchone()
                 conn.commit()
-                return
+                return row[0] if row else None
             except Error as exc:
                 rollback_connection(conn)
                 if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
@@ -39,15 +44,15 @@ def save_message_to_db(chat_room_id: str, message: str, sender: str) -> None:
     raise RuntimeError("Failed to save chat message after retry attempts.")
 
 
-def create_chat_room_in_db(room_id: str, user_id: int, title: str) -> None:
+def create_chat_room_in_db(room_id: str, user_id: int, title: str, mode: str = "normal") -> None:
     # チャットルームのメタ情報を保存する
     # Persist chat room metadata.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
-                query = "INSERT INTO chat_rooms (id, user_id, title) VALUES (%s, %s, %s)"
-                cursor.execute(query, (room_id, user_id, title))
+                query = "INSERT INTO chat_rooms (id, user_id, title, mode) VALUES (%s, %s, %s, %s)"
+                cursor.execute(query, (room_id, user_id, title, mode))
                 conn.commit()
                 return
             except Error as exc:
@@ -164,19 +169,22 @@ def get_chat_room_messages(chat_room_id: str) -> list[dict[str, str]]:
 
 def validate_room_owner(
     room_id: str, user_id: int, forbidden_message: str
-) -> None:
+) -> str | None:
     # 指定ルームの所有者チェックを行い、失敗時は例外を送出する
     # Validate room ownership and raise API service errors on failure.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
-            check_q = "SELECT user_id FROM chat_rooms WHERE id = %s"
+            check_q = "SELECT user_id, COALESCE(mode, 'normal') FROM chat_rooms WHERE id = %s"
             cursor.execute(check_q, (room_id,))
             result = cursor.fetchone()
             if not result:
                 raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
             if result[0] != user_id:
                 raise ForbiddenOperationError(forbidden_message)
+            if len(result) < 2:
+                return None
+            return str(result[1] or "normal")
         finally:
             cursor.close()
 

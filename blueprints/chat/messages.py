@@ -18,6 +18,14 @@ from services.chat_service import (
     get_chat_room_messages,
     validate_room_owner,
 )
+from services.chat_context import build_context_messages
+from services.chat_state import (
+    get_room_summary,
+    list_room_memory_fact_records,
+    list_room_memory_facts,
+    rebuild_room_summary,
+    remember_facts_from_message,
+)
 from services.chat_generation import (
     ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
@@ -79,6 +87,7 @@ from . import (
     chat_bp,
     get_session_id,
     get_guest_room_ids,
+    get_temporary_user_store_key,
     register_guest_room,
     unregister_guest_room,
     cleanup_ephemeral_chats,
@@ -246,11 +255,12 @@ def _discard_room_without_assistant_response(
     user_id: int | None = None,
     sid: str | None = None,
 ) -> bool:
+    deleted = False
     if user_id is not None:
-        return delete_chat_room_if_no_assistant_messages(chat_room_id, user_id)
+        deleted = delete_chat_room_if_no_assistant_messages(chat_room_id, user_id) or deleted
     if sid is not None:
-        return ephemeral_store.delete_room_if_no_assistant_messages(sid, chat_room_id)
-    return False
+        deleted = ephemeral_store.delete_room_if_no_assistant_messages(sid, chat_room_id) or deleted
+    return deleted
 
 
 def _cleanup_failed_room_without_assistant_response(
@@ -519,6 +529,18 @@ def _legacy_error_response(result: Any):
     return None
 
 
+def _resolved_room_mode(owner_result: Any) -> str:
+    if isinstance(owner_result, str) and owner_result in {"normal", "temporary"}:
+        return owner_result
+    return "normal"
+
+
+def _ensure_ephemeral_room(sid: str, chat_room_id: str, title: str = "新規チャット") -> None:
+    if ephemeral_store.room_exists(sid, chat_room_id):
+        return
+    ephemeral_store.create_room(sid, chat_room_id, title)
+
+
 def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
     if char_budget <= 0:
         return ""
@@ -724,7 +746,9 @@ async def chat(
             )
 
     sid = None
+    room_mode = "temporary"
     user_id = session.get("user_id")
+    saved_user_message_id: int | None = None
     if "user_id" in session:
         # ログインユーザーはDB永続履歴、ゲストは ephemeral_store を利用する
         # Use DB-backed history for signed-in users and ephemeral store for guests.
@@ -738,6 +762,7 @@ async def chat(
             legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
+            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -749,8 +774,25 @@ async def chat(
         escaped = html.escape(user_message)
         formatted_user_message = escaped.replace("\n", "<br>")
 
-        await run_blocking(save_message_to_db, chat_room_id, formatted_user_message, "user")
-        all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(user_id)
+            await run_blocking(_ensure_ephemeral_room, sid, chat_room_id)
+            await run_blocking(
+                ephemeral_store.append_message,
+                sid,
+                chat_room_id,
+                "user",
+                formatted_user_message,
+            )
+            all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+        else:
+            saved_user_message_id = await run_blocking(
+                save_message_to_db,
+                chat_room_id,
+                formatted_user_message,
+                "user",
+            )
+            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -769,23 +811,41 @@ async def chat(
     if active_task_request is not None:
         prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
 
-    conversation_messages = [
-        {
-            "role": "system",
-            "content": _build_base_system_prompt(),
-        }
-    ]
+    task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
+    room_summary = ""
+    memory_facts: list[str] = []
+    if user_id is not None and room_mode == "normal":
+        try:
+            summary_payload = await run_blocking(get_room_summary, chat_room_id)
+            room_summary = str((summary_payload or {}).get("summary") or "")
+        except Exception:
+            logger.warning("Failed to load room summary; proceeding without it.")
+        try:
+            memory_facts = await run_blocking(list_room_memory_facts, chat_room_id)
+        except Exception:
+            logger.warning("Failed to load memory facts; proceeding without them.")
+        if saved_user_message_id is not None:
+            try:
+                remembered_facts = await run_blocking(
+                    remember_facts_from_message,
+                    chat_room_id,
+                    user_id,
+                    user_message,
+                    source_message_id=saved_user_message_id,
+                )
+                for fact in remembered_facts:
+                    if fact not in memory_facts:
+                        memory_facts.insert(0, fact)
+            except Exception:
+                logger.warning("Failed to update memory facts for chat room %s.", chat_room_id)
 
-    if prompt_data:
-        conversation_messages.append(
-            {
-                "role": "system",
-                "content": _build_task_prompt(prompt_data),
-            }
-        )
-
-    conversation_messages += normalized_all_messages
-    conversation_messages = _truncate_conversation_for_llm(conversation_messages)
+    conversation_messages = build_context_messages(
+        base_system_prompt=_build_base_system_prompt(),
+        task_prompt=task_prompt,
+        room_summary=room_summary,
+        memory_facts=memory_facts,
+        recent_messages=normalized_all_messages,
+    )
 
     try:
         validate_model_name(model)
@@ -827,11 +887,22 @@ async def chat(
     if is_streaming_model(model):
         # ストリーミング対応モデルはバックグラウンド生成ジョブ + SSE で返す
         # For streaming-capable models, run background generation and return via SSE.
-        persist_response = (
-            partial(save_message_to_db, chat_room_id, sender="assistant")
-            if "user_id" in session
-            else partial(ephemeral_store.append_message, sid, chat_room_id, "assistant")
-        )
+        on_finished = None
+        if user_id is not None and room_mode == "normal":
+            def persist_response(response: str) -> None:
+                save_message_to_db(chat_room_id, response, "assistant")
+
+            def on_finished() -> None:
+                try:
+                    updated_messages = get_chat_room_messages(chat_room_id)
+                    rebuild_room_summary(chat_room_id, updated_messages)
+                except Exception:
+                    logger.warning(
+                        "Failed to rebuild room summary after streaming response for %s.",
+                        chat_room_id,
+                    )
+        else:
+            persist_response = partial(ephemeral_store.append_message, sid, chat_room_id, "assistant")
 
         try:
             job = start_generation_job(
@@ -839,6 +910,7 @@ async def chat(
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
+                on_finished=on_finished,
                 on_error=partial(
                     _cleanup_failed_room_without_assistant_response,
                     chat_room_id,
@@ -912,11 +984,19 @@ async def chat(
             status_code=502,
         )
 
-    if "user_id" in session:
-        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
+    saved_assistant_message_id: int | None = None
+    if user_id is not None and room_mode == "normal":
+        saved_assistant_message_id = await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
     else:
-        sid = get_session_id(session)
+        sid = sid or get_session_id(session)
         await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
+
+    if user_id is not None and room_mode == "normal" and saved_assistant_message_id is not None:
+        try:
+            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
+            await run_blocking(rebuild_room_summary, chat_room_id, all_messages)
+        except Exception:
+            logger.warning("Failed to rebuild room summary for chat room %s.", chat_room_id)
 
     return jsonify({"response": bot_reply})
 
@@ -943,6 +1023,7 @@ async def chat_stop(
     )
     sid = None
     user_id = session.get("user_id")
+    room_mode = "temporary"
 
     if user_id is not None:
         try:
@@ -955,6 +1036,7 @@ async def chat_stop(
             legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
+            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -962,6 +1044,8 @@ async def chat_stop(
                 logger,
                 "Failed to validate chat room ownership before stop.",
             )
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -989,6 +1073,7 @@ async def get_chat_history(request: Request):
 
     session = request.session
     if "user_id" in session:
+        room_mode = "normal"
         try:
             owner_result = await run_blocking(
                 validate_room_owner,
@@ -999,6 +1084,7 @@ async def get_chat_history(request: Request):
             legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
+            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1007,8 +1093,30 @@ async def get_chat_history(request: Request):
                 "Failed to validate chat room ownership before history fetch.",
             )
 
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(session["user_id"])
+            messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+            payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
+            payload["room_mode"] = room_mode
+            payload["summary"] = ""
+            payload["memory_facts"] = []
+            return jsonify(payload)
+
         try:
             payload = await run_blocking(_fetch_chat_history, chat_room_id, limit, before_message_id)
+            payload["room_mode"] = room_mode
+            try:
+                summary_payload = await run_blocking(get_room_summary, chat_room_id)
+            except Exception:
+                logger.warning("Failed to load room summary during history fetch.")
+                summary_payload = None
+            try:
+                memory_records = await run_blocking(list_room_memory_fact_records, chat_room_id)
+            except Exception:
+                logger.warning("Failed to load memory facts during history fetch.")
+                memory_records = []
+            payload["summary"] = (summary_payload or {}).get("summary", "")
+            payload["memory_facts"] = memory_records
             return jsonify(payload)
         except Exception:
             return log_and_internal_server_error(
@@ -1022,6 +1130,9 @@ async def get_chat_history(request: Request):
 
         messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         payload = _paginate_ephemeral_chat_history(messages, limit, before_message_id)
+        payload["room_mode"] = "temporary"
+        payload["summary"] = ""
+        payload["memory_facts"] = []
         return jsonify(payload)
 
 
@@ -1044,6 +1155,7 @@ async def chat_generation_stream(
     )
     sid = None
     user_id = session.get("user_id")
+    room_mode = "temporary"
 
     if user_id is not None:
         try:
@@ -1056,6 +1168,7 @@ async def chat_generation_stream(
             legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
+            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1063,6 +1176,8 @@ async def chat_generation_stream(
                 logger,
                 "Failed to validate chat room ownership before generation stream.",
             )
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -1117,6 +1232,7 @@ async def chat_generation_status(
     )
     sid = None
     user_id = session.get("user_id")
+    room_mode = "temporary"
 
     if user_id is not None:
         try:
@@ -1129,6 +1245,7 @@ async def chat_generation_status(
             legacy_response = _legacy_error_response(owner_result)
             if legacy_response is not None:
                 return legacy_response
+            room_mode = _resolved_room_mode(owner_result)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
         except Exception:
@@ -1136,6 +1253,8 @@ async def chat_generation_status(
                 logger,
                 "Failed to validate chat room ownership before generation status fetch.",
             )
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(user_id)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:

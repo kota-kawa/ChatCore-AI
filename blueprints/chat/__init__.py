@@ -50,6 +50,10 @@ def guest_room_belongs_to_session(session: dict, room_id: str) -> bool:
     return room_id in get_guest_room_ids(session)
 
 
+def get_temporary_user_store_key(user_id: int) -> str:
+    return f"temporary-user:{user_id}"
+
+
 # エフェメラルチャットの期限切れデータを掃除する
 # Clean up expired data from the ephemeral chat store.
 def cleanup_ephemeral_chats():
@@ -68,6 +72,7 @@ __all__ = [
     "register_guest_room",
     "unregister_guest_room",
     "guest_room_belongs_to_session",
+    "get_temporary_user_store_key",
     "ephemeral_store",
     "EXPIRATION_TIME",
 ]

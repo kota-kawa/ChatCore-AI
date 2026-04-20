@@ -47,6 +47,7 @@ from . import (
     cleanup_ephemeral_chats,
     ephemeral_store,
     get_session_id,
+    get_temporary_user_store_key,
     register_guest_room,
     unregister_guest_room,
 )
@@ -72,7 +73,7 @@ def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
         conn = get_db_connection()
         cursor = conn.cursor()
         query = """
-            SELECT id, title, created_at
+            SELECT id, title, COALESCE(mode, 'normal'), created_at
             FROM chat_rooms
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -80,11 +81,12 @@ def _fetch_user_rooms(user_id: int) -> list[dict[str, Any]]:
         cursor.execute(query, (user_id,))
         rows = cursor.fetchall()
         rooms = []
-        for (room_id, title, created_at) in rows:
+        for (room_id, title, mode, created_at) in rows:
             rooms.append(
                 {
                     "id": room_id,
                     "title": title,
+                    "mode": mode or "normal",
                     "created_at": serialize_datetime_iso(created_at),
                 }
             )
@@ -157,6 +159,7 @@ async def new_chat_room(
 
     room_id = payload.id
     title = payload.title
+    mode = payload.mode
 
     session = request.session
     if "user_id" in session:
@@ -164,12 +167,16 @@ async def new_chat_room(
         # Persist for authenticated users in DB without daily free limit.
         user_id = session["user_id"]
         try:
-            await run_blocking(create_chat_room_in_db, room_id, user_id, title)
+            await run_blocking(create_chat_room_in_db, room_id, user_id, title, mode)
+            if mode == "temporary":
+                temporary_sid = get_temporary_user_store_key(user_id)
+                await run_blocking(ephemeral_store.create_room, temporary_sid, room_id, title)
             return jsonify(
                 {
                     "message": "チャットルームが作成されました。",
                     "id": room_id,
                     "title": title,
+                    "mode": mode,
                 },
                 status_code=201,
             )
@@ -201,6 +208,7 @@ async def new_chat_room(
                 "message": "エフェメラルチャットルームが作成されました。",
                 "id": room_id,
                 "title": title,
+                "mode": "temporary",
             },
             status_code=201,
         )
@@ -248,7 +256,16 @@ async def delete_chat_room(request: Request):
     session = request.session
     if "user_id" in session:
         try:
+            room_mode = await run_blocking(
+                validate_room_owner,
+                room_id,
+                session["user_id"],
+                "他ユーザーのチャットルームは削除できません",
+            )
             response_payload = await run_blocking(_delete_room_for_user, room_id, session["user_id"])
+            if room_mode == "temporary":
+                temporary_sid = get_temporary_user_store_key(session["user_id"])
+                await run_blocking(ephemeral_store.delete_room, temporary_sid, room_id)
             return jsonify(response_payload, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -297,6 +314,9 @@ async def rename_chat_room(request: Request):
                 return legacy_response
 
             await run_blocking(rename_chat_room_in_db, room_id, new_title)
+            if owner_result == "temporary":
+                temporary_sid = get_temporary_user_store_key(session["user_id"])
+                await run_blocking(ephemeral_store.rename_room, temporary_sid, room_id, new_title)
             return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
         except ApiServiceError as exc:
             return jsonify_service_error(exc)
@@ -342,6 +362,8 @@ async def share_chat_room(request: Request):
         legacy_response = _legacy_error_response(owner_result)
         if legacy_response is not None:
             return legacy_response
+        if owner_result == "temporary":
+            return jsonify({"error": "temporary chat は共有できません"}, status_code=400)
 
         share_token_result = await run_blocking(create_or_get_shared_chat_token, room_id, user_id)
         if isinstance(share_token_result, tuple) and len(share_token_result) == 2:

@@ -643,6 +643,7 @@ return 0
         conversation_messages: list[dict[str, str]],
         model: str,
         persist_response: Callable[[str], None],
+        on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
@@ -660,7 +661,11 @@ return 0
                 conversation_messages=conversation_messages,
                 model=model,
                 persist_response=persist_response,
-                on_finished=lambda: self._release_active_job_lock(job_key, lock_token),
+                on_finished=lambda: self._finalize_job(
+                    job_key,
+                    lock_token,
+                    on_finished=on_finished,
+                ),
                 on_event=lambda event: self._publish_distributed_event(job_key, event),
                 on_error=on_error,
             )
@@ -674,6 +679,21 @@ return 0
             self._release_active_job_lock(job_key, lock_token)
             raise
         return job
+
+    def _finalize_job(
+        self,
+        job_key: str,
+        lock_token: str | None,
+        *,
+        on_finished: Callable[[], None] | None = None,
+    ) -> None:
+        self._release_active_job_lock(job_key, lock_token)
+        if on_finished is None:
+            return
+        try:
+            on_finished()
+        except Exception:
+            logger.exception("Failed to run chat generation finished callback.")
 
 
 _default_chat_generation_service = ChatGenerationService()
@@ -768,6 +788,7 @@ def start_generation_job(
     conversation_messages: list[dict[str, str]],
     model: str,
     persist_response: Callable[[str], None],
+    on_finished: Callable[[], None] | None = None,
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
 ) -> ChatGenerationJob:
@@ -781,5 +802,6 @@ def start_generation_job(
         conversation_messages=conversation_messages,
         model=model,
         persist_response=persist_response,
+        on_finished=on_finished,
         on_error=on_error,
     )

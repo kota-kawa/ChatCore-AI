@@ -40,6 +40,7 @@ class NewChatRoomRequest(RequestPayloadModel):
     # Input payload for chat room creation.
     id: str
     title: str = "新規チャット"
+    mode: Literal["normal", "temporary"] = "normal"
 
 
 class ChatRoomIdRequest(RequestPayloadModel):
