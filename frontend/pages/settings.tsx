@@ -96,6 +96,10 @@ function toDisplayDate(rawDate?: string): string {
   return formatDateTime(rawDate) || rawDate || "";
 }
 
+function normalizePreviewText(value?: string): string {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
 function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
   return rawPasskeys
     .map((rawPasskey) => {
@@ -198,18 +202,42 @@ function PromptCard({
   onDelete: (prompt: PromptRecord) => void;
 }) {
   const promptId = asIdString(prompt.id);
+  const contentPreview = normalizePreviewText(prompt.content);
+  const inputPreview = normalizePreviewText(prompt.inputExamples);
+  const outputPreview = normalizePreviewText(prompt.outputExamples);
+  const categoryLabel = normalizePreviewText(prompt.category) || "未分類";
+  const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : "日時未設定";
 
   return (
     <article className="prompt-card" data-prompt-id={promptId}>
-      <h3 title={prompt.title}>{truncateTitle(prompt.title)}</h3>
-      <p>{prompt.content}</p>
-      <div className="meta">
-        <span>カテゴリ: {prompt.category}</span><br />
-        <span>投稿日: {prompt.createdAt ? toDisplayDate(prompt.createdAt) : ""}</span>
+      <div className="prompt-card__header">
+        <div className="prompt-card__eyebrow">
+          <span className="prompt-card__chip prompt-card__chip--category">{categoryLabel}</span>
+          <span className="prompt-card__meta-item">
+            <i className="bi bi-calendar3" aria-hidden="true"></i>
+            {createdAtLabel}
+          </span>
+        </div>
+        <h3 className="prompt-card__title" title={prompt.title}>{truncateTitle(prompt.title)}</h3>
       </div>
-      <p className="d-none input-examples">{prompt.inputExamples || ""}</p>
-      <p className="d-none output-examples">{prompt.outputExamples || ""}</p>
-      <div className="btn-group">
+      <p className="prompt-card__content" title={prompt.content}>{contentPreview || "内容はまだありません。"}</p>
+      {(inputPreview || outputPreview) ? (
+        <div className="prompt-card__details">
+          {inputPreview ? (
+            <div className="prompt-card__detail">
+              <span className="prompt-card__detail-label">入力例</span>
+              <p className="prompt-card__detail-text" title={prompt.inputExamples}>{inputPreview}</p>
+            </div>
+          ) : null}
+          {outputPreview ? (
+            <div className="prompt-card__detail">
+              <span className="prompt-card__detail-label">出力例</span>
+              <p className="prompt-card__detail-text" title={prompt.outputExamples}>{outputPreview}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="btn-group prompt-card__actions">
         <button
           type="button"
           className="btn btn-sm btn-warning edit-btn"
@@ -239,16 +267,45 @@ function PromptListCard({
   onDelete: (entry: PromptListEntry) => void;
 }) {
   const entryId = asIdString(entry.id);
+  const contentPreview = normalizePreviewText(entry.content);
+  const inputPreview = normalizePreviewText(entry.inputExamples);
+  const outputPreview = normalizePreviewText(entry.outputExamples);
+  const categoryLabel = normalizePreviewText(entry.category);
+  const createdAtLabel = entry.createdAt ? toDisplayDate(entry.createdAt) : "日時未設定";
 
   return (
     <article className="prompt-card" data-prompt-list-entry-id={entryId}>
-      <h3 title={entry.title}>{truncateTitle(entry.title)}</h3>
-      <p>{entry.content}</p>
-      {entry.category ? <div className="meta"><strong>カテゴリ:</strong> {entry.category}</div> : null}
-      {entry.inputExamples ? <div className="meta"><strong>入力例:</strong> {entry.inputExamples}</div> : null}
-      {entry.outputExamples ? <div className="meta"><strong>出力例:</strong> {entry.outputExamples}</div> : null}
-      <div className="meta"><span>保存日: {entry.createdAt ? toDisplayDate(entry.createdAt) : ""}</span></div>
-      <div className="btn-group">
+      <div className="prompt-card__header">
+        <div className="prompt-card__eyebrow">
+          <span className="prompt-card__chip prompt-card__chip--saved">保存済み</span>
+          {categoryLabel ? <span className="prompt-card__chip prompt-card__chip--category">{categoryLabel}</span> : null}
+        </div>
+        <h3 className="prompt-card__title" title={entry.title}>{truncateTitle(entry.title)}</h3>
+      </div>
+      <p className="prompt-card__content" title={entry.content}>{contentPreview || "内容はまだありません。"}</p>
+      <div className="prompt-card__meta-row">
+        <span className="prompt-card__meta-item">
+          <i className="bi bi-bookmark-check" aria-hidden="true"></i>
+          {createdAtLabel}
+        </span>
+      </div>
+      {(inputPreview || outputPreview) ? (
+        <div className="prompt-card__details">
+          {inputPreview ? (
+            <div className="prompt-card__detail">
+              <span className="prompt-card__detail-label">入力例</span>
+              <p className="prompt-card__detail-text" title={entry.inputExamples}>{inputPreview}</p>
+            </div>
+          ) : null}
+          {outputPreview ? (
+            <div className="prompt-card__detail">
+              <span className="prompt-card__detail-label">出力例</span>
+              <p className="prompt-card__detail-text" title={entry.outputExamples}>{outputPreview}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="btn-group prompt-card__actions">
         <button
           type="button"
           className="btn btn-sm btn-danger remove-prompt-list-btn"
