@@ -21,7 +21,6 @@ from services.chat_service import (
 from services.chat_context import build_context_messages
 from services.chat_state import (
     get_room_summary,
-    list_room_memory_fact_records,
     list_room_memory_facts,
     rebuild_room_summary,
     remember_facts_from_message,
@@ -1153,18 +1152,9 @@ async def get_chat_history(request: Request):
         try:
             payload = await run_blocking(_fetch_chat_history, chat_room_id, limit, before_message_id)
             payload["room_mode"] = room_mode
-            try:
-                summary_payload = await run_blocking(get_room_summary, chat_room_id)
-            except Exception:
-                logger.warning("Failed to load room summary during history fetch.")
-                summary_payload = None
-            try:
-                memory_records = await run_blocking(list_room_memory_fact_records, chat_room_id)
-            except Exception:
-                logger.warning("Failed to load memory facts during history fetch.")
-                memory_records = []
-            payload["summary"] = (summary_payload or {}).get("summary", "")
-            payload["memory_facts"] = memory_records
+            # Keep the history endpoint lightweight so the chat view can render immediately.
+            payload["summary"] = ""
+            payload["memory_facts"] = []
             return jsonify(payload)
         except Exception:
             return log_and_internal_server_error(

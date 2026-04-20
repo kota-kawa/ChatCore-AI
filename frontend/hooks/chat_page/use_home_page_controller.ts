@@ -1054,31 +1054,75 @@ export function useHomePageController() {
   }, [closeShareModal, setLaunchingTaskName, setPageViewState]);
 
   const handleAccessChat = useCallback(async () => {
+    const activeRoomId = currentRoomIdRef.current;
+    const preferredLoadedRoom =
+      (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
+
+    if (preferredLoadedRoom) {
+      switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode);
+      return;
+    }
+
+    setPageViewState("chat");
+    setSidebarOpen(false);
+    setOpenRoomActionsFor(null);
+
+    if (activeRoomId) {
+      loadLocalChatHistory(activeRoomId);
+    } else {
+      setMessages([]);
+      setHistoryHasMore(false);
+      setHistoryNextBeforeId(null);
+      setIsLoadingOlder(false);
+    }
+
     try {
       const response = await fetch("/api/get_chat_rooms", { credentials: "same-origin" });
       const payload = (await readJsonBodySafe(response)) as { rooms?: unknown };
       const rooms = normalizeChatRooms(payload.rooms);
+      const preferredFetchedRoom =
+        (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
 
-      if (rooms.length > 0) {
-        setChatRooms(rooms);
-        switchChatRoom(rooms[0].id, rooms[0].mode);
+      setChatRooms(rooms);
+
+      if (preferredFetchedRoom) {
+        switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode);
         return;
       }
 
-      setPageViewState("chat");
       setMessages([]);
       persistCurrentRoomId(null);
       setCurrentRoomMode("normal");
-      void loadChatRooms();
+      setHistoryHasMore(false);
+      setHistoryNextBeforeId(null);
+      setIsLoadingOlder(false);
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
-      setPageViewState("chat");
-      setMessages([]);
-      persistCurrentRoomId(null);
-      setCurrentRoomMode("normal");
-      void loadChatRooms();
+      if (!activeRoomId) {
+        setMessages([]);
+        persistCurrentRoomId(null);
+        setCurrentRoomMode("normal");
+        setHistoryHasMore(false);
+        setHistoryNextBeforeId(null);
+        setIsLoadingOlder(false);
+      }
     }
-  }, [loadChatRooms, persistCurrentRoomId, setPageViewState, switchChatRoom]);
+  }, [
+    chatRooms,
+    currentRoomIdRef,
+    loadLocalChatHistory,
+    persistCurrentRoomId,
+    setCurrentRoomMode,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsLoadingOlder,
+    setMessages,
+    setOpenRoomActionsFor,
+    setPageViewState,
+    setSidebarOpen,
+    setChatRooms,
+    switchChatRoom,
+  ]);
 
   const handleNewChat = useCallback(() => {
     persistCurrentRoomId(null);
