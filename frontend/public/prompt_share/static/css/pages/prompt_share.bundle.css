@@ -767,6 +767,14 @@ body.prompt-share-page,
   --ps-primary-strong: #185abc;
   --ps-success: #188038;
   --ps-danger: #d93025;
+  --ps-like: #c05d74;
+  --ps-like-strong: #a44b61;
+  --ps-like-tint: rgba(192, 93, 116, 0.14);
+  --ps-like-shadow: rgba(192, 93, 116, 0.26);
+  --ps-bookmark: #b8872f;
+  --ps-bookmark-strong: #94691f;
+  --ps-bookmark-tint: rgba(184, 135, 47, 0.15);
+  --ps-bookmark-shadow: rgba(184, 135, 47, 0.24);
   --ps-shadow-soft: 0 1px 3px rgba(60, 64, 67, 0.18);
   --ps-shadow-hover: 0 8px 24px rgba(60, 64, 67, 0.2);
   --ps-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
@@ -1551,13 +1559,13 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-action-btn.like-btn:hover {
-  background: rgba(217, 48, 37, 0.12);
-  color: #d93025;
+  background: var(--ps-like-tint);
+  color: var(--ps-like);
 }
 
 .prompt-share-page .prompt-action-btn.bookmark-btn:hover {
-  background: rgba(26, 122, 74, 0.12);
-  color: #1a7a4a;
+  background: var(--ps-bookmark-tint);
+  color: var(--ps-bookmark);
 }
 
 .prompt-share-page .meatball-menu:hover {
@@ -1583,13 +1591,13 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .bookmark-btn.bookmarked {
-  color: #1a7a4a;
-  background: rgba(26, 122, 74, 0.1);
+  color: var(--ps-bookmark);
+  background: var(--ps-bookmark-tint);
 }
 
 .prompt-share-page .like-btn.liked {
-  color: #d93025;
-  background: rgba(217, 48, 37, 0.1);
+  color: var(--ps-like);
+  background: var(--ps-like-tint);
 }
 
 .prompt-share-page .meatball-menu {
@@ -3038,20 +3046,24 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-action-btn.like-btn.liked {
-  --ps-button-base: rgba(217, 48, 37, 0.92);
-  --ps-button-accent: rgba(185, 28, 28, 0.92);
-  --ps-button-shadow-color: rgba(220, 38, 38, 0.24);
+  --ps-button-base: color-mix(in srgb, var(--ps-like) 90%, white);
+  --ps-button-accent: color-mix(in srgb, var(--ps-like-strong) 92%, white);
+  --ps-button-shadow-color: var(--ps-like-shadow);
   color: #ffffff;
 }
 
 .prompt-share-page .prompt-action-btn.bookmark-btn.bookmarked {
-  --ps-button-base: rgba(26, 122, 74, 0.9);
-  --ps-button-accent: rgba(22, 101, 52, 0.9);
-  --ps-button-shadow-color: rgba(22, 163, 74, 0.24);
+  --ps-button-base: color-mix(in srgb, var(--ps-bookmark) 90%, white);
+  --ps-button-accent: color-mix(in srgb, var(--ps-bookmark-strong) 92%, white);
+  --ps-button-shadow-color: var(--ps-bookmark-shadow);
   color: #ffffff;
   background:
     var(--cc-button-sheen),
-    linear-gradient(135deg, rgba(26, 122, 74, 0.9) 0%, rgba(22, 101, 52, 0.9) 100%);
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ps-bookmark) 90%, white) 0%,
+      color-mix(in srgb, var(--ps-bookmark-strong) 92%, white) 100%
+    );
 }
 
 .prompt-share-page .prompt-card .meatball-menu,
