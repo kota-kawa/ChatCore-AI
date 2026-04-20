@@ -580,9 +580,9 @@ body.settings-page,
 
 .avatar-preview-wrapper {
   position: relative;
-  display: inline-block; /* 適切なサイズに */
+  display: inline-flex;
   margin-top: 0.5rem;
-  overflow: visible;
+  width: fit-content;
 }
 
 .avatar-preview {
@@ -596,8 +596,8 @@ body.settings-page,
 
 .change-avatar-btn {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  right: 0.2rem;
+  bottom: 0.2rem;
   width: 2.35rem;
   height: 2.35rem;
   display: inline-flex;
@@ -607,17 +607,17 @@ body.settings-page,
   color: #fff !important;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 3px solid #fff;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.24);
-  transform: translate(18%, 18%);
-  transition: background-color 0.2s, transform 0.2s;
+  transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
   cursor: pointer;
   z-index: 2;
 }
 
 .change-avatar-btn:hover {
   background: var(--accent-color); /* buttons.css の hover と合わせるか検討 */
-  transform: scale(1.1);
+  transform: scale(1.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
 .change-avatar-btn i {
