@@ -62,6 +62,8 @@ type PasskeyRecord = {
   lastUsedAt: string;
 };
 
+const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
+
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "prompts", iconClass: "bi bi-shield-lock", label: "プロンプト管理" },
@@ -417,6 +419,8 @@ export default function UserSettingsPage() {
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<ProfileSaveStatus | null>(null);
+  const [profileSaveEffectToken, setProfileSaveEffectToken] = useState(0);
+  const [profileSaveEffectActive, setProfileSaveEffectActive] = useState(false);
   const [llmProfileContextUsesGeneratedDefault, setLlmProfileContextUsesGeneratedDefault] = useState(false);
   const [initialLlmProfileContextUsesGeneratedDefault, setInitialLlmProfileContextUsesGeneratedDefault] = useState(false);
 
@@ -439,6 +443,7 @@ export default function UserSettingsPage() {
   const [deletingPasskeyId, setDeletingPasskeyId] = useState<number | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const profileSaveEffectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSectionActive = useCallback(
     (section: SettingsSection) => activeSection === section,
@@ -568,10 +573,36 @@ export default function UserSettingsPage() {
     void loadPasskeys();
 
     return () => {
+      if (profileSaveEffectTimeoutRef.current) {
+        clearTimeout(profileSaveEffectTimeoutRef.current);
+      }
       document.body.classList.remove("settings-page");
       document.body.classList.remove("modal-open");
     };
   }, [loadPasskeys, loadProfile]);
+
+  useEffect(() => {
+    if (profileSaveEffectToken === 0) {
+      return;
+    }
+
+    if (profileSaveEffectTimeoutRef.current) {
+      clearTimeout(profileSaveEffectTimeoutRef.current);
+    }
+
+    setProfileSaveEffectActive(true);
+    profileSaveEffectTimeoutRef.current = setTimeout(() => {
+      setProfileSaveEffectActive(false);
+      profileSaveEffectTimeoutRef.current = null;
+    }, PROFILE_SAVE_EFFECT_DURATION_MS);
+
+    return () => {
+      if (profileSaveEffectTimeoutRef.current) {
+        clearTimeout(profileSaveEffectTimeoutRef.current);
+        profileSaveEffectTimeoutRef.current = null;
+      }
+    };
+  }, [profileSaveEffectToken]);
 
   useEffect(() => {
     if (!editPromptForm) {
@@ -616,6 +647,7 @@ export default function UserSettingsPage() {
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = event.target;
       setProfileSaveStatus(null);
+      setProfileSaveEffectActive(false);
       setProfileForm((prev) => {
         const nextProfile = {
           ...prev,
@@ -654,6 +686,7 @@ export default function UserSettingsPage() {
     reader.readAsDataURL(file);
 
     setProfileSaveStatus(null);
+    setProfileSaveEffectActive(false);
     setSelectedAvatarFile(file);
   }, []);
 
@@ -666,6 +699,7 @@ export default function UserSettingsPage() {
       avatarInputRef.current.value = "";
     }
     setProfileSaveStatus(null);
+    setProfileSaveEffectActive(false);
   }, [initialAvatarUrl, initialLlmProfileContextUsesGeneratedDefault, initialProfileForm]);
 
   const handleProfileSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -682,6 +716,7 @@ export default function UserSettingsPage() {
 
     setProfileSaving(true);
     setProfileSaveStatus(null);
+    setProfileSaveEffectActive(false);
     try {
       const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
@@ -697,6 +732,7 @@ export default function UserSettingsPage() {
 
       const successMessage = asString(payload.message) || "プロフィールを更新しました";
       setProfileSaveStatus({ tone: "success", message: successMessage });
+      setProfileSaveEffectToken((current) => current + 1);
 
       const persistedAvatarUrl = asString(payload.avatar_url) || avatarPreviewUrl;
       setAvatarPreviewUrl(persistedAvatarUrl || DEFAULT_AVATAR_URL);
@@ -717,6 +753,7 @@ export default function UserSettingsPage() {
         avatarInputRef.current.value = "";
       }
     } catch (error) {
+      setProfileSaveEffectActive(false);
       setProfileSaveStatus({
         tone: "error",
         message: error instanceof Error ? error.message : String(error)
@@ -966,14 +1003,19 @@ export default function UserSettingsPage() {
             </div>
 
             <div id="profile-section" className={`settings-section${isSectionActive("profile") ? " active" : ""}`}>
-              <div className="settings-card">
+              <div className={`settings-card${profileSaveEffectActive ? " settings-card--save-success" : ""}`}>
                 <h2>ユーザープロフィール設定</h2>
                 {profileSaveStatus ? (
                   <p
-                    className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}`}
+                    key={`${profileSaveStatus.tone}-${profileSaveEffectToken}`}
+                    className={`settings-inline-feedback settings-inline-feedback--${profileSaveStatus.tone}${profileSaveStatus.tone === "success" && profileSaveEffectActive ? " settings-inline-feedback--celebrate" : ""}`}
                     role={profileSaveStatus.tone === "error" ? "alert" : "status"}
                     aria-live={profileSaveStatus.tone === "error" ? "assertive" : "polite"}
                   >
+                    <i
+                      className={`settings-inline-feedback__icon bi ${profileSaveStatus.tone === "success" ? "bi-check-circle-fill" : "bi-exclamation-circle-fill"}`}
+                      aria-hidden="true"
+                    ></i>
                     {profileSaveStatus.message}
                   </p>
                 ) : null}
@@ -1077,8 +1119,16 @@ export default function UserSettingsPage() {
                     <button type="button" className="secondary-button" id="cancelBtn" onClick={handleProfileCancel}>
                       キャンセル
                     </button>
-                    <button type="submit" className="primary-button" disabled={profileSaving}>
-                      {profileSaving ? "保存中..." : "変更を保存"}
+                    <button
+                      type="submit"
+                      className={`primary-button profile-save-button${profileSaveEffectActive ? " profile-save-button--saved" : ""}`}
+                      disabled={profileSaving}
+                    >
+                      <span className="profile-save-button__content">
+                        {profileSaving ? <i className="bi bi-arrow-repeat" aria-hidden="true"></i> : null}
+                        {!profileSaving && profileSaveEffectActive ? <i className="bi bi-check2-circle" aria-hidden="true"></i> : null}
+                        {profileSaving ? "保存中..." : profileSaveEffectActive ? "保存しました" : "変更を保存"}
+                      </span>
                     </button>
                   </div>
                 </form>

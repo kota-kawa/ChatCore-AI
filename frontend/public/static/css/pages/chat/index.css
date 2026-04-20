@@ -418,8 +418,7 @@ body.chat-page :where(.task-detail-modal-close, .new-modal-close-btn, .custom-mo
 }
 
 body.chat-page .new-prompt-modal-content {
-  max-height: min(90vh, 920px);
-  overscroll-behavior: contain;
+  max-height: none;
 }
 
 body.chat-page .io-modal-content {

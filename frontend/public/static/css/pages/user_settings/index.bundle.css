@@ -1204,6 +1204,8 @@ body.settings-page,
   box-shadow: var(--shadow);
   max-width: 700px;
   margin: 2rem auto; /* 上下のマージンを追加し、中央寄せ */
+  position: relative;
+  overflow: hidden;
 }
 
 .settings-card h2 {
@@ -1214,11 +1216,33 @@ body.settings-page,
   font-weight: 700;
 }
 
+.settings-card--save-success {
+  animation: settings-save-card-glow 0.9s ease;
+}
+
+.settings-card--save-success::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.2) 42%, rgba(255, 255, 255, 0.7) 50%, transparent 58%);
+  transform: translateX(-135%);
+  pointer-events: none;
+  animation: settings-save-card-sheen 0.9s ease;
+}
+
 .settings-inline-feedback {
   margin: -0.75rem 0 1.5rem;
   padding: 0.85rem 1rem;
   border-radius: 12px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.settings-inline-feedback__icon {
+  flex-shrink: 0;
+  font-size: 1rem;
 }
 
 .settings-inline-feedback--success {
@@ -1231,6 +1255,10 @@ body.settings-page,
   color: #991b1b;
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.18);
+}
+
+.settings-inline-feedback--celebrate {
+  animation: settings-save-feedback-pop 0.48s ease;
 }
 
 /* 共通フォーム要素 */
@@ -1362,6 +1390,31 @@ body.settings-page,
 .primary-button {
   padding: 0.85rem 1.5rem; /* パディング調整 */
   font-weight: 700;
+}
+
+.profile-save-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-save-button__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.profile-save-button--saved {
+  animation: settings-save-button-pulse 0.7s ease;
+}
+
+.profile-save-button--saved::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.16) 35%, rgba(255, 255, 255, 0.7) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: settings-save-button-sheen 0.8s ease;
 }
 
 /* セカンダリボタン (buttons.css のスタイルを参考に新規作成または調整) */
@@ -1561,5 +1614,74 @@ body.settings-page :where(
   .btn-primary
 ):active:not(:disabled) {
   transform: scale(0.97);
+}
+
+@keyframes settings-save-button-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 14px 24px rgba(25, 195, 125, 0.26),
+      var(--cc-button-edge-highlight);
+  }
+  45% {
+    transform: scale(1.04);
+    box-shadow:
+      0 0 0 10px rgba(25, 195, 125, 0.12),
+      0 18px 32px rgba(25, 195, 125, 0.32),
+      var(--cc-button-edge-highlight);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 14px 24px rgba(25, 195, 125, 0.26),
+      var(--cc-button-edge-highlight);
+  }
+}
+
+@keyframes settings-save-button-sheen {
+  from {
+    transform: translateX(-130%);
+  }
+  to {
+    transform: translateX(130%);
+  }
+}
+
+@keyframes settings-save-feedback-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes settings-save-card-glow {
+  0% {
+    box-shadow: var(--shadow);
+  }
+  45% {
+    box-shadow:
+      0 0 0 4px rgba(25, 195, 125, 0.08),
+      0 18px 44px rgba(25, 195, 125, 0.16);
+  }
+  100% {
+    box-shadow: var(--shadow);
+  }
+}
+
+@keyframes settings-save-card-sheen {
+  from {
+    transform: translateX(-135%);
+  }
+  to {
+    transform: translateX(135%);
+  }
 }
 /* END inlined: public/static/css/pages/user_settings/user_settings.css */
