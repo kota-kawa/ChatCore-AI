@@ -55,6 +55,16 @@ export function ChatMainSection() {
   const launchSetupSummary = setupInfo.trim();
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
 
+  const handleRoomCardKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    roomId: string,
+    roomMode: "normal" | "temporary",
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    switchChatRoom(roomId, roomMode);
+  };
+
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
 
@@ -173,22 +183,24 @@ export function ChatMainSection() {
                 <div
                   key={room.id}
                   className={`chat-room-card ${currentRoomId === room.id ? "active" : ""}`.trim()}
+                  role="button"
+                  tabIndex={0}
+                  aria-current={currentRoomId === room.id ? "page" : undefined}
+                  onClick={() => {
+                    switchChatRoom(room.id, room.mode);
+                  }}
+                  onKeyDown={(event) => {
+                    handleRoomCardKeyDown(event, room.id, room.mode);
+                  }}
                 >
-                  <button
-                    type="button"
-                    className="chat-room-card__trigger"
-                    aria-current={currentRoomId === room.id ? "page" : undefined}
-                    onClick={() => {
-                      switchChatRoom(room.id);
-                    }}
-                  >
+                  <div className="chat-room-card__trigger">
                     <span className="chat-room-card__title-row">
                       <span>{roomTitle}</span>
                       {room.mode === "temporary" && (
                         <span className="chat-room-card__mode-badge">未保存</span>
                       )}
                     </span>
-                  </button>
+                  </div>
 
                   <div className="chat-room-card-actions">
                     <button

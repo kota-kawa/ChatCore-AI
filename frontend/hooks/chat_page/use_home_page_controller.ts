@@ -711,6 +711,13 @@ export function useHomePageController() {
 
   const switchChatRoom = useCallback(
     (roomId: string, roomMode?: ChatRoomMode) => {
+      if (currentRoomIdRef.current === roomId) {
+        setPageViewState("chat");
+        setSidebarOpen(false);
+        setOpenRoomActionsFor(null);
+        return;
+      }
+
       const nextRoom = chatRooms.find((room) => room.id === roomId);
       persistCurrentRoomId(roomId);
       setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
@@ -721,9 +728,8 @@ export function useHomePageController() {
       setShareUrl("");
       loadLocalChatHistory(roomId);
       void loadChatHistory(roomId, true);
-      void loadChatRooms();
     },
-    [chatRooms, loadChatHistory, loadChatRooms, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
+    [chatRooms, currentRoomIdRef, loadChatHistory, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
