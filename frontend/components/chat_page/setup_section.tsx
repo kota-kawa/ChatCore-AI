@@ -25,6 +25,20 @@ function TemporaryChatIcon() {
   );
 }
 
+function TemporaryChatCheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M3.25 8.35 6.45 11.15 12.75 4.85"
+        stroke="currentColor"
+        strokeWidth="2.15"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function SetupSection() {
   const {
     pageViewState,
@@ -407,18 +421,53 @@ export function SetupSection() {
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
         <h2 className="setup-form-title">Chat Core</h2>
 
-        <div className="form-group">
+        <div className="form-group setup-info-group">
           <label className="form-label">現在の状況・作業環境（入力なしでもOK）</label>
-          <textarea
-            id="setup-info"
-            rows={4}
-            maxLength={MAX_SETUP_INFO_LENGTH}
-            placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
-            value={setupInfo}
-            onChange={(event) => {
-              setSetupInfo(event.target.value);
-            }}
-          ></textarea>
+          <div className="setup-info-field-shell">
+            <div className="chat-save-mode-control">
+              <button
+                id="temporary-chat-mode-btn"
+                type="button"
+                className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
+                aria-pressed={temporaryModeEnabled ? "true" : "false"}
+                aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
+                title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
+                onClick={() => {
+                  setTemporaryModeEnabled((previous) => !previous);
+                }}
+              >
+                <span className="chat-save-mode-toggle__icon" aria-hidden="true">
+                  <TemporaryChatIcon />
+                </span>
+                {temporaryModeEnabled && (
+                  <span className="chat-save-mode-toggle__check" aria-hidden="true">
+                    <TemporaryChatCheckIcon />
+                  </span>
+                )}
+              </button>
+
+              <span
+                className={`chat-save-mode-feedback ${saveModeFeedbackVisible ? "is-visible" : ""} ${
+                  temporaryModeEnabled ? "is-active" : ""
+                }`.trim()}
+                role="status"
+                aria-live="polite"
+              >
+                {temporaryModeEnabled ? "未保存チャット" : "履歴に保存"}
+              </span>
+            </div>
+
+            <textarea
+              id="setup-info"
+              rows={4}
+              maxLength={MAX_SETUP_INFO_LENGTH}
+              placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
+              value={setupInfo}
+              onChange={(event) => {
+                setSetupInfo(event.target.value);
+              }}
+            ></textarea>
+          </div>
           {setupInfo.length > 0 && (
             <div className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}>
               {setupInfo.length > MAX_SETUP_INFO_LENGTH
@@ -476,37 +525,6 @@ export function SetupSection() {
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <span className="form-label">チャット保存</span>
-          <div className="chat-save-mode-control">
-            <button
-              id="temporary-chat-mode-btn"
-              type="button"
-              className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
-              aria-pressed={temporaryModeEnabled ? "true" : "false"}
-              aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
-              title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
-              onClick={() => {
-                setTemporaryModeEnabled((previous) => !previous);
-              }}
-            >
-              <span className="chat-save-mode-toggle__icon" aria-hidden="true">
-                <TemporaryChatIcon />
-              </span>
-            </button>
-
-            <span
-              className={`chat-save-mode-feedback ${saveModeFeedbackVisible ? "is-visible" : ""} ${
-                temporaryModeEnabled ? "is-active" : ""
-              }`.trim()}
-              role="status"
-              aria-live="polite"
-            >
-              {temporaryModeEnabled ? "未保存チャット" : "履歴に保存"}
-            </span>
           </div>
         </div>
 
