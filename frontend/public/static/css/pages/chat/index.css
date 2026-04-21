@@ -315,6 +315,10 @@ body.chat-page .model-select-option:active {
   transform: none;
 }
 
+body.chat-page .task-selection-header #edit-task-order-btn:hover:not(:disabled) {
+  filter: none;
+}
+
 body.chat-page .sidebar-toggle:active {
   transform: scale(0.9);
 }
