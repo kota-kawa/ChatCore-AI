@@ -1888,7 +1888,7 @@ export default function PromptSharePage() {
             }
           }}
         >
-          <div className="post-modal-content" tabIndex={-1}>
+          <div className="post-modal-content post-modal-content--detail" tabIndex={-1}>
             <button
               type="button"
               className="close-btn"
