@@ -34,10 +34,10 @@
 }
 
 #chat-container[data-view="launching"] {
-  transform: translateY(18px);
+  transform: translateY(0);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.03),
-    0 30px 56px -18px rgba(0, 0, 0, 0.12);
+    0 24px 48px -12px rgba(0, 0, 0, 0.12);
 }
 
 #chat-container[data-view="chat"] {
