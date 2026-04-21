@@ -3,11 +3,27 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
+
+function TemporaryChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M8.2 5.75h4.95c3.15 0 5.6 2.45 5.6 5.6v1.05c0 3.15-2.45 5.6-5.6 5.6h-1.5v1.45c0 .62-.72.97-1.21.58L7.82 18H8.2c-3.15 0-5.6-2.45-5.6-5.6v-1.05c0-3.15 2.45-5.6 5.6-5.6Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="3 3.1"
+      />
+    </svg>
+  );
+}
 
 export function SetupSection() {
   const {
@@ -69,11 +85,39 @@ export function SetupSection() {
   // Keep a live ref to tasks to avoid stale closures in callbacks
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
+  const saveModeFeedbackTimeoutRef = useRef<number | null>(null);
+  const hasSeenInitialTemporaryModeRef = useRef(false);
+  const [saveModeFeedbackVisible, setSaveModeFeedbackVisible] = useState(false);
 
   // Sync dragging index from React state → ref
   useEffect(() => {
     draggingTaskIndexRef.current = draggingTaskIndex;
   }, [draggingTaskIndex]);
+
+  useEffect(() => {
+    if (!hasSeenInitialTemporaryModeRef.current) {
+      hasSeenInitialTemporaryModeRef.current = true;
+      return;
+    }
+
+    setSaveModeFeedbackVisible(true);
+
+    if (saveModeFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(saveModeFeedbackTimeoutRef.current);
+    }
+
+    saveModeFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setSaveModeFeedbackVisible(false);
+      saveModeFeedbackTimeoutRef.current = null;
+    }, 1800);
+
+    return () => {
+      if (saveModeFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(saveModeFeedbackTimeoutRef.current);
+        saveModeFeedbackTimeoutRef.current = null;
+      }
+    };
+  }, [temporaryModeEnabled]);
 
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
@@ -437,28 +481,33 @@ export function SetupSection() {
 
         <div className="form-group">
           <span className="form-label">チャット保存</span>
-          <button
-            id="temporary-chat-mode-btn"
-            type="button"
-            className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
-            aria-pressed={temporaryModeEnabled ? "true" : "false"}
-            onClick={() => {
-              setTemporaryModeEnabled((previous) => !previous);
-            }}
-          >
-            <span className="chat-save-mode-toggle__icon" aria-hidden="true">
-              <i className={`bi ${temporaryModeEnabled ? "bi-eye-slash" : "bi-save"}`}></i>
+          <div className="chat-save-mode-control">
+            <button
+              id="temporary-chat-mode-btn"
+              type="button"
+              className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
+              aria-pressed={temporaryModeEnabled ? "true" : "false"}
+              aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
+              title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
+              onClick={() => {
+                setTemporaryModeEnabled((previous) => !previous);
+              }}
+            >
+              <span className="chat-save-mode-toggle__icon" aria-hidden="true">
+                <TemporaryChatIcon />
+              </span>
+            </button>
+
+            <span
+              className={`chat-save-mode-feedback ${saveModeFeedbackVisible ? "is-visible" : ""} ${
+                temporaryModeEnabled ? "is-active" : ""
+              }`.trim()}
+              role="status"
+              aria-live="polite"
+            >
+              {temporaryModeEnabled ? "未保存チャット" : "履歴に保存"}
             </span>
-            <span className="chat-save-mode-toggle__text">
-              <strong>{temporaryModeEnabled ? "保存しないモード" : "通常モード"}</strong>
-              <small>
-                {temporaryModeEnabled
-                  ? "この状態で開始したチャットは履歴に残さず、一時的にだけ保持します。"
-                  : "開始したチャットを通常どおり履歴へ保存します。"}
-              </small>
-            </span>
-            <span className="chat-save-mode-toggle__state">{temporaryModeEnabled ? "ON" : "OFF"}</span>
-          </button>
+          </div>
         </div>
 
         <div className="task-selection-header">
