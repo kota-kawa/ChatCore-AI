@@ -43,6 +43,7 @@ export function SetupSection() {
   const {
     pageViewState,
     isSetupVisible,
+    isChatLaunching,
     loggedIn,
     setupInfo,
     temporaryModeEnabled,
@@ -77,7 +78,8 @@ export function SetupSection() {
     setTasksExpanded,
   } = useHomePageTaskContext();
 
-  const { handleAccessChat } = useHomePageChatContext();
+  const { handleAccessChat, handleSetupSendMessage } = useHomePageChatContext();
+  const canSendSetupMessage = setupInfo.trim().length > 0 && !isChatLaunching;
 
   // DOM refs
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -467,6 +469,20 @@ export function SetupSection() {
                 setSetupInfo(event.target.value);
               }}
             ></textarea>
+
+            <button
+              type="button"
+              className="setup-send-btn"
+              aria-label="入力内容を送信"
+              data-tooltip="入力内容をそのまま送信"
+              data-tooltip-placement="top"
+              disabled={!canSendSetupMessage}
+              onClick={() => {
+                void handleSetupSendMessage();
+              }}
+            >
+              <i className="bi bi-send"></i>
+            </button>
           </div>
           {setupInfo.length > 0 && (
             <div className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}>

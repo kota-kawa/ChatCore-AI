@@ -24,6 +24,7 @@ body.chat-page :where(
   .new-chat-btn,
   .icon-button,
   #send-btn,
+  .setup-send-btn,
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,
@@ -84,7 +85,7 @@ body.chat-page :where(
   border-color: transparent;
 }
 
-body.chat-page :where(.primary-button, .new-chat-btn, #auth-buttons .auth-btn, #send-btn) {
+body.chat-page :where(.primary-button, .new-chat-btn, #auth-buttons .auth-btn, #send-btn, .setup-send-btn) {
   color: #ffffff;
 }
 
@@ -248,6 +249,7 @@ body.chat-page :where(
   .new-chat-btn,
   .icon-button,
   #send-btn,
+  .setup-send-btn,
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,
@@ -284,6 +286,7 @@ body.chat-page :where(
   .new-chat-btn,
   .icon-button,
   #send-btn,
+  .setup-send-btn,
   .task-detail-toggle,
   .task-detail-modal-close,
   .new-modal-close-btn,

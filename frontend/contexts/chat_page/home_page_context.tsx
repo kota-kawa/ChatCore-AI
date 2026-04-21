@@ -52,6 +52,7 @@ type HomePageTaskContextValue = Pick<
 type HomePageChatContextValue = Pick<
   HomePageControllerState,
   | "handleAccessChat"
+  | "handleSetupSendMessage"
   | "hasCurrentRoom"
   | "sidebarOpen"
   | "chatRooms"
@@ -134,6 +135,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
 
   const chatValue: HomePageChatContextValue = {
     handleAccessChat: controller.handleAccessChat,
+    handleSetupSendMessage: controller.handleSetupSendMessage,
     hasCurrentRoom: controller.hasCurrentRoom,
     sidebarOpen: controller.sidebarOpen,
     chatRooms: controller.chatRooms,

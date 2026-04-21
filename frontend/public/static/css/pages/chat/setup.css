@@ -136,7 +136,15 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
-  padding-right: 4.25rem;
+  padding-right: 4.75rem;
+  padding-bottom: 4.2rem;
+}
+
+.setup-send-btn {
+  position: absolute;
+  right: 0.72rem;
+  bottom: 0.72rem;
+  z-index: 2;
 }
 
 body.chat-page #setup-info::-webkit-scrollbar {
@@ -615,6 +623,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-compact #setup-info {
   min-height: clamp(3.4rem, 10.5vh, 5.1rem);
+  padding-right: 4.4rem;
+  padding-bottom: 3.9rem;
 }
 
 #setup-container.setup-fit-compact .form-label {
@@ -656,6 +666,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-tight #setup-info {
   min-height: clamp(3rem, 8.8vh, 4.1rem);
+  padding-right: 4.1rem;
+  padding-bottom: 3.7rem;
 }
 
 #setup-container.setup-fit-tight .form-label {
@@ -939,7 +951,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   #setup-info {
-    padding-right: 3.95rem;
+    padding-right: 4.2rem;
+    padding-bottom: 3.95rem;
+  }
+
+  .setup-send-btn {
+    right: 0.62rem;
+    bottom: 0.62rem;
   }
 
   .task-selection {

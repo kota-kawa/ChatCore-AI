@@ -75,7 +75,8 @@
   line-height: inherit;
 }
 
-#send-btn {
+#send-btn,
+.setup-send-btn {
   --send-btn-visual-inset: 4px;
   flex: 0 0 52px;
   width: 52px;
@@ -105,7 +106,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-#send-btn::before {
+#send-btn::before,
+.setup-send-btn::before {
   content: "";
   position: absolute;
   inset: var(--send-btn-visual-inset);
@@ -126,15 +128,23 @@
   pointer-events: none;
 }
 
-#send-btn:active {
+#send-btn:active,
+.setup-send-btn:active {
   transform: scale(0.92);
 }
 
-#send-btn i {
+#send-btn i,
+.setup-send-btn i {
   position: relative;
   z-index: 1;
   font-size: var(--text-base, 0.9375rem);
   left: -1px;
+}
+
+#send-btn:disabled,
+.setup-send-btn:disabled {
+  cursor: default;
+  opacity: 0.54;
 }
 
 /* 生成中: 停止ボタン */
@@ -182,7 +192,8 @@
     font-size: var(--text-md, 1rem);
   }
 
-  #send-btn {
+  #send-btn,
+  .setup-send-btn {
     --send-btn-visual-inset: 5px;
     flex-basis: 52px;
     width: 52px;
@@ -191,7 +202,8 @@
     min-height: 52px;
   }
 
-  #send-btn i {
+  #send-btn i,
+  .setup-send-btn i {
     font-size: var(--text-sm, 0.875rem);
   }
 

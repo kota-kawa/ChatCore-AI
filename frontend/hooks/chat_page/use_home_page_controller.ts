@@ -11,7 +11,7 @@ import { useHomePageShareState } from "./use_home_page_share_state";
 import { useHomePageTaskState } from "./use_home_page_task_state";
 import { useHomePageUiState } from "./use_home_page_ui_state";
 import { setLoggedInState } from "../../scripts/core/app_state";
-import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
+import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
@@ -1208,6 +1208,62 @@ export function useHomePageController() {
     ],
   );
 
+  const handleSetupSendMessage = useCallback(async () => {
+    if (taskLaunchInProgressRef.current) return;
+
+    const firstMessage = setupInfo.trim();
+    if (!firstMessage) return;
+    if (firstMessage.length > MAX_SETUP_INFO_LENGTH) return;
+
+    taskLaunchInProgressRef.current = true;
+
+    const roomId = Date.now().toString();
+    const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
+    const roomTitle = firstMessage.slice(0, 255) || "新規チャット";
+
+    persistCurrentRoomId(roomId);
+    setCurrentRoomMode(roomMode);
+    setMessages([]);
+    setChatInput("");
+    setOpenRoomActionsFor(null);
+    setShareUrl("");
+    setShareStatus({ message: "共有リンクを準備しています...", error: false });
+    setHistoryHasMore(false);
+    setHistoryNextBeforeId(null);
+    setIsLoadingOlder(false);
+    setSidebarOpen(false);
+    setPageViewState("launching");
+
+    try {
+      await Promise.all([
+        createNewChatRoom(roomId, roomTitle, roomMode),
+        waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
+      ]);
+      removeStoredHistory(roomId);
+      setPageViewState("chat");
+
+      void loadChatRooms();
+      await generateResponse(firstMessage, selectedModel, roomId);
+    } catch (error) {
+      setPageViewState("setup");
+      setMessages([]);
+      persistCurrentRoomId(null);
+      setCurrentRoomMode("normal");
+      window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      taskLaunchInProgressRef.current = false;
+    }
+  }, [
+    createNewChatRoom,
+    generateResponse,
+    loadChatRooms,
+    persistCurrentRoomId,
+    selectedModel,
+    setPageViewState,
+    setupInfo,
+    temporaryModeEnabled,
+  ]);
+
   const handleSendMessage = useCallback(() => {
     if (isGenerating) {
       void stopGeneration();
@@ -1836,6 +1892,7 @@ export function useHomePageController() {
     handleTaskDragStart,
     handleTaskDragEnd,
     handleTaskCardLaunch,
+    handleSetupSendMessage,
     handleTaskDelete,
     openTaskEditModal,
     setTaskDetail,
