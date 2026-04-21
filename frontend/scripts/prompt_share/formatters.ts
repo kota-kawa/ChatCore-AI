@@ -45,6 +45,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     ...prompt,
     prompt_type: normalizePromptType(prompt.prompt_type),
     reference_image_url: prompt.reference_image_url || "",
+    liked: Boolean(prompt.liked),
     bookmarked: Boolean(prompt.bookmarked),
     saved_to_list: Boolean(prompt.saved_to_list)
   };

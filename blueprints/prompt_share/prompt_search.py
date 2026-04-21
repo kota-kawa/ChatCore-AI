@@ -1,5 +1,5 @@
-# search_module.py
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Request
 
@@ -23,7 +23,20 @@ def _parse_positive_int(raw_value: str | None, default: int) -> int:
     return value if value > 0 else default
 
 
-def _search_public_prompts(query, page, per_page):
+def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
+    prompt = dict(row)
+    created_at = prompt.get("created_at")
+    if created_at is not None and hasattr(created_at, "isoformat"):
+        prompt["created_at"] = created_at.isoformat()
+    prompt["prompt_type"] = "image" if prompt.get("prompt_type") == "image" else "text"
+    prompt["reference_image_url"] = prompt.get("reference_image_url") or None
+    prompt["liked"] = bool(prompt.get("liked"))
+    prompt["bookmarked"] = bool(prompt.get("bookmarked"))
+    prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
+    return prompt
+
+
+def _search_public_prompts(query, page, per_page, user_id=None):
     # 公開プロンプトを title/content/category/author で部分一致検索する
     # Search public prompts with partial matching across multiple columns.
     page = max(int(page), SEARCH_DEFAULT_PAGE)
@@ -49,26 +62,39 @@ def _search_public_prompts(query, page, per_page):
         offset = (page - 1) * per_page
         sql = """
             SELECT
-              id,
-              title,
-              category,
-              content,
-              author,
-              input_examples,
-              output_examples,
-              prompt_type,
-              reference_image_url,
-              created_at
-            FROM prompts
-            WHERE is_public = TRUE
-              AND deleted_at IS NULL
+              p.id,
+              p.title,
+              p.category,
+              p.content,
+              p.author,
+              p.input_examples,
+              p.output_examples,
+              p.prompt_type,
+              p.reference_image_url,
+              p.created_at,
+              CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
+              CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
+              CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
+            FROM prompts AS p
+            LEFT JOIN prompt_likes AS pl
+              ON pl.user_id = %s
+             AND pl.prompt_id = p.id
+            LEFT JOIN task_with_examples AS b
+              ON b.user_id = %s
+             AND b.name = p.title
+             AND b.deleted_at IS NULL
+            LEFT JOIN prompt_list_entries AS ple
+              ON ple.user_id = %s
+             AND ple.prompt_id = p.id
+            WHERE p.is_public = TRUE
+              AND p.deleted_at IS NULL
               AND (
-                title   LIKE %s OR
-                content LIKE %s OR
-                category LIKE %s OR
-                author  LIKE %s
+                p.title   LIKE %s OR
+                p.content LIKE %s OR
+                p.category LIKE %s OR
+                p.author  LIKE %s
               )
-            ORDER BY created_at DESC
+            ORDER BY p.created_at DESC
             LIMIT %s
             OFFSET %s
         """
@@ -93,6 +119,9 @@ def _search_public_prompts(query, page, per_page):
         cursor.execute(
             sql,
             (
+                user_id,
+                user_id,
+                user_id,
                 like_query,
                 like_query,
                 like_query,
@@ -103,7 +132,7 @@ def _search_public_prompts(query, page, per_page):
         )
         total_pages = (total + per_page - 1) // per_page if total > 0 else 0
         return {
-            "prompts": cursor.fetchall(),
+            "prompts": [_normalize_search_prompt_row(dict(row)) for row in cursor.fetchall()],
             "pagination": {
                 "page": page,
                 "per_page": per_page,
@@ -132,8 +161,10 @@ async def search_prompts(request: Request):
         request.query_params.get("per_page"),
         SEARCH_DEFAULT_PER_PAGE,
     )
+    session = getattr(request, "session", {}) or {}
+    user_id = session.get("user_id")
     try:
-        payload = await run_blocking(_search_public_prompts, query, page, per_page)
+        payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id)
         return jsonify({"status": "success", **payload})
     except Exception:
         return log_and_internal_server_error(

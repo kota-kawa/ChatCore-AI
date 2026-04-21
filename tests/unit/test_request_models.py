@@ -7,6 +7,7 @@ from services.request_models import (
     ChatMessageRequest,
     MemoCreateRequest,
     PromptAssistRequest,
+    PromptLikeRequest,
     PromptListEntryCreateRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
@@ -58,6 +59,13 @@ class RequestModelsTestCase(unittest.TestCase):
     def test_prompt_list_entry_requires_prompt_id(self):
         with self.assertRaises(ValidationError):
             _validate(PromptListEntryCreateRequest, {})
+
+    def test_prompt_like_request_parses_prompt_id_type(self):
+        payload = _validate(
+            PromptLikeRequest,
+            {"prompt_id": "24"},
+        )
+        self.assertEqual(payload.prompt_id, 24)
 
     def test_chat_message_rejects_oversized_body(self):
         with self.assertRaises(ValidationError):

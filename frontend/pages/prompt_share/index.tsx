@@ -20,7 +20,9 @@ import {
   fetchPromptList,
   fetchPromptSearchResults,
   removePromptBookmark,
+  removePromptLike,
   savePromptBookmark,
+  savePromptLike,
   savePromptToList
 } from "../../scripts/prompt_share/api";
 import {
@@ -163,6 +165,7 @@ export default function PromptSharePage() {
   const [shareActionLoading, setShareActionLoading] = useState(false);
 
   const [openDropdownPromptId, setOpenDropdownPromptId] = useState<string | null>(null);
+  const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [bookmarkPendingIds, setBookmarkPendingIds] = useState<Set<string>>(new Set());
   const [saveToListPendingIds, setSaveToListPendingIds] = useState<Set<string>>(new Set());
 
@@ -244,6 +247,10 @@ export default function PromptSharePage() {
     promptTypeRef.current = promptType;
   }, [promptType]);
 
+  const toCachedPromptData = useCallback((items: PromptRecord[]) => {
+    return items.map(({ clientId, ...prompt }) => prompt);
+  }, []);
+
   const setPromptPostStatus = useCallback(
     (message: string, variant: PromptPostStatusVariant = "info") => {
       setPromptPostStatusState({ message, variant });
@@ -313,7 +320,7 @@ export default function PromptSharePage() {
     return items.map((item) => ({
       ...normalizePromptData(item),
       clientId: `prompt-${++nextPromptClientIdRef.current}`,
-      liked: false
+      liked: Boolean(item.liked)
     }));
   }, []);
 
@@ -428,12 +435,32 @@ export default function PromptSharePage() {
 
   const updatePromptRecord = useCallback(
     (clientId: string, updater: (prompt: PromptRecord) => PromptRecord) => {
-      setPrompts((current) =>
-        current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt))
-      );
+      setPrompts((current) => {
+        const next = current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt));
+        writePromptCache(toCachedPromptData(next));
+        return next;
+      });
+      setDetailPrompt((current) => {
+        if (!current || current.clientId !== clientId) {
+          return current;
+        }
+        return updater(current);
+      });
     },
-    []
+    [toCachedPromptData]
   );
+
+  const setLikePending = useCallback((clientId: string, pending: boolean) => {
+    setLikePendingIds((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(clientId);
+      } else {
+        next.delete(clientId);
+      }
+      return next;
+    });
+  }, []);
 
   const setBookmarkPending = useCallback((clientId: string, pending: boolean) => {
     setBookmarkPendingIds((current) => {
@@ -1274,6 +1301,7 @@ export default function PromptSharePage() {
                 const isBookmarked = Boolean(prompt.bookmarked);
                 const isSavedToList = Boolean(prompt.saved_to_list);
                 const promptId = prompt.clientId;
+                const isLikePending = likePendingIds.has(promptId);
                 const isBookmarkPending = bookmarkPendingIds.has(promptId);
                 const isSaveToListPending = saveToListPendingIds.has(promptId);
                 const isDropdownOpen = openDropdownPromptId === promptId;
@@ -1439,12 +1467,36 @@ export default function PromptSharePage() {
                           aria-pressed={prompt.liked ? "true" : "false"}
                           data-tooltip="このプロンプトにいいね"
                           data-tooltip-placement="top"
-                          onClick={(event) => {
+                          disabled={isLikePending}
+                          onClick={async (event) => {
                             event.stopPropagation();
-                            updatePromptRecord(promptId, (currentPrompt) => ({
-                              ...currentPrompt,
-                              liked: !currentPrompt.liked
-                            }));
+                            if (!isLoggedIn) {
+                              alert("いいねするにはログインが必要です。");
+                              return;
+                            }
+
+                            const shouldLike = !prompt.liked;
+                            setLikePending(promptId, true);
+                            try {
+                              const request = shouldLike
+                                ? savePromptLike(prompt)
+                                : removePromptLike(prompt);
+                              const result = await request;
+
+                              updatePromptRecord(promptId, (currentPrompt) => ({
+                                ...currentPrompt,
+                                liked: shouldLike
+                              }));
+
+                              if (result && result.message) {
+                                console.log(result.message);
+                              }
+                            } catch (error) {
+                              console.error("いいね操作エラー:", error);
+                              alert("いいねの更新中にエラーが発生しました。");
+                            } finally {
+                              setLikePending(promptId, false);
+                            }
                           }}
                         >
                           <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>

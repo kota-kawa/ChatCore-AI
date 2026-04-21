@@ -40,6 +40,30 @@ export function removePromptBookmark(prompt: PromptData) {
   });
 }
 
+export async function sendLikeRequest(method: "POST" | "DELETE", prompt: PromptData) {
+  if (prompt.id === undefined || prompt.id === null) {
+    return Promise.reject(new Error("いいね対象のプロンプトIDが見つかりません。"));
+  }
+
+  const { payload } = await fetchJsonOrThrow<ApiResponse>("/prompt_share/api/like", {
+    method,
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt_id: prompt.id
+    })
+  });
+  return payload;
+}
+
+export function savePromptLike(prompt: PromptData) {
+  return sendLikeRequest("POST", prompt);
+}
+
+export function removePromptLike(prompt: PromptData) {
+  return sendLikeRequest("DELETE", prompt);
+}
+
 export function savePromptToList(prompt: PromptData) {
   // 保存対象IDが無い場合はAPI呼び出し前に明確なエラーを返す
   // Fail fast before API call when prompt ID is missing.

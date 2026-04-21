@@ -20,6 +20,7 @@ export type PromptData = {
   input_examples?: string;
   output_examples?: string;
   ai_model?: string;
+  liked?: boolean;
   bookmarked?: boolean;
   saved_to_list?: boolean;
   created_at?: string;

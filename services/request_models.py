@@ -133,6 +133,10 @@ class PromptListEntryCreateRequest(RequestPayloadModel):
     prompt_id: int
 
 
+class PromptLikeRequest(RequestPayloadModel):
+    prompt_id: int
+
+
 class PromptUpdateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: NonEmptyStr

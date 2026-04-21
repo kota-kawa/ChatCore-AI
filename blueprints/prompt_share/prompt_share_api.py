@@ -13,6 +13,7 @@ from services.db import get_db_connection
 from services.request_models import (
     BookmarkCreateRequest,
     BookmarkDeleteRequest,
+    PromptLikeRequest,
     PromptListEntryCreateRequest,
     SharedPromptCreateRequest,
 )
@@ -143,9 +144,13 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.prompt_type,
                 p.reference_image_url,
                 p.created_at,
+                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
                 CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
                 CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
+            LEFT JOIN prompt_likes AS pl
+              ON pl.user_id = %s
+             AND pl.prompt_id = p.id
             LEFT JOIN task_with_examples AS b
               ON b.user_id = %s
              AND b.name = p.title
@@ -157,11 +162,12 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
               AND p.deleted_at IS NULL
             ORDER BY p.created_at DESC
             """,
-            (user_id, user_id),
+            (user_id, user_id, user_id),
         )
         prompts = []
         for row in cursor.fetchall():
             prompt = _serialize_prompt_row(dict(row))
+            prompt["liked"] = bool(prompt.get("liked"))
             prompt["bookmarked"] = bool(prompt.get("bookmarked"))
             prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
             prompts.append(prompt)
@@ -399,6 +405,77 @@ def _add_prompt_list_entry_for_user(
             conn.close()
 
 
+def _add_prompt_like_for_user(
+    user_id: int,
+    prompt_id: int,
+) -> tuple[dict[str, Any], int]:
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id
+            FROM prompts
+            WHERE id = %s
+              AND is_public = TRUE
+              AND deleted_at IS NULL
+            """,
+            (prompt_id,),
+        )
+        prompt = cursor.fetchone()
+        if not prompt:
+            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
+
+        cursor.execute(
+            """
+            INSERT INTO prompt_likes (user_id, prompt_id)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id, prompt_id) DO NOTHING
+            RETURNING id
+            """,
+            (user_id, prompt_id),
+        )
+        inserted = cursor.fetchone()
+        conn.commit()
+        if inserted:
+            return {"message": "いいねしました。", "liked": True}, 201
+        return {"message": "すでにいいねしています。", "liked": True}, 200
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+def _remove_prompt_like_for_user(user_id: int, prompt_id: int) -> int:
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM prompt_likes
+            WHERE user_id = %s
+              AND prompt_id = %s
+            """,
+            (user_id, prompt_id),
+        )
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
 async def get_prompts(request: Request):
     """保存されている全プロンプトを取得するエンドポイント"""
@@ -562,6 +639,66 @@ async def remove_bookmark(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to remove bookmark.",
+        )
+
+
+@prompt_share_api_bp.post("/like", name="prompt_share_api.add_like")
+async def add_like(request: Request):
+    if "user_id" not in request.session:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    user_id = request.session["user_id"]
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    request_payload, validation_error = validate_payload_model(
+        data,
+        PromptLikeRequest,
+        error_message="必要なフィールドが不足しています",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        response_payload, status_code = await run_blocking(
+            _add_prompt_like_for_user,
+            user_id,
+            request_payload.prompt_id,
+        )
+        return jsonify(response_payload, status_code=status_code)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to add prompt like.",
+        )
+
+
+@prompt_share_api_bp.delete("/like", name="prompt_share_api.remove_like")
+async def remove_like(request: Request):
+    if "user_id" not in request.session:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    user_id = request.session["user_id"]
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    request_payload, validation_error = validate_payload_model(
+        data,
+        PromptLikeRequest,
+        error_message="必要なフィールドが不足しています",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        await run_blocking(_remove_prompt_like_for_user, user_id, request_payload.prompt_id)
+        return jsonify({"message": "いいねを解除しました。", "liked": False})
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to remove prompt like.",
         )
 
 

@@ -30,6 +30,9 @@ class FakeCursor:
                     "prompt_type": "text",
                     "reference_image_url": None,
                     "created_at": "2024-01-01T00:00:00",
+                    "liked": True,
+                    "bookmarked": False,
+                    "saved_to_list": True,
                 }
             ]
 
@@ -65,9 +68,12 @@ class PromptSearchTestCase(unittest.TestCase):
         fake_conn = FakeConnection(fake_cursor)
 
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
-            payload = _search_public_prompts("sample", 2, 20)
+            payload = _search_public_prompts("sample", 2, 20, 9)
 
         self.assertEqual(payload["prompts"][0]["id"], 11)
+        self.assertTrue(payload["prompts"][0]["liked"])
+        self.assertFalse(payload["prompts"][0]["bookmarked"])
+        self.assertTrue(payload["prompts"][0]["saved_to_list"])
         self.assertEqual(payload["pagination"]["page"], 2)
         self.assertEqual(payload["pagination"]["per_page"], 20)
         self.assertEqual(payload["pagination"]["total"], 55)
@@ -80,7 +86,9 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertEqual(count_params, ("%sample%", "%sample%", "%sample%", "%sample%"))
 
         search_query, search_params = fake_cursor.executed[1]
+        self.assertIn("LEFT JOIN prompt_likes AS pl", search_query)
         self.assertIn("LIMIT %s OFFSET %s", search_query)
+        self.assertEqual(search_params[:3], (9, 9, 9))
         self.assertEqual(search_params[-2:], (20, 20))
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
