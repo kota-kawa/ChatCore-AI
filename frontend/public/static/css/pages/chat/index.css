@@ -315,8 +315,15 @@ body.chat-page .model-select-option:active {
   transform: none;
 }
 
-body.chat-page .task-selection-header #edit-task-order-btn:hover:not(:disabled) {
+body.chat-page .task-selection-header #edit-task-order-btn:hover:not(:disabled),
+body.chat-page .task-selection-header #edit-task-order-btn:focus:not(:disabled),
+body.chat-page .task-selection-header #edit-task-order-btn:focus-visible:not(:disabled) {
+  background:
+    var(--chat-button-sheen),
+    linear-gradient(135deg, var(--chat-button-base) 0%, var(--chat-button-accent) 100%) !important;
   filter: none;
+  color: inherit;
+  transform: none;
 }
 
 body.chat-page .sidebar-toggle:active {
