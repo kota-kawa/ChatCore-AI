@@ -598,8 +598,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-compact #openNewPromptModal,
 #setup-container.setup-fit-compact #edit-task-order-btn {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
   font-size: 1rem;
 }
 
@@ -634,9 +635,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-tight #openNewPromptModal,
 #setup-container.setup-fit-tight #edit-task-order-btn {
-  width: 30px;
-  height: 30px;
-  font-size: 0.9rem;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  font-size: 0.92rem;
 }
 
 #setup-container.setup-fit-tight .task-selection .task-wrapper {
@@ -792,6 +794,39 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   margin-left: 0.5rem;
 }
 
+.task-selection-header #edit-task-order-btn,
+.task-selection-header #openNewPromptModal {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-selection-header #edit-task-order-btn {
+  --chat-button-base: #166534;
+  --chat-button-accent: #14532d;
+  --chat-button-shadow-color: rgba(20, 83, 45, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+
+.task-selection-header #openNewPromptModal {
+  --chat-button-base: #84cc16;
+  --chat-button-accent: #65a30d;
+  --chat-button-shadow-color: rgba(101, 163, 13, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.task-selection-header #edit-task-order-btn i,
+.task-selection-header #openNewPromptModal i {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
 .task-selection-header p#task-selection-text {
   flex: 1;
   margin: 0;
@@ -862,6 +897,21 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
   .task-selection {
     gap: var(--setup-task-gap);
+  }
+
+  .task-selection-header #edit-task-order-btn {
+    margin-left: 0;
+  }
+
+  .task-selection-header #openNewPromptModal {
+    margin-left: 0;
+  }
+
+  .task-selection-header #edit-task-order-btn,
+  .task-selection-header #openNewPromptModal {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
   }
 
   .task-selection .task-wrapper {
