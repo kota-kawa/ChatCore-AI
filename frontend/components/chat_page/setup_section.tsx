@@ -459,30 +459,32 @@ export function SetupSection() {
               </span>
             </div>
 
-            <textarea
-              id="setup-info"
-              rows={4}
-              maxLength={MAX_SETUP_INFO_LENGTH}
-              placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
-              value={setupInfo}
-              onChange={(event) => {
-                setSetupInfo(event.target.value);
-              }}
-            ></textarea>
+            <div className="setup-info-input-area">
+              <textarea
+                id="setup-info"
+                rows={4}
+                maxLength={MAX_SETUP_INFO_LENGTH}
+                placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
+                value={setupInfo}
+                onChange={(event) => {
+                  setSetupInfo(event.target.value);
+                }}
+              ></textarea>
 
-            <button
-              type="button"
-              className="setup-send-btn"
-              aria-label="入力内容を送信"
-              data-tooltip="入力内容をそのまま送信"
-              data-tooltip-placement="top"
-              disabled={!canSendSetupMessage}
-              onClick={() => {
-                void handleSetupSendMessage();
-              }}
-            >
-              <i className="bi bi-send"></i>
-            </button>
+              <button
+                type="button"
+                className="setup-send-btn"
+                aria-label="入力内容を送信"
+                data-tooltip="入力内容をそのまま送信"
+                data-tooltip-placement="top"
+                disabled={!canSendSetupMessage}
+                onClick={() => {
+                  void handleSetupSendMessage();
+                }}
+              >
+                <i className="bi bi-send"></i>
+              </button>
+            </div>
           </div>
           {setupInfo.length > 0 && (
             <div className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}>

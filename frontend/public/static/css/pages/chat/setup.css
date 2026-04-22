@@ -108,6 +108,10 @@
   position: relative;
 }
 
+.setup-info-input-area {
+  position: relative;
+}
+
 .setup-form textarea,
 .setup-form select {
   width: 100%;
@@ -138,6 +142,7 @@
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
   padding-right: 4.75rem;
   padding-bottom: 4.2rem;
+  display: block;
 }
 
 .setup-send-btn {
