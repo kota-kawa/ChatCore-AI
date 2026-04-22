@@ -145,7 +145,7 @@
   display: block;
 }
 
-.setup-send-btn {
+.setup-info-input-area .setup-send-btn {
   position: absolute;
   right: 0.72rem;
   bottom: 0.72rem;
@@ -960,7 +960,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     padding-bottom: 3.95rem;
   }
 
-  .setup-send-btn {
+  .setup-info-input-area .setup-send-btn {
     right: 0.62rem;
     bottom: 0.62rem;
   }
