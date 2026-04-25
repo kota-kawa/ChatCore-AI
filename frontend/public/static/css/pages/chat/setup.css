@@ -890,9 +890,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 .task-selection-header #edit-task-order-btn {
-  --chat-button-base: #166534;
-  --chat-button-accent: #14532d;
-  --chat-button-shadow-color: rgba(20, 83, 45, 0.28);
+  --chat-button-base: #0d9488;
+  --chat-button-accent: #0f766e;
+  --chat-button-shadow-color: rgba(15, 118, 110, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.26);
 }
 
