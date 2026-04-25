@@ -1002,28 +1002,30 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   .task-selection-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.55rem;
+    row-gap: 0.6rem;
   }
 
   .task-selection-header p#task-selection-text {
-    grid-column: 1 / -1;
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
+    margin: 0;
     line-height: var(--leading-tight, 1.4);
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .task-selection-header #edit-task-order-btn {
-    grid-column: 2;
-    justify-self: end;
-    margin-left: 0;
+    margin-left: auto;
   }
 
   .task-selection-header #openNewPromptModal {
-    grid-column: 3;
-    justify-self: end;
     margin-left: 0;
   }
 
@@ -1033,6 +1035,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     height: 44px;
     min-width: 44px;
     min-height: 44px;
+    flex-shrink: 0;
   }
 
   .task-selection .task-wrapper {
