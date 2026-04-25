@@ -424,7 +424,7 @@ export function SetupSection() {
         <h2 className="setup-form-title">Chat Core</h2>
 
         <div className="form-group setup-info-group">
-          <label className="form-label">現在の状況・作業環境（入力なしでもOK）</label>
+          <label className="form-label">やりたいことを入力（任意）</label>
           <div className="setup-info-field-shell">
             <div className="chat-save-mode-control">
               <button
@@ -464,7 +464,7 @@ export function SetupSection() {
                 id="setup-info"
                 rows={4}
                 maxLength={MAX_SETUP_INFO_LENGTH}
-                placeholder="例：大学生、リモートワーク中　／　自宅のデスク、周囲は静か"
+                placeholder="例：沖縄旅行のプランを考えたい　／　英語メールを添削してほしい　／　Pythonのエラーを直したい"
                 value={setupInfo}
                 onChange={(event) => {
                   setSetupInfo(event.target.value);
