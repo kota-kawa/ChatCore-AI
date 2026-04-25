@@ -238,6 +238,20 @@ body.chat-page .model-select-option:hover {
   border-color: #b8dccb !important;
 }
 
+body.chat-page .model-select-option.is-selected {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%) !important;
+  border-color: rgba(15, 122, 81, 0.82) !important;
+  box-shadow: 0 10px 18px rgba(15, 122, 81, 0.18) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+body.chat-page .model-select-option.is-selected:hover {
+  background: linear-gradient(135deg, var(--primary-dark-hover, #0d6945) 0%, var(--primary-hover, #15a86b) 100%) !important;
+  border-color: rgba(13, 105, 69, 0.92) !important;
+  color: #ffffff !important;
+}
+
 body.chat-page .chat-history-load-more-btn,
 body.chat-page .task-detail-toggle {
   color: var(--primary-color, #19c37d);
@@ -347,6 +361,15 @@ body.chat-page {
     radial-gradient(130% 110% at 50% 0%, rgba(47, 141, 101, 0.2), transparent 54%),
     linear-gradient(180deg, rgba(5, 16, 12, 0.38) 0%, rgba(5, 16, 12, 0.6) 100%);
   --chat-modal-border: rgba(184, 221, 204, 0.82);
+  --chat-modal-header-bg: linear-gradient(135deg, rgba(15, 122, 81, 0.12) 0%, rgba(187, 247, 208, 0.1) 44%, rgba(255, 255, 255, 0.78) 100%);
+  --chat-modal-header-border: rgba(15, 122, 81, 0.12);
+  --chat-modal-surface-bg:
+    radial-gradient(circle at top left, rgba(168, 240, 203, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 249, 0.96) 100%);
+  --chat-modal-panel-radius: 28px;
+  --chat-modal-backdrop-filter: blur(8px) saturate(125%);
+  --chat-modal-enter-duration: 0.24s;
+  --chat-modal-transition: var(--chat-modal-enter-duration) cubic-bezier(0.32, 0.72, 0, 1);
   --chat-modal-shadow:
     0 34px 90px rgba(8, 28, 20, 0.22),
     0 12px 30px rgba(8, 28, 20, 0.12);
@@ -365,8 +388,8 @@ body.chat-page .chat-share-modal,
 body.chat-page #io-modal,
 body.chat-page #taskEditModal.custom-modal {
   background: var(--chat-modal-overlay);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: var(--chat-modal-backdrop-filter);
+  -webkit-backdrop-filter: var(--chat-modal-backdrop-filter);
 }
 
 body.chat-page .new-prompt-modal-content,
@@ -375,8 +398,9 @@ body.chat-page .custom-modal-dialog,
 body.chat-page .chat-share-modal__content {
   position: relative;
   isolation: isolate;
-  border-radius: 28px;
+  border-radius: var(--chat-modal-panel-radius);
   border: 1px solid var(--chat-modal-border);
+  background: var(--chat-modal-surface-bg);
   box-shadow: var(--chat-modal-shadow);
   overflow: hidden;
 }
@@ -423,8 +447,8 @@ body.chat-page :where(.task-detail-modal-close, .new-modal-close-btn, .custom-mo
   box-shadow:
     0 14px 24px rgba(15, 23, 42, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.74) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 body.chat-page :where(.task-detail-modal-close, .new-modal-close-btn, .custom-modal-close, .chat-share-close-btn):hover:not(:disabled) {
@@ -437,9 +461,13 @@ body.chat-page .new-prompt-modal-content {
 
 body.chat-page .io-modal-content {
   max-height: min(86vh, 780px);
-  background:
-    radial-gradient(circle at top left, rgba(168, 240, 203, 0.18), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 249, 0.96) 100%);
+  background: var(--chat-modal-surface-bg);
+}
+
+body.chat-page :where(.new-prompt-modal__hero, .task-detail-modal-header, .custom-modal-header) {
+  background: var(--chat-modal-header-bg);
+  border: 1px solid var(--chat-modal-header-border);
+  border-radius: 22px;
 }
 
 body.chat-page .task-detail-modal-shell {
@@ -493,15 +521,16 @@ body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-web
 body.chat-page .custom-modal-dialog {
   width: min(620px, 92vw);
   max-height: min(88vh, 900px);
-  background:
-    radial-gradient(circle at top left, rgba(168, 240, 203, 0.18), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 249, 0.96) 100%);
+  background: var(--chat-modal-surface-bg);
+  padding: 1.15rem;
+}
+
+body.chat-page .custom-modal-content {
+  gap: 1rem;
 }
 
 body.chat-page .custom-modal-header {
   padding: 1rem 1.2rem 0.95rem;
-  border-bottom: 1px solid rgba(211, 226, 218, 0.92);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(243, 248, 245, 0.82) 100%);
 }
 
 body.chat-page .custom-modal-title {
@@ -523,16 +552,16 @@ body.chat-page .custom-modal-close {
 }
 
 body.chat-page .custom-modal-body {
-  padding: 1.08rem 1.2rem 1.18rem;
+  padding: 0;
   border-bottom: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 100%);
+  background: transparent;
   overscroll-behavior: contain;
 }
 
 body.chat-page .custom-modal-footer {
-  padding: 1rem 1.2rem 1.15rem;
-  border-top: 1px solid rgba(220, 233, 226, 0.9);
-  background: linear-gradient(180deg, rgba(248, 251, 249, 0.66) 0%, rgba(244, 248, 246, 0.96) 100%);
+  padding: 0;
+  border-top: none;
+  background: transparent;
 }
 
 body.chat-page .custom-form-group {
@@ -576,9 +605,7 @@ body.chat-page .custom-form-text {
 body.chat-page .chat-share-modal__content {
   width: min(580px, 100%);
   padding: 1.18rem 1.22rem 1.24rem;
-  background:
-    radial-gradient(circle at top right, rgba(168, 240, 203, 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 249, 0.96) 100%);
+  background: var(--chat-modal-surface-bg);
 }
 
 body.chat-page .chat-share-modal__desc {

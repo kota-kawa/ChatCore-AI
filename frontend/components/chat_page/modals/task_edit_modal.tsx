@@ -36,9 +36,10 @@ export function TaskEditModal({
               type="button"
               className="custom-modal-close"
               id="closeTaskEditModal"
+              aria-label="タスク編集を閉じる"
               onClick={closeTaskEditModal}
             >
-              ×
+              <i className="bi bi-x-lg" aria-hidden="true"></i>
             </button>
           </div>
 

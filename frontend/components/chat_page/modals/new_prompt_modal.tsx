@@ -69,7 +69,7 @@ export function NewPromptModal({
             onClose();
           }}
         >
-          &times;
+          <i className="bi bi-x-lg" aria-hidden="true"></i>
         </button>
 
         <div className="new-prompt-modal__hero">
