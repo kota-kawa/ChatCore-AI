@@ -10,6 +10,8 @@ import {
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
+const POINTER_DRAG_START_THRESHOLD_PX = 8;
+
 function TemporaryChatIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -89,10 +91,13 @@ export function SetupSection() {
   // Drag state refs
   const activePointerIdRef = useRef<number | null>(null);
   const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
+  const dragPointerOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPointerPointRef = useRef<{ x: number; y: number } | null>(null);
   const draggingTaskDomKeyRef = useRef<string | null>(null);
   const draggingTaskIndexRef = useRef<number | null>(null);
   const dropTargetIndexRef = useRef<number | null>(null);
   const startRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const isPointerDragActiveRef = useRef(false);
 
   // Drop completion refs (for useLayoutEffect animation)
   const justDroppedDomKeyRef = useRef<string | null>(null);
@@ -250,17 +255,31 @@ export function SetupSection() {
 
       const dragIndex = draggingTaskIndexRef.current;
       const dropTarget = dropTargetIndexRef.current;
+      const wasPointerDragActive = isPointerDragActiveRef.current;
 
-      // Signal useLayoutEffect to run drop-completion animation
-      justDroppedDomKeyRef.current = draggingTaskDomKey;
-      isDropCompletingRef.current = true;
+      if (wasPointerDragActive) {
+        // Signal useLayoutEffect to run drop-completion animation
+        justDroppedDomKeyRef.current = draggingTaskDomKey;
+        isDropCompletingRef.current = true;
+      }
 
       activePointerIdRef.current = null;
       dragStartPointRef.current = null;
+      dragPointerOffsetRef.current = null;
+      lastPointerPointRef.current = null;
       draggingTaskDomKeyRef.current = null;
       draggingTaskIndexRef.current = null;
       dropTargetIndexRef.current = null;
       startRectsRef.current = new Map();
+      isPointerDragActiveRef.current = false;
+
+      if (!wasPointerDragActive) {
+        taskWrapperRefs.current.forEach((wrapper) => {
+          wrapper.style.transition = "";
+          wrapper.style.transform = "";
+        });
+        return;
+      }
 
       const finalDragIndex = typeof dragIndex === "number" ? dragIndex : 0;
       const finalDropTarget = typeof dropTarget === "number" ? dropTarget : finalDragIndex;
@@ -293,6 +312,13 @@ export function SetupSection() {
       taskWrapperRefs.current.forEach((element, domKey) => {
         startRects.set(domKey, element.getBoundingClientRect());
       });
+      const startRect = startRects.get(taskDomKey);
+      if (!startRect) {
+        taskWrapperRefs.current.forEach((wrapper) => {
+          wrapper.style.transition = "";
+        });
+        return;
+      }
       startRectsRef.current = startRects;
 
       // Restore CSS transition on non-dragged items
@@ -304,18 +330,65 @@ export function SetupSection() {
 
       activePointerIdRef.current = event.pointerId;
       dragStartPointRef.current = { x: event.clientX, y: event.clientY };
+      dragPointerOffsetRef.current = {
+        x: event.clientX - startRect.left,
+        y: event.clientY - startRect.top,
+      };
+      lastPointerPointRef.current = { x: event.clientX, y: event.clientY };
       draggingTaskDomKeyRef.current = taskDomKey;
       draggingTaskIndexRef.current = index;
       dropTargetIndexRef.current = index;
-      handleTaskDragStart(index);
+      isPointerDragActiveRef.current = false;
 
       if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.setPointerCapture(event.pointerId);
       }
-      event.preventDefault();
+      if (event.pointerType !== "touch") {
+        event.preventDefault();
+      }
     },
-    [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing],
+    [finishPointerDrag, isTaskOrderEditing],
   );
+
+  const refreshDragGeometry = useCallback(() => {
+    if (!isPointerDragActiveRef.current) return;
+
+    const draggingTaskDomKey = draggingTaskDomKeyRef.current;
+    const pointerPoint = lastPointerPointRef.current;
+    const pointerOffset = dragPointerOffsetRef.current;
+    if (!draggingTaskDomKey || !pointerPoint || !pointerOffset) return;
+
+    taskWrapperRefs.current.forEach((wrapper) => {
+      wrapper.style.transition = "none";
+      wrapper.style.transform = "";
+    });
+    void document.body.offsetHeight;
+
+    const nextRects = new Map<string, DOMRect>();
+    taskWrapperRefs.current.forEach((element, domKey) => {
+      nextRects.set(domKey, element.getBoundingClientRect());
+    });
+    startRectsRef.current = nextRects;
+
+    taskWrapperRefs.current.forEach((wrapper, domKey) => {
+      if (domKey !== draggingTaskDomKey) {
+        wrapper.style.transition = "";
+      }
+    });
+
+    const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
+    const myStartRect = nextRects.get(draggingTaskDomKey);
+    if (!draggingTaskWrapper || !myStartRect) return;
+
+    const currentLeft = pointerPoint.x - pointerOffset.x;
+    const currentTop = pointerPoint.y - pointerOffset.y;
+    const deltaX = currentLeft - myStartRect.left;
+    const deltaY = currentTop - myStartRect.top;
+    draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+
+    updateDropTarget(currentLeft + myStartRect.width / 2, currentTop + myStartRect.height / 2);
+    applyDragTransforms();
+  }, [applyDragTransforms, updateDropTarget]);
 
   useEffect(() => {
     if (!isTaskOrderEditing) {
@@ -328,42 +401,74 @@ export function SetupSection() {
       if (activePointerId === null || event.pointerId !== activePointerId) return;
 
       const dragStartPoint = dragStartPointRef.current;
+      const pointerOffset = dragPointerOffsetRef.current;
       const draggingTaskDomKey = draggingTaskDomKeyRef.current;
-      if (!dragStartPoint || !draggingTaskDomKey) return;
+      if (!dragStartPoint || !pointerOffset || !draggingTaskDomKey) return;
+
+      const pointerPoint = { x: event.clientX, y: event.clientY };
+      lastPointerPointRef.current = pointerPoint;
+      const dragDistance = Math.hypot(pointerPoint.x - dragStartPoint.x, pointerPoint.y - dragStartPoint.y);
+      const dragIndex = draggingTaskIndexRef.current;
+      if (!isPointerDragActiveRef.current) {
+        if (dragDistance < POINTER_DRAG_START_THRESHOLD_PX || dragIndex === null) return;
+        isPointerDragActiveRef.current = true;
+        handleTaskDragStart(dragIndex);
+      }
 
       const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
       const myStartRect = startRectsRef.current.get(draggingTaskDomKey);
       if (!draggingTaskWrapper || !myStartRect) return;
 
       // Move dragged card to follow pointer
-      const deltaX = event.clientX - dragStartPoint.x;
-      const deltaY = event.clientY - dragStartPoint.y;
+      const currentLeft = pointerPoint.x - pointerOffset.x;
+      const currentTop = pointerPoint.y - pointerOffset.y;
+      const deltaX = currentLeft - myStartRect.left;
+      const deltaY = currentTop - myStartRect.top;
       draggingTaskWrapper.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
 
       // Compute dragged card's visual center and update drop target
-      const draggedCenterX = myStartRect.left + myStartRect.width / 2 + deltaX;
-      const draggedCenterY = myStartRect.top + myStartRect.height / 2 + deltaY;
+      const draggedCenterX = currentLeft + myStartRect.width / 2;
+      const draggedCenterY = currentTop + myStartRect.height / 2;
       updateDropTarget(draggedCenterX, draggedCenterY);
-
-      if (event.cancelable) {
-        event.preventDefault();
-      }
     };
 
     const handleWindowPointerUp = (event: PointerEvent) => {
       finishPointerDrag(event.pointerId);
     };
 
-    window.addEventListener("pointermove", handleWindowPointerMove, { passive: false });
+    let geometryRafId: number | null = null;
+    const scheduleRefreshDragGeometry = () => {
+      if (geometryRafId !== null) {
+        window.cancelAnimationFrame(geometryRafId);
+      }
+
+      geometryRafId = window.requestAnimationFrame(() => {
+        geometryRafId = null;
+        refreshDragGeometry();
+      });
+    };
+
+    window.addEventListener("pointermove", handleWindowPointerMove, { passive: true });
     window.addEventListener("pointerup", handleWindowPointerUp);
     window.addEventListener("pointercancel", handleWindowPointerUp);
+    window.addEventListener("resize", scheduleRefreshDragGeometry);
+    window.addEventListener("orientationchange", scheduleRefreshDragGeometry);
+    window.visualViewport?.addEventListener("resize", scheduleRefreshDragGeometry);
+    window.visualViewport?.addEventListener("scroll", scheduleRefreshDragGeometry);
 
     return () => {
+      if (geometryRafId !== null) {
+        window.cancelAnimationFrame(geometryRafId);
+      }
       window.removeEventListener("pointermove", handleWindowPointerMove);
       window.removeEventListener("pointerup", handleWindowPointerUp);
       window.removeEventListener("pointercancel", handleWindowPointerUp);
+      window.removeEventListener("resize", scheduleRefreshDragGeometry);
+      window.removeEventListener("orientationchange", scheduleRefreshDragGeometry);
+      window.visualViewport?.removeEventListener("resize", scheduleRefreshDragGeometry);
+      window.visualViewport?.removeEventListener("scroll", scheduleRefreshDragGeometry);
     };
-  }, [finishPointerDrag, isTaskOrderEditing, updateDropTarget]);
+  }, [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing, refreshDragGeometry, updateDropTarget]);
 
   useEffect(() => {
     return () => {

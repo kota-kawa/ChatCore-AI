@@ -15,9 +15,14 @@
   --setup-card-padding-x: 0.8rem;
   --setup-card-min-height: 68px;
   --setup-card-font-size: 1.05rem;
-  --setup-toggle-size: 40px;
+  --setup-toggle-size: 44px;
+  --setup-info-min-height: 5.5rem;
   background: var(--surface);
-  padding: var(--setup-container-padding-y) var(--setup-container-padding-x);
+  padding:
+    max(var(--setup-container-padding-y), env(safe-area-inset-top, 0px))
+    max(var(--setup-container-padding-x), env(safe-area-inset-right, 0px))
+    max(var(--setup-container-padding-y), env(safe-area-inset-bottom, 0px))
+    max(var(--setup-container-padding-x), env(safe-area-inset-left, 0px));
   border-radius: 24px;
   border: 1px solid var(--border-soft);
   box-shadow: var(--shadow-strong);
@@ -94,7 +99,7 @@
   position: static;
   background: transparent;
   padding: 0;
-  font-size: var(--text-base, 0.9375rem);
+  font-size: var(--text-md, 1rem);
   font-weight: 600;
   color: var(--success-strong, #0f5132);
   letter-spacing: 0.02em;
@@ -134,7 +139,7 @@
   --scrollbar-thumb-hover-current: rgba(24, 89, 63, 0.38);
   --scrollbar-thumb-active-current: rgba(16, 72, 50, 0.54);
   --scrollbar-thumb-border-current: transparent;
-  min-height: clamp(3.8rem, 12vh, 6rem);
+  min-height: var(--setup-info-min-height);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -180,7 +185,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 .setup-info-counter {
   text-align: right;
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-md, 1rem);
   color: var(--text-muted, #9ca3af);
   transition: color var(--transition-normal, 0.2s ease);
 }
@@ -595,6 +600,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 .task-detail-toggle {
   width: var(--setup-toggle-size);
   height: var(--setup-toggle-size);
+  min-width: var(--setup-toggle-size);
   min-height: var(--setup-toggle-size);
   padding: 0 !important;
   line-height: 1 !important;
@@ -622,18 +628,18 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-card-padding-y: 0.5rem;
   --setup-card-padding-x: 0.66rem;
   --setup-card-min-height: 56px;
-  --setup-card-font-size: 0.96rem;
-  --setup-toggle-size: 34px;
+  --setup-card-font-size: 1rem;
+  --setup-toggle-size: 44px;
+  --setup-info-min-height: 5rem;
 }
 
 #setup-container.setup-fit-compact #setup-info {
-  min-height: clamp(3.4rem, 10.5vh, 5.1rem);
   padding-right: 4.4rem;
   padding-bottom: 3.9rem;
 }
 
 #setup-container.setup-fit-compact .form-label {
-  font-size: 0.88rem;
+  font-size: var(--text-md, 1rem);
 }
 
 #setup-container.setup-fit-compact .task-selection-header {
@@ -641,14 +647,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 #setup-container.setup-fit-compact .task-selection-header p#task-selection-text {
-  font-size: 0.9rem;
+  font-size: var(--text-md, 1rem);
 }
 
 #setup-container.setup-fit-compact #openNewPromptModal,
 #setup-container.setup-fit-compact #edit-task-order-btn {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 1rem;
 }
 
@@ -665,29 +672,30 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-card-padding-y: 0.42rem;
   --setup-card-padding-x: 0.56rem;
   --setup-card-min-height: 46px;
-  --setup-card-font-size: 0.9rem;
-  --setup-toggle-size: 30px;
+  --setup-card-font-size: 1rem;
+  --setup-toggle-size: 44px;
+  --setup-info-min-height: 4.25rem;
 }
 
 #setup-container.setup-fit-tight #setup-info {
-  min-height: clamp(3rem, 8.8vh, 4.1rem);
   padding-right: 4.1rem;
   padding-bottom: 3.7rem;
 }
 
 #setup-container.setup-fit-tight .form-label {
-  font-size: var(--text-xs, 0.8125rem);
+  font-size: var(--text-md, 1rem);
 }
 
 #setup-container.setup-fit-tight .task-selection-header p#task-selection-text {
-  font-size: var(--text-xs, 0.8125rem);
+  font-size: var(--text-md, 1rem);
 }
 
 #setup-container.setup-fit-tight #openNewPromptModal,
 #setup-container.setup-fit-tight #edit-task-order-btn {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 0.92rem;
 }
 
@@ -752,7 +760,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 .task-detail-modal-eyebrow {
   margin: 0;
-  font-size: 0.73rem;
+  font-size: var(--text-md, 1rem);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -767,8 +775,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 .task-detail-modal-close {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   flex-shrink: 0;
   border: 1px solid #d9e9e1;
   border-radius: 999px;
@@ -806,14 +816,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 .task-detail-section-title {
   margin: 0;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-md, 1rem);
   font-weight: 700;
   color: var(--success-strong, #0f5132);
 }
 
 .task-detail-section-body {
   margin-top: 0.52rem;
-  font-size: var(--text-base, 0.9375rem);
+  font-size: var(--text-md, 1rem);
   line-height: var(--leading-relaxed, 1.6);
   color: var(--text-dark, #1a1a1a);
   word-break: break-word;
@@ -848,6 +858,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 .task-selection-header #openNewPromptModal {
   width: 48px;
   height: 48px;
+  min-width: 48px;
   min-height: 48px;
   padding: 0;
   border-radius: 50%;
@@ -981,6 +992,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   .task-selection-header #openNewPromptModal {
     width: 44px;
     height: 44px;
+    min-width: 44px;
     min-height: 44px;
   }
 
@@ -1018,8 +1030,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   .task-detail-modal-close {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
   }
 
   .task-detail-section {
@@ -1027,7 +1039,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   .task-detail-section-body {
-    font-size: var(--text-sm, 0.875rem);
+    font-size: var(--text-md, 1rem);
     max-height: 185px;
   }
 }

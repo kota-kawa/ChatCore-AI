@@ -231,6 +231,7 @@ user-icon[hidden] {
   width: 100%;
   margin-bottom: 0.6rem;
   padding: 0.6rem 1rem;
+  min-height: 44px;
   font-size: 0.9rem;
   font-weight: 500;
   background: var(--primary-color);
@@ -266,6 +267,8 @@ user-icon[hidden] {
 /* アイコンボタン */
 .icon-button {
   padding: 0.55rem;
+  min-width: 44px;
+  min-height: 44px;
   border: none;
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
@@ -274,7 +277,9 @@ user-icon[hidden] {
     opacity var(--transition-fast, 0.15s ease);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  box-sizing: border-box;
   background: transparent;
   color: white;
 }
@@ -288,6 +293,7 @@ user-icon[hidden] {
   background: var(--primary-color);
   color: white;
   padding: 0.65rem 1rem;
+  min-height: 44px;
   border-radius: var(--radius-md, 14px);
   border: none;
   cursor: pointer;
