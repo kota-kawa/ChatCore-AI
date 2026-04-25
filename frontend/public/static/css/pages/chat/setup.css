@@ -1001,11 +1001,29 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     gap: var(--setup-task-gap);
   }
 
+  .task-selection-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .task-selection-header p#task-selection-text {
+    grid-column: 1 / -1;
+    min-width: 0;
+    line-height: var(--leading-tight, 1.4);
+    white-space: normal;
+  }
+
   .task-selection-header #edit-task-order-btn {
+    grid-column: 2;
+    justify-self: end;
     margin-left: 0;
   }
 
   .task-selection-header #openNewPromptModal {
+    grid-column: 3;
+    justify-self: end;
     margin-left: 0;
   }
 
