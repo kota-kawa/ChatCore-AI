@@ -84,6 +84,7 @@ export function useHomePageController() {
     setSetupInfo,
     temporaryModeEnabled,
     setTemporaryModeEnabled,
+    storedSetupStateLoaded,
     modelMenuOpen,
     setModelMenuOpen,
     chatHeaderModelMenuOpen,
@@ -1362,6 +1363,7 @@ export function useHomePageController() {
       } else {
         draggingTaskIndexRef.current = null;
         setDraggingTaskIndex(null);
+        setTasksExpanded(false);
         void saveTaskOrder(tasks);
       }
       return next;
@@ -1870,6 +1872,7 @@ export function useHomePageController() {
     isChatLaunching,
     setupInfo,
     temporaryModeEnabled,
+    storedSetupStateLoaded,
     selectedModel,
     modelMenuOpen,
     selectedModelLabel,

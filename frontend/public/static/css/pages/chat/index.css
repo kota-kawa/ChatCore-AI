@@ -347,8 +347,10 @@ body.chat-page .sidebar-toggle:active {
   transform: scale(0.9);
 }
 
-body.chat-page :where(.prompt-assist__action:disabled, .prompt-assist__apply-all:disabled, .memo-save-btn:disabled) {
+body.chat-page :where(.prompt-assist__action:disabled, .prompt-assist__apply-all:disabled, .memo-save-btn:disabled, .setup-send-btn:disabled) {
+  filter: grayscale(0.18);
   box-shadow: none;
+  transform: none;
 }
 
 body.chat-page {

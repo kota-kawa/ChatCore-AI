@@ -49,6 +49,7 @@ export function SetupSection() {
     loggedIn,
     setupInfo,
     temporaryModeEnabled,
+    storedSetupStateLoaded,
     selectedModel,
     modelMenuOpen,
     selectedModelLabel,
@@ -81,7 +82,8 @@ export function SetupSection() {
   } = useHomePageTaskContext();
 
   const { handleAccessChat, handleSetupSendMessage } = useHomePageChatContext();
-  const canSendSetupMessage = setupInfo.trim().length > 0 && !isChatLaunching;
+  const isSetupInfoWithinLimit = setupInfo.length <= MAX_SETUP_INFO_LENGTH;
+  const canSendSetupMessage = setupInfo.trim().length > 0 && isSetupInfoWithinLimit && !isChatLaunching;
 
   // DOM refs
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -116,6 +118,7 @@ export function SetupSection() {
   }, [draggingTaskIndex]);
 
   useEffect(() => {
+    if (!storedSetupStateLoaded) return;
     if (!hasSeenInitialTemporaryModeRef.current) {
       hasSeenInitialTemporaryModeRef.current = true;
       return;
@@ -138,7 +141,7 @@ export function SetupSection() {
         saveModeFeedbackTimeoutRef.current = null;
       }
     };
-  }, [temporaryModeEnabled]);
+  }, [storedSetupStateLoaded, temporaryModeEnabled]);
 
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
@@ -471,6 +474,12 @@ export function SetupSection() {
   }, [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing, refreshDragGeometry, updateDropTarget]);
 
   useEffect(() => {
+    if (pageViewState !== "setup" || isNewPromptModalOpen) {
+      finishPointerDrag();
+    }
+  }, [finishPointerDrag, isNewPromptModalOpen, pageViewState]);
+
+  useEffect(() => {
     return () => {
       finishPointerDrag();
     };
@@ -540,6 +549,7 @@ export function SetupSection() {
                 aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
                 title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
                 onClick={() => {
+                  finishPointerDrag();
                   setTemporaryModeEnabled((previous) => !previous);
                 }}
               >
@@ -584,6 +594,8 @@ export function SetupSection() {
                 data-tooltip-placement="top"
                 disabled={!canSendSetupMessage}
                 onClick={() => {
+                  if (!canSendSetupMessage) return;
+                  finishPointerDrag();
                   void handleSetupSendMessage();
                 }}
               >
@@ -663,6 +675,7 @@ export function SetupSection() {
                 data-tooltip={isTaskOrderEditing ? "並び替え編集を終了" : "タスクの並び順を編集"}
                 data-tooltip-placement="bottom"
                 onClick={() => {
+                  finishPointerDrag();
                   toggleTaskOrderEditing();
                 }}
               >
@@ -679,6 +692,7 @@ export function SetupSection() {
                   if (isNewPromptModalOpen) {
                     closeNewPromptModal();
                   } else {
+                    finishPointerDrag();
                     openNewPromptModal();
                   }
                 }}
@@ -738,6 +752,7 @@ export function SetupSection() {
                           data-tooltip-placement="top"
                           onClick={(event) => {
                             event.stopPropagation();
+                            finishPointerDrag();
                             void handleTaskDelete(task.name);
                           }}
                         >
@@ -753,6 +768,7 @@ export function SetupSection() {
                           data-tooltip-placement="top"
                           onClick={(event) => {
                             event.stopPropagation();
+                            finishPointerDrag();
                             openTaskEditModal(task);
                           }}
                         >
@@ -770,6 +786,7 @@ export function SetupSection() {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
+                        finishPointerDrag();
                         setTaskDetail(task);
                       }}
                     >
@@ -787,6 +804,7 @@ export function SetupSection() {
               id="toggle-tasks-btn"
               className="primary-button task-toggle-btn"
               onClick={() => {
+                finishPointerDrag();
                 setTasksExpanded((previous) => !previous);
               }}
             >
@@ -802,6 +820,7 @@ export function SetupSection() {
               type="button"
               className="primary-button"
               onClick={() => {
+                finishPointerDrag();
                 void handleAccessChat();
               }}
             >

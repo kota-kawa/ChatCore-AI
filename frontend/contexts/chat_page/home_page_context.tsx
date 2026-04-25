@@ -12,6 +12,7 @@ type HomePageUiContextValue = Pick<
   | "isChatLaunching"
   | "setupInfo"
   | "temporaryModeEnabled"
+  | "storedSetupStateLoaded"
   | "selectedModel"
   | "modelMenuOpen"
   | "selectedModelLabel"
@@ -97,6 +98,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     isChatLaunching: controller.isChatLaunching,
     setupInfo: controller.setupInfo,
     temporaryModeEnabled: controller.temporaryModeEnabled,
+    storedSetupStateLoaded: controller.storedSetupStateLoaded,
     selectedModel: controller.selectedModel,
     modelMenuOpen: controller.modelMenuOpen,
     selectedModelLabel: controller.selectedModelLabel,

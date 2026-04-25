@@ -4,7 +4,9 @@ export const STORAGE_KEYS = {
   currentChatRoomId: "currentChatRoomId",
   authStateCache: "chatcore.auth.loggedIn",
   authStateCachedAt: "chatcore.auth.cachedAt",
-  tasksCachePrefix: "chatcore.tasks.v2."
+  tasksCachePrefix: "chatcore.tasks.v2.",
+  setupInfoDraft: "chatcore.setup.infoDraft",
+  temporaryModeEnabled: "chatcore.setup.temporaryModeEnabled"
 } as const;
 
 export const CACHE_TTL_MS = {
