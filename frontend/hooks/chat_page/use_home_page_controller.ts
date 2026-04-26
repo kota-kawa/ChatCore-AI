@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import useSWR from "swr";
 import { useHomePageChatState } from "./use_home_page_chat_state";
 import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
@@ -17,9 +18,11 @@ import { buildTaskOrderForPersistence } from "../../lib/chat_page/home_page_cont
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
-  normalizeChatHistoryMessages,
-  normalizeChatHistoryPagination,
-  normalizeChatRooms,
+  normalizeChatHistoryPayload,
+  normalizeChatResponsePayload,
+  normalizeChatRoomsPayload,
+  normalizeGenerationStatusPayload,
+  normalizeShareChatRoomPayload,
 } from "../../lib/chat_page/api_contract";
 import {
   appendStoredHistory,
@@ -37,10 +40,9 @@ import {
 } from "../../lib/chat_page/storage";
 import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_utils";
 import type {
-  ChatHistoryPayload,
   ChatHistoryPagination,
+  ChatRoom,
   ChatRoomMode,
-  GenerationStatusPayload,
   NormalizedTask,
   PromptAssistController,
   UiChatMessage,
@@ -64,6 +66,18 @@ import {
 import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
+
+const fetchChatRooms = async (url: string): Promise<ChatRoom[]> => {
+  const response = await fetch(url, { credentials: "same-origin" });
+  const rawPayload = await readJsonBodySafe(response);
+  const payload = normalizeChatRoomsPayload(rawPayload);
+
+  if (!response.ok || payload.error) {
+    throw new Error(extractApiErrorMessage(rawPayload, "ルーム一覧取得に失敗しました。", response.status));
+  }
+
+  return payload.rooms;
+};
 
 function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
@@ -198,6 +212,15 @@ export function useHomePageController() {
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
   const hasCurrentRoom = Boolean(currentRoomId);
+  const { data: cachedChatRooms, mutate: mutateChatRooms } = useSWR<ChatRoom[]>(
+    loggedIn ? "/api/get_chat_rooms" : null,
+    fetchChatRooms,
+    {
+      revalidateOnFocus: true,
+      dedupingInterval: 5000,
+      keepPreviousData: true,
+    },
+  );
 
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
     const container = chatMessagesRef.current;
@@ -314,25 +337,22 @@ export function useHomePageController() {
     const response = await fetch(`/api/get_chat_history?${params.toString()}`, {
       credentials: "same-origin",
     });
-    const rawPayload = (await readJsonBodySafe(response)) as ChatHistoryPayload;
+    const rawPayload = await readJsonBodySafe(response);
+    const payload = normalizeChatHistoryPayload(rawPayload);
 
-    if (!response.ok || rawPayload.error) {
+    if (!response.ok || payload.error) {
       throw new Error(extractApiErrorMessage(rawPayload, "履歴取得に失敗しました。", response.status));
     }
 
-    const historyMessages = normalizeChatHistoryMessages(rawPayload.messages);
-    const pagination = normalizeChatHistoryPagination(rawPayload.pagination);
-
     const normalizedPagination: ChatHistoryPagination = {
-      hasMore: pagination.hasMore,
-      nextBeforeId: pagination.nextBeforeId,
+      hasMore: payload.pagination.hasMore,
+      nextBeforeId: payload.pagination.nextBeforeId,
     };
-    const roomMode: ChatRoomMode = rawPayload.room_mode === "temporary" ? "temporary" : "normal";
 
     return {
-      messages: historyMessages,
+      messages: payload.messages,
       pagination: normalizedPagination,
-      roomMode,
+      roomMode: payload.roomMode,
     };
   }, []);
 
@@ -592,14 +612,14 @@ export function useHomePageController() {
           return;
         }
 
-        let generationStatus: GenerationStatusPayload = {};
+        let generationStatus = normalizeGenerationStatusPayload({});
         try {
           const statusResponse = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
             credentials: "same-origin",
           });
-          generationStatus = (await readJsonBodySafe(statusResponse)) as GenerationStatusPayload;
+          generationStatus = normalizeGenerationStatusPayload(await readJsonBodySafe(statusResponse));
         } catch {
-          generationStatus = {};
+          generationStatus = normalizeGenerationStatusPayload({});
         }
 
         if (currentRoomIdRef.current !== roomId) return;
@@ -687,18 +707,11 @@ export function useHomePageController() {
     }
   }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder]);
 
-  const loadChatRooms = useCallback(async () => {
+  const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
-      const response = await fetch("/api/get_chat_rooms", { credentials: "same-origin" });
-      const rawPayload = await readJsonBodySafe(response);
-      const data = rawPayload && typeof rawPayload === "object" ? (rawPayload as { rooms?: unknown[]; error?: unknown }) : {};
-
-      if (typeof data.error === "string" && data.error) {
-        console.error("get_chat_rooms:", data.error);
-        return;
-      }
-
-      const rooms = normalizeChatRooms(data.rooms);
+      const rooms = loggedIn
+        ? (await mutateChatRooms()) ?? cachedChatRooms ?? []
+        : await fetchChatRooms("/api/get_chat_rooms");
       setChatRooms(rooms);
 
       const activeRoomId = currentRoomIdRef.current;
@@ -708,10 +721,12 @@ export function useHomePageController() {
           setCurrentRoomMode(activeRoom.mode);
         }
       }
+      return rooms;
     } catch (error) {
       console.error("ルーム一覧取得失敗:", error);
+      return cachedChatRooms ?? [];
     }
-  }, []);
+  }, [cachedChatRooms, loggedIn, mutateChatRooms]);
 
   const switchChatRoom = useCallback(
     (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
@@ -801,13 +816,13 @@ export function useHomePageController() {
         }
 
         const rawPayload = await readJsonBodySafe(response);
-        const data = rawPayload && typeof rawPayload === "object" ? (rawPayload as { response?: unknown; error?: unknown }) : {};
+        const data = normalizeChatResponsePayload(rawPayload);
 
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId) return previous;
           const trimmed = removeThinkingMessages(previous);
 
-          if (response.ok && typeof data.response === "string" && data.response) {
+          if (response.ok && data.response) {
             return [
               ...trimmed,
               {
@@ -829,7 +844,7 @@ export function useHomePageController() {
           ];
         });
 
-        if (response.ok && typeof data.response === "string" && data.response) {
+        if (response.ok && data.response) {
           appendStoredHistory(roomId, { text: data.response, sender: "bot" });
         }
         scheduleAutoScrollIfNeeded(true);
@@ -980,14 +995,14 @@ export function useHomePageController() {
           body: JSON.stringify({ room_id: roomId }),
         });
         const rawPayload = await readJsonBodySafe(response);
-        const data = rawPayload && typeof rawPayload === "object" ? (rawPayload as { share_url?: unknown }) : {};
+        const data = normalizeShareChatRoomPayload(rawPayload);
 
-        if (!response.ok || typeof data.share_url !== "string" || !data.share_url) {
+        if (!response.ok || !data.shareUrl) {
           throw new Error(extractApiErrorMessage(rawPayload, "共有リンクの作成に失敗しました。", response.status));
         }
 
-        shareCacheRef.current.set(roomId, data.share_url);
-        setShareUrl(data.share_url);
+        shareCacheRef.current.set(roomId, data.shareUrl);
+        setShareUrl(data.shareUrl);
         setShareStatus({ message: "共有リンクを作成しました。", error: false });
       } catch (error) {
         setShareStatus({
@@ -1088,13 +1103,9 @@ export function useHomePageController() {
     }
 
     try {
-      const response = await fetch("/api/get_chat_rooms", { credentials: "same-origin" });
-      const payload = (await readJsonBodySafe(response)) as { rooms?: unknown };
-      const rooms = normalizeChatRooms(payload.rooms);
+      const rooms = await loadChatRooms();
       const preferredFetchedRoom =
         (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
-
-      setChatRooms(rooms);
 
       if (preferredFetchedRoom) {
         switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
@@ -1121,6 +1132,7 @@ export function useHomePageController() {
   }, [
     chatRooms,
     currentRoomIdRef,
+    loadChatRooms,
     loadLocalChatHistory,
     persistCurrentRoomId,
     setCurrentRoomMode,
@@ -1131,7 +1143,6 @@ export function useHomePageController() {
     setOpenRoomActionsFor,
     setPageViewState,
     setSidebarOpen,
-    setChatRooms,
     switchChatRoom,
   ]);
 
@@ -1681,6 +1692,19 @@ export function useHomePageController() {
   }, [loggedIn]);
 
   useEffect(() => {
+    if (!cachedChatRooms) return;
+    setChatRooms(cachedChatRooms);
+
+    const activeRoomId = currentRoomIdRef.current;
+    if (!activeRoomId) return;
+
+    const activeRoom = cachedChatRooms.find((room) => room.id === activeRoomId);
+    if (activeRoom) {
+      setCurrentRoomMode(activeRoom.mode);
+    }
+  }, [cachedChatRooms]);
+
+  useEffect(() => {
     if (!authResolved) return;
     if (!loggedIn && isTaskOrderEditing) {
       setIsTaskOrderEditing(false);
@@ -1690,13 +1714,11 @@ export function useHomePageController() {
   useEffect(() => {
     if (!authResolved) return;
     void refreshTasks(true);
-    if (loggedIn) {
-      void loadChatRooms();
-    } else {
+    if (!loggedIn) {
       setChatRooms([]);
       setCurrentRoomMode("normal");
     }
-  }, [authResolved, loadChatRooms, loggedIn, refreshTasks]);
+  }, [authResolved, loggedIn, refreshTasks]);
 
   useEffect(() => {
     if (tasks.length <= taskCollapseLimit) {
@@ -1718,8 +1740,8 @@ export function useHomePageController() {
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      if (!target) return;
+      if (!(event.target instanceof Element)) return;
+      const target = event.target;
 
       if (modelMenuOpen && modelSelectRef.current && !modelSelectRef.current.contains(target)) {
         setModelMenuOpen(false);
@@ -1782,8 +1804,8 @@ export function useHomePageController() {
 
   useEffect(() => {
     const onCodeCopyClick = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      const button = target?.closest(".code-block-copy-btn") as HTMLButtonElement | null;
+      if (!(event.target instanceof Element)) return;
+      const button = event.target.closest<HTMLButtonElement>(".code-block-copy-btn");
       if (!button) return;
 
       const codeElement = button.closest(".code-block-container")?.querySelector("code");

@@ -1,6 +1,10 @@
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import type { StreamParsedEvent } from "./types";
 
+function isStreamData(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
 export function parseStreamEventBlock(block: string): StreamParsedEvent | null {
   const lines = block
     .split(/\r?\n/)
@@ -34,11 +38,11 @@ export function parseStreamEventBlock(block: string): StreamParsedEvent | null {
 
   try {
     const parsed = parseJsonText(dataLines.join("\n"));
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!isStreamData(parsed)) return null;
     return {
       event,
       id: eventId,
-      data: parsed as Record<string, unknown>,
+      data: parsed,
     };
   } catch {
     return null;

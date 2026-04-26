@@ -724,14 +724,11 @@ export default function PromptSharePage() {
 
       setSaveToListPending(promptId, true);
       try {
-        const result = await savePromptToList(prompt);
+        await savePromptToList(prompt);
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           saved_to_list: true
         }));
-        if (result && result.message) {
-          console.log(result.message);
-        }
       } catch (error) {
         console.error("プロンプト保存中にエラーが発生しました:", error);
         showToast("プロンプトリストへの保存中にエラーが発生しました。", { variant: "error" });
@@ -754,16 +751,12 @@ export default function PromptSharePage() {
       setLikePending(promptId, true);
       try {
         const request = shouldLike ? savePromptLike(prompt) : removePromptLike(prompt);
-        const result = await request;
+        await request;
 
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           liked: shouldLike
         }));
-
-        if (result && result.message) {
-          console.log(result.message);
-        }
       } catch (error) {
         console.error("いいね操作エラー:", error);
         showToast("いいねの更新中にエラーが発生しました。", { variant: "error" });
@@ -786,16 +779,12 @@ export default function PromptSharePage() {
       setBookmarkPending(promptId, true);
       try {
         const request = shouldBookmark ? savePromptBookmark(prompt) : removePromptBookmark(prompt);
-        const result = await request;
+        await request;
 
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           bookmarked: shouldBookmark
         }));
-
-        if (result && result.message) {
-          console.log(result.message);
-        }
       } catch (error) {
         console.error("ブックマーク操作エラー:", error);
         showToast("ブックマークの更新中にエラーが発生しました。", { variant: "error" });
@@ -907,10 +896,7 @@ export default function PromptSharePage() {
       setPromptPostStatus("プロンプトを投稿しています...", "info");
 
       try {
-        const result = await createPrompt(formData);
-        if (result.message) {
-          console.log(result.message);
-        }
+        await createPrompt(formData);
 
         setPromptPostStatus("プロンプトが投稿されました。公開一覧へ反映します。", "success");
 
@@ -1220,7 +1206,7 @@ export default function PromptSharePage() {
 
       const firstFocusable = focusableElements[0];
       const lastFocusable = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
       if (event.shiftKey) {
         if (!activeElement || activeElement === firstFocusable || !modalElement.contains(activeElement)) {

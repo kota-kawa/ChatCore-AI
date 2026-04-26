@@ -6,6 +6,7 @@ import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
+import { asId } from "../../lib/utils";
 import {
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
@@ -27,13 +28,6 @@ const CONTENT_CHAR_LIMIT = 160;
 function truncateText(text: string, limit: number) {
   const chars = Array.from(text || "");
   return chars.length > limit ? `${chars.slice(0, limit).join("")}...` : text;
-}
-
-function asId(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number") {
-    return String(value);
-  }
-  return "";
 }
 
 function toDisplayDate(createdAt?: string): string {

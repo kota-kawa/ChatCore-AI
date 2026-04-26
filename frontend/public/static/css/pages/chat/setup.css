@@ -146,15 +146,15 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
-  padding-right: 4.75rem;
-  padding-bottom: 4.2rem;
+  padding-right: calc(4.75rem + env(safe-area-inset-right, 0px));
+  padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
   display: block;
 }
 
 .setup-info-input-area .setup-send-btn {
   position: absolute;
-  right: 0.72rem;
-  bottom: 0.72rem;
+  right: calc(0.72rem + env(safe-area-inset-right, 0px));
+  bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
   z-index: 2;
 }
 

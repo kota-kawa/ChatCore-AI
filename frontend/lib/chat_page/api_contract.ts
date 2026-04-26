@@ -2,16 +2,21 @@ import type {
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatRoom,
+  ChatRoomMode,
+  GenerationStatusPayload,
 } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
 
-function asRecord(value: unknown): UnknownRecord {
-  if (!value || typeof value !== "object") return {};
-  return value as UnknownRecord;
+function isUnknownRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object";
 }
 
-function asString(value: unknown): string | undefined {
+export function asRecord(value: unknown): UnknownRecord {
+  return isUnknownRecord(value) ? value : {};
+}
+
+function optionalString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   return value;
 }
@@ -22,14 +27,18 @@ function asPositiveNumber(value: unknown): number | null {
   return value;
 }
 
+function asBoolean(value: unknown): boolean {
+  return value === true;
+}
+
 export function normalizeChatRoom(raw: unknown): ChatRoom | null {
   const record = asRecord(raw);
   const rawId = record.id;
   if (rawId === undefined || rawId === null) return null;
 
-  const rawTitle = asString(record.title);
-  const rawCreatedAt = asString(record.created_at);
-  const rawMode = asString(record.mode);
+  const rawTitle = optionalString(record.title);
+  const rawCreatedAt = optionalString(record.created_at);
+  const rawMode = optionalString(record.mode);
 
   return {
     id: String(rawId),
@@ -46,15 +55,23 @@ export function normalizeChatRooms(rawRooms: unknown): ChatRoom[] {
     .filter((room): room is ChatRoom => room !== null);
 }
 
+export function normalizeChatRoomsPayload(rawPayload: unknown): { rooms: ChatRoom[]; error?: string } {
+  const payload = asRecord(rawPayload);
+  return {
+    rooms: normalizeChatRooms(payload.rooms),
+    error: optionalString(payload.error),
+  };
+}
+
 export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryMessagePayload[] {
   if (!Array.isArray(rawMessages)) return [];
   return rawMessages.map((entry) => {
     const record = asRecord(entry);
     return {
       id: asPositiveNumber(record.id) ?? undefined,
-      message: asString(record.message),
-      sender: asString(record.sender),
-      timestamp: asString(record.timestamp),
+      message: optionalString(record.message),
+      sender: optionalString(record.sender),
+      timestamp: optionalString(record.timestamp),
     };
   });
 }
@@ -64,5 +81,44 @@ export function normalizeChatHistoryPagination(rawPagination: unknown): ChatHist
   return {
     hasMore: pagination.has_more === true,
     nextBeforeId: asPositiveNumber(pagination.next_before_id),
+  };
+}
+
+export function normalizeChatHistoryPayload(rawPayload: unknown): {
+  error?: string;
+  messages: ChatHistoryMessagePayload[];
+  pagination: ChatHistoryPagination;
+  roomMode: ChatRoomMode;
+} {
+  const payload = asRecord(rawPayload);
+  return {
+    error: optionalString(payload.error),
+    messages: normalizeChatHistoryMessages(payload.messages),
+    pagination: normalizeChatHistoryPagination(payload.pagination),
+    roomMode: payload.room_mode === "temporary" ? "temporary" : "normal",
+  };
+}
+
+export function normalizeGenerationStatusPayload(rawPayload: unknown): GenerationStatusPayload {
+  const payload = asRecord(rawPayload);
+  return {
+    error: optionalString(payload.error),
+    is_generating: asBoolean(payload.is_generating),
+    has_replayable_job: asBoolean(payload.has_replayable_job),
+  };
+}
+
+export function normalizeChatResponsePayload(rawPayload: unknown): { response?: string; error?: string } {
+  const payload = asRecord(rawPayload);
+  return {
+    response: optionalString(payload.response),
+    error: optionalString(payload.error),
+  };
+}
+
+export function normalizeShareChatRoomPayload(rawPayload: unknown): { shareUrl?: string } {
+  const payload = asRecord(rawPayload);
+  return {
+    shareUrl: optionalString(payload.share_url),
   };
 }

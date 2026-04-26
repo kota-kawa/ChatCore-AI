@@ -413,9 +413,9 @@
 @media (max-width: 576px) {
   #chat-container {
     height: 100vh;
-    height: 100dvh;
+    height: 100svh;
     min-height: 100vh;
-    min-height: 100dvh;
+    min-height: 100svh;
     border-radius: 0;
     border: none;
     box-shadow: none;

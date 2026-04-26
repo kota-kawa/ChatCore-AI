@@ -16,6 +16,7 @@ import { showToast } from "../scripts/core/toast";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
 import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
+import { asId, asRecord, asString } from "../lib/utils";
 import {
   parseMyPromptsResponse,
   parsePromptListResponse,
@@ -76,23 +77,6 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 const DEFAULT_AVATAR_URL = "/static/user-icon.png";
 const PASSKEY_INITIAL_SUPPORT_TEXT = "このブラウザの対応状況を確認しています。";
 
-function asString(value: unknown): string {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  return String(value);
-}
-
-function asIdString(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number") {
-    return String(value);
-  }
-  return "";
-}
-
 function toDisplayDate(rawDate?: string): string {
   return formatDateTime(rawDate) || rawDate || "";
 }
@@ -104,9 +88,7 @@ function normalizePreviewText(value?: string): string {
 function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
   return rawPasskeys
     .map((rawPasskey) => {
-      const passkey = typeof rawPasskey === "object" && rawPasskey !== null
-        ? (rawPasskey as Record<string, unknown>)
-        : {};
+      const passkey = asRecord(rawPasskey);
       const id = Number(passkey.id);
       if (!Number.isFinite(id)) {
         return null;
@@ -202,7 +184,7 @@ function PromptCard({
   onEdit: (prompt: PromptRecord) => void;
   onDelete: (prompt: PromptRecord) => void;
 }) {
-  const promptId = asIdString(prompt.id);
+  const promptId = asId(prompt.id);
   const contentPreview = normalizePreviewText(prompt.content);
   const inputPreview = normalizePreviewText(prompt.inputExamples);
   const outputPreview = normalizePreviewText(prompt.outputExamples);
@@ -277,7 +259,7 @@ function PromptListCard({
   entry: PromptListEntry;
   onDelete: (entry: PromptListEntry) => void;
 }) {
-  const entryId = asIdString(entry.id);
+  const entryId = asId(entry.id);
   const contentPreview = normalizePreviewText(entry.content);
   const inputPreview = normalizePreviewText(entry.inputExamples);
   const outputPreview = normalizePreviewText(entry.outputExamples);
@@ -849,7 +831,7 @@ export default function UserSettingsPage() {
 
   const handleOpenPromptEdit = useCallback((prompt: PromptRecord) => {
     setEditPromptForm({
-      id: asIdString(prompt.id),
+      id: asId(prompt.id),
       title: prompt.title,
       category: prompt.category,
       content: prompt.content,
@@ -859,7 +841,7 @@ export default function UserSettingsPage() {
   }, []);
 
   const handleDeletePrompt = useCallback(async (prompt: PromptRecord) => {
-    const promptId = asIdString(prompt.id);
+    const promptId = asId(prompt.id);
     if (!promptId) {
       showToast("削除対象のプロンプトが見つかりませんでした。", { variant: "error" });
       return;
@@ -947,7 +929,7 @@ export default function UserSettingsPage() {
   }, [editPromptForm, loadMyPrompts]);
 
   const handleDeletePromptListEntry = useCallback(async (entry: PromptListEntry) => {
-    const entryId = asIdString(entry.id);
+    const entryId = asId(entry.id);
     if (!entryId) {
       showToast("削除対象のエントリが見つかりませんでした。", { variant: "error" });
       return;
@@ -1026,7 +1008,7 @@ export default function UserSettingsPage() {
 
   const myPromptCards = useMemo(
     () => myPrompts.map((prompt, index) => {
-      const key = asIdString(prompt.id) || `${prompt.title}-${index}`;
+      const key = asId(prompt.id) || `${prompt.title}-${index}`;
       return (
         <PromptCard
           key={key}
@@ -1041,7 +1023,7 @@ export default function UserSettingsPage() {
 
   const promptListCards = useMemo(
     () => promptListEntries.map((entry, index) => {
-      const key = asIdString(entry.id) || `${entry.title}-${index}`;
+      const key = asId(entry.id) || `${entry.title}-${index}`;
       return (
         <PromptListCard
           key={key}

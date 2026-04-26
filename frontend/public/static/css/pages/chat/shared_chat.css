@@ -4,7 +4,7 @@
 
 .shared-chat-page {
   min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100svh;
   background: var(--surface-tertiary, #f2f5f3);
   padding: 1.2rem;
 }
