@@ -229,7 +229,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIsInstance(response, StreamingResponse)
         self.assertEqual(response.media_type, "text/event-stream")
 
-    def test_chat_discards_authenticated_room_when_invalid_model_leaves_no_assistant_reply(self):
+    def test_chat_rejects_invalid_model_before_persisting_authenticated_message(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "room-auth", "model": "invalid-model"},
             session={"user_id": 42},
@@ -237,7 +237,7 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
-                with patch("blueprints.chat.messages.save_message_to_db"):
+                with patch("blueprints.chat.messages.save_message_to_db") as mock_save_message:
                     with patch(
                         "blueprints.chat.messages.get_chat_room_messages",
                         return_value=[{"role": "user", "content": "こんにちは"}],
@@ -251,7 +251,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(response.status_code, 400)
         self.assertIn("invalid-model", payload["error"])
-        mock_delete_room.assert_called_once_with("room-auth", 42)
+        mock_save_message.assert_not_called()
+        mock_delete_room.assert_not_called()
 
     def test_streaming_generation_error_discards_guest_room_without_assistant_reply(self):
         request = make_request(
@@ -444,47 +445,53 @@ class ChatStreamingTestCase(unittest.TestCase):
             session=session,
         )
 
-        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
-                with patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message):
-                    with patch("blueprints.chat.messages.get_chat_room_messages", side_effect=get_messages):
-                        with patch("blueprints.chat.messages._fetch_chat_history", side_effect=fetch_history):
-                            with patch(
-                                "blueprints.chat.messages.consume_llm_daily_quota",
-                                return_value=(True, 1, 300),
-                            ):
-                                with patch(
-                                    "services.chat_generation.get_llm_response_stream",
-                                    side_effect=delayed_stream,
-                                ):
-                                    response = asyncio.run(chat(request))
-                                    self.assertIsInstance(response, StreamingResponse)
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
+            patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
+            patch("blueprints.chat.messages.get_chat_room_messages", side_effect=get_messages),
+            patch("blueprints.chat.messages._fetch_chat_history", side_effect=fetch_history),
+            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
+            patch("blueprints.chat.messages.get_room_summary", return_value={}),
+            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
+            patch("blueprints.chat.messages.rebuild_room_summary"),
+            patch(
+                "blueprints.chat.messages.consume_llm_daily_quota",
+                return_value=(True, 1, 300),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=delayed_stream,
+            ),
+        ):
+            response = asyncio.run(chat(request))
+            self.assertIsInstance(response, StreamingResponse)
 
-                                    generation_key = build_generation_key(chat_room_id="room-1", user_id=42)
-                                    self.assertTrue(has_active_generation(generation_key))
+            generation_key = build_generation_key(chat_room_id="room-1", user_id=42)
+            self.assertTrue(has_active_generation(generation_key))
 
-                                    status_request = build_request(
-                                        method="GET",
-                                        path="/api/chat_generation_status",
-                                        session=session,
-                                        query_string=b"room_id=room-1",
-                                    )
-                                    status_response = asyncio.run(chat_generation_status(status_request))
-                                    status_payload = json.loads(status_response.body.decode("utf-8"))
-                                    self.assertTrue(status_payload["is_generating"])
+            status_request = build_request(
+                method="GET",
+                path="/api/chat_generation_status",
+                session=session,
+                query_string=b"room_id=room-1",
+            )
+            status_response = asyncio.run(chat_generation_status(status_request))
+            status_payload = json.loads(status_response.body.decode("utf-8"))
+            self.assertTrue(status_payload["is_generating"])
 
-                                    release_generation.set()
-                                    self.assertTrue(generation_finished.wait(timeout=1.0))
-                                    self.assertFalse(has_active_generation(generation_key))
+            release_generation.set()
+            self.assertTrue(generation_finished.wait(timeout=1.0))
+            self.assertFalse(has_active_generation(generation_key))
 
-                                    history_request = build_request(
-                                        method="GET",
-                                        path="/api/get_chat_history",
-                                        session=session,
-                                        query_string=b"room_id=room-1",
-                                    )
-                                    history_response = asyncio.run(get_chat_history(history_request))
-                                    history_payload = json.loads(history_response.body.decode("utf-8"))
+            history_request = build_request(
+                method="GET",
+                path="/api/get_chat_history",
+                session=session,
+                query_string=b"room_id=room-1",
+            )
+            history_response = asyncio.run(get_chat_history(history_request))
+            history_payload = json.loads(history_response.body.decode("utf-8"))
 
         self.assertEqual(
             [message["sender"] for message in history_payload["messages"]],

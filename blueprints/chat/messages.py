@@ -768,6 +768,11 @@ async def chat(
     chat_room_id = payload.chat_room_id
     model = payload.model or GEMINI_DEFAULT_MODEL
 
+    try:
+        validate_model_name(model)
+    except LlmInvalidModelError as exc:
+        return jsonify({"error": str(exc)}, status_code=400)
+
     # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
     # Enforce guest daily quota with a server-side counter.
     session = request.session
@@ -900,17 +905,6 @@ async def chat(
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
     )
-
-    try:
-        validate_model_name(model)
-    except LlmInvalidModelError as exc:
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify({"error": str(exc)}, status_code=400)
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     if has_active_generation(generation_key, service=resolved_chat_generation_service):

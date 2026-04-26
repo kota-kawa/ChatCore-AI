@@ -70,24 +70,24 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 11},
         )
 
-        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
-            with patch("blueprints.chat.messages.validate_room_owner", return_value="temporary"):
-                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
-                    with patch("blueprints.chat.messages.ephemeral_store.append_message") as append_message:
-                        with patch(
-                            "blueprints.chat.messages.ephemeral_store.get_messages",
-                            return_value=[{"role": "user", "content": "こんにちは"}],
-                        ):
-                            with patch(
-                                "blueprints.chat.messages.consume_llm_daily_quota",
-                                return_value=(True, 1, 300),
-                            ):
-                                with patch("blueprints.chat.messages.is_streaming_model", return_value=False):
-                                    with patch(
-                                        "blueprints.chat.messages.get_llm_response",
-                                        return_value="やあ",
-                                    ):
-                                        response = asyncio.run(chat(request))
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_room_owner", return_value="temporary"),
+            patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True),
+            patch("blueprints.chat.messages.ephemeral_store.append_message") as append_message,
+            patch(
+                "blueprints.chat.messages.ephemeral_store.get_messages",
+                return_value=[{"role": "user", "content": "こんにちは"}],
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
+            patch(
+                "blueprints.chat.messages.consume_llm_daily_quota",
+                return_value=(True, 1, 300),
+            ),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch("blueprints.chat.messages.get_llm_response", return_value="やあ"),
+        ):
+            response = asyncio.run(chat(request))
 
         self.assertNotIsInstance(response, StreamingResponse)
         self.assertEqual(response.status_code, 200)
