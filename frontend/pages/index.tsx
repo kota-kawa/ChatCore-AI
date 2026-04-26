@@ -71,6 +71,7 @@ export default function HomePage() {
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
+        <link rel="stylesheet" href="/static/css/pages/chat/page.css" />
       </Head>
 
       <HomePageContextProvider controller={controller}>

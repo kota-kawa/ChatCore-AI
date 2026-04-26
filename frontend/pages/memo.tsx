@@ -408,6 +408,7 @@ export default function MemoPage() {
         <title>メモを保存</title>
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />
+        <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
       </Head>
 
       <div className="memo-page-shell">

@@ -3,7 +3,7 @@
 
 /* index.css
    Chat page root-level tokens and shell styles.
-   Import ordering is controlled by frontend/styles/chat-entry.css. */
+   Import ordering is controlled by public/static/css/pages/chat/page.css. */
 
 /* ホームページ（chat-page）内のボタン質感を
    「新しいプロンプト作成（＋）」系の立体感にそろえる */

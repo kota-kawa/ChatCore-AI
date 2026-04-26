@@ -1,7 +1,5 @@
 import "../styles/globals.css";
-import "../styles/chat-entry.css";
-import "../styles/memo-entry.css";
-import "../styles/prompt-share-entry.css";
+import "../styles/bootstrap-compat.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";

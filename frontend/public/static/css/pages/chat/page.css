@@ -1,0 +1,20 @@
+/* Chat page CSS entry.
+   Keep this order stable to avoid cascade regressions:
+   1) base.css
+   2) global.css
+   3) shared components
+   4) page modules
+   5) chat root shell */
+@import url("../../base/base.css");
+@import url("../../base/global.css");
+
+@import url("../../components/sidebar.css");
+@import url("../../components/new_prompt_modal.css");
+
+@import url("setup.css");
+@import url("chat_layout.css");
+@import url("chat_messages.css");
+@import url("chat_input.css");
+@import url("tasks_order/tasks_order.css");
+@import url("tasks_order/task-edit-modal.css");
+@import url("index.css");

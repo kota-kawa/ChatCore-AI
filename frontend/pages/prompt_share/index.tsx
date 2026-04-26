@@ -1253,8 +1253,7 @@ export default function PromptSharePage() {
         <title>プロンプト共有 - トップ</title>
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />
-        <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_share.css" />
       </Head>
 
       <div className="prompt-share-page">
