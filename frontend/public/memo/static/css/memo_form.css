@@ -403,11 +403,34 @@ textarea.memo-control {
 }
 
 .memo-item:hover,
-.memo-item:focus-visible {
+.memo-item:focus-within {
   transform: translateY(-3px);
   border-color: rgba(217, 119, 6, 0.34);
   box-shadow: 0 16px 32px rgba(41, 24, 6, 0.12);
   outline: none;
+}
+
+.memo-item__open {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  width: 100%;
+  text-align: left;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.memo-item__open:focus-visible {
+  outline: 2px solid rgba(217, 119, 6, 0.52);
+  outline-offset: 2px;
+}
+
+.memo-item__open--content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.68rem;
 }
 
 .memo-item__header {

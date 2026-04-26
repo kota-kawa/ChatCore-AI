@@ -13,6 +13,7 @@ import { useHomePageUiState } from "./use_home_page_ui_state";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { isNearBottom } from "../../lib/chat_page/dom";
+import { buildTaskOrderForPersistence } from "../../lib/chat_page/home_page_controller_utils";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
@@ -46,6 +47,7 @@ import type {
 } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
+import { showToast } from "../../scripts/core/toast";
 import {
   extractApiErrorMessage,
   fetchJsonOrThrow,
@@ -901,10 +903,7 @@ export function useHomePageController() {
   );
 
   const saveTaskOrder = useCallback(async (nextTasks: NormalizedTask[]) => {
-    const order = nextTasks
-      .filter((task) => !task.is_default)
-      .map((task) => task.name)
-      .filter((name) => Boolean(name));
+    const order = buildTaskOrderForPersistence(nextTasks);
 
     if (order.length === 0) return;
 
@@ -918,7 +917,7 @@ export function useHomePageController() {
       invalidateTasksCache();
     } catch (error) {
       const message = error instanceof Error ? error.message : "並び順の保存に失敗しました。";
-      window.alert(`並び順の保存に失敗: ${message}`);
+      showToast(`並び順の保存に失敗: ${message}`, { variant: "error" });
     }
   }, []);
 
@@ -1191,7 +1190,9 @@ export function useHomePageController() {
         setMessages([]);
         persistCurrentRoomId(null);
         setCurrentRoomMode("normal");
-        window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
+        showToast(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`, {
+          variant: "error",
+        });
       } finally {
         taskLaunchInProgressRef.current = false;
       }
@@ -1251,7 +1252,9 @@ export function useHomePageController() {
       setMessages([]);
       persistCurrentRoomId(null);
       setCurrentRoomMode("normal");
-      window.alert(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`);
+      showToast(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`, {
+        variant: "error",
+      });
     } finally {
       taskLaunchInProgressRef.current = false;
     }
@@ -1323,7 +1326,7 @@ export function useHomePageController() {
         setOpenRoomActionsFor(null);
         void loadChatRooms();
       } catch (error) {
-        window.alert(`削除失敗: ${error instanceof Error ? error.message : String(error)}`);
+        showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
     [closeShareModal, loadChatRooms, persistCurrentRoomId],
@@ -1350,7 +1353,7 @@ export function useHomePageController() {
         setOpenRoomActionsFor(null);
         void loadChatRooms();
       } catch (error) {
-        window.alert(`名前変更失敗: ${error instanceof Error ? error.message : String(error)}`);
+        showToast(`名前変更失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
     [loadChatRooms],
@@ -1417,7 +1420,9 @@ export function useHomePageController() {
         });
         invalidateTasksCache();
       } catch (error) {
-        window.alert(`削除に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+        showToast(`削除に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
+          variant: "error",
+        });
       }
     },
     [saveTaskOrder],
@@ -1452,7 +1457,7 @@ export function useHomePageController() {
     };
 
     if (!payload.new_task) {
-      window.alert("タイトルを入力してください。");
+      showToast("タイトルを入力してください。", { variant: "error" });
       return;
     }
 
@@ -1481,7 +1486,9 @@ export function useHomePageController() {
       invalidateTasksCache();
       closeTaskEditModal();
     } catch (error) {
-      window.alert(`更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+      showToast(`更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
+        variant: "error",
+      });
     }
   }, [closeTaskEditModal, taskEditForm]);
 

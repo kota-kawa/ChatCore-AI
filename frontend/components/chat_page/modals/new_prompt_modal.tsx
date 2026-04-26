@@ -1,4 +1,4 @@
-import type { FormEvent, MutableRefObject } from "react";
+import { useEffect, useRef, type FormEvent, type MutableRefObject } from "react";
 
 import type { PromptStatus } from "../../../lib/chat_page/types";
 
@@ -47,11 +47,69 @@ export function NewPromptModal({
   setNewPromptInputExample,
   setNewPromptOutputExample,
 }: NewPromptModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    previousFocusedElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const focusTarget = titleInputRef.current ?? modalRef.current;
+    window.requestAnimationFrame(() => {
+      focusTarget?.focus();
+    });
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+
+      const modal = modalRef.current;
+      if (!modal) return;
+
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("hidden"));
+
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeElement = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+      if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocusedElementRef.current?.isConnected) {
+        previousFocusedElementRef.current.focus();
+      }
+      previousFocusedElementRef.current = null;
+    };
+  }, [isOpen, titleInputRef]);
+
   return (
     <div
+      ref={modalRef}
       id="newPromptModal"
       className={`new-prompt-modal modal-base ${isOpen ? "is-open show" : ""}`.trim()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-prompt-modal-title"
       aria-hidden={isOpen ? "false" : "true"}
+      tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget && !isPromptSubmitting) {
           onClose();
@@ -75,7 +133,7 @@ export function NewPromptModal({
         <div className="new-prompt-modal__hero">
           <div className="new-prompt-modal__hero-copy">
             <p className="new-prompt-modal__eyebrow">Prompt Composer</p>
-            <h2>新しいプロンプトを追加</h2>
+            <h2 id="new-prompt-modal-title">新しいプロンプトを追加</h2>
             <p className="new-prompt-modal__lead">AI 補助を使いながら、短時間で実用的なタスクに整えられます。</p>
           </div>
           <div className="new-prompt-modal__hero-badges" aria-hidden="true">

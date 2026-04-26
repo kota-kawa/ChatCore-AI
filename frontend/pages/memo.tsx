@@ -599,30 +599,26 @@ export default function MemoPage() {
 
                     return (
                       <li key={memo.id}>
-                        <article
-                          className="memo-item"
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => {
-                            openMemoDetail(memo);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter" && event.key !== " ") return;
-                            event.preventDefault();
-                            openMemoDetail(memo);
-                          }}
-                        >
+                        <article className="memo-item">
                           <div className="memo-item__header">
-                            <div className="memo-item__heading">
-                              <h3 className="memo-item__title">
-                                {displayTitle}
-                              </h3>
-                              {memo.created_at ? (
-                                <time className="memo-item__date">
-                                  {formatDateTime(memo.created_at) || memo.created_at}
-                                </time>
-                              ) : null}
-                            </div>
+                            <button
+                              type="button"
+                              className="memo-item__open"
+                              onClick={() => {
+                                openMemoDetail(memo);
+                              }}
+                            >
+                              <div className="memo-item__heading">
+                                <h3 className="memo-item__title">
+                                  {displayTitle}
+                                </h3>
+                                {memo.created_at ? (
+                                  <time className="memo-item__date">
+                                    {formatDateTime(memo.created_at) || memo.created_at}
+                                  </time>
+                                ) : null}
+                              </div>
+                            </button>
                             <button
                               type="button"
                               className="memo-item__share"
@@ -634,26 +630,34 @@ export default function MemoPage() {
                                 event.stopPropagation();
                                 openShareModal(memo);
                               }}
+                              >
+                                <i className="bi bi-share"></i>
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              className="memo-item__open memo-item__open--content"
+                              onClick={() => {
+                                openMemoDetail(memo);
+                              }}
                             >
-                              <i className="bi bi-share"></i>
+                              <div className="memo-tag-list">
+                                {tagList.length ? (
+                                  tagList.map((tag) => (
+                                    <span className="memo-tag" key={tag}>
+                                      {tag}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="memo-tag memo-tag--muted">
+                                    タグなし
+                                  </span>
+                                )}
+                              </div>
+                              {excerpt ? (
+                                <MemoMarkdown text={excerpt} className="memo-item__excerpt" />
+                              ) : null}
                             </button>
-                          </div>
-                          <div className="memo-tag-list">
-                            {tagList.length ? (
-                              tagList.map((tag) => (
-                                <span className="memo-tag" key={tag}>
-                                  {tag}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="memo-tag memo-tag--muted">
-                                タグなし
-                              </span>
-                            )}
-                          </div>
-                          {excerpt ? (
-                            <MemoMarkdown text={excerpt} className="memo-item__excerpt" />
-                          ) : null}
                         </article>
                       </li>
                     );

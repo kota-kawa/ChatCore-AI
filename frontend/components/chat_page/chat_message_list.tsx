@@ -232,11 +232,15 @@ function ChatMessageListComponent({
   return (
     <List
       aria-busy={isGenerating ? "true" : undefined}
+      aria-live="polite"
+      aria-relevant="additions text"
+      aria-label="チャットメッセージ"
       className="chat-messages chat-messages--virtual scroll-pb-24"
       defaultHeight={480}
       id="chat-messages"
       listRef={setListRef}
       overscanCount={6}
+      role="log"
       rowComponent={ChatMessageRow}
       rowCount={rows.length}
       rowHeight={rowHeight}

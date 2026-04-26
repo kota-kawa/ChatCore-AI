@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import type { ShareStatus } from "../../../lib/chat_page/types";
 
 type ChatShareModalProps = {
@@ -27,14 +29,66 @@ export function ChatShareModal({
   copyShareLink,
   shareWithNativeSheet,
 }: ChatShareModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!shareModalOpen) return;
+
+    previousFocusedElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    window.requestAnimationFrame(() => {
+      modalRef.current?.querySelector<HTMLElement>("#chat-share-copy-btn")?.focus();
+    });
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const modal = modalRef.current;
+      if (!modal) return;
+
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("hidden"));
+
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeElement = document.activeElement as HTMLElement | null;
+
+      if (event.shiftKey && activeElement === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+      if (!event.shiftKey && activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocusedElementRef.current?.isConnected) {
+        previousFocusedElementRef.current.focus();
+      }
+      previousFocusedElementRef.current = null;
+    };
+  }, [shareModalOpen]);
+
   return (
     <div
+      ref={modalRef}
       id="chat-share-modal"
       className={`chat-share-modal modal-base ${shareModalOpen ? "is-open" : ""}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-hidden={shareModalOpen ? "false" : "true"}
       aria-labelledby="chat-share-title"
+      tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeShareModal();

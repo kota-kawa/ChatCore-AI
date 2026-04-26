@@ -12,6 +12,7 @@ import {
 import "../scripts/core/csrf";
 import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from "../scripts/core/passkeys";
 import { showConfirmModal } from "../scripts/core/alert_modal";
+import { showToast } from "../scripts/core/toast";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
 import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
@@ -638,7 +639,7 @@ export default function UserSettingsPage() {
       setPasskeys(normalizePasskeyRecords(passkeyRecords));
     } catch (error) {
       setPasskeys([]);
-      alert(error instanceof Error ? error.message : "Passkey一覧の取得に失敗しました。");
+      showToast(error instanceof Error ? error.message : "Passkey一覧の取得に失敗しました。", { variant: "error" });
     } finally {
       setPasskeysLoading(false);
     }
@@ -860,7 +861,7 @@ export default function UserSettingsPage() {
   const handleDeletePrompt = useCallback(async (prompt: PromptRecord) => {
     const promptId = asIdString(prompt.id);
     if (!promptId) {
-      alert("削除対象のプロンプトが見つかりませんでした。");
+      showToast("削除対象のプロンプトが見つかりませんでした。", { variant: "error" });
       return;
     }
 
@@ -881,10 +882,10 @@ export default function UserSettingsPage() {
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      alert(response.message || "削除しました。");
+      showToast(response.message || "削除しました。", { variant: "success" });
       await loadMyPrompts();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。");
+      showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
     }
   }, [loadMyPrompts]);
 
@@ -908,7 +909,7 @@ export default function UserSettingsPage() {
     }
 
     if (!editPromptForm.id || !editPromptForm.title.trim() || !editPromptForm.category.trim() || !editPromptForm.content.trim()) {
-      alert("編集フォームの値が不足しています。");
+      showToast("編集フォームの値が不足しています。", { variant: "error" });
       return;
     }
 
@@ -935,11 +936,11 @@ export default function UserSettingsPage() {
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      alert(response.message || "更新しました。");
+      showToast(response.message || "更新しました。", { variant: "success" });
       setEditPromptForm(null);
       await loadMyPrompts();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。");
+      showToast(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。", { variant: "error" });
     } finally {
       setPromptSaving(false);
     }
@@ -948,7 +949,7 @@ export default function UserSettingsPage() {
   const handleDeletePromptListEntry = useCallback(async (entry: PromptListEntry) => {
     const entryId = asIdString(entry.id);
     if (!entryId) {
-      alert("削除対象のエントリが見つかりませんでした。");
+      showToast("削除対象のエントリが見つかりませんでした。", { variant: "error" });
       return;
     }
 
@@ -969,10 +970,10 @@ export default function UserSettingsPage() {
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      alert(response.message || "プロンプトを削除しました。");
+      showToast(response.message || "プロンプトを削除しました。", { variant: "success" });
       await loadPromptList();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "プロンプトリストの削除に失敗しました。");
+      showToast(error instanceof Error ? error.message : "プロンプトリストの削除に失敗しました。", { variant: "error" });
     }
   }, [loadPromptList]);
 
@@ -980,13 +981,13 @@ export default function UserSettingsPage() {
     setRegisteringPasskey(true);
     try {
       await registerPasskey();
-      alert("Passkeyを追加しました。");
+      showToast("Passkeyを追加しました。", { variant: "success" });
       await loadPasskeys();
     } catch (error) {
       if (error instanceof PasskeyCancelledError) {
         return;
       }
-      alert(error instanceof Error ? error.message : "Passkey登録に失敗しました。");
+      showToast(error instanceof Error ? error.message : "Passkey登録に失敗しました。", { variant: "error" });
     } finally {
       setRegisteringPasskey(false);
     }
@@ -1017,7 +1018,7 @@ export default function UserSettingsPage() {
       );
       await loadPasskeys();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Passkeyの削除に失敗しました。");
+      showToast(error instanceof Error ? error.message : "Passkeyの削除に失敗しました。", { variant: "error" });
     } finally {
       setDeletingPasskeyId(null);
     }

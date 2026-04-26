@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import "../../scripts/core/csrf";
+import { showToast } from "../../scripts/core/toast";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
 import { setLoggedInState } from "../../scripts/core/app_state";
@@ -712,12 +713,12 @@ export default function PromptSharePage() {
       setOpenDropdownPromptId(null);
 
       if (!isLoggedIn) {
-        alert("プロンプトを保存するにはログインが必要です。");
+        showToast("プロンプトを保存するにはログインが必要です。", { variant: "error" });
         return;
       }
 
       if (prompt.saved_to_list) {
-        alert("このプロンプトはすでにプロンプトリストに保存されています。");
+        showToast("このプロンプトはすでにプロンプトリストに保存されています。", { variant: "info" });
         return;
       }
 
@@ -733,7 +734,7 @@ export default function PromptSharePage() {
         }
       } catch (error) {
         console.error("プロンプト保存中にエラーが発生しました:", error);
-        alert("プロンプトリストへの保存中にエラーが発生しました。");
+        showToast("プロンプトリストへの保存中にエラーが発生しました。", { variant: "error" });
       } finally {
         setSaveToListPending(promptId, false);
       }
@@ -744,7 +745,7 @@ export default function PromptSharePage() {
   const handleTogglePromptLike = useCallback(
     async (prompt: PromptRecord) => {
       if (!isLoggedIn) {
-        alert("いいねするにはログインが必要です。");
+        showToast("いいねするにはログインが必要です。", { variant: "error" });
         return;
       }
 
@@ -765,7 +766,7 @@ export default function PromptSharePage() {
         }
       } catch (error) {
         console.error("いいね操作エラー:", error);
-        alert("いいねの更新中にエラーが発生しました。");
+        showToast("いいねの更新中にエラーが発生しました。", { variant: "error" });
       } finally {
         setLikePending(promptId, false);
       }
@@ -776,7 +777,7 @@ export default function PromptSharePage() {
   const handleTogglePromptBookmark = useCallback(
     async (prompt: PromptRecord) => {
       if (!isLoggedIn) {
-        alert("ブックマークするにはログインが必要です。");
+        showToast("ブックマークするにはログインが必要です。", { variant: "error" });
         return;
       }
 
@@ -797,7 +798,7 @@ export default function PromptSharePage() {
         }
       } catch (error) {
         console.error("ブックマーク操作エラー:", error);
-        alert("ブックマークの更新中にエラーが発生しました。");
+        showToast("ブックマークの更新中にエラーが発生しました。", { variant: "error" });
       } finally {
         setBookmarkPending(promptId, false);
       }
@@ -807,7 +808,7 @@ export default function PromptSharePage() {
 
   const openComposerModal = useCallback(() => {
     if (!isLoggedIn) {
-      alert("プロンプトを投稿するにはログインが必要です。");
+      showToast("プロンプトを投稿するにはログインが必要です。", { variant: "error" });
       return;
     }
 
@@ -852,7 +853,7 @@ export default function PromptSharePage() {
       const file = event.target.files?.[0] || null;
       const validationError = validateReferenceImageFile(file);
       if (validationError) {
-        alert(validationError);
+        showToast(validationError, { variant: "error" });
         clearPromptImageSelection();
         return;
       }

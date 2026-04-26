@@ -2,6 +2,8 @@ import Head from "next/head";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
 import "../../scripts/core/csrf";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
+import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
 import {
@@ -310,11 +312,11 @@ export default function PromptManagePage() {
   const handleDelete = useCallback(async (prompt: PromptRecord) => {
     const promptId = asId(prompt.id);
     if (!promptId) {
-      alert("削除対象のプロンプトIDが不正です。");
+      showToast("削除対象のプロンプトIDが不正です。", { variant: "error" });
       return;
     }
 
-    const confirmed = window.confirm("本当にこのプロンプトを削除しますか？");
+    const confirmed = await showConfirmModal("本当にこのプロンプトを削除しますか？");
     if (!confirmed) {
       return;
     }
@@ -334,10 +336,10 @@ export default function PromptManagePage() {
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      alert(response.message || "削除しました。");
+      showToast(response.message || "削除しました。", { variant: "success" });
       setPrompts((prev) => prev.filter((entry) => asId(entry.id) !== promptId));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。");
+      showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
     }
   }, []);
 
@@ -361,7 +363,7 @@ export default function PromptManagePage() {
     }
 
     if (!editFormState.id || !editFormState.title.trim() || !editFormState.category.trim() || !editFormState.content.trim()) {
-      alert("編集フォームの値が不足しています。");
+      showToast("編集フォームの値が不足しています。", { variant: "error" });
       return;
     }
 
@@ -388,11 +390,11 @@ export default function PromptManagePage() {
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      alert(response.message || "更新しました。");
+      showToast(response.message || "更新しました。", { variant: "success" });
       setEditFormState(null);
       await loadMyPrompts();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。");
+      showToast(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。", { variant: "error" });
     } finally {
       setIsSaving(false);
     }

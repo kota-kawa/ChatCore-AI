@@ -135,3 +135,49 @@
   --z-tooltip: 90;
   --z-alert-modal: 95;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-dark: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --text-light: #f9fafb;
+    --surface-primary: #0f172a;
+    --surface-secondary: #111827;
+    --surface-tertiary: #0b1220;
+    --surface-sidebar: #111827;
+    --border-default: rgba(148, 163, 184, 0.28);
+    --border-light: rgba(148, 163, 184, 0.22);
+    --modal-overlay: rgba(2, 6, 23, 0.72);
+    --modal-surface: #0f172a;
+    --modal-border: rgba(148, 163, 184, 0.3);
+    --modal-shadow: 0 16px 42px rgba(2, 6, 23, 0.58);
+    --scrollbar-track: rgba(51, 65, 85, 0.42);
+    --scrollbar-thumb: rgba(148, 163, 184, 0.5);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.66);
+    --scrollbar-thumb-active: rgba(148, 163, 184, 0.76);
+    --scrollbar-thumb-border: rgba(15, 23, 42, 0.9);
+    --chat-surface: rgba(15, 23, 42, 0.9);
+    --chat-surface-strong: #111827;
+    --chat-surface-muted: #1f2937;
+    --chat-border-soft: rgba(25, 195, 125, 0.3);
+    --chat-shadow-strong: 0 24px 60px rgba(2, 6, 23, 0.45);
+    --chat-shadow-soft: 0 12px 24px rgba(2, 6, 23, 0.38);
+    --ps-text-color: #e5e7eb;
+    --ps-light-bg: #0b1220;
+    --ps-background-color: var(--ps-light-bg);
+    --ps-card-bg: #111827;
+    --ps-border-color: rgba(148, 163, 184, 0.3);
+    --ps-shadow: 0 4px 10px rgba(2, 6, 23, 0.5);
+    --new-prompt-text-color: #e5e7eb;
+    --new-prompt-muted-text-color: #9ca3af;
+    --new-prompt-light-bg: #0b1220;
+    --new-prompt-card-bg: #111827;
+    --new-prompt-shadow: 0 16px 32px rgba(2, 6, 23, 0.42);
+    --settings-sidebar-bg: #111827;
+    --settings-content-bg: #0b1220;
+    --settings-card-bg: #111827;
+    --settings-text-muted: #9ca3af;
+    --settings-border-color: rgba(148, 163, 184, 0.3);
+    --settings-input-bg: #0f172a;
+  }
+}

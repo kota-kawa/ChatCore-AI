@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+}
+
 .cc-tooltip {
   position: fixed;
   top: 0;
@@ -182,6 +192,41 @@
   background: #d1d5db;
 }
 
+.cc-toast-viewport {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: var(--z-alert-modal, 95);
+  display: flex;
+  width: min(420px, calc(100vw - 24px));
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.cc-toast {
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
+  padding: 10px 12px;
+  color: #111827;
+  line-height: 1.55;
+  pointer-events: auto;
+}
+
+.cc-toast[data-variant="info"] {
+  border-color: rgba(37, 99, 235, 0.32);
+}
+
+.cc-toast[data-variant="success"] {
+  border-color: rgba(22, 163, 74, 0.4);
+}
+
+.cc-toast[data-variant="error"] {
+  border-color: rgba(220, 38, 38, 0.42);
+}
+
 .cc-alert-modal-open {
   overflow: hidden;
 }
@@ -217,6 +262,66 @@
   margin: 0;
   color: #374151;
   line-height: 1.7;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cc-alert-modal__dialog {
+    border-color: rgba(148, 163, 184, 0.3);
+    background: #0f172a;
+    box-shadow: 0 24px 56px rgba(2, 6, 23, 0.5);
+  }
+
+  .cc-alert-modal__close {
+    color: #cbd5e1;
+  }
+
+  .cc-alert-modal__close:hover {
+    background: rgba(148, 163, 184, 0.2);
+  }
+
+  .cc-alert-modal__title {
+    color: #f3f4f6;
+  }
+
+  .cc-alert-modal__message {
+    color: #e5e7eb;
+  }
+
+  .cc-alert-modal__button--secondary {
+    background: #334155;
+    color: #f8fafc;
+  }
+
+  .cc-alert-modal__button--secondary:hover {
+    background: #475569;
+  }
+
+  .cc-toast {
+    border-color: rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.96);
+    box-shadow: 0 16px 36px rgba(2, 6, 23, 0.52);
+    color: #e5e7eb;
+  }
+
+  .global-error-boundary {
+    background:
+      radial-gradient(circle at top right, rgba(37, 99, 235, 0.2), transparent 58%),
+      linear-gradient(135deg, #020617 0%, #111827 100%);
+  }
+
+  .global-error-boundary__card {
+    border-color: rgba(148, 163, 184, 0.26);
+    background: rgba(15, 23, 42, 0.9);
+    box-shadow: 0 20px 44px rgba(2, 6, 23, 0.5);
+  }
+
+  .global-error-boundary__card h1 {
+    color: #f3f4f6;
+  }
+
+  .global-error-boundary__card p {
+    color: #cbd5e1;
+  }
 }
 
 @layer components {
