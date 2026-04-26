@@ -705,7 +705,7 @@ export function SetupSection() {
 
         <div
           className={`task-selection ${
-            tasks.length > 6 ? "tasks-collapsed" : ""
+            showTaskToggleButton ? "tasks-collapsed" : ""
           } ${tasksExpanded || isTaskOrderEditing ? "tasks-expanded" : ""}`.trim()}
           id="task-selection"
           data-launching={launchingTaskName ? "true" : "false"}
@@ -783,6 +783,7 @@ export function SetupSection() {
                     <button
                       type="button"
                       className="task-detail-toggle"
+                      aria-label={`${task.name}の詳細を表示`}
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

@@ -102,6 +102,7 @@ export function useHomePageController() {
     setTasks,
     tasksExpanded,
     setTasksExpanded,
+    taskCollapseLimit,
     isTaskOrderEditing,
     setIsTaskOrderEditing,
     taskDetail,
@@ -1691,10 +1692,10 @@ export function useHomePageController() {
   }, [authResolved, loadChatRooms, loggedIn, refreshTasks]);
 
   useEffect(() => {
-    if (tasks.length <= 6) {
+    if (tasks.length <= taskCollapseLimit) {
       setTasksExpanded(false);
     }
-  }, [tasks.length]);
+  }, [taskCollapseLimit, tasks.length]);
 
   useEffect(() => {
     try {

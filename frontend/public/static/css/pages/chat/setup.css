@@ -481,7 +481,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   display: block;
 }
 
-/* 初期描画時のフラッシュ防止: 折りたたみ時は 7 件目以降を隠す */
+/* 初期描画時のフラッシュ防止: 折りたたみ時はデスクトップで 7 件目以降を隠す */
 .task-selection.tasks-collapsed:not(.tasks-expanded) .task-wrapper:nth-child(n + 7) {
   display: none;
 }
@@ -1001,6 +1001,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     gap: var(--setup-task-gap);
   }
 
+  .task-selection.tasks-collapsed:not(.tasks-expanded) .task-wrapper:nth-child(n + 5) {
+    display: none;
+  }
+
   .task-selection-header {
     display: flex;
     flex-wrap: wrap;
@@ -1038,18 +1042,31 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     flex-shrink: 0;
   }
 
-  .task-selection .task-wrapper {
+  .task-selection .task-wrapper,
+  #setup-container.setup-fit-compact .task-selection .task-wrapper,
+  #setup-container.setup-fit-tight .task-selection .task-wrapper {
     flex: 1 1 100%;
     max-width: 100%;
   }
 
   .prompt-card {
     height: auto;
-    min-height: var(--setup-card-min-height) !important;
+    min-height: max(var(--setup-card-min-height), 62px) !important;
     max-height: none;
     font-size: var(--setup-card-font-size);
     padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
     overflow: hidden;
+  }
+
+  .task-header {
+    display: -webkit-box;
+    line-height: 1.35;
+    white-space: normal;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .io-container {
