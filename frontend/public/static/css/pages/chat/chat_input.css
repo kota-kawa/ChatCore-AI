@@ -297,7 +297,7 @@
   left: -12%;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   background:
     radial-gradient(circle, var(--constellation-comet-core) 0%, var(--constellation-comet-mid) 28%, var(--constellation-comet-trail) 62%, transparent 72%);
   box-shadow: -0.8rem 0 1.4rem var(--constellation-comet-shadow);
@@ -339,7 +339,7 @@
   width: 0;
   height: 0;
   opacity: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   transform: translate(-50%, -50%) scale(0.28);
   background: radial-gradient(circle at 36% 36%, var(--constellation-node-start) 0%, var(--constellation-node-mid) 42%, var(--constellation-node-end) 100%);
   box-shadow:

@@ -9,8 +9,11 @@ type CopyActionButtonProps = {
 export function CopyActionButton({ getText }: CopyActionButtonProps) {
   const [iconClass, setIconClass] = useState("bi-clipboard");
   const [statusClass, setStatusClass] = useState("");
+  const [disabled, setDisabled] = useState(false);
 
   const handleClick = useCallback(async () => {
+    if (disabled) return;
+    setDisabled(true);
     try {
       await copyTextToClipboard(getText());
       setIconClass("bi-check-lg");
@@ -22,9 +25,10 @@ export function CopyActionButton({ getText }: CopyActionButtonProps) {
       window.setTimeout(() => {
         setIconClass("bi-clipboard");
         setStatusClass("");
+        setDisabled(false);
       }, 2000);
     }
-  }, [getText]);
+  }, [disabled, getText]);
 
   return (
     <button
@@ -33,6 +37,7 @@ export function CopyActionButton({ getText }: CopyActionButtonProps) {
       aria-label="メッセージをコピー"
       data-tooltip="このメッセージをコピー"
       data-tooltip-placement="top"
+      disabled={disabled}
       onClick={() => {
         void handleClick();
       }}

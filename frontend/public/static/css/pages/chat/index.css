@@ -347,7 +347,15 @@ body.chat-page .sidebar-toggle:active {
   transform: scale(0.9);
 }
 
-body.chat-page :where(.prompt-assist__action:disabled, .prompt-assist__apply-all:disabled, .memo-save-btn:disabled, .setup-send-btn:disabled) {
+body.chat-page :where(
+  .prompt-assist__action:disabled,
+  .prompt-assist__apply-all:disabled,
+  .copy-btn:disabled,
+  .memo-save-btn:disabled,
+  .setup-send-btn:disabled,
+  .chat-history-load-more-btn:disabled
+) {
+  opacity: var(--disabled-opacity, 0.6);
   filter: grayscale(0.18);
   box-shadow: none;
   transform: none;
@@ -368,12 +376,12 @@ body.chat-page {
   --chat-modal-surface-bg:
     radial-gradient(circle at top left, rgba(168, 240, 203, 0.16), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 249, 0.96) 100%);
-  --chat-modal-panel-radius: 28px;
+  --chat-modal-panel-radius: var(--radius-2xl, 28px);
   --chat-modal-backdrop-filter: blur(8px) saturate(125%);
   --chat-modal-enter-duration: 0.24s;
   --chat-modal-transition: var(--chat-modal-enter-duration) cubic-bezier(0.32, 0.72, 0, 1);
   --chat-modal-shadow:
-    0 34px 90px rgba(8, 28, 20, 0.22),
+    var(--shadow-xl, 0 24px 56px rgba(15, 23, 42, 0.18)),
     0 12px 30px rgba(8, 28, 20, 0.12);
   --chat-modal-scrollbar-track: rgba(214, 225, 219, 0.84);
   --chat-modal-scrollbar-thumb: rgba(39, 117, 85, 0.24);
@@ -469,7 +477,7 @@ body.chat-page .io-modal-content {
 body.chat-page :where(.new-prompt-modal__hero, .task-detail-modal-header, .custom-modal-header) {
   background: var(--chat-modal-header-bg);
   border: 1px solid var(--chat-modal-header-border);
-  border-radius: 22px;
+  border-radius: var(--radius-xl, 24px);
 }
 
 body.chat-page .task-detail-modal-shell {
@@ -482,7 +490,7 @@ body.chat-page .task-detail-modal-shell {
 }
 
 body.chat-page .task-detail-section {
-  border-radius: 18px;
+  border-radius: var(--radius-lg, 20px);
   border: 1px solid rgba(214, 228, 220, 0.92);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(249, 252, 250, 0.98) 100%);
   box-shadow: 0 14px 28px rgba(16, 44, 35, 0.06);
@@ -500,14 +508,14 @@ body.chat-page .task-detail-section-body {
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   margin-block: 6px;
 }
 
 body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-webkit-scrollbar-thumb {
   background: rgba(30, 107, 76, 0.20);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   box-shadow: none;
   transition: background 0.18s ease;
 }
@@ -521,7 +529,7 @@ body.chat-page :where(.task-detail-modal-shell, .task-detail-section-body)::-web
 }
 
 body.chat-page .custom-modal-dialog {
-  width: min(620px, 92vw);
+  width: min(var(--modal-width-lg, 620px), calc(100vw - 2rem));
   max-height: min(88vh, 900px);
   background: var(--chat-modal-surface-bg);
   padding: 1.15rem;
@@ -543,10 +551,10 @@ body.chat-page .custom-modal-title {
 }
 
 body.chat-page .custom-modal-close {
-  width: 44px;
-  height: 44px;
+  width: var(--tap-target-min, 44px);
+  height: var(--tap-target-min, 44px);
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -577,7 +585,7 @@ body.chat-page .custom-form-label {
 }
 
 body.chat-page .custom-form-control {
-  border-radius: 16px;
+  border-radius: var(--radius-l, 16px);
   border: 1px solid rgba(206, 221, 214, 0.92);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
@@ -595,7 +603,7 @@ body.chat-page .custom-form-control::placeholder {
 body.chat-page .custom-form-control:focus {
   border-color: rgba(25, 195, 125, 0.44);
   box-shadow:
-    0 0 0 4px rgba(25, 195, 125, 0.12),
+    var(--shadow-focus-strong, 0 0 0 4px rgba(25, 195, 125, 0.18)),
     inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
@@ -605,7 +613,7 @@ body.chat-page .custom-form-text {
 }
 
 body.chat-page .chat-share-modal__content {
-  width: min(580px, 100%);
+  width: min(580px, calc(100vw - 2rem));
   padding: 1.18rem 1.22rem 1.24rem;
   background: var(--chat-modal-surface-bg);
 }
@@ -616,7 +624,7 @@ body.chat-page .chat-share-modal__desc {
 }
 
 body.chat-page #chat-share-link-input {
-  border-radius: 16px;
+  border-radius: var(--radius-l, 16px);
   border: 1px solid rgba(206, 220, 214, 0.92);
   background: rgba(250, 252, 251, 0.94);
   padding: 0.85rem 0.95rem;

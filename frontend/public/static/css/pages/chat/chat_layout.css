@@ -67,7 +67,7 @@
   justify-content: center;
   min-height: 32px;
   padding: 0.35rem 0.8rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.32);
   color: var(--text-light, #ffffff);
@@ -196,9 +196,9 @@
 }
 
 .chat-share-modal__content {
-  width: min(560px, 100%);
+  width: min(var(--modal-width-md, 560px), calc(100vw - 2rem));
   background: var(--modal-surface, #ffffff);
-  border-radius: 16px;
+  border-radius: var(--radius-l, 16px);
   border: 1px solid var(--modal-border, rgba(0, 0, 0, 0.08));
   box-shadow: var(--modal-shadow, 0 16px 42px rgba(0, 0, 0, 0.2));
   padding: 1.05rem 1.1rem 1.1rem;
@@ -219,9 +219,9 @@
 }
 
 .chat-share-close-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
+  width: var(--tap-target-min, 44px);
+  height: var(--tap-target-min, 44px);
+  border-radius: var(--radius-full, 999px);
   border: none;
   background: rgba(0, 0, 0, 0.04);
   color: var(--text-secondary, #6b7280);
@@ -280,7 +280,7 @@
   height: 40px;
   min-width: 40px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -303,7 +303,7 @@
   align-items: center;
   gap: 0.34rem;
   padding: 0.43rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   text-decoration: none;
   border: 1px solid rgba(0, 0, 0, 0.12);
   color: var(--text-dark, #1a1a1a);

@@ -1,6 +1,8 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
+import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { TaskEditFormState } from "../../../lib/chat_page/types";
+import { ModalCloseButton } from "../../ui/modal_close_button";
 
 type TaskEditModalProps = {
   taskEditModalOpen: boolean;
@@ -17,11 +19,28 @@ export function TaskEditModal({
   setTaskEditForm,
   onSave,
 }: TaskEditModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const getInitialFocus = useCallback(() => {
+    return modalRef.current?.querySelector<HTMLElement>("#taskName") ?? null;
+  }, []);
+
+  useModalFocusTrap({
+    isOpen: taskEditModalOpen,
+    containerRef: modalRef,
+    getInitialFocus,
+    onEscape: closeTaskEditModal,
+  });
+
   return (
     <div
+      ref={modalRef}
       id="taskEditModal"
       className={`custom-modal modal-base ${taskEditModalOpen ? "is-open" : ""}`.trim()}
+      role="dialog"
+      aria-modal="true"
       aria-hidden={taskEditModalOpen ? "false" : "true"}
+      aria-labelledby="taskEditModalTitle"
+      tabIndex={-1}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeTaskEditModal();
@@ -31,16 +50,13 @@ export function TaskEditModal({
       <div className="custom-modal-dialog">
         <div className="custom-modal-content">
           <div className="custom-modal-header">
-            <h5 className="custom-modal-title">タスク編集</h5>
-            <button
-              type="button"
+            <h5 className="custom-modal-title" id="taskEditModalTitle">タスク編集</h5>
+            <ModalCloseButton
               className="custom-modal-close"
               id="closeTaskEditModal"
-              aria-label="タスク編集を閉じる"
+              label="タスク編集を閉じる"
               onClick={closeTaskEditModal}
-            >
-              <i className="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
+            />
           </div>
 
           <div className="custom-modal-body">

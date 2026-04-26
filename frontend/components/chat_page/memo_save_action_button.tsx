@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { isRecord } from "../../lib/utils";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
 
 type MemoSaveActionButtonProps = {
@@ -43,10 +44,7 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
       });
 
       const rawPayload = await readJsonBodySafe(response);
-      const status =
-        rawPayload && typeof rawPayload === "object" && "status" in rawPayload
-          ? (rawPayload as { status?: unknown }).status
-          : undefined;
+      const status = isRecord(rawPayload) ? rawPayload.status : undefined;
 
       if (!response.ok || status === "fail") {
         throw new Error(extractApiErrorMessage(rawPayload, "メモの保存に失敗しました。", response.status));

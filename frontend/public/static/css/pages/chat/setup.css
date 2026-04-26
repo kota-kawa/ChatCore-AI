@@ -164,14 +164,14 @@ body.chat-page #setup-info::-webkit-scrollbar {
 
 body.chat-page #setup-info::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   margin-block: 6px;
 }
 
 body.chat-page #setup-info::-webkit-scrollbar-thumb {
   background: rgba(30, 107, 76, 0.20);
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   box-shadow: none;
   transition: background 0.18s ease;
 }
@@ -199,7 +199,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 .setup-form textarea:focus,
 .setup-form select:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.2);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(25, 195, 125, 0.2));
   outline: none;
   background: #ffffff;
 }
@@ -254,7 +254,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 .model-select.is-open .model-select-trigger,
 .model-select-trigger:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.2);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(25, 195, 125, 0.2));
   outline: none;
   background: #ffffff;
 }
@@ -283,7 +283,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   justify-content: center;
   padding: 0;
   border: 1px solid rgba(33, 78, 60, 0.12);
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.96), rgba(238, 248, 243, 0.92)),
     rgba(255, 255, 255, 0.94);
@@ -327,7 +327,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   outline: none;
   border-color: var(--primary-color);
   box-shadow:
-    0 0 0 3px rgba(25, 195, 125, 0.2),
+    var(--focus-ring, 0 0 0 3px rgba(25, 195, 125, 0.2)),
     0 12px 24px rgba(16, 44, 35, 0.1);
 }
 
@@ -369,7 +369,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   white-space: nowrap;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   background: rgba(255, 255, 255, 0.72);
   color: #466256;
   font-size: 0.78rem;
@@ -621,7 +621,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   min-height: var(--setup-toggle-size);
   padding: 0 !important;
   line-height: 1 !important;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -735,7 +735,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* モーダル内のコンテンツ領域 */
 .io-modal-content {
-  width: min(820px, 100%);
+  width: min(820px, calc(100vw - 2rem));
   max-height: min(84vh, 760px);
   overflow: hidden; /* スクロールバーを角丸内に収めるためhiddenに */
   border-radius: var(--chat-modal-panel-radius, 28px);
@@ -775,7 +775,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   gap: 0.9rem;
   padding: 1rem 1.1rem;
   border: 1px solid var(--chat-modal-header-border, rgba(15, 122, 81, 0.12));
-  border-radius: 22px;
+  border-radius: var(--radius-xl, 24px);
   background: var(--chat-modal-header-bg, linear-gradient(135deg, rgba(15, 122, 81, 0.12) 0%, rgba(187, 247, 208, 0.1) 44%, rgba(255, 255, 255, 0.78) 100%));
 }
 
@@ -796,13 +796,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 .task-detail-modal-close {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: var(--tap-target-min, 44px);
+  height: var(--tap-target-min, 44px);
+  min-width: var(--tap-target-min, 44px);
+  min-height: var(--tap-target-min, 44px);
   flex-shrink: 0;
   border: 1px solid #d9e9e1;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   background: #ffffff;
   color: var(--success-strong, #0f5132);
   display: inline-flex;

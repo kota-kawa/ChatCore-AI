@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 
+import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { ShareStatus } from "../../../lib/chat_page/types";
+import { ModalCloseButton } from "../../ui/modal_close_button";
 
 type ChatShareModalProps = {
   shareModalOpen: boolean;
@@ -30,54 +32,16 @@ export function ChatShareModal({
   shareWithNativeSheet,
 }: ChatShareModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const getInitialFocus = useCallback(() => {
+    return modalRef.current?.querySelector<HTMLElement>("#chat-share-copy-btn") ?? null;
+  }, []);
 
-  useEffect(() => {
-    if (!shareModalOpen) return;
-
-    previousFocusedElementRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    window.requestAnimationFrame(() => {
-      modalRef.current?.querySelector<HTMLElement>("#chat-share-copy-btn")?.focus();
-    });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const modal = modalRef.current;
-      if (!modal) return;
-
-      const focusable = Array.from(
-        modal.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute("hidden"));
-
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey && activeElement === first) {
-        event.preventDefault();
-        last.focus();
-        return;
-      }
-      if (!event.shiftKey && activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (previousFocusedElementRef.current?.isConnected) {
-        previousFocusedElementRef.current.focus();
-      }
-      previousFocusedElementRef.current = null;
-    };
-  }, [shareModalOpen]);
+  useModalFocusTrap({
+    isOpen: shareModalOpen,
+    containerRef: modalRef,
+    getInitialFocus,
+    onEscape: closeShareModal,
+  });
 
   return (
     <div
@@ -98,15 +62,12 @@ export function ChatShareModal({
       <div className="chat-share-modal__content">
         <div className="chat-share-modal__header">
           <h5 id="chat-share-title">チャットを共有</h5>
-          <button
-            type="button"
+          <ModalCloseButton
             id="chat-share-close-btn"
             className="chat-share-close-btn"
-            aria-label="共有モーダルを閉じる"
+            label="共有モーダルを閉じる"
             onClick={closeShareModal}
-          >
-            <i className="bi bi-x-lg"></i>
-          </button>
+          />
         </div>
 
         <p className="chat-share-modal__desc">

@@ -24,6 +24,17 @@
   --text-xl: 1.125rem;
   --text-2xl: 1.25rem;
 
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
   --leading-tight: 1.4;
   --leading-normal: 1.5;
   --leading-relaxed: 1.6;
@@ -36,8 +47,13 @@
   --primary-strong: #0f8a40;
   --primary-soft: #e8f9f3;
   --primary-gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  --primary-alpha-06: rgba(25, 195, 125, 0.06);
   --primary-subtle: rgba(25, 195, 125, 0.08);
+  --primary-alpha-12: rgba(25, 195, 125, 0.12);
+  --primary-alpha-16: rgba(25, 195, 125, 0.16);
   --primary-border: rgba(25, 195, 125, 0.18);
+  --primary-alpha-22: rgba(25, 195, 125, 0.22);
+  --primary-alpha-28: rgba(25, 195, 125, 0.28);
   --success-color: #15803d;
   --success-strong: #0f5132;
   --danger-color: #dc2626;
@@ -61,10 +77,34 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 24px 56px rgba(15, 23, 42, 0.18);
+  --shadow-panel: 0 18px 46px rgba(15, 23, 42, 0.14);
+  --shadow-button: 0 14px 24px rgba(15, 122, 81, 0.22);
+  --shadow-focus: 0 0 0 3px rgba(25, 195, 125, 0.2);
+  --shadow-focus-strong: 0 0 0 4px rgba(25, 195, 125, 0.18);
+  --shadow-danger-focus: 0 0 0 3px rgba(220, 38, 38, 0.18);
+  --radius-xs: 4px;
+  --radius-s: 6px;
   --radius-sm: 8px;
+  --radius-m: 12px;
   --radius-md: 14px;
+  --radius-l: 16px;
   --radius-lg: 20px;
   --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-full: 999px;
+  --disabled-opacity: 0.6;
+  --icon-size-sm: 1rem;
+  --icon-size-md: 1.25rem;
+  --icon-size-lg: 1.5rem;
+  --tap-target-min: 44px;
+  --chat-readable-width: 800px;
+  --chat-readable-width-narrow: 680px;
+  --modal-width-sm: 520px;
+  --modal-width-md: 560px;
+  --modal-width-lg: 620px;
+  --modal-viewport-padding: 1rem;
+  --focus-ring: var(--shadow-focus);
   --transition-fast: 0.15s ease;
   --transition-normal: 0.2s ease;
   --transition-slow: 0.3s ease;
@@ -144,6 +184,52 @@
   --z-modal-priority: 85;
   --z-tooltip: 90;
   --z-alert-modal: 95;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-dark: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --text-light: #f9fafb;
+    --surface-primary: #0f172a;
+    --surface-secondary: #111827;
+    --surface-tertiary: #0b1220;
+    --surface-sidebar: #111827;
+    --border-default: rgba(148, 163, 184, 0.28);
+    --border-light: rgba(148, 163, 184, 0.22);
+    --modal-overlay: rgba(2, 6, 23, 0.72);
+    --modal-surface: #0f172a;
+    --modal-border: rgba(148, 163, 184, 0.3);
+    --modal-shadow: 0 16px 42px rgba(2, 6, 23, 0.58);
+    --scrollbar-track: rgba(51, 65, 85, 0.42);
+    --scrollbar-thumb: rgba(148, 163, 184, 0.5);
+    --scrollbar-thumb-hover: rgba(148, 163, 184, 0.66);
+    --scrollbar-thumb-active: rgba(148, 163, 184, 0.76);
+    --scrollbar-thumb-border: rgba(15, 23, 42, 0.9);
+    --chat-surface: rgba(15, 23, 42, 0.9);
+    --chat-surface-strong: #111827;
+    --chat-surface-muted: #1f2937;
+    --chat-border-soft: rgba(25, 195, 125, 0.3);
+    --chat-shadow-strong: 0 24px 60px rgba(2, 6, 23, 0.45);
+    --chat-shadow-soft: 0 12px 24px rgba(2, 6, 23, 0.38);
+    --ps-text-color: #e5e7eb;
+    --ps-light-bg: #0b1220;
+    --ps-background-color: var(--ps-light-bg);
+    --ps-card-bg: #111827;
+    --ps-border-color: rgba(148, 163, 184, 0.3);
+    --ps-shadow: 0 4px 10px rgba(2, 6, 23, 0.5);
+    --new-prompt-text-color: #e5e7eb;
+    --new-prompt-muted-text-color: #9ca3af;
+    --new-prompt-light-bg: #0b1220;
+    --new-prompt-card-bg: #111827;
+    --new-prompt-shadow: 0 16px 32px rgba(2, 6, 23, 0.42);
+    --settings-sidebar-bg: #111827;
+    --settings-content-bg: #0b1220;
+    --settings-card-bg: #111827;
+    --settings-text-muted: #9ca3af;
+    --settings-border-color: rgba(148, 163, 184, 0.3);
+    --settings-input-bg: #0f172a;
+  }
 }
 /* END inlined: public/static/css/base/variables.css */
 /* BEGIN inlined: public/static/css/base/animations.css */

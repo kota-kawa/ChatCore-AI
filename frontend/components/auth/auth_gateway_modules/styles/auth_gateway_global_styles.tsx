@@ -28,7 +28,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         font-family: ${fontFamily}, var(--font-app-sans), "Segoe UI", sans-serif;
         background: linear-gradient(135deg, var(--bg-1), var(--bg-2));
         min-height: 100vh;
-        min-height: 100dvh;
+        min-height: 100svh;
         width: 100%;
         display: flex;
         justify-content: center;
@@ -41,7 +41,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       .auth-page-root {
         width: 100vw;
         min-height: 100vh;
-        min-height: 100dvh;
+        min-height: 100svh;
         isolation: isolate;
       }
 
@@ -275,7 +275,7 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
       .spinner-ring {
         width: 48px;
         height: 48px;
-        border-radius: 999px;
+        border-radius: var(--radius-full, 999px);
         border: 4px solid rgba(255, 255, 255, 0.18);
         border-top-color: var(--accent);
         animation: spin 0.85s linear infinite;

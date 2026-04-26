@@ -1,6 +1,8 @@
-import { useEffect, useRef, type FormEvent, type MutableRefObject } from "react";
+import { useCallback, useRef, type FormEvent, type MutableRefObject } from "react";
 
+import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { PromptStatus } from "../../../lib/chat_page/types";
+import { ModalCloseButton } from "../../ui/modal_close_button";
 
 type NewPromptModalProps = {
   isOpen: boolean;
@@ -48,57 +50,18 @@ export function NewPromptModal({
   setNewPromptOutputExample,
 }: NewPromptModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const getInitialFocus = useCallback(() => titleInputRef.current ?? modalRef.current, [titleInputRef]);
+  const closeWithEscape = useCallback(() => {
+    if (isPromptSubmitting) return;
+    onClose();
+  }, [isPromptSubmitting, onClose]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    previousFocusedElementRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    const focusTarget = titleInputRef.current ?? modalRef.current;
-    window.requestAnimationFrame(() => {
-      focusTarget?.focus();
-    });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-
-      const modal = modalRef.current;
-      if (!modal) return;
-
-      const focusable = Array.from(
-        modal.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute("hidden"));
-
-      if (focusable.length === 0) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
-
-      if (event.shiftKey && activeElement === first) {
-        event.preventDefault();
-        last.focus();
-        return;
-      }
-      if (!event.shiftKey && activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (previousFocusedElementRef.current?.isConnected) {
-        previousFocusedElementRef.current.focus();
-      }
-      previousFocusedElementRef.current = null;
-    };
-  }, [isOpen, titleInputRef]);
+  useModalFocusTrap({
+    isOpen,
+    containerRef: modalRef,
+    getInitialFocus,
+    onEscape: closeWithEscape,
+  });
 
   return (
     <div
@@ -117,29 +80,26 @@ export function NewPromptModal({
       }}
     >
       <div className="new-prompt-modal-content">
-        <button
-          type="button"
+        <ModalCloseButton
           className="new-modal-close-btn"
           id="newModalCloseBtn"
-          aria-label="モーダルを閉じる"
+          label="モーダルを閉じる"
           onClick={() => {
             if (isPromptSubmitting) return;
             onClose();
           }}
-        >
-          <i className="bi bi-x-lg" aria-hidden="true"></i>
-        </button>
+        />
 
         <div className="new-prompt-modal__hero">
           <div className="new-prompt-modal__hero-copy">
-            <p className="new-prompt-modal__eyebrow">Prompt Composer</p>
-            <h2 id="new-prompt-modal-title">新しいプロンプトを追加</h2>
+            <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
+            <h2 id="new-prompt-modal-title">新しいプロンプトを作成</h2>
             <p className="new-prompt-modal__lead">AI 補助を使いながら、短時間で実用的なタスクに整えられます。</p>
           </div>
           <div className="new-prompt-modal__hero-badges" aria-hidden="true">
-            <span>Draft</span>
-            <span>Polish</span>
-            <span>Examples</span>
+            <span>下書き</span>
+            <span>調整</span>
+            <span>例</span>
           </div>
         </div>
 

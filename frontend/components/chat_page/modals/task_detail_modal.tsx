@@ -1,4 +1,8 @@
+import { useCallback, useRef } from "react";
+
+import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { NormalizedTask } from "../../../lib/chat_page/types";
+import { ModalCloseButton } from "../../ui/modal_close_button";
 
 type TaskDetailModalProps = {
   taskDetail: NormalizedTask | null;
@@ -6,6 +10,18 @@ type TaskDetailModalProps = {
 };
 
 export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const getInitialFocus = useCallback(() => {
+    return modalRef.current?.querySelector<HTMLElement>("[data-close-task-detail]") ?? null;
+  }, []);
+
+  useModalFocusTrap({
+    isOpen: Boolean(taskDetail),
+    containerRef: modalRef,
+    getInitialFocus,
+    onEscape: onClose,
+  });
+
   const renderMultilineText = (value: string) => (
     <div className="task-detail-section-body" style={{ whiteSpace: "pre-wrap" }}>
       {value}
@@ -14,6 +30,7 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
 
   return (
     <div
+      ref={modalRef}
       id="io-modal"
       className={`modal-base ${taskDetail ? "is-open" : ""}`.trim()}
       role="dialog"
@@ -38,20 +55,17 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
           <div className="task-detail-modal-shell">
             <div className="task-detail-modal-header">
               <div>
-                <p className="task-detail-modal-eyebrow">Task Detail</p>
+                <p className="task-detail-modal-eyebrow">タスク詳細</p>
                 <h5 className="task-detail-modal-title" id="taskDetailTitle">
                   タスク詳細
                 </h5>
               </div>
-              <button
-                type="button"
+              <ModalCloseButton
                 className="task-detail-modal-close"
                 data-close-task-detail
-                aria-label="タスク詳細を閉じる"
+                label="タスク詳細を閉じる"
                 onClick={onClose}
-              >
-                <i className="bi bi-x-lg"></i>
-              </button>
+              />
             </div>
 
             <div className="task-detail-sections">

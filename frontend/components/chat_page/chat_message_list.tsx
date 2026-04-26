@@ -7,6 +7,7 @@ import {
 } from "react";
 import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window";
 
+import { InlineLoading } from "../ui/inline_loading";
 import type { UiChatMessage } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { CopyActionButton } from "./copy_action_button";
@@ -67,7 +68,7 @@ function ChatMessageRow({
             void loadOlderChatHistory();
           }}
         >
-          {isLoadingOlder ? "読み込み中..." : "過去のメッセージを読み込む"}
+          {isLoadingOlder ? <InlineLoading label="読み込み中" /> : "過去のメッセージを読み込む"}
         </button>
       </div>
     );
@@ -207,9 +208,10 @@ function ChatMessageListComponent({
         id="chat-messages"
         ref={setStaticMessagesRef}
         aria-busy="true"
+        aria-live="polite"
       >
         <div className="chat-launch-placeholder" role="status" aria-live="polite">
-          <div className="chat-launch-placeholder__eyebrow">Preparing chat</div>
+          <div className="chat-launch-placeholder__eyebrow">チャット準備中</div>
           <div className="chat-launch-placeholder__title">
             {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
           </div>
@@ -217,7 +219,7 @@ function ChatMessageListComponent({
             <p className="chat-launch-placeholder__summary">入力内容をチャットに反映しています。</p>
           )}
           <div className="chat-launch-placeholder__meta">
-            {launchingTaskName && <span className="chat-launch-placeholder__task-pill">Task selected</span>}
+            {launchingTaskName && <span className="chat-launch-placeholder__task-pill">タスク選択済み</span>}
             <div className="chat-launch-placeholder__pulse" aria-hidden="true">
               <span></span>
               <span></span>

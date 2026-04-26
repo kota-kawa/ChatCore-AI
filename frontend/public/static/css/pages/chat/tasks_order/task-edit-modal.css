@@ -11,8 +11,8 @@
 .custom-modal-dialog {
   background: var(--chat-modal-surface-bg, var(--modal-surface, #fff));
   border-radius: var(--chat-modal-panel-radius, 28px);
-  width: 90%;
-  max-width: 520px;
+  width: min(var(--modal-width-sm, 520px), calc(100vw - 2rem));
+  max-width: none;
   max-height: calc(100vh - 48px);
   box-shadow: var(--chat-modal-shadow, 0 18px 40px rgba(0, 0, 0, 0.18));
   overflow: hidden;
@@ -37,7 +37,7 @@
   align-items: center;
   padding: 14px 20px;
   border: 1px solid var(--chat-modal-header-border, #e2e9e6);
-  border-radius: 22px;
+  border-radius: var(--radius-xl, 24px);
   background: var(--chat-modal-header-bg, #f4faf7);
 }
 
@@ -117,7 +117,7 @@
 
 .custom-form-control:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.2);
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(25, 195, 125, 0.2));
   outline: none;
 }
 
