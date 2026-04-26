@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -41,7 +42,7 @@ function TemporaryChatCheckIcon() {
   );
 }
 
-export function SetupSection() {
+function SetupSectionComponent() {
   const {
     pageViewState,
     isSetupVisible,
@@ -833,3 +834,6 @@ export function SetupSection() {
     </div>
   );
 }
+
+export const SetupSection = memo(SetupSectionComponent);
+SetupSection.displayName = "SetupSection";

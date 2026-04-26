@@ -33,13 +33,9 @@ import {
   PROMPT_SHARE_TITLE
 } from "../../scripts/prompt_share/constants";
 import {
-  formatPromptDate,
-  getPromptTypeIconClass,
   getPromptTypeLabel,
   normalizePromptData,
   normalizePromptType,
-  truncateContent,
-  truncateTitle
 } from "../../scripts/prompt_share/formatters";
 import {
   readCachedAuthState,
@@ -52,16 +48,12 @@ import type {
   PromptPagination,
   PromptType
 } from "../../scripts/prompt_share/types";
+import { PromptCard, type PromptRecord } from "../../components/prompt_share/prompt_card";
 
 type PromptCategory = {
   value: string;
   iconClass: string;
   label: string;
-};
-
-type PromptRecord = PromptData & {
-  clientId: string;
-  liked: boolean;
 };
 
 type ModalKey = "post" | "detail" | "share" | null;
@@ -706,6 +698,113 @@ export default function PromptSharePage() {
     [openModal]
   );
 
+  const togglePromptDropdown = useCallback((promptId: string) => {
+    setOpenDropdownPromptId((current) => (current === promptId ? null : promptId));
+  }, []);
+
+  const closePromptDropdown = useCallback(() => {
+    setOpenDropdownPromptId(null);
+  }, []);
+
+  const handleSavePromptToList = useCallback(
+    async (prompt: PromptRecord) => {
+      const promptId = prompt.clientId;
+      setOpenDropdownPromptId(null);
+
+      if (!isLoggedIn) {
+        alert("プロンプトを保存するにはログインが必要です。");
+        return;
+      }
+
+      if (prompt.saved_to_list) {
+        alert("このプロンプトはすでにプロンプトリストに保存されています。");
+        return;
+      }
+
+      setSaveToListPending(promptId, true);
+      try {
+        const result = await savePromptToList(prompt);
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          saved_to_list: true
+        }));
+        if (result && result.message) {
+          console.log(result.message);
+        }
+      } catch (error) {
+        console.error("プロンプト保存中にエラーが発生しました:", error);
+        alert("プロンプトリストへの保存中にエラーが発生しました。");
+      } finally {
+        setSaveToListPending(promptId, false);
+      }
+    },
+    [isLoggedIn, setSaveToListPending, updatePromptRecord]
+  );
+
+  const handleTogglePromptLike = useCallback(
+    async (prompt: PromptRecord) => {
+      if (!isLoggedIn) {
+        alert("いいねするにはログインが必要です。");
+        return;
+      }
+
+      const promptId = prompt.clientId;
+      const shouldLike = !prompt.liked;
+      setLikePending(promptId, true);
+      try {
+        const request = shouldLike ? savePromptLike(prompt) : removePromptLike(prompt);
+        const result = await request;
+
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          liked: shouldLike
+        }));
+
+        if (result && result.message) {
+          console.log(result.message);
+        }
+      } catch (error) {
+        console.error("いいね操作エラー:", error);
+        alert("いいねの更新中にエラーが発生しました。");
+      } finally {
+        setLikePending(promptId, false);
+      }
+    },
+    [isLoggedIn, setLikePending, updatePromptRecord]
+  );
+
+  const handleTogglePromptBookmark = useCallback(
+    async (prompt: PromptRecord) => {
+      if (!isLoggedIn) {
+        alert("ブックマークするにはログインが必要です。");
+        return;
+      }
+
+      const promptId = prompt.clientId;
+      const shouldBookmark = !prompt.bookmarked;
+      setBookmarkPending(promptId, true);
+      try {
+        const request = shouldBookmark ? savePromptBookmark(prompt) : removePromptBookmark(prompt);
+        const result = await request;
+
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          bookmarked: shouldBookmark
+        }));
+
+        if (result && result.message) {
+          console.log(result.message);
+        }
+      } catch (error) {
+        console.error("ブックマーク操作エラー:", error);
+        alert("ブックマークの更新中にエラーが発生しました。");
+      } finally {
+        setBookmarkPending(promptId, false);
+      }
+    },
+    [isLoggedIn, setBookmarkPending, updatePromptRecord]
+  );
+
   const openComposerModal = useCallback(() => {
     if (!isLoggedIn) {
       alert("プロンプトを投稿するにはログインが必要です。");
@@ -1297,254 +1396,23 @@ export default function PromptSharePage() {
               ) : null}
 
               {visiblePrompts.map((prompt) => {
-                const promptTypeValue = normalizePromptType(prompt.prompt_type);
-                const isBookmarked = Boolean(prompt.bookmarked);
-                const isSavedToList = Boolean(prompt.saved_to_list);
                 const promptId = prompt.clientId;
-                const isLikePending = likePendingIds.has(promptId);
-                const isBookmarkPending = bookmarkPendingIds.has(promptId);
-                const isSaveToListPending = saveToListPendingIds.has(promptId);
-                const isDropdownOpen = openDropdownPromptId === promptId;
-                const safeCategory = prompt.category || "未分類";
-                const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
-
                 return (
-                  <div
-                    key={prompt.clientId}
-                    className={`prompt-card${isDropdownOpen ? " menu-open" : ""}`}
-                    data-category={prompt.category || ""}
-                    onClick={() => {
-                      openPromptDetailModal(prompt);
-                    }}
-                  >
-                    <div className="prompt-card__header">
-                      <div className="prompt-card__badges">
-                        <span className="prompt-card__category-pill">
-                          <i className="bi bi-hash"></i>
-                          <span>{safeCategory}</span>
-                        </span>
-                        <span className={`prompt-card__type-pill prompt-card__type-pill--${promptTypeValue}`}>
-                          <i className={`bi ${getPromptTypeIconClass(promptTypeValue)}`}></i>
-                          <span>{getPromptTypeLabel(promptTypeValue)}</span>
-                        </span>
-                      </div>
-                      <span className="prompt-card__created-at">
-                        <i className="bi bi-calendar3"></i>
-                        {safeCreatedAt}
-                      </span>
-                      <button
-                        className="meatball-menu"
-                        type="button"
-                        aria-label="その他の操作"
-                        aria-haspopup="true"
-                        aria-expanded={isDropdownOpen ? "true" : "false"}
-                        data-tooltip="その他の操作"
-                        data-tooltip-placement="left"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setOpenDropdownPromptId((current) =>
-                            current === promptId ? null : promptId
-                          );
-                        }}
-                      >
-                        <i className="bi bi-three-dots"></i>
-                      </button>
-                    </div>
-
-                    <div
-                      className={`prompt-actions-dropdown${isDropdownOpen ? " is-open" : ""}`}
-                      role="menu"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                    >
-                      <button
-                        className="dropdown-item"
-                        type="button"
-                        role="menuitem"
-                        data-action="share"
-                        onClick={(event) => {
-                          openPromptShareDialog(prompt, event);
-                          setOpenDropdownPromptId(null);
-                        }}
-                      >
-                        共有する
-                      </button>
-                      <button
-                        className="dropdown-item"
-                        type="button"
-                        role="menuitem"
-                        data-action="save-to-list"
-                        disabled={isSavedToList || isSaveToListPending}
-                        onClick={async (event) => {
-                          event.stopPropagation();
-                          setOpenDropdownPromptId(null);
-
-                          if (!isLoggedIn) {
-                            alert("プロンプトを保存するにはログインが必要です。");
-                            return;
-                          }
-
-                          if (isSavedToList) {
-                            alert("このプロンプトはすでにプロンプトリストに保存されています。");
-                            return;
-                          }
-
-                          setSaveToListPending(promptId, true);
-                          try {
-                            const result = await savePromptToList(prompt);
-                            updatePromptRecord(promptId, (currentPrompt) => ({
-                              ...currentPrompt,
-                              saved_to_list: true
-                            }));
-                            if (result && result.message) {
-                              console.log(result.message);
-                            }
-                          } catch (error) {
-                            console.error("プロンプト保存中にエラーが発生しました:", error);
-                            alert("プロンプトリストへの保存中にエラーが発生しました。");
-                          } finally {
-                            setSaveToListPending(promptId, false);
-                          }
-                        }}
-                      >
-                        {isSavedToList ? "プロンプトリストに保存済み" : "プロンプトリストに保存"}
-                      </button>
-                      <button
-                        className="dropdown-item"
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setOpenDropdownPromptId(null);
-                        }}
-                      >
-                        ミュート
-                      </button>
-                      <button
-                        className="dropdown-item"
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setOpenDropdownPromptId(null);
-                        }}
-                      >
-                        報告する
-                      </button>
-                    </div>
-
-                    {prompt.reference_image_url ? (
-                      <div className="prompt-card__image">
-                        <img
-                          src={prompt.reference_image_url}
-                          alt={`${truncateTitle(prompt.title)} の作例画像`}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </div>
-                    ) : null}
-
-                    <h3>{truncateTitle(prompt.title)}</h3>
-                    <p className="prompt-card__content">{truncateContent(prompt.content)}</p>
-
-                    <div className="prompt-meta">
-                      <div className="prompt-actions">
-                        <button
-                          className="prompt-action-btn comment-btn"
-                          type="button"
-                          aria-label="コメント"
-                          data-tooltip="コメント（準備中）"
-                          data-tooltip-placement="top"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          <i className="bi bi-chat-dots"></i>
-                        </button>
-                        <button
-                          className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}`}
-                          type="button"
-                          aria-label="いいね"
-                          aria-pressed={prompt.liked ? "true" : "false"}
-                          data-tooltip="このプロンプトにいいね"
-                          data-tooltip-placement="top"
-                          disabled={isLikePending}
-                          onClick={async (event) => {
-                            event.stopPropagation();
-                            if (!isLoggedIn) {
-                              alert("いいねするにはログインが必要です。");
-                              return;
-                            }
-
-                            const shouldLike = !prompt.liked;
-                            setLikePending(promptId, true);
-                            try {
-                              const request = shouldLike
-                                ? savePromptLike(prompt)
-                                : removePromptLike(prompt);
-                              const result = await request;
-
-                              updatePromptRecord(promptId, (currentPrompt) => ({
-                                ...currentPrompt,
-                                liked: shouldLike
-                              }));
-
-                              if (result && result.message) {
-                                console.log(result.message);
-                              }
-                            } catch (error) {
-                              console.error("いいね操作エラー:", error);
-                              alert("いいねの更新中にエラーが発生しました。");
-                            } finally {
-                              setLikePending(promptId, false);
-                            }
-                          }}
-                        >
-                          <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
-                        </button>
-                        <button
-                          className={`prompt-action-btn bookmark-btn${isBookmarked ? " bookmarked" : ""}`}
-                          type="button"
-                          aria-label="保存"
-                          aria-pressed={isBookmarked ? "true" : "false"}
-                          data-tooltip={isBookmarked ? "保存を解除" : "このプロンプトを保存"}
-                          data-tooltip-placement="top"
-                          disabled={isBookmarkPending}
-                          onClick={async (event) => {
-                            event.stopPropagation();
-                            if (!isLoggedIn) {
-                              alert("ブックマークするにはログインが必要です。");
-                              return;
-                            }
-
-                            const shouldBookmark = !isBookmarked;
-                            setBookmarkPending(promptId, true);
-                            try {
-                              const request = shouldBookmark
-                                ? savePromptBookmark(prompt)
-                                : removePromptBookmark(prompt);
-                              const result = await request;
-
-                              updatePromptRecord(promptId, (currentPrompt) => ({
-                                ...currentPrompt,
-                                bookmarked: shouldBookmark
-                              }));
-
-                              if (result && result.message) {
-                                console.log(result.message);
-                              }
-                            } catch (error) {
-                              console.error("ブックマーク操作エラー:", error);
-                              alert("ブックマークの更新中にエラーが発生しました。");
-                            } finally {
-                              setBookmarkPending(promptId, false);
-                            }
-                          }}
-                        >
-                          <i className={`bi ${isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark"}`}></i>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <PromptCard
+                    key={promptId}
+                    prompt={prompt}
+                    isDropdownOpen={openDropdownPromptId === promptId}
+                    isLikePending={likePendingIds.has(promptId)}
+                    isBookmarkPending={bookmarkPendingIds.has(promptId)}
+                    isSaveToListPending={saveToListPendingIds.has(promptId)}
+                    onOpenDetail={openPromptDetailModal}
+                    onOpenShare={openPromptShareDialog}
+                    onToggleDropdown={togglePromptDropdown}
+                    onCloseDropdown={closePromptDropdown}
+                    onSaveToList={handleSavePromptToList}
+                    onToggleLike={handleTogglePromptLike}
+                    onToggleBookmark={handleTogglePromptBookmark}
+                  />
                 );
               })}
             </div>

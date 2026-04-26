@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { BotMessageHtml } from "./bot_message_html";
 import { UserMessageHtml } from "./user_message_html";
 import { CopyActionButton } from "./copy_action_button";
@@ -7,7 +7,7 @@ import { ThinkingConstellation } from "./thinking_constellation";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 
-export function ChatMainSection() {
+function ChatMainSectionComponent() {
   const {
     pageViewState,
     isChatVisible,
@@ -415,3 +415,6 @@ export function ChatMainSection() {
     </div>
   );
 }
+
+export const ChatMainSection = memo(ChatMainSectionComponent);
+ChatMainSection.displayName = "ChatMainSection";
