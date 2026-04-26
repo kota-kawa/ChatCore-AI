@@ -17,6 +17,18 @@ type MarkedParseOptions = {
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markdownEnhancementDisabled = false;
 const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
+const MARKED_HTML_CACHE_LIMIT = 160;
+const botMarkdownHtmlCache = new Map<string, string>();
+const userMarkdownHtmlCache = new Map<string, string>();
+
+function rememberMarkdownHtml(cache: Map<string, string>, key: string, value: string) {
+  cache.set(key, value);
+  if (cache.size <= MARKED_HTML_CACHE_LIMIT) return;
+  const oldestKey = cache.keys().next().value;
+  if (oldestKey) {
+    cache.delete(oldestKey);
+  }
+}
 
 function readMarkedCodeToken(token: unknown) {
   if (!isRecord(token)) {
@@ -405,12 +417,17 @@ function formatLLMOutput(text: string) {
     return formatMarkdownFallback(normalized);
   }
 
+  const cached = botMarkdownHtmlCache.get(normalized);
+  if (cached !== undefined) return cached;
+
   const parsed = markedParser(normalized, {
     async: false,
     gfm: true,
     breaks: true
   });
-  return typeof parsed === "string" ? parsed : normalized;
+  const html = typeof parsed === "string" ? parsed : normalized;
+  rememberMarkdownHtml(botMarkdownHtmlCache, normalized, html);
+  return html;
 }
 
 /* ユーザー入力の Markdown を HTML に変換 */
@@ -421,12 +438,17 @@ function formatUserInputForDisplay(text: string) {
     return formatMarkdownFallback(normalized);
   }
 
+  const cached = userMarkdownHtmlCache.get(normalized);
+  if (cached !== undefined) return cached;
+
   const parsed = markedParser(normalized, {
     async: false,
     gfm: true,
     breaks: true
   });
-  return typeof parsed === "string" ? parsed : formatMarkdownFallback(normalized);
+  const html = typeof parsed === "string" ? parsed : formatMarkdownFallback(normalized);
+  rememberMarkdownHtml(userMarkdownHtmlCache, normalized, html);
+  return html;
 }
 
 /*  サイドバートグル処理  */

@@ -1,9 +1,5 @@
 import { memo, useEffect, useRef } from "react";
-import { BotMessageHtml } from "./bot_message_html";
-import { UserMessageHtml } from "./user_message_html";
-import { CopyActionButton } from "./copy_action_button";
-import { MemoSaveActionButton } from "./memo_save_action_button";
-import { ThinkingConstellation } from "./thinking_constellation";
+import { ChatMessageList } from "./chat_message_list";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 
@@ -272,103 +268,19 @@ function ChatMainSectionComponent() {
             <i className="bi bi-arrow-bar-right"></i>
           </button>
 
-          <div
-            className="chat-messages scroll-pb-24"
-            id="chat-messages"
-            ref={chatMessagesRef}
-            aria-busy={isGenerating || isChatLaunching ? "true" : undefined}
-          >
-            {isChatLaunching ? (
-              <div className="chat-launch-placeholder" role="status" aria-live="polite">
-                <div className="chat-launch-placeholder__eyebrow">Preparing chat</div>
-                <div className="chat-launch-placeholder__title">
-                  {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
-                </div>
-                {hasLaunchSetupInfo && (
-                  <p className="chat-launch-placeholder__summary">入力内容をチャットに反映しています。</p>
-                )}
-                <div className="chat-launch-placeholder__meta">
-                  {launchingTaskName && <span className="chat-launch-placeholder__task-pill">Task selected</span>}
-                  <div className="chat-launch-placeholder__pulse" aria-hidden="true">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                {historyHasMore && historyNextBeforeId !== null && (
-                  <button
-                    type="button"
-                    className="chat-history-load-more-btn"
-                    disabled={isLoadingOlder}
-                    onClick={() => {
-                      void loadOlderChatHistory();
-                    }}
-                  >
-                    {isLoadingOlder ? "読み込み中..." : "過去のメッセージを読み込む"}
-                  </button>
-                )}
-
-                {messages.map((message) => {
-                  if (message.sender === "thinking") {
-                    return (
-                      <div key={message.id} className="message-wrapper bot-message-wrapper thinking-message-wrapper">
-                        <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
-                          <ThinkingConstellation />
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if (message.sender === "user") {
-                    return (
-                      <div key={message.id} className="message-wrapper user-message-wrapper">
-                        <div className="user-message">
-                          <UserMessageHtml text={message.text} />
-                        </div>
-                        <div className="message-actions">
-                          <CopyActionButton
-                            getText={() => {
-                              return message.text;
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={message.id}
-                      className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
-                    >
-                      <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
-                        <BotMessageHtml text={message.text} />
-                      </div>
-                      {!message.streaming && (
-                        <div className="message-actions">
-                          <CopyActionButton
-                            getText={() => {
-                              return message.text;
-                            }}
-                          />
-                          {!message.error && (
-                            <MemoSaveActionButton
-                              getText={() => {
-                                return message.text;
-                              }}
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
+          <ChatMessageList
+            chatMessagesRef={chatMessagesRef}
+            currentRoomId={currentRoomId}
+            hasLaunchSetupInfo={hasLaunchSetupInfo}
+            historyHasMore={historyHasMore}
+            historyNextBeforeId={historyNextBeforeId}
+            isChatLaunching={isChatLaunching}
+            isGenerating={isGenerating}
+            isLoadingOlder={isLoadingOlder}
+            launchingTaskName={launchingTaskName}
+            loadOlderChatHistory={loadOlderChatHistory}
+            messages={messages}
+          />
 
           <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
             <div className="input-wrapper">

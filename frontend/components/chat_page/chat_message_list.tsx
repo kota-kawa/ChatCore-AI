@@ -1,0 +1,250 @@
+import {
+  memo,
+  useCallback,
+  useMemo,
+  type CSSProperties,
+  type MutableRefObject,
+} from "react";
+import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window";
+
+import type { UiChatMessage } from "../../lib/chat_page/types";
+import { BotMessageHtml } from "./bot_message_html";
+import { CopyActionButton } from "./copy_action_button";
+import { MemoSaveActionButton } from "./memo_save_action_button";
+import { ThinkingConstellation } from "./thinking_constellation";
+import { UserMessageHtml } from "./user_message_html";
+
+type ChatMessageListRow =
+  | { kind: "load-more" }
+  | { kind: "message"; message: UiChatMessage };
+
+type ChatMessageRowProps = {
+  rows: ChatMessageListRow[];
+  isLoadingOlder: boolean;
+  loadOlderChatHistory: () => Promise<void>;
+};
+
+type ChatMessageRowComponentProps = ChatMessageRowProps & {
+  ariaAttributes: {
+    "aria-posinset": number;
+    "aria-setsize": number;
+    role: "listitem";
+  };
+  index: number;
+  style: CSSProperties;
+};
+
+function ChatMessageRow({
+  ariaAttributes,
+  index,
+  isLoadingOlder,
+  loadOlderChatHistory,
+  rows,
+  style,
+}: ChatMessageRowComponentProps) {
+  const row = rows[index];
+  const rowClassName = [
+    "chat-message-row",
+    index === 0 ? "chat-message-row--first" : "",
+    index === rows.length - 1 ? "chat-message-row--last" : "",
+    row?.kind === "load-more" ? "chat-message-row--history" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!row) {
+    return <div {...ariaAttributes} className={rowClassName} style={style}></div>;
+  }
+
+  if (row.kind === "load-more") {
+    return (
+      <div {...ariaAttributes} className={rowClassName} style={style}>
+        <button
+          type="button"
+          className="chat-history-load-more-btn"
+          disabled={isLoadingOlder}
+          onClick={() => {
+            void loadOlderChatHistory();
+          }}
+        >
+          {isLoadingOlder ? "読み込み中..." : "過去のメッセージを読み込む"}
+        </button>
+      </div>
+    );
+  }
+
+  const { message } = row;
+  if (message.sender === "thinking") {
+    return (
+      <div {...ariaAttributes} className={rowClassName} style={style}>
+        <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
+          <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
+            <ThinkingConstellation />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (message.sender === "user") {
+    return (
+      <div {...ariaAttributes} className={rowClassName} style={style}>
+        <div className="message-wrapper user-message-wrapper">
+          <div className="user-message">
+            <UserMessageHtml text={message.text} />
+          </div>
+          <div className="message-actions">
+            <CopyActionButton
+              getText={() => {
+                return message.text;
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div {...ariaAttributes} className={rowClassName} style={style}>
+      <div
+        className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
+      >
+        <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
+          <BotMessageHtml text={message.text} />
+        </div>
+        {!message.streaming && (
+          <div className="message-actions">
+            <CopyActionButton
+              getText={() => {
+                return message.text;
+              }}
+            />
+            {!message.error && (
+              <MemoSaveActionButton
+                getText={() => {
+                  return message.text;
+                }}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ChatMessageListProps = {
+  chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
+  currentRoomId: string | null;
+  hasLaunchSetupInfo: boolean;
+  historyHasMore: boolean;
+  historyNextBeforeId: number | null;
+  isChatLaunching: boolean;
+  isGenerating: boolean;
+  isLoadingOlder: boolean;
+  launchingTaskName: string | null;
+  loadOlderChatHistory: () => Promise<void>;
+  messages: UiChatMessage[];
+};
+
+function ChatMessageListComponent({
+  chatMessagesRef,
+  currentRoomId,
+  hasLaunchSetupInfo,
+  historyHasMore,
+  historyNextBeforeId,
+  isChatLaunching,
+  isGenerating,
+  isLoadingOlder,
+  launchingTaskName,
+  loadOlderChatHistory,
+  messages,
+}: ChatMessageListProps) {
+  const rowHeight = useDynamicRowHeight({
+    defaultRowHeight: 156,
+    key: currentRoomId || "no-room",
+  });
+
+  const setStaticMessagesRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      chatMessagesRef.current = node;
+    },
+    [chatMessagesRef],
+  );
+
+  const setListRef = useCallback(
+    (api: ListImperativeAPI | null) => {
+      chatMessagesRef.current = api?.element ?? null;
+    },
+    [chatMessagesRef],
+  );
+
+  const rows = useMemo<ChatMessageListRow[]>(() => {
+    const nextRows: ChatMessageListRow[] = [];
+    if (historyHasMore && historyNextBeforeId !== null) {
+      nextRows.push({ kind: "load-more" });
+    }
+    messages.forEach((message) => {
+      nextRows.push({ kind: "message", message });
+    });
+    return nextRows;
+  }, [historyHasMore, historyNextBeforeId, messages]);
+
+  const rowProps = useMemo<ChatMessageRowProps>(
+    () => ({
+      rows,
+      isLoadingOlder,
+      loadOlderChatHistory,
+    }),
+    [isLoadingOlder, loadOlderChatHistory, rows],
+  );
+
+  if (isChatLaunching) {
+    return (
+      <div
+        className="chat-messages scroll-pb-24"
+        id="chat-messages"
+        ref={setStaticMessagesRef}
+        aria-busy="true"
+      >
+        <div className="chat-launch-placeholder" role="status" aria-live="polite">
+          <div className="chat-launch-placeholder__eyebrow">Preparing chat</div>
+          <div className="chat-launch-placeholder__title">
+            {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
+          </div>
+          {hasLaunchSetupInfo && (
+            <p className="chat-launch-placeholder__summary">入力内容をチャットに反映しています。</p>
+          )}
+          <div className="chat-launch-placeholder__meta">
+            {launchingTaskName && <span className="chat-launch-placeholder__task-pill">Task selected</span>}
+            <div className="chat-launch-placeholder__pulse" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <List
+      aria-busy={isGenerating ? "true" : undefined}
+      className="chat-messages chat-messages--virtual scroll-pb-24"
+      defaultHeight={480}
+      id="chat-messages"
+      listRef={setListRef}
+      overscanCount={6}
+      rowComponent={ChatMessageRow}
+      rowCount={rows.length}
+      rowHeight={rowHeight}
+      rowProps={rowProps}
+      style={{ width: "100%" }}
+    />
+  );
+}
+
+export const ChatMessageList = memo(ChatMessageListComponent);
+ChatMessageList.displayName = "ChatMessageList";

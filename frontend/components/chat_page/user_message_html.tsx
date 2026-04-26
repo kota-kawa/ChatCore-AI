@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatUserInputForDisplay } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
@@ -9,7 +9,7 @@ type UserMessageHtmlProps = {
   text: string;
 };
 
-export function UserMessageHtml({ text }: UserMessageHtmlProps) {
+function UserMessageHtmlComponent({ text }: UserMessageHtmlProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const formatted = useMemo(() => formatUserInputForDisplay(text), [text]);
 
@@ -20,3 +20,6 @@ export function UserMessageHtml({ text }: UserMessageHtmlProps) {
 
   return <div ref={containerRef}></div>;
 }
+
+export const UserMessageHtml = memo(UserMessageHtmlComponent);
+UserMessageHtml.displayName = "UserMessageHtml";

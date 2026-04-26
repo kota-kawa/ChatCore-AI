@@ -1,11 +1,10 @@
 // message_utils.ts – 共通メッセージユーティリティ
 // --------------------------------------------------
+import DOMPurify from "dompurify";
 import { getSharedDomRefs } from "../core/dom";
 import { sanitizeClassAttributeValue } from "../core/html";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
-
-// DOMPurify が利用可能な場合は使用し、未ロード時は安全なテキスト描画にフォールバック
 
 /**
  * HTML をサニタイズして挿入する
@@ -24,92 +23,20 @@ function compactBotMessageHtml(html: string) {
     .trim();
 }
 
-function isSafeUrl(value: string) {
-  const v = value.trim();
-  if (!v) return false;
-  return /^(https?:|mailto:|tel:|\/|#)/i.test(v);
+const SAFE_URI_PATTERN = /^(?:(?:https?|mailto|tel):|\/(?!\/)|#|\.{1,2}\/|[^:/?#]+(?:[/?#]|$))/i;
+const SANITIZED_HTML_CACHE_LIMIT = 160;
+const sanitizedHtmlCache = new Map<string, string>();
+
+function rememberSanitizedHtml(key: string, value: string) {
+  sanitizedHtmlCache.set(key, value);
+  if (sanitizedHtmlCache.size <= SANITIZED_HTML_CACHE_LIMIT) return;
+  const oldestKey = sanitizedHtmlCache.keys().next().value;
+  if (oldestKey) {
+    sanitizedHtmlCache.delete(oldestKey);
+  }
 }
 
-function sanitizeHtmlWithoutPurifier(
-  dirtyHtml: string,
-  allowedTags: string[],
-  allowedAttrs: string[]
-) {
-  const allowedTagSet = new Set(allowedTags.map((t) => t.toLowerCase()));
-  const allowedAttrSet = new Set(allowedAttrs.map((a) => a.toLowerCase()));
-
-  const template = document.createElement("template");
-  template.innerHTML = dirtyHtml;
-
-  const sanitizeNode = (node: Node): Node | DocumentFragment | null => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      return document.createTextNode(node.textContent || "");
-    }
-
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      return null;
-    }
-
-    const element = node as HTMLElement;
-    const tag = element.tagName.toLowerCase();
-
-    // 非許可タグは中身だけ展開して残す
-    if (!allowedTagSet.has(tag)) {
-      const fragment = document.createDocumentFragment();
-      Array.from(element.childNodes).forEach((child) => {
-        const cleanedChild = sanitizeNode(child);
-        if (cleanedChild) fragment.appendChild(cleanedChild);
-      });
-      return fragment;
-    }
-
-    const clean = document.createElement(tag);
-    Array.from(element.attributes).forEach((attr) => {
-      const name = attr.name.toLowerCase();
-      const value = attr.value;
-      if (!allowedAttrSet.has(name)) return;
-
-      if ((name === "href" || name === "src") && !isSafeUrl(value)) {
-        return;
-      }
-
-      if (name === "target") {
-        if (value === "_blank") {
-          clean.setAttribute("target", "_blank");
-          clean.setAttribute("rel", "noopener noreferrer");
-        }
-        return;
-      }
-
-      if (name === "class") {
-        const safeClassNames = sanitizeClassAttributeValue(value);
-        if (safeClassNames) {
-          clean.setAttribute("class", safeClassNames);
-        }
-        return;
-      }
-
-      clean.setAttribute(name, value);
-    });
-
-    Array.from(element.childNodes).forEach((child) => {
-      const cleanedChild = sanitizeNode(child);
-      if (cleanedChild) clean.appendChild(cleanedChild);
-    });
-
-    return clean;
-  };
-
-  const root = document.createElement("div");
-  Array.from(template.content.childNodes).forEach((child) => {
-    const cleaned = sanitizeNode(child);
-    if (cleaned) root.appendChild(cleaned);
-  });
-
-  return root.innerHTML;
-}
-
-function sanitizeAllowedClasses(html: string) {
+function normalizeSanitizedHtml(html: string) {
   const template = document.createElement("template");
   template.innerHTML = html;
 
@@ -120,6 +47,10 @@ function sanitizeAllowedClasses(html: string) {
       return;
     }
     node.removeAttribute("class");
+  });
+
+  Array.from(template.content.querySelectorAll("a[target='_blank']")).forEach((node) => {
+    node.setAttribute("rel", "noopener noreferrer");
   });
 
   return template.innerHTML;
@@ -161,30 +92,24 @@ function renderSanitizedHTML(
   ]
 ) {
   const isBotMessage = element.classList.contains("bot-message");
-  const purifier = typeof DOMPurify !== "undefined" ? DOMPurify : null;
-  if (purifier && typeof purifier.sanitize === "function") {
-    let clean = purifier.sanitize(dirtyHtml, {
-      ALLOWED_TAGS: allowed,
-      ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"]
-    });
-    clean = sanitizeAllowedClasses(clean);
-    if (isBotMessage) {
-      clean = compactBotMessageHtml(clean);
-    }
-    element.innerHTML = clean;
+  const cacheKey = `${isBotMessage ? "bot" : "plain"}\0${allowed.join(",")}\0${dirtyHtml}`;
+  const cached = sanitizedHtmlCache.get(cacheKey);
+  if (cached !== undefined) {
+    element.innerHTML = cached;
     return;
   }
 
-  // サニタイザが未ロードでも許可タグだけを残すフォールバックサニタイズを適用する
-  if (allowed.length === 1 && allowed[0] === "br") {
-    setTextWithLineBreaks(element, dirtyHtml.replace(/<br\s*\/?>/gi, "\n"));
-    return;
-  }
-
-  let clean = sanitizeHtmlWithoutPurifier(dirtyHtml, allowed, ["href", "src", "alt", "title", "target", "class"]);
+  let clean = DOMPurify.sanitize(dirtyHtml, {
+    ALLOWED_TAGS: allowed,
+    ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"],
+    ALLOWED_URI_REGEXP: SAFE_URI_PATTERN,
+    ALLOW_DATA_ATTR: false
+  });
+  clean = normalizeSanitizedHtml(clean);
   if (isBotMessage) {
     clean = compactBotMessageHtml(clean);
   }
+  rememberSanitizedHtml(cacheKey, clean);
   element.innerHTML = clean;
 }
 
