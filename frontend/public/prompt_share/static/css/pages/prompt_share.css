@@ -1976,10 +1976,28 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .prompt-share-page .ai-agent-btn {
   width: 58px;
   height: 58px;
+  border-color: rgba(20, 184, 166, 0.26);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(135deg, #ffffff 0%, #f5fffd 100%);
+  color: #0f766e;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.14),
+    0 0 0 6px rgba(20, 184, 166, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .prompt-share-page .ai-agent-btn[aria-expanded="true"],
 .prompt-share-page .ai-agent-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.34), transparent 34%),
+    linear-gradient(135deg, #1a73e8 0%, #14b8a6 100%);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 6px rgba(20, 184, 166, 0.14),
+    0 16px 34px rgba(20, 184, 166, 0.3),
+    0 5px 14px rgba(15, 23, 42, 0.18);
   background-position: 100% 100%;
 }
 
@@ -3296,6 +3314,31 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   border-color: rgba(248, 113, 113, 0.22);
   background: rgba(127, 29, 29, 0.24);
   color: #fca5a5;
+}
+
+[data-theme="dark"] .prompt-share-page .ai-agent-btn {
+  border-color: rgba(45, 212, 191, 0.28);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(45, 212, 191, 0.16), rgba(45, 212, 191, 0) 42%),
+    linear-gradient(135deg, #111827 0%, #0f2f35 100%);
+  color: #5eead4;
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.38),
+    0 0 0 6px rgba(45, 212, 191, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .prompt-share-page .ai-agent-btn[aria-expanded="true"],
+[data-theme="dark"] .prompt-share-page .ai-agent-btn:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.28), transparent 34%),
+    linear-gradient(135deg, #2563eb 0%, #14b8a6 100%);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 6px rgba(45, 212, 191, 0.16),
+    0 18px 38px rgba(20, 184, 166, 0.28),
+    0 8px 20px rgba(0, 0, 0, 0.32);
 }
 
 @media (max-width: 640px) {
