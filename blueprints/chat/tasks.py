@@ -32,8 +32,10 @@ from services.llm_daily_limit import (
     get_llm_daily_limit_service,
 )
 from services.code_search import search_codebase
-from services.manual_rag import needs_manual_search, search_manual
-from services.page_context import get_page_context, is_page_specific_query
+from services.intent_classifier import classify_intent
+from services.manual_rag import search_manual
+from services.page_actions import build_action_messages, parse_action_response
+from services.page_context import get_page_context
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -757,19 +759,40 @@ async def ai_agent(
                 (m.content for m in reversed(payload.messages) if m.role == "user"),
                 "",
             )
-
+            current_page = payload.current_page or ""
             rag_context = ""
-            if needs_manual_search(last_user_message):
-                current_page = payload.current_page or ""
 
-                if current_page and is_page_specific_query(last_user_message):
-                    yield _ai_agent_sse("progress", {"message": "現在のページを確認中..."})
-                    rag_context = await run_blocking(get_page_context, current_page)
+            intent = await run_blocking(classify_intent, last_user_message, current_page)
 
+            if intent == "action":
+                yield _ai_agent_sse("progress", {"message": "ページを解析中..."})
+                page_ctx = await run_blocking(get_page_context, current_page)
+                if page_ctx:
+                    yield _ai_agent_sse("progress", {"message": "操作手順を生成中..."})
+                    action_messages = build_action_messages(
+                        page_ctx,
+                        [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                    )
+                    response_text = await run_blocking(
+                        get_llm_response, action_messages, GPT_OSS_120B_MODEL
+                    )
+                    action_plan = parse_action_response(response_text or "")
+                    if action_plan:
+                        yield _ai_agent_sse("action_plan", action_plan)
+                        return
+                    # セレクタ特定できず → ページコードをRAGとして通常応答にフォールスルー
+                    rag_context = page_ctx
+
+            elif intent == "page_info":
+                yield _ai_agent_sse("progress", {"message": "現在のページを確認中..."})
+                rag_context = await run_blocking(get_page_context, current_page)
                 if not rag_context:
                     yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
                     rag_context = await run_blocking(search_manual, last_user_message)
 
+            elif intent == "search":
+                yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
+                rag_context = await run_blocking(search_manual, last_user_message)
                 if not rag_context:
                     yield _ai_agent_sse("progress", {"message": "コードを探索中..."})
                     rag_context = await run_blocking(search_codebase, last_user_message)

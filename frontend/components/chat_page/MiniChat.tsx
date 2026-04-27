@@ -1,13 +1,27 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
+type ActionStep = {
+  action: "click" | "input" | "focus" | "scroll";
+  selector: string;
+  value?: string;
+  description: string;
+};
+
+type ActionPlan = {
+  description: string;
+  steps: ActionStep[];
+};
+
 type Message = {
   sender: "user" | "assistant";
   text: string;
+  actionPlan?: ActionPlan;
 };
 
 type AiAgentSseEvent =
   | { type: "progress"; message: string }
   | { type: "done"; response: string; model: string }
+  | { type: "action_plan"; description: string; steps: ActionStep[] }
   | { type: "error"; message: string; retryable?: boolean; retry_after?: number };
 
 async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEvent> {
@@ -49,11 +63,51 @@ const QUICK_PROMPTS = [
   "使いやすい入力例を作って"
 ];
 
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = el instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
+  if (descriptor?.set) {
+    descriptor.set.call(el, value);
+  } else {
+    el.value = value;
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+async function executeActionSteps(steps: ActionStep[]): Promise<void> {
+  for (const step of steps) {
+    const el = document.querySelector(step.selector);
+    if (!el) continue;
+    if (step.action === "click") {
+      (el as HTMLElement).click();
+    } else if (step.action === "input") {
+      setNativeValue(el as HTMLInputElement | HTMLTextAreaElement, step.value ?? "");
+    } else if (step.action === "focus") {
+      (el as HTMLElement).focus();
+    } else if (step.action === "scroll") {
+      (el as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    await new Promise<void>((r) => setTimeout(r, 150));
+  }
+}
+
+const ACTION_LABELS: Record<ActionStep["action"], string> = {
+  click: "クリック",
+  input: "入力",
+  focus: "フォーカス",
+  scroll: "スクロール",
+};
+
 export function MiniChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [executingIdx, setExecutingIdx] = useState<number | null>(null);
+  const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const trimmedInput = input.trim();
 
@@ -83,6 +137,7 @@ export function MiniChat() {
       }
 
       let assistantText = "応答を取得できませんでした。もう一度試してください。";
+      let actionPlan: ActionPlan | undefined;
 
       for await (const event of readSseStream(response)) {
         if (event.type === "progress") {
@@ -90,13 +145,17 @@ export function MiniChat() {
         } else if (event.type === "done") {
           assistantText = event.response.trim() || assistantText;
           break;
+        } else if (event.type === "action_plan") {
+          assistantText = event.description;
+          actionPlan = { description: event.description, steps: event.steps };
+          break;
         } else if (event.type === "error") {
           assistantText = event.message;
           break;
         }
       }
 
-      setMessages((prev) => [...prev, { sender: "assistant", text: assistantText }]);
+      setMessages((prev) => [...prev, { sender: "assistant", text: assistantText, actionPlan }]);
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -108,6 +167,16 @@ export function MiniChat() {
     } finally {
       setIsGenerating(false);
       setStatusText(null);
+    }
+  };
+
+  const handleExecuteActions = async (steps: ActionStep[], msgIdx: number) => {
+    setExecutingIdx(msgIdx);
+    try {
+      await executeActionSteps(steps);
+      setExecutedSet((prev) => new Set([...prev, msgIdx]));
+    } finally {
+      setExecutingIdx(null);
     }
   };
 
@@ -148,6 +217,35 @@ export function MiniChat() {
             </span>
             <div className="mini-chat-text-wrapper">
               <div className="mini-chat-text">{msg.text}</div>
+              {msg.actionPlan && (
+                <div className="mini-chat-action-plan">
+                  <ol className="mini-chat-action-steps">
+                    {msg.actionPlan.steps.map((step, si) => (
+                      <li key={si} className="mini-chat-action-step">
+                        <span className={`mini-chat-action-badge mini-chat-action-badge--${step.action}`}>
+                          {ACTION_LABELS[step.action]}
+                        </span>
+                        {step.description}
+                      </li>
+                    ))}
+                  </ol>
+                  <button
+                    type="button"
+                    className="mini-chat-execute-btn"
+                    onClick={() => handleExecuteActions(msg.actionPlan!.steps, i)}
+                    disabled={executingIdx === i || executedSet.has(i)}
+                    aria-label="操作を実行"
+                  >
+                    {executingIdx === i ? (
+                      <><i className="bi bi-three-dots"></i> 実行中...</>
+                    ) : executedSet.has(i) ? (
+                      <><i className="bi bi-check2"></i> 実行済み</>
+                    ) : (
+                      <><i className="bi bi-play-fill"></i> 実行</>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

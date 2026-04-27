@@ -88,6 +88,16 @@ _PAGE_MAP: list[tuple[re.Pattern[str], str, list[tuple[str, int]]]] = [
     ),
 ]
 
+# ユーザーが操作（クリック・入力等）を依頼しているパターン
+_ACTION_REQUEST_PATTERNS = re.compile(
+    r"(?:クリック|タップ|押)して(?:ほしい|くれ|ください|もらえ|みて)?"
+    r"|(?:入力|記入|書き込)(?:んで|いて|して)(?:ほしい|くれ|ください|もらえ)?"
+    r"|(?:操作|実行)して(?:ほしい|くれ|ください|もらえ|みて)?"
+    r"|代わりに.{0,30}(?:して|クリック|入力|押)"
+    r"|やって(?:ほしい|くれ|ください|もらえ)",
+    re.IGNORECASE,
+)
+
 # 「今いるページ」を指しているパターン
 _PAGE_CONTEXT_PATTERNS = re.compile(
     r"このページ|この画面|今のページ|今の画面|今開いている|現在のページ|現在の画面"
@@ -102,6 +112,11 @@ _PAGE_CONTEXT_PATTERNS = re.compile(
 def is_page_specific_query(query: str) -> bool:
     """ユーザーが今開いているページについて質問しているか判定する。"""
     return bool(_PAGE_CONTEXT_PATTERNS.search(query))
+
+
+def is_action_request(query: str) -> bool:
+    """ユーザーがページ上での操作（クリック・入力等）を依頼しているか判定する。"""
+    return bool(_ACTION_REQUEST_PATTERNS.search(query))
 
 
 def _read_file_head(rel_path: str, max_lines: int) -> str:
