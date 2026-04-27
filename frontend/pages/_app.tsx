@@ -6,6 +6,7 @@ import "../scripts/core/alert_modal";
 import type { AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
+import { GlobalAiAgent } from "../components/GlobalAiAgent";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 
 const appSansFont = Noto_Sans_JP({
@@ -77,6 +78,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <div className={appSansFont.variable}>
       <GlobalErrorBoundary>
         <Component {...pageProps} />
+        <GlobalAiAgent />
       </GlobalErrorBoundary>
     </div>
   );

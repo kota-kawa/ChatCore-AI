@@ -50,8 +50,6 @@ import type {
   PromptType
 } from "../../scripts/prompt_share/types";
 import { PromptCard, type PromptRecord } from "../../components/prompt_share/prompt_card";
-import { DraggableModal } from "../../components/ui/DraggableModal";
-import { MiniChat } from "../../components/chat_page/MiniChat";
 
 type PromptCategory = {
   value: string;
@@ -136,7 +134,6 @@ export default function PromptSharePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authUiReady, setAuthUiReady] = useState(false);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
-  const [isAiAgentModalOpen, setIsAiAgentModalOpen] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -1988,28 +1985,6 @@ export default function PromptSharePage() {
           </div>
         </div>
 
-        <button
-          id="openPostModal"
-          className="new-prompt-btn ai-agent-btn"
-          aria-label="AI エージェントを起動"
-          aria-expanded={isAiAgentModalOpen}
-          data-tooltip="AI エージェントを起動"
-          data-tooltip-placement="right"
-          type="button"
-          onClick={() => setIsAiAgentModalOpen((prev) => !prev)}
-        >
-          <i className="bi bi-robot"></i>
-        </button>
-
-        <DraggableModal
-          isOpen={isAiAgentModalOpen}
-          onClose={() => setIsAiAgentModalOpen(false)}
-          title="AI エージェント"
-          initialX={20}
-          initialY={100}
-        >
-          <MiniChat />
-        </DraggableModal>
       </div>
     </>
   );

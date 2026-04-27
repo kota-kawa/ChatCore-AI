@@ -96,7 +96,7 @@ export function DraggableModal({
   return (
     <div
       ref={modalRef}
-      className="ai-agent-modal"
+      className="ai-agent-modal global-ai-agent-modal"
       role="dialog"
       aria-modal="false"
       aria-label={title || "AI エージェント"}
