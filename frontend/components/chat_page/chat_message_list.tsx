@@ -214,11 +214,18 @@ function ChatMessageListComponent({
 
     return (
       <div
-        className="chat-messages scroll-pb-24"
+        className="chat-messages chat-messages--virtual scroll-pb-24"
         id="chat-messages"
         ref={setStaticMessagesRef}
         aria-busy="true"
         aria-live="polite"
+        style={{
+          width: "100%",
+          position: "relative",
+          maxHeight: "100%",
+          flexGrow: 1,
+          overflowY: "auto",
+        }}
       >
         {/* ユーザーメッセージの再現 */}
         <div className="chat-message-row chat-message-row--first">
