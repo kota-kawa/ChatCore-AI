@@ -1216,3 +1216,160 @@ body.memo-page :where(
 ):active:not(:disabled) {
   transform: scale(0.97);
 }
+
+/* ==========================================================================
+   Dark Mode Overrides
+   ========================================================================== */
+
+[data-theme="dark"] body.memo-page {
+  --memo-amber: #f59e0b;
+  --memo-amber-strong: #d97706;
+  --memo-amber-soft: rgba(245, 158, 11, 0.18);
+  --memo-amber-border: rgba(245, 158, 11, 0.25);
+  --memo-surface: rgba(15, 23, 42, 0.9);
+  --memo-surface-strong: rgba(30, 41, 59, 0.96);
+  --memo-border: rgba(148, 163, 184, 0.12);
+  --memo-border-strong: rgba(245, 158, 11, 0.3);
+  --memo-text: #f8fafc;
+  --memo-text-muted: #94a3b8;
+  --memo-shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.5);
+  --memo-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.3);
+  --page-scrollbar-track: rgba(15, 23, 42, 0.8);
+  --page-scrollbar-thumb: rgba(245, 158, 11, 0.3);
+  --page-scrollbar-thumb-hover: rgba(245, 158, 11, 0.45);
+  --page-scrollbar-thumb-border: rgba(15, 23, 42, 0.9);
+  background: #0f172a;
+}
+
+[data-theme="dark"] .memo-page-shell {
+  background: #0f172a;
+}
+
+[data-theme="dark"] .memo-page-shell::before {
+  background:
+    radial-gradient(ellipse 1100px 650px at 8% 6%, rgba(245, 158, 11, 0.08), transparent),
+    radial-gradient(ellipse 820px 540px at 94% 8%, rgba(251, 191, 36, 0.08), transparent),
+    linear-gradient(180deg, #0f172a 0%, #020617 100%);
+}
+
+[data-theme="dark"] .memo-card {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .memo-hero__icon {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-hero__text h1 {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-hero__chip {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .memo-section-title {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-item {
+  background: #1e293b;
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="dark"] .memo-item:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .memo-item__title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .memo-item__meta {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .memo-item__tag {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+[data-theme="dark"] .form-group label {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .form-control {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .form-control:focus {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+}
+
+[data-theme="dark"] .memo-modal__content {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="dark"] .memo-modal__header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .memo-modal__title {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .modal-section-title {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+[data-theme="dark"] .memo-content-box {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(148, 163, 184, 0.15);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .memo-share-modal__content {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] #memo-share-link-input {
+  background: rgba(15, 23, 42, 0.6);
+  color: #f1f5f9;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] body.memo-page :where(.memo-item__share, .memo-modal__close, .memo-share-modal__close, .memo-share-modal__sns a) {
+  --memo-button-base: rgba(30, 41, 59, 0.98);
+  --memo-button-accent: rgba(15, 23, 42, 0.98);
+  --memo-button-shadow-color: rgba(0, 0, 0, 0.4);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-page-shell #auth-buttons .auth-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f59e0b;
+}
+
+[data-theme="dark"] .memo-empty-state {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .memo-empty-state i {
+  color: rgba(245, 158, 11, 0.2);
+}
