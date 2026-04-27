@@ -8,6 +8,24 @@ from services.llm import LlmProviderError
 from tests.helpers.request_helpers import build_request
 
 
+async def _collect_sse_done(response) -> dict:
+    """StreamingResponse の body_iterator を読み進め、done/action_plan/error イベントのペイロードを返す。"""
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk if isinstance(chunk, bytes) else chunk.encode("utf-8")
+    for block in body.decode("utf-8").split("\n\n"):
+        event_type = "message"
+        data = ""
+        for line in block.strip().split("\n"):
+            if line.startswith("event: "):
+                event_type = line[7:].strip()
+            elif line.startswith("data: "):
+                data = line[6:].strip()
+        if data and event_type in ("done", "action_plan", "error"):
+            return json.loads(data)
+    return {}
+
+
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -93,13 +111,18 @@ class PromptAssistApiTestCase(unittest.TestCase):
             session={},
         )
 
-        with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)) as mock_limits:
-            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
-                with patch("blueprints.chat.tasks.get_llm_response", return_value="改善案です。") as mock_llm:
-                    response = asyncio.run(ai_agent(request))
+        async def _run():
+            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)) as mock_limits:
+                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                    with patch("blueprints.chat.tasks.classify_intent", return_value="direct"):
+                        with patch("blueprints.chat.tasks.get_llm_response", return_value="改善案です。") as mock_llm:
+                            response = await ai_agent(request)
+                            payload = await _collect_sse_done(response)
+            return response, payload, mock_limits, mock_llm
+
+        response, payload, mock_limits, mock_llm = asyncio.run(_run())
 
         self.assertEqual(response.status_code, 200)
-        payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["response"], "改善案です。")
         self.assertEqual(payload["model"], "openai/gpt-oss-120b")
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
