@@ -165,7 +165,7 @@ function ChatMessageListComponent({
   messages,
 }: ChatMessageListProps) {
   const rowHeight = useDynamicRowHeight({
-    defaultRowHeight: messages.length <= 2 ? 64 : 112,
+    defaultRowHeight: 92,
     key: currentRoomId || "no-room",
   });
 
@@ -212,22 +212,31 @@ function ChatMessageListComponent({
         aria-busy="true"
         aria-live="polite"
       >
-        <div className="chat-launch-placeholder" role="status" aria-live="polite">
-          <div className="chat-launch-placeholder__eyebrow">チャット準備中</div>
-          <div className="chat-launch-placeholder__title">
-            {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
+        <div className="chat-message-row chat-message-row--first">
+          <div className="message-wrapper user-message-wrapper">
+            <div className="user-message">
+              {hasLaunchSetupInfo && setupInfo ? (
+                <UserMessageHtml text={setupInfo} />
+              ) : (
+                <div className="chat-launch-placeholder__title">
+                  {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
+                </div>
+              )}
+            </div>
           </div>
-          {hasLaunchSetupInfo && (
-            <p className="chat-launch-placeholder__summary">
-              {setupInfo ? setupInfo : "入力内容をチャットに反映しています。"}
-            </p>
-          )}
-          <div className="chat-launch-placeholder__meta">
-            {launchingTaskName && <span className="chat-launch-placeholder__task-pill">タスク選択済み</span>}
-            <div className="chat-launch-placeholder__pulse" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
+        </div>
+
+        <div className="chat-message-row">
+          <div className="message-wrapper bot-message-wrapper">
+            <div className="chat-launch-placeholder" style={{ margin: 0, width: "100%", maxWidth: "none", background: "none", border: "none", boxShadow: "none", padding: "0.5rem 0" }}>
+              <div className="chat-launch-placeholder__meta" style={{ marginTop: 0 }}>
+                <div className="chat-launch-placeholder__pulse" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div className="chat-launch-placeholder__eyebrow" style={{ marginLeft: "auto" }}>Preparing Chat</div>
+              </div>
             </div>
           </div>
         </div>
