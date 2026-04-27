@@ -256,6 +256,7 @@ chat-action-menu {
 
 .user-message-wrapper {
   margin-left: auto;
+  width: fit-content;
   max-width: min(75%, var(--chat-readable-width-narrow, 680px));
 }
 
@@ -277,6 +278,8 @@ chat-action-menu {
 .user-message {
   background: var(--primary-color, #19c37d);
   color: var(--text-light, #ffffff);
+  width: fit-content;
+  max-width: 100%;
   padding: 0.75rem 1.05rem;
   border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) var(--radius-xs, 4px) var(--radius-lg, 20px);
   animation: userMessageAppear 0.35s ease-out;
