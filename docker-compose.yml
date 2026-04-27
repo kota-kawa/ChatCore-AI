@@ -37,7 +37,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
-      - FASTAPI_ENV=production
+      - FASTAPI_ENV=${FASTAPI_ENV:-production}
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
     ports:

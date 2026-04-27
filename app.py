@@ -7,6 +7,15 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from dotenv import load_dotenv
+
+# アプリケーションモジュールをインポートする前に環境変数を読み込む。
+# .env.local が存在すれば .env の値を上書きする（ローカル開発用設定として使用）。
+# Load env vars before importing application modules so that module-level
+# constants (e.g. FRONTEND_URL in web_constants.py) pick up the correct values.
+# .env.local overrides .env and is intended for local-development overrides.
+load_dotenv()
+load_dotenv(".env.local", override=True)
+
 from fastapi import FastAPI, Request
 
 from blueprints.chat import cleanup_ephemeral_chats
@@ -31,10 +40,6 @@ from services.runtime_config import (
 )
 from services.session_middleware import PermanentSessionMiddleware
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify
-
-# 初回起動時に環境変数を読み込む
-# Load environment variables at startup.
-load_dotenv()
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.

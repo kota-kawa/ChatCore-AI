@@ -90,6 +90,7 @@ yarn-error.log*
 .env.production.local
 *.env.bak
 .deploy-active-color
+docker-compose.local.yml
 
 # Database & Uploads
 *.sqlite3
