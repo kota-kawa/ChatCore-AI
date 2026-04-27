@@ -463,11 +463,11 @@ a.cc-texture-btn:active {
 
 .global-ai-agent-button {
   position: fixed;
-  left: max(16px, env(safe-area-inset-left));
-  bottom: max(18px, env(safe-area-inset-bottom));
+  left: max(40px, env(safe-area-inset-left));
+  bottom: max(40px, env(safe-area-inset-bottom));
   z-index: var(--z-floating-action-menu, 60);
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border: 1px solid rgba(20, 184, 166, 0.26);
   border-radius: 50%;
   background:
@@ -1040,10 +1040,10 @@ a.cc-texture-btn:active {
 
 @media (max-width: 640px) {
   .global-ai-agent-button {
-    width: 54px;
-    height: 54px;
-    left: max(14px, env(safe-area-inset-left));
-    bottom: max(14px, env(safe-area-inset-bottom));
+    width: 56px;
+    height: 56px;
+    left: max(20px, env(safe-area-inset-left));
+    bottom: max(20px, env(safe-area-inset-bottom));
   }
 
   .global-ai-agent-modal.global-ai-agent-modal {
@@ -1066,6 +1066,15 @@ a.cc-texture-btn:active {
 
   .global-ai-agent-modal .mini-chat-input-area {
     padding: 0.68rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .global-ai-agent-button {
+    width: 50px;
+    height: 50px;
+    left: max(15px, env(safe-area-inset-left));
+    bottom: max(15px, env(safe-area-inset-bottom));
   }
 }
 
