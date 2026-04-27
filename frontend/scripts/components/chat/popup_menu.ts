@@ -15,10 +15,10 @@ chatTemplate.innerHTML = `
       --cc-fab-share-bg: linear-gradient(135deg, #1a73e8, #4a9bf5);
       --cc-fab-star-bg: linear-gradient(135deg, #19c37d, #0fa86a);
       --cc-fab-comment-bg: linear-gradient(135deg, #d97706, #f59e0b);
-      --cc-fab-theme-bg: linear-gradient(135deg, #6b7280, #374151);
       --cc-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
       --cc-fab-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.26);
     }
+
 
     :host([data-chat-page="true"]) {
       --cc-fab-shadow: none;
@@ -78,11 +78,6 @@ chatTemplate.innerHTML = `
     .btn--comment:hover {
       box-shadow:
         0 0 0 5px rgba(217, 119, 6, 0.20),
-        0 6px 20px rgba(0, 0, 0, 0.16);
-    }
-    .btn--theme:hover {
-      box-shadow:
-        0 0 0 5px rgba(107, 114, 128, 0.20),
         0 6px 20px rgba(0, 0, 0, 0.16);
     }
     .btn svg {
@@ -158,9 +153,6 @@ chatTemplate.innerHTML = `
     .btn--comment {
       background: var(--cc-fab-comment-bg);
     }
-    .btn--theme {
-      background: var(--cc-fab-theme-bg);
-    }
 
     /* ============
        ボタンの配置
@@ -179,10 +171,9 @@ chatTemplate.innerHTML = `
         transform 0.4s  cubic-bezier(0.4, 0, 0.65, 1);
     }
     /* 閉じるとき逆順カスケード */
-    .actions-menu .btn--theme   { transition-delay: 0s; }
-    .actions-menu .btn--comment { transition-delay: 0.05s; }
-    .actions-menu .btn--star    { transition-delay: 0.1s; }
-    .actions-menu .btn--share   { transition-delay: 0.15s; }
+    .actions-menu .btn--comment { transition-delay: 0s; }
+    .actions-menu .btn--star    { transition-delay: 0.05s; }
+    .actions-menu .btn--share   { transition-delay: 0.1s; }
 
     .actions-menu .btn--menu {
       position: absolute;
@@ -204,11 +195,10 @@ chatTemplate.innerHTML = `
         opacity  0.4s  ease,
         transform 0.52s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    /* 開くとき順順カスケード: share→star→comment→theme */
+    /* 開くとき順順カスケード: share→star→comment */
     #chatActionMenuButton:checked + .actions-menu > .btn--share   { transition-delay: 0s; }
     #chatActionMenuButton:checked + .actions-menu > .btn--star    { transition-delay: 0.05s; }
     #chatActionMenuButton:checked + .actions-menu > .btn--comment { transition-delay: 0.1s; }
-    #chatActionMenuButton:checked + .actions-menu > .btn--theme   { transition-delay: 0.15s; }
 
     /* 展開位置 */
     #chatActionMenuButton:checked + .actions-menu > .btn--share {
@@ -220,11 +210,7 @@ chatTemplate.innerHTML = `
       left: -60px;
     }
     #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-      top: -45px;
-      left: -95px;
-    }
-    #chatActionMenuButton:checked + .actions-menu > .btn--theme {
-      top: 15px;
+      top: -15px;
       left: -100px;
     }
 
@@ -241,7 +227,6 @@ chatTemplate.innerHTML = `
     .btn--share:hover svg { transform: rotate(-20deg) scale(1.2); }
     .btn--star:hover svg  { transform: rotate(20deg)  scale(1.2); }
     .btn--comment:hover svg { transform: rotate(-20deg) scale(1.2); }
-    .btn--theme:hover svg { transform: rotate(20deg) scale(1.2); }
 
     @keyframes menuBtnWiggle {
       0%   { transform: scale(1.08) rotate(0deg); }
@@ -283,11 +268,7 @@ chatTemplate.innerHTML = `
         left: -52px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: -38px;
-        left: -80px;
-      }
-      #chatActionMenuButton:checked + .actions-menu > .btn--theme {
-        top: 12px;
+        top: -5px;
         left: -85px;
       }
     }
@@ -321,11 +302,7 @@ chatTemplate.innerHTML = `
         left: -45px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: -32px;
-        left: -70px;
-      }
-      #chatActionMenuButton:checked + .actions-menu > .btn--theme {
-        top: 10px;
+        top: -5px;
         left: -75px;
       }
     }
@@ -348,25 +325,12 @@ chatTemplate.innerHTML = `
         <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l7-7V5a2 2 0 0 0-2-2Zm-5 14v-5h5l-5 5Z" />
       </svg>
     </button>
-    <button id="themeToggleButton" class="btn btn--theme" data-tooltip="テーマを切り替え" data-tooltip-placement="left">
-      <!-- Sun icon -->
-      <svg id="themeIconSun" viewBox="0 0 24 24" style="display: none;">
-        <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5ZM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1Zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1ZM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1Zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1ZM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58Zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06Zm1.06-12.37a.996.996 0 0 0-1.41 0l-1.06 1.06a.996.996 0 1 0 1.41 1.41l1.06-1.06a.996.996 0 0 0 0-1.41ZM7.05 18.36a.996.996 0 0 0-1.41 0l-1.06 1.06a.996.996 0 1 0 1.41 1.41l1.06-1.06a.996.996 0 0 0 0-1.41Z"/>
-      </svg>
-      <!-- Moon icon -->
-      <svg id="themeIconMoon" viewBox="0 0 24 24" style="display: none;">
-        <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1Z"/>
-      </svg>
-    </button>
     <label for="chatActionMenuButton" class="btn btn--menu"><span></span></label>
   </div>
 `;
 
 class ChatActionMenu extends HTMLElement {
   private toggle: HTMLInputElement | null;
-  private themeBtn: HTMLButtonElement | null;
-  private sunIcon: SVGElement | null;
-  private moonIcon: SVGElement | null;
 
   constructor() {
     super();
@@ -374,9 +338,6 @@ class ChatActionMenu extends HTMLElement {
     shadow.appendChild(chatTemplate.content.cloneNode(true));
 
     this.toggle = shadow.querySelector("#chatActionMenuButton") as HTMLInputElement | null;
-    this.themeBtn = shadow.querySelector("#themeToggleButton") as HTMLButtonElement | null;
-    this.sunIcon = shadow.querySelector("#themeIconSun") as SVGElement | null;
-    this.moonIcon = shadow.querySelector("#themeIconMoon") as SVGElement | null;
 
     document.addEventListener("click", (event) => {
       if (this.toggle?.checked && !event.composedPath().includes(this)) {
@@ -384,52 +345,8 @@ class ChatActionMenu extends HTMLElement {
       }
     });
 
-    // テーマ切り替えの初期化
-    this.initThemeToggle();
-
     this.updateTextureContext();
     this.observeTextureContextChanges();
-  }
-
-  private initThemeToggle() {
-    if (!this.themeBtn) return;
-
-    const updateIcons = (theme: "light" | "dark") => {
-      if (this.sunIcon && this.moonIcon) {
-        if (theme === "dark") {
-          this.sunIcon.style.display = "block";
-          this.moonIcon.style.display = "none";
-        } else {
-          this.sunIcon.style.display = "none";
-          this.moonIcon.style.display = "block";
-        }
-      }
-    };
-
-    // 初期状態の設定
-    const currentPreference = getStoredThemePreference();
-    const currentTheme = resolveTheme(currentPreference);
-    updateIcons(currentTheme);
-
-    this.themeBtn.addEventListener("click", () => {
-      const pref = getStoredThemePreference();
-      const nextTheme: "light" | "dark" = resolveTheme(pref) === "dark" ? "light" : "dark";
-      setThemePreference(nextTheme);
-      updateIcons(nextTheme);
-      
-      // 切り替え後、メニューを閉じる
-      if (this.toggle) {
-        this.toggle.checked = false;
-      }
-    });
-
-    // 他の場所でのテーマ変更を監視
-    window.addEventListener("storage", (e) => {
-      if (e.key === "chatcore-theme") {
-        const newTheme = resolveTheme(getStoredThemePreference());
-        updateIcons(newTheme);
-      }
-    });
   }
 
   updateTextureContext() {
