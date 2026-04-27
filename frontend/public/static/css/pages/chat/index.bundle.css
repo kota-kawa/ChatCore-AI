@@ -724,6 +724,134 @@ body.chat-page .chat-share-sns a:hover {
   z-index: 2;
 }
 
+@media (prefers-color-scheme: dark) {
+  body.chat-page {
+    background: #080f1c;
+  }
+
+  .chat-page-shell {
+    background: #080f1c;
+  }
+
+  .chat-page-shell::before {
+    background:
+      radial-gradient(ellipse 1100px 600px at 5% 5%, rgba(25, 195, 125, 0.1), transparent),
+      radial-gradient(ellipse 800px 500px at 95% 10%, rgba(25, 195, 125, 0.07), transparent);
+  }
+
+  /* Model select dark mode: rely on variable-driven colors, fix hardcoded borders */
+  body.chat-page .model-select-trigger {
+    border-color: rgba(148, 163, 184, 0.26) !important;
+  }
+
+  body.chat-page .model-select.is-open .model-select-trigger,
+  body.chat-page .model-select-trigger:focus {
+    border-color: rgba(25, 195, 125, 0.52) !important;
+  }
+
+  body.chat-page .model-select-menu {
+    background: #111827;
+    border-color: rgba(25, 195, 125, 0.24);
+    box-shadow: 0 18px 34px rgba(2, 6, 23, 0.52);
+  }
+
+  body.chat-page .model-select-option {
+    background: rgba(17, 24, 39, 0.94) !important;
+    border-color: rgba(148, 163, 184, 0.16) !important;
+    color: var(--text-dark, #e5e7eb) !important;
+  }
+
+  body.chat-page .model-select-option:hover {
+    background: rgba(25, 195, 125, 0.12) !important;
+    border-color: rgba(25, 195, 125, 0.34) !important;
+  }
+
+  body.chat-page .model-select-option + .model-select-option {
+    margin-top: 0.4rem;
+  }
+
+  /* Modal overlay & surfaces for dark mode */
+  body.chat-page {
+    --chat-modal-surface-bg:
+      radial-gradient(circle at top left, rgba(25, 195, 125, 0.1), transparent 34%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.98) 0%, rgba(12, 18, 30, 0.98) 100%);
+    --chat-modal-header-bg: linear-gradient(135deg, rgba(15, 122, 81, 0.2) 0%, rgba(25, 195, 125, 0.1) 44%, rgba(17, 24, 39, 0.65) 100%);
+    --chat-modal-header-border: rgba(25, 195, 125, 0.22);
+    --chat-modal-border: rgba(25, 195, 125, 0.26);
+    --chat-modal-shadow:
+      var(--shadow-xl, 0 24px 56px rgba(2, 6, 23, 0.6)),
+      0 12px 30px rgba(2, 6, 23, 0.4);
+  }
+
+  body.chat-page .new-prompt-modal,
+  body.chat-page .chat-share-modal,
+  body.chat-page #io-modal,
+  body.chat-page #taskEditModal.custom-modal {
+    background:
+      radial-gradient(130% 110% at 50% 0%, rgba(25, 195, 125, 0.14), transparent 54%),
+      linear-gradient(180deg, rgba(2, 6, 18, 0.55) 0%, rgba(2, 6, 18, 0.8) 100%);
+  }
+
+  body.chat-page .new-prompt-modal-content::before,
+  body.chat-page .io-modal-content::before,
+  body.chat-page .custom-modal-dialog::before,
+  body.chat-page .chat-share-modal__content::before {
+    background: linear-gradient(180deg, rgba(25, 195, 125, 0.08), rgba(25, 195, 125, 0));
+  }
+
+  body.chat-page .custom-modal-title {
+    color: #a7f3d0;
+  }
+
+  body.chat-page .custom-form-label {
+    color: #6ee7b7;
+  }
+
+  body.chat-page .custom-form-control {
+    background: rgba(15, 23, 42, 0.94);
+    border-color: rgba(148, 163, 184, 0.22);
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  body.chat-page .custom-form-control::placeholder {
+    color: rgba(148, 163, 184, 0.52);
+  }
+
+  body.chat-page .custom-form-control:focus {
+    border-color: rgba(25, 195, 125, 0.48);
+    background: rgba(17, 24, 39, 1);
+  }
+
+  body.chat-page .custom-form-text {
+    color: #9ca3af;
+  }
+
+  body.chat-page .chat-share-modal__desc {
+    color: #9ca3af;
+  }
+
+  body.chat-page #chat-share-link-input {
+    background: rgba(15, 23, 42, 0.94);
+    border-color: rgba(148, 163, 184, 0.22);
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  body.chat-page #chat-share-link-input:focus {
+    border-color: rgba(25, 195, 125, 0.4);
+    background: rgba(17, 24, 39, 1);
+  }
+
+  body.chat-page .chat-share-sns a {
+    background: rgba(17, 24, 39, 0.9);
+    border-color: rgba(148, 163, 184, 0.22);
+  }
+
+  body.chat-page .chat-share-sns a:hover {
+    background: rgba(22, 33, 54, 0.96);
+    border-color: rgba(25, 195, 125, 0.32);
+  }
+}
+
 @media (max-width: 576px) {
   .chat-page-shell {
     padding: 0;

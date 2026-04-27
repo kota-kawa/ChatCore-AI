@@ -190,6 +190,8 @@
   :root {
     --text-dark: #e5e7eb;
     --text-secondary: #9ca3af;
+    --success-strong: #34d399;
+    --success-color: #4ade80;
     --text-light: #f9fafb;
     --surface-primary: #0f172a;
     --surface-secondary: #111827;

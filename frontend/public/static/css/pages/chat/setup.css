@@ -1102,3 +1102,157 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     max-height: 185px;
   }
 }
+
+/* ===== Dark Mode ===== */
+@media (prefers-color-scheme: dark) {
+  /* Form inputs */
+  .setup-form textarea,
+  .setup-form select {
+    background: rgba(15, 23, 42, 0.95);
+    border-color: rgba(148, 163, 184, 0.22);
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  .setup-form textarea::placeholder {
+    color: rgba(148, 163, 184, 0.6);
+  }
+
+  .setup-form textarea:focus,
+  .setup-form select:focus {
+    background: rgba(17, 24, 39, 1);
+    border-color: rgba(25, 195, 125, 0.52);
+  }
+
+  /* Model select trigger */
+  .model-select-trigger {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    color: var(--text-dark, #e5e7eb) !important;
+  }
+
+  .model-select-trigger::after {
+    border-color: rgba(148, 163, 184, 0.7);
+  }
+
+  .model-select.is-open .model-select-trigger,
+  .model-select-trigger:focus {
+    background: rgba(17, 24, 39, 1) !important;
+    border-color: rgba(25, 195, 125, 0.52) !important;
+  }
+
+  /* Model select dropdown */
+  .model-select-menu {
+    background: #0f172a;
+    border-color: rgba(25, 195, 125, 0.22);
+    box-shadow: 0 18px 34px rgba(2, 6, 23, 0.52);
+  }
+
+  .model-select-option {
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  .model-select-option:hover {
+    background: rgba(25, 195, 125, 0.12);
+    border-color: rgba(25, 195, 125, 0.3);
+  }
+
+  /* Prompt cards */
+  .prompt-card {
+    background: rgba(17, 24, 39, 0.88);
+    border-color: rgba(25, 195, 125, 0.18);
+    color: var(--text-dark, #e5e7eb);
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+  }
+
+  .prompt-card:hover {
+    background: rgba(22, 33, 54, 0.96);
+    border-color: rgba(25, 195, 125, 0.44);
+    box-shadow: 0 16px 32px rgba(2, 6, 23, 0.4);
+  }
+
+  .task-header {
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  /* Save mode toggle */
+  .chat-save-mode-toggle {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.92)),
+      rgba(15, 23, 42, 0.94);
+    border-color: rgba(148, 163, 184, 0.24);
+    color: #a7f3d0;
+    box-shadow:
+      0 10px 24px rgba(2, 6, 23, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .chat-save-mode-toggle:hover {
+    border-color: rgba(25, 195, 125, 0.38);
+    box-shadow:
+      0 14px 28px rgba(25, 195, 125, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .chat-save-mode-toggle.is-active {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(30, 27, 20, 0.96), rgba(20, 18, 14, 0.92)),
+      rgba(20, 18, 14, 0.94);
+    border-color: rgba(180, 83, 9, 0.36);
+    color: #fcd34d;
+  }
+
+  .chat-save-mode-feedback.is-visible {
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(25, 195, 125, 0.24);
+    color: #6ee7b7;
+  }
+
+  .chat-save-mode-feedback.is-visible.is-active {
+    background: rgba(20, 14, 6, 0.92);
+    border-color: rgba(180, 83, 9, 0.3);
+    color: #fcd34d;
+  }
+
+  /* Task detail modal sections */
+  .task-detail-section {
+    background: rgba(17, 24, 39, 0.88);
+    border-color: rgba(25, 195, 125, 0.18);
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.24);
+  }
+
+  .task-detail-section-title {
+    color: var(--success-strong, #34d399);
+  }
+
+  .task-detail-section-body {
+    color: var(--text-dark, #e5e7eb);
+  }
+
+  /* Task detail modal header */
+  .task-detail-modal-header {
+    background: linear-gradient(135deg, rgba(15, 122, 81, 0.2) 0%, rgba(25, 195, 125, 0.1) 44%, rgba(17, 24, 39, 0.7) 100%);
+    border-color: rgba(25, 195, 125, 0.22);
+  }
+
+  .task-detail-modal-eyebrow {
+    color: #34d399;
+  }
+
+  .task-detail-modal-close {
+    background: rgba(17, 24, 39, 0.92);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: #34d399;
+  }
+
+  .task-detail-modal-close:hover {
+    border-color: rgba(25, 195, 125, 0.44);
+    box-shadow: 0 10px 18px rgba(2, 6, 23, 0.28);
+  }
+
+  /* IO modal */
+  .io-modal-content {
+    background: linear-gradient(145deg, #111827 0%, #0d1b2e 100%);
+    border-color: rgba(25, 195, 125, 0.26);
+    box-shadow: 0 30px 60px rgba(2, 6, 23, 0.55);
+  }
+}
