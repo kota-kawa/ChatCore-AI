@@ -223,12 +223,16 @@ function ChatMessageListComponent({
                 </div>
               )}
             </div>
+            {/* 実際のメッセージと同じアクション欄を配置して高さを合わせる */}
+            <div className="message-actions" style={{ visibility: "hidden", pointerEvents: "none" }}>
+              <div className="copy-btn"><i className="bi bi-clipboard"></i></div>
+            </div>
           </div>
         </div>
 
         <div className="chat-message-row">
           <div className="message-wrapper bot-message-wrapper">
-            <div className="chat-launch-placeholder" style={{ margin: 0, width: "100%", maxWidth: "none", background: "none", border: "none", boxShadow: "none", padding: "0.5rem 0" }}>
+            <div className="chat-launch-placeholder" style={{ margin: 0, width: "100%", maxWidth: "none", background: "none", border: "none", boxShadow: "none", padding: "0.25rem 0" }}>
               <div className="chat-launch-placeholder__meta" style={{ marginTop: 0 }}>
                 <div className="chat-launch-placeholder__pulse" aria-hidden="true">
                   <span></span>
