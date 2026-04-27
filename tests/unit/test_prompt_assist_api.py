@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from blueprints.chat.tasks import prompt_assist
+from blueprints.chat.tasks import ai_agent, prompt_assist
 from services.llm import LlmProviderError
 from tests.helpers.request_helpers import build_request
 
@@ -12,6 +12,15 @@ def make_request(json_body, session=None):
     return build_request(
         method="POST",
         path="/api/prompt-assist",
+        json_body=json_body,
+        session=session,
+    )
+
+
+def make_ai_agent_request(json_body, session=None):
+    return build_request(
+        method="POST",
+        path="/api/ai-agent",
         json_body=json_body,
         session=session,
     )
@@ -70,6 +79,54 @@ class PromptAssistApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["suggested_fields"]["title"], "丁寧なメール返信テンプレート")
         self.assertEqual(payload["model"], "openai/gpt-oss-120b")
+
+    def test_ai_agent_returns_gpt_oss_120b_response_for_guest(self):
+        request = make_ai_agent_request(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "このプロンプトを短く改善して",
+                    }
+                ]
+            },
+            session={},
+        )
+
+        with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)) as mock_limits:
+            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch("blueprints.chat.tasks.get_llm_response", return_value="改善案です。") as mock_llm:
+                    response = asyncio.run(ai_agent(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["response"], "改善案です。")
+        self.assertEqual(payload["model"], "openai/gpt-oss-120b")
+        self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
+        self.assertTrue(mock_limits.call_args.args[1].startswith("guest:"))
+
+    def test_ai_agent_returns_429_when_daily_quota_exceeded(self):
+        request = make_ai_agent_request(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "相談です",
+                    }
+                ]
+            },
+            session={"user_id": 1},
+        )
+
+        with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
+            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(False, 0, 300)):
+                with patch("blueprints.chat.tasks.get_llm_response") as mock_llm:
+                    response = asyncio.run(ai_agent(request))
+
+        self.assertEqual(response.status_code, 429)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertIn("上限", payload["error"])
+        mock_llm.assert_not_called()
 
     def test_prompt_assist_returns_429_when_daily_quota_exceeded(self):
         request = make_request(

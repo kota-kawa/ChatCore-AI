@@ -107,6 +107,15 @@ class PromptAssistRequest(RequestPayloadModel):
     fields: PromptAssistFields = Field(default_factory=PromptAssistFields)
 
 
+class AiAgentMessage(RequestPayloadModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class AiAgentRequest(RequestPayloadModel):
+    messages: list[AiAgentMessage] = Field(min_length=1, max_length=20)
+
+
 class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: NonEmptyStr

@@ -1,8 +1,16 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
+import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
+
 type Message = {
   sender: "user" | "assistant";
   text: string;
+};
+
+type AiAgentResponse = {
+  response?: string;
+  model?: string;
+  error?: string;
 };
 
 const QUICK_PROMPTS = [
@@ -23,19 +31,47 @@ export function MiniChat() {
     if (!trimmedInput || isGenerating) return;
 
     const userMessage: Message = { sender: "user", text: trimmedInput };
-    setMessages((prev) => [...prev, userMessage]);
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
     setInput("");
     setIsGenerating(true);
 
-    // Mock AI response for now
-    setTimeout(() => {
+    try {
+      const { payload } = await fetchJsonOrThrow<AiAgentResponse>(
+        "/api/ai-agent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: nextMessages.map((message) => ({
+              role: message.sender,
+              content: message.text,
+            })),
+          }),
+        },
+        {
+          defaultMessage: "AIエージェントの応答生成に失敗しました。",
+        }
+      );
+
       const assistantMessage: Message = {
         sender: "assistant",
-        text: "内容を確認しました。目的、対象読者、出力形式を1つずつ足すと、共有しやすいプロンプトになります。"
+        text: payload.response?.trim() || "応答を取得できませんでした。もう一度試してください。",
       };
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      const assistantMessage: Message = {
+        sender: "assistant",
+        text: error instanceof Error
+          ? error.message
+          : "AIエージェントの応答生成に失敗しました。",
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
       setIsGenerating(false);
-    }, 1000);
+    }
   };
 
   useEffect(() => {

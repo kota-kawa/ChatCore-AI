@@ -3,6 +3,7 @@ import "../styles/bootstrap-compat.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
+import "../scripts/core/csrf";
 import type { AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";

@@ -14,9 +14,12 @@ from services.async_utils import run_blocking
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
 from services.llm import (
+    GPT_OSS_120B_MODEL,
     LlmAuthenticationError,
+    LlmConfigurationError,
     LlmRateLimitError,
     LlmServiceError,
+    get_llm_response,
     is_retryable_llm_error,
 )
 from services.llm_daily_limit import (
@@ -28,6 +31,7 @@ from services.llm_daily_limit import (
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
+    AiAgentRequest,
     DeleteTaskRequest,
     EditTaskRequest,
     PromptAssistRequest,
@@ -41,12 +45,27 @@ from services.web import (
     validate_payload_model,
 )
 
-from . import chat_bp
+from . import chat_bp, get_session_id
 
 logger = logging.getLogger(__name__)
 PROMPT_ASSIST_RATE_WINDOW_SECONDS = 300
 PROMPT_ASSIST_PER_IP_LIMIT = 20
 PROMPT_ASSIST_PER_USER_LIMIT = 30
+AI_AGENT_RATE_WINDOW_SECONDS = 300
+AI_AGENT_PER_IP_LIMIT = 30
+AI_AGENT_PER_ACTOR_LIMIT = 40
+
+AI_AGENT_SYSTEM_PROMPT = """
+あなたは ChatCore の全ページ共通AIエージェントです。
+ユーザーの作業を短く、実用的に支援してください。
+
+応答ルール:
+- 日本語で自然に答える。
+- まず結論や次の一手を示す。
+- 必要な場合だけ箇条書きを使う。
+- 長すぎる前置きやAIらしい定型句は避ける。
+- 画面操作やプロンプト作成の相談では、具体的な文案や改善案を出す。
+""".strip()
 
 
 def _resolve_auth_limit_service(
@@ -106,6 +125,57 @@ def _consume_prompt_assist_limits(
             ),
         )
     return True, None
+
+
+def _consume_ai_agent_limits(
+    request: Request,
+    actor_key: str,
+    *,
+    auth_limit_service: AuthLimitService | None = None,
+) -> tuple[bool, str | None]:
+    client_ip = get_request_client_ip(request)
+    allowed, _, retry_after = consume_rate_limit(
+        "ai_agent:ip",
+        client_ip,
+        limit=AI_AGENT_PER_IP_LIMIT,
+        window_seconds=AI_AGENT_RATE_WINDOW_SECONDS,
+        service=auth_limit_service,
+    )
+    if not allowed:
+        return (
+            False,
+            (
+                "AIエージェントの試行回数が多すぎます。"
+                f"{retry_after}秒ほど待ってから再試行してください。"
+            ),
+        )
+
+    allowed, _, retry_after = consume_rate_limit(
+        "ai_agent:actor",
+        actor_key,
+        limit=AI_AGENT_PER_ACTOR_LIMIT,
+        window_seconds=AI_AGENT_RATE_WINDOW_SECONDS,
+        service=auth_limit_service,
+    )
+    if not allowed:
+        return (
+            False,
+            (
+                "AIエージェントの試行回数が多すぎます。"
+                f"{retry_after}秒ほど待ってから再試行してください。"
+            ),
+        )
+    return True, None
+
+
+def _build_ai_agent_messages(payload: AiAgentRequest) -> list[dict[str, str]]:
+    recent_messages = payload.messages[-12:]
+    conversation_messages = [{"role": "system", "content": AI_AGENT_SYSTEM_PROMPT}]
+    conversation_messages.extend(
+        {"role": message.role, "content": message.content}
+        for message in recent_messages
+    )
+    return conversation_messages
 
 
 def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
@@ -608,4 +678,101 @@ async def prompt_assist(
         return log_and_internal_server_error(
             logger,
             "Failed to handle prompt assist request.",
+        )
+
+
+@chat_bp.post("/api/ai-agent", name="chat.ai_agent")
+async def ai_agent(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
+        request,
+        llm_daily_limit_service,
+    )
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        AiAgentRequest,
+        error_message="AIエージェントリクエストが不正です。",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    user_id = request.session.get("user_id")
+    actor_key = f"user:{user_id}" if user_id else f"guest:{get_session_id(request.session)}"
+    can_access, limit_message = await run_blocking(
+        _consume_ai_agent_limits,
+        request,
+        actor_key,
+        auth_limit_service=resolved_auth_limit_service,
+    )
+    if not can_access:
+        return jsonify_rate_limited(
+            limit_message or "試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_message,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+        )
+
+    can_access_llm, _, daily_limit = await run_blocking(
+        consume_llm_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
+    if not can_access_llm:
+        return jsonify_rate_limited(
+            (
+                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
+        )
+
+    try:
+        response_text = await run_blocking(
+            get_llm_response,
+            _build_ai_agent_messages(payload),
+            GPT_OSS_120B_MODEL,
+        )
+        return jsonify(
+            {
+                "response": response_text or "",
+                "model": GPT_OSS_120B_MODEL,
+            }
+        )
+    except LlmRateLimitError as exc:
+        return jsonify_rate_limited(
+            "AIエージェントの呼び出しが混み合っています。時間をおいて再試行してください。",
+            retry_after=(
+                exc.retry_after_seconds
+                if exc.retry_after_seconds is not None
+                else DEFAULT_RETRY_AFTER_SECONDS
+            ),
+        )
+    except (LlmAuthenticationError, LlmConfigurationError):
+        logger.exception("AI agent failed due to LLM authentication/configuration issue.")
+        return jsonify(
+            {"error": "AIエージェントの設定エラーが発生しました。管理者に連絡してください。"},
+            status_code=502,
+        )
+    except LlmServiceError as exc:
+        logger.exception("Failed to generate AI agent response.")
+        retryable = is_retryable_llm_error(exc)
+        return jsonify(
+            {
+                "error": "AIエージェントの応答生成に失敗しました。時間をおいて再試行してください。",
+                "retryable": retryable,
+            },
+            status_code=502,
+        )
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to handle AI agent request.",
         )
