@@ -872,14 +872,44 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .bookmark-btn.bookmarked {
-  color: var(--ps-bookmark);
-  background: var(--ps-bookmark-tint);
+  color: #ffffff;
+  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+  box-shadow: 0 4px 12px rgba(142, 68, 173, 0.35);
+}
+
+.prompt-share-page .bookmark-btn.bookmarked i {
+  color: #ffffff !important;
+  font-family: "bootstrap-icons" !important;
 }
 
 .prompt-share-page .like-btn.liked {
   color: #ffffff;
-  background: linear-gradient(135deg, var(--ps-like-strong) 0%, var(--ps-like) 100%);
-  box-shadow: 0 12px 24px var(--ps-like-shadow);
+  background: linear-gradient(135deg, #e74c3c 0%, #ff7675 100%);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.35);
+}
+
+.prompt-share-page .like-btn.liked i {
+  color: #ffffff !important;
+  font-family: "bootstrap-icons" !important;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] .like-btn.liked {
+  background: rgba(231, 76, 60, 0.25);
+  color: #ff7675;
+  box-shadow: none;
+}
+[data-theme="dark"] .like-btn.liked i {
+  color: #ff7675 !important;
+}
+
+[data-theme="dark"] .bookmark-btn.bookmarked {
+  background: rgba(142, 68, 173, 0.25);
+  color: #dcdde1;
+  box-shadow: none;
+}
+[data-theme="dark"] .bookmark-btn.bookmarked i {
+  color: #a29bfe !important;
 }
 
 .prompt-share-page .meatball-menu {
@@ -2428,30 +2458,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   --ps-button-shadow-color: rgba(56, 111, 172, 0.18);
 }
 
-.prompt-share-page .prompt-action-btn.like-btn.liked {
-  --ps-button-base: var(--ps-like-strong);
-  --ps-button-accent: var(--ps-like);
-  --ps-button-shadow-color: var(--ps-like-shadow);
-  color: #ffffff;
-  background:
-    var(--cc-button-sheen),
-    linear-gradient(135deg, var(--ps-like-strong) 0%, var(--ps-like) 100%);
-}
-
-.prompt-share-page .prompt-action-btn.bookmark-btn.bookmarked {
-  --ps-button-base: color-mix(in srgb, var(--ps-bookmark) 90%, white);
-  --ps-button-accent: color-mix(in srgb, var(--ps-bookmark-strong) 92%, white);
-  --ps-button-shadow-color: var(--ps-bookmark-shadow);
-  color: #ffffff;
-  background:
-    var(--cc-button-sheen),
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--ps-bookmark) 90%, white) 0%,
-      color-mix(in srgb, var(--ps-bookmark-strong) 92%, white) 100%
-    );
-}
-
 
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
@@ -2708,16 +2714,6 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 [data-theme="dark"] .prompt-action-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #f9fafb;
-}
-
-[data-theme="dark"] .like-btn.liked {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.15);
-}
-
-[data-theme="dark"] .bookmark-btn.bookmarked {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.15);
 }
 
 [data-theme="dark"] .post-modal-content {
