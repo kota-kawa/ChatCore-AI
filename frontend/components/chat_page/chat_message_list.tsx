@@ -204,6 +204,14 @@ function ChatMessageListComponent({
   );
 
   if (isChatLaunching) {
+    // 実際のチャット開始後に表示されるのと同じ形式のフルメッセージを組み立てる
+    const fullDisplayContent = [
+      launchingTaskName ? `【タスク】${launchingTaskName}` : "",
+      setupInfo ? `【状況・作業環境】${setupInfo}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     return (
       <div
         className="chat-messages scroll-pb-24"
@@ -215,8 +223,8 @@ function ChatMessageListComponent({
         <div className="chat-message-row chat-message-row--first">
           <div className="message-wrapper user-message-wrapper">
             <div className="user-message">
-              {hasLaunchSetupInfo && setupInfo ? (
-                <UserMessageHtml text={setupInfo} />
+              {fullDisplayContent ? (
+                <UserMessageHtml text={fullDisplayContent} />
               ) : (
                 <div className="chat-launch-placeholder__title">
                   {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
