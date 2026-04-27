@@ -381,22 +381,6 @@ export default function PromptSharePage() {
     [getModalElement]
   );
 
-  const triggerNewPromptIconRotation = useCallback(() => {
-    const icon = promptNewButtonIconRef.current;
-    if (!icon) return;
-    icon.classList.remove("rotating");
-    void icon.offsetWidth;
-    icon.classList.add("rotating");
-  }, []);
-
-  const triggerNewPromptButtonLaunch = useCallback(() => {
-    const button = promptNewButtonRef.current;
-    if (!button) return;
-    button.classList.remove("launching");
-    void button.offsetWidth;
-    button.classList.add("launching");
-  }, []);
-
   const resetPostModalState = useCallback(() => {
     setPromptPostStatus("", "info");
     setIsPostSubmitting(false);
@@ -408,17 +392,16 @@ export default function PromptSharePage() {
       if (activeModalRef.current !== modal) {
         return false;
       }
+
       setActiveModal(null);
       if (modal === "post") {
         resetPostModalState();
-        if (options?.rotateTrigger) {
-          triggerNewPromptIconRotation();
-        }
       }
       return true;
     },
-    [resetPostModalState, triggerNewPromptIconRotation]
-  );
+    [resetPostModalState]
+    );
+
 
   const openModal = useCallback((modal: Exclude<ModalKey, null>, preferredElement?: HTMLElement | null) => {
     previousFocusedElementRef.current =
@@ -802,11 +785,9 @@ export default function PromptSharePage() {
       return;
     }
 
-    triggerNewPromptButtonLaunch();
-    triggerNewPromptIconRotation();
     setPromptPostStatus("カテゴリやタイトルを軽く入れてから AI 補助を使うと、提案が安定します。", "info");
     openModal("post", promptPostTitleInputRef.current);
-  }, [isLoggedIn, openModal, setPromptPostStatus, triggerNewPromptButtonLaunch, triggerNewPromptIconRotation]);
+  }, [isLoggedIn, openModal, setPromptPostStatus]);
 
   const handleCategoryClick = useCallback(
     (category: string) => {
@@ -1039,34 +1020,6 @@ export default function PromptSharePage() {
 
     void loadPrompts();
   }, [countVisiblePrompts, loadPrompts, toPromptRecords]);
-
-  useEffect(() => {
-    const icon = promptNewButtonIconRef.current;
-    if (!icon) {
-      return;
-    }
-    const handleAnimationEnd = () => {
-      icon.classList.remove("rotating");
-    };
-    icon.addEventListener("animationend", handleAnimationEnd);
-    return () => {
-      icon.removeEventListener("animationend", handleAnimationEnd);
-    };
-  }, []);
-
-  useEffect(() => {
-    const button = promptNewButtonRef.current;
-    if (!button) {
-      return;
-    }
-    const handleAnimationEnd = () => {
-      button.classList.remove("launching");
-    };
-    button.addEventListener("animationend", handleAnimationEnd);
-    return () => {
-      button.removeEventListener("animationend", handleAnimationEnd);
-    };
-  }, []);
 
   useEffect(() => {
     if (promptType !== "image") {
