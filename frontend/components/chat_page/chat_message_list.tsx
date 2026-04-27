@@ -220,35 +220,23 @@ function ChatMessageListComponent({
         aria-busy="true"
         aria-live="polite"
       >
+        {/* ユーザーメッセージの再現 */}
         <div className="chat-message-row chat-message-row--first">
           <div className="message-wrapper user-message-wrapper">
             <div className="user-message">
-              {fullDisplayContent ? (
-                <UserMessageHtml text={fullDisplayContent} />
-              ) : (
-                <div className="chat-launch-placeholder__title">
-                  {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
-                </div>
-              )}
+              <UserMessageHtml text={fullDisplayContent || "チャットを準備しています..."} />
             </div>
-            {/* 実際のメッセージと同じアクション欄を配置して高さを合わせる */}
-            <div className="message-actions" style={{ visibility: "hidden", pointerEvents: "none" }}>
+            <div className="message-actions" style={{ visibility: "hidden" }}>
               <div className="copy-btn"><i className="bi bi-clipboard"></i></div>
             </div>
           </div>
         </div>
 
+        {/* ボットの「考え中」状態の再現 */}
         <div className="chat-message-row">
-          <div className="message-wrapper bot-message-wrapper">
-            <div className="chat-launch-placeholder" style={{ margin: 0, width: "100%", maxWidth: "none", background: "none", border: "none", boxShadow: "none", padding: "0.25rem 0" }}>
-              <div className="chat-launch-placeholder__meta" style={{ marginTop: 0 }}>
-                <div className="chat-launch-placeholder__pulse" aria-hidden="true">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <div className="chat-launch-placeholder__eyebrow" style={{ marginLeft: "auto" }}>Preparing Chat</div>
-              </div>
+          <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
+            <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
+              <ThinkingConstellation />
             </div>
           </div>
         </div>
