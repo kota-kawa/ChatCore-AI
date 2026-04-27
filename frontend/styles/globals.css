@@ -914,7 +914,7 @@ a.cc-texture-btn:active {
 
 .global-ai-agent-modal .mini-chat-message--typing .mini-chat-text-wrapper {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.3rem;
   min-width: 66px;
   min-height: 38px;
@@ -937,14 +937,78 @@ a.cc-texture-btn:active {
 }
 
 .global-ai-agent-modal .mini-chat-status-text {
+  display: block;
   font-size: 0.82rem;
+  font-weight: 700;
   color: rgba(26, 115, 232, 0.8);
   animation: miniChatStatusFade 0.3s ease-in;
+}
+
+.global-ai-agent-modal .mini-chat-progress {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 180px;
+  max-width: 100%;
+}
+
+.global-ai-agent-modal .mini-chat-progress-list {
+  display: grid;
+  gap: 0.34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.global-ai-agent-modal .mini-chat-progress-step {
+  position: relative;
+  padding-left: 1.12rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.global-ai-agent-modal .mini-chat-progress-step::before {
+  content: "";
+  position: absolute;
+  top: 0.43em;
+  left: 0;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: rgba(26, 115, 232, 0.22);
+}
+
+.global-ai-agent-modal .mini-chat-progress-step.is-complete::before {
+  background: #1a73e8;
+  box-shadow: inset 0 0 0 2px #ffffff;
+}
+
+.global-ai-agent-modal .mini-chat-progress-step.is-current {
+  color: #172033;
+  font-weight: 700;
+}
+
+.global-ai-agent-modal .mini-chat-progress-step.is-current::before {
+  background: #1a73e8;
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.14);
+  animation: miniChatProgressPulse 1.2s ease-in-out infinite;
 }
 
 @keyframes miniChatStatusFade {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes miniChatProgressPulse {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
 }
 
 .global-ai-agent-modal .mini-chat-input-area {
@@ -1255,6 +1319,28 @@ a.cc-texture-btn:active {
   color: rgba(96, 165, 250, 0.85);
 }
 
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-progress-step {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-progress-step.is-current {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-progress-step::before {
+  background: rgba(96, 165, 250, 0.24);
+}
+
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-progress-step.is-complete::before {
+  background: #60a5fa;
+  box-shadow: inset 0 0 0 2px #1e293b;
+}
+
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-progress-step.is-current::before {
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.16);
+}
+
 [data-theme="dark"] .global-ai-agent-modal .modal-close-btn,
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-placeholder,
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-action-btn {
@@ -1403,7 +1489,8 @@ a.cc-texture-btn:active {
   .global-ai-agent-modal .mini-chat-suggestion,
   .global-ai-agent-modal .mini-chat-send-btn,
   .global-ai-agent-modal .mini-chat-action-btn,
-  .global-ai-agent-modal .mini-chat-typing-dot {
+  .global-ai-agent-modal .mini-chat-typing-dot,
+  .global-ai-agent-modal .mini-chat-progress-step.is-current::before {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -1420,6 +1507,10 @@ a.cc-texture-btn:active {
   }
 
   .global-ai-agent-modal .mini-chat-typing-dot {
+    animation: none;
+  }
+
+  .global-ai-agent-modal .mini-chat-progress-step.is-current::before {
     animation: none;
   }
 }

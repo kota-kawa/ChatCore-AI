@@ -770,6 +770,7 @@ async def ai_agent(
             current_page = payload.current_page or ""
             rag_context = ""
 
+            yield _ai_agent_sse("progress", {"message": "依頼内容を確認中..."})
             intent = await run_blocking(classify_intent, last_user_message, current_page)
 
             if intent == "action":

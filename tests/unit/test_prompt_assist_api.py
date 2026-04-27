@@ -26,6 +26,25 @@ async def _collect_sse_done(response) -> dict:
     return {}
 
 
+async def _collect_sse_events(response) -> list[tuple[str, dict]]:
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk if isinstance(chunk, bytes) else chunk.encode("utf-8")
+
+    events = []
+    for block in body.decode("utf-8").split("\n\n"):
+        event_type = "message"
+        data = ""
+        for line in block.strip().split("\n"):
+            if line.startswith("event: "):
+                event_type = line[7:].strip()
+            elif line.startswith("data: "):
+                data = line[6:].strip()
+        if data:
+            events.append((event_type, json.loads(data)))
+    return events
+
+
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -127,6 +146,35 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertEqual(payload["model"], "openai/gpt-oss-120b")
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
         self.assertTrue(mock_limits.call_args.args[1].startswith("guest:"))
+
+    def test_ai_agent_streams_progress_before_done(self):
+        request = make_ai_agent_request(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "相談です",
+                    }
+                ]
+            },
+            session={},
+        )
+
+        async def _run():
+            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
+                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                    with patch("blueprints.chat.tasks.classify_intent", return_value="direct"):
+                        with patch("blueprints.chat.tasks.get_llm_response", return_value="回答です。"):
+                            response = await ai_agent(request)
+                            events = await _collect_sse_events(response)
+            return response, events
+
+        response, events = asyncio.run(_run())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(events[0], ("progress", {"message": "依頼内容を確認中..."}))
+        self.assertIn(("progress", {"message": "回答を生成中..."}), events)
+        self.assertEqual(events[-1][0], "done")
 
     def test_ai_agent_returns_429_when_daily_quota_exceeded(self):
         request = make_ai_agent_request(

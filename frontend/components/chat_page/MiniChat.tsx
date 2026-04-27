@@ -26,6 +26,29 @@ type AiAgentSseEvent =
   | { type: "action_plan"; description: string; steps: ActionStep[] }
   | { type: "error"; message: string; retryable?: boolean; retry_after?: number };
 
+function parseSseBlock(block: string): AiAgentSseEvent | null {
+  if (!block.trim()) return null;
+  let eventType = "message";
+  const dataLines: string[] = [];
+
+  for (const rawLine of block.split(/\r?\n/)) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith("event:")) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (!dataLines.length) return null;
+  try {
+    const parsed = JSON.parse(dataLines.join("\n"));
+    return { type: eventType, ...parsed } as AiAgentSseEvent;
+  } catch {
+    return null;
+  }
+}
+
 async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEvent> {
   if (!response.body) throw new Error("レスポンスボディがありません。");
   const reader = response.body.getReader();
@@ -41,22 +64,14 @@ async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEven
     buffer = blocks.pop() ?? "";
 
     for (const block of blocks) {
-      if (!block.trim()) continue;
-      let eventType = "message";
-      let dataLine = "";
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
-        else if (line.startsWith("data: ")) dataLine = line.slice(6).trim();
-      }
-      if (!dataLine) continue;
-      try {
-        const parsed = JSON.parse(dataLine);
-        yield { type: eventType, ...parsed } as AiAgentSseEvent;
-      } catch {
-        // ignore malformed JSON
-      }
+      const event = parseSseBlock(block);
+      if (event) yield event;
     }
   }
+
+  buffer += decoder.decode();
+  const trailingEvent = parseSseBlock(buffer);
+  if (trailingEvent) yield trailingEvent;
 }
 
 const QUICK_PROMPTS = [
@@ -103,15 +118,26 @@ const ACTION_LABELS: Record<ActionStep["action"], string> = {
   scroll: "スクロール",
 };
 
+const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
+
 export function MiniChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [progressSteps, setProgressSteps] = useState<string[]>([]);
   const [executingIdx, setExecutingIdx] = useState<number | null>(null);
   const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const trimmedInput = input.trim();
+  const currentProgressText = statusText ?? progressSteps[progressSteps.length - 1] ?? null;
+
+  const appendProgressStep = (message: string) => {
+    setStatusText(message);
+    setProgressSteps((prev) => (
+      prev[prev.length - 1] === message ? prev : [...prev, message]
+    ));
+  };
 
   const handleSend = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -122,7 +148,8 @@ export function MiniChat() {
     setMessages(nextMessages);
     setInput("");
     setIsGenerating(true);
-    setStatusText(null);
+    setStatusText(INITIAL_PROGRESS_MESSAGE);
+    setProgressSteps([INITIAL_PROGRESS_MESSAGE]);
 
     try {
       const response = await fetch("/api/ai-agent", {
@@ -143,7 +170,7 @@ export function MiniChat() {
 
       for await (const event of readSseStream(response)) {
         if (event.type === "progress") {
-          setStatusText(event.message);
+          appendProgressStep(event.message);
         } else if (event.type === "done") {
           assistantText = event.response.trim() || assistantText;
           break;
@@ -169,6 +196,7 @@ export function MiniChat() {
     } finally {
       setIsGenerating(false);
       setStatusText(null);
+      setProgressSteps([]);
     }
   };
 
@@ -186,7 +214,7 @@ export function MiniChat() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isGenerating]);
+  }, [messages, isGenerating, statusText, progressSteps.length]);
 
   return (
     <div className="mini-chat-container">
@@ -261,8 +289,24 @@ export function MiniChat() {
               <i className="bi bi-stars"></i>
             </span>
             <div className="mini-chat-text-wrapper">
-              {statusText ? (
-                <span className="mini-chat-status-text">{statusText}</span>
+              {currentProgressText ? (
+                <div className="mini-chat-progress" role="status">
+                  <span className="mini-chat-status-text">{currentProgressText}</span>
+                  {progressSteps.length > 0 ? (
+                    <ol className="mini-chat-progress-list" aria-label="AIエージェントの進捗">
+                      {progressSteps.map((step, stepIndex) => (
+                        <li
+                          key={`${step}-${stepIndex}`}
+                          className={`mini-chat-progress-step ${
+                            stepIndex === progressSteps.length - 1 ? "is-current" : "is-complete"
+                          }`}
+                        >
+                          {step}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </div>
               ) : (
                 <>
                   <span className="mini-chat-typing-dot"></span>
