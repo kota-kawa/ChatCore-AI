@@ -16,30 +16,30 @@ from dotenv import load_dotenv
 load_dotenv()
 load_dotenv(".env.local", override=True)
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request  # noqa: E402
 
-from blueprints.chat import cleanup_ephemeral_chats
-from services.auth_limits import AuthLimitService
-from services.chat_generation import ChatGenerationService
-from services.background_executor import (
+from blueprints.chat import cleanup_ephemeral_chats  # noqa: E402
+from services.auth_limits import AuthLimitService  # noqa: E402
+from services.chat_generation import ChatGenerationService  # noqa: E402
+from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
     submit_background_task,
 )
-from services.db import close_db_pool
-from services.default_tasks import ensure_default_tasks_seeded
-from services.default_shared_prompts import ensure_default_shared_prompts
-from services.health import get_liveness_status, get_readiness_status
-from services.llm_daily_limit import LlmDailyLimitService
-from services.logging_config import configure_logging
-from services.csrf import get_or_create_csrf_token
-from services.request_context import RequestContextMiddleware
-from services.runtime_config import (
+from services.db import close_db_pool  # noqa: E402
+from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
+from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
+from services.health import get_liveness_status, get_readiness_status  # noqa: E402
+from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
+from services.logging_config import configure_logging  # noqa: E402
+from services.csrf import get_or_create_csrf_token  # noqa: E402
+from services.request_context import RequestContextMiddleware  # noqa: E402
+from services.runtime_config import (  # noqa: E402
     get_session_same_site,
     get_session_secret_key,
     is_production_env,
 )
-from services.session_middleware import PermanentSessionMiddleware
-from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify
+from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
+from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.

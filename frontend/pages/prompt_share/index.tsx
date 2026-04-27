@@ -1992,6 +1992,7 @@ export default function PromptSharePage() {
           id="openPostModal"
           className="new-prompt-btn ai-agent-btn"
           aria-label="AI エージェントを起動"
+          aria-expanded={isAiAgentModalOpen}
           data-tooltip="AI エージェントを起動"
           data-tooltip-placement="right"
           type="button"

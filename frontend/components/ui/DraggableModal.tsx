@@ -22,9 +22,23 @@ export function DraggableModal({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const modalRef = useRef<HTMLDivElement>(null);
 
+  const clampPosition = useCallback((nextPosition: { x: number; y: number }) => {
+    const modal = modalRef.current;
+    const modalWidth = modal?.offsetWidth || 360;
+    const modalHeight = modal?.offsetHeight || 520;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - modalWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - modalHeight - margin);
+
+    return {
+      x: Math.min(Math.max(nextPosition.x, margin), maxX),
+      y: Math.min(Math.max(nextPosition.y, margin), maxY),
+    };
+  }, []);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(".modal-close-btn")) return;
-    
+
     setIsDragging(true);
     setDragOffset({
       x: e.clientX - position.x,
@@ -35,13 +49,13 @@ export function DraggableModal({
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (isDragging) {
-        setPosition({
+        setPosition(clampPosition({
           x: e.clientX - dragOffset.x,
           y: e.clientY - dragOffset.y,
-        });
+        }));
       }
     },
-    [isDragging, dragOffset]
+    [isDragging, dragOffset, clampPosition]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -62,12 +76,30 @@ export function DraggableModal({
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const keepModalInViewport = () => {
+      setPosition((current) => clampPosition(current));
+    };
+
+    keepModalInViewport();
+    window.addEventListener("resize", keepModalInViewport);
+
+    return () => {
+      window.removeEventListener("resize", keepModalInViewport);
+    };
+  }, [isOpen, clampPosition]);
+
   if (!isOpen) return null;
 
   return (
     <div
       ref={modalRef}
       className="ai-agent-modal"
+      role="dialog"
+      aria-modal="false"
+      aria-label={title || "AI エージェント"}
       style={{
         position: "fixed",
         left: `${position.x}px`,
@@ -78,7 +110,7 @@ export function DraggableModal({
     >
       <div className="ai-agent-modal-header" onMouseDown={handleMouseDown} style={{ cursor: "grab" }}>
         <span className="ai-agent-modal-title">{title}</span>
-        <button className="modal-close-btn" onClick={onClose}>
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="AIエージェントを閉じる">
           <i className="bi bi-x-lg"></i>
         </button>
       </div>
