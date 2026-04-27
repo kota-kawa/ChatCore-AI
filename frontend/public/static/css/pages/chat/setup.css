@@ -1212,6 +1212,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: #fcd34d;
 }
 
+[data-theme="dark"] .chat-save-mode-toggle__check {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .chat-save-mode-toggle.is-active .chat-save-mode-toggle__check {
+  color: #ffffff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+}
+
 /* Task detail modal sections */
 [data-theme="dark"] .task-detail-section {
   background: rgba(17, 24, 39, 0.94);
