@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
+import MarkdownContent from "../MarkdownContent";
+
 type ActionStep = {
   action: "click" | "input" | "focus" | "scroll";
   selector: string;
@@ -216,7 +218,11 @@ export function MiniChat() {
               <i className={`bi ${msg.sender === "user" ? "bi-person" : "bi-stars"}`}></i>
             </span>
             <div className="mini-chat-text-wrapper">
-              <div className="mini-chat-text">{msg.text}</div>
+              {msg.sender === "assistant" ? (
+                <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
+              ) : (
+                <div className="mini-chat-text">{msg.text}</div>
+              )}
               {msg.actionPlan && (
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
