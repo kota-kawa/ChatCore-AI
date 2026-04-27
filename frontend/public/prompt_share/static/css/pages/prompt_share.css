@@ -1,6 +1,19 @@
 @import url('../base/base.css');
 @import url('../../../../static/css/components/prompt_assist.css');
 
+.bi {
+  display: inline-block;
+  font-family: "bootstrap-icons" !important;
+  font-style: normal;
+  font-weight: normal !important;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  vertical-align: -.125em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body.prompt-share-page,
 .prompt-share-page {
   --ps-bg: #f8f9fa;
@@ -815,6 +828,18 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .prompt-share-page .prompt-action-btn i,
 .prompt-share-page .meatball-menu i {
   font-size: 1.15rem;
+  display: inline-block;
+  font-family: "bootstrap-icons" !important;
+  font-style: normal;
+  font-weight: normal !important;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  vertical-align: -.125em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .prompt-share-page .prompt-action-btn:hover {
