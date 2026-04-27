@@ -33,6 +33,7 @@ from services.llm_daily_limit import (
 )
 from services.code_search import search_codebase
 from services.manual_rag import needs_manual_search, search_manual
+from services.page_context import get_page_context, is_page_specific_query
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -759,8 +760,15 @@ async def ai_agent(
 
             rag_context = ""
             if needs_manual_search(last_user_message):
-                yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
-                rag_context = await run_blocking(search_manual, last_user_message)
+                current_page = payload.current_page or ""
+
+                if current_page and is_page_specific_query(last_user_message):
+                    yield _ai_agent_sse("progress", {"message": "現在のページを確認中..."})
+                    rag_context = await run_blocking(get_page_context, current_page)
+
+                if not rag_context:
+                    yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
+                    rag_context = await run_blocking(search_manual, last_user_message)
 
                 if not rag_context:
                     yield _ai_agent_sse("progress", {"message": "コードを探索中..."})

@@ -74,6 +74,7 @@ export function MiniChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: nextMessages.map((m) => ({ role: m.sender, content: m.text })),
+          current_page: typeof window !== "undefined" ? window.location.pathname : null,
         }),
       });
 

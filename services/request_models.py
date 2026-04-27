@@ -114,6 +114,7 @@ class AiAgentMessage(RequestPayloadModel):
 
 class AiAgentRequest(RequestPayloadModel):
     messages: list[AiAgentMessage] = Field(min_length=1, max_length=20)
+    current_page: str | None = Field(default=None, max_length=256)
 
 
 class SharedPromptCreateRequest(RequestPayloadModel):
