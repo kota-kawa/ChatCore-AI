@@ -800,6 +800,17 @@ a.cc-texture-btn:active {
   animation-delay: 0.28s;
 }
 
+.global-ai-agent-modal .mini-chat-status-text {
+  font-size: 0.82rem;
+  color: rgba(26, 115, 232, 0.8);
+  animation: miniChatStatusFade 0.3s ease-in;
+}
+
+@keyframes miniChatStatusFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .global-ai-agent-modal .mini-chat-input-area {
   display: flex;
   align-items: center;
@@ -974,6 +985,10 @@ a.cc-texture-btn:active {
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-avatar {
   background: rgba(96, 165, 250, 0.14);
   color: #93c5fd;
+}
+
+[data-theme="dark"] .global-ai-agent-modal .mini-chat-status-text {
+  color: rgba(96, 165, 250, 0.85);
 }
 
 [data-theme="dark"] .global-ai-agent-modal .modal-close-btn,

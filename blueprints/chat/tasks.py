@@ -1,7 +1,10 @@
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import Depends, Request
+from starlette.responses import StreamingResponse
 
 from services.auth_limits import (
     AuthLimitService,
@@ -28,7 +31,7 @@ from services.llm_daily_limit import (
     get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
-from services.manual_rag import search_manual
+from services.manual_rag import needs_manual_search, search_manual
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -167,6 +170,11 @@ def _consume_ai_agent_limits(
             ),
         )
     return True, None
+
+
+def _ai_agent_sse(event: str, payload: dict[str, Any]) -> bytes:
+    body = json.dumps(payload, ensure_ascii=False)
+    return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
 
 
 def _build_ai_agent_messages(
@@ -741,50 +749,48 @@ async def ai_agent(
             retry_after=get_seconds_until_daily_reset(),
         )
 
-    try:
-        last_user_message = next(
-            (m.content for m in reversed(payload.messages) if m.role == "user"),
-            "",
-        )
-        rag_context = await run_blocking(search_manual, last_user_message)
-        response_text = await run_blocking(
-            get_llm_response,
-            _build_ai_agent_messages(payload, rag_context),
-            GPT_OSS_120B_MODEL,
-        )
-        return jsonify(
-            {
-                "response": response_text or "",
-                "model": GPT_OSS_120B_MODEL,
-            }
-        )
-    except LlmRateLimitError as exc:
-        return jsonify_rate_limited(
-            "AIエージェントの呼び出しが混み合っています。時間をおいて再試行してください。",
-            retry_after=(
-                exc.retry_after_seconds
-                if exc.retry_after_seconds is not None
-                else DEFAULT_RETRY_AFTER_SECONDS
-            ),
-        )
-    except (LlmAuthenticationError, LlmConfigurationError):
-        logger.exception("AI agent failed due to LLM authentication/configuration issue.")
-        return jsonify(
-            {"error": "AIエージェントの設定エラーが発生しました。管理者に連絡してください。"},
-            status_code=502,
-        )
-    except LlmServiceError as exc:
-        logger.exception("Failed to generate AI agent response.")
-        retryable = is_retryable_llm_error(exc)
-        return jsonify(
-            {
-                "error": "AIエージェントの応答生成に失敗しました。時間をおいて再試行してください。",
-                "retryable": retryable,
-            },
-            status_code=502,
-        )
-    except Exception:
-        return log_and_internal_server_error(
-            logger,
-            "Failed to handle AI agent request.",
-        )
+    async def _stream() -> AsyncIterator[bytes]:
+        try:
+            last_user_message = next(
+                (m.content for m in reversed(payload.messages) if m.role == "user"),
+                "",
+            )
+
+            if needs_manual_search(last_user_message):
+                yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
+                rag_context = await run_blocking(search_manual, last_user_message)
+            else:
+                rag_context = ""
+
+            yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
+            response_text = await run_blocking(
+                get_llm_response,
+                _build_ai_agent_messages(payload, rag_context),
+                GPT_OSS_120B_MODEL,
+            )
+            yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})
+
+        except LlmRateLimitError as exc:
+            retry = exc.retry_after_seconds if exc.retry_after_seconds is not None else DEFAULT_RETRY_AFTER_SECONDS
+            yield _ai_agent_sse("error", {
+                "message": "AIエージェントの呼び出しが混み合っています。時間をおいて再試行してください。",
+                "retry_after": retry,
+            })
+        except (LlmAuthenticationError, LlmConfigurationError):
+            logger.exception("AI agent failed due to LLM authentication/configuration issue.")
+            yield _ai_agent_sse("error", {"message": "AIエージェントの設定エラーが発生しました。管理者に連絡してください。"})
+        except LlmServiceError as exc:
+            logger.exception("Failed to generate AI agent response.")
+            yield _ai_agent_sse("error", {
+                "message": "AIエージェントの応答生成に失敗しました。時間をおいて再試行してください。",
+                "retryable": is_retryable_llm_error(exc),
+            })
+        except Exception:
+            logger.exception("Failed to handle AI agent request.")
+            yield _ai_agent_sse("error", {"message": "予期しないエラーが発生しました。"})
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

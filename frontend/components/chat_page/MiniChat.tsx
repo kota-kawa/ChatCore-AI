@@ -1,17 +1,47 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
-import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
-
 type Message = {
   sender: "user" | "assistant";
   text: string;
 };
 
-type AiAgentResponse = {
-  response?: string;
-  model?: string;
-  error?: string;
-};
+type AiAgentSseEvent =
+  | { type: "progress"; message: string }
+  | { type: "done"; response: string; model: string }
+  | { type: "error"; message: string; retryable?: boolean; retry_after?: number };
+
+async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEvent> {
+  if (!response.body) throw new Error("レスポンスボディがありません。");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      let eventType = "message";
+      let dataLine = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataLine = line.slice(6).trim();
+      }
+      if (!dataLine) continue;
+      try {
+        const parsed = JSON.parse(dataLine);
+        yield { type: eventType, ...parsed } as AiAgentSseEvent;
+      } catch {
+        // ignore malformed JSON
+      }
+    }
+  }
+}
 
 const QUICK_PROMPTS = [
   "このプロンプトを投稿向けに整えて",
@@ -23,6 +53,7 @@ export function MiniChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [statusText, setStatusText] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const trimmedInput = input.trim();
 
@@ -35,42 +66,47 @@ export function MiniChat() {
     setMessages(nextMessages);
     setInput("");
     setIsGenerating(true);
+    setStatusText(null);
 
     try {
-      const { payload } = await fetchJsonOrThrow<AiAgentResponse>(
-        "/api/ai-agent",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: nextMessages.map((message) => ({
-              role: message.sender,
-              content: message.text,
-            })),
-          }),
-        },
-        {
-          defaultMessage: "AIエージェントの応答生成に失敗しました。",
-        }
-      );
+      const response = await fetch("/api/ai-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages.map((m) => ({ role: m.sender, content: m.text })),
+        }),
+      });
 
-      const assistantMessage: Message = {
-        sender: "assistant",
-        text: payload.response?.trim() || "応答を取得できませんでした。もう一度試してください。",
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      if (!response.ok) {
+        throw new Error(`サーバーエラー (${response.status})`);
+      }
+
+      let assistantText = "応答を取得できませんでした。もう一度試してください。";
+
+      for await (const event of readSseStream(response)) {
+        if (event.type === "progress") {
+          setStatusText(event.message);
+        } else if (event.type === "done") {
+          assistantText = event.response.trim() || assistantText;
+          break;
+        } else if (event.type === "error") {
+          assistantText = event.message;
+          break;
+        }
+      }
+
+      setMessages((prev) => [...prev, { sender: "assistant", text: assistantText }]);
     } catch (error) {
-      const assistantMessage: Message = {
-        sender: "assistant",
-        text: error instanceof Error
-          ? error.message
-          : "AIエージェントの応答生成に失敗しました。",
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "assistant",
+          text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
+        },
+      ]);
     } finally {
       setIsGenerating(false);
+      setStatusText(null);
     }
   };
 
@@ -120,9 +156,15 @@ export function MiniChat() {
               <i className="bi bi-stars"></i>
             </span>
             <div className="mini-chat-text-wrapper">
-              <span className="mini-chat-typing-dot"></span>
-              <span className="mini-chat-typing-dot"></span>
-              <span className="mini-chat-typing-dot"></span>
+              {statusText ? (
+                <span className="mini-chat-status-text">{statusText}</span>
+              ) : (
+                <>
+                  <span className="mini-chat-typing-dot"></span>
+                  <span className="mini-chat-typing-dot"></span>
+                  <span className="mini-chat-typing-dot"></span>
+                </>
+              )}
             </div>
           </div>
         ) : null}
