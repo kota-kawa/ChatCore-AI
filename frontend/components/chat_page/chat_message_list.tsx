@@ -165,7 +165,7 @@ function ChatMessageListComponent({
   messages,
 }: ChatMessageListProps) {
   const rowHeight = useDynamicRowHeight({
-    defaultRowHeight: 92,
+    defaultRowHeight: 104,
     key: currentRoomId || "no-room",
   });
 
