@@ -139,6 +139,7 @@ type ChatMessageListProps = {
   chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
   currentRoomId: string | null;
   hasLaunchSetupInfo: boolean;
+  setupInfo?: string;
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
   isChatLaunching: boolean;
@@ -153,6 +154,7 @@ function ChatMessageListComponent({
   chatMessagesRef,
   currentRoomId,
   hasLaunchSetupInfo,
+  setupInfo,
   historyHasMore,
   historyNextBeforeId,
   isChatLaunching,
@@ -163,7 +165,7 @@ function ChatMessageListComponent({
   messages,
 }: ChatMessageListProps) {
   const rowHeight = useDynamicRowHeight({
-    defaultRowHeight: messages.length <= 2 ? 112 : 156,
+    defaultRowHeight: messages.length <= 2 ? 64 : 112,
     key: currentRoomId || "no-room",
   });
 
@@ -216,7 +218,9 @@ function ChatMessageListComponent({
             {launchingTaskName ? `「${launchingTaskName}」のチャットを準備しています` : "チャットを準備しています"}
           </div>
           {hasLaunchSetupInfo && (
-            <p className="chat-launch-placeholder__summary">入力内容をチャットに反映しています。</p>
+            <p className="chat-launch-placeholder__summary">
+              {setupInfo ? setupInfo : "入力内容をチャットに反映しています。"}
+            </p>
           )}
           <div className="chat-launch-placeholder__meta">
             {launchingTaskName && <span className="chat-launch-placeholder__task-pill">タスク選択済み</span>}

@@ -62,28 +62,29 @@ chat-action-menu {
 
 .chat-launch-placeholder {
   position: relative;
-  align-self: stretch;
-  width: min(100%, 760px);
-  margin: 0 auto 1.3rem;
-  padding: 1.25rem 1.35rem 1.2rem;
-  border-radius: var(--radius-2xl, 28px);
+  align-self: flex-end;
+  width: fit-content;
+  min-width: 240px;
+  max-width: min(85%, 720px);
+  margin: 0 0 1.3rem auto;
+  padding: 0.85rem 1.15rem;
+  border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) var(--radius-xs, 4px) var(--radius-lg, 20px);
   border: 1px solid var(--primary-alpha-16, rgba(25, 195, 125, 0.16));
   background:
-    linear-gradient(145deg, rgba(246, 251, 248, 0.98), rgba(255, 255, 255, 0.94)),
-    radial-gradient(circle at top right, var(--primary-alpha-12, rgba(25, 195, 125, 0.12)), transparent 42%);
+    linear-gradient(135deg, #19c37d 0%, #15a86b 100%);
   box-shadow:
-    0 24px 46px -28px rgba(15, 23, 42, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    0 8px 24px -8px rgba(25, 195, 125, 0.35);
   overflow: hidden;
   animation: chatLaunchPlaceholderIn 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #fff;
 }
 
 .chat-launch-placeholder::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.74) 30%, transparent 58%);
-  opacity: 0.7;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.18) 30%, transparent 58%);
+  opacity: 0.6;
   transform: translateX(-120%);
   animation: chatLaunchPlaceholderSheen 1.8s ease-in-out infinite;
   pointer-events: none;
@@ -101,26 +102,26 @@ chat-action-menu {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(15, 122, 81, 0.76);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .chat-launch-placeholder__title {
-  margin-top: 0.45rem;
-  font-size: clamp(1.1rem, 1rem + 0.3vw, 1.36rem);
-  line-height: 1.35;
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  line-height: 1.4;
   font-weight: 700;
-  color: var(--text-dark, #1a1a1a);
+  color: #ffffff;
 }
 
 .chat-launch-placeholder__summary {
-  margin: 0.6rem 0 0;
-  color: var(--text-secondary, #5f6b66);
-  font-size: 0.93rem;
-  line-height: 1.55;
+  margin: 0.35rem 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.88rem;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -128,7 +129,7 @@ chat-action-menu {
 }
 
 .chat-launch-placeholder__meta {
-  margin-top: 0.9rem;
+  margin-top: 0.7rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -138,12 +139,12 @@ chat-action-menu {
 .chat-launch-placeholder__task-pill {
   display: inline-flex;
   align-items: center;
-  padding: 0.38rem 0.7rem;
+  padding: 0.28rem 0.65rem;
   border-radius: var(--radius-full, 999px);
-  background: var(--primary-alpha-12, rgba(25, 195, 125, 0.12));
-  border: 1px solid var(--primary-border, rgba(25, 195, 125, 0.18));
-  color: rgba(15, 122, 81, 0.9);
-  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -155,10 +156,10 @@ chat-action-menu {
 }
 
 .chat-launch-placeholder__pulse span {
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 0.4rem;
+  height: 0.4rem;
   border-radius: var(--radius-full, 999px);
-  background: rgba(25, 195, 125, 0.52);
+  background: rgba(255, 255, 255, 0.75);
   animation: chatLaunchPulse 0.96s ease-in-out infinite;
 }
 

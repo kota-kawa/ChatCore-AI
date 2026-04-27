@@ -272,6 +272,7 @@ function ChatMainSectionComponent() {
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
             hasLaunchSetupInfo={hasLaunchSetupInfo}
+            setupInfo={setupInfo}
             historyHasMore={historyHasMore}
             historyNextBeforeId={historyNextBeforeId}
             isChatLaunching={isChatLaunching}
