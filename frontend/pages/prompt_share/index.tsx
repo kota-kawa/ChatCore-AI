@@ -33,11 +33,7 @@ import {
   PROMPT_SHARE_TEXT,
   PROMPT_SHARE_TITLE
 } from "../../scripts/prompt_share/constants";
-import {
-  getPromptTypeLabel,
-  normalizePromptData,
-  normalizePromptType,
-} from "../../scripts/prompt_share/formatters";
+import { normalizePromptData } from "../../scripts/prompt_share/formatters";
 import {
   readCachedAuthState,
   readPromptCache,
@@ -49,86 +45,28 @@ import type {
   PromptPagination,
   PromptType
 } from "../../scripts/prompt_share/types";
-import { PromptCard, type PromptRecord } from "../../components/prompt_share/prompt_card";
-
-type PromptCategory = {
-  value: string;
-  iconClass: string;
-  label: string;
-};
-
-type ModalKey = "post" | "detail" | "share" | null;
-
-type PromptFeedback = {
-  message: string;
-  variant: "empty" | "error";
-};
-
-type PromptPostStatusVariant = "info" | "success" | "error";
-
-type PromptPostStatus = {
-  message: string;
-  variant: PromptPostStatusVariant;
-};
-
-const SEARCH_RESULTS_PER_PAGE = 20;
-
-const PROMPT_CATEGORIES: PromptCategory[] = [
-  { value: "all", iconClass: "bi bi-grid", label: "全て" },
-  { value: "恋愛", iconClass: "bi bi-heart-fill", label: "恋愛" },
-  { value: "勉強", iconClass: "bi bi-book", label: "勉強" },
-  { value: "趣味", iconClass: "bi bi-camera", label: "趣味" },
-  { value: "仕事", iconClass: "bi bi-briefcase", label: "仕事" },
-  { value: "その他", iconClass: "bi bi-stars", label: "その他" },
-  { value: "スポーツ", iconClass: "bi bi-trophy", label: "スポーツ" },
-  { value: "音楽", iconClass: "bi bi-music-note", label: "音楽" },
-  { value: "旅行", iconClass: "bi bi-geo-alt", label: "旅行" },
-  { value: "グルメ", iconClass: "bi bi-shop", label: "グルメ" }
-];
-
-const PROMPT_CATEGORY_OPTIONS = [
-  "未選択",
-  "恋愛",
-  "勉強",
-  "趣味",
-  "仕事",
-  "その他",
-  "スポーツ",
-  "音楽",
-  "旅行",
-  "グルメ"
-];
-
-function getCategoryCountLabel(category: string) {
-  return category === "all" ? "公開プロンプト" : category;
-}
-
-function getCategoryTitle(category: string) {
-  return category === "all" ? "全てのプロンプト" : `${category} のプロンプト`;
-}
-
-function getPromptId(prompt: PromptData | null | undefined) {
-  if (!prompt) return "";
-  if (prompt.id === undefined || prompt.id === null) return "";
-  return String(prompt.id);
-}
-
-function getModalFocusableElements(modal: HTMLElement) {
-  const selector = [
-    "a[href]",
-    "area[href]",
-    "button:not([disabled])",
-    "input:not([disabled])",
-    "select:not([disabled])",
-    "textarea:not([disabled])",
-    "[tabindex]:not([tabindex='-1'])"
-  ].join(", ");
-
-  return Array.from(modal.querySelectorAll<HTMLElement>(selector)).filter((element) => {
-    const style = window.getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
-  });
-}
+import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
+import { PromptShareDetailModal } from "../../components/prompt_share/prompt_share_detail_modal";
+import {
+  PROMPT_CATEGORIES,
+  PROMPT_CATEGORY_OPTIONS,
+  SEARCH_RESULTS_PER_PAGE
+} from "../../components/prompt_share/prompt_share_page_constants";
+import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
+import type {
+  ModalKey,
+  PromptFeedback,
+  PromptPostStatus,
+  PromptPostStatusVariant
+} from "../../components/prompt_share/prompt_share_page_types";
+import {
+  getCategoryCountLabel,
+  getCategoryTitle,
+  getModalFocusableElements,
+  getPromptId
+} from "../../components/prompt_share/prompt_share_page_utils";
+import { PromptShareShareModal } from "../../components/prompt_share/prompt_share_share_modal";
+import type { PromptRecord } from "../../components/prompt_share/prompt_card";
 
 export default function PromptSharePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -642,6 +580,48 @@ export default function PromptSharePage() {
     },
     [buildPromptShareUrl, setPromptShareStatus]
   );
+
+  const handleCopyShareLink = useCallback(async () => {
+    const currentShareUrl = shareUrl.trim();
+    if (!currentShareUrl) {
+      setPromptShareStatus("先に共有リンクを表示してください。", true);
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(currentShareUrl);
+      setPromptShareStatus("リンクをコピーしました。");
+    } catch (error) {
+      setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
+    }
+  }, [setPromptShareStatus, shareUrl]);
+
+  const handleNativeShare = useCallback(async () => {
+    const currentShareUrl = shareUrl.trim();
+    if (!currentShareUrl) {
+      setPromptShareStatus("先に共有リンクを表示してください。", true);
+      return;
+    }
+
+    if (typeof navigator.share !== "function") {
+      setPromptShareStatus("このブラウザはネイティブ共有に対応していません。", true);
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: PROMPT_SHARE_TITLE,
+        text: PROMPT_SHARE_TEXT,
+        url: currentShareUrl
+      });
+      setPromptShareStatus("共有シートを開きました。");
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+      setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
+    }
+  }, [setPromptShareStatus, shareUrl]);
 
   const applyDefaultAuthorName = useCallback((user?: { username?: string } | null) => {
     const username = String(user?.username || "").trim();
@@ -1193,799 +1173,115 @@ export default function PromptSharePage() {
         <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_share.css" />
       </Head>
 
-      <div className="prompt-share-page">
-        <action-menu></action-menu>
+      <PromptSharePageLayout
+        authUiReady={authUiReady}
+        isLoggedIn={isLoggedIn}
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        onSearchInputKeyDown={handleSearchInputKeyDown}
+        onSearch={() => {
+          void searchPrompts();
+        }}
+        onOpenComposerModal={openComposerModal}
+        categories={PROMPT_CATEGORIES}
+        selectedCategory={selectedCategory}
+        onCategoryClick={handleCategoryClick}
+        selectedCategoryTitle={selectedCategoryTitle}
+        promptCountMeta={promptCountMeta}
+        hasMoreSearchResults={hasMoreSearchResults}
+        isLoadingMoreSearchResults={isLoadingMoreSearchResults}
+        onLoadMoreSearchResults={() => {
+          void loadMoreSearchResults();
+        }}
+        isPromptsLoading={isPromptsLoading}
+        hasPromptFeedback={Boolean(promptFeedback)}
+        visiblePrompts={visiblePrompts}
+        feedbackToShow={feedbackToShow}
+        openDropdownPromptId={openDropdownPromptId}
+        likePendingIds={likePendingIds}
+        bookmarkPendingIds={bookmarkPendingIds}
+        saveToListPendingIds={saveToListPendingIds}
+        onOpenDetail={openPromptDetailModal}
+        onOpenShare={openPromptShareDialog}
+        onToggleDropdown={togglePromptDropdown}
+        onCloseDropdown={closePromptDropdown}
+        onSaveToList={handleSavePromptToList}
+        onToggleLike={handleTogglePromptLike}
+        onToggleBookmark={handleTogglePromptBookmark}
+      >
 
-        <div
-          id="auth-buttons"
-          style={{
-            display: authUiReady && !isLoggedIn ? "" : "none",
-            position: "fixed",
-            top: 10,
-            right: 10,
-            zIndex: "var(--z-floating-controls)"
+        <PromptShareComposerModal
+          isOpen={activeModal === "post"}
+          isPostSubmitting={isPostSubmitting}
+          postModalRef={postModalRef}
+          onClose={() => {
+            closeModal("post", { rotateTrigger: true });
           }}
-        >
-          <button
-            id="login-btn"
-            className="auth-btn"
-            type="button"
-            onClick={() => {
-              window.location.href = "/login";
-            }}
-          >
-            <i className="bi bi-person-circle"></i>
-            <span>ログイン / 登録</span>
-          </button>
-        </div>
+          onSubmit={handlePostSubmit}
+          promptType={promptType}
+          setPromptType={setPromptType}
+          postTitle={postTitle}
+          setPostTitle={setPostTitle}
+          postCategory={postCategory}
+          setPostCategory={setPostCategory}
+          postContent={postContent}
+          setPostContent={setPostContent}
+          postAuthor={postAuthor}
+          setPostAuthor={setPostAuthor}
+          setHasAutoFilledAuthor={setHasAutoFilledAuthor}
+          postAiModel={postAiModel}
+          setPostAiModel={setPostAiModel}
+          guardrailEnabled={guardrailEnabled}
+          setGuardrailEnabled={setGuardrailEnabled}
+          postInputExample={postInputExample}
+          setPostInputExample={setPostInputExample}
+          postOutputExample={postOutputExample}
+          setPostOutputExample={setPostOutputExample}
+          updatePromptFeedbackErrorIfNeeded={updatePromptFeedbackErrorIfNeeded}
+          categoryOptions={PROMPT_CATEGORY_OPTIONS}
+          promptPostStatus={promptPostStatus}
+          promptPostTitleInputRef={promptPostTitleInputRef}
+          promptPostCategorySelectRef={promptPostCategorySelectRef}
+          promptPostContentTextareaRef={promptPostContentTextareaRef}
+          promptPostAuthorInputRef={promptPostAuthorInputRef}
+          promptPostAiModelSelectRef={promptPostAiModelSelectRef}
+          promptPostInputExamplesRef={promptPostInputExamplesRef}
+          promptPostOutputExamplesRef={promptPostOutputExamplesRef}
+          promptImageInputRef={promptImageInputRef}
+          promptAssistRootRef={promptAssistRootRef}
+          promptImagePreviewUrl={promptImagePreviewUrl}
+          promptImagePreviewName={promptImagePreviewName}
+          onReferenceImageChange={handleReferenceImageChange}
+          onClearReferenceImage={clearPromptImageSelection}
+        />
 
-        <user-icon id="userIcon" style={authUiReady && isLoggedIn ? undefined : { display: "none" }}></user-icon>
-
-        <header className="prompts-header" aria-labelledby="promptShareHeroTitle">
-          <div className="prompts-header__inner">
-            <p className="hero-kicker">Prompt Share</p>
-            <h1 id="promptShareHeroTitle" className="hero-title">
-              必要なプロンプトを、すぐ検索。
-            </h1>
-            <p className="hero-description">
-              シンプルな検索で公開プロンプトを見つけて、そのまま保存・共有できます。
-            </p>
-
-            <div className="search-section" role="search" aria-label="プロンプト検索">
-              <div className="search-box">
-                <input
-                  type="text"
-                  id="searchInput"
-                  placeholder="キーワードでプロンプトを検索..."
-                  value={searchInput}
-                  onChange={(event) => {
-                    setSearchInput(event.target.value);
-                  }}
-                  onKeyDown={handleSearchInputKeyDown}
-                />
-                <button
-                  id="searchButton"
-                  type="button"
-                  aria-label="検索を実行する"
-                  data-tooltip="入力したキーワードで検索"
-                  data-tooltip-placement="bottom"
-                  onClick={() => {
-                    void searchPrompts();
-                  }}
-                >
-                  <i className="bi bi-search"></i>
-                </button>
-              </div>
-            </div>
-
-            <div className="hero-actions">
-              <button
-                type="button"
-                id="heroOpenPostModal"
-                className="hero-action hero-action--primary"
-                onClick={openComposerModal}
-              >
-                <i className="bi bi-plus-lg"></i>
-                <span>プロンプトを投稿</span>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main>
-          <section className="categories" aria-labelledby="categories-title">
-            <div className="section-header section-header--compact">
-              <h2 id="categories-title">カテゴリ</h2>
-            </div>
-
-            <div className="category-list">
-              {PROMPT_CATEGORIES.map((category) => (
-                <button
-                  key={category.value}
-                  type="button"
-                  className={`category-card${selectedCategory === category.value ? " active" : ""}`}
-                  data-category={category.value}
-                  onClick={() => {
-                    handleCategoryClick(category.value);
-                  }}
-                >
-                  <i className={category.iconClass}></i>
-                  <span>{category.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section id="prompt-feed-section" className="prompts-list" aria-labelledby="selected-category-title">
-            <div className="section-header prompts-list-header section-header--compact">
-              <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
-            </div>
-
-            <div className="prompt-toolbar">
-              <p id="promptCountMeta" className="prompt-count-meta">
-                {promptCountMeta}
-              </p>
-              {hasMoreSearchResults ? (
-                <button
-                  type="button"
-                  className="prompt-load-more"
-                  onClick={() => {
-                    void loadMoreSearchResults();
-                  }}
-                  disabled={isLoadingMoreSearchResults}
-                >
-                  {isLoadingMoreSearchResults ? "読み込み中..." : "さらに読み込む"}
-                </button>
-              ) : null}
-            </div>
-
-            <div id="promptResults"></div>
-
-            <div className="prompt-cards">
-              {isPromptsLoading && visiblePrompts.length === 0 && !promptFeedback ? (
-                <p className="prompt-loading-message">読み込み中...</p>
-              ) : null}
-
-              {feedbackToShow ? (
-                <p className={`prompt-feedback prompt-feedback--${feedbackToShow.variant}`}>
-                  {feedbackToShow.message}
-                </p>
-              ) : null}
-
-              {visiblePrompts.map((prompt) => {
-                const promptId = prompt.clientId;
-                return (
-                  <PromptCard
-                    key={promptId}
-                    prompt={prompt}
-                    isDropdownOpen={openDropdownPromptId === promptId}
-                    isLikePending={likePendingIds.has(promptId)}
-                    isBookmarkPending={bookmarkPendingIds.has(promptId)}
-                    isSaveToListPending={saveToListPendingIds.has(promptId)}
-                    onOpenDetail={openPromptDetailModal}
-                    onOpenShare={openPromptShareDialog}
-                    onToggleDropdown={togglePromptDropdown}
-                    onCloseDropdown={closePromptDropdown}
-                    onSaveToList={handleSavePromptToList}
-                    onToggleLike={handleTogglePromptLike}
-                    onToggleBookmark={handleTogglePromptBookmark}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        </main>
-
-        <div
-          id="postModal"
-          className={`post-modal${activeModal === "post" ? " show" : ""}`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="postModalTitle"
-          aria-hidden={activeModal === "post" ? "false" : "true"}
-          data-submitting={isPostSubmitting ? "true" : "false"}
-          ref={postModalRef}
-        >
-          <div className="post-modal-content post-modal-content--composer" tabIndex={-1}>
-            <button
-              type="button"
-              className="close-btn"
-              aria-label="投稿モーダルを閉じる"
-              onClick={() => {
-                closeModal("post", { rotateTrigger: true });
-              }}
-            >
-              &times;
-            </button>
-
-            <div className="post-modal-scroll">
-              <div className="composer-hero">
-                <div className="composer-hero__copy">
-                  <p className="composer-hero__eyebrow">Prompt Share Composer</p>
-                  <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
-                  <p className="post-modal-lead">
-                    AI 補助を使いながら、公開用の見やすさと使いやすさまでその場で仕上げます。
-                  </p>
-                </div>
-                <div className="composer-hero__chips" aria-hidden="true">
-                  <span>Searchable</span>
-                  <span>Polished</span>
-                  <span>Share Ready</span>
-                </div>
-              </div>
-
-              <form className="post-form" id="postForm" onSubmit={handlePostSubmit}>
-                <section className="composer-section composer-section--primary" aria-labelledby="composerBasicsTitle">
-                  <div className="composer-section__header">
-                    <div>
-                      <p className="composer-section__eyebrow">Basics</p>
-                      <h3 id="composerBasicsTitle">投稿の基本情報</h3>
-                    </div>
-                    <p className="composer-section__description">
-                      まずは投稿タイプとタイトルを決めて、一覧で見つけやすい形に整えます。
-                    </p>
-                  </div>
-
-                  <div className="form-group">
-                    <label>投稿タイプ</label>
-                    <div className="prompt-type-toggle" role="radiogroup" aria-label="投稿タイプを選択">
-                      <label className={`prompt-type-option${promptType === "text" ? " prompt-type-option--active" : ""}`}>
-                        <input
-                          type="radio"
-                          name="prompt-type"
-                          value="text"
-                          checked={promptType === "text"}
-                          onChange={(event) => {
-                            setPromptType(normalizePromptType(event.target.value));
-                          }}
-                        />
-                        <span className="prompt-type-option__icon">
-                          <i className="bi bi-chat-square-text"></i>
-                        </span>
-                        <span className="prompt-type-option__body">
-                          <strong>通常プロンプト</strong>
-                          <small>文章生成、要約、相談、分析など</small>
-                        </span>
-                      </label>
-
-                      <label className={`prompt-type-option${promptType === "image" ? " prompt-type-option--active" : ""}`}>
-                        <input
-                          type="radio"
-                          name="prompt-type"
-                          value="image"
-                          checked={promptType === "image"}
-                          onChange={(event) => {
-                            setPromptType(normalizePromptType(event.target.value));
-                          }}
-                        />
-                        <span className="prompt-type-option__icon">
-                          <i className="bi bi-image"></i>
-                        </span>
-                        <span className="prompt-type-option__body">
-                          <strong>画像生成プロンプト</strong>
-                          <small>Midjourney、Stable Diffusion、Flux など向け</small>
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="composer-field-grid composer-field-grid--two">
-                    <div className="form-group">
-                      <label htmlFor="prompt-title">タイトル</label>
-                      <span className="form-group__hint">用途が伝わる短い名前にすると保存後に探しやすくなります。</span>
-                      <input
-                        type="text"
-                        id="prompt-title"
-                        placeholder="プロンプトのタイトルを入力"
-                        required
-                        ref={promptPostTitleInputRef}
-                        value={postTitle}
-                        onChange={(event) => {
-                          setPostTitle(event.target.value);
-                          updatePromptFeedbackErrorIfNeeded();
-                        }}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="prompt-category">カテゴリ</label>
-                      <span className="form-group__hint">検索や絞り込みに使われるため、目的に近いものを選択してください。</span>
-                      <select
-                        id="prompt-category"
-                        required
-                        ref={promptPostCategorySelectRef}
-                        value={postCategory}
-                        onChange={(event) => {
-                          setPostCategory(event.target.value);
-                          updatePromptFeedbackErrorIfNeeded();
-                        }}
-                      >
-                        {PROMPT_CATEGORY_OPTIONS.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="composer-section composer-section--content" aria-labelledby="composerContentTitle">
-                  <div className="composer-section__header">
-                    <div>
-                      <p className="composer-section__eyebrow">Content</p>
-                      <h3 id="composerContentTitle">プロンプト本文</h3>
-                    </div>
-                    <p className="composer-section__description">
-                      指示文の意図や条件が明確に伝わるように、本文を先にまとめます。
-                    </p>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="prompt-content">プロンプト内容</label>
-                    <span className="form-group__hint">役割、前提条件、出力形式まで書くと再利用しやすくなります。</span>
-                    <textarea
-                      id="prompt-content"
-                      rows={6}
-                      placeholder="具体的なプロンプト内容を入力"
-                      required
-                      ref={promptPostContentTextareaRef}
-                      value={postContent}
-                      onChange={(event) => {
-                        setPostContent(event.target.value);
-                        updatePromptFeedbackErrorIfNeeded();
-                      }}
-                    ></textarea>
-                  </div>
-
-                  <div id="sharedPromptAssistRoot" ref={promptAssistRootRef}></div>
-                  <p
-                    id="promptPostStatus"
-                    className="composer-status"
-                    hidden={!promptPostStatus.message}
-                    data-variant={promptPostStatus.variant}
-                  >
-                    {promptPostStatus.message}
-                  </p>
-                </section>
-
-                <section className="composer-section" aria-labelledby="composerMetaTitle">
-                  <div className="composer-section__header">
-                    <div>
-                      <p className="composer-section__eyebrow">Details</p>
-                      <h3 id="composerMetaTitle">投稿設定</h3>
-                    </div>
-                    <p className="composer-section__description">
-                      投稿者名や使用モデルを添えると、利用者が使いどころを判断しやすくなります。
-                    </p>
-                  </div>
-
-                  <div className="composer-field-grid composer-field-grid--two">
-                    <div className="form-group">
-                      <label htmlFor="prompt-author">投稿者名</label>
-                      <span className="form-group__hint">ニックネームやチーム名など、公開してよい表示名を使ってください。</span>
-                      <input
-                        type="text"
-                        id="prompt-author"
-                        placeholder="ニックネームなど"
-                        required
-                        ref={promptPostAuthorInputRef}
-                        value={postAuthor}
-                        onChange={(event) => {
-                          setPostAuthor(event.target.value);
-                          setHasAutoFilledAuthor(false);
-                          updatePromptFeedbackErrorIfNeeded();
-                        }}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="prompt-ai-model">使用AIモデル（任意）</label>
-                      <span className="form-group__hint">このプロンプトを試したモデルを残すと、再現条件の共有に役立ちます。</span>
-                      <select
-                        id="prompt-ai-model"
-                        ref={promptPostAiModelSelectRef}
-                        value={postAiModel}
-                        onChange={(event) => {
-                          setPostAiModel(event.target.value);
-                          updatePromptFeedbackErrorIfNeeded();
-                        }}
-                      >
-                        <option value="">未設定</option>
-                        <optgroup label="OpenAI">
-                          <option value="ChatGPT (GPT-5.4)">ChatGPT (GPT-5.4)</option>
-                          <option value="ChatGPT (GPT-5.4 mini)">ChatGPT (GPT-5.4 mini)</option>
-                          <option value="ChatGPT (o3)">ChatGPT (o3)</option>
-                          <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
-                        </optgroup>
-                        <optgroup label="Anthropic">
-                          <option value="Claude Opus 4.6">Claude Opus 4.6</option>
-                          <option value="Claude Sonnet 4.6">Claude Sonnet 4.6</option>
-                          <option value="Claude Haiku 4.5">Claude Haiku 4.5</option>
-                          <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
-                        </optgroup>
-                        <optgroup label="Google">
-                          <option value="Gemini 3.1 Pro">Gemini 3.1 Pro</option>
-                          <option value="Gemini 3.1 Flash">Gemini 3.1 Flash</option>
-                          <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
-                        </optgroup>
-                        <optgroup label="Meta">
-                          <option value="Llama 4 Maverick">Llama 4 Maverick</option>
-                          <option value="Llama 4 Scout">Llama 4 Scout</option>
-                        </optgroup>
-                        <optgroup label="DeepSeek">
-                          <option value="DeepSeek-R1">DeepSeek-R1</option>
-                          <option value="DeepSeek-V3">DeepSeek-V3</option>
-                        </optgroup>
-                        <optgroup label="xAI">
-                          <option value="Grok 3">Grok 3</option>
-                        </optgroup>
-                        <optgroup label="画像生成">
-                          <option value="Midjourney">Midjourney</option>
-                          <option value="Stable Diffusion">Stable Diffusion</option>
-                          <option value="FLUX">FLUX</option>
-                          <option value="DALL-E 3">DALL-E 3</option>
-                        </optgroup>
-                        <option value="その他">その他</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div id="imagePromptFields" className="image-prompt-fields" hidden={promptType !== "image"}>
-                    <div className="form-group">
-                      <label htmlFor="prompt-reference-image">作例画像（任意・1枚）</label>
-                      <span className="form-group__hint">画像生成系の投稿では、完成イメージを添えると意図が伝わりやすくなります。</span>
-                      <label className="image-upload-field" htmlFor="prompt-reference-image">
-                        <input
-                          type="file"
-                          id="prompt-reference-image"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
-                          ref={promptImageInputRef}
-                          onChange={handleReferenceImageChange}
-                        />
-                        <span className="image-upload-field__icon">
-                          <i className="bi bi-cloud-arrow-up"></i>
-                        </span>
-                        <span className="image-upload-field__copy">
-                          <strong>画像をアップロード</strong>
-                          <small>PNG / JPG / WebP / GIF、5MBまで、1枚のみ</small>
-                        </span>
-                      </label>
-
-                      <div id="promptImagePreview" className="prompt-image-preview" hidden={!promptImagePreviewUrl}>
-                        <img id="promptImagePreviewImg" src={promptImagePreviewUrl} alt="アップロード画像のプレビュー" />
-                        <div className="prompt-image-preview__meta">
-                          <span id="promptImagePreviewName">{promptImagePreviewName}</span>
-                          <button
-                            type="button"
-                            id="promptImageClearButton"
-                            className="prompt-image-clear-btn"
-                            onClick={() => {
-                              clearPromptImageSelection();
-                            }}
-                          >
-                            <i className="bi bi-x-lg"></i>
-                            <span>画像を外す</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="composer-section" aria-labelledby="composerExamplesTitle">
-                  <div className="composer-section__header">
-                    <div>
-                      <p className="composer-section__eyebrow">Examples</p>
-                      <h3 id="composerExamplesTitle">利用例</h3>
-                    </div>
-                    <p className="composer-section__description">
-                      必須ではありませんが、入力例と出力例があると他のユーザーがそのまま試せます。
-                    </p>
-                  </div>
-
-                  <div className="form-group form-group--toggle">
-                    <label className="composer-toggle" htmlFor="guardrail-checkbox">
-                      <input
-                        type="checkbox"
-                        id="guardrail-checkbox"
-                        checked={guardrailEnabled}
-                        onChange={(event) => {
-                          setGuardrailEnabled(event.target.checked);
-                        }}
-                      />
-                      <span className="composer-toggle__copy">
-                        <strong>入出力例を追加する</strong>
-                        <small>
-                          保存・再利用しやすい投稿にするため、プロンプトの使い方を例で添えます。
-                        </small>
-                      </span>
-                    </label>
-                  </div>
-
-                  <div id="guardrail-fields" style={{ display: guardrailEnabled ? "block" : "none" }}>
-                    <div className="composer-field-grid">
-                      <div className="form-group">
-                        <label htmlFor="prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
-                        <textarea
-                          id="prompt-input-example"
-                          rows={3}
-                          placeholder="例: 夏休みの思い出をテーマにした短いエッセイを書いてください。"
-                          ref={promptPostInputExamplesRef}
-                          value={postInputExample}
-                          onChange={(event) => {
-                            setPostInputExample(event.target.value);
-                            updatePromptFeedbackErrorIfNeeded();
-                          }}
-                        ></textarea>
-                      </div>
-                      <div className="form-group">
-                        <label htmlFor="prompt-output-example">出力例</label>
-                        <textarea
-                          id="prompt-output-example"
-                          rows={3}
-                          placeholder="例: 夏休みのある日、私は家族と一緒に海辺へ出かけました。波の音と潮風に包まれながら、子供の頃の記憶がよみがえり、心が温かくなりました。その日は一生忘れられない、宝物のような時間となりました。"
-                          ref={promptPostOutputExamplesRef}
-                          value={postOutputExample}
-                          onChange={(event) => {
-                            setPostOutputExample(event.target.value);
-                            updatePromptFeedbackErrorIfNeeded();
-                          }}
-                        ></textarea>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <div className="composer-footer">
-                  <p className="composer-footer__note">
-                    入力内容はそのまま保持されます。送信後に一覧へ反映され、他のユーザーから参照できるようになります。
-                  </p>
-                  <button type="submit" className="submit-btn" disabled={isPostSubmitting}>
-                    <i className={`bi ${isPostSubmitting ? "bi-stars" : "bi-upload"}`}></i>
-                    {isPostSubmitting ? " 投稿を準備中..." : " 投稿する"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <div
-          id="promptDetailModal"
-          className={`post-modal${activeModal === "detail" ? " show" : ""}`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modalPromptTitle"
-          aria-hidden={activeModal === "detail" ? "false" : "true"}
-          ref={promptDetailModalRef}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeModal("detail");
-            }
+        <PromptShareDetailModal
+          isOpen={activeModal === "detail"}
+          promptDetailModalRef={promptDetailModalRef}
+          detailPrompt={detailPrompt}
+          promptDetailCloseButtonRef={promptDetailCloseButtonRef}
+          onClose={() => {
+            closeModal("detail");
           }}
-        >
-          <div className="post-modal-content post-modal-content--detail" tabIndex={-1}>
-            <button
-              type="button"
-              className="close-btn"
-              id="closePromptDetailModal"
-              aria-label="詳細モーダルを閉じる"
-              ref={promptDetailCloseButtonRef}
-              onClick={() => {
-                closeModal("detail");
-              }}
-            >
-              &times;
-            </button>
-            <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
+        />
 
-            <div className="modal-content-body">
-              <div className="form-group">
-                <label>
-                  <strong>タイプ:</strong>
-                </label>
-                <p id="modalPromptType">
-                  {detailPrompt ? getPromptTypeLabel(normalizePromptType(detailPrompt.prompt_type)) : ""}
-                </p>
-              </div>
-
-              {detailPrompt?.reference_image_url ? (
-                <div id="modalReferenceImageGroup" className="form-group" style={{ display: "block" }}>
-                  <label>
-                    <strong>作例画像:</strong>
-                  </label>
-                  <div className="modal-reference-image">
-                    <img
-                      id="modalReferenceImage"
-                      src={detailPrompt.reference_image_url}
-                      alt={`${detailPrompt.title} の作例画像`}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="form-group">
-                <label>
-                  <strong>カテゴリ:</strong>
-                </label>
-                <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
-              </div>
-
-              <div className="form-group">
-                <label>
-                  <strong>内容:</strong>
-                </label>
-                <p id="modalPromptContent">{detailPrompt?.content || ""}</p>
-              </div>
-
-              <div className="form-group">
-                <label>
-                  <strong>投稿者:</strong>
-                </label>
-                <p id="modalPromptAuthor">{detailPrompt?.author || ""}</p>
-              </div>
-
-              {detailPrompt?.ai_model ? (
-                <div id="modalAiModelGroup" className="form-group" style={{ display: "block" }}>
-                  <label>
-                    <strong>使用AIモデル:</strong>
-                  </label>
-                  <p id="modalAiModel">{detailPrompt.ai_model}</p>
-                </div>
-              ) : null}
-
-              {detailPrompt?.input_examples ? (
-                <div id="modalInputExamplesGroup" className="form-group" style={{ display: "block" }}>
-                  <label>
-                    <strong>入力例:</strong>
-                  </label>
-                  <p id="modalInputExamples">{detailPrompt.input_examples}</p>
-                </div>
-              ) : null}
-
-              {detailPrompt?.output_examples ? (
-                <div id="modalOutputExamplesGroup" className="form-group" style={{ display: "block" }}>
-                  <label>
-                    <strong>出力例:</strong>
-                  </label>
-                  <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div
-          id="promptShareModal"
-          className={`post-modal prompt-share-modal${activeModal === "share" ? " show" : ""}`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="promptShareModalTitle"
-          aria-hidden={activeModal === "share" ? "false" : "true"}
-          ref={promptShareModalRef}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeModal("share");
-            }
+        <PromptShareShareModal
+          isOpen={activeModal === "share"}
+          promptShareModalRef={promptShareModalRef}
+          onClose={() => {
+            closeModal("share");
           }}
-        >
-          <div className="post-modal-content prompt-share-dialog" tabIndex={-1}>
-            <button
-              type="button"
-              className="prompt-share-dialog__close"
-              id="closePromptShareModal"
-              aria-label="共有モーダルを閉じる"
-              onClick={() => {
-                closeModal("share");
-              }}
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6 16.9 4.29z" />
-              </svg>
-            </button>
+          shareUrl={shareUrl}
+          shareStatus={shareStatus}
+          shareActionLoading={shareActionLoading}
+          promptShareCopyButtonRef={promptShareCopyButtonRef}
+          onCopyLink={handleCopyShareLink}
+          supportsNativeShare={supportsNativeShare}
+          onNativeShare={handleNativeShare}
+          shareSnsLinks={shareSnsLinks}
+        />
 
-            <header className="prompt-share-dialog__header">
-              <h2 id="promptShareModalTitle">プロンプトを共有</h2>
-              <p className="prompt-share-dialog__lead">
-                このプロンプト専用のURLをコピーしたり、そのまま共有できます。
-              </p>
-            </header>
-
-            <div className="prompt-share-dialog__body">
-              <div className="prompt-share-dialog__row">
-                <input
-                  type="text"
-                  id="prompt-share-link-input"
-                  readOnly
-                  placeholder="共有リンクを準備しています"
-                  value={shareUrl}
-                />
-              </div>
-
-              <p
-                id="prompt-share-status"
-                className={`prompt-share-dialog__status${shareStatus.isError ? " prompt-share-dialog__status--error" : ""}`}
-              >
-                {shareStatus.text}
-              </p>
-
-              <div className="prompt-share-dialog__actions">
-                <button
-                  type="button"
-                  id="prompt-share-copy-btn"
-                  className="submit-btn prompt-share-icon-btn"
-                  aria-label="リンクをコピー"
-                  title="リンクをコピー"
-                  ref={promptShareCopyButtonRef}
-                  disabled={shareActionLoading}
-                  onClick={async () => {
-                    const currentShareUrl = shareUrl.trim();
-                    if (!currentShareUrl) {
-                      setPromptShareStatus("先に共有リンクを表示してください。", true);
-                      return;
-                    }
-
-                    try {
-                      await copyTextToClipboard(currentShareUrl);
-                      setPromptShareStatus("リンクをコピーしました。");
-                    } catch (error) {
-                      setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
-                    }
-                  }}
-                >
-                  <i className="bi bi-files" aria-hidden="true"></i>
-                </button>
-
-                {supportsNativeShare ? (
-                  <button
-                    type="button"
-                    id="prompt-share-web-btn"
-                    className="submit-btn prompt-share-icon-btn"
-                    aria-label="端末で共有"
-                    title="端末で共有"
-                    disabled={shareActionLoading}
-                    onClick={async () => {
-                      const currentShareUrl = shareUrl.trim();
-                      if (!currentShareUrl) {
-                        setPromptShareStatus("先に共有リンクを表示してください。", true);
-                        return;
-                      }
-
-                      if (typeof navigator.share !== "function") {
-                        setPromptShareStatus("このブラウザはネイティブ共有に対応していません。", true);
-                        return;
-                      }
-
-                      try {
-                        await navigator.share({
-                          title: PROMPT_SHARE_TITLE,
-                          text: PROMPT_SHARE_TEXT,
-                          url: currentShareUrl
-                        });
-                        setPromptShareStatus("共有シートを開きました。");
-                      } catch (error) {
-                        if (error instanceof Error && error.name === "AbortError") {
-                          return;
-                        }
-                        setPromptShareStatus(error instanceof Error ? error.message : String(error), true);
-                      }
-                    }}
-                  >
-                    <i className="bi bi-box-arrow-up-right" aria-hidden="true"></i>
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="prompt-share-dialog__sns">
-                <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
-                  <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      fill="currentColor"
-                      d="M18.901 1.153h3.68l-8.04 9.188L24 22.847h-7.406l-5.8-7.584-6.63 7.584H.48l8.6-9.83L0 1.154h7.594l5.243 6.932L18.901 1.153Zm-1.291 19.49h2.039L6.486 3.24H4.298L17.61 20.643Z"
-                    ></path>
-                  </svg>
-                  <span>X</span>
-                </a>
-                <a id="prompt-share-sns-line" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.line}>
-                  <i className="bi bi-chat-dots"></i>
-                  <span>LINE</span>
-                </a>
-                <a
-                  id="prompt-share-sns-facebook"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  href={shareSnsLinks.facebook}
-                >
-                  <i className="bi bi-facebook"></i>
-                  <span>Facebook</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
+      </PromptSharePageLayout>
     </>
   );
 }
