@@ -14,6 +14,7 @@ import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from 
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { showToast } from "../scripts/core/toast";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
+import { getStoredThemePreference, setThemePreference, type ThemePreference } from "../scripts/core/theme";
 import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
 import { asId, asRecord, asString } from "../lib/utils";
@@ -26,7 +27,35 @@ import {
 } from "../scripts/user/settings/types";
 import { truncateTitle } from "../scripts/user/settings/utils";
 
-type SettingsSection = "profile" | "prompts" | "prompt-list" | "notifications" | "security";
+type SettingsSection = "profile" | "appearance" | "prompts" | "prompt-list" | "notifications" | "security";
+
+type ThemeOption = {
+  value: ThemePreference;
+  iconClass: string;
+  label: string;
+  description: string;
+};
+
+const THEME_OPTIONS: ThemeOption[] = [
+  {
+    value: "light",
+    iconClass: "bi bi-sun-fill",
+    label: "ライト",
+    description: "明るい背景の固定テーマ"
+  },
+  {
+    value: "dark",
+    iconClass: "bi bi-moon-stars-fill",
+    label: "ダーク",
+    description: "暗い背景の固定テーマ"
+  },
+  {
+    value: "auto",
+    iconClass: "bi bi-circle-half",
+    label: "システムに合わせる",
+    description: "OS の設定に追従して自動切り替え"
+  }
+];
 
 type SettingsNavItem = {
   section: SettingsSection;
@@ -68,6 +97,7 @@ const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
 
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
+  { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
   { section: "prompts", iconClass: "bi bi-shield-lock", label: "プロンプト管理" },
   { section: "prompt-list", iconClass: "bi bi-list-stars", label: "プロンプトリスト" },
   { section: "notifications", iconClass: "bi bi-bell", label: "通知設定" },
@@ -495,6 +525,8 @@ export default function UserSettingsPage() {
   const [editPromptForm, setEditPromptForm] = useState<EditPromptFormState | null>(null);
   const [promptSaving, setPromptSaving] = useState(false);
 
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("auto");
+
   const [passkeySupported, setPasskeySupported] = useState(true);
   const [passkeySupportStatus, setPasskeySupportStatus] = useState(PASSKEY_INITIAL_SUPPORT_TEXT);
   const [passkeys, setPasskeys] = useState<PasskeyRecord[]>([]);
@@ -630,6 +662,8 @@ export default function UserSettingsPage() {
   useEffect(() => {
     document.body.classList.add("settings-page");
 
+    setThemePreferenceState(getStoredThemePreference());
+
     const importCustomElements = async () => {
       await import("../scripts/components/popup_menu");
     };
@@ -708,6 +742,11 @@ export default function UserSettingsPage() {
       void loadPasskeys();
     }
   }, [loadMyPrompts, loadPasskeys, loadPromptList]);
+
+  const handleThemeSelect = useCallback((preference: ThemePreference) => {
+    setThemePreferenceState(preference);
+    setThemePreference(preference);
+  }, []);
 
   const handleProfileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1200,6 +1239,44 @@ export default function UserSettingsPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+
+            <div id="appearance-section" className={`settings-section${isSectionActive("appearance") ? " active" : ""}`}>
+              <div className="settings-card">
+                <h2>外観</h2>
+                <p className="settings-section-lead">
+                  画面のテーマを切り替えます。「システムに合わせる」を選ぶと OS の設定に追従します。
+                </p>
+
+                <div className="theme-options" role="radiogroup" aria-label="テーマ選択">
+                  {THEME_OPTIONS.map((option) => {
+                    const isSelected = themePreference === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={`theme-option${isSelected ? " is-selected" : ""}`}
+                        onClick={() => handleThemeSelect(option.value)}
+                      >
+                        <span className="theme-option__icon" aria-hidden="true">
+                          <i className={option.iconClass}></i>
+                        </span>
+                        <span className="theme-option__body">
+                          <span className="theme-option__label">{option.label}</span>
+                          <span className="theme-option__description">{option.description}</span>
+                        </span>
+                        {isSelected ? (
+                          <span className="theme-option__check" aria-hidden="true">
+                            <i className="bi bi-check-circle-fill"></i>
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

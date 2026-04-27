@@ -4,8 +4,9 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
 import type { AppProps } from "next/app";
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
+import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 
 const appSansFont = Noto_Sans_JP({
   subsets: ["latin"],
@@ -67,6 +68,11 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
 }
 
 export default function App({ Component, pageProps }: AppProps) {
+  useEffect(() => {
+    applyTheme(resolveTheme(getStoredThemePreference()));
+    watchSystemTheme();
+  }, []);
+
   return (
     <div className={appSansFont.variable}>
       <GlobalErrorBoundary>
