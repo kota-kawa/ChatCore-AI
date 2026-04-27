@@ -14,6 +14,7 @@ from services.auth_limits import (
 )
 from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
+from services.agent_capabilities import build_capability_context
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
 from services.llm import (
@@ -194,9 +195,9 @@ def _build_ai_agent_messages(
     rag_context: str = "",
 ) -> list[dict[str, str]]:
     recent_messages = payload.messages[-12:]
-    system_content = AI_AGENT_SYSTEM_PROMPT
+    system_content = f"{AI_AGENT_SYSTEM_PROMPT}\n\n{build_capability_context(payload.current_page or '')}"
     if rag_context:
-        system_content = f"{AI_AGENT_SYSTEM_PROMPT}\n\n{rag_context}"
+        system_content = f"{system_content}\n\n{rag_context}"
     conversation_messages = [{"role": "system", "content": system_content}]
     conversation_messages.extend(
         {"role": message.role, "content": message.content}
@@ -769,6 +770,9 @@ async def ai_agent(
             )
             current_page = payload.current_page or ""
             rag_context = ""
+            dom_context = ""
+            if payload.current_dom:
+                dom_context = f"【現在ブラウザで見えている操作可能要素】\n{payload.current_dom}"
 
             yield _ai_agent_sse("progress", {"message": "依頼内容を確認中..."})
             intent = await run_blocking(classify_intent, last_user_message, current_page)
@@ -776,10 +780,13 @@ async def ai_agent(
             if intent == "action":
                 yield _ai_agent_sse("progress", {"message": "ページを解析中..."})
                 page_ctx = await run_blocking(get_page_context, current_page)
-                if page_ctx:
+                action_context = "\n\n".join(
+                    part for part in (dom_context, page_ctx, build_capability_context(current_page)) if part
+                )
+                if action_context:
                     yield _ai_agent_sse("progress", {"message": "操作手順を生成中..."})
                     action_messages = build_action_messages(
-                        page_ctx,
+                        action_context,
                         [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
                     )
                     response_text = await run_blocking(
@@ -794,7 +801,8 @@ async def ai_agent(
 
             elif intent == "page_info":
                 yield _ai_agent_sse("progress", {"message": "現在のページを確認中..."})
-                rag_context = await run_blocking(get_page_context, current_page)
+                page_context = await run_blocking(get_page_context, current_page)
+                rag_context = "\n\n".join(part for part in (dom_context, page_context) if part)
                 if not rag_context:
                     yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
                     rag_context = await run_blocking(search_manual, last_user_message)

@@ -4,6 +4,8 @@ import logging
 import re
 from pathlib import Path
 
+from services.agent_capabilities import build_capability_context
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -143,7 +145,10 @@ def get_page_context(pathname: str) -> str:
 
     for pattern, page_label, file_specs in _PAGE_MAP:
         if pattern.search(pathname):
-            parts = [f"【現在のページ: {page_label}（{pathname}）のソースコード】"]
+            parts = [
+                build_capability_context(pathname),
+                f"\n【現在のページ: {page_label}（{pathname}）のソースコード抜粋】",
+            ]
             count = 0
             for rel_path, max_lines in file_specs:
                 if count >= MAX_FILES_PER_PAGE:

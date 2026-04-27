@@ -176,6 +176,45 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertIn(("progress", {"message": "回答を生成中..."}), events)
         self.assertEqual(events[-1][0], "done")
 
+    def test_ai_agent_action_plan_uses_current_dom_context(self):
+        request = make_ai_agent_request(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "プロンプトを検索して",
+                    }
+                ],
+                "current_page": "/prompt_share",
+                "current_dom": "1. selector=#searchInput; tag=input; placeholder=キーワードでプロンプトを検索\n"
+                "2. selector=#searchButton; tag=button; aria-label=検索を実行する",
+            },
+            session={},
+        )
+
+        async def _run():
+            with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
+                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                    with patch("blueprints.chat.tasks.classify_intent", return_value="action"):
+                        with patch(
+                            "blueprints.chat.tasks.get_llm_response",
+                            return_value=(
+                                '{"description":"プロンプト検索を実行します",'
+                                '"steps":[{"action":"click","selector":"#searchButton","description":"検索ボタンを押す"}]}'
+                            ),
+                        ) as mock_llm:
+                            response = await ai_agent(request)
+                            payload = await _collect_sse_done(response)
+            return response, payload, mock_llm
+
+        response, payload, mock_llm = asyncio.run(_run())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["description"], "プロンプト検索を実行します")
+        self.assertEqual(payload["steps"][0]["selector"], "#searchButton")
+        self.assertIn("#searchInput", mock_llm.call_args.args[0][0]["content"])
+        self.assertIn("ChatCore 機能カタログ", mock_llm.call_args.args[0][0]["content"])
+
     def test_ai_agent_returns_429_when_daily_quota_exceeded(self):
         request = make_ai_agent_request(
             {
