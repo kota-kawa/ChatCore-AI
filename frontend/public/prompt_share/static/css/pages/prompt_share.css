@@ -2515,3 +2515,222 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     transform: translateY(-50%);
   }
 }
+
+/* ==========================================================================
+   Dark Mode Overrides
+   ========================================================================== */
+
+[data-theme="dark"] body.prompt-share-page,
+[data-theme="dark"] .prompt-share-page {
+  --ps-bg: #0b1220;
+  --ps-surface: #111827;
+  --ps-surface-muted: #1e293b;
+  --ps-text-strong: #f3f4f6;
+  --ps-text-muted: #9ca3af;
+  --ps-border: rgba(148, 163, 184, 0.2);
+  --ps-primary: #3b82f6;
+  --ps-primary-strong: #2563eb;
+  --ps-shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --ps-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --ps-fab-blue-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  --page-scrollbar-track: rgba(15, 23, 42, 0.8);
+  --page-scrollbar-thumb: rgba(59, 130, 246, 0.4);
+  --page-scrollbar-thumb-hover: rgba(59, 130, 246, 0.6);
+}
+
+[data-theme="dark"] .prompts-header {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%),
+    url('prompt_share.webp') center / cover no-repeat;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .prompts-header::before {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+[data-theme="dark"] .search-box {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .search-box input {
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .search-box input::placeholder {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .hero-action {
+  background: #1e293b;
+  color: #ffffff;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .hero-action--primary:hover {
+  background: #334155;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .categories,
+[data-theme="dark"] .prompts-list {
+  background: rgba(17, 24, 39, 0.9);
+  border-color: rgba(148, 163, 184, 0.15);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .categories::before,
+[data-theme="dark"] .prompts-list::before {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent 58%);
+}
+
+[data-theme="dark"] .categories h2,
+[data-theme="dark"] .prompts-list h2 {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .category-card {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e5e7eb;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .category-card i {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .category-card:hover {
+  border-color: #3b82f6;
+  background: #334155;
+}
+
+[data-theme="dark"] .category-card.active {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-color: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .prompt-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .prompt-card h3 {
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .prompt-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .prompt-card__category-pill {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-card__created-at {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .meatball-menu {
+  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .meatball-menu:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .prompt-actions-dropdown {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .dropdown-item {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .dropdown-item:hover {
+  background: #334155;
+}
+
+[data-theme="dark"] .prompt-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .prompt-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .like-btn.liked {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+
+[data-theme="dark"] .bookmark-btn.bookmarked {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+}
+
+[data-theme="dark"] .post-modal-content {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .post-modal-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .close-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .form-label {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .form-control {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f3f4f6;
+}
+
+[data-theme="dark"] .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+[data-theme="dark"] .prompt-load-more {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .prompt-load-more:hover {
+  background: #334155;
+  border-color: #4b5563;
+}
+
+[data-theme="dark"] .prompt-share-page #auth-buttons .auth-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .prompt-share-page #auth-buttons .auth-btn:hover {
+  background: #334155;
+}
