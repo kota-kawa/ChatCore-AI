@@ -28,6 +28,7 @@ from services.llm_daily_limit import (
     get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
+from services.manual_rag import search_manual
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
     AddTaskRequest,
@@ -168,9 +169,15 @@ def _consume_ai_agent_limits(
     return True, None
 
 
-def _build_ai_agent_messages(payload: AiAgentRequest) -> list[dict[str, str]]:
+def _build_ai_agent_messages(
+    payload: AiAgentRequest,
+    rag_context: str = "",
+) -> list[dict[str, str]]:
     recent_messages = payload.messages[-12:]
-    conversation_messages = [{"role": "system", "content": AI_AGENT_SYSTEM_PROMPT}]
+    system_content = AI_AGENT_SYSTEM_PROMPT
+    if rag_context:
+        system_content = f"{AI_AGENT_SYSTEM_PROMPT}\n\n{rag_context}"
+    conversation_messages = [{"role": "system", "content": system_content}]
     conversation_messages.extend(
         {"role": message.role, "content": message.content}
         for message in recent_messages
@@ -735,9 +742,14 @@ async def ai_agent(
         )
 
     try:
+        last_user_message = next(
+            (m.content for m in reversed(payload.messages) if m.role == "user"),
+            "",
+        )
+        rag_context = await run_blocking(search_manual, last_user_message)
         response_text = await run_blocking(
             get_llm_response,
-            _build_ai_agent_messages(payload),
+            _build_ai_agent_messages(payload, rag_context),
             GPT_OSS_120B_MODEL,
         )
         return jsonify(

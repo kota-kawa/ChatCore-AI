@@ -14,3 +14,4 @@ python-dotenv==1.2.1
 openai==2.24.0
 redis==7.2.1
 webauthn==2.7.1
+rank-bm25==0.2.2
