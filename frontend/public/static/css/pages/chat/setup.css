@@ -1222,33 +1222,37 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* Task detail modal sections */
-[data-theme="dark"] .task-detail-section {
-  background: rgba(17, 24, 39, 0.94);
-  border-color: rgba(25, 195, 125, 0.22);
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.32);
+[data-theme="dark"] body.chat-page .task-detail-section {
+  background: rgba(15, 23, 42, 0.65);
+  border-color: rgba(25, 195, 125, 0.35);
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.45);
 }
 
-[data-theme="dark"] .task-detail-section-title {
-  color: #10b981;
+[data-theme="dark"] body.chat-page .task-detail-section-title {
+  color: #34d399;
 }
 
-[data-theme="dark"] .task-detail-section-body {
-  color: #f9fafb;
+[data-theme="dark"] body.chat-page .task-detail-section-body {
+  color: #f1f5f9;
 }
 
 /* Task detail modal header */
-[data-theme="dark"] .task-detail-modal-header {
-  background: linear-gradient(135deg, rgba(15, 122, 81, 0.2) 0%, rgba(25, 195, 125, 0.1) 44%, rgba(17, 24, 39, 0.7) 100%);
-  border-color: rgba(25, 195, 125, 0.22);
+[data-theme="dark"] body.chat-page .task-detail-modal-header {
+  background: linear-gradient(135deg, rgba(15, 122, 81, 0.28) 0%, rgba(25, 195, 125, 0.15) 44%, rgba(17, 24, 39, 0.8) 100%);
+  border-color: rgba(25, 195, 125, 0.35);
 }
 
-[data-theme="dark"] .task-detail-modal-eyebrow {
+[data-theme="dark"] body.chat-page .task-detail-modal-eyebrow {
   color: #6ee7b7;
 }
 
-[data-theme="dark"] .task-detail-modal-close {
-  background: rgba(17, 24, 39, 0.92);
-  border-color: rgba(148, 163, 184, 0.28);
+[data-theme="dark"] body.chat-page .task-detail-modal-title {
+  color: #ffffff;
+}
+
+[data-theme="dark"] body.chat-page .task-detail-modal-close {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(148, 163, 184, 0.35);
   color: #34d399;
 }
 

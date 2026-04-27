@@ -349,3 +349,32 @@ body.prompt-manage-page,
 .prompt-manage-page :where(.edit-btn, .delete-btn, .btn-primary, .btn-close):active:not(:disabled) {
   transform: scale(0.97);
 }
+
+/* Dark Mode Overrides */
+[data-theme="dark"] body.prompt-manage-page,
+[data-theme="dark"] .prompt-manage-page {
+  background: linear-gradient(120deg, var(--ps-light-bg) 0%, #111827 100%);
+  color: var(--ps-text-color);
+}
+
+[data-theme="dark"] .header-bar {
+  border-bottom-color: var(--ps-primary-color);
+}
+
+[data-theme="dark"] .section-title {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-card {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .prompt-card h3 {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .prompt-card:hover {
+  border-color: var(--ps-primary-color);
+}
