@@ -548,6 +548,8 @@ function SetupSectionComponent() {
                 className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
                 aria-pressed={temporaryModeEnabled ? "true" : "false"}
                 aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
+                data-tooltip={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
+                data-tooltip-placement="top"
                 title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
                 onClick={() => {
                   finishPointerDrag();
@@ -591,7 +593,7 @@ function SetupSectionComponent() {
                 type="button"
                 className="setup-send-btn"
                 aria-label="入力内容を送信"
-                data-tooltip="入力内容をそのまま送信"
+                data-tooltip="メッセージを送信"
                 data-tooltip-placement="top"
                 disabled={!canSendSetupMessage}
                 onClick={() => {
@@ -785,6 +787,8 @@ function SetupSectionComponent() {
                       type="button"
                       className="task-detail-toggle"
                       aria-label={`${task.name}の詳細を表示`}
+                      data-tooltip="タスクの詳細を表示"
+                      data-tooltip-placement="top"
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

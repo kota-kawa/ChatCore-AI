@@ -64,7 +64,6 @@ class GlobalTooltip {
     if (!element.isConnected) return false;
     if (element.closest(".cc-tooltip")) return false;
     if (element.getAttribute("aria-hidden") === "true") return false;
-    if (element.matches(":disabled")) return false;
     return element.matches(TOOLTIP_TARGET_SELECTOR);
   }
 
