@@ -31,6 +31,7 @@ from services.llm_daily_limit import (
     get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
+from services.code_search import search_codebase
 from services.manual_rag import needs_manual_search, search_manual
 from services.prompt_assist import create_prompt_assist_payload
 from services.request_models import (
@@ -756,11 +757,14 @@ async def ai_agent(
                 "",
             )
 
+            rag_context = ""
             if needs_manual_search(last_user_message):
                 yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
                 rag_context = await run_blocking(search_manual, last_user_message)
-            else:
-                rag_context = ""
+
+                if not rag_context:
+                    yield _ai_agent_sse("progress", {"message": "コードを探索中..."})
+                    rag_context = await run_blocking(search_codebase, last_user_message)
 
             yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
             response_text = await run_blocking(
