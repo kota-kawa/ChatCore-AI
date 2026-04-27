@@ -48,6 +48,10 @@ type HomePageTaskContextValue = Pick<
   | "openTaskEditModal"
   | "setTaskDetail"
   | "setTasksExpanded"
+  | "isAiAgentModalOpen"
+  | "openAiAgentModal"
+  | "closeAiAgentModal"
+  | "toggleAiAgentModal"
 >;
 
 type HomePageChatContextValue = Pick<
@@ -159,6 +163,10 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       openTaskEditModal: controller.openTaskEditModal,
       setTaskDetail: controller.setTaskDetail,
       setTasksExpanded: controller.setTasksExpanded,
+      isAiAgentModalOpen: controller.isAiAgentModalOpen,
+      openAiAgentModal: controller.openAiAgentModal,
+      closeAiAgentModal: controller.closeAiAgentModal,
+      toggleAiAgentModal: controller.toggleAiAgentModal,
     }),
     [
       controller.tasks,
@@ -179,6 +187,10 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.openTaskEditModal,
       controller.setTaskDetail,
       controller.setTasksExpanded,
+      controller.isAiAgentModalOpen,
+      controller.openAiAgentModal,
+      controller.closeAiAgentModal,
+      controller.toggleAiAgentModal,
     ],
   );
 

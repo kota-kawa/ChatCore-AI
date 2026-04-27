@@ -11,6 +11,7 @@ import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
 import { useHomePageTaskState } from "./use_home_page_task_state";
 import { useHomePageUiState } from "./use_home_page_ui_state";
+import { useHomePageAiAgentState } from "./use_home_page_ai_agent_state";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { isNearBottom } from "../../lib/chat_page/dom";
@@ -208,6 +209,13 @@ export function useHomePageController() {
     shareFacebookUrl,
     supportsNativeShare,
   } = useHomePageShareState();
+
+  const {
+    isAiAgentModalOpen,
+    openAiAgentModal,
+    closeAiAgentModal,
+    toggleAiAgentModal,
+  } = useHomePageAiAgentState();
 
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
@@ -1995,6 +2003,10 @@ export function useHomePageController() {
     closeShareModal,
     copyShareLink,
     shareWithNativeSheet,
-  };
+    isAiAgentModalOpen,
+    openAiAgentModal,
+    closeAiAgentModal,
+    toggleAiAgentModal,
+    };
+    }
 
-}

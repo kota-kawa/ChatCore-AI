@@ -73,6 +73,8 @@ function SetupSectionComponent() {
     toggleTaskOrderEditing,
     closeNewPromptModal,
     openNewPromptModal,
+    isAiAgentModalOpen,
+    toggleAiAgentModal,
     handleTaskDragStart,
     handleTaskDragEnd,
     handleTaskCardLaunch,

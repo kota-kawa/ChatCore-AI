@@ -50,6 +50,8 @@ import type {
   PromptType
 } from "../../scripts/prompt_share/types";
 import { PromptCard, type PromptRecord } from "../../components/prompt_share/prompt_card";
+import { DraggableModal } from "../../components/ui/DraggableModal";
+import { MiniChat } from "../../components/chat_page/MiniChat";
 
 type PromptCategory = {
   value: string;
@@ -134,6 +136,7 @@ export default function PromptSharePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authUiReady, setAuthUiReady] = useState(false);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
+  const [isAiAgentModalOpen, setIsAiAgentModalOpen] = useState(false);
 
   const [searchInput, setSearchInput] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -200,8 +203,6 @@ export default function PromptSharePage() {
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const promptImageInputRef = useRef<HTMLInputElement | null>(null);
-  const promptNewButtonRef = useRef<HTMLButtonElement | null>(null);
-  const promptNewButtonIconRef = useRef<HTMLElement | null>(null);
 
   const promptAssistRootRef = useRef<HTMLDivElement | null>(null);
   const promptAssistInitializedRef = useRef(false);
@@ -2036,16 +2037,25 @@ export default function PromptSharePage() {
 
         <button
           id="openPostModal"
-          className="new-prompt-btn"
-          aria-label="新しいプロンプトを投稿"
-          data-tooltip="新しいプロンプトを投稿"
-          data-tooltip-placement="left"
+          className="new-prompt-btn ai-agent-btn"
+          aria-label="AI エージェントを起動"
+          data-tooltip="AI エージェントを起動"
+          data-tooltip-placement="right"
           type="button"
-          ref={promptNewButtonRef}
-          onClick={openComposerModal}
+          onClick={() => setIsAiAgentModalOpen((prev) => !prev)}
         >
-          <i className="bi bi-plus-lg" ref={promptNewButtonIconRef}></i>
+          <i className="bi bi-robot"></i>
         </button>
+
+        <DraggableModal
+          isOpen={isAiAgentModalOpen}
+          onClose={() => setIsAiAgentModalOpen(false)}
+          title="AI エージェント"
+          initialX={20}
+          initialY={100}
+        >
+          <MiniChat />
+        </DraggableModal>
       </div>
     </>
   );
