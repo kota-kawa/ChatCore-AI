@@ -7,6 +7,7 @@ import "../scripts/core/csrf";
 import type { AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
+import { useRouter } from "next/router";
 import { GlobalAiAgent } from "../components/GlobalAiAgent";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 
@@ -69,7 +70,12 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
   }
 }
 
+const AUTH_PAGES = new Set(["/login", "/register"]);
+
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+  const showAiAgent = !AUTH_PAGES.has(router.pathname);
+
   useEffect(() => {
     const reapplyTheme = () => {
       applyTheme(resolveTheme(getStoredThemePreference()));
@@ -102,7 +108,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <div className={appSansFont.variable}>
       <GlobalErrorBoundary>
         <Component {...pageProps} />
-        <GlobalAiAgent />
+        {showAiAgent && <GlobalAiAgent />}
       </GlobalErrorBoundary>
     </div>
   );

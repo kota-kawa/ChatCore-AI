@@ -1420,6 +1420,101 @@ a.cc-texture-btn:active {
   opacity: 0.5;
 }
 
+.global-ai-agent-modal .mini-chat-stop-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+  cursor: pointer;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #ffffff;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.global-ai-agent-modal .mini-chat-stop-btn i {
+  font-size: 1.1rem;
+}
+
+.global-ai-agent-modal .mini-chat-stop-btn:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+}
+
+.global-ai-agent-modal .mini-chat-stop-btn:active {
+  transform: scale(0.94);
+}
+
+.global-ai-agent-modal .mini-chat-text-wrapper--error {
+  border-left: 2px solid rgba(248, 113, 113, 0.5);
+  padding-left: 0.6rem;
+}
+
+.global-ai-agent-modal .mini-chat-message-toolbar {
+  display: flex;
+  gap: 0.36rem;
+  margin-top: 0.44rem;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.global-ai-agent-modal .mini-chat-message:hover .mini-chat-message-toolbar,
+.global-ai-agent-modal .mini-chat-message-toolbar:focus-within {
+  opacity: 1;
+}
+
+.global-ai-agent-modal .mini-chat-copy-btn,
+.global-ai-agent-modal .mini-chat-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.2rem 0.52rem;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.global-ai-agent-modal .mini-chat-copy-btn {
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background: transparent;
+  color: #7aa8b3;
+}
+
+.global-ai-agent-modal .mini-chat-copy-btn:hover {
+  color: #e6fbff;
+  border-color: rgba(34, 211, 238, 0.42);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.global-ai-agent-modal .mini-chat-retry-btn {
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: transparent;
+  color: #f87171;
+}
+
+.global-ai-agent-modal .mini-chat-retry-btn:hover:not(:disabled) {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.global-ai-agent-modal .mini-chat-retry-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 [data-theme="dark"] .global-ai-agent-modal .mini-chat-action-plan {
   border-color: rgba(96, 165, 250, 0.24);
   background: rgba(96, 165, 250, 0.05);

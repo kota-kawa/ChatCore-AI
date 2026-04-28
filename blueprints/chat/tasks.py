@@ -28,8 +28,10 @@ from services.llm import (
 )
 from services.llm_daily_limit import (
     LlmDailyLimitService,
+    consume_ai_agent_monthly_quota,
     consume_llm_daily_quota,
     get_seconds_until_daily_reset,
+    get_seconds_until_monthly_reset,
     get_llm_daily_limit_service,
 )
 from services.code_search import search_codebase
@@ -754,17 +756,17 @@ async def ai_agent(
             ),
         )
 
-    can_access_llm, _, daily_limit = await run_blocking(
-        consume_llm_daily_quota,
+    can_access_llm, _, monthly_limit = await run_blocking(
+        consume_ai_agent_monthly_quota,
         service=resolved_llm_daily_limit_service,
     )
     if not can_access_llm:
         return jsonify_rate_limited(
             (
-                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
+                f"今月のAIエージェント利用上限（全ユーザー合計 {monthly_limit} 回）に達しました。"
+                "翌月になってから再度お試しください。"
             ),
-            retry_after=get_seconds_until_daily_reset(),
+            retry_after=get_seconds_until_monthly_reset(),
         )
 
     async def _stream() -> AsyncIterator[bytes]:

@@ -138,7 +138,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
 
         async def _run():
             with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)) as mock_limits:
-                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch("blueprints.chat.tasks.classify_intent", return_value="direct"):
                         with patch("blueprints.chat.tasks.get_llm_response", return_value="改善案です。") as mock_llm:
                             response = await ai_agent(request)
@@ -168,7 +168,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
 
         async def _run():
             with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch("blueprints.chat.tasks.classify_intent", return_value="direct"):
                         with patch("blueprints.chat.tasks.get_llm_response", return_value="回答です。"):
                             response = await ai_agent(request)
@@ -200,7 +200,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
 
         async def _run():
             with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-                with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(True, 299, 300)):
+                with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(True, 999, 1000)):
                     with patch("blueprints.chat.tasks.classify_intent", return_value="action"):
                         with patch(
                             "blueprints.chat.tasks.get_llm_response",
@@ -221,7 +221,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
         self.assertIn("#searchInput", mock_llm.call_args.args[0][0]["content"])
         self.assertIn("ChatCore 機能カタログ", mock_llm.call_args.args[0][0]["content"])
 
-    def test_ai_agent_returns_429_when_daily_quota_exceeded(self):
+    def test_ai_agent_returns_429_when_monthly_quota_exceeded(self):
         request = make_ai_agent_request(
             {
                 "messages": [
@@ -235,7 +235,7 @@ class PromptAssistApiTestCase(unittest.TestCase):
         )
 
         with patch("blueprints.chat.tasks._consume_ai_agent_limits", return_value=(True, None)):
-            with patch("blueprints.chat.tasks.consume_llm_daily_quota", return_value=(False, 0, 300)):
+            with patch("blueprints.chat.tasks.consume_ai_agent_monthly_quota", return_value=(False, 0, 1000)):
                 with patch("blueprints.chat.tasks.get_llm_response") as mock_llm:
                     response = asyncio.run(ai_agent(request))
 

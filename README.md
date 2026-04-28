@@ -120,7 +120,7 @@ alembic upgrade head
 - **Connection pooling**: PostgreSQL connections are managed via `psycopg2.ThreadedConnectionPool` with configurable min/max bounds, avoiding per-request connection overhead.
   Set `DB_POOL_MIN_CONN` / `DB_POOL_MAX_CONN` for general environments, and `DB_POOL_MIN_CONN_PRODUCTION` / `DB_POOL_MAX_CONN_PRODUCTION` to override them only when `FASTAPI_ENV=production`.
 - **Redis-backed sessions**: When Redis is available, session data is stored server-side, enabling stateless horizontal scaling of the application tier.
-- **Rate limiting**: Per-day caps on LLM API calls and verification email sends are enforced at the service layer, protecting both external API quotas and infrastructure cost.
+- **Rate limiting**: Per-day caps on chat LLM API calls and verification email sends, plus a separate monthly support AI agent cap, are enforced at the service layer to protect external API quotas and infrastructure cost.
 - **Health endpoints**: `GET /healthz` returns process liveness; `GET /readyz` checks live DB reachability and reports Redis as degraded-but-optional, enabling load balancer health checks without false negatives.
 - **Structured logging**: All requests emit JSON logs with `X-Request-ID` correlation IDs, making distributed tracing and incident diagnosis tractable at scale.
 

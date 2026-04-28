@@ -18,12 +18,16 @@ DEFAULT_AUTH_EMAIL_DAILY_SEND_LIMIT = 50
 AUTH_EMAIL_DAILY_SEND_LIMIT_ENV = "AUTH_EMAIL_DAILY_SEND_LIMIT"
 _AUTH_EMAIL_DAILY_COUNT_KEY_PREFIX = "auth_email:daily_send_total"
 
+DEFAULT_AI_AGENT_MONTHLY_API_LIMIT = 1000
+AI_AGENT_MONTHLY_API_LIMIT_ENV = "AI_AGENT_MONTHLY_API_LIMIT"
+_AI_AGENT_MONTHLY_COUNT_KEY_PREFIX = "llm:agent_monthly_total"
+
 logger = logging.getLogger(__name__)
 
 
-def _get_daily_limit(env_name: str, default_limit: int) -> int:
+def _get_limit(env_name: str, default_limit: int) -> int:
     # 環境変数値を整数化し、異常値はデフォルトへフォールバックする
-    # Parse daily limit from env and fallback to default on invalid values.
+    # Parse limit from env and fallback to default on invalid values.
     raw_limit = os.environ.get(env_name, str(default_limit))
     try:
         limit = int(raw_limit)
@@ -47,8 +51,24 @@ def _seconds_until_tomorrow() -> int:
     return max(seconds, 1)
 
 
+def _seconds_until_next_month() -> int:
+    # 月次クォータのキー期限を「翌月1日の0時」までに合わせる
+    # Compute TTL that expires at the first day of the next month.
+    now = datetime.now()
+    if now.month == 12:
+        first_of_next_month = datetime(now.year + 1, 1, 1)
+    else:
+        first_of_next_month = datetime(now.year, now.month + 1, 1)
+    seconds = int((first_of_next_month - now).total_seconds())
+    return max(seconds, 1)
+
+
 def get_seconds_until_daily_reset() -> int:
     return _seconds_until_tomorrow()
+
+
+def get_seconds_until_monthly_reset() -> int:
+    return _seconds_until_next_month()
 
 
 class LlmDailyLimitService:
@@ -60,6 +80,7 @@ class LlmDailyLimitService:
         self._redis_client_getter = redis_client_getter
         self._in_memory_lock = Lock()
         self._in_memory_daily_counts: dict[str, int] = {}
+        self._in_memory_monthly_counts: dict[str, int] = {}
 
     def _get_redis_client(self) -> Any | None:
         if self._redis_client_getter is not None:
@@ -69,9 +90,14 @@ class LlmDailyLimitService:
     def reset_in_memory_state(self) -> None:
         with self._in_memory_lock:
             self._in_memory_daily_counts.clear()
+            self._in_memory_monthly_counts.clear()
 
     def _consume_with_redis(
-        self, redis_client: Any, redis_key: str, daily_limit: int
+        self,
+        redis_client: Any,
+        redis_key: str,
+        limit: int,
+        ttl_seconds: int,
     ) -> tuple[bool, int] | None:
         # Redis Lua で INCR+EXPIRE を原子的に実行し、競合時の取りこぼしを防ぐ
         # Use Redis Lua for atomic INCR+EXPIRE to avoid race conditions.
@@ -97,39 +123,43 @@ return {1, current}
                 lua_script,
                 1,
                 redis_key,
-                daily_limit,
-                _seconds_until_tomorrow(),
+                limit,
+                ttl_seconds,
             )
             if not isinstance(result, (list, tuple)) or len(result) != 2:
                 raise ValueError(f"Unexpected Redis result: {result}")
             allowed = int(result[0]) == 1
             current = int(result[1])
-            remaining = max(daily_limit - current, 0)
+            remaining = max(limit - current, 0)
             return allowed, remaining
         except Exception:
             logger.exception("Redis quota tracking failed; falling back to in-memory.")
             return None
 
     def _consume_with_in_memory(
-        self, daily_key: str, current_date: str, daily_limit: int
+        self,
+        counts: dict[str, int],
+        quota_key: str,
+        current_period: str,
+        limit: int,
     ) -> tuple[bool, int]:
-        # Redis 不可時のフォールバック。日付が変わったキーを都度掃除する
-        # Fallback path when Redis is unavailable; prune stale day keys on each call.
+        # Redis 不可時のフォールバック。期間が変わったキーを都度掃除する
+        # Fallback path when Redis is unavailable; prune stale period keys on each call.
         with self._in_memory_lock:
-            date_suffix = f":{current_date}"
+            period_suffix = f":{current_period}"
             stale_keys = [
-                key for key in self._in_memory_daily_counts if not key.endswith(date_suffix)
+                key for key in counts if not key.endswith(period_suffix)
             ]
             for key in stale_keys:
-                self._in_memory_daily_counts.pop(key, None)
+                counts.pop(key, None)
 
-            current = self._in_memory_daily_counts.get(daily_key, 0)
-            if current >= daily_limit:
+            current = counts.get(quota_key, 0)
+            if current >= limit:
                 return False, 0
 
             current += 1
-            self._in_memory_daily_counts[daily_key] = current
-            remaining = max(daily_limit - current, 0)
+            counts[quota_key] = current
+            remaining = max(limit - current, 0)
             return True, remaining
 
     def _consume_daily_quota(
@@ -142,7 +172,7 @@ return {1, current}
     ) -> tuple[bool, int, int]:
         # 1日単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替える
         # Consume quota using a day-scoped key, preferring Redis and falling back to memory.
-        daily_limit = _get_daily_limit(env_name, default_limit)
+        daily_limit = _get_limit(env_name, default_limit)
         if daily_limit <= 0:
             return False, 0, daily_limit
 
@@ -151,13 +181,60 @@ return {1, current}
 
         redis_client = self._get_redis_client()
         if redis_client is not None:
-            redis_result = self._consume_with_redis(redis_client, quota_key, daily_limit)
+            redis_result = self._consume_with_redis(
+                redis_client,
+                quota_key,
+                daily_limit,
+                _seconds_until_tomorrow(),
+            )
             if redis_result is not None:
                 allowed, remaining = redis_result
                 return allowed, remaining, daily_limit
 
-        allowed, remaining = self._consume_with_in_memory(quota_key, today, daily_limit)
+        allowed, remaining = self._consume_with_in_memory(
+            self._in_memory_daily_counts,
+            quota_key,
+            today,
+            daily_limit,
+        )
         return allowed, remaining, daily_limit
+
+    def _consume_monthly_quota(
+        self,
+        *,
+        key_prefix: str,
+        env_name: str,
+        default_limit: int,
+        current_month: str | None = None,
+    ) -> tuple[bool, int, int]:
+        # 月単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替える
+        # Consume quota using a month-scoped key, preferring Redis and falling back to memory.
+        monthly_limit = _get_limit(env_name, default_limit)
+        if monthly_limit <= 0:
+            return False, 0, monthly_limit
+
+        month = current_month or date.today().strftime("%Y-%m")
+        quota_key = f"{key_prefix}:{month}"
+
+        redis_client = self._get_redis_client()
+        if redis_client is not None:
+            redis_result = self._consume_with_redis(
+                redis_client,
+                quota_key,
+                monthly_limit,
+                _seconds_until_next_month(),
+            )
+            if redis_result is not None:
+                allowed, remaining = redis_result
+                return allowed, remaining, monthly_limit
+
+        allowed, remaining = self._consume_with_in_memory(
+            self._in_memory_monthly_counts,
+            quota_key,
+            month,
+            monthly_limit,
+        )
+        return allowed, remaining, monthly_limit
 
     def consume_llm_daily_quota(self, current_date: str | None = None) -> tuple[bool, int, int]:
         # チャット応答 API 用の日次上限を 1 回分消費する
@@ -182,14 +259,34 @@ return {1, current}
             current_date=current_date,
         )
 
+    def consume_ai_agent_monthly_quota(
+        self,
+        current_month: str | None = None,
+    ) -> tuple[bool, int, int]:
+        # サポートAIエージェント用の月次上限を 1 回分消費する
+        # Consume one unit from the monthly quota for support AI agent usage.
+        return self._consume_monthly_quota(
+            key_prefix=_AI_AGENT_MONTHLY_COUNT_KEY_PREFIX,
+            env_name=AI_AGENT_MONTHLY_API_LIMIT_ENV,
+            default_limit=DEFAULT_AI_AGENT_MONTHLY_API_LIMIT,
+            current_month=current_month,
+        )
+
 
 def get_llm_daily_api_limit() -> int:
-    return _get_daily_limit(LLM_DAILY_API_LIMIT_ENV, DEFAULT_LLM_DAILY_API_LIMIT)
+    return _get_limit(LLM_DAILY_API_LIMIT_ENV, DEFAULT_LLM_DAILY_API_LIMIT)
 
 
 def get_auth_email_daily_send_limit() -> int:
-    return _get_daily_limit(
+    return _get_limit(
         AUTH_EMAIL_DAILY_SEND_LIMIT_ENV, DEFAULT_AUTH_EMAIL_DAILY_SEND_LIMIT
+    )
+
+
+def get_ai_agent_monthly_api_limit() -> int:
+    return _get_limit(
+        AI_AGENT_MONTHLY_API_LIMIT_ENV,
+        DEFAULT_AI_AGENT_MONTHLY_API_LIMIT,
     )
 
 
@@ -236,3 +333,16 @@ def consume_auth_email_daily_quota(
     return target.consume_auth_email_daily_quota(
         current_date=current_date
     )
+
+
+def consume_ai_agent_monthly_quota(
+    current_month: str | None = None,
+    *,
+    service: LlmDailyLimitService | None = None,
+) -> tuple[bool, int, int]:
+    target = (
+        service
+        if isinstance(service, LlmDailyLimitService)
+        else get_llm_daily_limit_service()
+    )
+    return target.consume_ai_agent_monthly_quota(current_month=current_month)

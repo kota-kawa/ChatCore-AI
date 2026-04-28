@@ -25,6 +25,7 @@ type Message = {
   sender: "user" | "assistant";
   text: string;
   actionPlan?: ActionPlan;
+  isError?: boolean;
 };
 
 type AiAgentSseEvent =
@@ -60,6 +61,24 @@ type ExecutionProgress = {
   currentStepIndex: number | null;
   completedStepIndexes: number[];
 };
+
+const QUICK_PROMPTS = [
+  "このサービスはどんなことができる？",
+  "この画面の使い方を教えて",
+  "マニュアルからメモの共有方法を探して",
+  "プロンプト共有を開いてメール返信を検索して"
+];
+
+const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
+const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
+const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
+const MESSAGES_TIMESTAMP_KEY = "globalAiAgent.messagesTimestamp";
+const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
+
+const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const MAX_SEND_MESSAGES = 20;
+const MAX_DOM_LENGTH = 12_000;
+const MAX_INPUT_LENGTH = 4_000;
 
 function parseSseBlock(block: string): AiAgentSseEvent | null {
   if (!block.trim()) return null;
@@ -109,19 +128,7 @@ async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEven
   if (trailingEvent) yield trailingEvent;
 }
 
-const QUICK_PROMPTS = [
-  "このサービスはどんなことができる？",
-  "この画面の使い方を教えて",
-  "マニュアルからメモの共有方法を探して",
-  "プロンプト共有を開いてメール返信を検索して"
-];
-
-const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
-const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
-const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
-const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
-
-function isPersistedMessage(value: unknown): value is Message {
+function isPersistedMessage(value: unknown): value is Pick<Message, "sender" | "text"> {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<Message>;
   return (
@@ -131,9 +138,16 @@ function isPersistedMessage(value: unknown): value is Message {
 }
 
 function readStoredMessages(): Message[] {
+  const timestamp = readSessionJson<number>(MESSAGES_TIMESTAMP_KEY, 0);
+  if (timestamp > 0 && Date.now() - timestamp > SESSION_EXPIRY_MS) {
+    writeSessionJson(MESSAGES_STORAGE_KEY, []);
+    writeSessionJson(EXECUTED_STORAGE_KEY, []);
+    writeSessionJson(MESSAGES_TIMESTAMP_KEY, 0);
+    return [];
+  }
   const raw = readSessionJson<unknown>(MESSAGES_STORAGE_KEY, []);
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isPersistedMessage);
+  return raw.filter(isPersistedMessage).map(({ sender, text }) => ({ sender, text }));
 }
 
 function readStoredExecutedIndexes(): number[] {
@@ -624,9 +638,17 @@ export function MiniChat() {
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
   const [hydrated, setHydrated] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef<Message[]>([]);
   const trimmedInput = input.trim();
   const currentProgressText = statusText ?? progressSteps[progressSteps.length - 1] ?? null;
+
+  // Keep ref in sync for stale-closure-safe access in async handlers
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const appendProgressStep = (message: string) => {
     setStatusText(message);
@@ -635,14 +657,18 @@ export function MiniChat() {
     ));
   };
 
-  const requestAiAgentMessage = async (nextMessages: Message[]): Promise<Message> => {
+  const requestAiAgentMessage = async (
+    nextMessages: Message[],
+    signal: AbortSignal,
+  ): Promise<Message> => {
     const response = await fetch("/api/ai-agent", {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: nextMessages.map((m) => ({ role: m.sender, content: m.text })),
+        messages: nextMessages.slice(-MAX_SEND_MESSAGES).map((m) => ({ role: m.sender, content: m.text })),
         current_page: typeof window !== "undefined" ? window.location.pathname : null,
-        current_dom: collectVisiblePageDom(),
+        current_dom: collectVisiblePageDom().slice(0, MAX_DOM_LENGTH),
       }),
     });
 
@@ -676,6 +702,9 @@ export function MiniChat() {
     event?.preventDefault();
     if (!trimmedInput || isGenerating) return;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const userMessage: Message = { sender: "user", text: trimmedInput };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
@@ -685,20 +714,69 @@ export function MiniChat() {
     setProgressSteps([INITIAL_PROGRESS_MESSAGE]);
 
     try {
-      const assistantMessage = await requestAiAgentMessage(nextMessages);
+      const assistantMessage = await requestAiAgentMessage(nextMessages, controller.signal);
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
         {
           sender: "assistant",
           text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
+          isError: true,
         },
       ]);
     } finally {
+      abortControllerRef.current = null;
       setIsGenerating(false);
       setStatusText(null);
       setProgressSteps([]);
+    }
+  };
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+  };
+
+  const handleRetry = async (errorMsgIndex: number) => {
+    const messagesBeforeError = messages.slice(0, errorMsgIndex);
+    setMessages(messagesBeforeError);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsGenerating(true);
+    setStatusText(INITIAL_PROGRESS_MESSAGE);
+    setProgressSteps([INITIAL_PROGRESS_MESSAGE]);
+
+    try {
+      const assistantMessage = await requestAiAgentMessage(messagesBeforeError, controller.signal);
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "assistant",
+          text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
+          isError: true,
+        },
+      ]);
+    } finally {
+      abortControllerRef.current = null;
+      setIsGenerating(false);
+      setStatusText(null);
+      setProgressSteps([]);
+    }
+  };
+
+  const handleCopy = async (text: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex((prev) => (prev === index ? null : prev)), 2000);
+    } catch {
+      // clipboard API unavailable
     }
   };
 
@@ -749,36 +827,59 @@ export function MiniChat() {
           `失敗理由: ${failureText}`,
           "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
         ].filter(Boolean).join("\n");
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
         setIsGenerating(true);
         setStatusText("画面を再確認しています...");
         setProgressSteps(["画面を再確認しています..."]);
-        const replanMessage = await requestAiAgentMessage([
-          ...messages,
-          { sender: "user", text: replanPrompt },
-        ]);
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: "assistant",
-            text: `操作を途中で停止しました。${failureText}`,
-          },
-          replanMessage,
-        ]);
+
+        try {
+          const replanMessage = await requestAiAgentMessage(
+            [
+              ...messagesRef.current,
+              { sender: "user", text: replanPrompt },
+            ],
+            controller.signal,
+          );
+          setMessages((prev) => [
+            ...prev,
+            {
+              sender: "assistant",
+              text: `操作を途中で停止しました。${failureText}`,
+            },
+            replanMessage,
+          ]);
+        } catch (replanError) {
+          if (!(replanError instanceof DOMException && replanError.name === "AbortError")) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                sender: "assistant",
+                text: replanError instanceof Error ? replanError.message : "操作の再計画に失敗しました。",
+                isError: true,
+              },
+            ]);
+          }
+        } finally {
+          abortControllerRef.current = null;
+          setIsGenerating(false);
+          setStatusText(null);
+          setProgressSteps([]);
+        }
       }
     } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
           sender: "assistant",
-          text: error instanceof Error ? error.message : "操作の再計画に失敗しました。",
+          text: error instanceof Error ? error.message : "操作の実行に失敗しました。",
+          isError: true,
         },
       ]);
     } finally {
       setExecutingIdx(null);
       setExecutionProgress(null);
-      setIsGenerating(false);
-      setStatusText(null);
-      setProgressSteps([]);
     }
   };
 
@@ -817,9 +918,14 @@ export function MiniChat() {
     };
   }, []);
 
+  // Persist messages without actionPlan/isError (not restorable after reload)
   useEffect(() => {
     if (!hydrated) return;
-    writeSessionJson(MESSAGES_STORAGE_KEY, messages);
+    writeSessionJson(
+      MESSAGES_STORAGE_KEY,
+      messages.map(({ sender, text }) => ({ sender, text })),
+    );
+    writeSessionJson(MESSAGES_TIMESTAMP_KEY, messages.length > 0 ? Date.now() : 0);
   }, [hydrated, messages]);
 
   useEffect(() => {
@@ -862,7 +968,7 @@ export function MiniChat() {
             <span className="mini-chat-avatar" aria-hidden="true">
               <i className={`bi ${msg.sender === "user" ? "bi-person" : "bi-stars"}`}></i>
             </span>
-            <div className="mini-chat-text-wrapper">
+            <div className={`mini-chat-text-wrapper${msg.isError ? " mini-chat-text-wrapper--error" : ""}`}>
               {msg.sender === "assistant" ? (
                 <MarkdownContent text={msg.text} className="mini-chat-text mini-chat-markdown" />
               ) : (
@@ -914,6 +1020,31 @@ export function MiniChat() {
                   </button>
                 </div>
               )}
+              {msg.sender === "assistant" && (
+                <div className="mini-chat-message-toolbar">
+                  <button
+                    type="button"
+                    className="mini-chat-copy-btn"
+                    onClick={() => void handleCopy(msg.text, i)}
+                    aria-label="回答をコピー"
+                  >
+                    <i className={`bi ${copiedIndex === i ? "bi-check2" : "bi-copy"}`}></i>
+                    {copiedIndex === i ? "コピー済み" : "コピー"}
+                  </button>
+                  {msg.isError && (
+                    <button
+                      type="button"
+                      className="mini-chat-retry-btn"
+                      onClick={() => void handleRetry(i)}
+                      disabled={isGenerating}
+                      aria-label="再試行"
+                    >
+                      <i className="bi bi-arrow-clockwise"></i>
+                      再試行
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -961,15 +1092,28 @@ export function MiniChat() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="この画面でやりたいことを相談する"
             aria-label="AIサポートへのメッセージ"
+            maxLength={MAX_INPUT_LENGTH}
+            disabled={isGenerating}
           />
-          <button
-            type="submit"
-            className="mini-chat-send-btn"
-            disabled={!trimmedInput || isGenerating}
-            aria-label="送信"
-          >
-            <i className={`bi ${isGenerating ? "bi-three-dots" : "bi-arrow-up-short"}`}></i>
-          </button>
+          {isGenerating ? (
+            <button
+              type="button"
+              className="mini-chat-stop-btn"
+              onClick={handleStop}
+              aria-label="生成を停止"
+            >
+              <i className="bi bi-stop-fill"></i>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="mini-chat-send-btn"
+              disabled={!trimmedInput}
+              aria-label="送信"
+            >
+              <i className="bi bi-arrow-up-short"></i>
+            </button>
+          )}
         </div>
         <button
           type="button"
