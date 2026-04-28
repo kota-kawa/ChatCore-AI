@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from blueprints.chat.tasks import ai_agent, prompt_assist
+from blueprints.chat.tasks import AI_AGENT_SYSTEM_PROMPT, ai_agent, prompt_assist
 from services.llm import LlmProviderError
 from tests.helpers.request_helpers import build_request
 
@@ -64,6 +64,12 @@ def make_ai_agent_request(json_body, session=None):
 
 
 class PromptAssistApiTestCase(unittest.TestCase):
+    def test_ai_agent_system_prompt_requires_plain_user_facing_language(self):
+        self.assertIn("子供から高齢者まで分かる", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("変数名、関数名、クラス名", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("コード由来の名前は回答に出さない", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn("画面上の言葉を優先", AI_AGENT_SYSTEM_PROMPT)
+
     def test_prompt_assist_requires_login(self):
         request = make_request(
             {

@@ -65,6 +65,8 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("check", messages[0]["content"])
         self.assertIn("wait", messages[0]["content"])
         self.assertIn("navigate の後に続きの steps", messages[0]["content"])
+        self.assertIn("description には変数名", messages[0]["content"])
+        self.assertIn("画面上の言葉に言い換える", messages[0]["content"])
 
     def test_parse_action_response_accepts_typed_app_action_steps(self):
         plan = parse_action_response(

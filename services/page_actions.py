@@ -45,6 +45,9 @@ ACTION_SYSTEM_PROMPT = """
 }
 
 操作の原則:
+- description はユーザーに表示される文章なので、子供から高齢者まで分かる短い日本語にする。
+- description には変数名、関数名、クラス名、CSSセレクタ、HTML属性、ファイル名、API名、JSONキー、action名、command名を入れない。
+- selector、command、args、path などの内部フィールドには必要な技術名を入れてよいが、description では必ず「検索欄に入力する」「検索ボタンを押す」のような画面上の言葉に言い換える。
 - ユーザーの依頼が「入力してからクリック」「ページを開いてから検索」のように複数の画面操作を含む場合は、必ず steps に複数ステップを順番通りに入れる。
 - 1ステップには1つの利用者に見える操作だけを入れる。例: input → click、navigate → wait → input → select → check → click のように必要な数だけ並べる。
 - 型付きアクションAPIで表現できる単発操作は、action="app_action" を優先する。ただし複数操作を1つの app_action に隠さない。
