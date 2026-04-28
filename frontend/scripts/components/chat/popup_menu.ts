@@ -97,6 +97,13 @@ chatTemplate.innerHTML = `
       z-index: var(--z-floating-action-menu, 60);
     }
 
+    /* デスクトップでは action-menu が担うため非表示 */
+    @media (min-width: 769px) {
+      .actions-menu {
+        display: none;
+      }
+    }
+
     @keyframes popIn {
       0% {
         transform: scale(0.5) rotate(0deg);
