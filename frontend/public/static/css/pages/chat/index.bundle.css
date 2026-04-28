@@ -678,28 +678,6 @@ body.chat-page .chat-share-sns a:hover {
   perspective: 1800px;
 }
 
-.chat-page-stage::after {
-  content: '';
-  position: absolute;
-  inset: 1.2rem;
-  border-radius: 32px;
-  background:
-    radial-gradient(circle at top, rgba(25, 195, 125, 0.08), transparent 48%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(244, 249, 246, 0.08));
-  opacity: 0;
-  transform: scale(0.985);
-  transition:
-    opacity 0.34s ease,
-    transform 0.52s cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.chat-page-stage[data-view="launching"]::after,
-.chat-page-stage[data-view="chat"]::after {
-  opacity: 1;
-  transform: scale(1);
-}
 
 .chat-page-shell::before {
   content: '';
@@ -871,11 +849,6 @@ body.chat-page .chat-share-sns a:hover {
   .chat-page-stage[data-view="launching"] #chat-container,
   .chat-page-stage[data-view="chat"] #chat-container {
     height: 100%;
-  }
-
-  .chat-page-stage::after {
-    inset: 0;
-    border-radius: 0;
   }
 
   .chat-page-shell::before {
