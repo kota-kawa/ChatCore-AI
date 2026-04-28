@@ -71,8 +71,31 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
-    applyTheme(resolveTheme(getStoredThemePreference()));
+    const reapplyTheme = () => {
+      applyTheme(resolveTheme(getStoredThemePreference()));
+    };
+
+    reapplyTheme();
     watchSystemTheme();
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        reapplyTheme();
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === "chatcore-theme") {
+        reapplyTheme();
+      }
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return (
