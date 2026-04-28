@@ -393,3 +393,281 @@
     padding: 0.68rem;
   }
 }
+
+/* ==========================================================================
+   ダークモード: プロンプト詳細 / 共有 / コンポーザー モーダル
+   ========================================================================== */
+
+/* ── 共有モーダルのコンテンツ背景 (#promptShareModal .post-modal-content は
+      ID セレクターで詳細度が高いため、個別に上書きが必要) ── */
+[data-theme="dark"] #promptShareModal .post-modal-content {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── 詳細モーダル内コンテンツテキストボックス (白背景→ダーク) ── */
+[data-theme="dark"] #modalPromptContent,
+[data-theme="dark"] #modalInputExamples,
+[data-theme="dark"] #modalOutputExamples,
+[data-theme="dark"] .prompt-share-page .modal-content-body .form-group p {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+  box-shadow: none;
+}
+
+/* ── モーダルリード文 ── */
+[data-theme="dark"] .post-modal-lead {
+  color: #94a3b8;
+}
+
+/* ── 参照画像コンテナ ── */
+[data-theme="dark"] .modal-reference-image {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+/* ── 閉じるボタン (詳細・共有モーダル共通) ── */
+[data-theme="dark"] .prompt-share-page .close-btn {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-share-page .close-btn:hover {
+  background: rgba(30, 41, 59, 1);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #f1f5f9;
+}
+
+/* ── 共有ダイアログ閉じるボタン ── */
+[data-theme="dark"] .prompt-share-dialog__close {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-share-dialog__close:hover {
+  background: rgba(30, 41, 59, 1);
+  color: #f1f5f9;
+}
+
+/* ── 共有ダイアログ: URL 入力 ── */
+[data-theme="dark"] .prompt-share-dialog__row input {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #f1f5f9;
+  box-shadow: none;
+}
+
+/* ── 共有ダイアログ: ステータス文字 ── */
+[data-theme="dark"] .prompt-share-dialog__status--error {
+  color: #f87171;
+}
+
+/* ── 共有ダイアログ: SNS リンクボタン ── */
+[data-theme="dark"] .prompt-share-dialog__sns a {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-share-dialog__sns a:hover {
+  background: rgba(30, 41, 59, 1);
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+/* ── コンポーザーモーダル: ヒーローエリア ── */
+[data-theme="dark"] .composer-hero {
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.14) 0%, rgba(17, 24, 39, 0.9) 100%);
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .composer-hero__eyebrow {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .composer-hero__chips span {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+  box-shadow: none;
+}
+
+/* ── コンポーザー: フォームグループ ── */
+[data-theme="dark"] .prompt-share-page .form-group label {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .prompt-share-page .form-group__hint {
+  color: #64748b;
+}
+
+[data-theme="dark"] .prompt-share-page .form-group input[type="text"],
+[data-theme="dark"] .prompt-share-page .form-group textarea,
+[data-theme="dark"] .prompt-share-page .form-group select {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #f1f5f9;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-share-page .form-group input::placeholder,
+[data-theme="dark"] .prompt-share-page .form-group textarea::placeholder {
+  color: #475569;
+}
+
+[data-theme="dark"] .prompt-share-page .form-group input[type="text"]:focus,
+[data-theme="dark"] .prompt-share-page .form-group textarea:focus,
+[data-theme="dark"] .prompt-share-page .form-group select:focus {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+}
+
+/* ── コンポーザー: セクション ── */
+[data-theme="dark"] .composer-section {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .composer-section--primary,
+[data-theme="dark"] .composer-section--content {
+  background: rgba(17, 24, 39, 0.85);
+}
+
+[data-theme="dark"] .composer-section__eyebrow {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .composer-section__header h3 {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .composer-section__description {
+  color: #64748b;
+}
+
+/* ── コンポーザー: プロンプトタイプ選択 ── */
+[data-theme="dark"] .prompt-type-option {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] .prompt-type-option:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .prompt-type-option--active {
+  background: rgba(30, 58, 138, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+[data-theme="dark"] .prompt-type-option__body strong {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .prompt-type-option__body small {
+  color: #94a3b8;
+}
+
+/* ── コンポーザー: 画像アップロード ── */
+[data-theme="dark"] .image-upload-field {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="dark"] .image-upload-field:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .image-upload-field__copy strong {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .image-upload-field__copy small {
+  color: #94a3b8;
+}
+
+/* ── コンポーザー: 画像プレビュー ── */
+[data-theme="dark"] .prompt-image-preview {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-image-preview img {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="dark"] .prompt-image-preview__meta span {
+  background: rgba(30, 41, 59, 0.9);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-image-clear-btn {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-image-clear-btn:hover {
+  background: rgba(30, 41, 59, 1);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #e2e8f0;
+}
+
+/* ── コンポーザー: トグル ── */
+[data-theme="dark"] .composer-toggle {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="dark"] .composer-toggle__copy strong {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .composer-toggle__copy small {
+  color: #94a3b8;
+}
+
+/* ── コンポーザー: ガードレールフィールド ── */
+[data-theme="dark"] #guardrail-fields {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+/* ── コンポーザー: ステータスメッセージ ── */
+[data-theme="dark"] .composer-status[data-variant="info"] {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .composer-status[data-variant="success"] {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.22);
+  color: #4ade80;
+}
+
+[data-theme="dark"] .composer-status[data-variant="error"] {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.22);
+  color: #f87171;
+}
+
+/* ── コンポーザー: フッター ── */
+[data-theme="dark"] .composer-footer {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0) 0%, rgba(17, 24, 39, 0.88) 22%, rgba(17, 24, 39, 0.98) 100%);
+}
+
+[data-theme="dark"] .composer-footer__note {
+  color: #64748b;
+}
