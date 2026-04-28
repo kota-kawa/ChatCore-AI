@@ -3,12 +3,14 @@ import { useState, useRef, useEffect, type FormEvent } from "react";
 import MarkdownContent from "../MarkdownContent";
 
 type ActionStep = {
-  action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate";
+  action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait";
   command?: string;
   args?: Record<string, unknown>;
   selector?: string;
   path?: string;
   value?: string;
+  checked?: boolean;
+  timeout_ms?: number;
   risk?: "low" | "medium" | "high";
   description: string;
 };
@@ -37,6 +39,10 @@ type VisibleElementSummary = {
   ariaLabel?: string;
   placeholder?: string;
   value?: string;
+  inputType?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  options?: string;
   href?: string;
   role?: string;
 };
@@ -44,6 +50,14 @@ type VisibleElementSummary = {
 type StepExecutionResult = {
   ok: boolean;
   message?: string;
+  failedStepIndex?: number;
+  pendingNavigation?: boolean;
+};
+
+type ExecutionProgress = {
+  messageIndex: number;
+  currentStepIndex: number | null;
+  completedStepIndexes: number[];
 };
 
 function parseSseBlock(block: string): AiAgentSseEvent | null {
@@ -101,6 +115,9 @@ const QUICK_PROMPTS = [
   "プロンプト共有を開いてメール返信を検索して"
 ];
 
+const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
+const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
+
 function cssEscape(value: string) {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(value);
@@ -115,6 +132,72 @@ function truncateForContext(value: string | null | undefined, maxLength = 80) {
 
 function wait(ms = 180) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepExecutionResult> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    if (isVisibleElement(document.querySelector(selector))) {
+      return { ok: true };
+    }
+    await wait(80);
+  }
+  return { ok: false, message: `${selector} の表示を確認できませんでした。` };
+}
+
+function isActionStep(value: unknown): value is ActionStep {
+  if (!value || typeof value !== "object") return false;
+  const step = value as Partial<ActionStep>;
+  return (
+    step.action === "app_action"
+    || step.action === "click"
+    || step.action === "input"
+    || step.action === "focus"
+    || step.action === "scroll"
+    || step.action === "navigate"
+    || step.action === "select"
+    || step.action === "check"
+    || step.action === "wait"
+  ) && typeof step.description === "string";
+}
+
+function readPendingActionSteps() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_ACTION_STEPS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isActionStep) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingActionSteps(steps: ActionStep[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PENDING_ACTION_STEPS_KEY, JSON.stringify(steps));
+    window.sessionStorage.setItem(AI_AGENT_OPEN_STATE_KEY, JSON.stringify(true));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearPendingActionSteps() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(PENDING_ACTION_STEPS_KEY);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function getStepNavigationPath(step: ActionStep) {
+  if (step.action === "navigate") return step.path || "";
+  if (step.action === "app_action" && step.command === "navigation.openPage") {
+    return getArg(step.args, "path");
+  }
+  return "";
 }
 
 function getArg(args: Record<string, unknown> | undefined, key: string) {
@@ -178,13 +261,28 @@ function collectVisiblePageDom() {
     seenSelectors.add(selector);
 
     const input = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
+    const select = element instanceof HTMLSelectElement ? element : null;
+    const disabled = "disabled" in element && typeof element.disabled === "boolean"
+      ? element.disabled
+      : undefined;
     summaries.push({
       selector,
       tag: element.tagName.toLowerCase(),
       text: truncateForContext(element.textContent),
       ariaLabel: truncateForContext(element.getAttribute("aria-label")),
       placeholder: truncateForContext(input?.placeholder),
-      value: truncateForContext(input?.value, 60),
+      value: truncateForContext(input?.value ?? select?.value, 60),
+      inputType: element instanceof HTMLInputElement ? element.type : undefined,
+      checked: element instanceof HTMLInputElement && /^(checkbox|radio)$/.test(element.type)
+        ? element.checked
+        : undefined,
+      disabled,
+      options: select
+        ? Array.from(select.options)
+          .slice(0, 12)
+          .map((option) => `${truncateForContext(option.textContent, 28)}=${truncateForContext(option.value, 28)}`)
+          .join(", ")
+        : undefined,
       href: truncateForContext(element instanceof HTMLAnchorElement ? element.getAttribute("href") : null),
       role: truncateForContext(element.getAttribute("role")),
     });
@@ -197,6 +295,10 @@ function collectVisiblePageDom() {
       + `${item.ariaLabel ? `; aria-label=${item.ariaLabel}` : ""}`
       + `${item.placeholder ? `; placeholder=${item.placeholder}` : ""}`
       + `${item.value ? `; value=${item.value}` : ""}`
+      + `${item.inputType ? `; input-type=${item.inputType}` : ""}`
+      + `${typeof item.checked === "boolean" ? `; checked=${item.checked}` : ""}`
+      + `${typeof item.disabled === "boolean" ? `; disabled=${item.disabled}` : ""}`
+      + `${item.options ? `; options=${item.options}` : ""}`
       + `${item.href ? `; href=${item.href}` : ""}`
       + `${item.role ? `; role=${item.role}` : ""}`
     ))
@@ -226,6 +328,28 @@ function setInputValue(selector: string, value: string): StepExecutionResult {
   return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に入力値を反映できませんでした。` };
 }
 
+function setSelectValue(selector: string, value: string): StepExecutionResult {
+  const el = getElement<HTMLSelectElement>(selector);
+  if (!(el instanceof HTMLSelectElement)) {
+    return { ok: false, message: `${selector} の選択欄が見つかりませんでした。` };
+  }
+  el.value = value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に選択値を反映できませんでした。` };
+}
+
+function setCheckedValue(selector: string, checked: boolean): StepExecutionResult {
+  const el = getElement<HTMLInputElement>(selector);
+  if (!(el instanceof HTMLInputElement) || !/^(checkbox|radio)$/.test(el.type)) {
+    return { ok: false, message: `${selector} のチェック項目が見つかりませんでした。` };
+  }
+  el.checked = checked;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return { ok: el.checked === checked, message: el.checked === checked ? undefined : `${selector} のチェック状態を反映できませんでした。` };
+}
+
 function clickElement(selector: string): StepExecutionResult {
   const el = getElement(selector);
   if (!el) return { ok: false, message: `${selector} が見つかりませんでした。` };
@@ -248,6 +372,7 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
   if (command === "navigation.openPage") {
     const path = getArg(args, "path");
     if (!path.startsWith("/")) return { ok: false, message: "移動先パスが不正です。" };
+    if (path === window.location.pathname) return { ok: true };
     window.location.href = path;
     return { ok: true };
   }
@@ -351,6 +476,20 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
     const expected = step.value ?? "";
     return { ok: Boolean(el && "value" in el && el.value === expected), message: `${step.selector} の入力結果を確認できませんでした。` };
   }
+  if (step.action === "select" && step.selector) {
+    const el = getElement<HTMLSelectElement>(step.selector);
+    const expected = step.value ?? "";
+    return { ok: Boolean(el && el.value === expected), message: `${step.selector} の選択結果を確認できませんでした。` };
+  }
+  if (step.action === "check" && step.selector) {
+    const el = getElement<HTMLInputElement>(step.selector);
+    const expected = step.checked ?? true;
+    return { ok: Boolean(el && el.checked === expected), message: `${step.selector} のチェック状態を確認できませんでした。` };
+  }
+  if (step.action === "wait") {
+    if (!step.selector) return { ok: true };
+    return { ok: isVisibleElement(document.querySelector(step.selector)), message: `${step.selector} の表示を確認できませんでした。` };
+  }
   if (step.action === "focus" && step.selector) {
     return { ok: document.activeElement === document.querySelector(step.selector), message: `${step.selector} のフォーカスを確認できませんでした。` };
   }
@@ -370,11 +509,22 @@ async function executeActionStep(step: ActionStep): Promise<StepExecutionResult>
     result = executeAppAction(step);
   } else if (step.action === "navigate") {
     if (!step.path?.startsWith("/")) return { ok: false, message: "移動先パスが不正です。" };
+    if (step.path === window.location.pathname) return { ok: true };
     window.location.href = step.path;
     return { ok: true };
   } else if (step.action === "input") {
     if (!step.selector) return { ok: false, message: "入力先が指定されていません。" };
     result = setInputValue(step.selector, step.value ?? "");
+  } else if (step.action === "select") {
+    if (!step.selector) return { ok: false, message: "選択先が指定されていません。" };
+    result = setSelectValue(step.selector, step.value ?? "");
+  } else if (step.action === "check") {
+    if (!step.selector) return { ok: false, message: "チェック対象が指定されていません。" };
+    result = setCheckedValue(step.selector, step.checked ?? true);
+  } else if (step.action === "wait") {
+    const timeoutMs = Math.max(0, Math.min(step.timeout_ms ?? 1200, 5000));
+    result = step.selector ? await waitForElement(step.selector, timeoutMs) : { ok: true };
+    if (!step.selector && timeoutMs > 0) await wait(timeoutMs);
   } else if (step.action === "click") {
     if (!step.selector) return { ok: false, message: "クリック先が指定されていません。" };
     result = clickElement(step.selector);
@@ -393,10 +543,25 @@ async function executeActionStep(step: ActionStep): Promise<StepExecutionResult>
   return verifyStep(step);
 }
 
-async function executeActionSteps(steps: ActionStep[]): Promise<StepExecutionResult> {
-  for (const step of steps) {
+async function executeActionSteps(
+  steps: ActionStep[],
+  onStepProgress?: (stepIndex: number, status: "current" | "complete") => void,
+): Promise<StepExecutionResult> {
+  for (const [stepIndex, step] of steps.entries()) {
+    const navigationPath = getStepNavigationPath(step);
+    const hasRemainingSteps = stepIndex < steps.length - 1;
+    if (navigationPath && hasRemainingSteps && navigationPath !== window.location.pathname) {
+      writePendingActionSteps(steps.slice(stepIndex + 1));
+      onStepProgress?.(stepIndex, "current");
+      const result = await executeActionStep(step);
+      if (!result.ok) return { ...result, failedStepIndex: stepIndex };
+      return { ok: true, pendingNavigation: true };
+    }
+
+    onStepProgress?.(stepIndex, "current");
     const result = await executeActionStep(step);
-    if (!result.ok) return result;
+    if (!result.ok) return { ...result, failedStepIndex: stepIndex };
+    onStepProgress?.(stepIndex, "complete");
   }
   return { ok: true };
 }
@@ -408,6 +573,9 @@ const ACTION_LABELS: Record<ActionStep["action"], string> = {
   focus: "フォーカス",
   scroll: "スクロール",
   navigate: "移動",
+  select: "選択",
+  check: "チェック",
+  wait: "待機",
 };
 
 const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
@@ -419,6 +587,7 @@ export function MiniChat() {
   const [statusText, setStatusText] = useState<string | null>(null);
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   const [executingIdx, setExecutingIdx] = useState<number | null>(null);
+  const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const trimmedInput = input.trim();
@@ -500,17 +669,49 @@ export function MiniChat() {
 
   const handleExecuteActions = async (steps: ActionStep[], msgIdx: number) => {
     setExecutingIdx(msgIdx);
+    setExecutionProgress({
+      messageIndex: msgIdx,
+      currentStepIndex: null,
+      completedStepIndexes: [],
+    });
     try {
-      const result = await executeActionSteps(steps);
+      const result = await executeActionSteps(steps, (stepIndex, status) => {
+        setExecutionProgress((current) => {
+          if (!current || current.messageIndex !== msgIdx) {
+            return {
+              messageIndex: msgIdx,
+              currentStepIndex: status === "current" ? stepIndex : null,
+              completedStepIndexes: status === "complete" ? [stepIndex] : [],
+            };
+          }
+          const completed = new Set(current.completedStepIndexes);
+          if (status === "complete") completed.add(stepIndex);
+          return {
+            messageIndex: msgIdx,
+            currentStepIndex: status === "current"
+              ? stepIndex
+              : current.currentStepIndex === stepIndex
+                ? null
+                : current.currentStepIndex,
+            completedStepIndexes: Array.from(completed).sort((a, b) => a - b),
+          };
+        });
+      });
       if (result.ok) {
-        setExecutedSet((prev) => new Set([...prev, msgIdx]));
+        if (!result.pendingNavigation) {
+          setExecutedSet((prev) => new Set([...prev, msgIdx]));
+        }
       } else {
         const failureText = result.message || "画面状態を確認できませんでした。";
+        const failedStepText = typeof result.failedStepIndex === "number"
+          ? `失敗ステップ: ${result.failedStepIndex + 1}`
+          : "";
         const replanPrompt = [
           "前回の操作計画は実行中に失敗しました。",
+          failedStepText,
           `失敗理由: ${failureText}`,
           "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
-        ].join("\n");
+        ].filter(Boolean).join("\n");
         setIsGenerating(true);
         setStatusText("画面を再確認しています...");
         setProgressSteps(["画面を再確認しています..."]);
@@ -537,11 +738,41 @@ export function MiniChat() {
       ]);
     } finally {
       setExecutingIdx(null);
+      setExecutionProgress(null);
       setIsGenerating(false);
       setStatusText(null);
       setProgressSteps([]);
     }
   };
+
+  useEffect(() => {
+    const pendingSteps = readPendingActionSteps();
+    if (!pendingSteps.length) return undefined;
+    clearPendingActionSteps();
+
+    let timer: number | undefined;
+    setMessages((prev) => {
+      const messageIndex = prev.length;
+      timer = window.setTimeout(() => {
+        void handleExecuteActions(pendingSteps, messageIndex);
+      }, 360);
+      return [
+        ...prev,
+        {
+          sender: "assistant",
+          text: "移動後の残り操作を続けます。",
+          actionPlan: {
+            description: "移動後の残り操作を続けます。",
+            steps: pendingSteps,
+          },
+        },
+      ];
+    });
+
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -588,10 +819,27 @@ export function MiniChat() {
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
                     {msg.actionPlan.steps.map((step, si) => (
-                      <li key={si} className="mini-chat-action-step">
+                      <li
+                        key={si}
+                        className={`mini-chat-action-step ${
+                          executionProgress?.messageIndex === i && executionProgress.currentStepIndex === si
+                            ? "is-current"
+                            : executionProgress?.messageIndex === i && executionProgress.completedStepIndexes.includes(si)
+                              ? "is-complete"
+                              : executedSet.has(i)
+                                ? "is-complete"
+                                : ""
+                        }`.trim()}
+                        aria-current={
+                          executionProgress?.messageIndex === i && executionProgress.currentStepIndex === si
+                            ? "step"
+                            : undefined
+                        }
+                      >
                         <span className={`mini-chat-action-badge mini-chat-action-badge--${step.action}`}>
                           {ACTION_LABELS[step.action]}
                         </span>
+                        <span className="mini-chat-action-index">{si + 1}</span>
                         {step.description}
                       </li>
                     ))}

@@ -60,6 +60,11 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("#searchInput", messages[0]["content"])
         self.assertIn('action": "app_action"', messages[0]["content"])
         self.assertIn("action=\"navigate\"", messages[0]["content"])
+        self.assertIn("input → click", messages[0]["content"])
+        self.assertIn("select", messages[0]["content"])
+        self.assertIn("check", messages[0]["content"])
+        self.assertIn("wait", messages[0]["content"])
+        self.assertIn("navigate の後に続きの steps", messages[0]["content"])
 
     def test_parse_action_response_accepts_typed_app_action_steps(self):
         plan = parse_action_response(
@@ -71,6 +76,44 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertEqual(plan["steps"][0]["action"], "app_action")
         self.assertEqual(plan["steps"][0]["command"], "prompt.search")
         self.assertEqual(plan["steps"][0]["args"]["query"], "メール返信")
+
+    def test_parse_action_response_accepts_multi_step_input_then_click(self):
+        plan = parse_action_response(
+            '{"description":"検索語を入力して検索します","steps":['
+            '{"action":"input","selector":"#searchInput","value":"メール返信","description":"検索語を入力する"},'
+            '{"action":"click","selector":"#searchButton","description":"検索ボタンを押す"}]}'
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan["steps"]), 2)
+        self.assertEqual(plan["steps"][0]["action"], "input")
+        self.assertEqual(plan["steps"][0]["value"], "メール返信")
+        self.assertEqual(plan["steps"][1]["action"], "click")
+
+    def test_parse_action_response_accepts_navigation_followed_by_action(self):
+        plan = parse_action_response(
+            '{"description":"プロンプト共有へ移動して検索します","steps":['
+            '{"action":"navigate","path":"/prompt_share","description":"プロンプト共有を開く"},'
+            '{"action":"input","selector":"#searchInput","value":"メール返信","description":"検索語を入力する"},'
+            '{"action":"click","selector":"#searchButton","description":"検索ボタンを押す"}]}'
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual([step["action"] for step in plan["steps"]], ["navigate", "input", "click"])
+
+    def test_parse_action_response_accepts_select_check_and_wait_steps(self):
+        plan = parse_action_response(
+            '{"description":"設定を変更します","steps":['
+            '{"action":"select","selector":"#theme","value":"dark","description":"テーマを選択する"},'
+            '{"action":"check","selector":"#notify","checked":false,"description":"通知をオフにする"},'
+            '{"action":"wait","selector":"#save-status","timeout_ms":2400,"description":"保存状態を待つ"}]}'
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual([step["action"] for step in plan["steps"]], ["select", "check", "wait"])
+        self.assertEqual(plan["steps"][0]["value"], "dark")
+        self.assertFalse(plan["steps"][1]["checked"])
+        self.assertEqual(plan["steps"][2]["timeout_ms"], 2400)
 
     def test_parse_action_response_rejects_unknown_app_action_command(self):
         plan = parse_action_response(

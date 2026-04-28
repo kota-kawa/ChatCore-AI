@@ -9,7 +9,17 @@ from services.agent_capabilities import ALLOWED_AGENT_COMMANDS
 
 logger = logging.getLogger(__name__)
 
-_VALID_ACTIONS = frozenset({"app_action", "click", "input", "focus", "scroll", "navigate"})
+_VALID_ACTIONS = frozenset({
+    "app_action",
+    "click",
+    "input",
+    "focus",
+    "scroll",
+    "navigate",
+    "select",
+    "check",
+    "wait",
+})
 
 ACTION_SYSTEM_PROMPT = """
 ユーザーが現在のページでの画面操作を依頼しています。
@@ -20,12 +30,14 @@ ACTION_SYSTEM_PROMPT = """
   "description": "操作の概要（1文）",
   "steps": [
     {
-      "action": "app_action" | "click" | "input" | "focus" | "scroll" | "navigate",
+      "action": "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait",
       "command": "型付きアクションAPIの command（action=app_actionの場合のみ）",
       "args": {"key": "value"},
-      "selector": "CSSセレクタ（navigate以外で必須）",
+      "selector": "CSSセレクタ（navigate/app_action以外で使用。waitは待機対象がある場合）",
       "path": "遷移先パス（action=navigateの場合のみ。例: /settings）",
-      "value": "入力値（action=inputの場合のみ）",
+      "value": "入力値または選択値（action=input/selectの場合のみ）",
+      "checked": true,
+      "timeout_ms": 1200,
       "risk": "low" | "medium" | "high",
       "description": "このステップの説明"
     }
@@ -33,10 +45,13 @@ ACTION_SYSTEM_PROMPT = """
 }
 
 操作の原則:
-- 型付きアクションAPIで表現できる操作は、必ず action="app_action" を優先する。
+- ユーザーの依頼が「入力してからクリック」「ページを開いてから検索」のように複数の画面操作を含む場合は、必ず steps に複数ステップを順番通りに入れる。
+- 1ステップには1つの利用者に見える操作だけを入れる。例: input → click、navigate → wait → input → select → check → click のように必要な数だけ並べる。
+- 型付きアクションAPIで表現できる単発操作は、action="app_action" を優先する。ただし複数操作を1つの app_action に隠さない。
+- select は select 要素の value を変更する。check は checkbox/radio の checked を変更する。wait はクリック後にモーダルや結果が表示されるのを待つ。
 - app_action の command はカタログにある command だけを使う。args はカタログの形式に合わせる。
 - 現在のDOM情報に一致する要素がある場合は、そこに記載された selector を最優先で使う。
-- ページ移動が必要な場合は action="navigate" とし、機能カタログの route または target の相対パスを使う。
+- ページ移動が必要な場合は action="navigate" とし、機能カタログの route または target の相対パスを使う。移動後に続ける操作が明確なら、navigate の後に続きの steps も含める。
 - ユーザーが明示した値だけを input の value に入れる。推測した個人情報や危険な値は入力しない。
 - 削除、上書き、送信、外部認証など取り消しにくい操作は、ユーザーが明確に依頼した場合だけ含める。
 - ログインが必要・画面上に要素がない・状態が不明な場合は、まず該当ページ/タブを開く手順までにする。
@@ -91,6 +106,7 @@ def parse_action_response(text: str) -> dict[str, Any] | None:
         path = step.get("path", "")
         command = step.get("command", "")
         args = step.get("args", {})
+        timeout_ms = step.get("timeout_ms")
         if action not in _VALID_ACTIONS:
             continue
         clean: dict[str, Any] = {
@@ -109,12 +125,21 @@ def parse_action_response(text: str) -> dict[str, Any] | None:
             if not isinstance(path, str) or not path.startswith("/"):
                 continue
             clean["path"] = path
+        elif action == "wait":
+            if selector:
+                clean["selector"] = selector
+            if isinstance(timeout_ms, int | float):
+                clean["timeout_ms"] = max(0, min(int(timeout_ms), 5000))
+            elif not selector:
+                clean["timeout_ms"] = 300
         else:
             if not selector:
                 continue
             clean["selector"] = selector
-        if action == "input":
+        if action in ("input", "select"):
             clean["value"] = str(step.get("value", ""))
+        if action == "check":
+            clean["checked"] = bool(step.get("checked", True))
         valid_steps.append(clean)
 
     if not valid_steps:
