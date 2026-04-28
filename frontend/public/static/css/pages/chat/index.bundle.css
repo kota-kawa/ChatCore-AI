@@ -838,10 +838,32 @@ body.chat-page .chat-share-sns a:hover {
     width: 100%;
   }
 
-  .chat-page-stage[data-view="launching"],
-  .chat-page-stage[data-view="chat"] {
+  /* チャット表示中のみページ全体の縦スクロールを封じる */
+  html:has(.chat-page-stage[data-view="chat"]),
+  html:has(.chat-page-stage[data-view="launching"]) {
+    overflow: hidden;
+    height: 100%;
+  }
+
+  body.chat-page:has(.chat-page-stage[data-view="chat"]),
+  body.chat-page:has(.chat-page-stage[data-view="launching"]) {
+    overflow: hidden;
     height: 100vh;
     height: 100svh;
+    height: 100dvh;
+  }
+
+  .chat-page-shell:has(.chat-page-stage[data-view="chat"]),
+  .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .chat-page-stage[data-view="launching"],
+  .chat-page-stage[data-view="chat"] {
+    height: 100%;
     min-height: 0;
     overflow: hidden;
   }
