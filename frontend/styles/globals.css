@@ -501,7 +501,8 @@ a.cc-texture-btn:active {
     background 0.24s ease,
     border-color 0.24s ease,
     color 0.24s ease,
-    box-shadow 0.24s ease;
+    box-shadow 0.24s ease,
+    bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .global-ai-agent-button::before,
@@ -1784,6 +1785,21 @@ a.cc-texture-btn:active {
     height: 50px;
     left: max(15px, env(safe-area-inset-left));
     bottom: max(15px, env(safe-area-inset-bottom));
+  }
+}
+
+/* チャット画面表示中はメニューボタン（chat-action-menu）と同じ高さに揃える */
+@media (max-width: 768px) {
+  body:has(#chat-container[data-view="chat"]) .global-ai-agent-button,
+  body:has(#chat-container[data-view="launching"]) .global-ai-agent-button {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 480px) {
+  body:has(#chat-container[data-view="chat"]) .global-ai-agent-button,
+  body:has(#chat-container[data-view="launching"]) .global-ai-agent-button {
+    bottom: calc(65px + env(safe-area-inset-bottom, 0px));
   }
 }
 

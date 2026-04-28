@@ -108,12 +108,8 @@ template.innerHTML = `
       z-index: var(--z-floating-action-menu, 60);
     }
 
-    :host([data-context="chat"]) .actions-menu {
-      display: none;
-    }
-
     :host([data-context="non-chat"]) .actions-menu {
-      bottom: 40px; /* Align with floating prompt button on desktop */
+      bottom: 40px;
     }
 
     @keyframes popIn {
@@ -283,11 +279,11 @@ template.innerHTML = `
       }
 
       :host([data-context="chat"]) .actions-menu {
-        bottom: 100px;  /* チャット入力フォームから十分離して配置 */
+        display: none;
       }
 
       :host([data-context="non-chat"]) .actions-menu {
-        bottom: 20px;   /* プロンプト投稿ボタンと同じ高さに配置 */
+        bottom: 20px;
       }
       /* ハンバーガーボタンをプロンプト投稿ボタンと完全に同じサイズに */
       .actions-menu .btn--menu {
@@ -346,11 +342,11 @@ template.innerHTML = `
       }
 
       :host([data-context="chat"]) .actions-menu {
-        bottom: 90px;   /* チャット入力フォームから十分離して配置 */
+        display: none;
       }
 
       :host([data-context="non-chat"]) .actions-menu {
-        bottom: 15px;   /* プロンプト投稿ボタンと同じ高さに配置 */
+        bottom: 15px;
       }
 
       /* 展開位置調整 — 半径80pxの円弧上に0°/45°/90°等間隔配置 */
