@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 
+import { readSessionJson, writeSessionJson } from "../../lib/utils";
+
 type DraggableModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -7,7 +9,14 @@ type DraggableModalProps = {
   children: ReactNode;
   initialX?: number;
   initialY?: number;
+  positionStorageKey?: string;
 };
+
+type Position = { x: number; y: number };
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
 export function DraggableModal({
   isOpen,
@@ -16,11 +25,28 @@ export function DraggableModal({
   children,
   initialX = 100,
   initialY = 100,
+  positionStorageKey,
 }: DraggableModalProps) {
-  const [position, setPosition] = useState({ x: initialX, y: initialY });
+  const [position, setPosition] = useState<Position>({ x: initialX, y: initialY });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [hydrated, setHydrated] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (positionStorageKey) {
+      const stored = readSessionJson<Position | null>(positionStorageKey, null);
+      if (stored && isFiniteNumber(stored.x) && isFiniteNumber(stored.y)) {
+        setPosition(stored);
+      }
+    }
+    setHydrated(true);
+  }, [positionStorageKey]);
+
+  useEffect(() => {
+    if (!hydrated || !positionStorageKey) return;
+    writeSessionJson(positionStorageKey, position);
+  }, [hydrated, positionStorageKey, position]);
 
   const clampPosition = useCallback((nextPosition: { x: number; y: number }) => {
     const modal = modalRef.current;

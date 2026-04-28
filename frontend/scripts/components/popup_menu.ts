@@ -394,6 +394,8 @@ template.innerHTML = `
   </div>
 `;
 
+const ACTION_MENU_OPEN_KEY = "actionMenu.isOpen";
+
 class ActionMenu extends HTMLElement {
   private toggle: HTMLInputElement | null;
 
@@ -404,12 +406,33 @@ class ActionMenu extends HTMLElement {
 
     this.toggle = shadow.querySelector("#actionMenuButton") as HTMLInputElement | null;
 
-    //  メニュー外クリックで自動クローズ
     if (this.toggle) {
+      try {
+        if (window.sessionStorage.getItem(ACTION_MENU_OPEN_KEY) === "1") {
+          this.toggle.checked = true;
+        }
+      } catch {
+        // ignore sessionStorage failures
+      }
+
+      this.toggle.addEventListener("change", () => {
+        try {
+          window.sessionStorage.setItem(ACTION_MENU_OPEN_KEY, this.toggle?.checked ? "1" : "0");
+        } catch {
+          // ignore sessionStorage failures
+        }
+      });
+
+      //  メニュー外クリックで自動クローズ
       document.addEventListener("click", (e) => {
         // メニューが開いていて，クリック先がこのコンポーネント外なら閉じる
         if (this.toggle?.checked && !e.composedPath().includes(this)) {
           this.toggle.checked = false;
+          try {
+            window.sessionStorage.setItem(ACTION_MENU_OPEN_KEY, "0");
+          } catch {
+            // ignore sessionStorage failures
+          }
         }
       });
     }

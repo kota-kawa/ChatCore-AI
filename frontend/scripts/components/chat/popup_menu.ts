@@ -329,6 +329,8 @@ chatTemplate.innerHTML = `
   </div>
 `;
 
+const CHAT_ACTION_MENU_OPEN_KEY = "chatActionMenu.isOpen";
+
 class ChatActionMenu extends HTMLElement {
   private toggle: HTMLInputElement | null;
 
@@ -339,9 +341,32 @@ class ChatActionMenu extends HTMLElement {
 
     this.toggle = shadow.querySelector("#chatActionMenuButton") as HTMLInputElement | null;
 
+    if (this.toggle) {
+      try {
+        if (window.sessionStorage.getItem(CHAT_ACTION_MENU_OPEN_KEY) === "1") {
+          this.toggle.checked = true;
+        }
+      } catch {
+        // ignore sessionStorage failures
+      }
+
+      this.toggle.addEventListener("change", () => {
+        try {
+          window.sessionStorage.setItem(CHAT_ACTION_MENU_OPEN_KEY, this.toggle?.checked ? "1" : "0");
+        } catch {
+          // ignore sessionStorage failures
+        }
+      });
+    }
+
     document.addEventListener("click", (event) => {
       if (this.toggle?.checked && !event.composedPath().includes(this)) {
         this.toggle.checked = false;
+        try {
+          window.sessionStorage.setItem(CHAT_ACTION_MENU_OPEN_KEY, "0");
+        } catch {
+          // ignore sessionStorage failures
+        }
       }
     });
 
