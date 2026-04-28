@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
+import { readSessionJson, writeSessionJson } from "../../lib/utils";
 import MarkdownContent from "../MarkdownContent";
 
 type ActionStep = {
@@ -117,6 +118,29 @@ const QUICK_PROMPTS = [
 
 const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
 const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
+const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
+const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
+
+function isPersistedMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<Message>;
+  return (
+    (candidate.sender === "user" || candidate.sender === "assistant")
+    && typeof candidate.text === "string"
+  );
+}
+
+function readStoredMessages(): Message[] {
+  const raw = readSessionJson<unknown>(MESSAGES_STORAGE_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isPersistedMessage);
+}
+
+function readStoredExecutedIndexes(): number[] {
+  const raw = readSessionJson<unknown>(EXECUTED_STORAGE_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+}
 
 function cssEscape(value: string) {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
@@ -548,21 +572,31 @@ async function executeActionSteps(
   onStepProgress?: (stepIndex: number, status: "current" | "complete") => void,
 ): Promise<StepExecutionResult> {
   for (const [stepIndex, step] of steps.entries()) {
+    const remaining = steps.slice(stepIndex + 1);
     const navigationPath = getStepNavigationPath(step);
-    const hasRemainingSteps = stepIndex < steps.length - 1;
-    if (navigationPath && hasRemainingSteps && navigationPath !== window.location.pathname) {
-      writePendingActionSteps(steps.slice(stepIndex + 1));
-      onStepProgress?.(stepIndex, "current");
-      const result = await executeActionStep(step);
-      if (!result.ok) return { ...result, failedStepIndex: stepIndex };
-      return { ok: true, pendingNavigation: true };
+    const willNavigate = Boolean(navigationPath) && navigationPath !== window.location.pathname;
+
+    if (remaining.length) {
+      writePendingActionSteps(remaining);
+    } else {
+      clearPendingActionSteps();
     }
 
     onStepProgress?.(stepIndex, "current");
     const result = await executeActionStep(step);
-    if (!result.ok) return { ...result, failedStepIndex: stepIndex };
+    if (!result.ok) {
+      clearPendingActionSteps();
+      return { ...result, failedStepIndex: stepIndex };
+    }
+
+    if (willNavigate && remaining.length) {
+      return { ok: true, pendingNavigation: true };
+    }
+
     onStepProgress?.(stepIndex, "complete");
   }
+
+  clearPendingActionSteps();
   return { ok: true };
 }
 
@@ -589,6 +623,7 @@ export function MiniChat() {
   const [executingIdx, setExecutingIdx] = useState<number | null>(null);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const trimmedInput = input.trim();
   const currentProgressText = statusText ?? progressSteps[progressSteps.length - 1] ?? null;
@@ -698,8 +733,10 @@ export function MiniChat() {
         });
       });
       if (result.ok) {
-        if (!result.pendingNavigation) {
-          setExecutedSet((prev) => new Set([...prev, msgIdx]));
+        setExecutedSet((prev) => new Set([...prev, msgIdx]));
+        if (result.pendingNavigation) {
+          const merged = Array.from(new Set([...readStoredExecutedIndexes(), msgIdx]));
+          writeSessionJson(EXECUTED_STORAGE_KEY, merged);
         }
       } else {
         const failureText = result.message || "画面状態を確認できませんでした。";
@@ -746,6 +783,12 @@ export function MiniChat() {
   };
 
   useEffect(() => {
+    const storedMessages = readStoredMessages();
+    const storedExecuted = readStoredExecutedIndexes();
+    if (storedMessages.length) setMessages(storedMessages);
+    if (storedExecuted.length) setExecutedSet(new Set(storedExecuted));
+    setHydrated(true);
+
     const pendingSteps = readPendingActionSteps();
     if (!pendingSteps.length) return undefined;
     clearPendingActionSteps();
@@ -773,6 +816,16 @@ export function MiniChat() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    writeSessionJson(MESSAGES_STORAGE_KEY, messages);
+  }, [hydrated, messages]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    writeSessionJson(EXECUTED_STORAGE_KEY, Array.from(executedSet));
+  }, [hydrated, executedSet]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -921,7 +974,10 @@ export function MiniChat() {
         <button
           type="button"
           className="mini-chat-action-btn"
-          onClick={() => setMessages([])}
+          onClick={() => {
+            setMessages([]);
+            setExecutedSet(new Set());
+          }}
           disabled={!messages.length || isGenerating}
           aria-label="会話をクリア"
         >
