@@ -265,8 +265,7 @@ async def get_chat_rooms(request: Request):
         user_id = session["user_id"]
         try:
             persisted_rooms = await run_blocking(_fetch_persisted_user_rooms, user_id)
-            temporary_rooms = await run_blocking(_fetch_temporary_user_rooms, user_id)
-            return jsonify({"rooms": _sort_rooms_newest_first([*temporary_rooms, *persisted_rooms])})
+            return jsonify({"rooms": persisted_rooms})
         except Exception:
             return log_and_internal_server_error(
                 logger,

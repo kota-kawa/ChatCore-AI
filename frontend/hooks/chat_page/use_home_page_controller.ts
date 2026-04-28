@@ -265,14 +265,14 @@ export function useHomePageController() {
     setIsGenerating(false);
   }, []);
 
-  const persistCurrentRoomId = useCallback((roomId: string | null) => {
+  const persistCurrentRoomId = useCallback((roomId: string | null, mode?: ChatRoomMode) => {
     if (currentRoomIdRef.current !== roomId) {
       disconnectActiveGeneration();
     }
     currentRoomIdRef.current = roomId;
     setCurrentRoomId(roomId);
     try {
-      if (roomId) {
+      if (roomId && mode !== "temporary") {
         localStorage.setItem(STORAGE_KEYS.currentChatRoomId, roomId);
       } else {
         localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
@@ -749,7 +749,7 @@ export function useHomePageController() {
 
       const nextRoom = chatRooms.find((room) => room.id === roomId);
       if (currentRoomIdRef.current !== roomId) {
-        persistCurrentRoomId(roomId);
+        persistCurrentRoomId(roomId, roomMode ?? nextRoom?.mode);
       }
       setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
       setPageViewState("chat");
@@ -1179,7 +1179,7 @@ export function useHomePageController() {
         ? `【タスク】${task.name}\n【状況・作業環境】${currentSetupInfo}`
         : `【タスク】${task.name}`;
 
-      persistCurrentRoomId(roomId);
+      persistCurrentRoomId(roomId, roomMode);
       setCurrentRoomMode(roomMode);
       setMessages([]);
       setChatInput("");
@@ -1243,7 +1243,7 @@ export function useHomePageController() {
     const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
     const roomTitle = firstMessage.slice(0, 255) || "新規チャット";
 
-    persistCurrentRoomId(roomId);
+    persistCurrentRoomId(roomId, roomMode);
     setCurrentRoomMode(roomMode);
     setMessages([]);
     setChatInput("");

@@ -29,7 +29,7 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         create_room.assert_not_called()
         create_ephemeral.assert_called_once_with("temporary-user:7", "temp-room", "Temp")
 
-    def test_get_chat_rooms_merges_persisted_and_temporary_authenticated_rooms(self):
+    def test_get_chat_rooms_returns_only_persisted_rooms(self):
         request = build_request(
             method="GET",
             path="/api/get_chat_rooms",
@@ -44,23 +44,14 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
                 "created_at": "2026-04-20T10:00:00+09:00",
             }
         ]
-        temporary_rooms = [
-            {
-                "id": "room-temp",
-                "title": "未保存チャット",
-                "mode": "temporary",
-                "created_at": "2026-04-20T11:00:00",
-            }
-        ]
 
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=persisted_rooms):
-                with patch("blueprints.chat.rooms._fetch_temporary_user_rooms", return_value=temporary_rooms):
-                    response = asyncio.run(get_chat_rooms(request))
+                response = asyncio.run(get_chat_rooms(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual([room["id"] for room in payload["rooms"]], ["room-temp", "room-normal"])
+        self.assertEqual([room["id"] for room in payload["rooms"]], ["room-normal"])
 
     def test_chat_uses_ephemeral_store_for_authenticated_temporary_room(self):
         request = build_request(
