@@ -1373,3 +1373,122 @@ body.memo-page :where(
 [data-theme="dark"] .memo-empty-state i {
   color: rgba(245, 158, 11, 0.2);
 }
+
+/* ─── 追加ダークモード修正 ─── */
+
+/* カードヘッダー見出し (#4a2b09 → ダーク背景で不可視) */
+[data-theme="dark"] .memo-card__header h2 {
+  color: #fbbf24;
+}
+
+/* eyebrow テキスト (#b45309 → ダーク背景で不可視) */
+[data-theme="dark"] .memo-hero__eyebrow {
+  color: #fbbf24;
+}
+
+/* chip アイコン */
+[data-theme="dark"] .memo-hero__chip i {
+  color: #fbbf24;
+}
+
+/* フォーム入力エリア: 白背景 + 変数テキスト(#f8fafc) = 白地に白 (最重要修正) */
+[data-theme="dark"] .memo-control {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #f8fafc;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .memo-control:focus {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
+  transform: none;
+}
+
+/* Optional ラベル・ヒントテキスト */
+[data-theme="dark"] .memo-page-shell .optional {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .memo-page-shell .memo-form__hint {
+  color: #94a3b8;
+}
+
+/* フラッシュメッセージ (ダーク背景カード内で暗い文字が不可視) */
+[data-theme="dark"] .memo-flash--success {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+[data-theme="dark"] .memo-flash--error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+/* メモ一覧アイテムの日付 (クラス名不一致: .memo-item__meta → 実際は .memo-item__date) */
+[data-theme="dark"] .memo-item__date {
+  color: #94a3b8;
+}
+
+/* タグ (クラス名不一致: .memo-item__tag → 実際は .memo-tag) */
+[data-theme="dark"] .memo-tag {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-tag--muted {
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.18);
+  color: #94a3b8;
+}
+
+/* 空メモ表示 (白背景がダークページ内で浮く) */
+[data-theme="dark"] .memo-history__empty {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+/* メモ詳細モーダル: タイトル・日付 (#4a2b09/#9a7a52 → 暗背景で不可視) */
+[data-theme="dark"] .memo-modal__header h3 {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-modal__date {
+  color: #94a3b8;
+}
+
+/* モーダル内セクション (白背景のままダークモーダル内に残る) */
+[data-theme="dark"] .memo-modal__section {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+[data-theme="dark"] .memo-modal__section h4 {
+  color: #fbbf24;
+}
+
+/* 共有モーダル: テキスト類 */
+[data-theme="dark"] .memo-share-modal__header h3 {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-share-modal__header p {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .memo-share-modal__status {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .memo-share-modal__status--error {
+  color: #f87171;
+}
+
+/* 共有モーダル SNS リンクの枠線 */
+[data-theme="dark"] .memo-share-modal__sns a {
+  border-color: rgba(148, 163, 184, 0.2);
+}

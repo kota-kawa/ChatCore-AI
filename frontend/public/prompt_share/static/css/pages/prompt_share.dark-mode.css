@@ -130,8 +130,34 @@
   color: #93c5fd;
 }
 
+[data-theme="dark"] .prompt-share-page .prompt-card__type-pill--text {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #d1d5db;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-card__type-pill--image {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.25);
+  color: #fcd34d;
+}
+
 [data-theme="dark"] .prompt-card__created-at {
   color: #9ca3af;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-loading-message,
+[data-theme="dark"] .prompt-share-page .prompt-feedback,
+[data-theme="dark"] .prompt-share-page .prompt-cards > p {
+  background: #1f2937;
+  border-color: #374151;
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-feedback--error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #f87171;
 }
 
 [data-theme="dark"] .meatball-menu {
@@ -150,13 +176,20 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-[data-theme="dark"] .dropdown-item {
+/* specificity を light-mode (.prompt-share-page .prompt-actions-dropdown .dropdown-item = 0,3,0) と揃える */
+[data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item {
   color: #f3f4f6;
+  background: transparent;
 }
 
-[data-theme="dark"] .dropdown-item:hover {
+[data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item:hover {
   background: #334155;
   color: #60a5fa;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item:disabled {
+  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 [data-theme="dark"] .prompt-action-btn {
