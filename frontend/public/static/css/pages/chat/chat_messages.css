@@ -885,6 +885,48 @@ chat-action-menu {
   transform: translateX(-50%) translateY(8px);
 }
 
+/* ─── ダークモード ─── */
+[data-theme="dark"] .bot-message code {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f472b6;
+}
+
+[data-theme="dark"] .thinking-message {
+  border-color: rgba(25, 195, 125, 0.35);
+  background:
+    radial-gradient(circle at 16% 18%, rgba(30, 41, 59, 0.96), transparent 30%),
+    radial-gradient(circle at 84% 18%, rgba(25, 195, 125, 0.12), transparent 40%),
+    linear-gradient(138deg, rgba(17, 24, 39, 0.98), rgba(12, 18, 30, 0.94)),
+    rgba(15, 23, 42, 0.92);
+  box-shadow:
+    0 20px 44px rgba(2, 6, 23, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .copy-btn,
+[data-theme="dark"] .memo-save-btn {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .copy-btn:hover,
+[data-theme="dark"] .memo-save-btn:hover {
+  background: rgba(30, 41, 59, 1);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .scroll-to-bottom-btn {
+  background: rgba(17, 24, 39, 0.92);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .scroll-to-bottom-btn:hover {
+  background: rgba(30, 41, 59, 1);
+  color: #e2e8f0;
+}
+
 /* ─── タブレット (≤992px) ─── */
 @media (max-width: 992px) {
   .chat-messages {

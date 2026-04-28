@@ -332,6 +332,16 @@ body {
   }
 }
 
+[data-theme="dark"] .cc-inline-loading {
+  border-color: rgba(100, 116, 139, 0.4);
+  background: rgba(30, 41, 59, 0.9);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .cc-inline-loading__spinner {
+  color: #34d399;
+}
+
 .global-error-boundary__card .cc-texture-btn {
   justify-self: start;
 }

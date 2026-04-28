@@ -1267,3 +1267,11 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-color: rgba(25, 195, 125, 0.26);
   box-shadow: 0 30px 60px rgba(2, 6, 23, 0.55);
 }
+
+/* IO container (task card tooltip) */
+[data-theme="dark"] .io-container {
+  background: rgba(17, 24, 39, 0.97);
+  border-color: rgba(25, 195, 125, 0.28);
+  color: var(--text-dark, #e5e7eb);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.4);
+}

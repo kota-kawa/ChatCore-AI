@@ -893,6 +893,7 @@
   }
 }
 /* END inlined: public/static/css/components/prompt_assist.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.foundation.css */
 .bi {
   display: inline-block;
   font-family: "bootstrap-icons" !important;
@@ -1409,7 +1410,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   border-color: rgba(69, 88, 110, 0.3);
   background: #ffffff;
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.foundation.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.cards-actions.css */
 .prompt-load-more:disabled {
   opacity: 0.65;
   cursor: wait;
@@ -1865,7 +1867,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   color: var(--ps-text-muted);
   background: #f7f8f9;
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.cards-actions.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.modals-composer.css */
 .post-modal {
   display: flex;
   align-items: center;
@@ -2864,7 +2867,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .new-prompt-btn i.rotating {
   animation: newPromptIconSpin 0.72s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.modals-composer.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.ai-agent.css */
 .prompt-share-page .ai-agent-btn {
   width: 58px;
   height: 58px;
@@ -3434,7 +3438,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   padding: 0.66rem;
   font-size: 0.85rem;
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.ai-agent.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.responsive.css */
 @media (max-width: 1024px) {
   .prompts-header {
     min-height: clamp(240px, 46vw, 330px);
@@ -3750,7 +3755,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     min-width: 0;
   }
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.responsive.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.button-system.css */
 /* Prompt Share 全体のボタン質感をトップページの＋ボタン系に統一 */
 .prompt-share-page :where(
   #auth-buttons .auth-btn,
@@ -3893,7 +3899,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     transform: translateY(-50%);
   }
 }
-
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.button-system.css */
+/* BEGIN inlined: public/prompt_share/static/css/pages/prompt_share.dark-mode.css */
 /* ==========================================================================
    Dark Mode Overrides
    ========================================================================== */
@@ -4256,3 +4263,4 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
     padding: 0.68rem;
   }
 }
+/* END inlined: public/prompt_share/static/css/pages/prompt_share.dark-mode.css */

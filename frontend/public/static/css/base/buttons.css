@@ -261,6 +261,12 @@ user-icon[hidden] {
     }
   }
 
+/* ─── ダークモード: モバイルユーザーメニュー ─── */
+[data-theme="dark"] #user-menu.mobile-user-menu > div {
+  background: rgba(17, 24, 39, 0.98);
+  color: var(--text-dark, #e5e7eb);
+}
+
 /* ボタンの影を全体で無効化 */
 button,
 input[type="button"],
