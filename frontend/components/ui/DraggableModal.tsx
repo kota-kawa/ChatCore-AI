@@ -13,6 +13,7 @@ type DraggableModalProps = {
 };
 
 type Position = { x: number; y: number };
+const CLOSE_ANIMATION_MS = 320;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -31,6 +32,7 @@ export function DraggableModal({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [hydrated, setHydrated] = useState(false);
+  const [shouldRender, setShouldRender] = useState(isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +49,21 @@ export function DraggableModal({
     if (!hydrated || !positionStorageKey) return;
     writeSessionJson(positionStorageKey, position);
   }, [hydrated, positionStorageKey, position]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldRender(false);
+    }, CLOSE_ANIMATION_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isOpen]);
 
   const clampPosition = useCallback((nextPosition: { x: number; y: number }) => {
     const modal = modalRef.current;
@@ -103,7 +120,7 @@ export function DraggableModal({
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!shouldRender) return undefined;
 
     const keepModalInViewport = () => {
       setPosition((current) => clampPosition(current));
@@ -115,14 +132,14 @@ export function DraggableModal({
     return () => {
       window.removeEventListener("resize", keepModalInViewport);
     };
-  }, [isOpen, clampPosition]);
+  }, [shouldRender, clampPosition]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
   return (
     <div
       ref={modalRef}
-      className="ai-agent-modal global-ai-agent-modal"
+      className={`ai-agent-modal global-ai-agent-modal ${isOpen ? "is-open" : "is-closing"}`}
       role="dialog"
       aria-modal="false"
       aria-label={title || "AI エージェント"}
