@@ -511,12 +511,9 @@ a.cc-texture-btn:active {
 }
 
 .global-ai-agent-button::after {
-  inset: 7px;
-  background:
-    linear-gradient(90deg, transparent 46%, rgba(236, 254, 255, 0.5) 50%, transparent 54%),
-    linear-gradient(0deg, transparent 46%, rgba(236, 254, 255, 0.36) 50%, transparent 54%);
-  opacity: 0.52;
-  transform: rotate(18deg);
+  inset: 8px;
+  border: 1px solid rgba(236, 254, 255, 0.24);
+  opacity: 0.5;
 }
 
 .global-ai-agent-button:hover,

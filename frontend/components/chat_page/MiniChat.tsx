@@ -97,7 +97,8 @@ async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEven
 const QUICK_PROMPTS = [
   "このサービスはどんなことができる？",
   "この画面の使い方を教えて",
-  "まず何から始めればいい？"
+  "マニュアルからメモの共有方法を探して",
+  "プロンプト共有を開いてメール返信を検索して"
 ];
 
 function cssEscape(value: string) {
