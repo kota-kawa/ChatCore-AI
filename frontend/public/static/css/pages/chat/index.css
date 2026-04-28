@@ -826,30 +826,36 @@ body.chat-page .chat-share-sns a:hover {
 }
 
 @media (max-width: 576px) {
-  /* ページ全体の縦スクロールを封じる — ヘッダーと入力欄を常に画面内に固定する */
-  html:has(.chat-page-shell) {
-    overflow: hidden;
-    height: 100%;
-  }
-
-  body.chat-page {
-    overflow: hidden;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
-  }
-
   .chat-page-shell {
     padding: 0;
     align-items: stretch;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
-    overflow: hidden;
   }
 
   .chat-page-stage {
     width: 100%;
+  }
+
+  /* チャット表示中のみページ全体の縦スクロールを封じる */
+  html:has(.chat-page-stage[data-view="chat"]),
+  html:has(.chat-page-stage[data-view="launching"]) {
+    overflow: hidden;
+    height: 100%;
+  }
+
+  body.chat-page:has(.chat-page-stage[data-view="chat"]),
+  body.chat-page:has(.chat-page-stage[data-view="launching"]) {
+    overflow: hidden;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .chat-page-shell:has(.chat-page-stage[data-view="chat"]),
+  .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .chat-page-stage[data-view="launching"],
