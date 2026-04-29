@@ -965,11 +965,15 @@ chat-action-menu {
     flex: 1;
     max-height: unset;
     padding:
-      3.05rem
+      3.55rem
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
       0.9rem
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
     gap: 0.15rem;
+    /* iOS の慣性スクロールを安定させ、入力フォーカス時にズレないようにする */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scroll-padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
   }
 
   .chat-messages--virtual {
@@ -990,7 +994,7 @@ chat-action-menu {
   }
 
   .chat-message-row--first {
-    padding-top: 3.05rem;
+    padding-top: 3.55rem;
   }
 
   .chat-message-row--last {
@@ -1096,7 +1100,10 @@ chat-action-menu {
   }
 
   .scroll-to-bottom-btn {
-    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1rem;
   }
 
   /* Thinking message */

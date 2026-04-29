@@ -295,25 +295,38 @@
 @media (max-width: 576px) {
   .sidebar {
     padding:
-      0.8rem
+      /* サイドバートグルボタンの高さ分だけ上を空ける */
+      calc(3.6rem + env(safe-area-inset-top, 0px))
       calc(0.72rem + env(safe-area-inset-right, 0px))
-      0.9rem
+      calc(1.2rem + env(safe-area-inset-bottom, 0px))
       calc(0.72rem + env(safe-area-inset-left, 0px));
+    /* iOS での慣性スクロールを有効にする */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .new-chat-btn {
+    /* タップターゲットを広げる */
+    min-height: 48px;
+    padding: 0.72rem 1rem;
   }
 
   .chat-room-card {
-    min-height: 50px;
+    min-height: 52px;
     padding: 0.72rem 0.78rem;
     font-size: 0.9rem;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.72);
     border-color: rgba(15, 23, 42, 0.04);
+    /* タッチ時の即反応感 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .room-actions-icon {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
     opacity: 0.72;
     margin-right: -0.35rem;
   }
@@ -322,6 +335,10 @@
     right: 0;
     left: auto;
     min-width: 168px;
+  }
+
+  .menu-item {
+    min-height: 44px;
   }
 
   [data-theme="dark"] .chat-room-card {

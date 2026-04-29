@@ -1613,28 +1613,61 @@ export function useHomePageController() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const updateViewportVars = () => {
+    let rafId: number | null = null;
+    let settleTimeout: number | null = null;
+
+    const writeViewportVars = () => {
+      rafId = null;
       const visualViewport = window.visualViewport;
       const height = visualViewport?.height ?? window.innerHeight;
       const offsetTop = visualViewport?.offsetTop ?? 0;
+      const layoutHeight = window.innerHeight || height;
+      const keyboardInset = Math.max(0, Math.round(layoutHeight - height - offsetTop));
 
       root.style.setProperty("--chat-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
       root.style.setProperty("--chat-visual-viewport-offset-top", `${Math.max(0, Math.round(offsetTop))}px`);
+      root.style.setProperty("--chat-keyboard-inset", `${keyboardInset}px`);
+      root.dataset.chatKeyboardOpen = keyboardInset > 24 ? "true" : "false";
     };
 
-    updateViewportVars();
+    const updateViewportVars = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(writeViewportVars);
+    };
+
+    // iOS は keyboard を閉じた後に visualViewport.resize がしばらく遅延する
+    // ことがあるため、フォーカスが外れたら少し遅らせて強制再計測する
+    const scheduleSettleTick = () => {
+      if (settleTimeout !== null) {
+        window.clearTimeout(settleTimeout);
+      }
+      settleTimeout = window.setTimeout(() => {
+        settleTimeout = null;
+        writeViewportVars();
+      }, 250);
+    };
+
+    writeViewportVars();
     window.addEventListener("resize", updateViewportVars);
     window.addEventListener("orientationchange", updateViewportVars);
     window.visualViewport?.addEventListener("resize", updateViewportVars);
     window.visualViewport?.addEventListener("scroll", updateViewportVars);
+    document.addEventListener("focusin", updateViewportVars);
+    document.addEventListener("focusout", scheduleSettleTick);
 
     return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      if (settleTimeout !== null) window.clearTimeout(settleTimeout);
       window.removeEventListener("resize", updateViewportVars);
       window.removeEventListener("orientationchange", updateViewportVars);
       window.visualViewport?.removeEventListener("resize", updateViewportVars);
       window.visualViewport?.removeEventListener("scroll", updateViewportVars);
+      document.removeEventListener("focusin", updateViewportVars);
+      document.removeEventListener("focusout", scheduleSettleTick);
       root.style.removeProperty("--chat-visual-viewport-height");
       root.style.removeProperty("--chat-visual-viewport-offset-top");
+      root.style.removeProperty("--chat-keyboard-inset");
+      delete root.dataset.chatKeyboardOpen;
     };
   }, []);
 
@@ -1815,17 +1848,29 @@ export function useHomePageController() {
   }, [modelMenuOpen, chatHeaderModelMenuOpen, openRoomActionsFor, sidebarOpen]);
 
   useEffect(() => {
-    const onResize = () => {
-      setSidebarOpen(false);
+    let lastWidth = typeof window === "undefined" ? 0 : window.innerWidth;
+    const onWindowResize = () => {
+      const nextWidth = window.innerWidth;
+      // Only treat width changes as a real resize; ignore height-only changes
+      // caused by the on-screen keyboard opening/closing.
+      if (Math.abs(nextWidth - lastWidth) >= 1) {
+        lastWidth = nextWidth;
+        setSidebarOpen(false);
+        scheduleSetupViewportFit();
+      }
+    };
+    const onVisualViewportResize = () => {
+      // Re-run setup density on viewport changes, but never auto-close the
+      // sidebar — that would flicker every time the soft keyboard appears.
       scheduleSetupViewportFit();
     };
 
-    window.addEventListener("resize", onResize);
-    window.visualViewport?.addEventListener("resize", onResize);
+    window.addEventListener("resize", onWindowResize);
+    window.visualViewport?.addEventListener("resize", onVisualViewportResize);
 
     return () => {
-      window.removeEventListener("resize", onResize);
-      window.visualViewport?.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", onWindowResize);
+      window.visualViewport?.removeEventListener("resize", onVisualViewportResize);
     };
   }, []);
 

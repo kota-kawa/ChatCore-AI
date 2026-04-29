@@ -851,7 +851,8 @@ body.chat-page .chat-share-sns a:hover {
     -webkit-overflow-scrolling: touch;
   }
 
-  /* チャット表示中のみページ全体の縦スクロールを封じる */
+  /* チャット表示中はページ全体を visual viewport に固定して
+     iOS Safari がキーボードでヘッダーを画面外へ追いやらないようにする。 */
   html:has(.chat-page-stage[data-view="chat"]),
   html:has(.chat-page-stage[data-view="launching"]) {
     overflow: hidden;
@@ -862,14 +863,23 @@ body.chat-page .chat-share-sns a:hover {
   body.chat-page:has(.chat-page-stage[data-view="chat"]),
   body.chat-page:has(.chat-page-stage[data-view="launching"]) {
     overflow: hidden;
-    height: var(--chat-visual-viewport-height, 100dvh);
+    height: 100%;
+    overscroll-behavior: none;
   }
 
   body.chat-page.chat-view-active .chat-page-shell,
   .chat-page-shell:has(.chat-page-stage[data-view="chat"]),
   .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
+    position: fixed;
+    top: var(--chat-visual-viewport-offset-top, 0px);
+    left: 0;
+    right: 0;
+    width: 100%;
     height: var(--chat-visual-viewport-height, 100dvh);
+    min-height: 0;
     overflow: hidden;
+    /* キーボード開閉でガクつかないように、わずかな高さ変化はトランジションする */
+    transition: height 120ms ease, top 120ms ease;
   }
 
   body.chat-page.chat-view-active .chat-page-stage,
@@ -887,6 +897,12 @@ body.chat-page .chat-share-sns a:hover {
 
   .chat-page-shell::before {
     display: none;
+  }
+
+  /* キーボード表示中はガラスエフェクトを軽くしてジャギを抑える */
+  html[data-chat-keyboard-open="true"] .input-container {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   body.chat-page .global-ai-agent-button {

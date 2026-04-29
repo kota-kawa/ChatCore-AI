@@ -55,9 +55,15 @@ export default function HomePage() {
     shareWithNativeSheet,
   } = controller;
 
+  const isInChatView = pageViewState === "chat" || pageViewState === "launching";
   const floatingAuthUiStyle = {
     position: "fixed" as const,
-    top: "max(10px, env(safe-area-inset-top, 0px))",
+    // チャット画面では visual viewport の offset-top を考慮してチャットヘッダー内に収める。
+    // キーボードが開いている間は chat-page-shell が visual viewport に追従するが、
+    // この要素は body 直下 fixed なので offset-top を加算して揃える。
+    top: isInChatView
+      ? "calc(var(--chat-visual-viewport-offset-top, 0px) + max(10px, env(safe-area-inset-top, 0px)))"
+      : "max(10px, env(safe-area-inset-top, 0px))",
     right: "max(10px, env(safe-area-inset-right, 0px))",
     zIndex: "var(--z-floating-controls)"
   };
@@ -66,7 +72,10 @@ export default function HomePage() {
     <>
       <Head>
         <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+        />
         <title>ChatCore-AI</title>
         <link rel="icon" type="image/webp" href="/static/favicon.webp" />
         <link rel="icon" type="image/png" href="/static/favicon.png" />

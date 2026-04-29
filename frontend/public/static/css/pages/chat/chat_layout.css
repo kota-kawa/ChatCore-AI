@@ -412,12 +412,14 @@
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   #chat-container {
-    height: var(--chat-visual-viewport-height, 100dvh);
+    height: 100%;
     min-height: 0;
     border-radius: 0;
     border: none;
     box-shadow: none;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
 
   .chat-header {
@@ -429,10 +431,16 @@
       0.48rem
       calc(0.72rem + env(safe-area-inset-left, 0px));
     gap: 0.45rem;
+    /* iOS の慣性スクロール中もヘッダーが視覚的に揺れないよう固定する */
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: var(--z-chat-header, 50);
   }
 
   .chat-main {
-    height: 100%;
+    flex: 1;
+    height: auto;
     min-height: 0;
   }
 
@@ -444,6 +452,9 @@
 
   .header-left {
     gap: 0.42rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .header-right {
@@ -541,12 +552,42 @@
     color: #6ee7b7 !important;
   }
 
+  /* モデル選択ドロップダウン: iOS でスクロール可能にする */
+  .chat-header-model-menu {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* モデルオプション: タップターゲットを広く取る */
+  .chat-header-model-option {
+    padding: 0.72rem 1rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* 共有モーダル */
   .chat-share-modal {
     padding: 0.75rem;
+    align-items: flex-end;
   }
 
   .chat-share-modal__content {
-    border-radius: 14px;
-    padding: 0.92rem 0.88rem 0.95rem;
+    border-radius: 20px 20px 14px 14px;
+    padding: 0.92rem 0.88rem calc(0.95rem + env(safe-area-inset-bottom, 0px));
+    /* シート形式のモーダルを下から引き上げるアニメーション */
+    animation: mobileSheetIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes mobileSheetIn {
+    from { transform: translateY(24px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+
+  /* スクロールトゥボトムボタン: 入力欄より上に出す */
+  .scroll-to-bottom-btn {
+    bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px));
+    width: 2.5rem;
+    height: 2.5rem;
   }
 }

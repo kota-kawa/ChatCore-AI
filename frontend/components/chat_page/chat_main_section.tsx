@@ -79,6 +79,19 @@ function ChatMainSectionComponent() {
     adjustChatInputHeight(chatInputRef.current);
   }, [chatInput]);
 
+  // モバイルでテキスト入力欄にフォーカスした際、最新メッセージを画面下端に貼り付け、
+  // ヘッダー・入力欄が常に見える状態を保証する。
+  const handleChatInputFocus = () => {
+    const list = chatMessagesRef.current;
+    if (!list) return;
+    // visualViewport.resize が走るまでわずかに待ってからスクロール位置を補正する。
+    window.setTimeout(() => {
+      const node = chatMessagesRef.current;
+      if (!node) return;
+      node.scrollTop = node.scrollHeight;
+    }, 220);
+  };
+
   return (
     <div
       id="chat-container"
@@ -294,10 +307,14 @@ function ChatMainSectionComponent() {
                 placeholder={isChatLaunching ? "チャットを準備しています..." : "メッセージを入力..."}
                 value={chatInput}
                 disabled={isChatLaunching}
+                enterKeyHint="send"
+                autoCorrect="off"
+                autoCapitalize="sentences"
                 onChange={(event) => {
                   setChatInput(event.target.value);
                   adjustChatInputHeight(event.currentTarget);
                 }}
+                onFocus={handleChatInputFocus}
                 onKeyDown={handleChatInputKeyDown}
               ></textarea>
               <button
