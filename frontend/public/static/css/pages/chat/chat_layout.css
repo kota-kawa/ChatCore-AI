@@ -325,15 +325,32 @@
 .chat-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 0 minmax(0, 1fr);
   overflow: hidden;
   background: var(--surface-primary, #fff);
   min-height: 0;
   position: relative;
+  transition: grid-template-columns var(--transition-sidebar, 0.28s cubic-bezier(0.32, 0.72, 0, 1));
+}
+
+.chat-main.chat-main--sidebar-open {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.chat-main.chat-main--sidebar-closed > .sidebar {
+  visibility: hidden;
+  pointer-events: none;
+  border-right-color: transparent;
 }
 
 .chat-sidebar-toggle {
-  display: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0.85rem;
+  display: inline-flex;
+  color: var(--success-strong, #0f5132) !important;
+  z-index: var(--z-chat-sidebar-toggle, 44);
+  font-size: 1.25rem;
 }
 
 /* ─── タブレット (≤992px) ─── */
@@ -352,12 +369,8 @@
 
   /* サイドバートグルはchat-area内にダークグリーンで表示 */
   .chat-sidebar-toggle {
-    position: absolute;
     top: 0.6rem;
     left: 0.75rem;
-    display: inline-flex;
-    color: var(--success-strong, #0f5132) !important;
-    z-index: var(--z-chat-sidebar-toggle, 44);
     font-size: 1.3rem;
   }
 
@@ -375,6 +388,12 @@
     transform: translateX(-104%);
     transition: transform var(--transition-sidebar, 0.28s cubic-bezier(0.32, 0.72, 0, 1));
     z-index: var(--z-chat-sidebar, 46);
+  }
+
+  .chat-main.chat-main--sidebar-closed > .sidebar {
+    visibility: visible;
+    pointer-events: auto;
+    border-right-color: var(--border-default, rgba(0, 0, 0, 0.08));
   }
 
   .sidebar.open {
@@ -405,7 +424,15 @@
   }
 
   .chat-main {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .chat-main.chat-main--sidebar-open {
     grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    width: 320px;
   }
 }
 

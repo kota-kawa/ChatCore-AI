@@ -67,6 +67,11 @@ import {
 import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
+const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
+
+function isOverlaySidebarViewport() {
+  return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
+}
 
 const fetchChatRooms = async (url: string): Promise<ChatRoom[]> => {
   const response = await fetch(url, { credentials: "same-origin" });
@@ -229,6 +234,12 @@ export function useHomePageController() {
       keepPreviousData: true,
     },
   );
+
+  const closeOverlaySidebar = useCallback(() => {
+    if (isOverlaySidebarViewport()) {
+      setSidebarOpen(false);
+    }
+  }, [setSidebarOpen]);
 
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
     const container = chatMessagesRef.current;
@@ -742,7 +753,7 @@ export function useHomePageController() {
 
       if (currentRoomIdRef.current === roomId && !forceReload) {
         setPageViewState("chat");
-        setSidebarOpen(false);
+        closeOverlaySidebar();
         setOpenRoomActionsFor(null);
         return;
       }
@@ -753,14 +764,14 @@ export function useHomePageController() {
       }
       setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
       setPageViewState("chat");
-      setSidebarOpen(false);
+      closeOverlaySidebar();
       setOpenRoomActionsFor(null);
       setShareStatus({ message: "共有リンクを準備しています...", error: false });
       setShareUrl("");
       loadLocalChatHistory(roomId);
       void loadChatHistory(roomId, true);
     },
-    [chatRooms, currentRoomIdRef, loadChatHistory, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
+    [chatRooms, closeOverlaySidebar, currentRoomIdRef, loadChatHistory, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
@@ -1080,12 +1091,12 @@ export function useHomePageController() {
 
   const showSetupForm = useCallback(() => {
     setPageViewState("setup");
-    setSidebarOpen(false);
+    closeOverlaySidebar();
     setLaunchingTaskName(null);
     setSetupInfo("");
     closeShareModal();
     scheduleSetupViewportFit();
-  }, [closeShareModal, setLaunchingTaskName, setPageViewState]);
+  }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskName, setPageViewState]);
 
   const handleAccessChat = useCallback(async () => {
     const activeRoomId = currentRoomIdRef.current;
@@ -1098,7 +1109,7 @@ export function useHomePageController() {
     }
 
     setPageViewState("chat");
-    setSidebarOpen(false);
+    closeOverlaySidebar();
     setOpenRoomActionsFor(null);
 
     if (activeRoomId) {
@@ -1139,6 +1150,7 @@ export function useHomePageController() {
     }
   }, [
     chatRooms,
+    closeOverlaySidebar,
     currentRoomIdRef,
     loadChatRooms,
     loadLocalChatHistory,
@@ -1189,7 +1201,7 @@ export function useHomePageController() {
       setHistoryHasMore(false);
       setHistoryNextBeforeId(null);
       setIsLoadingOlder(false);
-      setSidebarOpen(false);
+      closeOverlaySidebar();
       setPageViewState("launching");
 
       try {
@@ -1217,6 +1229,7 @@ export function useHomePageController() {
       }
     },
     [
+      closeOverlaySidebar,
       createNewChatRoom,
       generateResponse,
       isTaskOrderEditing,
@@ -1253,7 +1266,7 @@ export function useHomePageController() {
     setHistoryHasMore(false);
     setHistoryNextBeforeId(null);
     setIsLoadingOlder(false);
-    setSidebarOpen(false);
+    closeOverlaySidebar();
     setPageViewState("launching");
 
     try {
@@ -1278,6 +1291,7 @@ export function useHomePageController() {
       taskLaunchInProgressRef.current = false;
     }
   }, [
+    closeOverlaySidebar,
     createNewChatRoom,
     generateResponse,
     loadChatRooms,
@@ -1601,6 +1615,20 @@ export function useHomePageController() {
   }, [clearTrackedTimeouts, disconnectActiveGeneration]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY);
+    const syncSidebarWithViewport = () => {
+      setSidebarOpen(!mediaQuery.matches);
+    };
+
+    syncSidebarWithViewport();
+    mediaQuery.addEventListener("change", syncSidebarWithViewport);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncSidebarWithViewport);
+    };
+  }, [setSidebarOpen]);
+
+  useEffect(() => {
     const chatViewActive = pageViewState === "chat" || pageViewState === "launching";
     document.body.classList.toggle("chat-view-active", chatViewActive);
     document.body.classList.toggle("setup-view-active", pageViewState === "setup");
@@ -1672,7 +1700,7 @@ export function useHomePageController() {
   }, []);
 
   useEffect(() => {
-    if (pageViewState !== "chat" || !sidebarOpen) {
+    if (pageViewState !== "chat" || !sidebarOpen || !isOverlaySidebarViewport()) {
       document.body.classList.remove("sidebar-visible");
       return;
     }
@@ -1836,7 +1864,12 @@ export function useHomePageController() {
         setOpenRoomActionsFor(null);
       }
 
-      if (sidebarOpen && !target.closest(".sidebar") && !target.closest("#sidebar-toggle")) {
+      if (
+        sidebarOpen &&
+        isOverlaySidebarViewport() &&
+        !target.closest(".sidebar") &&
+        !target.closest("#sidebar-toggle")
+      ) {
         setSidebarOpen(false);
       }
     };
@@ -1855,7 +1888,7 @@ export function useHomePageController() {
       // caused by the on-screen keyboard opening/closing.
       if (Math.abs(nextWidth - lastWidth) >= 1) {
         lastWidth = nextWidth;
-        setSidebarOpen(false);
+        closeOverlaySidebar();
         scheduleSetupViewportFit();
       }
     };
@@ -1872,7 +1905,7 @@ export function useHomePageController() {
       window.removeEventListener("resize", onWindowResize);
       window.visualViewport?.removeEventListener("resize", onVisualViewportResize);
     };
-  }, []);
+  }, [closeOverlaySidebar]);
 
   useEffect(() => {
     if (!isNewPromptModalOpen && !shareModalOpen) return;

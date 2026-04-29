@@ -170,8 +170,12 @@ function ChatMainSectionComponent() {
         </div>
       </div>
 
-      <div className="chat-main">
-        <div className={`sidebar ${sidebarOpen ? "open" : ""}`.trim()} id="chat-room-sidebar">
+      <div className={`chat-main ${sidebarOpen ? "chat-main--sidebar-open" : "chat-main--sidebar-closed"}`.trim()}>
+        <div
+          className={`sidebar ${sidebarOpen ? "open" : ""}`.trim()}
+          id="chat-room-sidebar"
+          aria-hidden={sidebarOpen ? "false" : "true"}
+        >
           <button
             id="new-chat-btn"
             className="new-chat-btn"
