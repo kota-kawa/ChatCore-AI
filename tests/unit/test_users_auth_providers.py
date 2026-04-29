@@ -5,6 +5,7 @@ from services.users import (
     EMAIL_AUTH_PROVIDER,
     GOOGLE_AUTH_PROVIDER,
     create_user,
+    delete_user_account,
     get_user_by_email,
     get_user_by_google_id,
     link_google_account,
@@ -114,6 +115,32 @@ class UserAuthProvidersTestCase(unittest.TestCase):
         self.assertEqual(user, expected)
         self.assertIn("LEFT JOIN user_auth_providers AS gap", fake_cursor.executed[0][0])
         self.assertEqual(fake_cursor.executed[0][1], (GOOGLE_AUTH_PROVIDER, "user@example.com"))
+
+    def test_delete_user_account_removes_user_owned_data_before_user(self):
+        fake_cursor = FakeCursor(fetchone_result=(7,))
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("services.users.get_db_connection", return_value=fake_conn):
+            deleted = delete_user_account(7)
+
+        self.assertTrue(deleted)
+        self.assertTrue(fake_conn.committed)
+        self.assertFalse(fake_conn.rolled_back)
+        self.assertIn("SELECT id FROM users WHERE id = %s FOR UPDATE", fake_cursor.executed[0][0])
+        self.assertIn("DELETE FROM memo_entries WHERE user_id = %s", [query for query, _ in fake_cursor.executed])
+        self.assertEqual(fake_cursor.executed[-1], ("DELETE FROM users WHERE id = %s", (7,)))
+
+    def test_delete_user_account_returns_false_when_user_missing(self):
+        fake_cursor = FakeCursor(fetchone_result=None)
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("services.users.get_db_connection", return_value=fake_conn):
+            deleted = delete_user_account(7)
+
+        self.assertFalse(deleted)
+        self.assertFalse(fake_conn.committed)
+        self.assertTrue(fake_conn.rolled_back)
+        self.assertEqual(len(fake_cursor.executed), 1)
 
 
 if __name__ == "__main__":

@@ -104,10 +104,12 @@ from services.passkeys import (
     update_passkey_usage,
 )
 from services.users import (
+    ACCOUNT_DELETE_CONFIRMATION_TEXT,
     get_user_by_email,
     get_user_by_id,
     get_user_by_google_id,
     create_user,
+    delete_user_account,
     link_google_account,
     set_user_verified,
     copy_default_tasks_for_user,
@@ -438,6 +440,35 @@ async def api_current_user(request: Request):
         return jsonify({"logged_in": False})
     else:
         return jsonify({"logged_in": False})
+
+
+@auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")
+async def api_delete_user_account(request: Request):
+    user_id = _user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"error": "ログインが必要です。"}, status_code=401)
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    confirmation = str(data.get("confirmation") or "").strip()
+    if confirmation != ACCOUNT_DELETE_CONFIRMATION_TEXT:
+        return jsonify({"error": "確認文字列が一致しません。"}, status_code=400)
+
+    try:
+        deleted = await run_blocking(delete_user_account, user_id)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to delete user account.",
+            message="アカウント削除に失敗しました。",
+        )
+
+    request.session.clear()
+    if not deleted:
+        return jsonify({"error": "削除対象のアカウントが見つかりませんでした。"}, status_code=404)
+    return jsonify({"message": "アカウントを削除しました。"})
 
 
 @auth_bp.get("/login", name="auth.login")
