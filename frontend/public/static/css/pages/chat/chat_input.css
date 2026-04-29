@@ -208,33 +208,39 @@
   .input-container {
     /* safe-area対応（iPhoneのホームインジケータ） */
     padding:
-      0.5rem
-      calc(0.65rem + env(safe-area-inset-right, 0px))
-      calc(0.5rem + env(safe-area-inset-bottom, 0px))
-      calc(0.65rem + env(safe-area-inset-left, 0px));
-    background: var(--surface-primary, #fff);
+      0.52rem
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
+      calc(0.58rem + env(safe-area-inset-bottom, 0px))
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
+    background: rgba(255, 255, 255, 0.94);
     border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
   }
 
   .input-wrapper {
     gap: 0.3rem;
-    padding: 0.26rem 0.3rem 0.26rem 0.88rem;
-    border-radius: 24px;
+    align-items: flex-end;
+    min-height: 56px;
+    max-width: none;
+    padding: 0.28rem 0.32rem 0.28rem 0.9rem;
+    border-radius: 28px;
   }
 
   #user-input {
     padding: 0.46rem 0 0.46rem 0;
     font-size: var(--text-md, 1rem);
+    max-height: min(32vh, 9.5rem);
   }
 
   #send-btn,
   .setup-send-btn {
     --send-btn-visual-inset: 5px;
-    flex-basis: 52px;
-    width: 52px;
-    height: 52px;
-    min-width: 52px;
-    min-height: 52px;
+    flex-basis: 50px;
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
   }
 
   #send-btn i,
@@ -244,6 +250,13 @@
 
   #send-btn.send-btn--stop i {
     left: 0;
+  }
+}
+
+@media (max-width: 576px) {
+  [data-theme="dark"] .input-container {
+    background: rgba(15, 23, 42, 0.9);
+    border-top-color: rgba(148, 163, 184, 0.18);
   }
 }
 

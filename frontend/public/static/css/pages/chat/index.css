@@ -826,13 +826,29 @@ body.chat-page .chat-share-sns a:hover {
 }
 
 @media (max-width: 576px) {
+  body.chat-page {
+    --chat-mobile-gutter: clamp(0.875rem, 4vw, 1.1rem);
+    --chat-mobile-toolbar-space: calc(3.65rem + env(safe-area-inset-top, 0px));
+  }
+
   .chat-page-shell {
     padding: 0;
     align-items: stretch;
+    justify-content: stretch;
+    min-height: var(--chat-visual-viewport-height, 100dvh);
+    background: #f7f8f7;
   }
 
   .chat-page-stage {
     width: 100%;
+    min-height: var(--chat-visual-viewport-height, 100dvh);
+    place-items: stretch;
+    perspective: none;
+  }
+
+  .chat-page-stage[data-view="setup"] {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* チャット表示中のみページ全体の縦スクロールを封じる */
@@ -842,22 +858,21 @@ body.chat-page .chat-share-sns a:hover {
     height: 100%;
   }
 
+  body.chat-page.chat-view-active,
   body.chat-page:has(.chat-page-stage[data-view="chat"]),
   body.chat-page:has(.chat-page-stage[data-view="launching"]) {
     overflow: hidden;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
+    height: var(--chat-visual-viewport-height, 100dvh);
   }
 
+  body.chat-page.chat-view-active .chat-page-shell,
   .chat-page-shell:has(.chat-page-stage[data-view="chat"]),
   .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
+    height: var(--chat-visual-viewport-height, 100dvh);
     overflow: hidden;
   }
 
+  body.chat-page.chat-view-active .chat-page-stage,
   .chat-page-stage[data-view="launching"],
   .chat-page-stage[data-view="chat"] {
     height: 100%;
@@ -872,6 +887,24 @@ body.chat-page .chat-share-sns a:hover {
 
   .chat-page-shell::before {
     display: none;
+  }
+
+  body.chat-page .global-ai-agent-button {
+    top: auto;
+    right: auto;
+    left: calc(var(--chat-mobile-gutter, 0.875rem) + env(safe-area-inset-left, 0px));
+    bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+    width: 52px;
+    height: 52px;
+  }
+
+  body.chat-page.chat-view-active .global-ai-agent-button,
+  body.chat-page:has(.chat-page-stage[data-view="chat"]) .global-ai-agent-button,
+  body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-button {
+    top: auto;
+    right: auto;
+    left: calc(var(--chat-mobile-gutter, 0.875rem) + env(safe-area-inset-left, 0px));
+    bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px));
   }
 }
 

@@ -294,17 +294,38 @@
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   .sidebar {
-    padding: 0.75rem 0.65rem;
+    padding:
+      0.8rem
+      calc(0.72rem + env(safe-area-inset-right, 0px))
+      0.9rem
+      calc(0.72rem + env(safe-area-inset-left, 0px));
   }
 
   .chat-room-card {
-    padding: 0.75rem 0.8rem;
-    font-size: 0.88rem;
-    border-radius: 6px;
+    min-height: 50px;
+    padding: 0.72rem 0.78rem;
+    font-size: 0.9rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(15, 23, 42, 0.04);
+  }
+
+  .room-actions-icon {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    opacity: 0.72;
+    margin-right: -0.35rem;
   }
 
   .room-actions-menu {
     right: 0;
     left: auto;
+    min-width: 168px;
+  }
+
+  [data-theme="dark"] .chat-room-card {
+    background: rgba(15, 23, 42, 0.62);
+    border-color: rgba(148, 163, 184, 0.12);
   }
 }

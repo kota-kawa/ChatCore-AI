@@ -1592,11 +1592,51 @@ export function useHomePageController() {
       clearTrackedTimeouts();
       disconnectActiveGeneration();
       document.body.classList.remove("chat-page");
+      document.body.classList.remove("chat-view-active");
+      document.body.classList.remove("setup-view-active");
       document.body.classList.remove("sidebar-visible");
       document.body.classList.remove("new-prompt-modal-open");
       document.body.style.overflow = "";
     };
   }, [clearTrackedTimeouts, disconnectActiveGeneration]);
+
+  useEffect(() => {
+    const chatViewActive = pageViewState === "chat" || pageViewState === "launching";
+    document.body.classList.toggle("chat-view-active", chatViewActive);
+    document.body.classList.toggle("setup-view-active", pageViewState === "setup");
+
+    return () => {
+      document.body.classList.remove("chat-view-active");
+      document.body.classList.remove("setup-view-active");
+    };
+  }, [pageViewState]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateViewportVars = () => {
+      const visualViewport = window.visualViewport;
+      const height = visualViewport?.height ?? window.innerHeight;
+      const offsetTop = visualViewport?.offsetTop ?? 0;
+
+      root.style.setProperty("--chat-visual-viewport-height", `${Math.max(0, Math.round(height))}px`);
+      root.style.setProperty("--chat-visual-viewport-offset-top", `${Math.max(0, Math.round(offsetTop))}px`);
+    };
+
+    updateViewportVars();
+    window.addEventListener("resize", updateViewportVars);
+    window.addEventListener("orientationchange", updateViewportVars);
+    window.visualViewport?.addEventListener("resize", updateViewportVars);
+    window.visualViewport?.addEventListener("scroll", updateViewportVars);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportVars);
+      window.removeEventListener("orientationchange", updateViewportVars);
+      window.visualViewport?.removeEventListener("resize", updateViewportVars);
+      window.visualViewport?.removeEventListener("scroll", updateViewportVars);
+      root.style.removeProperty("--chat-visual-viewport-height");
+      root.style.removeProperty("--chat-visual-viewport-offset-top");
+    };
+  }, []);
 
   useEffect(() => {
     if (pageViewState !== "chat" || !sidebarOpen) {
@@ -2009,4 +2049,3 @@ export function useHomePageController() {
     toggleAiAgentModal,
     };
     }
-

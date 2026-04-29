@@ -964,7 +964,11 @@ chat-action-menu {
   .chat-messages {
     flex: 1;
     max-height: unset;
-    padding: 2.6rem 0.85rem 0.75rem;
+    padding:
+      3.05rem
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
+      0.9rem
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
     gap: 0.15rem;
   }
 
@@ -973,11 +977,20 @@ chat-action-menu {
   }
 
   .chat-message-row {
-    padding: 0 0.85rem;
+    padding:
+      0
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
+      0
+      calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
+  }
+
+  .chat-messages:not(.chat-messages--virtual) .chat-message-row {
+    padding-right: 0;
+    padding-left: 0;
   }
 
   .chat-message-row--first {
-    padding-top: 2.6rem;
+    padding-top: 3.05rem;
   }
 
   .chat-message-row--last {
@@ -989,7 +1002,7 @@ chat-action-menu {
   }
 
   .user-message-wrapper {
-    max-width: 85%;
+    max-width: min(88%, 34rem);
   }
 
   .bot-message-wrapper {
@@ -998,13 +1011,15 @@ chat-action-menu {
   }
 
   .user-message {
-    padding: 0.65rem 0.9rem;
-    font-size: var(--text-sm, 0.875rem);
+    padding: 0.68rem 0.92rem;
+    font-size: var(--text-base, 0.9375rem);
+    line-height: 1.58;
     border-radius: 18px 18px 4px 18px;
   }
 
   .bot-message {
-    font-size: var(--text-sm, 0.875rem);
+    font-size: var(--text-base, 0.9375rem);
+    line-height: 1.66;
     padding: 0.15rem 0;
   }
 

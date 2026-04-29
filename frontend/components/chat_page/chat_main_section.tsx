@@ -257,7 +257,9 @@ function ChatMainSectionComponent() {
           <button
             id="sidebar-toggle"
             className="icon-button sidebar-toggle chat-sidebar-toggle"
-            data-tooltip="チャット一覧を表示"
+            aria-label={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
+            aria-controls="chat-room-sidebar"
+            data-tooltip={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
             data-tooltip-placement="left"
             aria-expanded={sidebarOpen ? "true" : "false"}
             onClick={(event) => {
@@ -265,7 +267,7 @@ function ChatMainSectionComponent() {
               setSidebarOpen((previous) => !previous);
             }}
           >
-            <i className="bi bi-arrow-bar-right"></i>
+            <i className={`bi ${sidebarOpen ? "bi-x-lg" : "bi-layout-sidebar-inset"}`}></i>
           </button>
 
           <ChatMessageList
