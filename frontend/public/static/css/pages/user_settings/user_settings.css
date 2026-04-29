@@ -78,6 +78,25 @@
   background: #fff;
 }
 
+.security-panel--danger {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(254, 242, 242, 0.72);
+}
+
+.account-delete-copy {
+  margin: 0 0 1rem;
+  color: var(--settings-text-muted);
+  line-height: 1.6;
+}
+
+.account-delete-confirmation {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.account-delete-actions {
+  margin-top: 1.25rem;
+}
 .passkey-list {
   display: grid;
   gap: 0.75rem;
@@ -720,6 +739,19 @@ body.settings-page,
   border-color: var(--settings-text-muted);
 }
 
+.danger-button {
+  padding: 0.85rem 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  border: 1px solid rgba(185, 28, 28, 0.2);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity, 0.6);
+}
 /* レスポンシブ対応 (基本的な例) */
 @media (max-width: 992px) {
   .settings-sidebar {
@@ -776,7 +808,7 @@ body.settings-page,
     flex-direction: column-reverse; /* ボタンを縦積みにし、保存を上に */
     gap: 0.75rem;
   }
-  .primary-button, .secondary-button {
+  .primary-button, .secondary-button, .danger-button {
     width: 100%;
   }
 }
@@ -822,6 +854,7 @@ body.settings-page :where(
   .toggle-password-btn,
   .primary-button,
   .secondary-button,
+  .danger-button,
   .prompt-card .btn-warning,
   .prompt-card .btn-danger,
   .btn-close,
@@ -866,6 +899,12 @@ body.settings-page :where(.prompt-card .btn-danger) {
   color: #ffffff !important;
 }
 
+body.settings-page :where(.danger-button) {
+  --settings-button-base: var(--danger-color, #dc2626);
+  --settings-button-accent: var(--danger-hover, #b91c1c);
+  --settings-button-shadow-color: rgba(220, 38, 38, 0.28);
+  color: #ffffff !important;
+}
 body.settings-page :where(.secondary-button, .toggle-password-btn, .btn-close) {
   color: var(--settings-text-muted);
 }
@@ -876,6 +915,7 @@ body.settings-page :where(
   .toggle-password-btn,
   .primary-button,
   .secondary-button,
+  .danger-button,
   .prompt-card .btn-warning,
   .prompt-card .btn-danger,
   .btn-close,
@@ -894,6 +934,7 @@ body.settings-page :where(
   .toggle-password-btn,
   .primary-button,
   .secondary-button,
+  .danger-button,
   .prompt-card .btn-warning,
   .prompt-card .btn-danger,
   .btn-close,
@@ -1130,6 +1171,10 @@ body.settings-page :where(
   border-color: rgba(148, 163, 184, 0.22);
 }
 
+[data-theme="dark"] .security-panel--danger {
+  background: rgba(127, 29, 29, 0.22);
+  border-color: rgba(248, 113, 113, 0.34);
+}
 [data-theme="dark"] .passkey-item {
   background: rgba(30, 41, 59, 0.72);
 }

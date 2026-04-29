@@ -94,6 +94,7 @@ type PasskeyRecord = {
 };
 
 const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
+const ACCOUNT_DELETE_CONFIRMATION_TEXT = "アカウント削除";
 
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
@@ -533,6 +534,9 @@ export default function UserSettingsPage() {
   const [passkeysLoading, setPasskeysLoading] = useState(false);
   const [registeringPasskey, setRegisteringPasskey] = useState(false);
   const [deletingPasskeyId, setDeletingPasskeyId] = useState<number | null>(null);
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const profileSaveEffectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1045,6 +1049,47 @@ export default function UserSettingsPage() {
     }
   }, [loadPasskeys]);
 
+  const handleDeleteAccount = useCallback(async () => {
+    const normalizedConfirmation = accountDeleteConfirmation.trim();
+    if (normalizedConfirmation !== ACCOUNT_DELETE_CONFIRMATION_TEXT) {
+      setAccountDeleteError(`確認のため「${ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力してください。`);
+      return;
+    }
+
+    const confirmed = await showConfirmModal(
+      "アカウントと保存済みデータを削除します。この操作は取り消せません。本当に削除しますか？"
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setAccountDeleting(true);
+    setAccountDeleteError(null);
+    try {
+      await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/user/account",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({ confirmation: normalizedConfirmation })
+        },
+        {
+          defaultMessage: "アカウント削除に失敗しました。"
+        }
+      );
+      showToast("アカウントを削除しました。", { variant: "success" });
+      window.setTimeout(() => {
+        window.location.assign("/login");
+      }, 400);
+    } catch (error) {
+      setAccountDeleteError(error instanceof Error ? error.message : "アカウント削除に失敗しました。");
+      setAccountDeleting(false);
+    }
+  }, [accountDeleteConfirmation]);
+
   const myPromptCards = useMemo(
     () => myPrompts.map((prompt, index) => {
       const key = asId(prompt.id) || `${prompt.title}-${index}`;
@@ -1394,6 +1439,51 @@ export default function UserSettingsPage() {
                           </div>
                         ))
                       )}
+                    </div>
+                  </div>
+
+                  <div className="security-panel security-panel--danger">
+                    <h3>アカウント削除</h3>
+                    <p className="account-delete-copy">
+                      アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。
+                    </p>
+                    <div className="account-delete-confirmation">
+                      <label className="form-label" htmlFor="accountDeleteConfirmation">
+                        確認のため「{ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力
+                      </label>
+                      <input
+                        type="text"
+                        id="accountDeleteConfirmation"
+                        className="custom-form-control"
+                        value={accountDeleteConfirmation}
+                        onChange={(event) => {
+                          setAccountDeleteConfirmation(event.target.value);
+                          setAccountDeleteError(null);
+                        }}
+                        disabled={accountDeleting}
+                        autoComplete="off"
+                      />
+                    </div>
+                    {accountDeleteError ? (
+                      <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
+                        <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+                        {accountDeleteError}
+                      </p>
+                    ) : null}
+                    <div className="button-group account-delete-actions">
+                      <button
+                        type="button"
+                        className="danger-button"
+                        disabled={
+                          accountDeleting ||
+                          accountDeleteConfirmation.trim() !== ACCOUNT_DELETE_CONFIRMATION_TEXT
+                        }
+                        onClick={() => {
+                          void handleDeleteAccount();
+                        }}
+                      >
+                        {accountDeleting ? "削除中..." : "アカウントを削除"}
+                      </button>
                     </div>
                   </div>
                 </div>

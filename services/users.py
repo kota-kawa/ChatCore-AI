@@ -7,6 +7,7 @@ DEFAULT_USERNAME = "ユーザー"
 DEFAULT_AVATAR_URL = "/static/user-icon.png"
 EMAIL_AUTH_PROVIDER = "email"
 GOOGLE_AUTH_PROVIDER = "google"
+ACCOUNT_DELETE_CONFIRMATION_TEXT = "アカウント削除"
 
 
 def _normalize_provider_metadata(
@@ -303,6 +304,48 @@ def update_user_profile_from_google_if_unset(
                 (next_username, next_avatar_url, user_id),
             )
             conn.commit()
+        finally:
+            cursor.close()
+
+
+def delete_user_account(user_id: int) -> bool:
+    # Delete user-owned records that are not fully covered by cascading FKs,
+    # then remove the user row in the same transaction.
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT id
+                  FROM users
+                 WHERE id = %s
+                 FOR UPDATE
+                """,
+                (user_id,),
+            )
+            if not cursor.fetchone():
+                conn.rollback()
+                return False
+
+            for query in (
+                "DELETE FROM prompt_likes WHERE user_id = %s",
+                "DELETE FROM prompt_list_entries WHERE user_id = %s",
+                "DELETE FROM memo_entries WHERE user_id = %s",
+                "DELETE FROM memory_facts WHERE user_id = %s",
+                "DELETE FROM user_auth_providers WHERE user_id = %s",
+                "DELETE FROM user_passkeys WHERE user_id = %s",
+                "DELETE FROM chat_rooms WHERE user_id = %s",
+                "DELETE FROM task_with_examples WHERE user_id = %s",
+                "DELETE FROM prompts WHERE user_id = %s",
+            ):
+                cursor.execute(query, (user_id,))
+
+            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             cursor.close()
 
