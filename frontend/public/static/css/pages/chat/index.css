@@ -740,6 +740,22 @@ body.chat-page .chat-share-sns a:hover {
   border-color: rgba(25, 195, 125, 0.34) !important;
 }
 
+[data-theme="dark"] body.chat-page .model-select-option.is-selected {
+  background: linear-gradient(135deg, #0f7a51 0%, #19c37d 100%) !important;
+  border-color: rgba(110, 231, 183, 0.72) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow:
+    0 10px 18px rgba(15, 122, 81, 0.34),
+    inset 3px 0 0 rgba(209, 250, 229, 0.9) !important;
+}
+
+[data-theme="dark"] body.chat-page .model-select-option.is-selected:hover {
+  background: linear-gradient(135deg, #0d6945 0%, #15a86b 100%) !important;
+  border-color: rgba(167, 243, 208, 0.86) !important;
+  color: #ffffff !important;
+}
+
 [data-theme="dark"] body.chat-page .model-select-option + .model-select-option {
   margin-top: 0.4rem;
 }
