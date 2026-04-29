@@ -6,17 +6,17 @@ chatTemplate.innerHTML = `
   <style>
     :host {
       display: contents;
+      --cc-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
+      --cc-fab-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.24);
       --cc-fab-shadow: none;
       --cc-fab-hover-shadow: none;
-      --cc-fab-hover-transform: scale(1.1);
-      --cc-fab-hover-filter: brightness(1.06) saturate(1.1);
+      --cc-fab-hover-transform: scale(1.08);
+      --cc-fab-hover-filter: brightness(1.07) saturate(1.12);
       --cc-fab-menu-shadow: none;
-      --cc-fab-menu-bg: linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
-      --cc-fab-share-bg: linear-gradient(135deg, #1a73e8, #4a9bf5);
-      --cc-fab-star-bg: linear-gradient(135deg, #19c37d, #0fa86a);
-      --cc-fab-comment-bg: linear-gradient(135deg, #d97706, #f59e0b);
-      --cc-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);
-      --cc-fab-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+      --cc-fab-menu-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #19c37d, #d97706);
+      --cc-fab-share-bg: var(--cc-fab-sheen), linear-gradient(135deg, #1a73e8, #4a9bf5);
+      --cc-fab-star-bg: var(--cc-fab-sheen), linear-gradient(135deg, #19c37d, #0fa86a);
+      --cc-fab-comment-bg: var(--cc-fab-sheen), linear-gradient(135deg, #d97706, #f59e0b);
     }
 
 
@@ -250,16 +250,16 @@ chatTemplate.innerHTML = `
         /* 固定inputの上に配置 (input ~56px + safe-area + 余白) */
         bottom: calc(70px + env(safe-area-inset-bottom, 0px));
         right: 12px;
-        width: 48px;
-        height: 48px;
+        width: 56px;
+        height: 56px;
       }
       .actions-menu .btn--menu {
-        width: 48px !important;
-        height: 48px !important;
+        width: 56px !important;
+        height: 56px !important;
       }
       .actions-menu .btn:not(.btn--menu) {
-        width: 40px;
-        height: 40px;
+        width: 45px;
+        height: 45px;
       }
       .btn svg {
         width: 20px;
@@ -284,16 +284,16 @@ chatTemplate.innerHTML = `
       .actions-menu {
         bottom: calc(65px + env(safe-area-inset-bottom, 0px));
         right: 10px;
-        width: 44px;
-        height: 44px;
+        width: 50px;
+        height: 50px;
       }
       .actions-menu .btn--menu {
-        width: 44px !important;
-        height: 44px !important;
+        width: 50px !important;
+        height: 50px !important;
       }
       .actions-menu .btn:not(.btn--menu) {
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
       }
       .btn svg {
         width: 18px;
