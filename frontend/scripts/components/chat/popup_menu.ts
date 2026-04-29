@@ -207,18 +207,18 @@ chatTemplate.innerHTML = `
     #chatActionMenuButton:checked + .actions-menu > .btn--star    { transition-delay: 0.05s; }
     #chatActionMenuButton:checked + .actions-menu > .btn--comment { transition-delay: 0.1s; }
 
-    /* 展開位置 */
+    /* 展開位置 — メニュー中心から半径108pxの円弧上に0°/45°/90°等間隔配置 */
     #chatActionMenuButton:checked + .actions-menu > .btn--share {
-      top: -100px;
-      left: 0px;
+      top: -103px;
+      left: 5px;
     }
     #chatActionMenuButton:checked + .actions-menu > .btn--star {
-      top: -85px;
-      left: -60px;
+      top: -71px;
+      left: -71px;
     }
     #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-      top: -15px;
-      left: -100px;
+      top: 5px;
+      left: -103px;
     }
 
     #chatActionMenuButton:checked + .actions-menu .btn--menu:after {
@@ -265,17 +265,17 @@ chatTemplate.innerHTML = `
         width: 20px;
         height: 20px;
       }
-      /* 展開位置調整 */
+      /* 展開位置調整 — 半径90pxの円弧上に0°/45°/90°等間隔配置 */
       #chatActionMenuButton:checked + .actions-menu > .btn--share {
         top: -85px;
-        left: 0px;
+        left: 5px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--star {
-        top: -72px;
-        left: -52px;
+        top: -58px;
+        left: -58px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: -5px;
+        top: 5px;
         left: -85px;
       }
     }
@@ -299,17 +299,17 @@ chatTemplate.innerHTML = `
         width: 18px;
         height: 18px;
       }
-      /* 展開位置調整 */
+      /* 展開位置調整 — 半径80pxの円弧上に0°/45°/90°等間隔配置 */
       #chatActionMenuButton:checked + .actions-menu > .btn--share {
         top: -75px;
-        left: 0px;
+        left: 5px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--star {
-        top: -62px;
-        left: -45px;
+        top: -52px;
+        left: -52px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: -5px;
+        top: 5px;
         left: -75px;
       }
     }
