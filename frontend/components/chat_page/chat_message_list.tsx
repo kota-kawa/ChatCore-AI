@@ -1,7 +1,10 @@
 import {
   memo,
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   type CSSProperties,
   type MutableRefObject,
 } from "react";
@@ -14,6 +17,8 @@ import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type ChatMessageListRow =
   | { kind: "load-more" }
@@ -168,9 +173,11 @@ function ChatMessageListComponent({
     defaultRowHeight: 104,
     key: currentRoomId || "no-room",
   });
+  const listApiRef = useRef<ListImperativeAPI | null>(null);
 
   const setStaticMessagesRef = useCallback(
     (node: HTMLDivElement | null) => {
+      listApiRef.current = null;
       chatMessagesRef.current = node;
     },
     [chatMessagesRef],
@@ -178,6 +185,7 @@ function ChatMessageListComponent({
 
   const setListRef = useCallback(
     (api: ListImperativeAPI | null) => {
+      listApiRef.current = api;
       chatMessagesRef.current = api?.element ?? null;
     },
     [chatMessagesRef],
@@ -202,6 +210,69 @@ function ChatMessageListComponent({
     }),
     [isLoadingOlder, loadOlderChatHistory, rows],
   );
+
+  const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";
+
+  const scrollThinkingIntoView = useCallback(() => {
+    const listApi = listApiRef.current;
+    const listElement = chatMessagesRef.current;
+
+    if (listApi && rows.length > 0) {
+      try {
+        listApi.scrollToRow({ index: rows.length - 1, align: "end", behavior: "instant" });
+        return;
+      } catch {
+        // Fall through to direct DOM scrolling if the virtual list is between renders.
+      }
+    }
+
+    if (listElement) {
+      listElement.scrollTop = listElement.scrollHeight;
+    }
+  }, [chatMessagesRef, rows.length]);
+
+  const handleListResize = useCallback(() => {
+    if (!shouldRevealThinking || typeof window === "undefined") return;
+    window.requestAnimationFrame(scrollThinkingIntoView);
+  }, [scrollThinkingIntoView, shouldRevealThinking]);
+
+  useIsomorphicLayoutEffect(() => {
+    if (!shouldRevealThinking) return;
+
+    scrollThinkingIntoView();
+
+    if (typeof window === "undefined") return;
+
+    const animationFrameIds: number[] = [];
+    const timeoutIds: number[] = [];
+    const scheduleAnimationFrame = () => {
+      const frameId = window.requestAnimationFrame(() => {
+        scrollThinkingIntoView();
+      });
+      animationFrameIds.push(frameId);
+    };
+
+    scheduleAnimationFrame();
+    const nestedFrameId = window.requestAnimationFrame(() => {
+      scrollThinkingIntoView();
+      scheduleAnimationFrame();
+    });
+    animationFrameIds.push(nestedFrameId);
+
+    [80, 220].forEach((delay) => {
+      const timeoutId = window.setTimeout(scrollThinkingIntoView, delay);
+      timeoutIds.push(timeoutId);
+    });
+
+    return () => {
+      animationFrameIds.forEach((frameId) => {
+        window.cancelAnimationFrame(frameId);
+      });
+      timeoutIds.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+    };
+  }, [scrollThinkingIntoView, shouldRevealThinking]);
 
   if (isChatLaunching) {
     // 実際のチャット開始後に表示されるのと同じ形式のフルメッセージを組み立てる
@@ -261,6 +332,7 @@ function ChatMessageListComponent({
       defaultHeight={480}
       id="chat-messages"
       listRef={setListRef}
+      onResize={handleListResize}
       overscanCount={6}
       role="log"
       rowComponent={ChatMessageRow}
