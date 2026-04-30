@@ -11,7 +11,7 @@ from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
-from services.db import get_db_connection
+from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
     save_message_to_db,
@@ -64,7 +64,6 @@ from services.chat_contract import (
     CHAT_HISTORY_PAGE_SIZE_MAX,
 )
 from services.users import get_user_by_id
-from services.datetime_serialization import serialize_datetime_iso
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -92,6 +91,10 @@ logger = logging.getLogger(__name__)
 LLM_CONTEXT_MAX_HISTORY_MESSAGES = 40
 LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
 LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
+
+
+def _get_chat_repository() -> ChatRepository:
+    return ChatRepository()
 
 
 def _resolve_auth_limit_service(
@@ -342,49 +345,7 @@ def _parse_task_launch_message(message: str) -> dict[str, str] | None:
 def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
     # タスク名に対応するプロンプト定義を取得する
     # Fetch prompt-template metadata for the selected task.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        if user_id:
-            query = """
-                SELECT name,
-                       prompt_template,
-                       response_rules,
-                       output_skeleton,
-                       input_examples,
-                       output_examples
-                 FROM task_with_examples
-                 WHERE name = %s
-                   AND deleted_at IS NULL
-                   AND (user_id = %s OR user_id IS NULL)
-                 ORDER BY CASE WHEN user_id = %s THEN 0 ELSE 1 END, id
-                 LIMIT 1
-            """
-            cursor.execute(query, (task, user_id, user_id))
-        else:
-            query = """
-                SELECT name,
-                       prompt_template,
-                       response_rules,
-                       output_skeleton,
-                       input_examples,
-                       output_examples
-                 FROM task_with_examples
-                 WHERE name = %s
-                   AND deleted_at IS NULL
-                   AND user_id IS NULL
-                 ORDER BY id
-                 LIMIT 1
-            """
-            cursor.execute(query, (task,))
-        return cursor.fetchone()
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    return _get_chat_repository().get_task_prompt_data(task, user_id)
 
 
 async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
@@ -652,54 +613,11 @@ def _fetch_chat_history(
 ) -> dict[str, Any]:
     # API返却向けにチャット履歴をページ単位で整形する
     # Fetch and format paginated chat history for API response.
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        query = """
-            SELECT id, message, sender, timestamp
-            FROM (
-                SELECT id, message, sender, timestamp
-                FROM chat_history
-                WHERE chat_room_id = %s
-                  AND (%s IS NULL OR id < %s)
-                ORDER BY id DESC
-                LIMIT %s
-            ) recent_history
-            ORDER BY id ASC
-        """
-        cursor.execute(query, (chat_room_id, before_message_id, before_message_id, limit + 1))
-        rows = cursor.fetchall()
-        has_more = len(rows) > limit
-        if has_more:
-            rows = rows[1:]
-
-        messages = []
-        for (message_id, msg, sender, ts) in rows:
-            messages.append(
-                {
-                    "id": message_id,
-                    "message": msg,
-                    "sender": sender,
-                    "timestamp": serialize_datetime_iso(ts),
-                }
-            )
-
-        next_before_id = messages[0]["id"] if has_more and messages else None
-        return {
-            "messages": messages,
-            "pagination": {
-                "limit": limit,
-                "has_more": has_more,
-                "next_before_id": next_before_id,
-            },
-        }
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    return _get_chat_repository().fetch_chat_history_page(
+        chat_room_id,
+        limit,
+        before_message_id,
+    )
 
 
 def _paginate_ephemeral_chat_history(
