@@ -11,7 +11,10 @@ import type { PromptRecord } from "./prompt_card";
 type PromptShareDetailModalProps = {
   isOpen: boolean;
   isLoggedIn: boolean;
+  activeView: "detail" | "comments";
   promptDetailModalRef: RefObject<HTMLDivElement>;
+  commentsSectionRef: RefObject<HTMLElement>;
+  commentTextareaRef: RefObject<HTMLTextAreaElement>;
   detailPrompt: PromptRecord | null;
   detailComments: PromptCommentData[];
   isDetailCommentsLoading: boolean;
@@ -19,6 +22,7 @@ type PromptShareDetailModalProps = {
   commentDraft: string;
   commentActionPendingIds: Set<string>;
   promptDetailCloseButtonRef: RefObject<HTMLButtonElement>;
+  onActiveViewChange: (view: "detail" | "comments") => void;
   onCommentDraftChange: (value: string) => void;
   onSubmitComment: () => void;
   onDeleteComment: (commentId: string | number) => void;
@@ -30,7 +34,10 @@ type PromptShareDetailModalProps = {
 export function PromptShareDetailModal({
   isOpen,
   isLoggedIn,
+  activeView,
   promptDetailModalRef,
+  commentsSectionRef,
+  commentTextareaRef,
   detailPrompt,
   detailComments,
   isDetailCommentsLoading,
@@ -38,6 +45,7 @@ export function PromptShareDetailModal({
   commentDraft,
   commentActionPendingIds,
   promptDetailCloseButtonRef,
+  onActiveViewChange,
   onCommentDraftChange,
   onSubmitComment,
   onDeleteComment,
@@ -74,79 +82,130 @@ export function PromptShareDetailModal({
         <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
 
         <div className="modal-content-body">
-          <div className="form-group">
-            <label>
-              <strong>タイプ:</strong>
-            </label>
-            <p id="modalPromptType">
-              {detailPrompt ? getPromptTypeLabel(normalizePromptType(detailPrompt.prompt_type)) : ""}
-            </p>
+          <div className="prompt-detail-tabs" role="tablist" aria-label="プロンプト詳細表示">
+            <button
+              type="button"
+              role="tab"
+              id="promptDetailTab"
+              aria-selected={activeView === "detail" ? "true" : "false"}
+              aria-controls="promptDetailPanel"
+              className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
+              onClick={() => {
+                onActiveViewChange("detail");
+              }}
+            >
+              詳細
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="promptCommentsTab"
+              aria-selected={activeView === "comments" ? "true" : "false"}
+              aria-controls="promptCommentsPanel"
+              className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
+              onClick={() => {
+                onActiveViewChange("comments");
+              }}
+            >
+              コメント
+              <span>{Number(detailPrompt?.comment_count || 0)}</span>
+            </button>
           </div>
 
-          {detailPrompt?.reference_image_url ? (
-            <div id="modalReferenceImageGroup" className="form-group" style={{ display: "block" }}>
+          <section
+            id="promptDetailPanel"
+            role="tabpanel"
+            aria-labelledby="promptDetailTab"
+            hidden={activeView !== "detail"}
+            className="prompt-detail-panel"
+          >
+            <div className="form-group">
               <label>
-                <strong>作例画像:</strong>
+                <strong>タイプ:</strong>
               </label>
-              <div className="modal-reference-image">
-                <img
-                  id="modalReferenceImage"
-                  src={detailPrompt.reference_image_url}
-                  alt={`${detailPrompt.title} の作例画像`}
-                />
+              <p id="modalPromptType">
+                {detailPrompt ? getPromptTypeLabel(normalizePromptType(detailPrompt.prompt_type)) : ""}
+              </p>
+            </div>
+
+            {detailPrompt?.reference_image_url ? (
+              <div id="modalReferenceImageGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>作例画像:</strong>
+                </label>
+                <div className="modal-reference-image">
+                  <img
+                    id="modalReferenceImage"
+                    src={detailPrompt.reference_image_url}
+                    alt={`${detailPrompt.title} の作例画像`}
+                  />
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          <div className="form-group">
-            <label>
-              <strong>カテゴリ:</strong>
-            </label>
-            <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
-          </div>
-
-          <div className="form-group">
-            <label>
-              <strong>内容:</strong>
-            </label>
-            <p id="modalPromptContent">{detailPrompt?.content || ""}</p>
-          </div>
-
-          <div className="form-group">
-            <label>
-              <strong>投稿者:</strong>
-            </label>
-            <p id="modalPromptAuthor">{detailPrompt?.author || ""}</p>
-          </div>
-
-          {detailPrompt?.ai_model ? (
-            <div id="modalAiModelGroup" className="form-group" style={{ display: "block" }}>
+            <div className="form-group">
               <label>
-                <strong>使用AIモデル:</strong>
+                <strong>カテゴリ:</strong>
               </label>
-              <p id="modalAiModel">{detailPrompt.ai_model}</p>
+              <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
             </div>
-          ) : null}
 
-          {detailPrompt?.input_examples ? (
-            <div id="modalInputExamplesGroup" className="form-group" style={{ display: "block" }}>
+            <div className="form-group">
               <label>
-                <strong>入力例:</strong>
+                <strong>内容:</strong>
               </label>
-              <p id="modalInputExamples">{detailPrompt.input_examples}</p>
+              <p id="modalPromptContent">{detailPrompt?.content || ""}</p>
             </div>
-          ) : null}
 
-          {detailPrompt?.output_examples ? (
-            <div id="modalOutputExamplesGroup" className="form-group" style={{ display: "block" }}>
+            <div className="form-group">
               <label>
-                <strong>出力例:</strong>
+                <strong>投稿者:</strong>
               </label>
-              <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
+              <p id="modalPromptAuthor">{detailPrompt?.author || ""}</p>
             </div>
-          ) : null}
 
-          <section className="prompt-detail-comments" aria-live="polite">
+            {detailPrompt?.ai_model ? (
+              <div id="modalAiModelGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>使用AIモデル:</strong>
+                </label>
+                <p id="modalAiModel">{detailPrompt.ai_model}</p>
+              </div>
+            ) : null}
+
+            {detailPrompt?.input_examples ? (
+              <div id="modalInputExamplesGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>入力例:</strong>
+                </label>
+                <p id="modalInputExamples">{detailPrompt.input_examples}</p>
+              </div>
+            ) : null}
+
+            {detailPrompt?.output_examples ? (
+              <div id="modalOutputExamplesGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>出力例:</strong>
+                </label>
+                <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
+              </div>
+            ) : null}
+          </section>
+
+          <section
+            id="promptCommentsPanel"
+            role="tabpanel"
+            aria-labelledby="promptCommentsTab"
+            hidden={activeView !== "comments"}
+            className="prompt-detail-comments"
+            aria-live="polite"
+            ref={commentsSectionRef}
+            tabIndex={-1}
+          >
+            <div className="prompt-detail-comments__summary">
+              <span>{detailPrompt?.category || "未分類"}</span>
+              <strong>{detailPrompt?.title || "プロンプト"}</strong>
+            </div>
             <div className="prompt-detail-comments__header">
               <h3>コメント</h3>
               <button
@@ -168,6 +227,7 @@ export function PromptShareDetailModal({
                 }}
               >
                 <textarea
+                  ref={commentTextareaRef}
                   value={commentDraft}
                   maxLength={1000}
                   placeholder="使ってみた感想や改善ポイントを書いてください"

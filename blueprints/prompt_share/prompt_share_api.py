@@ -878,9 +878,20 @@ def _report_prompt_comment_for_user(
             (comment_id, reporter_user_id, reason, details or None),
         )
         inserted = cursor.fetchone()
+        prompt_id = int(comment.get("prompt_id"))
         if not inserted:
+            comment_count = _count_visible_prompt_comments(cursor, prompt_id)
             conn.commit()
-            return {"message": "このコメントはすでに報告済みです。", "already_reported": True}, 200
+            return (
+                {
+                    "message": "このコメントはすでに報告済みです。",
+                    "already_reported": True,
+                    "hidden": False,
+                    "prompt_id": prompt_id,
+                    "comment_count": comment_count,
+                },
+                200,
+            )
 
         cursor.execute(
             """
@@ -906,7 +917,6 @@ def _report_prompt_comment_for_user(
             )
             hidden = cursor.rowcount > 0
 
-        prompt_id = int(comment.get("prompt_id"))
         comment_count = _count_visible_prompt_comments(cursor, prompt_id)
         conn.commit()
         return (

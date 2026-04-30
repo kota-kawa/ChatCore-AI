@@ -28,6 +28,7 @@ type PromptSharePageLayoutProps = {
   bookmarkPendingIds: Set<string>;
   saveToListPendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
+  onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => void;
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
@@ -62,6 +63,7 @@ export function PromptSharePageLayout({
   bookmarkPendingIds,
   saveToListPendingIds,
   onOpenDetail,
+  onOpenComments,
   onOpenShare,
   onToggleDropdown,
   onCloseDropdown,
@@ -217,6 +219,7 @@ export function PromptSharePageLayout({
                   isBookmarkPending={bookmarkPendingIds.has(promptId)}
                   isSaveToListPending={saveToListPendingIds.has(promptId)}
                   onOpenDetail={onOpenDetail}
+                  onOpenComments={onOpenComments}
                   onOpenShare={onOpenShare}
                   onToggleDropdown={onToggleDropdown}
                   onCloseDropdown={onCloseDropdown}

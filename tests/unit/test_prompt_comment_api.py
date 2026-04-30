@@ -194,6 +194,35 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["comment_count"], 8)
         mock_report.assert_called_once_with(4, 12, "abuse", "")
 
+    def test_report_prompt_comment_returns_already_reported_context(self):
+        request = make_request(
+            "POST",
+            "/prompt_share/api/comments/12/report",
+            payload={"reason": "abuse"},
+            session={"user_id": 4},
+        )
+
+        with patch(
+            "blueprints.prompt_share.prompt_share_api._report_prompt_comment_for_user",
+            return_value=(
+                {
+                    "message": "このコメントはすでに報告済みです。",
+                    "already_reported": True,
+                    "hidden": False,
+                    "prompt_id": 10,
+                    "comment_count": 8,
+                },
+                200,
+            ),
+        ):
+            response = asyncio.run(report_prompt_comment(12, request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertTrue(payload["already_reported"])
+        self.assertEqual(payload["prompt_id"], 10)
+        self.assertEqual(payload["comment_count"], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

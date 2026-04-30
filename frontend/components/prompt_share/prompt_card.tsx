@@ -22,6 +22,7 @@ type PromptCardProps = {
   isBookmarkPending: boolean;
   isSaveToListPending: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
+  onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event: MouseEvent<HTMLButtonElement>) => void;
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
@@ -37,6 +38,7 @@ function PromptCardComponent({
   isBookmarkPending,
   isSaveToListPending,
   onOpenDetail,
+  onOpenComments,
   onOpenShare,
   onToggleDropdown,
   onCloseDropdown,
@@ -169,7 +171,7 @@ function PromptCardComponent({
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
-              onOpenDetail(prompt);
+              onOpenComments(prompt);
             }}
           >
             <i className="bi bi-chat-dots"></i>

@@ -12,6 +12,7 @@ import {
 
 import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
@@ -110,6 +111,7 @@ export default function PromptSharePage() {
   const [isLoadingMoreSearchResults, setIsLoadingMoreSearchResults] = useState(false);
 
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
+  const [detailModalView, setDetailModalView] = useState<"detail" | "comments">("detail");
   const [detailPrompt, setDetailPrompt] = useState<PromptRecord | null>(null);
   const [detailComments, setDetailComments] = useState<PromptCommentData[]>([]);
   const [isDetailCommentsLoading, setIsDetailCommentsLoading] = useState(false);
@@ -155,6 +157,8 @@ export default function PromptSharePage() {
 
   const postModalRef = useRef<HTMLDivElement | null>(null);
   const promptDetailModalRef = useRef<HTMLDivElement | null>(null);
+  const promptCommentsSectionRef = useRef<HTMLElement | null>(null);
+  const promptCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptShareModalRef = useRef<HTMLDivElement | null>(null);
 
   const promptPostTitleInputRef = useRef<HTMLInputElement | null>(null);
@@ -361,6 +365,7 @@ export default function PromptSharePage() {
       if (modal === "post") {
         resetPostModalState();
       } else if (modal === "detail") {
+        setDetailModalView("detail");
         detailPromptIdRef.current = "";
         setDetailPrompt(null);
         setDetailComments([]);
@@ -776,9 +781,12 @@ export default function PromptSharePage() {
         await loadPromptComments(promptId);
       }
       setCommentDraft("");
+      showToast("コメントを投稿しました。", { variant: "success" });
     } catch (error) {
       console.error("コメント投稿エラー:", error);
-      showToast("コメント投稿に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : "コメント投稿に失敗しました。", {
+        variant: "error"
+      });
     } finally {
       setIsCommentSubmitting(false);
     }
@@ -786,6 +794,10 @@ export default function PromptSharePage() {
 
   const handleDeletePromptComment = useCallback(
     async (commentId: string | number) => {
+      const confirmed = await showConfirmModal("このコメントを削除しますか？");
+      if (!confirmed) {
+        return;
+      }
       const commentKey = String(commentId);
       setCommentActionPending(commentKey, true);
       try {
@@ -794,9 +806,12 @@ export default function PromptSharePage() {
         if (payload.prompt_id !== undefined && payload.comment_count !== undefined) {
           updatePromptCommentCount(payload.prompt_id, payload.comment_count);
         }
+        showToast("コメントを削除しました。", { variant: "success" });
       } catch (error) {
         console.error("コメント削除エラー:", error);
-        showToast("コメント削除に失敗しました。", { variant: "error" });
+        showToast(error instanceof Error ? error.message : "コメント削除に失敗しました。", {
+          variant: "error"
+        });
       } finally {
         setCommentActionPending(commentKey, false);
       }
@@ -808,6 +823,10 @@ export default function PromptSharePage() {
     async (commentId: string | number) => {
       if (!isLoggedIn) {
         showToast("コメントを報告するにはログインが必要です。", { variant: "error" });
+        return;
+      }
+      const confirmed = await showConfirmModal("このコメントを報告しますか？");
+      if (!confirmed) {
         return;
       }
       const commentKey = String(commentId);
@@ -827,7 +846,9 @@ export default function PromptSharePage() {
         }
       } catch (error) {
         console.error("コメント報告エラー:", error);
-        showToast("コメント報告に失敗しました。", { variant: "error" });
+        showToast(error instanceof Error ? error.message : "コメント報告に失敗しました。", {
+          variant: "error"
+        });
       } finally {
         setCommentActionPending(commentKey, false);
       }
@@ -855,11 +876,29 @@ export default function PromptSharePage() {
     (prompt: PromptRecord) => {
       const promptId = getPromptId(prompt);
       setOpenDropdownPromptId(null);
+      setDetailModalView("detail");
       setDetailPrompt(prompt);
       setCommentDraft("");
       setDetailComments([]);
       setCommentActionPendingIds(new Set());
       openModal("detail", promptDetailCloseButtonRef.current);
+      if (promptId) {
+        void loadPromptComments(promptId);
+      }
+    },
+    [loadPromptComments, openModal]
+  );
+
+  const openPromptCommentsModal = useCallback(
+    (prompt: PromptRecord) => {
+      const promptId = getPromptId(prompt);
+      setOpenDropdownPromptId(null);
+      setDetailModalView("comments");
+      setDetailPrompt(prompt);
+      setCommentDraft("");
+      setDetailComments([]);
+      setCommentActionPendingIds(new Set());
+      openModal("detail", promptCommentTextareaRef.current || promptCommentsSectionRef.current);
       if (promptId) {
         void loadPromptComments(promptId);
       }
@@ -1366,6 +1405,25 @@ export default function PromptSharePage() {
     };
   }, [activeModal, closeModal, getModalElement, isPostSubmitting]);
 
+  useEffect(() => {
+    if (activeModal !== "detail" || detailModalView !== "comments") {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = promptCommentTextareaRef.current || promptCommentsSectionRef.current;
+      if (!target) {
+        return;
+      }
+      target.focus({ preventScroll: true });
+      promptCommentsSectionRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [activeModal, detailModalView, detailPrompt]);
+
   const showPromptFeedback = Boolean(promptFeedback && visiblePrompts.length === 0 && !isPromptsLoading);
   const feedbackToShow = showPromptFeedback ? promptFeedback : null;
 
@@ -1409,6 +1467,7 @@ export default function PromptSharePage() {
         bookmarkPendingIds={bookmarkPendingIds}
         saveToListPendingIds={saveToListPendingIds}
         onOpenDetail={openPromptDetailModal}
+        onOpenComments={openPromptCommentsModal}
         onOpenShare={openPromptShareDialog}
         onToggleDropdown={togglePromptDropdown}
         onCloseDropdown={closePromptDropdown}
@@ -1465,7 +1524,10 @@ export default function PromptSharePage() {
         <PromptShareDetailModal
           isOpen={activeModal === "detail"}
           isLoggedIn={isLoggedIn}
+          activeView={detailModalView}
           promptDetailModalRef={promptDetailModalRef}
+          commentsSectionRef={promptCommentsSectionRef}
+          commentTextareaRef={promptCommentTextareaRef}
           detailPrompt={detailPrompt}
           detailComments={detailComments}
           isDetailCommentsLoading={isDetailCommentsLoading}
@@ -1473,6 +1535,7 @@ export default function PromptSharePage() {
           commentDraft={commentDraft}
           commentActionPendingIds={commentActionPendingIds}
           promptDetailCloseButtonRef={promptDetailCloseButtonRef}
+          onActiveViewChange={setDetailModalView}
           onCommentDraftChange={setCommentDraft}
           onSubmitComment={handleSubmitPromptComment}
           onDeleteComment={handleDeletePromptComment}

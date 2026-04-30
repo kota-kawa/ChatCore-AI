@@ -27,6 +27,11 @@ export function getModalFocusableElements(modal: HTMLElement) {
 
   return Array.from(modal.querySelectorAll<HTMLElement>(selector)).filter((element) => {
     const style = window.getComputedStyle(element);
-    return style.display !== "none" && style.visibility !== "hidden";
+    return (
+      !element.closest("[hidden]") &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      element.getClientRects().length > 0
+    );
   });
 }
