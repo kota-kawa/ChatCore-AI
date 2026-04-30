@@ -24,6 +24,13 @@
     box-shadow 0.38s ease;
 }
 
+@media (min-width: 577px) {
+  #chat-container {
+    height: calc(100vh - 2rem);
+    height: calc(100svh - 2rem);
+  }
+}
+
 #chat-container[data-view="launching"],
 #chat-container[data-view="chat"] {
   opacity: 1;
