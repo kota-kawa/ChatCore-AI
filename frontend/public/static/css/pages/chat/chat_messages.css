@@ -773,8 +773,10 @@ chat-action-menu {
   position: relative;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.65rem;
   min-width: 13rem;
   padding: 1rem;
   border-radius: 28px;
@@ -806,6 +808,20 @@ chat-action-menu {
   --constellation-width: 13rem;
   --constellation-height: 5.35rem;
   --constellation-radius: 22px;
+}
+
+.thinking-message__status {
+  position: relative;
+  z-index: 1;
+  max-width: 13rem;
+  overflow: hidden;
+  color: rgba(15, 96, 66, 0.84);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes streamMessageAppear {
@@ -901,6 +917,10 @@ chat-action-menu {
   box-shadow:
     0 20px 44px rgba(2, 6, 23, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .thinking-message__status {
+  color: rgba(196, 253, 224, 0.86);
 }
 
 [data-theme="dark"] .copy-btn,
@@ -1115,6 +1135,10 @@ chat-action-menu {
     min-width: 11.6rem;
     padding: 0.8rem;
     border-radius: 24px;
+  }
+
+  .thinking-message__status {
+    max-width: 11.6rem;
   }
 
   .thinking-message__constellation {
