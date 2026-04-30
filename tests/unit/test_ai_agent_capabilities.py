@@ -92,6 +92,34 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertEqual(plan["steps"][0]["value"], "メール返信")
         self.assertEqual(plan["steps"][1]["action"], "click")
 
+    def test_parse_action_response_accepts_json_target_alias(self):
+        plan = parse_action_response(
+            '{"description":"一番上のプロンプトを開きます","steps":['
+            '{"action":"click","target":"#prompt-feed-section .prompt-card:first-child",'
+            '"description":"一番上のプロンプトを開く"}]}'
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["steps"][0]["action"], "click")
+        self.assertEqual(plan["steps"][0]["selector"], "#prompt-feed-section .prompt-card:first-child")
+
+    def test_parse_action_response_accepts_legacy_action_text(self):
+        plan = parse_action_response(
+            "最上部に表示されている プロンプトカード をクリックします。\n\n"
+            "実行アクション\n\n"
+            "action=click, target=#prompt-feed-section .prompt-card:first-child\n\n"
+            "コピー"
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["description"], "最上部に表示されている プロンプトカード をクリックします。")
+        self.assertEqual(plan["steps"][0]["action"], "click")
+        self.assertEqual(plan["steps"][0]["selector"], "#prompt-feed-section .prompt-card:first-child")
+        self.assertEqual(
+            plan["steps"][0]["description"],
+            "最上部に表示されている プロンプトカード をクリックします。",
+        )
+
     def test_parse_action_response_accepts_navigation_followed_by_action(self):
         plan = parse_action_response(
             '{"description":"プロンプト共有へ移動して検索します","steps":['
