@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -28,25 +27,21 @@ WEB_SEARCH_DEFAULT_MAX_TOKENS = 4096
 WEB_SEARCH_MAX_QUERY_CHARS = 240
 WEB_SEARCH_MAX_CONTEXT_CHARS = 14000
 WEB_SEARCH_MAX_SNIPPET_CHARS = 900
-WEB_SEARCH_PLANNER_MAX_HISTORY_MESSAGES = 6
+WEB_SEARCH_PLANNER_MAX_MESSAGES = 10
+WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 
-_JSON_OBJECT_PATTERN = re.compile(r"\{[\s\S]*\}")
-_JAPANESE_TEXT_PATTERN = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
-_EXPLICIT_SEARCH_PATTERN = re.compile(
-    r"(?i)(検索して|調べて|最新|今日|昨日|現在|ニュース|web検索|ウェブ検索|"
-    r"look up|search (?:the )?web|latest|current|today|news|as of)"
-)
-_SEARCH_WORTHY_PATTERN = re.compile(
-    r"(?i)(検索|調べ|最新|今日|昨日|現在|ニュース|天気|株価|価格|料金|予定|"
-    r"試合|スコア|法律|規制|大統領|首相|知事|市長|CEO|社長|バージョン|リリース|"
-    r"weather|stock|price|schedule|score|law|regulation|president|prime minister|"
-    r"governor|mayor|CEO|version|release|latest|current|today|news|search|look up)"
-)
-_SECRETISH_PATTERN = re.compile(
-    r"(?i)(api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*\S+|"
-    r"\bsk-[A-Za-z0-9_-]{20,}\b|"
-    r"\bAIza[0-9A-Za-z\-_]{20,}\b|"
-    r"\bghp_[A-Za-z0-9]{20,}\b"
+_SENSITIVE_MARKERS = (
+    "api_key",
+    "api-key",
+    "apikey",
+    "access_token",
+    "access-token",
+    "secret",
+    "password",
+    "token=",
+    "sk-",
+    "aiza",
+    "ghp_",
 )
 
 WebSearchEventPublisher = Callable[[str, dict[str, Any]], None]
@@ -123,14 +118,24 @@ def _get_positive_float_env(name: str, default: float) -> float:
 
 def _normalize_text(value: Any, *, max_chars: int | None = None) -> str:
     text = value if isinstance(value, str) else str(value or "")
-    text = re.sub(r"\s+", " ", text).strip()
+    text = " ".join(text.split())
     if max_chars is not None and len(text) > max_chars:
         return text[: max_chars - 3].rstrip() + "..."
     return text
 
 
+def _looks_sensitive(value: str) -> bool:
+    lowered = value.lower()
+    return any(marker in lowered for marker in _SENSITIVE_MARKERS)
+
+
 def _redact_secretish_text(value: str) -> str:
-    return _SECRETISH_PATTERN.sub("[REDACTED-SENSITIVE]", value)
+    if not value:
+        return ""
+    redacted_tokens: list[str] = []
+    for token in value.split():
+        redacted_tokens.append("[REDACTED-SENSITIVE]" if _looks_sensitive(token) else token)
+    return " ".join(redacted_tokens)
 
 
 def _latest_user_message(conversation_messages: list[dict[str, str]]) -> str:
@@ -140,19 +145,29 @@ def _latest_user_message(conversation_messages: list[dict[str, str]]) -> str:
     return ""
 
 
-def _recent_conversation_excerpt(conversation_messages: list[dict[str, str]]) -> str:
-    recent = conversation_messages[-WEB_SEARCH_PLANNER_MAX_HISTORY_MESSAGES:]
+def _planner_context_excerpt(conversation_messages: list[dict[str, str]]) -> str:
+    recent = conversation_messages[-WEB_SEARCH_PLANNER_MAX_MESSAGES:]
     lines: list[str] = []
     for message in recent:
         role = str(message.get("role", "user"))
+        label = role
         if role == "system":
-            continue
+            content_probe = str(message.get("content", ""))
+            if "<task_contract>" in content_probe:
+                label = "active_task_system"
+            elif "<runtime_context>" in content_probe:
+                label = "runtime_system"
+            else:
+                label = "context_system"
         content = _redact_secretish_text(
-            _normalize_text(message.get("content", ""), max_chars=900)
+            _normalize_text(message.get("content", ""), max_chars=1200)
         )
         if content:
-            lines.append(f"{role}: {content}")
-    return "\n".join(lines)
+            lines.append(f"{label}: {content}")
+    excerpt = "\n".join(lines)
+    if len(excerpt) > WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS:
+        return excerpt[-WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS:]
+    return excerpt
 
 
 def _infer_freshness(user_message: str) -> str:
@@ -169,53 +184,63 @@ def _infer_freshness(user_message: str) -> str:
 def _fallback_decision(user_message: str) -> WebSearchDecision:
     if not user_message.strip():
         return WebSearchDecision(False)
-    if _SECRETISH_PATTERN.search(user_message):
+    if _looks_sensitive(user_message):
         return WebSearchDecision(False, reason="message contains sensitive-looking content")
-    if not _EXPLICIT_SEARCH_PATTERN.search(user_message):
-        return WebSearchDecision(False)
-    query = _normalize_text(_redact_secretish_text(user_message), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
-    return WebSearchDecision(
-        should_search=True,
-        query=query,
-        freshness=_infer_freshness(user_message),
-        reason="explicit or time-sensitive search request",
-    )
+    return WebSearchDecision(False, reason="web search planner unavailable")
 
 
-def _should_consult_search_planner(user_message: str) -> bool:
-    if _SEARCH_WORTHY_PATTERN.search(user_message):
-        return True
-    if len(user_message) >= 80 and ("?" in user_message or "？" in user_message):
-        return True
-    return False
+def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
+    text = (raw_response or "").strip()
+    if not text:
+        return None
+    try:
+        loaded = json.loads(text)
+    except Exception:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            loaded = json.loads(text[start : end + 1])
+        except Exception:
+            return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def _is_valid_date_range(value: str) -> bool:
+    if len(value) != 22:
+        return False
+    if value[10:12] != "to":
+        return False
+    first = value[:10]
+    second = value[12:]
+    return _is_iso_date(first) and _is_iso_date(second)
+
+
+def _is_iso_date(value: str) -> bool:
+    if len(value) != 10:
+        return False
+    if value[4] != "-" or value[7] != "-":
+        return False
+    year, month, day = value[:4], value[5:7], value[8:10]
+    return year.isdigit() and month.isdigit() and day.isdigit()
 
 
 def _parse_decision(raw_response: str, user_message: str) -> WebSearchDecision:
-    match = _JSON_OBJECT_PATTERN.search(raw_response or "")
-    if not match:
-        return _fallback_decision(user_message)
-
-    try:
-        loaded = json.loads(match.group(0))
-    except Exception:
-        return _fallback_decision(user_message)
-
-    if not isinstance(loaded, dict):
+    loaded = _extract_json_object(raw_response)
+    if loaded is None:
         return _fallback_decision(user_message)
 
     should_search = loaded.get("should_search") is True
     query = _normalize_text(_redact_secretish_text(loaded.get("query", "")), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     freshness = str(loaded.get("freshness") or "").strip()
-    if freshness not in {"", "pd", "pw", "pm", "py"} and not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}to\d{4}-\d{2}-\d{2}",
-        freshness,
-    ):
+    if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
         freshness = ""
     reason = _normalize_text(loaded.get("reason", ""), max_chars=240)
 
     if should_search and not query:
         query = _normalize_text(_redact_secretish_text(user_message), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
-    if should_search and _SECRETISH_PATTERN.search(query):
+    if should_search and _looks_sensitive(query):
         return WebSearchDecision(False, reason="search query contains sensitive-looking content")
 
     return WebSearchDecision(
@@ -233,10 +258,8 @@ def decide_web_search(
     user_message = _latest_user_message(conversation_messages)
     if not user_message.strip():
         return WebSearchDecision(False)
-    if _SECRETISH_PATTERN.search(user_message):
+    if _looks_sensitive(user_message):
         return WebSearchDecision(False, reason="message contains sensitive-looking content")
-    if not _should_consult_search_planner(user_message):
-        return WebSearchDecision(False)
 
     current_date = datetime.now(timezone.utc).date().isoformat()
     planner_messages = [
@@ -247,9 +270,11 @@ def decide_web_search(
                 "assistant needs a Brave web search before answering. Search only when "
                 "the user needs current, recent, volatile, local, legal/financial/medical, "
                 "price, schedule, sports/news, software-version, or directly requested "
-                "external information. Do not search for stable general knowledge, writing, "
-                "translation, brainstorming, casual chat, private/sensitive content, or tasks "
-                "answerable from the conversation. Return only compact JSON with keys: "
+                "external information. Also search when an active task asks for research, "
+                "fact checking, recommendations, market/company research, source-backed writing, "
+                "or up-to-date product/service/library details. Do not search for stable general "
+                "knowledge, pure writing, translation, brainstorming, casual chat, private/sensitive "
+                "content, or tasks answerable from the conversation. Return only compact JSON with keys: "
                 'should_search boolean, query string, freshness string, reason string. '
                 'freshness must be "", "pd", "pw", "pm", "py", or YYYY-MM-DDtoYYYY-MM-DD.'
             ),
@@ -258,8 +283,8 @@ def decide_web_search(
             "role": "user",
             "content": (
                 f"current_date: {current_date}\n"
-                "recent_conversation:\n"
-                f"{_recent_conversation_excerpt(conversation_messages)}\n\n"
+                "conversation_and_active_task_context:\n"
+                f"{_planner_context_excerpt(conversation_messages)}\n\n"
                 "Return JSON only."
             ),
         },
@@ -268,10 +293,10 @@ def decide_web_search(
     try:
         raw_response = get_llm_response(planner_messages, model) or ""
     except LlmServiceError:
-        logger.warning("Web search planner failed; falling back to explicit-search heuristics.")
+        logger.warning("Web search planner failed; continuing without web search.")
         return _fallback_decision(user_message)
     except Exception:
-        logger.warning("Unexpected web search planner failure; falling back to explicit-search heuristics.")
+        logger.warning("Unexpected web search planner failure; continuing without web search.")
         return _fallback_decision(user_message)
 
     return _parse_decision(raw_response, user_message)
@@ -316,7 +341,14 @@ def _infer_search_language(query: str) -> str:
     configured = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
     if configured:
         return configured
-    return "ja" if _JAPANESE_TEXT_PATTERN.search(query) else "en"
+    return "ja" if _contains_japanese(query) else "en"
+
+
+def _contains_japanese(value: str) -> bool:
+    return any(
+        ("\u3040" <= char <= "\u30ff") or ("\u3400" <= char <= "\u9fff")
+        for char in value
+    )
 
 
 def _source_age_text(raw_age: Any) -> str:

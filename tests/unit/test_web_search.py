@@ -24,23 +24,75 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(decision.query, "OpenAI latest news")
         self.assertEqual(decision.freshness, "pd")
 
-    def test_decide_web_search_falls_back_for_explicit_search_request(self):
+    def test_decide_web_search_does_not_search_when_planner_fails(self):
         messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
 
         with patch.object(web_search, "get_llm_response", side_effect=RuntimeError("down")):
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
 
-        self.assertTrue(decision.should_search)
-        self.assertIn("React 19", decision.query)
+        self.assertFalse(decision.should_search)
+        self.assertEqual(decision.reason, "web search planner unavailable")
 
-    def test_decide_web_search_skips_planner_for_plain_greeting(self):
+    def test_decide_web_search_uses_planner_for_plain_greeting(self):
         messages = [{"role": "user", "content": "こんにちは"}]
 
-        with patch.object(web_search, "get_llm_response") as mock_llm:
+        with patch.object(
+            web_search,
+            "get_llm_response",
+            return_value='{"should_search": false, "query": "", "freshness": "", "reason": "greeting"}',
+        ) as mock_llm:
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
 
         self.assertFalse(decision.should_search)
-        mock_llm.assert_not_called()
+        mock_llm.assert_called_once()
+
+    def test_decide_web_search_consults_planner_for_substantive_normal_message(self):
+        messages = [{"role": "user", "content": "日本で法人を設立する時の注意点を教えてください"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_response",
+            return_value='{"should_search": true, "query": "日本 法人設立 注意点 最新", "freshness": "py", "reason": "legal and procedural details"}',
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+        self.assertIn("法人設立", decision.query)
+        mock_llm.assert_called_once()
+
+    def test_decide_web_search_includes_task_system_context_for_task_card_launch(self):
+        messages = [
+            {
+                "role": "system",
+                "content": "<task_contract><task_name>市場調査</task_name><task_instruction>最新情報を調べて競合比較してください。</task_instruction></task_contract>",
+            },
+            {"role": "user", "content": "【タスク】市場調査\n【状況・作業環境】新しいCRMを検討しています"},
+        ]
+
+        with patch.object(
+            web_search,
+            "get_llm_response",
+            return_value='{"should_search": true, "query": "CRM 最新 比較", "freshness": "pm", "reason": "active task requires research"}',
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        planner_context = mock_llm.call_args.args[0][1]["content"]
+        self.assertTrue(decision.should_search)
+        self.assertIn("active_task_system", planner_context)
+        self.assertIn("最新情報を調べて競合比較", planner_context)
+
+    def test_decide_web_search_uses_planner_for_pure_writing_task(self):
+        messages = [{"role": "user", "content": "短い自己紹介文を書いて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_response",
+            return_value='{"should_search": false, "query": "", "freshness": "", "reason": "pure writing"}',
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertFalse(decision.should_search)
+        mock_llm.assert_called_once()
 
     def test_search_brave_llm_context_parses_sources(self):
         response = MagicMock()
