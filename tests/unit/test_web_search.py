@@ -78,7 +78,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         planner_context = mock_llm.call_args.args[0][1]["content"]
         self.assertTrue(decision.should_search)
-        self.assertIn("active_task_system", planner_context)
+        self.assertIn("実行中タスクシステム", planner_context)
         self.assertIn("最新情報を調べて競合比較", planner_context)
 
     def test_decide_web_search_uses_planner_for_pure_writing_task(self):
@@ -127,6 +127,18 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(mock_get.call_args.args[0], web_search.BRAVE_LLM_CONTEXT_URL)
         self.assertEqual(mock_get.call_args.kwargs["headers"]["X-Subscription-Token"], "test-key")
         self.assertEqual(mock_get.call_args.kwargs["params"]["freshness"], "pw")
+        self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "en")
+
+    def test_search_brave_llm_context_uses_brave_jp_language_code_for_japanese(self):
+        response = MagicMock()
+        response.json.return_value = {"grounding": {"generic": [], "map": []}, "sources": {}}
+        response.raise_for_status.return_value = None
+
+        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
+            with patch.object(web_search.requests, "get", return_value=response) as mock_get:
+                web_search.search_brave_llm_context("今日のニュース", freshness="pd")
+
+        self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "jp")
 
     def test_search_brave_llm_context_blocks_when_monthly_quota_exceeded(self):
         with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
@@ -180,6 +192,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(events[1].payload["source_count"], 1)
         self.assertEqual(len(augmented), 2)
         self.assertIn("<web_search_context", augmented[0]["content"])
+        self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented[0]["content"])
+        self.assertIn("リアルタイム検索できない」とは言わないでください", augmented[0]["content"])
         self.assertIn("https://example.com/python", augmented[0]["content"])
 
     def test_maybe_augment_messages_reports_monthly_quota_exceeded(self):
@@ -207,7 +221,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         self.assertEqual([event.event for event in events], ["web_search_started", "web_search_failed"])
         self.assertIn("月間上限", events[1].payload["message"])
-        self.assertIn("monthly quota is exhausted", augmented[0]["content"])
+        self.assertIn("月間上限", augmented[0]["content"])
+        self.assertIn("リアルタイム確認ができない", augmented[0]["content"])
 
 
 if __name__ == "__main__":
