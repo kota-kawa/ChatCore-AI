@@ -1,6 +1,7 @@
-import Head from "next/head";
 import { useRouter } from "next/router";
 import { useState, type FormEvent } from "react";
+
+import { SeoHead } from "../../components/SeoHead";
 
 type StatusMessage = {
   type: "success" | "error";
@@ -50,11 +51,12 @@ export default function AdminLogin() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <title>管理者ログイン</title>
-        <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-      </Head>
+      <SeoHead
+        title="管理者ログイン | Chat Core"
+        description="Chat Coreの管理者ログインページです。"
+        canonicalPath="/admin/login"
+        noindex
+      />
       <div className="relative min-h-screen overflow-hidden bg-slate-50">
         <div className="pointer-events-none absolute -top-24 right-[-10rem] h-72 w-72 rounded-full bg-indigo-200/50 blur-3xl"></div>
         <div className="pointer-events-none absolute bottom-0 left-[-6rem] h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl"></div>

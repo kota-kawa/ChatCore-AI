@@ -8,6 +8,7 @@ import type { AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
 import { useRouter } from "next/router";
+import { GoogleAnalytics } from "../components/GoogleAnalytics";
 import { GlobalAiAgent } from "../components/GlobalAiAgent";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 
@@ -107,6 +108,7 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <div className={appSansFont.variable}>
       <GlobalErrorBoundary>
+        <GoogleAnalytics />
         <Component {...pageProps} />
         {showAiAgent && <GlobalAiAgent />}
       </GlobalErrorBoundary>

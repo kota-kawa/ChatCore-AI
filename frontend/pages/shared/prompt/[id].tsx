@@ -1,6 +1,6 @@
-import Head from "next/head";
 import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../../components/MarkdownContent";
+import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 
 type SharedPrompt = {
@@ -140,26 +140,41 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
       return "";
     }
   })()) || defaultOgImageUrl;
+  const structuredData = prompt
+    ? {
+        "@context": "https://schema.org",
+        "@type": "CreativeWork",
+        headline: prompt.title || "共有プロンプト",
+        name: prompt.title || "共有プロンプト",
+        description,
+        author: {
+          "@type": "Person",
+          name: prompt.author || "匿名ユーザー"
+        },
+        datePublished: prompt.created_at || undefined,
+        image: ogImageUrl,
+        url: pageUrl,
+        inLanguage: "ja",
+        isPartOf: {
+          "@type": "WebSite",
+          name: "Chat Core"
+        }
+      }
+    : undefined;
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <title>{pageTitle}</title>
-        <meta name="description" content={description} />
-        <meta property="og:title" content={pageTitle} />
-        <meta property="og:description" content={description} />
-        <meta property="og:type" content="article" />
-        <meta property="og:site_name" content="Chat Core" />
-        <meta property="og:url" content={pageUrl} />
-        <meta property="og:image" content={ogImageUrl} />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={pageTitle} />
-        <meta name="twitter:description" content={description} />
-        <meta name="twitter:image" content={ogImageUrl} />
+      <SeoHead
+        title={pageTitle}
+        description={description}
+        canonicalUrl={pageUrl}
+        imageUrl={ogImageUrl}
+        ogType="article"
+        noindex={Boolean(payload.error || !prompt)}
+        structuredData={structuredData}
+      >
         <link rel="stylesheet" href="/static/css/pages/shared_prompt.css" />
-      </Head>
+      </SeoHead>
 
       <div className="shared-prompt-page">
         {payload.error ? (

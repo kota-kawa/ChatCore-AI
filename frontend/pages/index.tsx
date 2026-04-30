@@ -1,4 +1,4 @@
-import Head from "next/head";
+import { SeoHead } from "../components/SeoHead";
 import { ChatMainSection } from "../components/chat_page/chat_main_section";
 import { ChatShareModal } from "../components/chat_page/modals/chat_share_modal";
 import { NewPromptModal } from "../components/chat_page/modals/new_prompt_modal";
@@ -7,6 +7,31 @@ import { TaskEditModal } from "../components/chat_page/modals/task_edit_modal";
 import { SetupSection } from "../components/chat_page/setup_section";
 import { HomePageContextProvider } from "../contexts/chat_page/home_page_context";
 import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
+import { absoluteUrl, DEFAULT_SEO_DESCRIPTION } from "../lib/seo";
+
+const homeStructuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "ChatCore-AI",
+    applicationCategory: "ProductivityApplication",
+    operatingSystem: "Web",
+    url: absoluteUrl("/"),
+    description: DEFAULT_SEO_DESCRIPTION,
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "JPY"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Chat Core",
+    url: absoluteUrl("/"),
+    inLanguage: "ja"
+  }
+];
 
 export default function HomePage() {
   const controller = useHomePageController();
@@ -70,18 +95,13 @@ export default function HomePage() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
-        />
-        <title>ChatCore-AI</title>
-        <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-        <link rel="icon" type="image/png" href="/static/favicon.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
+      <SeoHead
+        title="ChatCore-AI | 日本語AIチャット・プロンプト共有・メモ管理"
+        canonicalPath="/"
+        structuredData={homeStructuredData}
+      >
         <link rel="stylesheet" href="/static/css/pages/chat/page.css" />
-      </Head>
+      </SeoHead>
 
       <HomePageContextProvider controller={controller}>
         <div className="chat-page-shell">

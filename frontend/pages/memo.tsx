@@ -1,4 +1,4 @@
-import Head from "next/head";
+import { SeoHead } from "../components/SeoHead";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import useSWR from "swr";
@@ -402,14 +402,14 @@ export default function MemoPage() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>メモを保存</title>
-        <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-        <link rel="icon" type="image/png" href="/static/favicon.png" />
+      <SeoHead
+        title="メモを保存 | Chat Core"
+        description="Chat CoreでAIとのやり取りや作業メモを保存するページです。"
+        canonicalPath="/memo"
+        noindex
+      >
         <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
-      </Head>
+      </SeoHead>
 
       <div className="memo-page-shell">
         <action-menu></action-menu>

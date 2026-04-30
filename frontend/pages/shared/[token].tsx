@@ -1,6 +1,6 @@
-import Head from "next/head";
 import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../components/MarkdownContent";
+import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
 
 type SharedMessage = {
@@ -126,26 +126,35 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   const pageTitle = `${title} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
+  const structuredData = !payload.error
+    ? {
+        "@context": "https://schema.org",
+        "@type": "DiscussionForumPosting",
+        headline: title,
+        description,
+        datePublished: payload.room?.created_at || undefined,
+        url: pageUrl,
+        inLanguage: "ja",
+        isPartOf: {
+          "@type": "WebSite",
+          name: "Chat Core"
+        }
+      }
+    : undefined;
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <title>{pageTitle}</title>
-        <meta name="description" content={description} />
-        <meta property="og:title" content={pageTitle} />
-        <meta property="og:description" content={description} />
-        <meta property="og:type" content="article" />
-        <meta property="og:site_name" content="Chat Core" />
-        <meta property="og:url" content={pageUrl} />
-        <meta property="og:image" content={ogImageUrl} />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={pageTitle} />
-        <meta name="twitter:description" content={description} />
-        <meta name="twitter:image" content={ogImageUrl} />
+      <SeoHead
+        title={pageTitle}
+        description={description}
+        canonicalUrl={pageUrl}
+        imageUrl={ogImageUrl}
+        ogType="article"
+        noindex={Boolean(payload.error)}
+        structuredData={structuredData}
+      >
         <link rel="stylesheet" href="/static/css/pages/chat/shared_chat.css" />
-      </Head>
+      </SeoHead>
 
       <div className="shared-chat-page">
         {payload.error ? (

@@ -1,4 +1,4 @@
-import Head from "next/head";
+import { SeoHead } from "../components/SeoHead";
 import {
   useCallback,
   useEffect,
@@ -1121,19 +1121,18 @@ export default function UserSettingsPage() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>ユーザー設定</title>
-        <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-        <link rel="icon" type="image/png" href="/static/favicon.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
+      <SeoHead
+        title="ユーザー設定 | Chat Core"
+        description="Chat Coreのユーザー設定ページです。"
+        canonicalPath="/settings"
+        noindex
+      >
         <link
           href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap"
           rel="stylesheet"
         />
         <link rel="stylesheet" href="/static/css/pages/user_settings/index.css" />
-      </Head>
+      </SeoHead>
 
       <div className="user-settings-page">
         <action-menu></action-menu>

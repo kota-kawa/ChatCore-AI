@@ -1,14 +1,12 @@
-import Head from "next/head";
+import { SeoHead } from "../../../SeoHead";
 
 export function AuthGatewayHead() {
   return (
-    <Head>
-      <meta charSet="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Chat Core 認証</title>
-      <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-      <link rel="icon" type="image/png" href="/static/favicon.png" />
-      <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-    </Head>
+    <SeoHead
+      title="ログイン・新規登録 | Chat Core"
+      description="Chat Coreのログイン・新規登録ページです。"
+      canonicalPath="/login"
+      noindex
+    />
   );
 }

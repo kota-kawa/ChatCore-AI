@@ -1,4 +1,4 @@
-import Head from "next/head";
+import { SeoHead } from "../../components/SeoHead";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
 import "../../scripts/core/csrf";
@@ -396,18 +396,18 @@ export default function PromptManagePage() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>マイプロンプト管理</title>
-        <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-        <link rel="icon" type="image/png" href="/static/favicon.png" />
+      <SeoHead
+        title="マイプロンプト管理 | Chat Core"
+        description="Chat Coreで保存したプロンプトを管理するページです。"
+        canonicalPath="/prompt_share/manage_prompts"
+        noindex
+      >
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_manage.css" />
-      </Head>
+      </SeoHead>
 
       <div className="prompt-manage-page">
         <PromptManageHeader />

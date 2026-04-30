@@ -10,7 +10,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 ARG BACKEND_URL=http://app:5004
+ARG NEXT_PUBLIC_SITE_URL=https://chatcore-ai.com
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=G-Q1F9PY8BFJ
 ENV BACKEND_URL=${BACKEND_URL}
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -25,6 +29,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV BACKEND_URL=http://app:5004
+ENV NEXT_PUBLIC_SITE_URL=https://chatcore-ai.com
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=G-Q1F9PY8BFJ
 
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json

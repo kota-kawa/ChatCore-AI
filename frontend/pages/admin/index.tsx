@@ -1,7 +1,8 @@
-import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import useSWR from "swr";
+
+import { SeoHead } from "../../components/SeoHead";
 
 type ColumnDetail = {
   name: string;
@@ -190,11 +191,12 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <title>管理コンソール</title>
-        <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
-      </Head>
+      <SeoHead
+        title="管理コンソール | Chat Core"
+        description="Chat Coreの管理コンソールです。"
+        canonicalPath="/admin"
+        noindex
+      />
       <div className="relative min-h-screen overflow-hidden bg-slate-50">
         <div className="pointer-events-none absolute -top-24 right-[-12rem] h-72 w-72 rounded-full bg-indigo-200/50 blur-3xl"></div>
         <div className="pointer-events-none absolute top-40 -left-24 h-96 w-96 rounded-full bg-emerald-200/40 blur-3xl"></div>

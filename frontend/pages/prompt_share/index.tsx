@@ -1,4 +1,3 @@
-import Head from "next/head";
 import {
   useCallback,
   useEffect,
@@ -11,6 +10,7 @@ import {
   type MouseEvent
 } from "react";
 
+import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
 import { showToast } from "../../scripts/core/toast";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
@@ -67,6 +67,24 @@ import {
 } from "../../components/prompt_share/prompt_share_page_utils";
 import { PromptShareShareModal } from "../../components/prompt_share/prompt_share_share_modal";
 import type { PromptRecord } from "../../components/prompt_share/prompt_card";
+import { absoluteUrl } from "../../lib/seo";
+
+const promptShareDescription =
+  "Chat Coreのプロンプト共有ページです。文章作成、調査、画像生成などに使える日本語AIプロンプトを探して、保存して、共有できます。";
+
+const promptShareStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Chat Core プロンプト共有",
+  url: absoluteUrl("/prompt_share"),
+  description: promptShareDescription,
+  inLanguage: "ja",
+  isPartOf: {
+    "@type": "WebSite",
+    name: "Chat Core",
+    url: absoluteUrl("/")
+  }
+};
 
 export default function PromptSharePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1164,14 +1182,14 @@ export default function PromptSharePage() {
 
   return (
     <>
-      <Head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>プロンプト共有 - トップ</title>
-        <link rel="icon" type="image/webp" href="/static/favicon.webp" />
-        <link rel="icon" type="image/png" href="/static/favicon.png" />
+      <SeoHead
+        title="プロンプト共有 | Chat Core"
+        description={promptShareDescription}
+        canonicalPath="/prompt_share"
+        structuredData={promptShareStructuredData}
+      >
         <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_share.css" />
-      </Head>
+      </SeoHead>
 
       <PromptSharePageLayout
         authUiReady={authUiReady}
