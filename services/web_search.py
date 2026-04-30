@@ -13,6 +13,10 @@ from typing import Any
 import requests
 
 from services.llm import LlmServiceError, get_llm_response
+from services.llm_daily_limit import (
+    consume_brave_web_search_monthly_quota,
+    get_seconds_until_monthly_reset,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,13 @@ class WebSearchResult:
     @property
     def has_sources(self) -> bool:
         return bool(self.sources)
+
+
+class WebSearchQuotaExceeded(RuntimeError):
+    def __init__(self, limit: int, retry_after_seconds: int) -> None:
+        super().__init__(f"Brave web search monthly limit exceeded: {limit}")
+        self.limit = limit
+        self.retry_after_seconds = retry_after_seconds
 
 
 _search_cache: dict[str, tuple[float, WebSearchResult]] = {}
@@ -402,6 +413,13 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
     if cached is not None:
         return cached
 
+    allowed, _, monthly_limit = consume_brave_web_search_monthly_quota()
+    if not allowed:
+        raise WebSearchQuotaExceeded(
+            monthly_limit,
+            get_seconds_until_monthly_reset(),
+        )
+
     params: dict[str, Any] = {
         "q": normalized_query,
         "country": country,
@@ -519,6 +537,33 @@ def maybe_augment_messages_with_web_search(
 
     try:
         result = search_brave_llm_context(decision.query, freshness=decision.freshness)
+    except WebSearchQuotaExceeded as exc:
+        logger.warning(
+            "Brave web search monthly quota exceeded.",
+            extra={"limit": exc.limit, "retry_after_seconds": exc.retry_after_seconds},
+        )
+        message = f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。検索なしで回答を続けます。"
+        if publish_event is not None:
+            publish_event(
+                "web_search_failed",
+                {
+                    "query": decision.query,
+                    "message": message,
+                    "retry_after_seconds": exc.retry_after_seconds,
+                },
+            )
+        return _insert_system_context(
+            conversation_messages,
+            {
+                "role": "system",
+                "content": (
+                    "<web_search_status>"
+                    f"The Brave web search monthly quota is exhausted ({exc.limit} searches). "
+                    "If the answer depends on current facts, say that live verification is unavailable because the monthly search limit has been reached."
+                    "</web_search_status>"
+                ),
+            },
+        )
     except Exception:
         logger.exception("Brave web search failed.")
         if publish_event is not None:

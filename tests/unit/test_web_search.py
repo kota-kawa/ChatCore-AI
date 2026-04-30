@@ -76,6 +76,22 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(mock_get.call_args.kwargs["headers"]["X-Subscription-Token"], "test-key")
         self.assertEqual(mock_get.call_args.kwargs["params"]["freshness"], "pw")
 
+    def test_search_brave_llm_context_blocks_when_monthly_quota_exceeded(self):
+        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
+            with patch.object(
+                web_search,
+                "consume_brave_web_search_monthly_quota",
+                return_value=(False, 0, 500),
+            ):
+                with patch.object(web_search, "get_seconds_until_monthly_reset", return_value=60):
+                    with patch.object(web_search.requests, "get") as mock_get:
+                        with self.assertRaises(web_search.WebSearchQuotaExceeded) as cm:
+                            web_search.search_brave_llm_context("example query")
+
+        self.assertEqual(cm.exception.limit, 500)
+        self.assertEqual(cm.exception.retry_after_seconds, 60)
+        mock_get.assert_not_called()
+
     def test_maybe_augment_messages_publishes_search_events_and_adds_context(self):
         messages = [{"role": "user", "content": "今日のPythonニュースを調べて"}]
         events = []
@@ -113,6 +129,33 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(len(augmented), 2)
         self.assertIn("<web_search_context", augmented[0]["content"])
         self.assertIn("https://example.com/python", augmented[0]["content"])
+
+    def test_maybe_augment_messages_reports_monthly_quota_exceeded(self):
+        messages = [{"role": "user", "content": "今日のPythonニュースを調べて"}]
+        events = []
+
+        with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
+            with patch.object(
+                web_search,
+                "decide_web_search",
+                return_value=web_search.WebSearchDecision(True, "Python news", "pd", "current"),
+            ):
+                with patch.object(
+                    web_search,
+                    "search_brave_llm_context",
+                    side_effect=web_search.WebSearchQuotaExceeded(500, 60),
+                ):
+                    augmented = web_search.maybe_augment_messages_with_web_search(
+                        messages,
+                        "gemini-2.5-flash",
+                        publish_event=lambda event, payload: events.append(
+                            SimpleNamespace(event=event, payload=payload)
+                        ),
+                    )
+
+        self.assertEqual([event.event for event in events], ["web_search_started", "web_search_failed"])
+        self.assertIn("月間上限", events[1].payload["message"])
+        self.assertIn("monthly quota is exhausted", augmented[0]["content"])
 
 
 if __name__ == "__main__":

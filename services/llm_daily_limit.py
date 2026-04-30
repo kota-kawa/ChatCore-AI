@@ -22,6 +22,10 @@ DEFAULT_AI_AGENT_MONTHLY_API_LIMIT = 1000
 AI_AGENT_MONTHLY_API_LIMIT_ENV = "AI_AGENT_MONTHLY_API_LIMIT"
 _AI_AGENT_MONTHLY_COUNT_KEY_PREFIX = "llm:agent_monthly_total"
 
+DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT = 500
+BRAVE_WEB_SEARCH_MONTHLY_LIMIT_ENV = "BRAVE_WEB_SEARCH_MONTHLY_LIMIT"
+_BRAVE_WEB_SEARCH_MONTHLY_COUNT_KEY_PREFIX = "brave:web_search_monthly_total"
+
 logger = logging.getLogger(__name__)
 
 
@@ -272,6 +276,19 @@ return {1, current}
             current_month=current_month,
         )
 
+    def consume_brave_web_search_monthly_quota(
+        self,
+        current_month: str | None = None,
+    ) -> tuple[bool, int, int]:
+        # Brave Web検索用の全体月次上限を 1 回分消費する
+        # Consume one unit from the global monthly quota for Brave web search usage.
+        return self._consume_monthly_quota(
+            key_prefix=_BRAVE_WEB_SEARCH_MONTHLY_COUNT_KEY_PREFIX,
+            env_name=BRAVE_WEB_SEARCH_MONTHLY_LIMIT_ENV,
+            default_limit=DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT,
+            current_month=current_month,
+        )
+
 
 def get_llm_daily_api_limit() -> int:
     return _get_limit(LLM_DAILY_API_LIMIT_ENV, DEFAULT_LLM_DAILY_API_LIMIT)
@@ -287,6 +304,13 @@ def get_ai_agent_monthly_api_limit() -> int:
     return _get_limit(
         AI_AGENT_MONTHLY_API_LIMIT_ENV,
         DEFAULT_AI_AGENT_MONTHLY_API_LIMIT,
+    )
+
+
+def get_brave_web_search_monthly_limit() -> int:
+    return _get_limit(
+        BRAVE_WEB_SEARCH_MONTHLY_LIMIT_ENV,
+        DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT,
     )
 
 
@@ -346,3 +370,16 @@ def consume_ai_agent_monthly_quota(
         else get_llm_daily_limit_service()
     )
     return target.consume_ai_agent_monthly_quota(current_month=current_month)
+
+
+def consume_brave_web_search_monthly_quota(
+    current_month: str | None = None,
+    *,
+    service: LlmDailyLimitService | None = None,
+) -> tuple[bool, int, int]:
+    target = (
+        service
+        if isinstance(service, LlmDailyLimitService)
+        else get_llm_daily_limit_service()
+    )
+    return target.consume_brave_web_search_monthly_quota(current_month=current_month)

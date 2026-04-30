@@ -10,6 +10,7 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.original_limit = os.environ.get("LLM_DAILY_API_LIMIT")
         self.original_auth_email_limit = os.environ.get("AUTH_EMAIL_DAILY_SEND_LIMIT")
         self.original_ai_agent_limit = os.environ.get("AI_AGENT_MONTHLY_API_LIMIT")
+        self.original_brave_search_limit = os.environ.get("BRAVE_WEB_SEARCH_MONTHLY_LIMIT")
         llm_daily_limit.clear_in_memory_daily_limit_state()
 
     def tearDown(self):
@@ -27,6 +28,11 @@ class LlmDailyLimitTestCase(unittest.TestCase):
             os.environ.pop("AI_AGENT_MONTHLY_API_LIMIT", None)
         else:
             os.environ["AI_AGENT_MONTHLY_API_LIMIT"] = self.original_ai_agent_limit
+
+        if self.original_brave_search_limit is None:
+            os.environ.pop("BRAVE_WEB_SEARCH_MONTHLY_LIMIT", None)
+        else:
+            os.environ["BRAVE_WEB_SEARCH_MONTHLY_LIMIT"] = self.original_brave_search_limit
 
         llm_daily_limit.clear_in_memory_daily_limit_state()
 
@@ -99,6 +105,30 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(month1, (True, 0, 1))
         self.assertEqual(month1_exceeded, (False, 0, 1))
         self.assertEqual(month2, (True, 0, 1))
+
+    def test_brave_web_search_monthly_limit_blocks_after_reaching_cap(self):
+        os.environ["BRAVE_WEB_SEARCH_MONTHLY_LIMIT"] = "2"
+
+        with patch("services.llm_daily_limit.get_redis_client", return_value=None):
+            first = llm_daily_limit.consume_brave_web_search_monthly_quota(current_month="2026-02")
+            second = llm_daily_limit.consume_brave_web_search_monthly_quota(current_month="2026-02")
+            third = llm_daily_limit.consume_brave_web_search_monthly_quota(current_month="2026-02")
+
+        self.assertEqual(first, (True, 1, 2))
+        self.assertEqual(second, (True, 0, 2))
+        self.assertEqual(third, (False, 0, 2))
+
+    def test_brave_web_search_monthly_limit_defaults_to_500(self):
+        os.environ.pop("BRAVE_WEB_SEARCH_MONTHLY_LIMIT", None)
+
+        with patch("services.llm_daily_limit.get_redis_client", return_value=None):
+            allowed, remaining, limit = llm_daily_limit.consume_brave_web_search_monthly_quota(
+                current_month="2026-02"
+            )
+
+        self.assertTrue(allowed)
+        self.assertEqual(limit, 500)
+        self.assertEqual(remaining, 499)
 
 
 if __name__ == "__main__":

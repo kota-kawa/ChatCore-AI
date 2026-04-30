@@ -516,7 +516,8 @@ export function useHomePageController() {
         }
 
         if (parsed.event === "web_search_failed") {
-          updateThinkingStatus("Web検索に失敗しました。回答を作成中");
+          const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
+          updateThinkingStatus(message || "Web検索に失敗しました。回答を作成中");
           return;
         }
 
