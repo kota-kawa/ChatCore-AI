@@ -1,4 +1,8 @@
-import type { PromptData, PromptFeedResponse } from "./types";
+import type {
+  PromptCommentsResponse,
+  PromptData,
+  PromptFeedResponse
+} from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
 
 type ApiResponse = {
@@ -62,6 +66,63 @@ export function savePromptLike(prompt: PromptData) {
 
 export function removePromptLike(prompt: PromptData) {
   return sendLikeRequest("DELETE", prompt);
+}
+
+export function fetchPromptComments(promptId: string | number) {
+  return fetchJsonOrThrow<PromptCommentsResponse>(
+    `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/comments`,
+    undefined,
+    {
+      defaultMessage: "コメント一覧の取得に失敗しました。"
+    }
+  ).then(({ payload }) => payload);
+}
+
+export function createPromptComment(promptId: string | number, content: string) {
+  return fetchJsonOrThrow<PromptCommentsResponse>(
+    `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/comments`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content })
+    },
+    {
+      defaultMessage: "コメント投稿に失敗しました。"
+    }
+  ).then(({ payload }) => payload);
+}
+
+export function deletePromptComment(commentId: string | number) {
+  return fetchJsonOrThrow<PromptCommentsResponse>(
+    `/prompt_share/api/comments/${encodeURIComponent(String(commentId))}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin"
+    },
+    {
+      defaultMessage: "コメント削除に失敗しました。"
+    }
+  ).then(({ payload }) => payload);
+}
+
+export function reportPromptComment(
+  commentId: string | number,
+  reason: "spam" | "harassment" | "abuse" | "other" = "abuse",
+  details = ""
+) {
+  return fetchJsonOrThrow<PromptCommentsResponse>(
+    `/prompt_share/api/comments/${encodeURIComponent(String(commentId))}/report`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason, details })
+    },
+    {
+      defaultMessage: "コメント報告に失敗しました。"
+    }
+  ).then(({ payload }) => payload);
 }
 
 export function savePromptToList(prompt: PromptData) {

@@ -50,6 +50,7 @@ function PromptCardComponent({
   const promptId = prompt.clientId;
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
+  const commentCount = Number(prompt.comment_count || 0);
 
   return (
     <div
@@ -164,13 +165,15 @@ function PromptCardComponent({
             className="prompt-action-btn comment-btn"
             type="button"
             aria-label="コメント"
-            data-tooltip="コメント（準備中）"
+            data-tooltip="コメントを見る・投稿する"
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
+              onOpenDetail(prompt);
             }}
           >
             <i className="bi bi-chat-dots"></i>
+            <span className="prompt-action-count">{commentCount}</span>
           </button>
           <button
             className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}`}

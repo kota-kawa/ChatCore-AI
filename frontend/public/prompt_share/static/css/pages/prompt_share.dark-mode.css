@@ -226,6 +226,56 @@
   color: #f3f4f6;
 }
 
+[data-theme="dark"] .prompt-detail-comments {
+  border-top-color: rgba(148, 163, 184, 0.24);
+}
+
+[data-theme="dark"] .prompt-detail-comments__header h3 {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .prompt-detail-comments__reload {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(30, 41, 59, 0.92);
+  color: #dbeafe;
+}
+
+[data-theme="dark"] .prompt-detail-comments__composer textarea {
+  border-color: rgba(148, 163, 184, 0.34);
+  background: rgba(15, 23, 42, 0.96);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .prompt-detail-comments__composer button {
+  background: #2563eb;
+}
+
+[data-theme="dark"] .prompt-detail-comments__login-note,
+[data-theme="dark"] .prompt-detail-comments__status {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-detail-comments__item {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.88);
+}
+
+[data-theme="dark"] .prompt-detail-comments__meta strong {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .prompt-detail-comments__meta span {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-detail-comments__item p {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .prompt-detail-comments__actions button {
+  color: #93c5fd;
+}
+
 [data-theme="dark"] .post-modal-header {
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }

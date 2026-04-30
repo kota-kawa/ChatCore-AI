@@ -18,8 +18,12 @@ import { initPromptAssist } from "../../scripts/components/prompt_assist";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import {
   createPrompt,
+  createPromptComment,
+  deletePromptComment,
+  fetchPromptComments,
   fetchPromptList,
   fetchPromptSearchResults,
+  reportPromptComment,
   removePromptBookmark,
   removePromptLike,
   savePromptBookmark,
@@ -41,6 +45,7 @@ import {
   writePromptCache
 } from "../../scripts/prompt_share/storage";
 import type {
+  PromptCommentData,
   PromptData,
   PromptPagination,
   PromptType
@@ -106,6 +111,11 @@ export default function PromptSharePage() {
 
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
   const [detailPrompt, setDetailPrompt] = useState<PromptRecord | null>(null);
+  const [detailComments, setDetailComments] = useState<PromptCommentData[]>([]);
+  const [isDetailCommentsLoading, setIsDetailCommentsLoading] = useState(false);
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentActionPendingIds, setCommentActionPendingIds] = useState<Set<string>>(new Set());
   const [shareUrl, setShareUrl] = useState("");
   const [shareStatus, setShareStatus] = useState({
     text: "共有するプロンプトを選択してください。",
@@ -173,6 +183,7 @@ export default function PromptSharePage() {
   const promptImagePreviewUrlRef = useRef("");
   const postCloseTimerRef = useRef<number | null>(null);
   const cachedPromptShareUrlsRef = useRef<Map<string, string>>(new Map());
+  const detailPromptIdRef = useRef("");
 
   useEffect(() => {
     promptsRef.current = prompts;
@@ -349,6 +360,14 @@ export default function PromptSharePage() {
       setActiveModal(null);
       if (modal === "post") {
         resetPostModalState();
+      } else if (modal === "detail") {
+        detailPromptIdRef.current = "";
+        setDetailPrompt(null);
+        setDetailComments([]);
+        setCommentDraft("");
+        setCommentActionPendingIds(new Set());
+        setIsDetailCommentsLoading(false);
+        setIsCommentSubmitting(false);
       }
       return true;
     },
@@ -415,6 +434,47 @@ export default function PromptSharePage() {
       return next;
     });
   }, []);
+
+  const setCommentActionPending = useCallback((commentId: string, pending: boolean) => {
+    setCommentActionPendingIds((current) => {
+      const next = new Set(current);
+      if (pending) {
+        next.add(commentId);
+      } else {
+        next.delete(commentId);
+      }
+      return next;
+    });
+  }, []);
+
+  const updatePromptCommentCount = useCallback(
+    (promptId: string | number, nextCount: number) => {
+      const normalizedPromptId = String(promptId);
+      const safeCount = Math.max(0, Number(nextCount || 0));
+      setPrompts((current) => {
+        const next = current.map((prompt) =>
+          String(prompt.id ?? "") === normalizedPromptId
+            ? {
+                ...prompt,
+                comment_count: safeCount
+              }
+            : prompt
+        );
+        writePromptCache(toCachedPromptData(next));
+        return next;
+      });
+      setDetailPrompt((current) => {
+        if (!current || String(current.id ?? "") !== normalizedPromptId) {
+          return current;
+        }
+        return {
+          ...current,
+          comment_count: safeCount
+        };
+      });
+    },
+    [toCachedPromptData]
+  );
 
   const loadPrompts = useCallback(
     async (options?: { categoryToApply?: string }) => {
@@ -659,6 +719,128 @@ export default function PromptSharePage() {
     });
   }, []);
 
+  const loadPromptComments = useCallback(
+    async (promptId: string | number) => {
+      const targetPromptId = String(promptId);
+      detailPromptIdRef.current = targetPromptId;
+      setIsDetailCommentsLoading(true);
+      try {
+        const payload = await fetchPromptComments(promptId);
+        if (detailPromptIdRef.current !== targetPromptId) {
+          return;
+        }
+        const nextComments = Array.isArray(payload.comments) ? payload.comments : [];
+        setDetailComments(nextComments);
+        if (payload.comment_count !== undefined) {
+          updatePromptCommentCount(promptId, payload.comment_count);
+        }
+      } catch (error) {
+        if (detailPromptIdRef.current !== targetPromptId) {
+          return;
+        }
+        console.error("コメント取得エラー:", error);
+        showToast("コメントの読み込みに失敗しました。", { variant: "error" });
+      } finally {
+        if (detailPromptIdRef.current === targetPromptId) {
+          setIsDetailCommentsLoading(false);
+        }
+      }
+    },
+    [updatePromptCommentCount]
+  );
+
+  const handleSubmitPromptComment = useCallback(async () => {
+    if (!isLoggedIn) {
+      showToast("コメントするにはログインが必要です。", { variant: "error" });
+      return;
+    }
+    const promptId = getPromptId(detailPrompt);
+    const content = commentDraft.trim();
+    if (!promptId) {
+      showToast("コメント対象のプロンプトが見つかりません。", { variant: "error" });
+      return;
+    }
+    if (!content) {
+      showToast("コメント内容を入力してください。", { variant: "error" });
+      return;
+    }
+    setIsCommentSubmitting(true);
+    try {
+      const payload = await createPromptComment(promptId, content);
+      if (payload.comment_count !== undefined) {
+        updatePromptCommentCount(promptId, payload.comment_count);
+      }
+      if (payload.comment) {
+        setDetailComments((current) => [...current, payload.comment!]);
+      } else {
+        await loadPromptComments(promptId);
+      }
+      setCommentDraft("");
+    } catch (error) {
+      console.error("コメント投稿エラー:", error);
+      showToast("コメント投稿に失敗しました。", { variant: "error" });
+    } finally {
+      setIsCommentSubmitting(false);
+    }
+  }, [commentDraft, detailPrompt, isLoggedIn, loadPromptComments, updatePromptCommentCount]);
+
+  const handleDeletePromptComment = useCallback(
+    async (commentId: string | number) => {
+      const commentKey = String(commentId);
+      setCommentActionPending(commentKey, true);
+      try {
+        const payload = await deletePromptComment(commentId);
+        setDetailComments((current) => current.filter((comment) => String(comment.id) !== commentKey));
+        if (payload.prompt_id !== undefined && payload.comment_count !== undefined) {
+          updatePromptCommentCount(payload.prompt_id, payload.comment_count);
+        }
+      } catch (error) {
+        console.error("コメント削除エラー:", error);
+        showToast("コメント削除に失敗しました。", { variant: "error" });
+      } finally {
+        setCommentActionPending(commentKey, false);
+      }
+    },
+    [setCommentActionPending, updatePromptCommentCount]
+  );
+
+  const handleReportPromptComment = useCallback(
+    async (commentId: string | number) => {
+      if (!isLoggedIn) {
+        showToast("コメントを報告するにはログインが必要です。", { variant: "error" });
+        return;
+      }
+      const commentKey = String(commentId);
+      setCommentActionPending(commentKey, true);
+      try {
+        const payload = await reportPromptComment(commentId, "abuse");
+        if (payload.already_reported) {
+          showToast("このコメントはすでに報告済みです。", { variant: "info" });
+        } else {
+          showToast("コメントを報告しました。", { variant: "success" });
+        }
+        if (payload.hidden) {
+          setDetailComments((current) => current.filter((comment) => String(comment.id) !== commentKey));
+        }
+        if (payload.prompt_id !== undefined && payload.comment_count !== undefined) {
+          updatePromptCommentCount(payload.prompt_id, payload.comment_count);
+        }
+      } catch (error) {
+        console.error("コメント報告エラー:", error);
+        showToast("コメント報告に失敗しました。", { variant: "error" });
+      } finally {
+        setCommentActionPending(commentKey, false);
+      }
+    },
+    [isLoggedIn, setCommentActionPending, updatePromptCommentCount]
+  );
+
+  const reloadDetailComments = useCallback(() => {
+    const promptId = getPromptId(detailPrompt);
+    if (!promptId) return;
+    void loadPromptComments(promptId);
+  }, [detailPrompt, loadPromptComments]);
+
   const openPromptShareDialog = useCallback(
     (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => {
       event?.stopPropagation();
@@ -671,11 +853,18 @@ export default function PromptSharePage() {
 
   const openPromptDetailModal = useCallback(
     (prompt: PromptRecord) => {
+      const promptId = getPromptId(prompt);
       setOpenDropdownPromptId(null);
       setDetailPrompt(prompt);
+      setCommentDraft("");
+      setDetailComments([]);
+      setCommentActionPendingIds(new Set());
       openModal("detail", promptDetailCloseButtonRef.current);
+      if (promptId) {
+        void loadPromptComments(promptId);
+      }
     },
-    [openModal]
+    [loadPromptComments, openModal]
   );
 
   const togglePromptDropdown = useCallback((promptId: string) => {
@@ -1275,9 +1464,20 @@ export default function PromptSharePage() {
 
         <PromptShareDetailModal
           isOpen={activeModal === "detail"}
+          isLoggedIn={isLoggedIn}
           promptDetailModalRef={promptDetailModalRef}
           detailPrompt={detailPrompt}
+          detailComments={detailComments}
+          isDetailCommentsLoading={isDetailCommentsLoading}
+          isCommentSubmitting={isCommentSubmitting}
+          commentDraft={commentDraft}
+          commentActionPendingIds={commentActionPendingIds}
           promptDetailCloseButtonRef={promptDetailCloseButtonRef}
+          onCommentDraftChange={setCommentDraft}
+          onSubmitComment={handleSubmitPromptComment}
+          onDeleteComment={handleDeletePromptComment}
+          onReportComment={handleReportPromptComment}
+          onReloadComments={reloadDetailComments}
           onClose={() => {
             closeModal("detail");
           }}

@@ -33,6 +33,7 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt["liked"] = bool(prompt.get("liked"))
     prompt["bookmarked"] = bool(prompt.get("bookmarked"))
     prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
+    prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     return prompt
 
 
@@ -72,10 +73,19 @@ def _search_public_prompts(query, page, per_page, user_id=None):
               p.prompt_type,
               p.reference_image_url,
               p.created_at,
+              COALESCE(pc.comment_count, 0) AS comment_count,
               CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
               CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
               CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
+            LEFT JOIN (
+              SELECT prompt_id, COUNT(*) AS comment_count
+              FROM prompt_comments
+              WHERE deleted_at IS NULL
+                AND hidden_by_reports_at IS NULL
+              GROUP BY prompt_id
+            ) AS pc
+              ON pc.prompt_id = p.id
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id

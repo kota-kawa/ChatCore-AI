@@ -23,7 +23,19 @@ export type PromptData = {
   liked?: boolean;
   bookmarked?: boolean;
   saved_to_list?: boolean;
+  comment_count?: number;
   created_at?: string;
+};
+
+export type PromptCommentData = {
+  id: string | number;
+  prompt_id: string | number;
+  user_id: number;
+  author_name: string;
+  content: string;
+  created_at?: string;
+  mine?: boolean;
+  can_delete?: boolean;
 };
 
 export type PromptFeedResponse = {
@@ -32,6 +44,18 @@ export type PromptFeedResponse = {
   pagination?: PromptPagination;
   error?: string;
   message?: string;
+};
+
+export type PromptCommentsResponse = {
+  status?: string;
+  comments?: PromptCommentData[];
+  comment?: PromptCommentData;
+  comment_count?: number;
+  prompt_id?: string | number;
+  error?: string;
+  message?: string;
+  hidden?: boolean;
+  already_reported?: boolean;
 };
 
 export type CurrentUserResponse = {

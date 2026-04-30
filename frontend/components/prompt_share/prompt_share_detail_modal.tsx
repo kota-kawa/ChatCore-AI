@@ -1,21 +1,48 @@
 import type { RefObject } from "react";
 
-import { getPromptTypeLabel, normalizePromptType } from "../../scripts/prompt_share/formatters";
+import {
+  formatPromptDate,
+  getPromptTypeLabel,
+  normalizePromptType
+} from "../../scripts/prompt_share/formatters";
+import type { PromptCommentData } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 
 type PromptShareDetailModalProps = {
   isOpen: boolean;
+  isLoggedIn: boolean;
   promptDetailModalRef: RefObject<HTMLDivElement>;
   detailPrompt: PromptRecord | null;
+  detailComments: PromptCommentData[];
+  isDetailCommentsLoading: boolean;
+  isCommentSubmitting: boolean;
+  commentDraft: string;
+  commentActionPendingIds: Set<string>;
   promptDetailCloseButtonRef: RefObject<HTMLButtonElement>;
+  onCommentDraftChange: (value: string) => void;
+  onSubmitComment: () => void;
+  onDeleteComment: (commentId: string | number) => void;
+  onReportComment: (commentId: string | number) => void;
+  onReloadComments: () => void;
   onClose: () => void;
 };
 
 export function PromptShareDetailModal({
   isOpen,
+  isLoggedIn,
   promptDetailModalRef,
   detailPrompt,
+  detailComments,
+  isDetailCommentsLoading,
+  isCommentSubmitting,
+  commentDraft,
+  commentActionPendingIds,
   promptDetailCloseButtonRef,
+  onCommentDraftChange,
+  onSubmitComment,
+  onDeleteComment,
+  onReportComment,
+  onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
   return (
@@ -118,6 +145,89 @@ export function PromptShareDetailModal({
               <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
             </div>
           ) : null}
+
+          <section className="prompt-detail-comments" aria-live="polite">
+            <div className="prompt-detail-comments__header">
+              <h3>コメント</h3>
+              <button
+                type="button"
+                className="prompt-detail-comments__reload"
+                onClick={onReloadComments}
+                disabled={isDetailCommentsLoading}
+              >
+                {isDetailCommentsLoading ? "読み込み中..." : "更新"}
+              </button>
+            </div>
+
+            {isLoggedIn ? (
+              <form
+                className="prompt-detail-comments__composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void onSubmitComment();
+                }}
+              >
+                <textarea
+                  value={commentDraft}
+                  maxLength={1000}
+                  placeholder="使ってみた感想や改善ポイントを書いてください"
+                  onChange={(event) => {
+                    onCommentDraftChange(event.target.value);
+                  }}
+                />
+                <button type="submit" disabled={isCommentSubmitting}>
+                  {isCommentSubmitting ? "投稿中..." : "コメントを投稿"}
+                </button>
+              </form>
+            ) : (
+              <p className="prompt-detail-comments__login-note">コメントするにはログインが必要です。</p>
+            )}
+
+            {isDetailCommentsLoading ? (
+              <p className="prompt-detail-comments__status">コメントを読み込み中...</p>
+            ) : detailComments.length === 0 ? (
+              <p className="prompt-detail-comments__status">まだコメントはありません。</p>
+            ) : (
+              <ul className="prompt-detail-comments__list">
+                {detailComments.map((comment) => {
+                  const commentId = String(comment.id);
+                  const isPending = commentActionPendingIds.has(commentId);
+                  return (
+                    <li key={commentId} className="prompt-detail-comments__item">
+                      <div className="prompt-detail-comments__meta">
+                        <strong>{comment.author_name || "ユーザー"}</strong>
+                        <span>{formatPromptDate(comment.created_at) || ""}</span>
+                      </div>
+                      <p>{comment.content || ""}</p>
+                      <div className="prompt-detail-comments__actions">
+                        {comment.can_delete ? (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              onDeleteComment(comment.id);
+                            }}
+                          >
+                            削除
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              onReportComment(comment.id);
+                            }}
+                          >
+                            報告
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
     </div>

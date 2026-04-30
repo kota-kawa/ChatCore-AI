@@ -11,6 +11,8 @@ MAX_CHAT_ROOM_ID_LENGTH = 128
 MAX_MODEL_NAME_LENGTH = 64
 MAX_PROMPT_ASSIST_TEXT_LENGTH = 4000
 MAX_PROMPT_ASSIST_META_LENGTH = 256
+MAX_PROMPT_COMMENT_LENGTH = 1000
+MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH = 500
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -146,6 +148,15 @@ class PromptListEntryCreateRequest(RequestPayloadModel):
 
 class PromptLikeRequest(RequestPayloadModel):
     prompt_id: int
+
+
+class PromptCommentCreateRequest(RequestPayloadModel):
+    content: str = Field(min_length=1, max_length=MAX_PROMPT_COMMENT_LENGTH)
+
+
+class PromptCommentReportRequest(RequestPayloadModel):
+    reason: Literal["spam", "harassment", "abuse", "other"] = "abuse"
+    details: str = Field(default="", max_length=MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH)
 
 
 class PromptUpdateRequest(RequestPayloadModel):

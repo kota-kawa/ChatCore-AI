@@ -47,6 +47,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     reference_image_url: prompt.reference_image_url || "",
     liked: Boolean(prompt.liked),
     bookmarked: Boolean(prompt.bookmarked),
-    saved_to_list: Boolean(prompt.saved_to_list)
+    saved_to_list: Boolean(prompt.saved_to_list),
+    comment_count: Number(prompt.comment_count || 0)
   };
 }

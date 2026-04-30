@@ -281,6 +281,24 @@
     color 0.18s ease,
     box-shadow 0.18s ease;
   user-select: none;
+  position: relative;
+}
+
+.prompt-share-page .prompt-action-count {
+  position: absolute;
+  right: -3px;
+  bottom: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .prompt-share-page .meatball-menu {
@@ -453,4 +471,3 @@
   color: var(--ps-text-muted);
   background: #f7f8f9;
 }
-
