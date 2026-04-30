@@ -4,13 +4,13 @@ import html
 import logging
 from collections.abc import Iterator
 from datetime import datetime
-from functools import partial
 from typing import Any
 
 from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
+from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.db import get_db_connection
 from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
@@ -26,7 +26,6 @@ from services.chat_state import (
     remember_facts_from_message,
 )
 from services.chat_generation import (
-    ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
     ChatGenerationJob,
@@ -56,10 +55,6 @@ from services.llm_daily_limit import (
 from services.llm import (
     get_llm_response,
     GEMINI_DEFAULT_MODEL,
-    LlmAuthenticationError,
-    LlmInvalidModelError,
-    LlmRateLimitError,
-    LlmServiceError,
     is_streaming_model,
     is_retryable_llm_error,
     validate_model_name,
@@ -70,7 +65,6 @@ from services.chat_contract import (
 )
 from services.users import get_user_by_id
 from services.datetime_serialization import serialize_datetime_iso
-from services.request_models import ChatMessageRequest
 from services.web import (
     jsonify,
     jsonify_rate_limited,
@@ -742,6 +736,58 @@ def _paginate_ephemeral_chat_history(
     }
 
 
+def _build_chat_post_use_case() -> ChatPostUseCase:
+    return ChatPostUseCase(
+        ChatPostUseCaseDependencies(
+            cleanup_ephemeral_chats=cleanup_ephemeral_chats,
+            require_json_dict=require_json_dict,
+            validate_payload_model=validate_payload_model,
+            jsonify=jsonify,
+            jsonify_rate_limited=jsonify_rate_limited,
+            jsonify_service_error=jsonify_service_error,
+            log_and_internal_server_error=log_and_internal_server_error,
+            validate_model_name=validate_model_name,
+            consume_guest_chat_daily_limit=consume_guest_chat_daily_limit,
+            get_seconds_until_tomorrow=get_seconds_until_tomorrow,
+            validate_guest_room_access=_validate_guest_room_access,
+            resolve_authenticated_room_target=_resolve_authenticated_room_target,
+            ensure_ephemeral_room=_ensure_ephemeral_room,
+            get_temporary_user_store_key=get_temporary_user_store_key,
+            ephemeral_store=ephemeral_store,
+            save_message_to_db=save_message_to_db,
+            get_chat_room_messages=get_chat_room_messages,
+            normalize_messages_for_llm=_normalize_messages_for_llm,
+            find_latest_task_launch_request=_find_latest_task_launch_request,
+            load_task_prompt_data=_load_task_prompt_data,
+            build_task_prompt=_build_task_prompt,
+            get_user_by_id=get_user_by_id,
+            build_user_profile_prompt=_build_user_profile_prompt,
+            get_room_summary=get_room_summary,
+            list_room_memory_facts=list_room_memory_facts,
+            remember_facts_from_message=remember_facts_from_message,
+            build_context_messages=build_context_messages,
+            build_base_system_prompt=_build_base_system_prompt,
+            build_generation_key=build_generation_key,
+            has_active_generation=has_active_generation,
+            consume_llm_daily_quota=consume_llm_daily_quota,
+            cleanup_failed_room_without_assistant_response=(
+                _cleanup_failed_room_without_assistant_response
+            ),
+            get_seconds_until_daily_reset=get_seconds_until_daily_reset,
+            is_streaming_model=is_streaming_model,
+            start_generation_job=start_generation_job,
+            build_llm_stream_response=_build_llm_stream_response,
+            iter_llm_stream_events=_iter_llm_stream_events,
+            get_llm_response=get_llm_response,
+            is_retryable_llm_error=is_retryable_llm_error,
+            rebuild_room_summary=rebuild_room_summary,
+            get_session_id=get_session_id,
+            logger=logger,
+        ),
+        default_model=GEMINI_DEFAULT_MODEL,
+    )
+
+
 @chat_bp.post("/api/chat", name="chat.chat")
 async def chat(
     request: Request,
@@ -749,33 +795,6 @@ async def chat(
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
-    # 1リクエストで「入力検証 → 履歴取得 → LLM応答 → 永続化」までを一貫処理する
-    # Handle validation, history load, LLM response, and persistence in one request flow.
-    await run_blocking(cleanup_ephemeral_chats)
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
-
-    payload, validation_error = validate_payload_model(
-        data,
-        ChatMessageRequest,
-        error_message="'message' が必要です。",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    user_message = payload.message
-    chat_room_id = payload.chat_room_id
-    model = payload.model or GEMINI_DEFAULT_MODEL
-
-    try:
-        validate_model_name(model)
-    except LlmInvalidModelError as exc:
-        return jsonify({"error": str(exc)}, status_code=400)
-
-    # 非ログインユーザーはサーバー側の日次カウンタで回数制限する
-    # Enforce guest daily quota with a server-side counter.
-    session = request.session
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
         request,
@@ -785,268 +804,12 @@ async def chat(
         request,
         chat_generation_service,
     )
-    if "user_id" not in session:
-        allowed, message = await run_blocking(
-            consume_guest_chat_daily_limit,
-            request,
-            service=resolved_auth_limit_service,
-        )
-        if not allowed:
-            return jsonify_rate_limited(
-                message or "1日10回までです",
-                retry_after=get_seconds_until_tomorrow(),
-            )
-
-    sid = None
-    room_mode = "temporary"
-    user_id = session.get("user_id")
-    saved_user_message_id: int | None = None
-    if "user_id" in session:
-        # ログインユーザーはDB永続履歴、ゲストは ephemeral_store を利用する
-        # Use DB-backed history for signed-in users and ephemeral store for guests.
-        try:
-            room_mode, sid, legacy_response = await run_blocking(
-                _resolve_authenticated_room_target,
-                chat_room_id,
-                user_id,
-                "他ユーザーのチャットルームには投稿できません",
-            )
-            if legacy_response is not None:
-                return legacy_response
-        except ApiServiceError as exc:
-            return jsonify_service_error(exc)
-        except Exception:
-            return log_and_internal_server_error(
-                logger,
-                "Failed to validate chat room ownership before posting.",
-            )
-
-        escaped = html.escape(user_message)
-        formatted_user_message = escaped.replace("\n", "<br>")
-
-        if room_mode == "temporary":
-            sid = get_temporary_user_store_key(user_id)
-            await run_blocking(_ensure_ephemeral_room, sid, chat_room_id)
-            await run_blocking(
-                ephemeral_store.append_message,
-                sid,
-                chat_room_id,
-                "user",
-                formatted_user_message,
-            )
-            all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
-        else:
-            saved_user_message_id = await run_blocking(
-                save_message_to_db,
-                chat_room_id,
-                formatted_user_message,
-                "user",
-            )
-            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
-    else:
-        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
-        if guest_error is not None:
-            return guest_error
-
-        escaped = html.escape(user_message)
-        formatted_user_message = escaped.replace("\n", "<br>")
-        await run_blocking(
-            ephemeral_store.append_message, sid, chat_room_id, "user", formatted_user_message
-        )
-        all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
-
-    normalized_all_messages = _normalize_messages_for_llm(all_messages)
-    active_task_request = _find_latest_task_launch_request(normalized_all_messages)
-    prompt_data = None
-    if active_task_request is not None:
-        prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
-
-    task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
-    room_summary = ""
-    memory_facts: list[str] = []
-    user_profile_prompt = None
-    if user_id is not None:
-        try:
-            user = await run_blocking(get_user_by_id, user_id)
-            user_profile_prompt = _build_user_profile_prompt(user)
-        except Exception:
-            logger.warning("Failed to load user profile context; proceeding without it.")
-
-    if user_id is not None and room_mode == "normal":
-        try:
-            summary_payload = await run_blocking(get_room_summary, chat_room_id)
-            room_summary = str((summary_payload or {}).get("summary") or "")
-        except Exception:
-            logger.warning("Failed to load room summary; proceeding without it.")
-        try:
-            memory_facts = await run_blocking(list_room_memory_facts, chat_room_id)
-        except Exception:
-            logger.warning("Failed to load memory facts; proceeding without them.")
-        if saved_user_message_id is not None:
-            try:
-                remembered_facts = await run_blocking(
-                    remember_facts_from_message,
-                    chat_room_id,
-                    user_id,
-                    user_message,
-                    source_message_id=saved_user_message_id,
-                )
-                for fact in remembered_facts:
-                    if fact not in memory_facts:
-                        memory_facts.insert(0, fact)
-            except Exception:
-                logger.warning("Failed to update memory facts for chat room %s.", chat_room_id)
-
-    conversation_messages = build_context_messages(
-        base_system_prompt=_build_base_system_prompt(),
-        user_profile_prompt=user_profile_prompt,
-        task_prompt=task_prompt,
-        room_summary=room_summary,
-        memory_facts=memory_facts,
-        recent_messages=normalized_all_messages,
+    return await _build_chat_post_use_case().execute(
+        request,
+        auth_limit_service=resolved_auth_limit_service,
+        llm_daily_limit_service=resolved_llm_daily_limit_service,
+        chat_generation_service=resolved_chat_generation_service,
     )
-
-    generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
-    if has_active_generation(generation_key, service=resolved_chat_generation_service):
-        return jsonify(
-            {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
-            status_code=409,
-        )
-
-    can_access_llm, _, daily_limit = await run_blocking(
-        consume_llm_daily_quota,
-        service=resolved_llm_daily_limit_service,
-    )
-    if not can_access_llm:
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify_rate_limited(
-            (
-                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
-            retry_after=get_seconds_until_daily_reset(),
-        )
-
-    if is_streaming_model(model):
-        # ストリーミング対応モデルはバックグラウンド生成ジョブ + SSE で返す
-        # For streaming-capable models, run background generation and return via SSE.
-        on_finished = None
-        if user_id is not None and room_mode == "normal":
-            def persist_response(response: str) -> None:
-                save_message_to_db(chat_room_id, response, "assistant")
-
-            def on_finished() -> None:
-                try:
-                    updated_messages = get_chat_room_messages(chat_room_id)
-                    rebuild_room_summary(chat_room_id, updated_messages)
-                except Exception:
-                    logger.warning(
-                        "Failed to rebuild room summary after streaming response for %s.",
-                        chat_room_id,
-                    )
-        else:
-            persist_response = partial(ephemeral_store.append_message, sid, chat_room_id, "assistant")
-
-        try:
-            job = start_generation_job(
-                generation_key,
-                conversation_messages=conversation_messages,
-                model=model,
-                persist_response=persist_response,
-                on_finished=on_finished,
-                on_error=partial(
-                    _cleanup_failed_room_without_assistant_response,
-                    chat_room_id,
-                    user_id=user_id,
-                    sid=sid,
-                ),
-                service=resolved_chat_generation_service,
-            )
-        except ChatGenerationAlreadyRunningError:
-            return jsonify(
-                {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
-                status_code=409,
-            )
-
-        return _build_llm_stream_response(_iter_llm_stream_events(job))
-
-    try:
-        bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
-    except LlmInvalidModelError as exc:
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify({"error": str(exc)}, status_code=400)
-    except LlmRateLimitError as exc:
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify_rate_limited(
-            "AI提供元が混み合っています。時間をおいて再試行してください。",
-            retry_after=(
-                exc.retry_after_seconds
-                if exc.retry_after_seconds is not None
-                else 10
-            ),
-        )
-    except LlmAuthenticationError:
-        logger.exception("LLM authentication/configuration error while generating chat response.")
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify(
-            {"error": "AI設定エラーが発生しました。管理者に連絡してください。"},
-            status_code=502,
-        )
-    except LlmServiceError as exc:
-        retryable = is_retryable_llm_error(exc)
-        logger.exception(
-            "Failed to get LLM response (retryable=%s).",
-            retryable,
-        )
-        await run_blocking(
-            _cleanup_failed_room_without_assistant_response,
-            chat_room_id,
-            user_id=user_id,
-            sid=sid,
-        )
-        return jsonify(
-            {
-                "error": "AI応答の生成に失敗しました。時間をおいて再試行してください。",
-                "retryable": retryable,
-            },
-            status_code=502,
-        )
-
-    saved_assistant_message_id: int | None = None
-    if user_id is not None and room_mode == "normal":
-        saved_assistant_message_id = await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
-    else:
-        sid = sid or get_session_id(session)
-        await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
-
-    if user_id is not None and room_mode == "normal" and saved_assistant_message_id is not None:
-        try:
-            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
-            await run_blocking(rebuild_room_summary, chat_room_id, all_messages)
-        except Exception:
-            logger.warning("Failed to rebuild room summary for chat room %s.", chat_room_id)
-
-    return jsonify({"response": bot_reply})
 
 
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")
