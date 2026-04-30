@@ -26,12 +26,16 @@ class FakeCursor:
             self._fetchone_result = (1,) if self.memo_exists else None
             return
 
+        if "SELECT share_token, expires_at, revoked_at FROM shared_memo_entries" in normalized:
+            self._fetchone_result = None
+            return
+
         if "INSERT INTO shared_memo_entries" in normalized:
             self.insert_attempts += 1
             if self.insert_attempts in self.fail_attempts:
                 raise UniqueViolation()
             token = self.insert_results.pop(0) if self.insert_results else params[1]
-            self._fetchone_result = (token,)
+            self._fetchone_result = {"share_token": token, "expires_at": params[2], "revoked_at": None}
             return
 
         raise AssertionError(f"Unexpected query: {normalized}")
@@ -50,7 +54,7 @@ class FakeConnection:
         self.rollback_calls = 0
         self.closed = False
 
-    def cursor(self):
+    def cursor(self, *args, **kwargs):
         return self._cursor
 
     def commit(self):
@@ -81,9 +85,11 @@ class MemoShareTokenTestCase(unittest.TestCase):
                     "services.memo_share.secrets.token_urlsafe",
                     side_effect=["collision-token", "fresh-token"],
                 ):
-                    token = create_or_get_shared_memo_token(10, 20)
+                    share_state = create_or_get_shared_memo_token(10, 20)
 
-        self.assertEqual(token, "fresh-token")
+        self.assertEqual(share_state["share_token"], "fresh-token")
+        self.assertTrue(share_state["is_active"])
+        self.assertFalse(share_state["is_reused"])
         self.assertEqual(fake_cursor.insert_attempts, 2)
         self.assertEqual(fake_connection.rollback_calls, 1)
         self.assertEqual(fake_connection.commit_calls, 1)

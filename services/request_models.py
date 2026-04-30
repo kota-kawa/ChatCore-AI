@@ -178,3 +178,19 @@ class MemoCreateRequest(RequestPayloadModel):
 
 class ShareMemoRequest(RequestPayloadModel):
     memo_id: int
+
+
+class MemoUpdateRequest(RequestPayloadModel):
+    title: str | None = None
+    tags: str | None = None
+    input_content: str | None = None
+    ai_response: str | None = None
+
+
+class MemoToggleRequest(RequestPayloadModel):
+    enabled: bool = True
+
+
+class MemoShareCreateRequest(RequestPayloadModel):
+    force_refresh: bool = False
+    expires_in_days: int | None = Field(default=30, ge=1, le=3650)

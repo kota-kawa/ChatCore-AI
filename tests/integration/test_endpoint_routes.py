@@ -108,7 +108,10 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
-                with patch("blueprints.memo._fetch_recent_memos", return_value=[sample]):
+                with patch(
+                    "blueprints.memo._fetch_memo_summaries",
+                    return_value={"total": 1, "memos": [{"id": sample["id"], "title": sample["title"], "created_at": "2024-01-01T09:30:00"}]},
+                ):
                     response = await client.get("/memo/api/recent?limit=5")
 
             self.assertEqual(response.status_code, 200)
@@ -188,7 +191,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
                     response = await client.get("/memo/api/recent?limit=5")
 
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), {"memos": []})
+            self.assertEqual(response.json(), {"memos": [], "total": 0})
 
         asyncio.run(scenario())
 
@@ -206,7 +209,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
             for response in responses:
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), {"memos": []})
+                self.assertEqual(response.json(), {"memos": [], "total": 0})
 
         asyncio.run(scenario())
 
