@@ -236,22 +236,9 @@ def _planner_context_excerpt(conversation_messages: list[dict[str, str]]) -> str
     return excerpt
 
 
-def _infer_freshness(user_message: str) -> str:
-    text = user_message.lower()
-    if any(token in text for token in ("今日", "本日", "today", "breaking")):
-        return "pd"
-    if any(token in text for token in ("今週", "直近", "latest", "current", "recent", "news")):
-        return "pw"
-    if any(token in text for token in ("今月", "this month")):
-        return "pm"
-    return ""
-
-
 def _fallback_decision(user_message: str) -> WebSearchDecision:
     if not user_message.strip():
         return WebSearchDecision(False)
-    if _looks_sensitive(user_message):
-        return WebSearchDecision(False, reason="message contains sensitive-looking content")
     return WebSearchDecision(False, reason="web search planner unavailable")
 
 
@@ -348,8 +335,6 @@ def decide_web_search(
     user_message = _latest_user_message(conversation_messages)
     if not user_message.strip():
         return WebSearchDecision(False)
-    if _looks_sensitive(user_message):
-        return WebSearchDecision(False, reason="message contains sensitive-looking content")
 
     current_date = datetime.now(timezone.utc).date().isoformat()
     planner_messages = [
@@ -362,7 +347,8 @@ def decide_web_search(
                 "価格、予定、スポーツ、ニュース、ソフトウェアのバージョン、または明示的に依頼された外部情報を必要としている場合だけです。"
                 "また、実行中のタスクが調査、事実確認、推薦、マーケット・企業調査、出典付きの文章作成、"
                 "最新の製品・サービス・ライブラリ情報を求めている場合も検索してください。"
-                "安定した一般知識、純粋な文章作成、翻訳、ブレインストーミング、雑談、個人情報・機密情報、"
+                "安定した一般知識、純粋な文章作成、翻訳、ブレインストーミング、雑談、"
+                "APIキー・パスワード・トークンなどの機密情報を含む入力、"
                 "会話内の情報だけで答えられるタスクでは検索しないでください。"
                 "必ずコンパクトなJSONだけを返してください。キーは「should_search」（真偽値）、「query」（文字列）、「freshness」（文字列）、「reason」（文字列）です。"
                 'freshness は "", "pd", "pw", "pm", "py", または YYYY-MM-DDtoYYYY-MM-DD のいずれかにしてください。'
