@@ -23,6 +23,7 @@ from .llm import (
     get_llm_response_stream,
     is_retryable_llm_error,
 )
+from .web_search import maybe_augment_messages_with_web_search
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,14 @@ class ChatGenerationJob:
     def _run(self) -> None:
         chunks: list[str] = []
         try:
-            for chunk in get_llm_response_stream(self._conversation_messages, self._model):
+            conversation_messages = maybe_augment_messages_with_web_search(
+                self._conversation_messages,
+                self._model,
+                publish_event=self._publish,
+            )
+            if self._cancelled:
+                return
+            for chunk in get_llm_response_stream(conversation_messages, self._model):
                 if self._cancelled:
                     return
                 if not chunk:

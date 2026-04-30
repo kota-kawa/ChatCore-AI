@@ -81,11 +81,13 @@ function ChatMessageRow({
 
   const { message } = row;
   if (message.sender === "thinking") {
+    const statusText = message.text.trim() || "AIが応答を準備しています";
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
-          <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
+          <div className="thinking-message" role="status" aria-live="polite" aria-label={statusText}>
             <ThinkingConstellation />
+            <span className="thinking-message__status">{statusText}</span>
           </div>
         </div>
       </div>
@@ -315,6 +317,7 @@ function ChatMessageListComponent({
           <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
             <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
               <ThinkingConstellation />
+              <span className="thinking-message__status">AIが応答を準備しています</span>
             </div>
           </div>
         </div>

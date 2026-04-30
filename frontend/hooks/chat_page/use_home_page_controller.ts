@@ -410,6 +410,20 @@ export function useHomePageController() {
         return newId;
       };
 
+      const updateThinkingStatus = (statusText: string) => {
+        setMessages((previous) => {
+          if (currentRoomIdRef.current !== roomId) return previous;
+          return previous.map((message) => {
+            if (message.sender !== "thinking") return message;
+            return {
+              ...message,
+              text: statusText,
+            };
+          });
+        });
+        scheduleAutoScrollIfNeeded();
+      };
+
       const finalizeStreamingMessage = (finalText: string, persist = true) => {
         if (!streamingMessageId) {
           if (finalText) {
@@ -482,6 +496,27 @@ export function useHomePageController() {
             });
           });
           scheduleAutoScrollIfNeeded();
+          return;
+        }
+
+        if (parsed.event === "web_search_started") {
+          const query = typeof parsed.data.query === "string" ? parsed.data.query.trim() : "";
+          updateThinkingStatus(query ? `Webを検索中: ${query}` : "Webを検索中");
+          return;
+        }
+
+        if (parsed.event === "web_search_completed") {
+          const sourceCount = typeof parsed.data.source_count === "number" ? parsed.data.source_count : 0;
+          updateThinkingStatus(
+            sourceCount > 0
+              ? `検索結果を確認中 (${sourceCount.toLocaleString()}件)`
+              : "検索結果を確認中",
+          );
+          return;
+        }
+
+        if (parsed.event === "web_search_failed") {
+          updateThinkingStatus("Web検索に失敗しました。回答を作成中");
           return;
         }
 
@@ -563,7 +598,7 @@ export function useHomePageController() {
           {
             id: thinkingId,
             sender: "thinking",
-            text: "",
+            text: "AIが応答を準備しています",
           },
         ];
       });
@@ -804,7 +839,7 @@ export function useHomePageController() {
       const thinkingMessage: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
-        text: "",
+        text: "AIが応答を準備しています",
       };
 
       setMessages((previous) => {
