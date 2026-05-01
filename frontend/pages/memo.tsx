@@ -117,9 +117,6 @@ function splitTags(raw: string | undefined) {
 
 function buildMemoListUrl(options: {
   query: string;
-  tag: string;
-  dateFrom: string;
-  dateTo: string;
   sort: string;
   archiveScope: string;
   collectionId: number | null;
@@ -131,11 +128,7 @@ function buildMemoListUrl(options: {
   params.set("pinned_first", "1");
 
   const tq = options.query.trim();
-  const tt = options.tag.trim();
   if (tq) params.set("q", tq);
-  if (tt) params.set("tag", tt);
-  if (options.dateFrom) params.set("date_from", options.dateFrom);
-  if (options.dateTo) params.set("date_to", options.dateTo);
   if (options.archiveScope === "all") params.set("include_archived", "1");
   else if (options.archiveScope === "archived") params.set("only_archived", "1");
   if (options.collectionId !== null) params.set("collection_id", String(options.collectionId));
@@ -223,9 +216,6 @@ export default function MemoPage() {
 
   // Filter/sort state
   const [query, setQuery] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [sortMode, setSortMode] = useState("recent");
   const [archiveScope, setArchiveScope] = useState("active");
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
@@ -281,8 +271,8 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const listUrl = useMemo(
-    () => buildMemoListUrl({ query, tag: tagFilter, dateFrom, dateTo, sort: sortMode, archiveScope, collectionId: activeCollectionId }),
-    [archiveScope, dateFrom, dateTo, query, sortMode, tagFilter, activeCollectionId],
+    () => buildMemoListUrl({ query, sort: sortMode, archiveScope, collectionId: activeCollectionId }),
+    [archiveScope, query, sortMode, activeCollectionId],
   );
 
   const { data: memoList = { memos: [], total: 0 }, error: memoLoadError, isLoading: memoListLoading, mutate } =
@@ -296,18 +286,6 @@ export default function MemoPage() {
 
   const memos = memoList.memos;
   const totalMemoCount = memoList.total;
-
-  const topTags = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const memo of memos) {
-      for (const tag of splitTags(memo.tags)) {
-        counts.set(tag, (counts.get(tag) || 0) + 1);
-      }
-    }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 8);
-  }, [memos]);
 
   const shareUrl = (shareState?.share_url || "").trim();
   const shareSnsLinks = useMemo(() => {
@@ -883,7 +861,8 @@ export default function MemoPage() {
                   type="button"
                   className={`memo-toolbar__icon-btn${isBulkMode ? " is-active" : ""}`}
                   onClick={() => { if (isBulkMode) exitBulkMode(); else setIsBulkMode(true); }}
-                  title={isBulkMode ? "一括選択を終了" : "一括操作モード"}
+                  data-tooltip={isBulkMode ? "一括選択を終了" : "一括操作モード"}
+                  data-tooltip-placement="bottom"
                 >
                   <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`}></i>
                   <span className="memo-toolbar__btn-label">{isBulkMode ? "選択終了" : "一括操作"}</span>
@@ -892,7 +871,8 @@ export default function MemoPage() {
                   type="button"
                   className="memo-toolbar__icon-btn"
                   onClick={() => setIsCollectionPanelOpen(true)}
-                  title="コレクション管理"
+                  data-tooltip="コレクション管理"
+                  data-tooltip-placement="bottom"
                 >
                   <i className="bi bi-folder2-open"></i>
                   <span className="memo-toolbar__btn-label">コレクション</span>
@@ -901,7 +881,8 @@ export default function MemoPage() {
                   type="button"
                   className="memo-toolbar__icon-btn"
                   onClick={() => setIsExportModalOpen(true)}
-                  title="エクスポート"
+                  data-tooltip="エクスポート"
+                  data-tooltip-placement="bottom"
                 >
                   <i className="bi bi-download"></i>
                   <span className="memo-toolbar__btn-label">エクスポート</span>
@@ -923,21 +904,6 @@ export default function MemoPage() {
             </div>
 
             <div className="memo-toolbar__filters">
-              <input
-                type="text"
-                className="memo-toolbar__tag-filter"
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                placeholder="タグで絞り込み"
-              />
-              <label className="memo-toolbar__date-filter">
-                <span>開始日</span>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              </label>
-              <label className="memo-toolbar__date-filter">
-                <span>終了日</span>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              </label>
               <select value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
                 <option value="recent">新しい順</option>
                 <option value="updated">更新順</option>
@@ -953,7 +919,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 className="memo-toolbar__clear"
-                onClick={() => { setQuery(""); setTagFilter(""); setDateFrom(""); setDateTo(""); setArchiveScope("active"); setSortMode("recent"); setActiveCollectionId(null); }}
+                onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("recent"); setActiveCollectionId(null); }}
               >
                 クリア
               </button>
@@ -986,22 +952,6 @@ export default function MemoPage() {
               </div>
             )}
 
-            {/* Tag chips */}
-            {topTags.length > 0 && (
-              <div className="memo-toolbar__chips" aria-label="人気タグ">
-                {topTags.map(([tag, count]) => (
-                  <button
-                    type="button"
-                    key={tag}
-                    className={`memo-chip${tagFilter === tag ? " is-active" : ""}`}
-                    onClick={() => setTagFilter((prev) => (prev === tag ? "" : tag))}
-                  >
-                    #{tag}
-                    <span>{count}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </header>
 
           {flashState && (
@@ -1026,16 +976,16 @@ export default function MemoPage() {
                 </label>
               </div>
               <div className="memo-bulk-bar__actions">
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("pin")} disabled={!hasSelection || bulkLoading} title="ピン留め">
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("pin")} disabled={!hasSelection || bulkLoading} data-tooltip="ピン留め" data-tooltip-placement="top">
                   <i className="bi bi-pin-angle"></i>ピン留め
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unpin")} disabled={!hasSelection || bulkLoading} title="ピン留め解除">
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unpin")} disabled={!hasSelection || bulkLoading} data-tooltip="ピン留め解除" data-tooltip-placement="top">
                   <i className="bi bi-pin-angle-fill"></i>解除
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("archive")} disabled={!hasSelection || bulkLoading} title="アーカイブ">
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("archive")} disabled={!hasSelection || bulkLoading} data-tooltip="アーカイブ" data-tooltip-placement="top">
                   <i className="bi bi-archive"></i>アーカイブ
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unarchive")} disabled={!hasSelection || bulkLoading} title="アーカイブ解除">
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unarchive")} disabled={!hasSelection || bulkLoading} data-tooltip="アーカイブ解除" data-tooltip-placement="top">
                   <i className="bi bi-archive-fill"></i>解除
                 </button>
                 <div className="memo-bulk-bar__tag-group">
@@ -1046,7 +996,7 @@ export default function MemoPage() {
                     onChange={(e) => setBulkTagInput(e.target.value)}
                     placeholder="タグを追加"
                   />
-                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("add_tags", { tags: bulkTagInput })} disabled={!hasSelection || bulkLoading || !bulkTagInput.trim()} title="タグを追加">
+                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("add_tags", { tags: bulkTagInput })} disabled={!hasSelection || bulkLoading || !bulkTagInput.trim()} data-tooltip="タグを追加" data-tooltip-placement="top">
                     <i className="bi bi-tag"></i>タグ追加
                   </button>
                 </div>
@@ -1060,15 +1010,15 @@ export default function MemoPage() {
                       <option value="">コレクション選択</option>
                       {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("set_collection", { collectionId: bulkCollectionId })} disabled={!hasSelection || bulkLoading || bulkCollectionId === null} title="コレクション設定">
+                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("set_collection", { collectionId: bulkCollectionId })} disabled={!hasSelection || bulkLoading || bulkCollectionId === null} data-tooltip="コレクション設定" data-tooltip-placement="top">
                       <i className="bi bi-folder2"></i>設定
                     </button>
-                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("clear_collection")} disabled={!hasSelection || bulkLoading} title="コレクション解除">
+                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("clear_collection")} disabled={!hasSelection || bulkLoading} data-tooltip="コレクション解除" data-tooltip-placement="top">
                       解除
                     </button>
                   </div>
                 )}
-                <button type="button" className="memo-bulk-btn memo-bulk-btn--danger" onClick={() => void executeBulkAction("delete")} disabled={!hasSelection || bulkLoading} title="削除">
+                <button type="button" className="memo-bulk-btn memo-bulk-btn--danger" onClick={() => void executeBulkAction("delete")} disabled={!hasSelection || bulkLoading} data-tooltip="削除" data-tooltip-placement="top">
                   <i className="bi bi-trash3"></i>削除
                 </button>
               </div>
@@ -1135,9 +1085,9 @@ export default function MemoPage() {
                               </div>
                             </button>
                             <div className="memo-item__status-icons" aria-label="メモ状態">
-                              {memo.is_pinned && <i className="bi bi-pin-angle-fill" title="ピン留め中"></i>}
-                              {memo.is_archived && <i className="bi bi-archive-fill" title="アーカイブ中"></i>}
-                              {memo.is_active && <i className="bi bi-link-45deg" title="共有中"></i>}
+                              {memo.is_pinned && <i className="bi bi-pin-angle-fill" data-tooltip="ピン留め中" data-tooltip-placement="top"></i>}
+                              {memo.is_archived && <i className="bi bi-archive-fill" data-tooltip="アーカイブ中" data-tooltip-placement="top"></i>}
+                              {memo.is_active && <i className="bi bi-link-45deg" data-tooltip="共有中" data-tooltip-placement="top"></i>}
                             </div>
                           </div>
 
@@ -1194,34 +1144,22 @@ export default function MemoPage() {
 
                               {!isBulkMode && (
                                 <div className="memo-item__actions">
-                                  {tags.map((tag) => (
-                                    <button
-                                      type="button"
-                                      key={tag}
-                                      className="memo-item__tag-action"
-                                      onClick={() => setTagFilter(tag)}
-                                      disabled={isBusy}
-                                      title={`${tag} で絞り込み`}
-                                    >
-                                      #{tag}
-                                    </button>
-                                  ))}
-                                  <button type="button" className="memo-item__action" onClick={() => { void copyMemoExcerpt(memo); }} disabled={isBusy} title="要約をコピー">
+                                  <button type="button" className="memo-item__action" onClick={() => { void copyMemoExcerpt(memo); }} disabled={isBusy} data-tooltip="要約をコピー" data-tooltip-placement="top">
                                     <i className="bi bi-files"></i>
                                   </button>
-                                  <button type="button" className="memo-item__action" onClick={() => startQuickEdit(memo)} disabled={isBusy} title="タイトル・タグを編集">
+                                  <button type="button" className="memo-item__action" onClick={() => startQuickEdit(memo)} disabled={isBusy} data-tooltip="タイトル・タグを編集" data-tooltip-placement="top">
                                     <i className="bi bi-pencil-square"></i>
                                   </button>
-                                  <button type="button" className={`memo-item__action${memo.is_pinned ? " is-active" : ""}`} onClick={() => { void handleTogglePin(memo); }} disabled={isBusy} title={memo.is_pinned ? "ピン留め解除" : "ピン留め"}>
+                                  <button type="button" className={`memo-item__action${memo.is_pinned ? " is-active" : ""}`} onClick={() => { void handleTogglePin(memo); }} disabled={isBusy} data-tooltip={memo.is_pinned ? "ピン留め解除" : "ピン留め"} data-tooltip-placement="top">
                                     <i className="bi bi-pin-angle"></i>
                                   </button>
-                                  <button type="button" className={`memo-item__action${memo.is_archived ? " is-active" : ""}`} onClick={() => { void handleToggleArchive(memo); }} disabled={isBusy} title={memo.is_archived ? "アーカイブ解除" : "アーカイブ"}>
+                                  <button type="button" className={`memo-item__action${memo.is_archived ? " is-active" : ""}`} onClick={() => { void handleToggleArchive(memo); }} disabled={isBusy} data-tooltip={memo.is_archived ? "アーカイブ解除" : "アーカイブ"} data-tooltip-placement="top">
                                     <i className="bi bi-archive"></i>
                                   </button>
-                                  <button type="button" className="memo-item__action" onClick={() => { void openShareModal(memo); }} disabled={isBusy} title="共有設定">
+                                  <button type="button" className="memo-item__action" onClick={() => { void openShareModal(memo); }} disabled={isBusy} data-tooltip="共有設定" data-tooltip-placement="top">
                                     <i className="bi bi-share"></i>
                                   </button>
-                                  <button type="button" className="memo-item__action memo-item__action--danger" onClick={() => { void handleDeleteMemo(memo); }} disabled={isBusy} title="削除">
+                                  <button type="button" className="memo-item__action memo-item__action--danger" onClick={() => { void handleDeleteMemo(memo); }} disabled={isBusy} data-tooltip="削除" data-tooltip-placement="top">
                                     <i className="bi bi-trash3"></i>
                                   </button>
                                 </div>
@@ -1289,7 +1227,8 @@ export default function MemoPage() {
                         className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
                         onClick={() => { void handleAiSuggest(); }}
                         disabled={aiSuggesting || !formState.ai_response.trim()}
-                        title="AIがタイトルとタグを提案"
+                        data-tooltip="AIがタイトルとタグを提案"
+                        data-tooltip-placement="top"
                       >
                         {aiSuggesting
                           ? <><i className="bi bi-arrow-repeat memo-spin"></i>提案中…</>
@@ -1456,7 +1395,8 @@ export default function MemoPage() {
                         className={`memo-collection-preset${newCollectionColor === c ? " is-active" : ""}`}
                         style={{ background: c }}
                         onClick={() => setNewCollectionColor(c)}
-                        title={c}
+                        data-tooltip={c}
+                        data-tooltip-placement="top"
                       />
                     ))}
                   </div>
@@ -1490,7 +1430,7 @@ export default function MemoPage() {
                           <input type="color" value={editingCollectionColor} onChange={(e) => setEditingCollectionColor(e.target.value)} className="memo-collection-color-input" />
                           <div className="memo-collection-presets">
                             {["#6b7280", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#0ea5e9"].map((c) => (
-                              <button type="button" key={c} className={`memo-collection-preset${editingCollectionColor === c ? " is-active" : ""}`} style={{ background: c }} onClick={() => setEditingCollectionColor(c)} title={c} />
+                              <button type="button" key={c} className={`memo-collection-preset${editingCollectionColor === c ? " is-active" : ""}`} style={{ background: c }} onClick={() => setEditingCollectionColor(c)} data-tooltip={c} data-tooltip-placement="top" />
                             ))}
                           </div>
                         </div>
@@ -1504,10 +1444,10 @@ export default function MemoPage() {
                         <span className="memo-collection-item__dot" style={{ background: col.color }}></span>
                         <span className="memo-collection-item__name">{col.name}</span>
                         <span className="memo-collection-item__count">{col.memo_count}件</span>
-                        <button type="button" className="memo-collection-item__action" onClick={() => { setEditingCollectionId(col.id); setEditingCollectionName(col.name); setEditingCollectionColor(col.color); }} title="編集">
+                        <button type="button" className="memo-collection-item__action" onClick={() => { setEditingCollectionId(col.id); setEditingCollectionName(col.name); setEditingCollectionColor(col.color); }} data-tooltip="編集" data-tooltip-placement="top">
                           <i className="bi bi-pencil"></i>
                         </button>
-                        <button type="button" className="memo-collection-item__action memo-collection-item__action--danger" onClick={() => { void handleDeleteCollection(col.id, col.name); }} disabled={collectionActionLoading} title="削除">
+                        <button type="button" className="memo-collection-item__action memo-collection-item__action--danger" onClick={() => { void handleDeleteCollection(col.id, col.name); }} disabled={collectionActionLoading} data-tooltip="削除" data-tooltip-placement="top">
                           <i className="bi bi-trash3"></i>
                         </button>
                       </div>
