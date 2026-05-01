@@ -18,7 +18,6 @@ from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection
 from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
-    ERROR_MEMO_NOT_FOUND_FOR_SHARE,
     ERROR_TOKEN_REQUIRED,
 )
 from services.memo_ai import (
@@ -639,32 +638,38 @@ def _bulk_action(
             return {"affected": 0}
 
         owned_ph = ",".join(["%s"] * len(owned_ids))
+        affected = 0
 
         if action == "delete":
             cursor.execute(
                 f"DELETE FROM memo_entries WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
         elif action == "archive":
             cursor.execute(
                 f"UPDATE memo_entries SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
         elif action == "unarchive":
             cursor.execute(
                 f"UPDATE memo_entries SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
         elif action == "pin":
             cursor.execute(
                 f"UPDATE memo_entries SET pinned_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
         elif action == "unpin":
             cursor.execute(
                 f"UPDATE memo_entries SET pinned_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
         elif action == "add_tags" and tags is not None:
             normalized_tags = tags.strip()
             if normalized_tags:
@@ -680,6 +685,7 @@ def _bulk_action(
                     """,
                     tuple([normalized_tags, normalized_tags, *owned_ids]),
                 )
+                affected = max(cursor.rowcount, 0)
         elif action == "set_collection" and collection_id is not None:
             cursor.execute(
                 "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",
@@ -690,14 +696,16 @@ def _bulk_action(
                     f"UPDATE memo_entries SET collection_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                     tuple([collection_id, *owned_ids]),
                 )
+                affected = max(cursor.rowcount, 0)
         elif action == "clear_collection":
             cursor.execute(
                 f"UPDATE memo_entries SET collection_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
+            affected = max(cursor.rowcount, 0)
 
         connection.commit()
-        return {"affected": len(owned_ids)}
+        return {"affected": affected}
     finally:
         if cursor is not None:
             cursor.close()
