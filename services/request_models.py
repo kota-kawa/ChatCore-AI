@@ -174,6 +174,7 @@ class MemoCreateRequest(RequestPayloadModel):
     ai_response: NonEmptyStr
     title: str = ""
     tags: str = ""
+    collection_id: int | None = None
 
 
 class ShareMemoRequest(RequestPayloadModel):
@@ -185,6 +186,8 @@ class MemoUpdateRequest(RequestPayloadModel):
     tags: str | None = None
     input_content: str | None = None
     ai_response: str | None = None
+    collection_id: int | None = Field(default=None)
+    clear_collection: bool = False
 
 
 class MemoToggleRequest(RequestPayloadModel):
@@ -194,3 +197,33 @@ class MemoToggleRequest(RequestPayloadModel):
 class MemoShareCreateRequest(RequestPayloadModel):
     force_refresh: bool = False
     expires_in_days: int | None = Field(default=30, ge=1, le=3650)
+
+
+class MemoSuggestRequest(RequestPayloadModel):
+    # AI タイトル・タグ提案APIの入力
+    # Input payload for AI-powered title/tag suggestion.
+    input_content: str = ""
+    ai_response: NonEmptyStr
+
+
+class MemoBulkActionRequest(RequestPayloadModel):
+    # 一括操作APIの入力
+    # Input payload for bulk memo operations.
+    action: Literal["delete", "archive", "unarchive", "pin", "unpin", "add_tags", "set_collection", "clear_collection"]
+    memo_ids: list[int] = Field(min_length=1, max_length=200)
+    tags: str | None = None
+    collection_id: int | None = None
+
+
+class MemoCollectionCreateRequest(RequestPayloadModel):
+    # コレクション作成APIの入力
+    # Input payload for memo collection creation.
+    name: str = Field(min_length=1, max_length=100)
+    color: str = Field(default="#6b7280", max_length=20)
+
+
+class MemoCollectionUpdateRequest(RequestPayloadModel):
+    # コレクション更新APIの入力
+    # Input payload for memo collection update.
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    color: str | None = Field(default=None, max_length=20)
