@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from services.request_models import (
+from services.request_models import (  # noqa: E402
     AddTaskRequest,
     AuthCodeRequest,
     BookmarkCreateRequest,
@@ -23,7 +23,14 @@ from services.request_models import (
     DeleteTaskRequest,
     EditTaskRequest,
     EmailRequest,
+    MemoBulkActionRequest,
+    MemoCollectionCreateRequest,
+    MemoCollectionUpdateRequest,
     MemoCreateRequest,
+    MemoShareCreateRequest,
+    MemoSuggestRequest,
+    MemoToggleRequest,
+    MemoUpdateRequest,
     NewChatRoomRequest,
     PromptAssistRequest,
     PromptListEntryCreateRequest,
@@ -34,7 +41,7 @@ from services.request_models import (
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
 )
-from services.response_models import (
+from services.response_models import (  # noqa: E402
     ApiDetailObject,
     ApiErrorPayload,
     ChatHistoryMessage,
@@ -77,6 +84,13 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("PromptUpdateRequest", PromptUpdateRequest),
     ("MemoCreateRequest", MemoCreateRequest),
     ("ShareMemoRequest", ShareMemoRequest),
+    ("MemoUpdateRequest", MemoUpdateRequest),
+    ("MemoToggleRequest", MemoToggleRequest),
+    ("MemoShareCreateRequest", MemoShareCreateRequest),
+    ("MemoSuggestRequest", MemoSuggestRequest),
+    ("MemoBulkActionRequest", MemoBulkActionRequest),
+    ("MemoCollectionCreateRequest", MemoCollectionCreateRequest),
+    ("MemoCollectionUpdateRequest", MemoCollectionUpdateRequest),
     # Response payloads (source of truth: services/response_models.py)
     ("ApiErrorPayload", ApiErrorPayload),
     ("ApiDetailObject", ApiDetailObject),
