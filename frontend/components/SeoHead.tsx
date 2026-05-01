@@ -3,10 +3,13 @@ import Head from "next/head";
 import {
   absoluteUrl,
   DEFAULT_OG_IMAGE_PATH,
+  DEFAULT_OG_IMAGE_HEIGHT,
+  DEFAULT_OG_IMAGE_WIDTH,
   DEFAULT_SEO_DESCRIPTION,
   DEFAULT_SEO_TITLE,
   jsonLdScriptContent,
-  SITE_NAME
+  SITE_NAME,
+  TWITTER_SITE
 } from "../lib/seo";
 
 type SeoHeadProps = {
@@ -15,6 +18,8 @@ type SeoHeadProps = {
   canonicalPath?: string;
   canonicalUrl?: string;
   imageUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   ogType?: "website" | "article" | "profile";
   noindex?: boolean;
   structuredData?: Record<string, unknown> | Record<string, unknown>[];
@@ -27,6 +32,8 @@ export function SeoHead({
   canonicalPath,
   canonicalUrl,
   imageUrl = DEFAULT_OG_IMAGE_PATH,
+  imageWidth = DEFAULT_OG_IMAGE_WIDTH,
+  imageHeight = DEFAULT_OG_IMAGE_HEIGHT,
   ogType = "website",
   noindex = false,
   structuredData,
@@ -57,8 +64,12 @@ export function SeoHead({
       {resolvedCanonicalUrl ? <link rel="canonical" href={resolvedCanonicalUrl} /> : null}
       {resolvedCanonicalUrl ? <meta property="og:url" content={resolvedCanonicalUrl} /> : null}
       {resolvedImageUrl ? <meta property="og:image" content={resolvedImageUrl} /> : null}
+      {resolvedImageUrl ? <meta property="og:image:type" content={resolvedImageUrl.endsWith(".png") ? "image/png" : "image/jpeg"} /> : null}
+      {resolvedImageUrl && imageWidth ? <meta property="og:image:width" content={String(imageWidth)} /> : null}
+      {resolvedImageUrl && imageHeight ? <meta property="og:image:height" content={String(imageHeight)} /> : null}
       {resolvedImageUrl ? <meta property="og:image:alt" content={`${SITE_NAME} preview`} /> : null}
       <meta name="twitter:card" content="summary_large_image" />
+      {TWITTER_SITE ? <meta name="twitter:site" content={TWITTER_SITE} /> : null}
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       {resolvedImageUrl ? <meta name="twitter:image" content={resolvedImageUrl} /> : null}

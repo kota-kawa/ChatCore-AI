@@ -93,7 +93,7 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   const origin = host ? `${proto}://${host}` : "";
   const resolvedPath = context.resolvedUrl || `/shared/${encodeURIComponent(token)}`;
   const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
-  const ogImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
+  const ogImageUrl = origin ? `${origin}/static/Chat-Core-OG-compressed.jpg` : "/static/Chat-Core-OG-compressed.jpg";
 
   let payload: SharedChatPayload = {};
 

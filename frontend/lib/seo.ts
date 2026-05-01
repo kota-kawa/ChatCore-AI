@@ -5,7 +5,11 @@ export const DEFAULT_SEO_TITLE = "ChatCore-AI | AIチャット・プロンプト
 export const DEFAULT_SEO_DESCRIPTION =
   "ChatCore-AIは、AIチャット、プロンプト共有、メモ保存をひとつにまとめた日本語対応のAIワークスペースです。日々の調査、文章作成、アイデア整理を効率化できます。";
 
-export const DEFAULT_OG_IMAGE_PATH = "/static/img.jpg";
+export const DEFAULT_OG_IMAGE_PATH = "/static/Chat-Core-OG-compressed.jpg";
+export const DEFAULT_OG_IMAGE_WIDTH = 2048;
+export const DEFAULT_OG_IMAGE_HEIGHT = 1070;
+
+export const TWITTER_SITE = process.env.NEXT_PUBLIC_TWITTER_SITE || "";
 
 const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
 
