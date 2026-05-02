@@ -5,6 +5,7 @@ from .default_tasks import default_task_rows
 
 DEFAULT_USERNAME = "ユーザー"
 DEFAULT_AVATAR_URL = "/static/user-icon.png"
+LEGACY_AVATAR_URL_MAX_LENGTH = 255
 EMAIL_AUTH_PROVIDER = "email"
 GOOGLE_AUTH_PROVIDER = "google"
 ACCOUNT_DELETE_CONFIRMATION_TEXT = "アカウント削除"
@@ -24,6 +25,15 @@ def _normalize_provider_metadata(
         normalized_provider_email = normalized_provider_email or email
 
     return normalized_provider_user_id, normalized_provider_email
+
+
+def _normalize_avatar_url(avatar_url: str | None) -> str:
+    normalized = (avatar_url or "").strip()
+    if not normalized:
+        return DEFAULT_AVATAR_URL
+    if len(normalized) > LEGACY_AVATAR_URL_MAX_LENGTH:
+        return DEFAULT_AVATAR_URL
+    return normalized
 
 
 def _upsert_user_auth_provider(
@@ -185,7 +195,7 @@ def create_user(
     # Create an unverified user and return the generated user_id.
     """未認証ユーザーを新規作成"""
     normalized_username = (username or "").strip()[:255] or DEFAULT_USERNAME
-    normalized_avatar_url = (avatar_url or "").strip()[:2000] or DEFAULT_AVATAR_URL
+    normalized_avatar_url = _normalize_avatar_url(avatar_url)
     normalized_provider_user_id, normalized_provider_email = _normalize_provider_metadata(
         auth_provider,
         email,
@@ -291,8 +301,9 @@ def update_user_profile_from_google_if_unset(
 
             if normalized_name and next_username.strip() in {"", DEFAULT_USERNAME}:
                 next_username = normalized_name
+            normalized_avatar_url = _normalize_avatar_url(normalized_picture)
             if normalized_picture and next_avatar_url.strip() in {"", DEFAULT_AVATAR_URL}:
-                next_avatar_url = normalized_picture
+                next_avatar_url = normalized_avatar_url
 
             cursor.execute(
                 """

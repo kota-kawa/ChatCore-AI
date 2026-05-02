@@ -1069,7 +1069,6 @@ async def google_callback(request: Request):
                     )
                     _clear_google_oauth_session(session)
                     return RedirectResponse(login_redirect_url, status_code=302)
-                should_offer_passkey_setup = True
     except Exception:
         logger.exception("Google OAuth callback: unexpected error during user lookup/creation.")
         _clear_google_oauth_session(session)

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from services.users import (
+    DEFAULT_AVATAR_URL,
     EMAIL_AUTH_PROVIDER,
     GOOGLE_AUTH_PROVIDER,
     create_user,
@@ -77,6 +78,24 @@ class UserAuthProvidersTestCase(unittest.TestCase):
             fake_cursor.executed[1][1],
             (321, EMAIL_AUTH_PROVIDER, "user@example.com", "user@example.com"),
         )
+
+    def test_create_user_uses_default_avatar_when_provider_avatar_url_is_too_long(self):
+        fake_cursor = FakeCursor(fetchone_result=(322,))
+        fake_conn = FakeConnection(fake_cursor)
+        long_avatar_url = "https://lh3.googleusercontent.com/" + ("a" * 260)
+
+        with patch("services.users.get_db_connection", return_value=fake_conn):
+            user_id = create_user(
+                "user@example.com",
+                avatar_url=long_avatar_url,
+                auth_provider=GOOGLE_AUTH_PROVIDER,
+                provider_user_id="google-user-123",
+                provider_email="user@example.com",
+                is_verified=True,
+            )
+
+        self.assertEqual(user_id, 322)
+        self.assertEqual(fake_cursor.executed[0][1][2], DEFAULT_AVATAR_URL)
 
     def test_link_google_account_upserts_google_provider_row(self):
         fake_cursor = FakeCursor()

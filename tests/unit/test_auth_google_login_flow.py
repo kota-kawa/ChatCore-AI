@@ -291,7 +291,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.headers["location"],
-            "https://chatcore-ai.com/login?flow=register&offer_passkey_setup=1&provider=google",
+            "https://chatcore-ai.com/?auth=success",
         )
         mock_frontend_url.assert_not_called()
         self.assertEqual(request.session["user_id"], 42)
@@ -679,7 +679,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.headers["location"],
-            "https://chatcore-ai.com/login?flow=register&offer_passkey_setup=1&provider=google&next=%2Fmemo%3Ftab%3Drecent",
+            "https://chatcore-ai.com/memo?tab=recent",
         )
 
     def test_handles_oidc_compliant_userinfo_fields(self):
