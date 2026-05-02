@@ -184,8 +184,8 @@ def create_user(
     # 未認証ユーザーを作成し、採番された user_id を返す
     # Create an unverified user and return the generated user_id.
     """未認証ユーザーを新規作成"""
-    normalized_username = (username or "").strip() or DEFAULT_USERNAME
-    normalized_avatar_url = (avatar_url or "").strip() or DEFAULT_AVATAR_URL
+    normalized_username = (username or "").strip()[:255] or DEFAULT_USERNAME
+    normalized_avatar_url = (avatar_url or "").strip()[:2000] or DEFAULT_AVATAR_URL
     normalized_provider_user_id, normalized_provider_email = _normalize_provider_metadata(
         auth_provider,
         email,
