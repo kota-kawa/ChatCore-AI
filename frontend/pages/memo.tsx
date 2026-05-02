@@ -1194,7 +1194,12 @@ export default function MemoPage() {
                             </button>
                             <div className="memo-item__status-icons" aria-label="メモ状態">
                               {memo.is_pinned && <i className="bi bi-pin-angle-fill" data-tooltip="ピン留め中" data-tooltip-placement="top"></i>}
-                              {memo.is_archived && <i className="bi bi-archive-fill" data-tooltip="アーカイブ中" data-tooltip-placement="top"></i>}
+                              {memo.is_archived && (
+                                <span className="memo-item__archive-badge">
+                                  <i className="bi bi-archive-fill" aria-hidden="true"></i>
+                                  アーカイブ
+                                </span>
+                              )}
                               {memo.is_active && <i className="bi bi-link-45deg" data-tooltip="共有中" data-tooltip-placement="top"></i>}
                             </div>
                           </div>
