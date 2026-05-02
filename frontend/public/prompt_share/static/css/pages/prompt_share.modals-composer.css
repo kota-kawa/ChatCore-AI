@@ -124,6 +124,7 @@
 
 #promptDetailModal .post-modal-content {
   width: min(92%, 620px);
+  overflow-y: auto;
 }
 
 #promptDetailModal .post-modal-content--detail {
