@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import useSWR from "swr";
 
 import "../scripts/core/csrf";
@@ -190,6 +191,104 @@ function CollectionBadge({ name, color }: { name: string; color: string }) {
       <i className="bi bi-folder2" aria-hidden="true"></i>
       {name}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MemoSelect – custom styled dropdown
+// ---------------------------------------------------------------------------
+
+type SelectOption = { value: string; label: string };
+
+function MemoSelect({
+  value,
+  onChange,
+  options,
+  className,
+  disabled,
+  id,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  className?: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
+
+  const toggleOpen = () => {
+    if (disabled) return;
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    }
+    setOpen((v) => !v);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!triggerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node))
+        setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
+
+  return (
+    <div
+      id={id}
+      className={`memo-select${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}${className ? ` ${className}` : ""}`}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className="memo-select__trigger"
+        onClick={toggleOpen}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="memo-select__label">{selectedLabel}</span>
+        <i className="bi bi-chevron-down memo-select__chevron" aria-hidden="true" />
+      </button>
+      {open && pos && createPortal(
+        <ul
+          ref={menuRef}
+          className="memo-select__menu"
+          role="listbox"
+          style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 99999 }}
+        >
+          {options.map((opt) => {
+            const isSel = opt.value === value;
+            return (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={isSel}
+                className={`memo-select__option${isSel ? " is-selected" : ""}`}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+              >
+                {isSel && <i className="bi bi-check2 memo-select__check" aria-hidden="true" />}
+                {opt.label}
+              </li>
+            );
+          })}
+        </ul>,
+        document.body,
+      )}
+    </div>
   );
 }
 
@@ -904,18 +1003,26 @@ export default function MemoPage() {
             </div>
 
             <div className="memo-toolbar__filters">
-              <select value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
-                <option value="recent">新しい順</option>
-                <option value="updated">更新順</option>
-                <option value="oldest">古い順</option>
-                <option value="title">タイトル順</option>
-                <option value="semantic">AI類似検索</option>
-              </select>
-              <select value={archiveScope} onChange={(e) => setArchiveScope(e.target.value)}>
-                <option value="active">通常メモ</option>
-                <option value="all">すべて</option>
-                <option value="archived">アーカイブのみ</option>
-              </select>
+              <MemoSelect
+                value={sortMode}
+                onChange={(v) => setSortMode(v)}
+                options={[
+                  { value: "recent", label: "新しい順" },
+                  { value: "updated", label: "更新順" },
+                  { value: "oldest", label: "古い順" },
+                  { value: "title", label: "タイトル順" },
+                  { value: "semantic", label: "AI類似検索" },
+                ]}
+              />
+              <MemoSelect
+                value={archiveScope}
+                onChange={(v) => setArchiveScope(v)}
+                options={[
+                  { value: "active", label: "通常メモ" },
+                  { value: "all", label: "すべて" },
+                  { value: "archived", label: "アーカイブのみ" },
+                ]}
+              />
               <button
                 type="button"
                 className="memo-toolbar__clear"
@@ -1002,14 +1109,15 @@ export default function MemoPage() {
                 </div>
                 {collections.length > 0 && (
                   <div className="memo-bulk-bar__tag-group">
-                    <select
-                      className="memo-bulk-collection-select"
-                      value={bulkCollectionId ?? ""}
-                      onChange={(e) => setBulkCollectionId(e.target.value === "" ? null : Number(e.target.value))}
-                    >
-                      <option value="">コレクション選択</option>
-                      {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <MemoSelect
+                      className="memo-select--sm"
+                      value={String(bulkCollectionId ?? "")}
+                      onChange={(v) => setBulkCollectionId(v === "" ? null : Number(v))}
+                      options={[
+                        { value: "", label: "コレクション選択" },
+                        ...collections.map((c) => ({ value: String(c.id), label: c.name })),
+                      ]}
+                    />
                     <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("set_collection", { collectionId: bulkCollectionId })} disabled={!hasSelection || bulkLoading || bulkCollectionId === null} data-tooltip="コレクション設定" data-tooltip-placement="top">
                       <i className="bi bi-folder2"></i>設定
                     </button>
@@ -1108,14 +1216,15 @@ export default function MemoPage() {
                                 maxLength={255}
                               />
                               {collections.length > 0 && (
-                                <select
-                                  value={quickEditCollectionId ?? ""}
-                                  onChange={(e) => setQuickEditCollectionId(e.target.value === "" ? null : Number(e.target.value))}
-                                  className="memo-item__collection-select"
-                                >
-                                  <option value="">コレクションなし</option>
-                                  {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <MemoSelect
+                                  className="memo-select--full"
+                                  value={String(quickEditCollectionId ?? "")}
+                                  onChange={(v) => setQuickEditCollectionId(v === "" ? null : Number(v))}
+                                  options={[
+                                    { value: "", label: "コレクションなし" },
+                                    ...collections.map((c) => ({ value: String(c.id), label: c.name })),
+                                  ]}
+                                />
                               )}
                               <div className="memo-item__inline-actions">
                                 <button type="button" onClick={() => { void saveQuickEdit(memoId); }} disabled={isBusy}>保存</button>
@@ -1255,10 +1364,16 @@ export default function MemoPage() {
                 {collections.length > 0 && (
                   <div className="form-group">
                     <label htmlFor="compose_collection">コレクション <span className="optional">(任意)</span></label>
-                    <select id="compose_collection" name="collection_id" className="memo-control" value={formState.collection_id ?? ""} onChange={handleFormChange}>
-                      <option value="">コレクションなし</option>
-                      {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    <MemoSelect
+                      id="compose_collection"
+                      className="memo-select--full"
+                      value={String(formState.collection_id ?? "")}
+                      onChange={(v) => setFormState((prev) => ({ ...prev, collection_id: v === "" ? null : Number(v) }))}
+                      options={[
+                        { value: "", label: "コレクションなし" },
+                        ...collections.map((c) => ({ value: String(c.id), label: c.name })),
+                      ]}
+                    />
                   </div>
                 )}
 
@@ -1329,14 +1444,14 @@ export default function MemoPage() {
               </div>
               <div className="memo-share-modal__row">
                 <label htmlFor="memo-share-expiry">有効期限</label>
-                <select
+                <MemoSelect
                   id="memo-share-expiry"
+                  className="memo-select--full"
                   value={shareExpiry}
-                  onChange={(e) => setShareExpiry(e.target.value as (typeof SHARE_EXPIRES_OPTIONS)[number]["value"])}
+                  onChange={(v) => setShareExpiry(v as (typeof SHARE_EXPIRES_OPTIONS)[number]["value"])}
                   disabled={shareLoading}
-                >
-                  {SHARE_EXPIRES_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                </select>
+                  options={SHARE_EXPIRES_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                />
               </div>
               <div className="memo-share-modal__actions">
                 <button type="button" className="primary-button" onClick={() => { void createShareLink(false); }} disabled={shareLoading}><i className="bi bi-link-45deg"></i>作成</button>

@@ -109,10 +109,8 @@ body.memo-page.modal-open {
   justify-content: end;
 }
 
-.memo-toolbar__filters select,
 .memo-control,
-.memo-share-modal__body input,
-.memo-share-modal__body select {
+.memo-share-modal__body input {
   min-height: 42px;
   border-radius: 12px;
   border: 1px solid rgba(191, 122, 23, 0.24);
@@ -1463,6 +1461,132 @@ textarea.memo-control {
 }
 
 /* ============================================================
+   Custom Select component (MemoSelect)
+   ============================================================ */
+.memo-select {
+  position: relative;
+  display: inline-block;
+}
+
+.memo-select--full {
+  display: block;
+  width: 100%;
+}
+
+.memo-select__trigger {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(191, 122, 23, 0.24);
+  background: var(--memo-card-strong);
+  color: var(--memo-text);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.52rem 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.memo-select__trigger:hover:not(:disabled) {
+  border-color: rgba(15, 118, 110, 0.45);
+  background: rgba(255, 255, 255, 1);
+}
+
+.memo-select.is-open .memo-select__trigger {
+  border-color: var(--memo-amber);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.memo-select.is-disabled .memo-select__trigger {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.memo-select__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-select__chevron {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: #8f5a17;
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.memo-select.is-open .memo-select__chevron {
+  transform: rotate(180deg);
+}
+
+/* Small variant (bulk bar) */
+.memo-select--sm .memo-select__trigger {
+  min-height: 34px;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.62rem;
+  border-radius: 8px;
+}
+
+/* Menu – rendered at document.body via portal, position set inline */
+.memo-select__menu {
+  margin: 0;
+  padding: 0.38rem;
+  list-style: none;
+  background: rgba(255, 251, 240, 0.98);
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 14px;
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.16),
+    0 4px 10px rgba(15, 118, 110, 0.08);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: memo-select-drop 0.14s ease;
+}
+
+@keyframes memo-select-drop {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.memo-select__option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  color: var(--memo-text);
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.memo-select__option:hover {
+  background: rgba(15, 118, 110, 0.09);
+  color: #0c5e58;
+}
+
+.memo-select__option.is-selected {
+  background: rgba(15, 118, 110, 0.11);
+  color: #0c5e58;
+  font-weight: 700;
+}
+
+.memo-select__check {
+  font-size: 0.82rem;
+  color: var(--memo-amber);
+  flex-shrink: 0;
+}
+
+/* ============================================================
    Dark mode additions
    ============================================================ */
 [data-theme="dark"] .memo-toolbar__icon-btn,
@@ -1678,9 +1802,7 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-control,
-[data-theme="dark"] .memo-toolbar__filters select,
 [data-theme="dark"] .memo-share-modal__body input,
-[data-theme="dark"] .memo-share-modal__body select,
 [data-theme="dark"] .memo-item__inline-edit input {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.25);
@@ -1721,4 +1843,48 @@ textarea.memo-control {
   color: #94a3b8;
   border-color: rgba(148, 163, 184, 0.24);
   background: rgba(148, 163, 184, 0.1);
+}
+
+[data-theme="dark"] .memo-select__trigger {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .memo-select__trigger:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+[data-theme="dark"] .memo-select.is-open .memo-select__trigger {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+}
+
+[data-theme="dark"] .memo-select__chevron {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-select__menu {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="dark"] .memo-select__option {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .memo-select__option:hover {
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-select__option.is-selected {
+  background: rgba(245, 158, 11, 0.13);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-select__check {
+  color: #f59e0b;
 }
