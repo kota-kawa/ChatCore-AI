@@ -125,6 +125,28 @@
 #promptDetailModal .post-modal-content {
   width: min(92%, 620px);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--page-scrollbar-thumb) transparent;
+}
+
+#promptDetailModal .post-modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+#promptDetailModal .post-modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#promptDetailModal .post-modal-content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--page-scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+#promptDetailModal .post-modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--page-scrollbar-thumb-hover);
+  background-clip: padding-box;
 }
 
 #promptDetailModal .post-modal-content--detail {
