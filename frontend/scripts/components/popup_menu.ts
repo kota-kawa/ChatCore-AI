@@ -292,27 +292,27 @@ template.innerHTML = `
       }
       /* 他のボタンのサイズ */
       .actions-menu .btn:not(.btn--menu) {
-        width: 45px;
-        height: 45px;
+        width: 52px;
+        height: 52px;
       }
       /* アイコンサイズ調整 */
       .btn svg {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
       }
 
-      /* 展開位置調整 — 半径90pxの円弧上に0°/45°/90°等間隔配置 */
+      /* 展開位置調整 — メニュー中心(28,28)から半径90pxの円弧上、ボタンサイズ52px */
       #actionMenuButton:checked + .actions-menu > .btn--share {
-        top: -85px;
-        left: 5px;
+        top: -88px;
+        left: 2px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--star {
-        top: -58px;
-        left: -58px;
+        top: -62px;
+        left: -62px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 5px;
-        left: -85px;
+        top: 2px;
+        left: -88px;
       }
     }
 
@@ -330,15 +330,15 @@ template.innerHTML = `
         width: 50px !important;
         height: 50px !important;
       }
-      /* 他のボタンのサイズをより小さく */
+      /* 他のボタンのサイズ */
       .actions-menu .btn:not(.btn--menu) {
-        width: 40px;
-        height: 40px;
+        width: 47px;
+        height: 47px;
       }
-      /* アイコンもさらに縮小 */
+      /* アイコンサイズ調整 */
       .btn svg {
-        width: 18px;
-        height: 18px;
+        width: 21px;
+        height: 21px;
       }
 
       :host([data-context="chat"]) .actions-menu {
@@ -349,18 +349,18 @@ template.innerHTML = `
         bottom: 15px;
       }
 
-      /* 展開位置調整 — 半径80pxの円弧上に0°/45°/90°等間隔配置 */
+      /* 展開位置調整 — メニュー中心(25,25)から半径80pxの円弧上、ボタンサイズ47px */
       #actionMenuButton:checked + .actions-menu > .btn--share {
-        top: -75px;
-        left: 5px;
+        top: -79px;
+        left: 2px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--star {
-        top: -52px;
-        left: -52px;
+        top: -55px;
+        left: -55px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 5px;
-        left: -75px;
+        top: 2px;
+        left: -79px;
       }
     }
 
