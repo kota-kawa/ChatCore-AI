@@ -38,6 +38,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - FASTAPI_ENV=${FASTAPI_ENV:-production}
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
@@ -114,10 +115,24 @@ services:
   redis:
     image: redis:7
     container_name: redis_cache
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --maxmemory 4gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+      --tcp-keepalive 300
+      --loglevel notice
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
     ports:
       - "6380:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -156,3 +171,4 @@ services:
 
 volumes:
   db_data:
+  redis_data:
