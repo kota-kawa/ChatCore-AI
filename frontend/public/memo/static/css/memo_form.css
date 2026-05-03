@@ -577,7 +577,8 @@ textarea.memo-control {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .memo-modal__section {
@@ -598,6 +599,8 @@ textarea.memo-control {
   font-size: 0.9rem;
   line-height: 1.68;
   color: var(--memo-text);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .memo-modal__markdown > * {
@@ -612,6 +615,62 @@ textarea.memo-control {
 .memo-modal__markdown ol {
   margin: 0.4rem 0 0.4rem 1rem;
   padding-left: 0.8rem;
+}
+
+.memo-modal__markdown pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.memo-modal__markdown code {
+  word-break: break-all;
+}
+
+/* ============================================================
+   Modal scrollbar – matches memo page amber/teal palette
+   ============================================================ */
+.memo-modal__body,
+.memo-collection-modal__body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.38) transparent;
+}
+
+.memo-modal__body::-webkit-scrollbar,
+.memo-collection-modal__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.memo-modal__body::-webkit-scrollbar-track,
+.memo-collection-modal__body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+  margin-block: 0.6rem;
+}
+
+.memo-modal__body::-webkit-scrollbar-thumb,
+.memo-collection-modal__body::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(15, 118, 110, 0.52) 0%,
+    rgba(21, 94, 117, 0.52) 100%
+  );
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 251, 235, 0.72);
+  transition: background 0.2s;
+}
+
+.memo-modal__body::-webkit-scrollbar-thumb:hover,
+.memo-collection-modal__body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(15, 118, 110, 0.74) 0%,
+    rgba(21, 94, 117, 0.74) 100%
+  );
+}
+
+.memo-modal__body::-webkit-scrollbar-thumb:active,
+.memo-collection-modal__body::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, var(--memo-amber) 0%, var(--memo-amber-strong) 100%);
 }
 
 .memo-share-modal__body {
@@ -1908,4 +1967,33 @@ textarea.memo-control {
   color: #94a3b8;
   background: rgba(148, 163, 184, 0.1);
   border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] .memo-modal__body,
+[data-theme="dark"] .memo-collection-modal__body {
+  scrollbar-color: rgba(245, 158, 11, 0.48) transparent;
+}
+
+[data-theme="dark"] .memo-modal__body::-webkit-scrollbar-thumb,
+[data-theme="dark"] .memo-collection-modal__body::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(245, 158, 11, 0.48) 0%,
+    rgba(217, 119, 6, 0.48) 100%
+  );
+  border-color: rgba(15, 23, 42, 0.82);
+}
+
+[data-theme="dark"] .memo-modal__body::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] .memo-collection-modal__body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(245, 158, 11, 0.7) 0%,
+    rgba(217, 119, 6, 0.7) 100%
+  );
+}
+
+[data-theme="dark"] .memo-modal__body::-webkit-scrollbar-thumb:active,
+[data-theme="dark"] .memo-collection-modal__body::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
 }
