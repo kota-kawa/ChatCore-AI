@@ -703,7 +703,6 @@ async def api_passkey_authenticate_options(
         generate_authentication_options is None
         or options_to_json is None
         or UserVerificationRequirement is None
-        or PublicKeyCredentialHint is None
         or bytes_to_base64url is None
     ):
         return _passkey_unavailable_response()
@@ -725,11 +724,6 @@ async def api_passkey_authenticate_options(
     options = generate_authentication_options(
         rp_id=get_passkey_rp_id(request),
         user_verification=UserVerificationRequirement.REQUIRED,
-        hints=[
-            PublicKeyCredentialHint.CLIENT_DEVICE,
-            PublicKeyCredentialHint.SECURITY_KEY,
-            PublicKeyCredentialHint.HYBRID,
-        ],
     )
     store_passkey_authentication_ceremony(
         request.session,
