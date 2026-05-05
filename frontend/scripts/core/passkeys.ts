@@ -112,7 +112,7 @@ function publicKeyCredentialToJson(credential: PublicKeyCredential): JsonRecord 
   if (response.signature) {
     responsePayload.signature = arrayBufferToBase64Url(response.signature);
   }
-  if (response.userHandle) {
+  if (response.userHandle != null && response.userHandle.byteLength > 0) {
     responsePayload.userHandle = arrayBufferToBase64Url(response.userHandle);
   }
 
@@ -134,14 +134,13 @@ async function requestJson(url: string, init?: RequestInit): Promise<JsonRecord>
   return payload;
 }
 
+function getErrorName(error: unknown): string {
+  return typeof error === "object" && error !== null && "name" in error
+    ? String((error as { name?: unknown }).name || "")
+    : "";
+}
+
 function isPasskeyCancellationError(error: unknown): boolean {
-  const rawName = (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error
-  )
-    ? (error as { name?: unknown }).name
-    : undefined;
   const rawMessage = (
     typeof error === "object" &&
     error !== null &&
@@ -149,7 +148,7 @@ function isPasskeyCancellationError(error: unknown): boolean {
   )
     ? (error as { message?: unknown }).message
     : error;
-  const errorName = String(rawName || "");
+  const errorName = getErrorName(error);
   const message = String(rawMessage || "").toLowerCase();
   return (
     errorName === "NotAllowedError" ||
@@ -166,6 +165,20 @@ function normalizePasskeyBrowserError(error: unknown, action: PasskeyAction): Er
         ? "Passkey認証はキャンセルされました。メールまたはGoogleでも続けられます。"
         : "Passkey登録はキャンセルされました。必要なときにもう一度お試しください。"
     );
+  }
+
+  const errorName = getErrorName(error);
+
+  if (errorName === "SecurityError") {
+    return new Error(
+      action === "authenticate"
+        ? "このサイトのPasskeyは利用できません。HTTPSで接続しているか確認してください。"
+        : "このサイトへのPasskey登録はできません。HTTPSで接続しているか確認してください。"
+    );
+  }
+
+  if (errorName === "NotSupportedError") {
+    return new Error("このデバイスまたはブラウザではPasskeyがサポートされていません。");
   }
 
   if (error instanceof Error) {

@@ -43,6 +43,12 @@ def get_passkey_rp_id(request: Request) -> str:
 
 
 def get_passkey_origins(request: Request) -> list[str]:
+    configured_env = (os.getenv("PASSKEY_ORIGINS") or os.getenv("WEBAUTHN_ORIGINS") or "").strip()
+    if configured_env:
+        explicit = [o.strip() for o in configured_env.split(",") if o.strip()]
+        if explicit:
+            return explicit
+
     origins: list[str] = []
     candidates = (
         FRONTEND_URL,

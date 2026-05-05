@@ -611,6 +611,7 @@ async def api_passkey_register_options(request: Request):
         exclude_credentials=exclude_credentials,
         hints=[
             PublicKeyCredentialHint.CLIENT_DEVICE,
+            PublicKeyCredentialHint.SECURITY_KEY,
             PublicKeyCredentialHint.HYBRID,
         ],
     )
@@ -678,8 +679,13 @@ async def api_passkey_register_verify(request: Request):
             credential_backed_up=bool(verified.credential_backed_up),
             label=str(label) if isinstance(label, str) else None,
         )
-    except Exception:
-        logger.exception("Passkey registration verification failed for user %s", user_id)
+    except Exception as exc:
+        logger.exception(
+            "Passkey registration verification failed for user %s: %s: %s",
+            user_id,
+            type(exc).__name__,
+            exc,
+        )
         clear_passkey_session(request.session)
         return jsonify({"status": "fail", "error": "Passkeyの登録に失敗しました"}, status_code=400)
 
@@ -697,6 +703,7 @@ async def api_passkey_authenticate_options(
         generate_authentication_options is None
         or options_to_json is None
         or UserVerificationRequirement is None
+        or PublicKeyCredentialHint is None
         or bytes_to_base64url is None
     ):
         return _passkey_unavailable_response()
@@ -718,6 +725,11 @@ async def api_passkey_authenticate_options(
     options = generate_authentication_options(
         rp_id=get_passkey_rp_id(request),
         user_verification=UserVerificationRequirement.REQUIRED,
+        hints=[
+            PublicKeyCredentialHint.CLIENT_DEVICE,
+            PublicKeyCredentialHint.SECURITY_KEY,
+            PublicKeyCredentialHint.HYBRID,
+        ],
     )
     store_passkey_authentication_ceremony(
         request.session,
@@ -795,8 +807,12 @@ async def api_passkey_authenticate_verify(
             credential_current_sign_count=int(passkey["sign_count"] or 0),
             require_user_verification=True,
         )
-    except Exception:
-        logger.exception("Passkey authentication verification failed.")
+    except Exception as exc:
+        logger.exception(
+            "Passkey authentication verification failed: %s: %s",
+            type(exc).__name__,
+            exc,
+        )
         clear_passkey_session(request.session)
         return jsonify({"status": "fail", "error": "Passkey認証に失敗しました"}, status_code=400)
 
