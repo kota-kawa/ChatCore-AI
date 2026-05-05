@@ -11,7 +11,11 @@ from typing import Any
 
 import requests
 
-from services.llm import LlmServiceError, get_llm_response
+from services.llm import (
+    LlmServiceError,
+    get_llm_json_response,
+    get_llm_response,
+)
 from services.llm_daily_limit import (
     consume_brave_web_search_monthly_quota,
     get_seconds_until_monthly_reset,
@@ -242,8 +246,21 @@ def _fallback_decision(user_message: str) -> WebSearchDecision:
     return WebSearchDecision(False, reason="web search planner unavailable")
 
 
+def _strip_markdown_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    body = stripped[3:]
+    newline_index = body.find("\n")
+    if newline_index >= 0:
+        body = body[newline_index + 1 :]
+    if body.endswith("```"):
+        body = body[:-3]
+    return body.strip()
+
+
 def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
-    text = (raw_response or "").strip()
+    text = _strip_markdown_code_fence((raw_response or "").strip())
     if not text:
         return None
     try:
@@ -258,6 +275,16 @@ def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
         except Exception:
             return None
     return loaded if isinstance(loaded, dict) else None
+
+
+def _coerce_should_search(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "1", "on"}
+    return False
 
 
 def _is_valid_date_range(value: str) -> bool:
@@ -290,7 +317,7 @@ def _parse_decision_payload(
     loaded: dict[str, Any],
     user_message: str,
 ) -> WebSearchDecision:
-    should_search = loaded.get("should_search") is True
+    should_search = _coerce_should_search(loaded.get("should_search"))
     query = _normalize_text(_redact_secretish_text(loaded.get("query", "")), max_chars=WEB_SEARCH_MAX_QUERY_CHARS)
     freshness = str(loaded.get("freshness") or "").strip()
     if freshness not in {"", "pd", "pw", "pm", "py"} and not _is_valid_date_range(freshness):
@@ -310,22 +337,123 @@ def _parse_decision_payload(
     )
 
 
-def _planner_model_candidates(selected_model: str) -> list[str]:
-    candidates: list[str] = []
+@dataclass(frozen=True)
+class _PlannerCandidate:
+    model: str
+    supports_json_mode: bool
 
-    def add(model_name: str | None) -> None:
+
+def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
+    candidates: list[_PlannerCandidate] = []
+    seen: set[str] = set()
+
+    def add(model_name: str | None, *, supports_json_mode: bool) -> None:
         normalized = str(model_name or "").strip()
-        if normalized and normalized not in candidates:
-            candidates.append(normalized)
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        candidates.append(
+            _PlannerCandidate(model=normalized, supports_json_mode=supports_json_mode)
+        )
 
-    add(selected_model)
-    if os.environ.get("OPENAI_API_KEY", "").strip():
-        add(OPENAI_PLANNER_MODEL)
+    # 信頼性の高い JSON 強制モード対応モデルを優先
     if os.environ.get("Gemini_API_KEY", "").strip():
-        add(os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash"))
+        add(
+            os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash"),
+            supports_json_mode=True,
+        )
+    if os.environ.get("OPENAI_API_KEY", "").strip():
+        add(OPENAI_PLANNER_MODEL, supports_json_mode=True)
     if os.environ.get("GROQ_API_KEY", "").strip():
-        add(os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"))
+        add(
+            os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
+            supports_json_mode=True,
+        )
+
+    # ユーザー選択モデルは最終フォールバック（JSON モード可否は呼び出し側で判定）
+    selected = str(selected_model or "").strip()
+    if selected and selected not in seen:
+        candidates.append(_PlannerCandidate(model=selected, supports_json_mode=True))
     return candidates
+
+
+_PLANNER_SYSTEM_PROMPT = (
+    "あなたはチャットアシスタントのWeb検索プランナーです。"
+    "回答前にBrave Web検索が必要かどうかを判断してください。\n"
+    "次のいずれかに当てはまる場合は必ず should_search を true にしてください:\n"
+    "- 現在・最近・変動しやすい情報（ニュース、株価、為替、天気、スポーツ結果、選挙、ランキング）\n"
+    "- 特定の地域・店舗・施設・イベントの情報\n"
+    "- 法律・金融・医療・税制など最新の規定が必要な話題\n"
+    "- 製品の価格、在庫、スペック、リリース日、バージョン情報\n"
+    "- ソフトウェア/ライブラリ/API の最新仕様、変更点、ドキュメント\n"
+    "- 固有名詞（人物・企業・作品など）に関する事実確認\n"
+    "- ユーザーが「調べて」「検索して」「最新」「現在」「今」など外部情報を明示要求している\n"
+    "- 実行中タスクが調査、事実確認、推薦、マーケット調査、出典付き文章作成を求めている\n"
+    "次の場合は should_search を false にしてください:\n"
+    "- 純粋な文章作成・翻訳・要約・添削・ブレインストーミング・雑談\n"
+    "- 安定した一般知識（数学、初等的な科学常識、確立された歴史事実）で十分答えられる\n"
+    "- 会話内に既に必要な情報が揃っている\n"
+    "- APIキー・パスワード・トークンなどの機密情報が含まれている\n"
+    "判断に迷う場合は should_search を true にしてください（誤って検索しない方がコストが高い）。\n"
+    "出力は必ず JSON オブジェクトのみ。前後に説明やコードフェンスを付けないこと。\n"
+    "スキーマ:\n"
+    '{"should_search": true|false, "query": string, "freshness": string, "reason": string}\n'
+    'query は検索エンジン向けの簡潔なキーワード（最大 240 文字）。\n'
+    'freshness は "", "pd", "pw", "pm", "py", または YYYY-MM-DDtoYYYY-MM-DD のいずれか。'
+)
+
+
+def _build_planner_messages(
+    conversation_messages: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    current_date = datetime.now(timezone.utc).date().isoformat()
+    return [
+        {"role": "system", "content": _PLANNER_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"現在日付(UTC): {current_date}\n"
+                "会話と実行中タスクの文脈:\n"
+                f"{_planner_context_excerpt(conversation_messages)}\n\n"
+                "上記スキーマの JSON だけを返してください。"
+            ),
+        },
+    ]
+
+
+def _invoke_planner(
+    candidate: _PlannerCandidate,
+    planner_messages: list[dict[str, str]],
+) -> dict[str, Any] | None:
+    for attempt_index in range(WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL):
+        raw_response = ""
+        try:
+            if candidate.supports_json_mode:
+                raw_response = get_llm_json_response(planner_messages, candidate.model) or ""
+            else:
+                raw_response = get_llm_response(planner_messages, candidate.model) or ""
+        except LlmServiceError:
+            logger.warning(
+                "Web search planner failed; trying next attempt.",
+                extra={"model": candidate.model, "attempt": attempt_index + 1},
+            )
+            continue
+        except Exception:
+            logger.warning(
+                "Unexpected web search planner failure; trying next attempt.",
+                extra={"model": candidate.model, "attempt": attempt_index + 1},
+            )
+            continue
+
+        loaded = _extract_json_object(raw_response)
+        if loaded is None:
+            logger.warning(
+                "Web search planner returned non-JSON output; retrying.",
+                extra={"model": candidate.model, "attempt": attempt_index + 1},
+            )
+            continue
+        return loaded
+    return None
 
 
 def decide_web_search(
@@ -336,59 +464,11 @@ def decide_web_search(
     if not user_message.strip():
         return WebSearchDecision(False)
 
-    current_date = datetime.now(timezone.utc).date().isoformat()
-    planner_messages = [
-        {
-            "role": "system",
-            "content": (
-                "あなたはチャットアシスタントのWeb検索プランナーです。"
-                "回答前にBrave Web検索が必要かどうかを判断してください。"
-                "検索するのは、ユーザーが現在・最近・変動しやすい情報、地域情報、法律・金融・医療、"
-                "価格、予定、スポーツ、ニュース、ソフトウェアのバージョン、または明示的に依頼された外部情報を必要としている場合だけです。"
-                "また、実行中のタスクが調査、事実確認、推薦、マーケット・企業調査、出典付きの文章作成、"
-                "最新の製品・サービス・ライブラリ情報を求めている場合も検索してください。"
-                "安定した一般知識、純粋な文章作成、翻訳、ブレインストーミング、雑談、"
-                "APIキー・パスワード・トークンなどの機密情報を含む入力、"
-                "会話内の情報だけで答えられるタスクでは検索しないでください。"
-                "必ずコンパクトなJSONだけを返してください。キーは「should_search」（真偽値）、「query」（文字列）、「freshness」（文字列）、「reason」（文字列）です。"
-                'freshness は "", "pd", "pw", "pm", "py", または YYYY-MM-DDtoYYYY-MM-DD のいずれかにしてください。'
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"現在日付: {current_date}\n"
-                "会話と実行中タスクの文脈:\n"
-                f"{_planner_context_excerpt(conversation_messages)}\n\n"
-                "JSONだけを返してください。"
-            ),
-        },
-    ]
+    planner_messages = _build_planner_messages(conversation_messages)
 
-    for planner_model in _planner_model_candidates(model):
-        for attempt_index in range(WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL):
-            try:
-                raw_response = get_llm_response(planner_messages, planner_model) or ""
-            except LlmServiceError:
-                logger.warning(
-                    "Web search planner failed; trying next planner candidate.",
-                    extra={"model": planner_model, "attempt": attempt_index + 1},
-                )
-                continue
-            except Exception:
-                logger.warning(
-                    "Unexpected web search planner failure; trying next planner candidate.",
-                    extra={"model": planner_model, "attempt": attempt_index + 1},
-                )
-                continue
-
-            loaded = _extract_json_object(raw_response)
-            if loaded is None:
-                logger.warning(
-                    "Web search planner returned non-JSON output; trying next planner candidate.",
-                    extra={"model": planner_model, "attempt": attempt_index + 1},
-                )
-                continue
+    for candidate in _planner_candidates(model):
+        loaded = _invoke_planner(candidate, planner_messages)
+        if loaded is not None:
             return _parse_decision_payload(loaded, user_message)
 
     logger.warning("All web search planner candidates failed; continuing without web search.")

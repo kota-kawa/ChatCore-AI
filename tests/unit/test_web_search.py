@@ -15,7 +15,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         with patch.object(
             web_search,
-            "get_llm_response",
+            "get_llm_json_response",
             return_value='{"should_search": true, "query": "OpenAI latest news", "freshness": "pd", "reason": "current news"}',
         ):
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
@@ -24,10 +24,35 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(decision.query, "OpenAI latest news")
         self.assertEqual(decision.freshness, "pd")
 
+    def test_decide_web_search_strips_markdown_code_fences(self):
+        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='```json\n{"should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}\n```',
+        ):
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "OpenAI news")
+
+    def test_decide_web_search_accepts_string_should_search(self):
+        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"should_search": "true", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
+        ):
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+
     def test_decide_web_search_does_not_search_when_planner_fails(self):
         messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
 
-        with patch.object(web_search, "get_llm_response", side_effect=RuntimeError("down")):
+        with patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")):
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
 
         self.assertFalse(decision.should_search)
@@ -38,7 +63,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         with patch.object(
             web_search,
-            "get_llm_response",
+            "get_llm_json_response",
             return_value='{"should_search": false, "query": "", "freshness": "", "reason": "greeting"}',
         ) as mock_llm:
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
@@ -51,7 +76,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         with patch.object(
             web_search,
-            "get_llm_response",
+            "get_llm_json_response",
             return_value='{"should_search": true, "query": "日本 法人設立 注意点 最新", "freshness": "py", "reason": "legal and procedural details"}',
         ) as mock_llm:
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
@@ -71,7 +96,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         with patch.object(
             web_search,
-            "get_llm_response",
+            "get_llm_json_response",
             return_value='{"should_search": true, "query": "CRM 最新 比較", "freshness": "pm", "reason": "active task requires research"}',
         ) as mock_llm:
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
@@ -86,13 +111,32 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         with patch.object(
             web_search,
-            "get_llm_response",
+            "get_llm_json_response",
             return_value='{"should_search": false, "query": "", "freshness": "", "reason": "pure writing"}',
         ) as mock_llm:
             decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
 
         self.assertFalse(decision.should_search)
         mock_llm.assert_called_once()
+
+    def test_decide_web_search_prefers_gemini_planner_when_api_key_set(self):
+        messages = [{"role": "user", "content": "今日の天気を教えて"}]
+
+        with patch.dict(
+            os.environ,
+            {"Gemini_API_KEY": "test", "OPENAI_API_KEY": "", "GROQ_API_KEY": ""},
+            clear=False,
+        ):
+            with patch.object(
+                web_search,
+                "get_llm_json_response",
+                return_value='{"should_search": true, "query": "today weather", "freshness": "pd", "reason": "current"}',
+            ) as mock_llm:
+                decision = web_search.decide_web_search(messages, "openai/gpt-oss-120b")
+
+        self.assertTrue(decision.should_search)
+        # Gemini should have been tried first as the most reliable planner
+        self.assertEqual(mock_llm.call_args.args[1], "gemini-2.5-flash")
 
     def test_search_brave_llm_context_parses_sources(self):
         response = MagicMock()

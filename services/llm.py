@@ -559,6 +559,91 @@ def get_llm_response(
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
+def _get_chat_completions_json_response(
+    *,
+    client: OpenAI | None,
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    provider_name: str,
+    missing_key_message: str,
+    fallback_message: str,
+) -> str | None:
+    if client is None:
+        raise LlmConfigurationError(missing_key_message)
+
+    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=sanitized_messages,
+            max_tokens=LLM_MAX_TOKENS,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        return response.choices[0].message.content
+    except Exception as exc:
+        _raise_provider_error(
+            exc,
+            provider_name=provider_name,
+            fallback_message=fallback_message,
+        )
+
+
+def _get_openai_responses_json_response(
+    conversation_messages: ConversationMessages,
+    model_name: str,
+) -> str | None:
+    if openai_client is None:
+        raise LlmConfigurationError("OPENAI_API_KEY が未設定です。")
+
+    sanitized_messages = _prepare_openai_responses_input(
+        _sanitize_conversation_messages(conversation_messages)
+    )
+    try:
+        response = openai_client.responses.create(
+            model=model_name,
+            input=sanitized_messages,
+            max_output_tokens=LLM_MAX_TOKENS,
+            text={"format": {"type": "json_object"}},
+        )
+        return response.output_text
+    except Exception as exc:
+        _raise_provider_error(
+            exc,
+            provider_name="OpenAI",
+            fallback_message="OpenAI Responses JSON API call failed.",
+        )
+
+
+def get_llm_json_response(
+    conversation_messages: ConversationMessages, model_name: str
+) -> str | None:
+    # JSONオブジェクト形式の出力を強制してLLMから応答を取得する。
+    # 失敗時はLlmServiceErrorを送出する。
+    validate_model_name(model_name)
+    if is_gemini_model(model_name):
+        return _get_chat_completions_json_response(
+            client=gemini_client,
+            conversation_messages=conversation_messages,
+            model_name=model_name,
+            provider_name="Google Gemini",
+            missing_key_message="Gemini_API_KEY が未設定です。",
+            fallback_message="Google Gemini JSON API call failed.",
+        )
+    if is_groq_model(model_name):
+        return _get_chat_completions_json_response(
+            client=groq_client,
+            conversation_messages=conversation_messages,
+            model_name=model_name,
+            provider_name="Groq",
+            missing_key_message="GROQ_API_KEY が未設定です。",
+            fallback_message="Groq JSON API call failed.",
+        )
+    if is_openai_model(model_name):
+        return _get_openai_responses_json_response(conversation_messages, model_name)
+    raise RuntimeError("Unreachable model dispatch branch in get_llm_json_response.")
+
+
 def get_llm_response_stream(
     conversation_messages: ConversationMessages, model_name: str
 ) -> Iterator[str]:
