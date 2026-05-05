@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any
 
-from services.agent_capabilities import ALLOWED_AGENT_COMMANDS
+from services.agent_capabilities import AGENT_COMMAND_RISKS, ALLOWED_AGENT_COMMANDS
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ _LEGACY_ACTION_KEY_RE = re.compile(
     r"\b(action|target|selector|path|value|checked|timeout_ms|risk|command)\s*=",
     re.IGNORECASE,
 )
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 ACTION_SYSTEM_PROMPT = """
 ユーザーが現在のページでの画面操作を依頼しています。
@@ -67,10 +68,11 @@ ACTION_SYSTEM_PROMPT = """
 
 セレクタ選択の優先順位：
 1. id属性 (#element-id)
-2. data-* 属性 ([data-testid="..."])
-3. aria-label属性 ([aria-label="..."])
-4. クラス＋タグの組み合わせ (button.submit-btn)
-5. 汎用クラス (.class-name)
+2. AIエージェント用の data-agent-id 属性 ([data-agent-id="..."])
+3. data-* 属性 ([data-testid="..."])
+4. aria-label属性 ([aria-label="..."])
+5. クラス＋タグの組み合わせ (button.submit-btn)
+6. 汎用クラス (.class-name)
 
 """.strip()
 
@@ -123,6 +125,23 @@ def _extract_legacy_description(lines: list[str], first_action_line_index: int) 
     return "操作を実行します"
 
 
+def _is_safe_internal_path(path: Any) -> bool:
+    if not isinstance(path, str):
+        return False
+    if not path.startswith("/") or path.startswith("//"):
+        return False
+    if any(ord(ch) < 32 for ch in path):
+        return False
+    return not re.match(r"^/[a-z][a-z0-9+.-]*:", path, re.IGNORECASE)
+
+
+def _stronger_risk(*risks: str | None) -> str | None:
+    valid = [risk for risk in risks if risk in _RISK_ORDER]
+    if not valid:
+        return None
+    return max(valid, key=lambda risk: _RISK_ORDER[risk])
+
+
 def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> dict[str, Any] | None:
     action = step.get("action", "")
     selector = step.get("selector") or step.get("target") or ""
@@ -137,19 +156,25 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
         "action": action,
         "description": str(step.get("description") or fallback_description or "操作を実行します"),
     }
-    risk = step.get("risk")
-    if risk in ("low", "medium", "high"):
-        clean["risk"] = risk
     if action == "app_action":
         if command not in ALLOWED_AGENT_COMMANDS:
             return None
         clean["command"] = command
         clean["args"] = args if isinstance(args, dict) else {}
+        risk = _stronger_risk(step.get("risk"), AGENT_COMMAND_RISKS.get(command))
+        if risk:
+            clean["risk"] = risk
     elif action == "navigate":
-        if not isinstance(path, str) or not path.startswith("/"):
+        if not _is_safe_internal_path(path):
             return None
         clean["path"] = path
+        risk = _stronger_risk(step.get("risk"))
+        if risk:
+            clean["risk"] = risk
     elif action == "wait":
+        risk = _stronger_risk(step.get("risk"))
+        if risk:
+            clean["risk"] = risk
         if selector:
             clean["selector"] = selector
         if isinstance(timeout_ms, str) and timeout_ms.isdigit():
@@ -159,6 +184,9 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
         elif not selector:
             clean["timeout_ms"] = 300
     else:
+        risk = _stronger_risk(step.get("risk"))
+        if risk:
+            clean["risk"] = risk
         if not selector:
             return None
         clean["selector"] = selector

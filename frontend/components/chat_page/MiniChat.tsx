@@ -1,65 +1,32 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
 
+import {
+  buildAiAgentHttpError,
+  collectVisiblePageDom,
+  createAiAgentMessageId,
+  cssEscape,
+  isActionStep,
+  isSafeInternalPath,
+  isVisibleElement,
+  readSseStream,
+  type ActionPlan,
+  type ActionStep,
+  type Message,
+  type StepExecutionResult,
+} from "../../lib/chat_page/ai_agent";
 import { readSessionJson, writeSessionJson } from "../../lib/utils";
+import { showConfirmModal } from "../../scripts/core/alert_modal";
 import MarkdownContent from "../MarkdownContent";
 
-type ActionStep = {
-  action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait";
-  command?: string;
-  args?: Record<string, unknown>;
-  selector?: string;
-  path?: string;
-  value?: string;
-  checked?: boolean;
-  timeout_ms?: number;
-  risk?: "low" | "medium" | "high";
-  description: string;
-};
-
-type ActionPlan = {
-  description: string;
-  steps: ActionStep[];
-};
-
-type Message = {
-  sender: "user" | "assistant";
-  text: string;
-  actionPlan?: ActionPlan;
-  isError?: boolean;
-};
-
-type AiAgentSseEvent =
-  | { type: "progress"; message: string }
-  | { type: "done"; response: string; model: string }
-  | { type: "action_plan"; description: string; steps: ActionStep[] }
-  | { type: "error"; message: string; retryable?: boolean; retry_after?: number };
-
-type VisibleElementSummary = {
-  selector: string;
-  tag: string;
-  text?: string;
-  ariaLabel?: string;
-  placeholder?: string;
-  value?: string;
-  inputType?: string;
-  checked?: boolean;
-  disabled?: boolean;
-  options?: string;
-  href?: string;
-  role?: string;
-};
-
-type StepExecutionResult = {
-  ok: boolean;
-  message?: string;
-  failedStepIndex?: number;
-  pendingNavigation?: boolean;
-};
-
 type ExecutionProgress = {
-  messageIndex: number;
+  messageId: string;
   currentStepIndex: number | null;
   completedStepIndexes: number[];
+};
+
+type PendingActionState = {
+  steps: ActionStep[];
+  expectedPath?: string;
 };
 
 const QUICK_PROMPTS = [
@@ -73,65 +40,22 @@ const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
 const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
 const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
 const MESSAGES_TIMESTAMP_KEY = "globalAiAgent.messagesTimestamp";
-const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
+const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIds";
+const LEGACY_EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
 
 const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const PENDING_ACTION_EXPIRY_MS = 10 * 60 * 1000;
 const MAX_SEND_MESSAGES = 20;
 const MAX_DOM_LENGTH = 12_000;
 const MAX_INPUT_LENGTH = 4_000;
+const RESUME_READY_TIMEOUT_MS = 12_000;
 
-function parseSseBlock(block: string): AiAgentSseEvent | null {
-  if (!block.trim()) return null;
-  let eventType = "message";
-  const dataLines: string[] = [];
-
-  for (const rawLine of block.split(/\r?\n/)) {
-    const line = rawLine.trimEnd();
-    if (line.startsWith("event:")) {
-      eventType = line.slice(6).trim();
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trimStart());
-    }
-  }
-
-  if (!dataLines.length) return null;
-  try {
-    const parsed = JSON.parse(dataLines.join("\n"));
-    return { type: eventType, ...parsed } as AiAgentSseEvent;
-  } catch {
-    return null;
-  }
-}
-
-async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEvent> {
-  if (!response.body) throw new Error("レスポンスボディがありません。");
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const blocks = buffer.split("\n\n");
-    buffer = blocks.pop() ?? "";
-
-    for (const block of blocks) {
-      const event = parseSseBlock(block);
-      if (event) yield event;
-    }
-  }
-
-  buffer += decoder.decode();
-  const trailingEvent = parseSseBlock(buffer);
-  if (trailingEvent) yield trailingEvent;
-}
-
-function isPersistedMessage(value: unknown): value is Pick<Message, "sender" | "text"> {
+function isPersistedMessage(value: unknown): value is Message {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<Message>;
   return (
+    (candidate.id === undefined || typeof candidate.id === "string")
+    &&
     (candidate.sender === "user" || candidate.sender === "assistant")
     && typeof candidate.text === "string"
   );
@@ -147,25 +71,27 @@ function readStoredMessages(): Message[] {
   }
   const raw = readSessionJson<unknown>(MESSAGES_STORAGE_KEY, []);
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isPersistedMessage).map(({ sender, text }) => ({ sender, text }));
+  return raw.filter(isPersistedMessage).map((message) => ({
+    id: message.id || createAiAgentMessageId(),
+    sender: message.sender,
+    text: message.text,
+    actionPlan: message.actionPlan,
+    isError: message.isError,
+  }));
 }
 
-function readStoredExecutedIndexes(): number[] {
+function readStoredExecutedIds(messages: Message[]): string[] {
   const raw = readSessionJson<unknown>(EXECUTED_STORAGE_KEY, []);
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-}
-
-function cssEscape(value: string) {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-    return CSS.escape(value);
+  if (Array.isArray(raw)) {
+    return raw.filter((value): value is string => typeof value === "string");
   }
-  return value.replace(/["\\#.;:[\]()>+~*='|\s]/g, "\\$&");
-}
 
-function truncateForContext(value: string | null | undefined, maxLength = 80) {
-  const normalized = (value || "").replace(/\s+/g, " ").trim();
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+  const legacyRaw = readSessionJson<unknown>(LEGACY_EXECUTED_STORAGE_KEY, []);
+  if (!Array.isArray(legacyRaw)) return [];
+  return legacyRaw
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .map((index) => messages[index]?.id)
+    .filter((value): value is string => typeof value === "string");
 }
 
 function wait(ms = 180) {
@@ -175,7 +101,7 @@ function wait(ms = 180) {
 async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepExecutionResult> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
-    if (isVisibleElement(document.querySelector(selector))) {
+    if (isVisibleElement(getElement(selector))) {
       return { ok: true };
     }
     await wait(80);
@@ -183,38 +109,41 @@ async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepE
   return { ok: false, message: `${selector} の表示を確認できませんでした。` };
 }
 
-function isActionStep(value: unknown): value is ActionStep {
-  if (!value || typeof value !== "object") return false;
-  const step = value as Partial<ActionStep>;
-  return (
-    step.action === "app_action"
-    || step.action === "click"
-    || step.action === "input"
-    || step.action === "focus"
-    || step.action === "scroll"
-    || step.action === "navigate"
-    || step.action === "select"
-    || step.action === "check"
-    || step.action === "wait"
-  ) && typeof step.description === "string";
-}
-
-function readPendingActionSteps() {
-  if (typeof window === "undefined") return [];
+function readPendingActionState(): PendingActionState {
+  if (typeof window === "undefined") return { steps: [] };
   try {
     const raw = window.sessionStorage.getItem(PENDING_ACTION_STEPS_KEY);
-    if (!raw) return [];
+    if (!raw) return { steps: [] };
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isActionStep) : [];
+    if (Array.isArray(parsed)) {
+      return { steps: parsed.filter(isActionStep) };
+    }
+    if (!parsed || typeof parsed !== "object") return { steps: [] };
+    const candidate = parsed as { version?: unknown; steps?: unknown; expectedPath?: unknown; createdAt?: unknown };
+    const createdAt = typeof candidate.createdAt === "number" ? candidate.createdAt : Date.now();
+    if (Date.now() - createdAt > PENDING_ACTION_EXPIRY_MS) {
+      clearPendingActionSteps();
+      return { steps: [] };
+    }
+    const steps = Array.isArray(candidate.steps) ? candidate.steps.filter(isActionStep) : [];
+    return {
+      steps,
+      expectedPath: typeof candidate.expectedPath === "string" ? candidate.expectedPath : undefined,
+    };
   } catch {
-    return [];
+    return { steps: [] };
   }
 }
 
-function writePendingActionSteps(steps: ActionStep[]) {
+function writePendingActionSteps(steps: ActionStep[], expectedPath?: string) {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(PENDING_ACTION_STEPS_KEY, JSON.stringify(steps));
+    window.sessionStorage.setItem(PENDING_ACTION_STEPS_KEY, JSON.stringify({
+      version: 2,
+      steps,
+      expectedPath,
+      createdAt: Date.now(),
+    }));
     window.sessionStorage.setItem(AI_AGENT_OPEN_STATE_KEY, JSON.stringify(true));
   } catch {
     // ignore storage failures
@@ -238,109 +167,97 @@ function getStepNavigationPath(step: ActionStep) {
   return "";
 }
 
+function getInternalPathname(path: string | undefined) {
+  if (!isSafeInternalPath(path) || typeof window === "undefined") return "";
+  try {
+    return new URL(path, window.location.origin).pathname;
+  } catch {
+    return "";
+  }
+}
+
+function getAppActionReadySelectors(step: ActionStep) {
+  const command = step.command || "";
+  if (command === "chat.fillSetupMessage") return ["[data-agent-id='chat.setup-message']"];
+  if (command === "chat.sendSetupMessage") return ["[data-agent-id='chat.send-setup-message']"];
+  if (command === "chat.openPromptComposer") return ["#openNewPromptModal"];
+  if (command === "chat.toggleTaskOrder") return ["#edit-task-order-btn"];
+  if (command === "chat.showChatHistory") return ["#access-chat-btn"];
+  if (command === "prompt.search") return ["#searchInput", "#searchButton"];
+  if (command === "prompt.openComposer") return ["#heroOpenPostModal"];
+  if (command === "prompt.openLogin") return ["#login-btn"];
+  if (command === "prompt.scrollResults") return ["#prompt-feed-section"];
+  if (command === "settings.openSection") {
+    const section = getArg(step.args, "section");
+    return section ? [`[data-section="${cssEscape(section)}"]`] : [];
+  }
+  if (command === "memo.fillForm") {
+    return [
+      "[data-agent-id='memo.input-content']",
+      "[data-agent-id='memo.ai-response']",
+      "[data-agent-id='memo.title']",
+      "[data-agent-id='memo.tags']",
+    ];
+  }
+  if (command === "memo.save") return ["[data-agent-id='memo.save']"];
+  return [];
+}
+
+function getStepReadySelectors(step: ActionStep) {
+  if (step.action === "app_action") return getAppActionReadySelectors(step);
+  if (step.selector) return [step.selector];
+  return [];
+}
+
+async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_TIMEOUT_MS): Promise<StepExecutionResult> {
+  if (!selectors.length) return { ok: true };
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    for (const selector of selectors) {
+      if (isVisibleElement(getElement(selector))) return { ok: true };
+    }
+    await wait(100);
+  }
+  return { ok: false, message: `${selectors[0]} の表示を確認できませんでした。` };
+}
+
+async function waitForPagePath(expectedPath: string | undefined, timeoutMs = RESUME_READY_TIMEOUT_MS) {
+  if (!expectedPath || typeof window === "undefined") return true;
+  const expectedPathname = getInternalPathname(expectedPath);
+  if (!expectedPathname) return false;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    if (window.location.pathname === expectedPathname) return true;
+    await wait(100);
+  }
+  return window.location.pathname === expectedPathname;
+}
+
+async function waitForPendingResumeReady(state: PendingActionState): Promise<StepExecutionResult> {
+  const pathReady = await waitForPagePath(state.expectedPath);
+  if (!pathReady) {
+    return { ok: false, message: "移動先ページの表示を確認できませんでした。" };
+  }
+  if (document.readyState === "loading") {
+    await new Promise<void>((resolve) => {
+      document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
+    });
+  }
+  return waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS);
+}
+
 function getArg(args: Record<string, unknown> | undefined, key: string) {
   const value = args?.[key];
   return typeof value === "string" ? value : "";
 }
 
 function getElement<T extends HTMLElement = HTMLElement>(selector: string): T | null {
-  const element = document.querySelector(selector);
-  return element instanceof HTMLElement ? element as T : null;
-}
-
-function isVisibleElement(element: Element | null) {
-  if (!(element instanceof HTMLElement)) return false;
-  const rect = element.getBoundingClientRect();
-  const style = window.getComputedStyle(element);
-  return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
-}
-
-function buildElementSelector(element: Element): string | null {
-  const id = element.getAttribute("id");
-  if (id) return `#${cssEscape(id)}`;
-
-  for (const attr of ["data-testid", "data-test", "data-section", "aria-label", "name"]) {
-    const value = element.getAttribute(attr);
-    if (value) return `${element.tagName.toLowerCase()}[${attr}="${cssEscape(value)}"]`;
+  try {
+    const element = document.querySelector(selector);
+    return element instanceof HTMLElement ? element as T : null;
+  } catch {
+    return null;
   }
-
-  const classNames = Array.from(element.classList).filter(Boolean).slice(0, 2);
-  if (classNames.length > 0) {
-    return `${element.tagName.toLowerCase()}.${classNames.map(cssEscape).join(".")}`;
-  }
-
-  return null;
-}
-
-function isVisibleActionableElement(element: Element) {
-  if (element.closest(".global-ai-agent-modal")) return false;
-  if (!(element instanceof HTMLElement)) return false;
-  if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
-  const rect = element.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return false;
-  const style = window.getComputedStyle(element);
-  return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
-}
-
-function collectVisiblePageDom() {
-  if (typeof document === "undefined") return "";
-  const elements = Array.from(
-    document.querySelectorAll(
-      "button, input, textarea, select, a[href], [role='button'], [role='tab'], [data-section], [data-category]"
-    )
-  ).filter(isVisibleActionableElement).slice(0, 80);
-
-  const summaries: VisibleElementSummary[] = [];
-  const seenSelectors = new Set<string>();
-
-  for (const element of elements) {
-    const selector = buildElementSelector(element);
-    if (!selector || seenSelectors.has(selector)) continue;
-    seenSelectors.add(selector);
-
-    const input = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
-    const select = element instanceof HTMLSelectElement ? element : null;
-    const disabled = "disabled" in element && typeof element.disabled === "boolean"
-      ? element.disabled
-      : undefined;
-    summaries.push({
-      selector,
-      tag: element.tagName.toLowerCase(),
-      text: truncateForContext(element.textContent),
-      ariaLabel: truncateForContext(element.getAttribute("aria-label")),
-      placeholder: truncateForContext(input?.placeholder),
-      value: truncateForContext(input?.value ?? select?.value, 60),
-      inputType: element instanceof HTMLInputElement ? element.type : undefined,
-      checked: element instanceof HTMLInputElement && /^(checkbox|radio)$/.test(element.type)
-        ? element.checked
-        : undefined,
-      disabled,
-      options: select
-        ? Array.from(select.options)
-          .slice(0, 12)
-          .map((option) => `${truncateForContext(option.textContent, 28)}=${truncateForContext(option.value, 28)}`)
-          .join(", ")
-        : undefined,
-      href: truncateForContext(element instanceof HTMLAnchorElement ? element.getAttribute("href") : null),
-      role: truncateForContext(element.getAttribute("role")),
-    });
-  }
-
-  return summaries
-    .map((item, index) => (
-      `${index + 1}. selector=${item.selector}; tag=${item.tag}`
-      + `${item.text ? `; text=${item.text}` : ""}`
-      + `${item.ariaLabel ? `; aria-label=${item.ariaLabel}` : ""}`
-      + `${item.placeholder ? `; placeholder=${item.placeholder}` : ""}`
-      + `${item.value ? `; value=${item.value}` : ""}`
-      + `${item.inputType ? `; input-type=${item.inputType}` : ""}`
-      + `${typeof item.checked === "boolean" ? `; checked=${item.checked}` : ""}`
-      + `${typeof item.disabled === "boolean" ? `; disabled=${item.disabled}` : ""}`
-      + `${item.options ? `; options=${item.options}` : ""}`
-      + `${item.href ? `; href=${item.href}` : ""}`
-      + `${item.role ? `; role=${item.role}` : ""}`
-    ))
-    .join("\n");
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -409,17 +326,17 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
 
   if (command === "navigation.openPage") {
     const path = getArg(args, "path");
-    if (!path.startsWith("/")) return { ok: false, message: "移動先パスが不正です。" };
+    if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。" };
     if (path === window.location.pathname) return { ok: true };
     window.location.href = path;
     return { ok: true };
   }
 
   if (command === "chat.fillSetupMessage") {
-    return setInputValue("#setup-info", getArg(args, "text"));
+    return setInputValue("[data-agent-id='chat.setup-message']", getArg(args, "text"));
   }
   if (command === "chat.sendSetupMessage") {
-    return clickElement(".setup-send-btn");
+    return clickElement("[data-agent-id='chat.send-setup-message']");
   }
   if (command === "chat.openPromptComposer") {
     return clickElement("#openNewPromptModal");
@@ -456,10 +373,10 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
 
   if (command === "memo.fillForm") {
     const fieldMap: Record<string, string> = {
-      input_content: "[name='input_content']",
-      ai_response: "[name='ai_response']",
-      title: "[name='title']",
-      tags: "[name='tags']",
+      input_content: "[data-agent-id='memo.input-content']",
+      ai_response: "[data-agent-id='memo.ai-response']",
+      title: "[data-agent-id='memo.title']",
+      tags: "[data-agent-id='memo.tags']",
     };
     for (const [key, selector] of Object.entries(fieldMap)) {
       const value = getArg(args, key);
@@ -470,17 +387,7 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
     return { ok: true };
   }
   if (command === "memo.save") {
-    return clickElement("button[type='submit']");
-  }
-
-  if (command === "auth.fillEmail") {
-    return setInputValue("#email", getArg(args, "email"));
-  }
-  if (command === "auth.startGoogleLogin") {
-    return clickElement("#googleAuthBtn");
-  }
-  if (command === "auth.sendEmailCode") {
-    return clickElement(".submit-btn");
+    return clickElement("[data-agent-id='memo.save']");
   }
 
   return { ok: false, message: `未対応の操作コマンドです: ${command}` };
@@ -526,38 +433,44 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
   }
   if (step.action === "wait") {
     if (!step.selector) return { ok: true };
-    return { ok: isVisibleElement(document.querySelector(step.selector)), message: `${step.selector} の表示を確認できませんでした。` };
+    return { ok: isVisibleElement(getElement(step.selector)), message: `${step.selector} の表示を確認できませんでした。` };
   }
   if (step.action === "focus" && step.selector) {
-    return { ok: document.activeElement === document.querySelector(step.selector), message: `${step.selector} のフォーカスを確認できませんでした。` };
+    return { ok: document.activeElement === getElement(step.selector), message: `${step.selector} のフォーカスを確認できませんでした。` };
   }
   if ((step.action === "click" || step.action === "scroll") && step.selector) {
-    return { ok: Boolean(document.querySelector(step.selector)), message: `${step.selector} が見つかりませんでした。` };
+    return { ok: Boolean(getElement(step.selector)), message: `${step.selector} が見つかりませんでした。` };
   }
   return { ok: true };
 }
 
 async function executeActionStep(step: ActionStep): Promise<StepExecutionResult> {
-  if (step.risk === "high" && !window.confirm("この操作は取り消しにくい可能性があります。実行しますか？")) {
+  if ((step.risk === "medium" || step.risk === "high") && !await showConfirmModal("この操作は送信や保存を行う可能性があります。実行しますか？")) {
     return { ok: false, message: "ユーザー確認で操作を中止しました。" };
   }
 
   let result: StepExecutionResult;
   if (step.action === "app_action") {
+    const ready = await waitForAnyElement(getAppActionReadySelectors(step), RESUME_READY_TIMEOUT_MS);
+    if (!ready.ok) return ready;
     result = executeAppAction(step);
   } else if (step.action === "navigate") {
-    if (!step.path?.startsWith("/")) return { ok: false, message: "移動先パスが不正です。" };
-    if (step.path === window.location.pathname) return { ok: true };
-    window.location.href = step.path;
+    const path = step.path;
+    if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。" };
+    if (path === window.location.pathname) return { ok: true };
+    window.location.href = path;
     return { ok: true };
   } else if (step.action === "input") {
     if (!step.selector) return { ok: false, message: "入力先が指定されていません。" };
+    await waitForElement(step.selector, 5000);
     result = setInputValue(step.selector, step.value ?? "");
   } else if (step.action === "select") {
     if (!step.selector) return { ok: false, message: "選択先が指定されていません。" };
+    await waitForElement(step.selector, 5000);
     result = setSelectValue(step.selector, step.value ?? "");
   } else if (step.action === "check") {
     if (!step.selector) return { ok: false, message: "チェック対象が指定されていません。" };
+    await waitForElement(step.selector, 5000);
     result = setCheckedValue(step.selector, step.checked ?? true);
   } else if (step.action === "wait") {
     const timeoutMs = Math.max(0, Math.min(step.timeout_ms ?? 1200, 5000));
@@ -565,6 +478,7 @@ async function executeActionStep(step: ActionStep): Promise<StepExecutionResult>
     if (!step.selector && timeoutMs > 0) await wait(timeoutMs);
   } else if (step.action === "click") {
     if (!step.selector) return { ok: false, message: "クリック先が指定されていません。" };
+    await waitForElement(step.selector, 5000);
     result = clickElement(step.selector);
   } else if (step.action === "focus") {
     if (!step.selector) return { ok: false, message: "フォーカス先が指定されていません。" };
@@ -588,11 +502,12 @@ async function executeActionSteps(
   for (const [stepIndex, step] of steps.entries()) {
     const remaining = steps.slice(stepIndex + 1);
     const navigationPath = getStepNavigationPath(step);
-    const willNavigate = Boolean(navigationPath) && navigationPath !== window.location.pathname;
+    const navigationPathname = getInternalPathname(navigationPath);
+    const willNavigate = Boolean(navigationPathname) && navigationPathname !== window.location.pathname;
 
-    if (remaining.length) {
-      writePendingActionSteps(remaining);
-    } else {
+    if (willNavigate && remaining.length) {
+      writePendingActionSteps(remaining, navigationPath);
+    } else if (!remaining.length) {
       clearPendingActionSteps();
     }
 
@@ -634,9 +549,9 @@ export function MiniChat() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
-  const [executingIdx, setExecutingIdx] = useState<number | null>(null);
+  const [executingMessageId, setExecutingMessageId] = useState<string | null>(null);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
-  const [executedSet, setExecutedSet] = useState<Set<number>>(new Set());
+  const [executedSet, setExecutedSet] = useState<Set<string>>(new Set());
   const [hydrated, setHydrated] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -673,11 +588,12 @@ export function MiniChat() {
     });
 
     if (!response.ok) {
-      throw new Error(`サーバーエラー (${response.status})`);
+      throw await buildAiAgentHttpError(response);
     }
 
     let assistantText = "応答を取得できませんでした。もう一度試してください。";
     let actionPlan: ActionPlan | undefined;
+    let isError = false;
 
     for await (const event of readSseStream(response)) {
       if (event.type === "progress") {
@@ -691,11 +607,12 @@ export function MiniChat() {
         break;
       } else if (event.type === "error") {
         assistantText = event.message;
+        isError = true;
         break;
       }
     }
 
-    return { sender: "assistant", text: assistantText, actionPlan };
+    return { id: createAiAgentMessageId(), sender: "assistant", text: assistantText, actionPlan, isError };
   };
 
   const handleSend = async (event?: FormEvent<HTMLFormElement>) => {
@@ -705,7 +622,7 @@ export function MiniChat() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const userMessage: Message = { sender: "user", text: trimmedInput };
+    const userMessage: Message = { id: createAiAgentMessageId(), sender: "user", text: trimmedInput };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setInput("");
@@ -721,6 +638,7 @@ export function MiniChat() {
       setMessages((prev) => [
         ...prev,
         {
+          id: createAiAgentMessageId(),
           sender: "assistant",
           text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
           isError: true,
@@ -757,6 +675,7 @@ export function MiniChat() {
       setMessages((prev) => [
         ...prev,
         {
+          id: createAiAgentMessageId(),
           sender: "assistant",
           text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
           isError: true,
@@ -780,19 +699,19 @@ export function MiniChat() {
     }
   };
 
-  const handleExecuteActions = async (steps: ActionStep[], msgIdx: number) => {
-    setExecutingIdx(msgIdx);
+  const handleExecuteActions = async (steps: ActionStep[], messageId: string) => {
+    setExecutingMessageId(messageId);
     setExecutionProgress({
-      messageIndex: msgIdx,
+      messageId,
       currentStepIndex: null,
       completedStepIndexes: [],
     });
     try {
       const result = await executeActionSteps(steps, (stepIndex, status) => {
         setExecutionProgress((current) => {
-          if (!current || current.messageIndex !== msgIdx) {
+          if (!current || current.messageId !== messageId) {
             return {
-              messageIndex: msgIdx,
+              messageId,
               currentStepIndex: status === "current" ? stepIndex : null,
               completedStepIndexes: status === "complete" ? [stepIndex] : [],
             };
@@ -800,7 +719,7 @@ export function MiniChat() {
           const completed = new Set(current.completedStepIndexes);
           if (status === "complete") completed.add(stepIndex);
           return {
-            messageIndex: msgIdx,
+            messageId,
             currentStepIndex: status === "current"
               ? stepIndex
               : current.currentStepIndex === stepIndex
@@ -811,9 +730,9 @@ export function MiniChat() {
         });
       });
       if (result.ok) {
-        setExecutedSet((prev) => new Set([...prev, msgIdx]));
+        setExecutedSet((prev) => new Set([...prev, messageId]));
         if (result.pendingNavigation) {
-          const merged = Array.from(new Set([...readStoredExecutedIndexes(), msgIdx]));
+          const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current), messageId]));
           writeSessionJson(EXECUTED_STORAGE_KEY, merged);
         }
       } else {
@@ -838,13 +757,14 @@ export function MiniChat() {
           const replanMessage = await requestAiAgentMessage(
             [
               ...messagesRef.current,
-              { sender: "user", text: replanPrompt },
+              { id: createAiAgentMessageId(), sender: "user", text: replanPrompt },
             ],
             controller.signal,
           );
           setMessages((prev) => [
             ...prev,
             {
+              id: createAiAgentMessageId(),
               sender: "assistant",
               text: `操作を途中で停止しました。${failureText}`,
             },
@@ -855,6 +775,7 @@ export function MiniChat() {
             setMessages((prev) => [
               ...prev,
               {
+                id: createAiAgentMessageId(),
                 sender: "assistant",
                 text: replanError instanceof Error ? replanError.message : "操作の再計画に失敗しました。",
                 isError: true,
@@ -872,37 +793,53 @@ export function MiniChat() {
       setMessages((prev) => [
         ...prev,
         {
+          id: createAiAgentMessageId(),
           sender: "assistant",
           text: error instanceof Error ? error.message : "操作の実行に失敗しました。",
           isError: true,
         },
       ]);
     } finally {
-      setExecutingIdx(null);
+      setExecutingMessageId(null);
       setExecutionProgress(null);
     }
   };
 
   useEffect(() => {
     const storedMessages = readStoredMessages();
-    const storedExecuted = readStoredExecutedIndexes();
+    const storedExecuted = readStoredExecutedIds(storedMessages);
     if (storedMessages.length) setMessages(storedMessages);
     if (storedExecuted.length) setExecutedSet(new Set(storedExecuted));
     setHydrated(true);
 
-    const pendingSteps = readPendingActionSteps();
+    const pendingActionState = readPendingActionState();
+    const pendingSteps = pendingActionState.steps;
     if (!pendingSteps.length) return undefined;
-    clearPendingActionSteps();
 
     let timer: number | undefined;
     setMessages((prev) => {
-      const messageIndex = prev.length;
-      timer = window.setTimeout(() => {
-        void handleExecuteActions(pendingSteps, messageIndex);
+      const pendingMessageId = createAiAgentMessageId();
+      timer = window.setTimeout(async () => {
+        const ready = await waitForPendingResumeReady(pendingActionState);
+        if (!ready.ok) {
+          clearPendingActionSteps();
+          setMessages((current) => [
+            ...current,
+            {
+              id: createAiAgentMessageId(),
+              sender: "assistant",
+              text: ready.message || "移動後のページ準備を確認できませんでした。",
+              isError: true,
+            },
+          ]);
+          return;
+        }
+        void handleExecuteActions(pendingSteps, pendingMessageId);
       }, 360);
       return [
         ...prev,
         {
+          id: pendingMessageId,
           sender: "assistant",
           text: "移動後の残り操作を続けます。",
           actionPlan: {
@@ -918,12 +855,11 @@ export function MiniChat() {
     };
   }, []);
 
-  // Persist messages without actionPlan/isError (not restorable after reload)
   useEffect(() => {
     if (!hydrated) return;
     writeSessionJson(
       MESSAGES_STORAGE_KEY,
-      messages.map(({ sender, text }) => ({ sender, text })),
+      messages.map(({ id, sender, text, actionPlan, isError }) => ({ id, sender, text, actionPlan, isError })),
     );
     writeSessionJson(MESSAGES_TIMESTAMP_KEY, messages.length > 0 ? Date.now() : 0);
   }, [hydrated, messages]);
@@ -964,7 +900,7 @@ export function MiniChat() {
           </div>
         )}
         {messages.map((msg, i) => (
-          <div key={`${msg.sender}-${i}`} className={`mini-chat-message mini-chat-message--${msg.sender}`}>
+          <div key={msg.id} className={`mini-chat-message mini-chat-message--${msg.sender}`}>
             <span className="mini-chat-avatar" aria-hidden="true">
               <i className={`bi ${msg.sender === "user" ? "bi-person" : "bi-stars"}`}></i>
             </span>
@@ -981,16 +917,16 @@ export function MiniChat() {
                       <li
                         key={si}
                         className={`mini-chat-action-step ${
-                          executionProgress?.messageIndex === i && executionProgress.currentStepIndex === si
+                          executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
                             ? "is-current"
-                            : executionProgress?.messageIndex === i && executionProgress.completedStepIndexes.includes(si)
+                            : executionProgress?.messageId === msg.id && executionProgress.completedStepIndexes.includes(si)
                               ? "is-complete"
-                              : executedSet.has(i)
+                              : executedSet.has(msg.id)
                                 ? "is-complete"
                                 : ""
                         }`.trim()}
                         aria-current={
-                          executionProgress?.messageIndex === i && executionProgress.currentStepIndex === si
+                          executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
                             ? "step"
                             : undefined
                         }
@@ -1006,13 +942,13 @@ export function MiniChat() {
                   <button
                     type="button"
                     className="mini-chat-execute-btn"
-                    onClick={() => handleExecuteActions(msg.actionPlan!.steps, i)}
-                    disabled={executingIdx === i || executedSet.has(i)}
+                    onClick={() => handleExecuteActions(msg.actionPlan!.steps, msg.id)}
+                    disabled={executingMessageId === msg.id || executedSet.has(msg.id)}
                     aria-label="操作を実行"
                   >
-                    {executingIdx === i ? (
+                    {executingMessageId === msg.id ? (
                       <><i className="bi bi-three-dots"></i> 実行中...</>
-                    ) : executedSet.has(i) ? (
+                    ) : executedSet.has(msg.id) ? (
                       <><i className="bi bi-check2"></i> 実行済み</>
                     ) : (
                       <><i className="bi bi-play-fill"></i> 実行</>

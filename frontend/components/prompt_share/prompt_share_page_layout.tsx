@@ -116,6 +116,7 @@ export function PromptSharePageLayout({
               <input
                 type="text"
                 id="searchInput"
+                data-agent-id="prompt.search-input"
                 placeholder="キーワードでプロンプトを検索..."
                 value={searchInput}
                 onChange={(event) => {
@@ -126,6 +127,7 @@ export function PromptSharePageLayout({
               <button
                 id="searchButton"
                 type="button"
+                data-agent-id="prompt.search-button"
                 aria-label="検索を実行する"
                 data-tooltip="入力したキーワードで検索"
                 data-tooltip-placement="bottom"
@@ -140,6 +142,7 @@ export function PromptSharePageLayout({
             <button
               type="button"
               id="heroOpenPostModal"
+              data-agent-id="prompt.open-composer"
               className="hero-action hero-action--primary"
               onClick={onOpenComposerModal}
             >
@@ -174,7 +177,7 @@ export function PromptSharePageLayout({
           </div>
         </section>
 
-        <section id="prompt-feed-section" className="prompts-list" aria-labelledby="selected-category-title">
+        <section id="prompt-feed-section" data-agent-id="prompt.results" className="prompts-list" aria-labelledby="selected-category-title">
           <div className="section-header prompts-list-header section-header--compact">
             <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
           </div>

@@ -187,6 +187,7 @@ function SettingsSidebar({
               type="button"
               className={`nav-link${activeSection === item.section ? " active" : ""}`}
               data-section={item.section}
+              data-agent-id={`settings.section.${item.section}`}
               aria-current={activeSection === item.section ? "page" : undefined}
               onClick={(event) => {
                 event.preventDefault();

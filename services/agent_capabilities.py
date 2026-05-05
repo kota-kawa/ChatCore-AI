@@ -53,12 +53,10 @@ AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("settings.openSection", "設定ページの指定セクションを開く。", '{"section": "security"}', "指定 data-section のナビ項目をクリックできる。"),
     AgentTool("memo.fillForm", "メモ作成フォームへ値を入力する。", '{"input_content": "...", "ai_response": "...", "title": "...", "tags": "..."}', "指定されたフォーム値が反映される。"),
     AgentTool("memo.save", "メモを保存する。", "{}", "保存ボタンをクリックできる。", risk="medium"),
-    AgentTool("auth.fillEmail", "ログイン画面のメール欄に入力する。", '{"email": "name@example.com"}', "#email の値が email になる。"),
-    AgentTool("auth.startGoogleLogin", "Googleログインを開始する。", "{}", "#googleAuthBtn をクリックできる。", risk="medium"),
-    AgentTool("auth.sendEmailCode", "メール認証コードを送信する。", "{}", "認証コード送信ボタンをクリックできる。", risk="medium"),
 )
 
 ALLOWED_AGENT_COMMANDS = frozenset(tool.command for tool in AGENT_TOOLS)
+AGENT_COMMAND_RISKS = {tool.command: tool.risk for tool in AGENT_TOOLS}
 
 
 PAGES: tuple[AgentPage, ...] = (

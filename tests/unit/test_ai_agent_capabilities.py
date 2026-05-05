@@ -79,6 +79,15 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertEqual(plan["steps"][0]["command"], "prompt.search")
         self.assertEqual(plan["steps"][0]["args"]["query"], "メール返信")
 
+    def test_parse_action_response_preserves_catalog_risk_for_app_action_steps(self):
+        plan = parse_action_response(
+            '{"description":"保存します","steps":[{"action":"app_action","command":"memo.save",'
+            '"args":{},"risk":"low","description":"メモを保存する"}]}'
+        )
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["steps"][0]["risk"], "medium")
+
     def test_parse_action_response_accepts_multi_step_input_then_click(self):
         plan = parse_action_response(
             '{"description":"検索語を入力して検索します","steps":['
@@ -165,6 +174,21 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
     def test_parse_action_response_rejects_external_navigation(self):
         plan = parse_action_response(
             '{"description":"外部へ移動","steps":[{"action":"navigate","path":"https://example.com","description":"外部"}]}'
+        )
+
+        self.assertIsNone(plan)
+
+    def test_parse_action_response_rejects_protocol_relative_navigation(self):
+        plan = parse_action_response(
+            '{"description":"外部へ移動","steps":[{"action":"navigate","path":"//example.com","description":"外部"}]}'
+        )
+
+        self.assertIsNone(plan)
+
+    def test_parse_action_response_rejects_auth_app_actions(self):
+        plan = parse_action_response(
+            '{"description":"ログインします","steps":[{"action":"app_action","command":"auth.startGoogleLogin",'
+            '"args":{},"description":"Googleログインを開始する"}]}'
         )
 
         self.assertIsNone(plan)

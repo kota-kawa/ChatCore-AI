@@ -34,6 +34,7 @@ export function DraggableModal({
   const [hydrated, setHydrated] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (positionStorageKey) {
@@ -89,6 +90,31 @@ export function DraggableModal({
     });
   };
 
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest(".modal-close-btn")) return;
+    if (event.pointerType === "mouse") return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+    setDragOffset({
+      x: event.clientX - position.x,
+      y: event.clientY - position.y,
+    });
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || event.pointerType === "mouse") return;
+    setPosition(clampPosition({
+      x: event.clientX - dragOffset.x,
+      y: event.clientY - dragOffset.y,
+    }));
+  };
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") return;
+    setIsDragging(false);
+  };
+
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (isDragging) {
@@ -128,11 +154,56 @@ export function DraggableModal({
 
     keepModalInViewport();
     window.addEventListener("resize", keepModalInViewport);
+    window.visualViewport?.addEventListener("resize", keepModalInViewport);
+    window.visualViewport?.addEventListener("scroll", keepModalInViewport);
 
     return () => {
       window.removeEventListener("resize", keepModalInViewport);
+      window.visualViewport?.removeEventListener("resize", keepModalInViewport);
+      window.visualViewport?.removeEventListener("scroll", keepModalInViewport);
     };
   }, [shouldRender, clampPosition]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const timer = window.setTimeout(() => {
+      const focusTarget = modalRef.current?.querySelector<HTMLElement>(
+        "input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      );
+      focusTarget?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) return undefined;
+    const previouslyFocused = previouslyFocusedRef.current;
+    if (previouslyFocused?.isConnected) {
+      previouslyFocused.focus();
+    }
+    previouslyFocusedRef.current = null;
+    return undefined;
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [isOpen, onClose]);
 
   if (!shouldRender) return null;
 
@@ -151,7 +222,15 @@ export function DraggableModal({
         cursor: isDragging ? "grabbing" : "auto",
       }}
     >
-      <div className="ai-agent-modal-header" onMouseDown={handleMouseDown} style={{ cursor: "grab" }}>
+      <div
+        className="ai-agent-modal-header"
+        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ cursor: "grab", touchAction: "none" }}
+      >
         <span className="ai-agent-modal-title">{title}</span>
         <button type="button" className="modal-close-btn" onClick={onClose} aria-label="AIエージェントを閉じる">
           <i className="bi bi-x-lg"></i>

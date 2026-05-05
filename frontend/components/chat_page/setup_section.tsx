@@ -582,6 +582,7 @@ function SetupSectionComponent() {
             <div className="setup-info-input-area">
               <textarea
                 id="setup-info"
+                data-agent-id="chat.setup-message"
                 rows={4}
                 maxLength={MAX_SETUP_INFO_LENGTH}
                 placeholder="例：沖縄旅行のプランを考えたい　／　英語メールを添削してほしい　／　Pythonのエラーを直したい"
@@ -594,6 +595,7 @@ function SetupSectionComponent() {
               <button
                 type="button"
                 className="setup-send-btn"
+                data-agent-id="chat.send-setup-message"
                 aria-label="入力内容を送信"
                 data-tooltip="メッセージを送信"
                 data-tooltip-placement="top"

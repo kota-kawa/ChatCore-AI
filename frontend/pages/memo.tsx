@@ -1298,7 +1298,7 @@ export default function MemoPage() {
               <form method="post" className="memo-form" onSubmit={handleSubmitMemo}>
                 <div className="form-group">
                   <label htmlFor="input_content">入力内容 <span className="optional">(任意)</span></label>
-                  <textarea id="input_content" name="input_content" className="memo-control" value={formState.input_content} onChange={handleFormChange} placeholder="AIに送った入力内容" />
+                  <textarea id="input_content" name="input_content" data-agent-id="memo.input-content" className="memo-control" value={formState.input_content} onChange={handleFormChange} placeholder="AIに送った入力内容" />
                 </div>
 
                 <div className="form-group">
@@ -1323,6 +1323,7 @@ export default function MemoPage() {
                     <textarea
                       id="ai_response"
                       name="ai_response"
+                      data-agent-id="memo.ai-response"
                       className="memo-control memo-control--response"
                       value={formState.ai_response}
                       onChange={handleFormChange}
@@ -1352,6 +1353,7 @@ export default function MemoPage() {
                     <input
                       id="title"
                       name="title"
+                      data-agent-id="memo.title"
                       type="text"
                       className="memo-control"
                       value={formState.title}
@@ -1362,7 +1364,7 @@ export default function MemoPage() {
                   </div>
                   <div className="form-group">
                     <label htmlFor="tags">タグ <span className="optional">(任意)</span></label>
-                    <input id="tags" name="tags" type="text" className="memo-control" value={formState.tags} onChange={handleFormChange} maxLength={255} placeholder="例: 設計 仕様" />
+                    <input id="tags" name="tags" data-agent-id="memo.tags" type="text" className="memo-control" value={formState.tags} onChange={handleFormChange} maxLength={255} placeholder="例: 設計 仕様" />
                   </div>
                 </div>
 
@@ -1383,7 +1385,7 @@ export default function MemoPage() {
                 )}
 
                 <div className="form-actions">
-                  <button type="submit" className="primary-button" disabled={submitting}>
+                  <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting}>
                     <i className="bi bi-save"></i>
                     保存する
                   </button>
