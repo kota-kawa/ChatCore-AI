@@ -500,18 +500,12 @@ export function useHomePageController() {
         }
 
         if (parsed.event === "web_search_started") {
-          const query = typeof parsed.data.query === "string" ? parsed.data.query.trim() : "";
-          updateThinkingStatus(query ? `Webを検索中: ${query}` : "Webを検索中");
+          updateThinkingStatus("Web検索をしています");
           return;
         }
 
         if (parsed.event === "web_search_completed") {
-          const sourceCount = typeof parsed.data.source_count === "number" ? parsed.data.source_count : 0;
-          updateThinkingStatus(
-            sourceCount > 0
-              ? `検索結果を確認中 (${sourceCount.toLocaleString()}件)`
-              : "検索結果を確認中",
-          );
+          updateThinkingStatus("AIが応答を準備しています");
           return;
         }
 
