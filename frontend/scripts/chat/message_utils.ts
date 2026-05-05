@@ -88,7 +88,9 @@ function renderSanitizedHTML(
     "div",
     "span",
     "button",
-    "i"
+    "i",
+    "details",
+    "summary"
   ]
 ) {
   const isBotMessage = element.classList.contains("bot-message");

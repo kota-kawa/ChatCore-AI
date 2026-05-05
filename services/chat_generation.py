@@ -23,7 +23,10 @@ from .llm import (
     get_llm_response_stream,
     is_retryable_llm_error,
 )
-from .web_search import maybe_augment_messages_with_web_search
+from .web_search import (
+    build_web_search_sources_markdown,
+    maybe_augment_messages_with_web_search,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,12 +189,15 @@ class ChatGenerationJob:
 
     def _run(self) -> None:
         chunks: list[str] = []
+        web_search_result = None
         try:
-            conversation_messages = maybe_augment_messages_with_web_search(
+            augmentation = maybe_augment_messages_with_web_search(
                 self._conversation_messages,
                 self._model,
                 publish_event=self._publish,
             )
+            conversation_messages = augmentation.messages
+            web_search_result = augmentation.result
             if self._cancelled:
                 return
             for chunk in get_llm_response_stream(conversation_messages, self._model):
@@ -267,6 +273,14 @@ class ChatGenerationJob:
             return
 
         bot_reply = "".join(chunks)
+        sources_block = build_web_search_sources_markdown(web_search_result)
+        if sources_block:
+            separator = "" if not bot_reply or bot_reply.endswith("\n\n") else (
+                "\n" if bot_reply.endswith("\n") else "\n\n"
+            )
+            sources_chunk = f"{separator}{sources_block}"
+            bot_reply = f"{bot_reply}{sources_chunk}"
+            self._publish("chunk", {"text": sources_chunk})
         self.response = bot_reply
 
         try:

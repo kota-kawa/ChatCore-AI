@@ -234,11 +234,15 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         self.assertEqual([event.event for event in events], ["web_search_started", "web_search_completed"])
         self.assertEqual(events[1].payload["source_count"], 1)
-        self.assertEqual(len(augmented), 2)
-        self.assertIn("<web_search_context", augmented[0]["content"])
-        self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented[0]["content"])
-        self.assertIn("リアルタイム検索できない」とは言わないでください", augmented[0]["content"])
-        self.assertIn("https://example.com/python", augmented[0]["content"])
+        self.assertEqual(events[1].payload["sources"][0]["url"], "https://example.com/python")
+        self.assertEqual(events[1].payload["sources"][0]["title"], "Python News")
+        self.assertEqual(events[1].payload["sources"][0]["hostname"], "example.com")
+        self.assertIs(augmented.result, result)
+        self.assertEqual(len(augmented.messages), 2)
+        self.assertIn("<web_search_context", augmented.messages[0]["content"])
+        self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented.messages[0]["content"])
+        self.assertIn("リアルタイム検索できない」とは言わないでください", augmented.messages[0]["content"])
+        self.assertIn("https://example.com/python", augmented.messages[0]["content"])
 
     def test_maybe_augment_messages_reports_monthly_quota_exceeded(self):
         messages = [{"role": "user", "content": "今日のPythonニュースを調べて"}]
@@ -265,8 +269,48 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         self.assertEqual([event.event for event in events], ["web_search_started", "web_search_failed"])
         self.assertIn("月間上限", events[1].payload["message"])
-        self.assertIn("月間上限", augmented[0]["content"])
-        self.assertIn("リアルタイム確認ができない", augmented[0]["content"])
+        self.assertIsNone(augmented.result)
+        self.assertIn("月間上限", augmented.messages[0]["content"])
+        self.assertIn("リアルタイム確認ができない", augmented.messages[0]["content"])
+
+    def test_build_web_search_sources_markdown_returns_collapsible_block(self):
+        result = web_search.WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Title A",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=(),
+                ),
+                web_search.WebSearchSource(
+                    url="https://example.com/b",
+                    title="Title B",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        block = web_search.build_web_search_sources_markdown(result)
+
+        self.assertIn("<details>", block)
+        self.assertIn("<summary>参照したWebサイト (2件)</summary>", block)
+        self.assertIn("[Title A](https://example.com/a) — example.com", block)
+        self.assertIn("[Title B](https://example.com/b) — example.com", block)
+        self.assertTrue(block.endswith("</details>"))
+
+    def test_build_web_search_sources_markdown_returns_empty_when_no_sources(self):
+        self.assertEqual(web_search.build_web_search_sources_markdown(None), "")
+        empty_result = web_search.WebSearchResult(
+            query="x",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(),
+        )
+        self.assertEqual(web_search.build_web_search_sources_markdown(empty_result), "")
 
 
 if __name__ == "__main__":

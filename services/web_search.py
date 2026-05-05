@@ -141,6 +141,12 @@ class WebSearchResult:
         return bool(self.sources)
 
 
+@dataclass(frozen=True)
+class WebSearchAugmentation:
+    messages: list[dict[str, str]]
+    result: WebSearchResult | None = None
+
+
 class WebSearchQuotaExceeded(RuntimeError):
     def __init__(self, limit: int, retry_after_seconds: int) -> None:
         super().__init__(f"Brave web search monthly limit exceeded: {limit}")
@@ -732,20 +738,60 @@ def _insert_system_context(
     ]
 
 
+def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]]:
+    return [
+        {
+            "url": source.url,
+            "title": source.title,
+            "hostname": source.hostname,
+        }
+        for source in result.sources
+    ]
+
+
+def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
+    if result is None or not result.has_sources:
+        return ""
+
+    sources_lines: list[str] = []
+    for source in result.sources:
+        url = source.url.strip()
+        if not url:
+            continue
+        title = source.title.strip() or url
+        title = title.replace("[", "(").replace("]", ")")
+        suffix = f" — {source.hostname}" if source.hostname else ""
+        sources_lines.append(f"- [{title}]({url}){suffix}")
+
+    if not sources_lines:
+        return ""
+
+    return "\n".join(
+        [
+            "<details>",
+            f"<summary>参照したWebサイト ({len(sources_lines)}件)</summary>",
+            "",
+            *sources_lines,
+            "",
+            "</details>",
+        ]
+    )
+
+
 def maybe_augment_messages_with_web_search(
     conversation_messages: list[dict[str, str]],
     model: str,
     *,
     publish_event: WebSearchEventPublisher | None = None,
-) -> list[dict[str, str]]:
+) -> WebSearchAugmentation:
     if not _web_search_enabled():
-        return conversation_messages
+        return WebSearchAugmentation(messages=conversation_messages)
     if not os.environ.get("BRAVE_API_KEY", "").strip():
-        return conversation_messages
+        return WebSearchAugmentation(messages=conversation_messages)
 
     decision = decide_web_search(conversation_messages, model)
     if not decision.should_search or not decision.query:
-        return conversation_messages
+        return WebSearchAugmentation(messages=conversation_messages)
 
     if publish_event is not None:
         publish_event(
@@ -773,17 +819,19 @@ def maybe_augment_messages_with_web_search(
                     "retry_after_seconds": exc.retry_after_seconds,
                 },
             )
-        return _insert_system_context(
-            conversation_messages,
-            {
-                "role": "system",
-                "content": (
-                    "<web_search_status>"
-                    f"Brave Web検索の月間上限（{exc.limit}回）に達しています。"
-                    "回答が現在の事実に依存する場合は、月間検索上限に達したためリアルタイム確認ができないと伝えてください。"
-                    "</web_search_status>"
-                ),
-            },
+        return WebSearchAugmentation(
+            messages=_insert_system_context(
+                conversation_messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "<web_search_status>"
+                        f"Brave Web検索の月間上限（{exc.limit}回）に達しています。"
+                        "回答が現在の事実に依存する場合は、月間検索上限に達したためリアルタイム確認ができないと伝えてください。"
+                        "</web_search_status>"
+                    ),
+                },
+            ),
         )
     except Exception:
         logger.exception("Brave web search failed.")
@@ -795,17 +843,19 @@ def maybe_augment_messages_with_web_search(
                     "message": "Web検索に失敗しました。検索なしで回答を続けます。",
                 },
             )
-        return _insert_system_context(
-            conversation_messages,
-            {
-                "role": "system",
-                "content": (
-                    "<web_search_status>"
-                    "Web検索が必要だと判断されましたが、Brave Searchリクエストに失敗しました。"
-                    "回答が現在の事実に依存する場合は、リアルタイム確認ができなかったと伝えてください。"
-                    "</web_search_status>"
-                ),
-            },
+        return WebSearchAugmentation(
+            messages=_insert_system_context(
+                conversation_messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "<web_search_status>"
+                        "Web検索が必要だと判断されましたが、Brave Searchリクエストに失敗しました。"
+                        "回答が現在の事実に依存する場合は、リアルタイム確認ができなかったと伝えてください。"
+                        "</web_search_status>"
+                    ),
+                },
+            ),
         )
 
     if publish_event is not None:
@@ -814,21 +864,28 @@ def maybe_augment_messages_with_web_search(
             {
                 "query": result.query,
                 "source_count": len(result.sources),
+                "sources": _serialize_sources_for_event(result),
             },
         )
 
     context_message = build_web_search_system_message(result)
     if context_message is None:
-        return _insert_system_context(
-            conversation_messages,
-            {
-                "role": "system",
-                "content": (
-                    "<web_search_status>"
-                    f'Brave Searchでは、検索語句「{result.query}」に対して回答根拠として使える内容が見つかりませんでした。'
-                    "回答が現在の事実に依存する場合は、関連するリアルタイム情報源が見つからなかったと伝えてください。"
-                    "</web_search_status>"
-                ),
-            },
+        return WebSearchAugmentation(
+            messages=_insert_system_context(
+                conversation_messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "<web_search_status>"
+                        f'Brave Searchでは、検索語句「{result.query}」に対して回答根拠として使える内容が見つかりませんでした。'
+                        "回答が現在の事実に依存する場合は、関連するリアルタイム情報源が見つからなかったと伝えてください。"
+                        "</web_search_status>"
+                    ),
+                },
+            ),
+            result=None,
         )
-    return _insert_system_context(conversation_messages, context_message)
+    return WebSearchAugmentation(
+        messages=_insert_system_context(conversation_messages, context_message),
+        result=result,
+    )
