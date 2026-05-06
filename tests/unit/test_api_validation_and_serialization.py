@@ -108,7 +108,11 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         request = make_request(
             method="POST",
             path="/api/chat",
-            json_body={"message": "今日のOpenAIの最新ニュースを教えて", "chat_room_id": "room-1"},
+            json_body={
+                "message": "今日のOpenAIの最新ニュースを教えて",
+                "chat_room_id": "room-1",
+                "model": "openai/gpt-oss-120b",
+            },
             session={},
         )
 
@@ -155,7 +159,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                         with patch(
                                             "blueprints.chat.messages.get_llm_response",
                                             return_value="最新ニュースです。",
-                                        ):
+                                        ) as mock_llm:
                                             response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
@@ -164,6 +168,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         self.assertIn("<summary>参照したWebサイト (1件)</summary>", payload["response"])
         self.assertIn("https://example.com/openai-news", payload["response"])
         mock_augment.assert_called_once()
+        self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
 
     def test_prompt_manage_serializes_datetime_consistently(self):
         request = make_request(
