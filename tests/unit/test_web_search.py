@@ -340,11 +340,33 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         block = web_search.build_web_search_sources_markdown(result)
 
-        self.assertIn("<details>", block)
+        self.assertIn('<details class="web-search-sources">', block)
         self.assertIn("<summary>参照したWebサイト (2件)</summary>", block)
-        self.assertIn("[Title A](https://example.com/a) — example.com", block)
-        self.assertIn("[Title B](https://example.com/b) — example.com", block)
+        self.assertIn('<a href="https://example.com/a" target="_blank">Title A</a>', block)
+        self.assertIn('<span class="web-search-sources__hostname">- example.com</span>', block)
+        self.assertIn('<a href="https://example.com/b" target="_blank">Title B</a>', block)
         self.assertTrue(block.endswith("</details>"))
+
+    def test_build_web_search_sources_markdown_escapes_source_html(self):
+        result = web_search.WebSearchResult(
+            query="x",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url='https://example.com/?q="x"',
+                    title="<b>Unsafe</b>",
+                    hostname="<host>",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        block = web_search.build_web_search_sources_markdown(result)
+
+        self.assertIn('href="https://example.com/?q=&quot;x&quot;"', block)
+        self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
+        self.assertIn("&lt;host&gt;", block)
 
     def test_build_web_search_sources_markdown_returns_empty_when_no_sources(self):
         self.assertEqual(web_search.build_web_search_sources_markdown(None), "")

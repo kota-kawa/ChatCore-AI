@@ -25,6 +25,7 @@ from services.chat_generation import (
     start_generation_job,
 )
 from services.llm import LlmConfigurationError
+from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearchSource
 from tests.helpers.request_helpers import build_request
 
 
@@ -327,6 +328,49 @@ class ChatStreamingTestCase(unittest.TestCase):
             persisted_messages,
             [("sid-1", "default", "assistant", "こんにちは")],
         )
+
+    def test_background_generation_job_appends_web_search_sources_to_reply(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/python",
+                    title="Python News",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["回答本文"]),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新ニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("回答本文", body)
+        self.assertIn("<summary>参照したWebサイト (1件)</summary>", body)
+        self.assertIn("https://example.com/python", persisted_messages[0])
+        self.assertTrue(persisted_messages[0].startswith("回答本文\n\n<details"))
 
     def test_background_generation_job_surfaces_configuration_error_message(self):
         with patch(

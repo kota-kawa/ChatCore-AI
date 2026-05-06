@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from html import escape
 from typing import Any
 
 import requests
@@ -852,20 +853,30 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
         if not url:
             continue
         title = source.title.strip() or url
-        title = title.replace("[", "(").replace("]", ")")
-        suffix = f" — {source.hostname}" if source.hostname else ""
-        sources_lines.append(f"- [{title}]({url}){suffix}")
+        hostname = source.hostname.strip()
+        suffix = (
+            f' <span class="web-search-sources__hostname">- {escape(hostname)}</span>'
+            if hostname
+            else ""
+        )
+        sources_lines.append(
+            (
+                '<li class="web-search-sources__item">'
+                f'<a href="{escape(url, quote=True)}" target="_blank">'
+                f"{escape(title)}</a>{suffix}</li>"
+            )
+        )
 
     if not sources_lines:
         return ""
 
     return "\n".join(
         [
-            "<details>",
+            '<details class="web-search-sources">',
             f"<summary>参照したWebサイト ({len(sources_lines)}件)</summary>",
-            "",
+            '<ul class="web-search-sources__list">',
             *sources_lines,
-            "",
+            "</ul>",
             "</details>",
         ]
     )

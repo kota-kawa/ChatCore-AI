@@ -634,6 +634,34 @@ chat-action-menu {
   text-underline-offset: 2px;
 }
 
+.bot-message .web-search-sources {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  color: var(--text-muted, #6b7280);
+  font-size: 0.92rem;
+}
+
+.bot-message .web-search-sources summary {
+  cursor: pointer;
+  color: var(--text-dark, #1a1a1a);
+  font-weight: 600;
+}
+
+.bot-message .web-search-sources__list {
+  margin: 0.55rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.bot-message .web-search-sources__item + .web-search-sources__item {
+  margin-top: 0.35rem;
+}
+
+.bot-message .web-search-sources__hostname {
+  color: var(--text-muted, #6b7280);
+  font-size: 0.88rem;
+}
+
 .bot-message strong {
   font-weight: 600;
   color: var(--text-dark, #1a1a1a);
@@ -905,6 +933,19 @@ chat-action-menu {
 [data-theme="dark"] .bot-message code {
   background: rgba(255, 255, 255, 0.1);
   color: #f472b6;
+}
+
+[data-theme="dark"] .bot-message .web-search-sources {
+  border-top-color: rgba(148, 163, 184, 0.2);
+  color: rgba(203, 213, 225, 0.72);
+}
+
+[data-theme="dark"] .bot-message .web-search-sources summary {
+  color: rgba(248, 250, 252, 0.92);
+}
+
+[data-theme="dark"] .bot-message .web-search-sources__hostname {
+  color: rgba(203, 213, 225, 0.64);
 }
 
 [data-theme="dark"] .thinking-message {
