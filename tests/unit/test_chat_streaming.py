@@ -800,7 +800,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             path="/api/chat_generation_stream",
             session=session,
             query_string=b"room_id=room-last-id",
-            headers=[(b"last-event-id", b"1")],
+            headers=[(b"last-event-id", b"3")],
         )
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)):
