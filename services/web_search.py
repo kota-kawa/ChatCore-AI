@@ -441,7 +441,7 @@ _PLANNER_SYSTEM_PROMPT = (
 )
 
 _PLANNER_REPAIR_SYSTEM_PROMPT = (
-    "あなたはWeb検索プランナー出力のJSON正規化担当です。"
+    "あなたはWeb検索プランナー出力のJSON修復担当です。"
     "会話文脈と前回のプランナー出力を読み、検索が必要かどうかを同じ基準で判断し直してください。"
     "ユーザー本文を固定キーワードで判定せず、意味と文脈から判断してください。"
     "出力は必ずJSONオブジェクトのみです。"
@@ -453,13 +453,13 @@ _PLANNER_REPAIR_SYSTEM_PROMPT = (
 def _build_planner_messages(
     conversation_messages: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    current_date = datetime.now(timezone.utc).date().isoformat()
+    current_date = datetime.now().astimezone().date().isoformat()
     return [
         {"role": "system", "content": _PLANNER_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"現在日付(UTC): {current_date}\n"
+                f"現在日付: {current_date}\n"
                 "会話と実行中タスクの文脈:\n"
                 f"{_planner_context_excerpt(conversation_messages)}\n\n"
                 "上記スキーマの JSON だけを返してください。"
@@ -748,7 +748,7 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
             minimum=1,
             maximum=100,
         ),
-        "threshold_mode": os.environ.get("BRAVE_SEARCH_THRESHOLD", "balanced").strip() or "balanced",
+        "context_threshold_mode": os.environ.get("BRAVE_SEARCH_THRESHOLD", "balanced").strip() or "balanced",
     }
     if freshness:
         params["freshness"] = freshness
@@ -910,12 +910,39 @@ def maybe_augment_messages_with_web_search(
 ) -> WebSearchAugmentation:
     if not _web_search_enabled():
         return WebSearchAugmentation(messages=conversation_messages)
-    if not os.environ.get("BRAVE_API_KEY", "").strip():
-        return WebSearchAugmentation(messages=conversation_messages)
 
     decision = decide_web_search(conversation_messages, model)
     if not decision.should_search or not decision.query:
         return WebSearchAugmentation(messages=conversation_messages)
+
+    if not os.environ.get("BRAVE_API_KEY", "").strip():
+        message = "Web検索が必要ですが、Brave Search APIキーが未設定です。"
+        logger.warning(
+            "Web search was required but BRAVE_API_KEY is not configured.",
+            extra={"query": decision.query, "reason": decision.reason},
+        )
+        if publish_event is not None:
+            publish_event(
+                "web_search_failed",
+                {
+                    "query": decision.query,
+                    "message": message,
+                },
+            )
+        return WebSearchAugmentation(
+            messages=_insert_system_context(
+                conversation_messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "<web_search_status>"
+                        "Web検索が必要だと判断されましたが、Brave Search APIキーが未設定です。"
+                        "回答が現在の事実に依存する場合は、検索機能の設定が未完了でリアルタイム確認ができないと伝えてください。"
+                        "</web_search_status>"
+                    ),
+                },
+            ),
+        )
 
     if publish_event is not None:
         publish_event(

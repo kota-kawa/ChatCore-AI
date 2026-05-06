@@ -100,6 +100,21 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertFalse(decision.should_search)
         self.assertEqual(decision.reason, "web search planner unavailable")
 
+    def test_decide_web_search_uses_llm_for_news_request(self):
+        messages = [{"role": "user", "content": "今日のニュースを教えてほしい"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"should_search": true, "query": "今日のニュース 2026-05-06", "freshness": "pd", "reason": "news requires current information"}',
+        ):
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "今日のニュース 2026-05-06")
+        self.assertEqual(decision.freshness, "pd")
+        self.assertEqual(decision.reason, "news requires current information")
+
     def test_decide_web_search_uses_planner_for_plain_greeting(self):
         messages = [{"role": "user", "content": "こんにちは"}]
 
@@ -214,6 +229,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(mock_get.call_args.kwargs["headers"]["X-Subscription-Token"], "test-key")
         self.assertEqual(mock_get.call_args.kwargs["params"]["freshness"], "pw")
         self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "en")
+        self.assertEqual(mock_get.call_args.kwargs["params"]["context_threshold_mode"], "balanced")
 
     def test_search_brave_llm_context_uses_brave_jp_language_code_for_japanese(self):
         response = MagicMock()
@@ -315,6 +331,29 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIsNone(augmented.result)
         self.assertIn("月間上限", augmented.messages[0]["content"])
         self.assertIn("リアルタイム確認ができない", augmented.messages[0]["content"])
+
+    def test_maybe_augment_messages_reports_missing_brave_api_key_for_required_search(self):
+        messages = [{"role": "user", "content": "今日のニュースを教えて"}]
+        events = []
+
+        with patch.dict(os.environ, {"BRAVE_API_KEY": ""}, clear=False):
+            with patch.object(
+                web_search,
+                "decide_web_search",
+                return_value=web_search.WebSearchDecision(True, "今日のニュース", "pd", "current"),
+            ):
+                augmented = web_search.maybe_augment_messages_with_web_search(
+                    messages,
+                    "gemini-2.5-flash",
+                    publish_event=lambda event, payload: events.append(
+                        SimpleNamespace(event=event, payload=payload)
+                    ),
+                )
+
+        self.assertEqual([event.event for event in events], ["web_search_failed"])
+        self.assertIn("APIキーが未設定", events[0].payload["message"])
+        self.assertIsNone(augmented.result)
+        self.assertIn("Brave Search APIキーが未設定", augmented.messages[0]["content"])
 
     def test_build_web_search_sources_markdown_returns_collapsible_block(self):
         result = web_search.WebSearchResult(
