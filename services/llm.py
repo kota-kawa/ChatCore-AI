@@ -292,13 +292,22 @@ def _sanitize_conversation_messages(
     redacted_message_count = 0
 
     for message in conversation_messages:
-        role = str(message.get("role", "user"))
-        raw_content = message.get("content", "")
-        content = raw_content if isinstance(raw_content, str) else str(raw_content)
-        redacted_content = _redact_sensitive_text(content)
-        if redacted_content != content:
-            redacted_message_count += 1
-        sanitized_messages.append({"role": role, "content": redacted_content})
+        new_msg = dict(message)
+        role = str(new_msg.get("role", "user"))
+        raw_content = new_msg.get("content")
+        
+        if raw_content is None:
+            content = None
+            redacted_content = None
+        else:
+            content = raw_content if isinstance(raw_content, str) else str(raw_content)
+            redacted_content = _redact_sensitive_text(content)
+            if redacted_content != content:
+                redacted_message_count += 1
+        
+        new_msg["role"] = role
+        new_msg["content"] = redacted_content
+        sanitized_messages.append(new_msg)
 
     if redacted_message_count > 0:
         logger.warning(
@@ -315,13 +324,18 @@ def _prepare_openai_responses_input(
     markdown_reenabled = False
 
     for message in conversation_messages:
-        role = str(message.get("role", "user"))
-        content = message.get("content", "")
-        normalized_content = content if isinstance(content, str) else str(content)
+        new_msg = dict(message)
+        role = str(new_msg.get("role", "user"))
+        raw_content = new_msg.get("content")
+        
+        if raw_content is None:
+            normalized_content = None
+        else:
+            normalized_content = raw_content if isinstance(raw_content, str) else str(raw_content)
 
         if role == "system":
             role = "developer"
-            if not markdown_reenabled:
+            if normalized_content is not None and not markdown_reenabled:
                 stripped_content = normalized_content.lstrip()
                 if not stripped_content.startswith(OPENAI_MARKDOWN_REENABLE_PREFIX):
                     normalized_content = (
@@ -329,13 +343,18 @@ def _prepare_openai_responses_input(
                     )
                 markdown_reenabled = True
 
-        prepared_messages.append({"role": role, "content": normalized_content})
+        new_msg["role"] = role
+        new_msg["content"] = normalized_content
+        prepared_messages.append(new_msg)
 
     return prepared_messages
 
 
 def get_groq_response(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str | None:
     # Groq 向けクライアントを使ってチャット補完を実行する
     # Run chat completion through the Groq client.
@@ -349,8 +368,22 @@ def get_groq_response(
             model=model_name,
             messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
+            tools=tools,
         )
-        return response.choices[0].message.content
+        message = response.choices[0].message
+        if message.tool_calls:
+            return json.dumps([
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    }
+                }
+                for tc in message.tool_calls
+            ])
+        return message.content
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -366,6 +399,7 @@ def _get_openai_compatible_response_stream(
     model_name: str,
     missing_key_message: str,
     provider_error_message: str,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
     # OpenAI互換APIのストリーム断片を順次返し、最後に確実に close する
     # Yield OpenAI-compatible stream deltas and always close the stream.
@@ -380,14 +414,28 @@ def _get_openai_compatible_response_stream(
             messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
             stream=True,
+            tools=tools,
         )
         for chunk in stream:
             if not chunk.choices:
                 continue
-            delta = getattr(chunk.choices[0], "delta", None)
-            content = getattr(delta, "content", None)
-            if content:
-                yield content
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield delta.content
+            if delta.tool_calls:
+                # ストリーム中のツール呼び出しは JSON 形式で yield する
+                # We yield tool calls as JSON strings in the stream.
+                yield json.dumps([
+                    {
+                        "index": tc.index,
+                        "id": tc.id,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    }
+                    for tc in delta.tool_calls
+                ])
     except Exception as exc:
         provider_name = "provider"
         if "Groq" in provider_error_message:
@@ -400,13 +448,15 @@ def _get_openai_compatible_response_stream(
             fallback_message=provider_error_message,
         )
     finally:
-        close = getattr(stream, "close", None)
-        if callable(close):
-            close()
+        if stream is not None:
+            stream.close()
 
 
 def get_groq_response_stream(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
     # Groq のストリーム応答を逐次テキスト片として返す
     # Yield Groq response chunks incrementally.
@@ -416,11 +466,15 @@ def get_groq_response_stream(
         model_name=model_name,
         missing_key_message="GROQ_API_KEY が未設定です。",
         provider_error_message="Groq streaming API call failed.",
+        tools=tools,
     )
 
 
 def get_gemini_response(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str | None:
     # Gemini 向けクライアントを使ってチャット補完を実行する
     # Run chat completion through the Gemini client.
@@ -434,8 +488,22 @@ def get_gemini_response(
             model=model_name,
             messages=sanitized_messages,
             max_tokens=LLM_MAX_TOKENS,
+            tools=tools,
         )
-        return response.choices[0].message.content
+        message = response.choices[0].message
+        if message.tool_calls:
+            return json.dumps([
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    }
+                }
+                for tc in message.tool_calls
+            ])
+        return message.content
     except Exception as exc:
         _raise_provider_error(
             exc,
@@ -445,7 +513,10 @@ def get_gemini_response(
 
 
 def get_gemini_response_stream(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
     # Gemini のストリーム応答を逐次テキスト片として返す
     # Yield Gemini response chunks incrementally.
@@ -455,11 +526,15 @@ def get_gemini_response_stream(
         model_name=model_name,
         missing_key_message="Gemini_API_KEY が未設定です。",
         provider_error_message="Google Gemini streaming API call failed.",
+        tools=tools,
     )
 
 
 def get_openai_response(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str:
     # OpenAI Responses APIでテキスト応答を取得する
     # Fetch text output via OpenAI Responses API.
@@ -470,6 +545,30 @@ def get_openai_response(
         _sanitize_conversation_messages(conversation_messages)
     )
     try:
+        # OpenAI Responses API supports tools in a different way or might need chat.completions
+        # For simplicity and consistency, if tools are provided, we use chat.completions
+        if tools:
+            response = openai_client.chat.completions.create(
+                model=model_name,
+                messages=sanitized_messages,
+                max_tokens=LLM_MAX_TOKENS,
+                tools=tools,
+            )
+            message = response.choices[0].message
+            if message.tool_calls:
+                return json.dumps([
+                    {
+                        "id": tc.id,
+                        "type": tc.type,
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    }
+                    for tc in message.tool_calls
+                ])
+            return message.content or ""
+        
         response = openai_client.responses.create(
             model=model_name,
             input=sanitized_messages,
@@ -485,7 +584,10 @@ def get_openai_response(
 
 
 def get_openai_response_stream(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
     # OpenAI Responses APIのストリーム断片を逐次返す
     # Yield OpenAI Responses API text deltas incrementally.
@@ -496,6 +598,17 @@ def get_openai_response_stream(
         _sanitize_conversation_messages(conversation_messages)
     )
     try:
+        if tools:
+            # Use chat.completions for tool support
+            return _get_openai_compatible_response_stream(
+                client=openai_client,
+                conversation_messages=sanitized_messages,
+                model_name=model_name,
+                missing_key_message="OPENAI_API_KEY が未設定です。",
+                provider_error_message="OpenAI streaming API call failed.",
+                tools=tools,
+            )
+
         with openai_client.responses.stream(
             model=model_name,
             input=sanitized_messages,

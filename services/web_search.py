@@ -421,35 +421,23 @@ def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
 
 
 _PLANNER_SYSTEM_PROMPT = (
-    "あなたはチャットアシスタントのWeb検索プランナーです。"
-    "回答前にBrave Web検索が必要かどうかを判断してください。\n"
-    "次のいずれかに当てはまる場合は必ず should_search を true にしてください:\n"
-    "- 現在・最近・変動しやすい情報（ニュース、株価、為替、天気、スポーツ結果、選挙、ランキング）\n"
-    "- 「今日」「昨日」「最新」「現在」「今」「直近」「速報」「リアルタイム」など時刻依存の語を含む質問\n"
-    "- 特定の地域・店舗・施設・イベントの情報\n"
-    "- 法律・金融・医療・税制など最新の規定が必要な話題\n"
-    "- 製品の価格、在庫、スペック、リリース日、バージョン情報\n"
-    "- ソフトウェア/ライブラリ/API の最新仕様、変更点、ドキュメント\n"
-    "- 固有名詞（人物・企業・作品など）に関する事実確認\n"
-    "- ユーザーが「調べて」「検索して」「最新」「現在」「今」など外部情報を明示要求している\n"
-    "- 実行中タスクが調査、事実確認、推薦、マーケット調査、出典付き文章作成を求めている\n"
-    "次の場合のみ should_search を false にしてください:\n"
-    "- 純粋な文章作成・翻訳・要約・添削・ブレインストーミング・雑談・挨拶\n"
-    "- 安定した一般知識（数学、初等的な科学常識、確立された歴史事実）で十分答えられる\n"
-    "- 会話内に既に必要な情報が揃っている\n"
-    "- APIキー・パスワード・トークンなどの機密情報が含まれている\n"
-    "判断に迷う場合は必ず should_search を true にしてください（誤って検索しない方がコストが高い）。\n"
-    "例:\n"
-    '- "今日の国内経済ニュースを教えて" → {"should_search": true, "query": "日本 経済ニュース 今日", "freshness": "pd", "reason": "今日のニュース"}\n'
-    '- "ドル円の今のレートは？" → {"should_search": true, "query": "ドル円 為替レート 現在", "freshness": "pd", "reason": "現在の為替"}\n'
-    '- "Python 3.13 の新機能" → {"should_search": true, "query": "Python 3.13 release notes new features", "freshness": "py", "reason": "最新仕様"}\n'
-    '- "簡単な自己紹介文を書いて" → {"should_search": false, "query": "", "freshness": "", "reason": "純粋な文章生成"}\n'
-    "出力は必ず JSON オブジェクトのみ。前後に説明やコードフェンスを付けないこと。\n"
-    "スキーマ:\n"
-    '{"decision": "search"|"skip", "should_search": true|false, "query": string, "freshness": string, "reason": string}\n'
-    'decision と should_search は必ず一致させること。\n'
-    'query は検索エンジン向けの簡潔なキーワード（最大 240 文字）。\n'
-    'freshness は "", "pd", "pw", "pm", "py", または YYYY-MM-DDtoYYYY-MM-DD のいずれか。'
+    "あなたは高度なWeb検索プランナーです。ユーザーの質問に回答するために、リアルタイムな外部情報（Brave Search）が必要かどうかを厳格に判断してください。\n"
+    "次のいずれかに当てはまる場合は、**必ず** should_search を true にし、最適な検索クエリを生成してください：\n"
+    "- **時事・ニュース**: 最新の出来事、政治、経済、社会ニュース、スポーツ結果、芸能ニュース\n"
+    "- **動的データ**: 株価、為替、仮想通貨、天気、交通情報、商品の価格や在庫\n"
+    "- **時間依存**: 「最新」「今日」「現在」「今」「直近」「最近」「昨日」「明日」などの語を含む場合\n"
+    "- **事実確認**: 固有名詞（人物、企業、製品、作品、場所）に関する具体的な事実、歴史、スペック、リリース日\n"
+    "- **専門情報**: 法律、税制、医療、技術仕様、ライブラリの最新ドキュメント、エラーの解決策\n"
+    "- **ローカル情報**: 特定の地域、店舗、イベント、施設の詳細\n"
+    "- **ユーザーの明示的指示**: 「検索して」「調べて」「最新情報を」「URLを教えて」などの要求\n"
+    "次の場合のみ should_search を false にしてください：\n"
+    "- 挨拶、雑談、自己紹介、感情的なやり取り\n"
+    "- 一般的な知識（数学の公式、初等的な科学、確立された歴史的定義など）だけで回答可能な場合\n"
+    "- 翻訳、文章の添削、要約、創作（詩や物語の作成）のみを求められている場合\n"
+    "**判断に迷う場合は、必ず検索を実行してください。** 情報が不足している状態で推測で答えるよりも、検索して事実を確認する方が価値が高いです。\n"
+    "出力は必ず JSON オブジェクトのみ。スキーマ：\n"
+    '{"decision": "search"|"skip", "should_search": true|false, "query": "検索クエリ", "freshness": "pd"|"pw"|"pm"|"py"|"", "reason": "判断理由"}\n'
+    'freshness は最新情報なら "pd" (24時間以内) や "pw" (1週間以内) を指定してください。'
 )
 
 _PLANNER_REPAIR_SYSTEM_PROMPT = (
@@ -663,9 +651,16 @@ def _extract_grounding_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _parse_brave_context_response(payload: dict[str, Any], query: str) -> WebSearchResult:
-    sources_metadata = payload.get("sources")
-    if not isinstance(sources_metadata, dict):
-        sources_metadata = {}
+    raw_sources = payload.get("sources")
+    sources_metadata: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_sources, dict):
+        for url, meta in raw_sources.items():
+            if isinstance(meta, dict):
+                sources_metadata[url] = meta
+    elif isinstance(raw_sources, list):
+        for meta in raw_sources:
+            if isinstance(meta, dict) and "url" in meta:
+                sources_metadata[meta["url"]] = meta
 
     sources: list[WebSearchSource] = []
     seen_urls: set[str] = set()
@@ -675,9 +670,7 @@ def _parse_brave_context_response(payload: dict[str, Any], query: str) -> WebSea
             continue
         seen_urls.add(url)
 
-        metadata = sources_metadata.get(url)
-        if not isinstance(metadata, dict):
-            metadata = {}
+        metadata = sources_metadata.get(url, {})
 
         title = _normalize_text(
             item.get("title") or item.get("name") or metadata.get("title") or url,
@@ -755,7 +748,7 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
             minimum=1,
             maximum=100,
         ),
-        "context_threshold_mode": os.environ.get("BRAVE_SEARCH_THRESHOLD", "balanced").strip() or "balanced",
+        "threshold_mode": os.environ.get("BRAVE_SEARCH_THRESHOLD", "balanced").strip() or "balanced",
     }
     if freshness:
         params["freshness"] = freshness
@@ -884,6 +877,31 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
     )
 
 
+def get_web_search_tool_definition() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Brave Searchを使用してリアルタイムのWeb情報を検索します。最新のニュース、天気、株価、事実確認などに使用してください。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "検索キーワード（例: '今日の日本のニュース', 'Python 3.13 新機能'）",
+                    },
+                    "freshness": {
+                        "type": "string",
+                        "description": "情報の鮮度指定。空文字、'pd' (24時間以内), 'pw' (1週間以内), 'pm' (1ヶ月以内), 'py' (1年以内) のいずれか。",
+                        "enum": ["", "pd", "pw", "pm", "py"],
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
 def maybe_augment_messages_with_web_search(
     conversation_messages: list[dict[str, str]],
     model: str,
@@ -971,6 +989,31 @@ def maybe_augment_messages_with_web_search(
                 "query": result.query,
                 "source_count": len(result.sources),
                 "sources": _serialize_sources_for_event(result),
+            },
+        )
+
+    context_message = build_web_search_system_message(result)
+    if context_message is None:
+        return WebSearchAugmentation(
+            messages=_insert_system_context(
+                conversation_messages,
+                {
+                    "role": "system",
+                    "content": (
+                        "<web_search_status>"
+                        f'Brave Searchでは、検索語句「{result.query}」に対して回答根拠として使える内容が見つかりませんでした。'
+                        "回答が現在の事実に依存する場合は、関連するリアルタイム情報源が見つからなかったと伝えてください。"
+                        "</web_search_status>"
+                    ),
+                },
+            ),
+            result=None,
+        )
+    return WebSearchAugmentation(
+        messages=_insert_system_context(conversation_messages, context_message),
+        result=result,
+    )
+erialize_sources_for_event(result),
             },
         )
 

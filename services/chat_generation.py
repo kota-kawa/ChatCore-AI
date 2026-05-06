@@ -25,7 +25,9 @@ from .llm import (
 )
 from .web_search import (
     build_web_search_sources_markdown,
+    get_web_search_tool_definition,
     maybe_augment_messages_with_web_search,
+    search_brave_llm_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,23 +192,119 @@ class ChatGenerationJob:
     def _run(self) -> None:
         chunks: list[str] = []
         web_search_result = None
+        current_messages = [dict(m) for m in self._conversation_messages]
+        
         try:
+            # 1. 積極的な先行検索 (Proactive augmentation)
+            # ユーザーが明示的に求めている場合や、プランナーが確信している場合に実行
             augmentation = maybe_augment_messages_with_web_search(
-                self._conversation_messages,
+                current_messages,
                 self._model,
                 publish_event=self._publish,
             )
-            conversation_messages = augmentation.messages
+            current_messages = augmentation.messages
             web_search_result = augmentation.result
+            
             if self._cancelled:
                 return
-            for chunk in get_llm_response_stream(conversation_messages, self._model):
+
+            # 2. 生成ループ (Tool calling loop)
+            # 最大 2 回までのツール呼び出しを許可（無限ループ防止）
+            for loop_index in range(2):
                 if self._cancelled:
                     return
-                if not chunk:
-                    continue
-                chunks.append(chunk)
-                self._publish("chunk", {"text": chunk})
+
+                tools = [get_web_search_tool_definition()]
+                tool_calls_buffer = []
+                
+                # ストリーム実行
+                for chunk in get_llm_response_stream(current_messages, self._model, tools=tools):
+                    if self._cancelled:
+                        return
+                    if not chunk:
+                        continue
+                    
+                    # ツール呼び出しの判定 (JSON 形式の配列として yield される)
+                    if chunk.startswith("[") and '"function"' in chunk:
+                        try:
+                            parsed_tool_calls = json.loads(chunk)
+                            if isinstance(parsed_tool_calls, list):
+                                tool_calls_buffer.extend(parsed_tool_calls)
+                                continue
+                        except Exception:
+                            pass
+                    
+                    # 通常のテキスト
+                    chunks.append(chunk)
+                    self._publish("chunk", {"text": chunk})
+
+                if not tool_calls_buffer:
+                    # ツール呼び出しがなければ終了
+                    break
+
+                # ツール呼び出しの実行
+                # 現在は web_search のみをサポート
+                assistant_tool_call_msg = {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls_buffer
+                }
+                current_messages.append(assistant_tool_call_msg)
+
+                for tc in tool_calls_buffer:
+                    func_name = tc.get("function", {}).get("name")
+                    if func_name == "web_search":
+                        args_raw = tc.get("function", {}).get("arguments", "{}")
+                        try:
+                            args = json.loads(args_raw)
+                        except Exception:
+                            args = {}
+                        
+                        query = args.get("query")
+                        if not query:
+                            # クエリがない場合はスキップ
+                            continue
+
+                        # Web検索の実行
+                        self._publish("web_search_started", {"query": query, "reason": "Model-requested search"})
+                        try:
+                            res = search_brave_llm_context(query, freshness=args.get("freshness", ""))
+                            web_search_result = res # 最新の結果を保持
+                            self._publish("web_search_completed", {
+                                "query": res.query,
+                                "source_count": len(res.sources)
+                            })
+                            
+                            # ツール結果をメッセージに追加
+                            tool_result_content = json.dumps([
+                                {
+                                    "url": s.url,
+                                    "title": s.title,
+                                    "snippets": s.snippets
+                                }
+                                for s in res.sources
+                            ], ensure_ascii=False)
+                            
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc.get("id"),
+                                "name": func_name,
+                                "content": tool_result_content
+                            })
+                        except Exception as exc:
+                            logger.exception("Brave search via tool call failed.")
+                            self._publish("web_search_failed", {"query": query, "message": "検索に失敗しました。"})
+                            current_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc.get("id"),
+                                "name": func_name,
+                                "content": "検索エラーが発生しました。"
+                            })
+
+                # ツール結果を踏まえて再生成（ループの次のイテレーションへ）
+                # テキストチャンクをクリアして新しく生成し直す
+                # (既存のチャンクがある場合は、それに続く形になるが、ツール呼び出し時は通常 content は空)
+
         except LlmConfigurationError as exc:
             if self._cancelled:
                 return
