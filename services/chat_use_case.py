@@ -18,6 +18,10 @@ from services.llm import (
     LlmServiceError,
 )
 from services.request_models import ChatMessageRequest
+from services.web_search import (
+    build_web_search_sources_markdown,
+    maybe_augment_messages_with_web_search,
+)
 
 
 @dataclass(frozen=True)
@@ -318,8 +322,11 @@ class ChatPostUseCase:
 
             return deps.build_llm_stream_response(deps.iter_llm_stream_events(job))
 
+        augmentation = maybe_augment_messages_with_web_search(conversation_messages, model)
+        response_messages = augmentation.messages
+
         try:
-            bot_reply = await run_blocking(deps.get_llm_response, conversation_messages, model)
+            bot_reply = await run_blocking(deps.get_llm_response, response_messages, model)
         except LlmInvalidModelError as exc:
             await run_blocking(
                 deps.cleanup_failed_room_without_assistant_response,
@@ -376,6 +383,13 @@ class ChatPostUseCase:
                 },
                 status_code=502,
             )
+
+        sources_block = build_web_search_sources_markdown(augmentation.result)
+        if sources_block:
+            separator = "" if not bot_reply or bot_reply.endswith("\n\n") else (
+                "\n" if bot_reply.endswith("\n") else "\n\n"
+            )
+            bot_reply = f"{bot_reply}{separator}{sources_block}"
 
         saved_assistant_message_id: int | None = None
         if user_id is not None and room_mode == "normal":

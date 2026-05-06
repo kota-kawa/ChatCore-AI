@@ -8,6 +8,7 @@ from blueprints.auth import api_send_login_code
 from blueprints.chat.messages import chat
 from blueprints.chat.tasks import update_tasks_order
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
+from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearchSource
 from tests.helpers.request_helpers import build_request
 
 
@@ -102,6 +103,67 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         self.assertIn("無効なモデル", payload["error"])
         mock_quota.assert_not_called()
         mock_llm.assert_not_called()
+
+    def test_chat_json_response_path_includes_web_search_sources(self):
+        request = make_request(
+            method="POST",
+            path="/api/chat",
+            json_body={"message": "今日のOpenAIの最新ニュースを教えて", "chat_room_id": "room-1"},
+            session={},
+        )
+
+        search_result = WebSearchResult(
+            query="OpenAI 最新ニュース 今日",
+            searched_at="2026-05-06T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/openai-news",
+                    title="OpenAI News",
+                    hostname="example.com",
+                    age="2026-05-06",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
+            with patch(
+                "blueprints.chat.messages.consume_guest_chat_daily_limit",
+                return_value=(True, None),
+            ):
+                with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
+                    with patch(
+                        "blueprints.chat.messages.ephemeral_store.get_messages",
+                        return_value=[{"role": "user", "content": "今日のOpenAIの最新ニュースを教えて"}],
+                    ):
+                        with patch("blueprints.chat.messages.ephemeral_store.append_message"):
+                            with patch(
+                                "blueprints.chat.messages.consume_llm_daily_quota",
+                                return_value=(True, 1, 300),
+                            ):
+                                with patch(
+                                    "blueprints.chat.messages.is_streaming_model",
+                                    return_value=False,
+                                ):
+                                    with patch(
+                                        "services.chat_use_case.maybe_augment_messages_with_web_search",
+                                        return_value=WebSearchAugmentation(
+                                            messages=[{"role": "user", "content": "今日のOpenAIの最新ニュースを教えて"}],
+                                            result=search_result,
+                                        ),
+                                    ) as mock_augment:
+                                        with patch(
+                                            "blueprints.chat.messages.get_llm_response",
+                                            return_value="最新ニュースです。",
+                                        ):
+                                            response = asyncio.run(chat(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertIn("最新ニュースです。", payload["response"])
+        self.assertIn("<summary>参照したWebサイト (1件)</summary>", payload["response"])
+        self.assertIn("https://example.com/openai-news", payload["response"])
+        mock_augment.assert_called_once()
 
     def test_prompt_manage_serializes_datetime_consistently(self):
         request = make_request(
