@@ -48,7 +48,6 @@ function ChatMainSectionComponent() {
   } = useHomePageChatContext();
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const hasLaunchSetupInfo = setupInfo.trim().length > 0;
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
 
   const handleRoomCardKeyDown = (
@@ -290,7 +289,6 @@ function ChatMainSectionComponent() {
           <ChatMessageList
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
-            hasLaunchSetupInfo={hasLaunchSetupInfo}
             setupInfo={setupInfo}
             historyHasMore={historyHasMore}
             historyNextBeforeId={historyNextBeforeId}

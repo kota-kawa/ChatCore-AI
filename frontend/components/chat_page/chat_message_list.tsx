@@ -95,19 +95,26 @@ function ChatMessageRow({
   }
 
   if (message.sender === "user") {
+    const isLaunchPreview = message.id === "launch-preview-user";
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper user-message-wrapper">
           <div className="user-message">
             <UserMessageHtml text={message.text} />
           </div>
-          <div className="message-actions">
-            <CopyActionButton
-              getText={() => {
-                return message.text;
-              }}
-            />
-          </div>
+          {isLaunchPreview ? (
+            <div className="message-actions" style={{ visibility: "hidden" }}>
+              <div className="copy-btn"><i className="bi bi-clipboard"></i></div>
+            </div>
+          ) : (
+            <div className="message-actions">
+              <CopyActionButton
+                getText={() => {
+                  return message.text;
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -145,7 +152,6 @@ function ChatMessageRow({
 type ChatMessageListProps = {
   chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
   currentRoomId: string | null;
-  hasLaunchSetupInfo: boolean;
   setupInfo?: string;
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
@@ -160,7 +166,6 @@ type ChatMessageListProps = {
 function ChatMessageListComponent({
   chatMessagesRef,
   currentRoomId,
-  hasLaunchSetupInfo,
   setupInfo,
   historyHasMore,
   historyNextBeforeId,
@@ -177,14 +182,6 @@ function ChatMessageListComponent({
   });
   const listApiRef = useRef<ListImperativeAPI | null>(null);
 
-  const setStaticMessagesRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      listApiRef.current = null;
-      chatMessagesRef.current = node;
-    },
-    [chatMessagesRef],
-  );
-
   const setListRef = useCallback(
     (api: ListImperativeAPI | null) => {
       listApiRef.current = api;
@@ -198,11 +195,35 @@ function ChatMessageListComponent({
     if (historyHasMore && historyNextBeforeId !== null) {
       nextRows.push({ kind: "load-more" });
     }
-    messages.forEach((message) => {
+
+    const visibleMessages =
+      isChatLaunching && messages.length === 0
+        ? [
+            {
+              id: "launch-preview-user",
+              sender: "user" as const,
+              text: launchingTaskName
+                ? [
+                    `【タスク】${launchingTaskName}`,
+                    setupInfo?.trim() ? `【状況・作業環境】${setupInfo.trim()}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n")
+                : setupInfo?.trim() || "チャットを準備しています...",
+            },
+            {
+              id: "launch-preview-thinking",
+              sender: "thinking" as const,
+              text: "AIが応答を準備しています",
+            },
+          ]
+        : messages;
+
+    visibleMessages.forEach((message) => {
       nextRows.push({ kind: "message", message });
     });
     return nextRows;
-  }, [historyHasMore, historyNextBeforeId, messages]);
+  }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskName, messages, setupInfo]);
 
   const rowProps = useMemo<ChatMessageRowProps>(
     () => ({
@@ -276,58 +297,9 @@ function ChatMessageListComponent({
     };
   }, [scrollThinkingIntoView, shouldRevealThinking]);
 
-  if (isChatLaunching) {
-    // 実際のチャット開始後に表示されるのと同じ形式のフルメッセージを組み立てる
-    const fullDisplayContent = [
-      launchingTaskName ? `【タスク】${launchingTaskName}` : "",
-      setupInfo ? `【状況・作業環境】${setupInfo}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    return (
-      <div
-        className="chat-messages chat-messages--virtual scroll-pb-24"
-        id="chat-messages"
-        ref={setStaticMessagesRef}
-        aria-busy="true"
-        aria-live="polite"
-        style={{
-          width: "100%",
-          position: "relative",
-          maxHeight: "100%",
-          flexGrow: 1,
-          overflowY: "auto",
-        }}
-      >
-        {/* ユーザーメッセージの再現 */}
-        <div className="chat-message-row chat-message-row--first">
-          <div className="message-wrapper user-message-wrapper">
-            <div className="user-message">
-              <UserMessageHtml text={fullDisplayContent || "チャットを準備しています..."} />
-            </div>
-            <div className="message-actions" style={{ visibility: "hidden" }}>
-              <div className="copy-btn"><i className="bi bi-clipboard"></i></div>
-            </div>
-          </div>
-        </div>
-
-        {/* ボットの「考え中」状態の再現 */}
-        <div className="chat-message-row">
-          <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
-            <div className="thinking-message" role="status" aria-live="polite" aria-label="AIが応答を準備しています">
-              <ThinkingConstellation />
-              <span className="thinking-message__status">AIが応答を準備しています</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <List
-      aria-busy={isGenerating ? "true" : undefined}
+      aria-busy={isChatLaunching || isGenerating ? "true" : undefined}
       aria-live="polite"
       aria-relevant="additions text"
       aria-label="チャットメッセージ"
