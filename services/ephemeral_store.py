@@ -16,7 +16,16 @@ class EphemeralChatStore:
     def __init__(self, expiration_seconds: int) -> None:
         self.expiration_seconds = expiration_seconds
         self._memory = {}
-        self._redis = get_redis_client()
+        self._redis = None
+        self._redis_initialized = False
+
+    def _get_redis(self):
+        # Avoid network access during module import; CI/unit tests often import
+        # chat routes without a Redis service available.
+        if not self._redis_initialized:
+            self._redis = get_redis_client()
+            self._redis_initialized = True
+        return self._redis
 
     def _key(self, sid: str, room_id: str) -> str:
         return f"ephemeral:{sid}:{room_id}"
@@ -59,7 +68,8 @@ class EphemeralChatStore:
     def cleanup(self) -> None:
         # Redis利用時はTTL管理に任せ、メモリ利用時のみ期限切れルームを掃除する
         # Let Redis TTL handle expiry; prune expired rooms only for in-memory mode.
-        if self._redis is not None:
+        redis_client = self._get_redis()
+        if redis_client is not None:
             return
         sids_to_delete = []
         for sid, rooms in self._memory.items():
@@ -82,9 +92,10 @@ class EphemeralChatStore:
             "messages": [],
             "created_at": datetime.now().isoformat(),
         }
-        if self._redis is not None:
+        redis_client = self._get_redis()
+        if redis_client is not None:
             key = self._key(sid, room_id)
-            self._redis.set(key, self._encode(room), ex=self.expiration_seconds)
+            redis_client.set(key, self._encode(room), ex=self.expiration_seconds)
             return
 
         self._memory.setdefault(sid, {})[room_id] = room
@@ -92,17 +103,18 @@ class EphemeralChatStore:
     def get_room(self, sid: str, room_id: str) -> Optional[dict]:
         # 取得時にも期限切れを判定し、期限超過ルームは削除して None を返す
         # Validate expiry on read and delete expired rooms before returning None.
-        if self._redis is not None:
+        redis_client = self._get_redis()
+        if redis_client is not None:
             key = self._key(sid, room_id)
-            payload = self._redis.get(key)
+            payload = redis_client.get(key)
             if not payload:
                 return None
             room = self._decode(payload)
             if not room:
-                self._redis.delete(key)
+                redis_client.delete(key)
                 return None
             if self._is_expired(room):
-                self._redis.delete(key)
+                redis_client.delete(key)
                 return None
             return room
 
@@ -114,21 +126,23 @@ class EphemeralChatStore:
     def _save_room(self, sid: str, room_id: str, room: dict) -> bool:
         # Redis では残TTLを再計算して保存し、期限切れなら保存せず削除する
         # Recalculate remaining TTL for Redis; delete instead of saving when expired.
-        if self._redis is not None:
+        redis_client = self._get_redis()
+        if redis_client is not None:
             key = self._key(sid, room_id)
             ttl = self._remaining_ttl(room)
             if ttl <= 0:
-                self._redis.delete(key)
+                redis_client.delete(key)
                 return False
-            self._redis.set(key, self._encode(room), ex=ttl)
+            redis_client.set(key, self._encode(room), ex=ttl)
             return True
 
         self._memory.setdefault(sid, {})[room_id] = room
         return True
 
     def delete_room(self, sid: str, room_id: str) -> bool:
-        if self._redis is not None:
-            return self._redis.delete(self._key(sid, room_id)) > 0
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            return redis_client.delete(self._key(sid, room_id)) > 0
 
         rooms = self._memory.get(sid)
         if not rooms or room_id not in rooms:
@@ -178,9 +192,10 @@ class EphemeralChatStore:
         # Return ephemeral room metadata for the given sid.
         rooms: list[dict] = []
 
-        if self._redis is not None:
+        redis_client = self._get_redis()
+        if redis_client is not None:
             key_prefix = self._key(sid, "")
-            for key in self._redis.scan_iter(match=f"{key_prefix}*"):
+            for key in redis_client.scan_iter(match=f"{key_prefix}*"):
                 room_id = key[len(key_prefix):]
                 if not room_id:
                     continue

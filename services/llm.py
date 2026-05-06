@@ -1,9 +1,11 @@
 """LLM service module using OpenAI client for multiple providers."""
 
+import json
 import logging
 import os
 import re
 from collections.abc import Iterator
+from typing import Any
 
 from openai import OpenAI
 try:
@@ -371,7 +373,8 @@ def get_groq_response(
             tools=tools,
         )
         message = response.choices[0].message
-        if message.tool_calls:
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
             return json.dumps([
                 {
                     "id": tc.id,
@@ -381,7 +384,7 @@ def get_groq_response(
                         "arguments": tc.function.arguments,
                     }
                 }
-                for tc in message.tool_calls
+                for tc in tool_calls
             ])
         return message.content
     except Exception as exc:
@@ -420,9 +423,11 @@ def _get_openai_compatible_response_stream(
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
-            if delta.content:
+            if getattr(delta, "content", None):
                 yield delta.content
-            if delta.tool_calls:
+            
+            tool_calls = getattr(delta, "tool_calls", None)
+            if tool_calls:
                 # ストリーム中のツール呼び出しは JSON 形式で yield する
                 # We yield tool calls as JSON strings in the stream.
                 yield json.dumps([
@@ -434,7 +439,7 @@ def _get_openai_compatible_response_stream(
                             "arguments": tc.function.arguments,
                         }
                     }
-                    for tc in delta.tool_calls
+                    for tc in tool_calls
                 ])
     except Exception as exc:
         provider_name = "provider"
@@ -491,7 +496,8 @@ def get_gemini_response(
             tools=tools,
         )
         message = response.choices[0].message
-        if message.tool_calls:
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls:
             return json.dumps([
                 {
                     "id": tc.id,
@@ -501,7 +507,7 @@ def get_gemini_response(
                         "arguments": tc.function.arguments,
                     }
                 }
-                for tc in message.tool_calls
+                for tc in tool_calls
             ])
         return message.content
     except Exception as exc:
@@ -555,7 +561,8 @@ def get_openai_response(
                 tools=tools,
             )
             message = response.choices[0].message
-            if message.tool_calls:
+            tool_calls = getattr(message, "tool_calls", None)
+            if tool_calls:
                 return json.dumps([
                     {
                         "id": tc.id,
@@ -565,7 +572,7 @@ def get_openai_response(
                             "arguments": tc.function.arguments,
                         }
                     }
-                    for tc in message.tool_calls
+                    for tc in tool_calls
                 ])
             return message.content or ""
         

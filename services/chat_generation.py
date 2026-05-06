@@ -291,7 +291,7 @@ class ChatGenerationJob:
                                 "name": func_name,
                                 "content": tool_result_content
                             })
-                        except Exception as exc:
+                        except Exception:
                             logger.exception("Brave search via tool call failed.")
                             self._publish("web_search_failed", {"query": query, "message": "検索に失敗しました。"})
                             current_messages.append({

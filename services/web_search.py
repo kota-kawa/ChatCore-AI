@@ -1013,28 +1013,3 @@ def maybe_augment_messages_with_web_search(
         messages=_insert_system_context(conversation_messages, context_message),
         result=result,
     )
-erialize_sources_for_event(result),
-            },
-        )
-
-    context_message = build_web_search_system_message(result)
-    if context_message is None:
-        return WebSearchAugmentation(
-            messages=_insert_system_context(
-                conversation_messages,
-                {
-                    "role": "system",
-                    "content": (
-                        "<web_search_status>"
-                        f'Brave Searchでは、検索語句「{result.query}」に対して回答根拠として使える内容が見つかりませんでした。'
-                        "回答が現在の事実に依存する場合は、関連するリアルタイム情報源が見つからなかったと伝えてください。"
-                        "</web_search_status>"
-                    ),
-                },
-            ),
-            result=None,
-        )
-    return WebSearchAugmentation(
-        messages=_insert_system_context(conversation_messages, context_message),
-        result=result,
-    )
