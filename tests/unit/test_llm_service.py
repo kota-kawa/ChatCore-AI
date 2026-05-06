@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -14,6 +15,26 @@ def _mock_openai_response(text):
 def _mock_stream_chunk(text):
     return SimpleNamespace(
         choices=[SimpleNamespace(delta=SimpleNamespace(content=text))]
+    )
+
+
+def _mock_tool_call_chunk(*, index=0, call_id=None, name=None, arguments=None):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                delta=SimpleNamespace(
+                    content=None,
+                    tool_calls=[
+                        SimpleNamespace(
+                            index=index,
+                            id=call_id,
+                            type="function" if call_id else None,
+                            function=SimpleNamespace(name=name, arguments=arguments),
+                        )
+                    ],
+                )
+            )
+        ]
     )
 
 
@@ -241,7 +262,39 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(mock_stream.closed)
         self.assertTrue(mock_groq.chat.completions.create.call_args.kwargs["stream"])
 
+    def test_get_groq_response_stream_aggregates_tool_call_chunks(self):
+        mock_groq = MagicMock()
+        mock_stream = _MockStream(
+            _mock_tool_call_chunk(
+                call_id="call-1",
+                name="web_search",
+                arguments='{"query": ',
+            ),
+            _mock_tool_call_chunk(arguments='"OpenAI latest news"}'),
+        )
+        mock_groq.chat.completions.create.return_value = mock_stream
+
+        with patch.object(llm, "groq_client", mock_groq):
+            response = list(
+                llm.get_groq_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GROQ_MODEL,
+                    tools=[{"type": "function", "function": {"name": "web_search"}}],
+                )
+            )
+
+        tool_calls = json.loads(response[0])
+        self.assertEqual(tool_calls[0]["id"], "call-1")
+        self.assertEqual(tool_calls[0]["function"]["name"], "web_search")
+        self.assertEqual(
+            json.loads(tool_calls[0]["function"]["arguments"]),
+            {"query": "OpenAI latest news"},
+        )
+        self.assertTrue(mock_stream.closed)
+
     def test_get_llm_response_stream_routes_to_groq(self):
+        messages = [{"role": "user", "content": "hello"}]
+        tools = [{"type": "function", "function": {"name": "web_search"}}]
         with patch.object(
             llm,
             "get_groq_response_stream",
@@ -249,13 +302,14 @@ class LlmServiceTestCase(unittest.TestCase):
         ) as mock_stream:
             response = list(
                 llm.get_llm_response_stream(
-                    [{"role": "user", "content": "hello"}],
+                    messages,
                     llm.GROQ_MODEL,
+                    tools=tools,
                 )
             )
 
         self.assertEqual(response, ["groq", "-stream"])
-        mock_stream.assert_called_once()
+        mock_stream.assert_called_once_with(messages, llm.GROQ_MODEL, tools=tools)
 
     def test_get_openai_response_stream_yields_text_deltas(self):
         mock_openai = MagicMock()
@@ -290,6 +344,25 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertTrue(
             passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
         )
+
+    def test_get_openai_response_stream_with_tools_uses_chat_completions_stream(self):
+        mock_openai = MagicMock()
+        mock_stream = _MockStream(_mock_stream_chunk("tool"), _mock_stream_chunk("-stream"))
+        mock_openai.chat.completions.create.return_value = mock_stream
+
+        with patch.object(llm, "openai_client", mock_openai):
+            response = list(
+                llm.get_openai_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                    tools=[{"type": "function", "function": {"name": "web_search"}}],
+                )
+            )
+
+        self.assertEqual(response, ["tool", "-stream"])
+        mock_openai.chat.completions.create.assert_called_once()
+        mock_openai.responses.stream.assert_not_called()
+        self.assertTrue(mock_stream.closed)
 
     def test_get_llm_response_stream_routes_to_openai(self):
         with patch.object(

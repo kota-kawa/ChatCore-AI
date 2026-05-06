@@ -411,6 +411,7 @@ def _get_openai_compatible_response_stream(
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     stream = None
+    tool_call_parts: dict[int, dict[str, Any]] = {}
     try:
         stream = client.chat.completions.create(
             model=model_name,
@@ -425,22 +426,44 @@ def _get_openai_compatible_response_stream(
             delta = chunk.choices[0].delta
             if getattr(delta, "content", None):
                 yield delta.content
-            
+
             tool_calls = getattr(delta, "tool_calls", None)
             if tool_calls:
-                # ストリーム中のツール呼び出しは JSON 形式で yield する
-                # We yield tool calls as JSON strings in the stream.
-                yield json.dumps([
-                    {
-                        "index": tc.index,
-                        "id": tc.id,
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        }
-                    }
-                    for tc in tool_calls
-                ])
+                for tc in tool_calls:
+                    index = int(getattr(tc, "index", 0) or 0)
+                    part = tool_call_parts.setdefault(
+                        index,
+                        {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        },
+                    )
+                    tool_call_id = getattr(tc, "id", None)
+                    if tool_call_id:
+                        part["id"] = tool_call_id
+                    tool_call_type = getattr(tc, "type", None)
+                    if tool_call_type:
+                        part["type"] = tool_call_type
+                    function = getattr(tc, "function", None)
+                    if function is None:
+                        continue
+                    function_name = getattr(function, "name", None)
+                    if function_name:
+                        part["function"]["name"] += function_name
+                    arguments = getattr(function, "arguments", None)
+                    if arguments:
+                        part["function"]["arguments"] += arguments
+
+        if tool_call_parts:
+            yield json.dumps(
+                [
+                    tool_call_parts[index]
+                    for index in sorted(tool_call_parts)
+                    if tool_call_parts[index]["function"]["name"]
+                ],
+                ensure_ascii=False,
+            )
     except Exception as exc:
         provider_name = "provider"
         if "Groq" in provider_error_message:
@@ -607,7 +630,7 @@ def get_openai_response_stream(
     try:
         if tools:
             # Use chat.completions for tool support
-            return _get_openai_compatible_response_stream(
+            yield from _get_openai_compatible_response_stream(
                 client=openai_client,
                 conversation_messages=sanitized_messages,
                 model_name=model_name,
@@ -615,6 +638,7 @@ def get_openai_response_stream(
                 provider_error_message="OpenAI streaming API call failed.",
                 tools=tools,
             )
+            return
 
         with openai_client.responses.stream(
             model=model_name,
@@ -665,17 +689,20 @@ def validate_model_name(model_name: str) -> None:
 
 
 def get_llm_response(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> str | None:
     # 指定モデル名でプロバイダを振り分け、不正モデルは例外として扱う
     # Route provider by model name and raise on invalid models.
     validate_model_name(model_name)
     if is_gemini_model(model_name):
-        return get_gemini_response(conversation_messages, model_name)
+        return get_gemini_response(conversation_messages, model_name, tools=tools)
     if is_groq_model(model_name):
-        return get_groq_response(conversation_messages, model_name)
+        return get_groq_response(conversation_messages, model_name, tools=tools)
     if is_openai_model(model_name):
-        return get_openai_response(conversation_messages, model_name)
+        return get_openai_response(conversation_messages, model_name, tools=tools)
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
@@ -765,15 +792,18 @@ def get_llm_json_response(
 
 
 def get_llm_response_stream(
-    conversation_messages: ConversationMessages, model_name: str
+    conversation_messages: ConversationMessages,
+    model_name: str,
+    *,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
     # 指定モデル名でストリーム可能なプロバイダを振り分ける
     # Route streaming providers by model name and raise on invalid models.
     validate_model_name(model_name)
     if is_gemini_model(model_name):
-        return get_gemini_response_stream(conversation_messages, model_name)
+        return get_gemini_response_stream(conversation_messages, model_name, tools=tools)
     if is_groq_model(model_name):
-        return get_groq_response_stream(conversation_messages, model_name)
+        return get_groq_response_stream(conversation_messages, model_name, tools=tools)
     if is_openai_model(model_name):
-        return get_openai_response_stream(conversation_messages, model_name)
+        return get_openai_response_stream(conversation_messages, model_name, tools=tools)
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response_stream.")
