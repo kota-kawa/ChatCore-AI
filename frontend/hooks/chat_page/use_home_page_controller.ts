@@ -505,7 +505,7 @@ export function useHomePageController() {
         }
 
         if (parsed.event === "web_search_completed") {
-          updateThinkingStatus("AIが応答を準備しています");
+          updateThinkingStatus("Web検索をしています");
           return;
         }
 

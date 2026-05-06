@@ -49,6 +49,48 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         self.assertTrue(decision.should_search)
 
+    def test_decide_web_search_accepts_decision_enum(self):
+        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"decision": "search", "should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
+        ):
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "OpenAI news")
+
+    def test_decide_web_search_accepts_japanese_search_flag(self):
+        messages = [{"role": "user", "content": "今日のOpenAIの最新ニュースを調べて"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"should_search": "必要", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
+        ):
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+
+    def test_decide_web_search_repairs_non_json_planner_output(self):
+        messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
+
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            side_effect=[
+                "検索が必要です。query は React 19 latest information です。",
+                '{"decision": "search", "should_search": true, "query": "React 19 latest information", "freshness": "py", "reason": "latest software information"}',
+            ],
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "React 19 latest information")
+        self.assertEqual(mock_llm.call_count, 2)
+
     def test_decide_web_search_does_not_search_when_planner_fails(self):
         messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
 
@@ -242,6 +284,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("<web_search_context", augmented.messages[0]["content"])
         self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented.messages[0]["content"])
         self.assertIn("リアルタイム検索できない」とは言わないでください", augmented.messages[0]["content"])
+        self.assertIn("追加質問で止まらず", augmented.messages[0]["content"])
         self.assertIn("https://example.com/python", augmented.messages[0]["content"])
 
     def test_maybe_augment_messages_reports_monthly_quota_exceeded(self):
