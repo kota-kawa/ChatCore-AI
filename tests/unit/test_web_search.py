@@ -290,12 +290,16 @@ class WebSearchServiceTestCase(unittest.TestCase):
                         ),
                     )
 
-        self.assertEqual([event.event for event in events], ["web_search_started", "web_search_completed"])
-        self.assertEqual(events[1].payload["source_count"], 1)
-        self.assertEqual(events[1].payload["sources"][0]["url"], "https://example.com/python")
-        self.assertEqual(events[1].payload["sources"][0]["title"], "Python News")
-        self.assertEqual(events[1].payload["sources"][0]["hostname"], "example.com")
+        self.assertEqual(
+            [event.event for event in events],
+            ["web_search_planning_started", "web_search_started", "web_search_completed"],
+        )
+        self.assertEqual(events[2].payload["source_count"], 1)
+        self.assertEqual(events[2].payload["sources"][0]["url"], "https://example.com/python")
+        self.assertEqual(events[2].payload["sources"][0]["title"], "Python News")
+        self.assertEqual(events[2].payload["sources"][0]["hostname"], "example.com")
         self.assertIs(augmented.result, result)
+        self.assertEqual(augmented.status, "completed")
         self.assertEqual(len(augmented.messages), 2)
         self.assertIn("<web_search_context", augmented.messages[0]["content"])
         self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented.messages[0]["content"])
@@ -326,9 +330,13 @@ class WebSearchServiceTestCase(unittest.TestCase):
                         ),
                     )
 
-        self.assertEqual([event.event for event in events], ["web_search_started", "web_search_failed"])
-        self.assertIn("月間上限", events[1].payload["message"])
+        self.assertEqual(
+            [event.event for event in events],
+            ["web_search_planning_started", "web_search_started", "web_search_failed"],
+        )
+        self.assertIn("月間上限", events[2].payload["message"])
         self.assertIsNone(augmented.result)
+        self.assertEqual(augmented.status, "failed")
         self.assertIn("月間上限", augmented.messages[0]["content"])
         self.assertIn("リアルタイム確認ができない", augmented.messages[0]["content"])
 
@@ -350,9 +358,10 @@ class WebSearchServiceTestCase(unittest.TestCase):
                     ),
                 )
 
-        self.assertEqual([event.event for event in events], ["web_search_failed"])
-        self.assertIn("APIキーが未設定", events[0].payload["message"])
+        self.assertEqual([event.event for event in events], ["web_search_planning_started", "web_search_failed"])
+        self.assertIn("APIキーが未設定", events[1].payload["message"])
         self.assertIsNone(augmented.result)
+        self.assertEqual(augmented.status, "failed")
         self.assertIn("Brave Search APIキーが未設定", augmented.messages[0]["content"])
 
     def test_build_web_search_sources_markdown_returns_collapsible_block(self):

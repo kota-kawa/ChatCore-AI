@@ -499,19 +499,35 @@ export function useHomePageController() {
           return;
         }
 
+        if (parsed.event === "web_search_planning_started") {
+          updateThinkingStatus("検索が必要か判断しています");
+          return;
+        }
+
         if (parsed.event === "web_search_started") {
-          updateThinkingStatus("Web検索をしています");
+          updateThinkingStatus("関連情報を取得しています");
           return;
         }
 
         if (parsed.event === "web_search_completed") {
-          updateThinkingStatus("Web検索をしています");
+          updateThinkingStatus("検索結果を読み込んでいます");
           return;
         }
 
         if (parsed.event === "web_search_failed") {
           const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
-          updateThinkingStatus(message || "Web検索に失敗しました。回答を作成中");
+          if (message.includes("APIキー") || message.includes("設定")) {
+            updateThinkingStatus("検索設定を確認できませんでした。回答を作成しています");
+          } else if (message.includes("上限")) {
+            updateThinkingStatus("Web検索の上限に達しました。回答を作成しています");
+          } else {
+            updateThinkingStatus("Web検索に失敗しました。回答を作成しています");
+          }
+          return;
+        }
+
+        if (parsed.event === "response_generation_started") {
+          updateThinkingStatus("回答を作成しています");
           return;
         }
 
@@ -1240,11 +1256,12 @@ export function useHomePageController() {
           waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
         ]);
         removeStoredHistory(roomId);
+        const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
         setPageViewState("chat");
         setLaunchingTaskName(null);
 
         void loadChatRooms();
-        await generateResponse(firstMessage, selectedModel, roomId);
+        await generationPromise;
       } catch (error) {
         setPageViewState("setup");
         setLaunchingTaskName(null);
@@ -1305,10 +1322,11 @@ export function useHomePageController() {
         waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
       ]);
       removeStoredHistory(roomId);
+      const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
       setPageViewState("chat");
 
       void loadChatRooms();
-      await generateResponse(firstMessage, selectedModel, roomId);
+      await generationPromise;
     } catch (error) {
       setPageViewState("setup");
       setMessages([]);

@@ -372,6 +372,64 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertTrue(persisted_messages[0].startswith("回答本文\n\n<details"))
 
+    def test_background_generation_job_reports_response_generation_status(self):
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "こんにちは"}],
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["回答"]),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: response_generation_started", body)
+        self.assertIn("event: chunk", body)
+
+    def test_background_generation_job_keeps_web_search_failure_status_until_chunk(self):
+        def failed_augment(messages, _model, *, publish_event=None):
+            if publish_event is not None:
+                publish_event("web_search_planning_started", {})
+                publish_event(
+                    "web_search_failed",
+                    {"query": "news", "message": "Web検索に失敗しました。"},
+                )
+            return WebSearchAugmentation(messages=messages, status="failed")
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                side_effect=failed_augment,
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["回答"]),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "今日のニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _: None,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: web_search_failed", body)
+        self.assertNotIn("event: response_generation_started", body)
+        self.assertIn("event: chunk", body)
+
     def test_background_generation_job_surfaces_configuration_error_message(self):
         with patch(
             "services.chat_generation.get_llm_response_stream",

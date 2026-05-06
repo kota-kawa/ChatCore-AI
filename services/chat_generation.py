@@ -193,6 +193,7 @@ class ChatGenerationJob:
         chunks: list[str] = []
         web_search_result = None
         current_messages = [dict(m) for m in self._conversation_messages]
+        last_web_search_failed = False
         
         try:
             # 1. 積極的な先行検索 (Proactive augmentation)
@@ -204,6 +205,7 @@ class ChatGenerationJob:
             )
             current_messages = augmentation.messages
             web_search_result = augmentation.result
+            last_web_search_failed = augmentation.status == "failed"
             
             if self._cancelled:
                 return
@@ -216,6 +218,9 @@ class ChatGenerationJob:
 
                 tools = [get_web_search_tool_definition()]
                 tool_calls_buffer = []
+                if not last_web_search_failed:
+                    self._publish("response_generation_started", {})
+                last_web_search_failed = False
                 
                 # ストリーム実行
                 for chunk in get_llm_response_stream(current_messages, self._model, tools=tools):
@@ -270,6 +275,7 @@ class ChatGenerationJob:
                         try:
                             res = search_brave_llm_context(query, freshness=args.get("freshness", ""))
                             web_search_result = res # 最新の結果を保持
+                            last_web_search_failed = False
                             self._publish("web_search_completed", {
                                 "query": res.query,
                                 "source_count": len(res.sources)
@@ -293,6 +299,7 @@ class ChatGenerationJob:
                             })
                         except Exception:
                             logger.exception("Brave search via tool call failed.")
+                            last_web_search_failed = True
                             self._publish("web_search_failed", {"query": query, "message": "検索に失敗しました。"})
                             current_messages.append({
                                 "role": "tool",

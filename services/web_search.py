@@ -147,6 +147,7 @@ class WebSearchResult:
 class WebSearchAugmentation:
     messages: list[dict[str, str]]
     result: WebSearchResult | None = None
+    status: str = ""
 
 
 class WebSearchQuotaExceeded(RuntimeError):
@@ -911,6 +912,9 @@ def maybe_augment_messages_with_web_search(
     if not _web_search_enabled():
         return WebSearchAugmentation(messages=conversation_messages)
 
+    if publish_event is not None:
+        publish_event("web_search_planning_started", {})
+
     decision = decide_web_search(conversation_messages, model)
     if not decision.should_search or not decision.query:
         return WebSearchAugmentation(messages=conversation_messages)
@@ -942,6 +946,7 @@ def maybe_augment_messages_with_web_search(
                     ),
                 },
             ),
+            status="failed",
         )
 
     if publish_event is not None:
@@ -983,6 +988,7 @@ def maybe_augment_messages_with_web_search(
                     ),
                 },
             ),
+            status="failed",
         )
     except Exception:
         logger.exception("Brave web search failed.")
@@ -1007,6 +1013,7 @@ def maybe_augment_messages_with_web_search(
                     ),
                 },
             ),
+            status="failed",
         )
 
     if publish_event is not None:
@@ -1035,8 +1042,10 @@ def maybe_augment_messages_with_web_search(
                 },
             ),
             result=None,
+            status="no_sources",
         )
     return WebSearchAugmentation(
         messages=_insert_system_context(conversation_messages, context_message),
         result=result,
+        status="completed",
     )
