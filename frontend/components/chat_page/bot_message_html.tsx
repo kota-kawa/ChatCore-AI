@@ -7,6 +7,7 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
 const WEB_SEARCH_SOURCES_ANIMATION_MS = 240;
 const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animation>();
+const WEB_SEARCH_SOURCES_REVEAL_PADDING = 16;
 
 type BotMessageHtmlProps = {
   text: string;
@@ -36,6 +37,58 @@ function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   activeWebSearchSourceAnimations.delete(details);
 }
 
+function getChatMessagesScroller(element: HTMLElement) {
+  return element.closest<HTMLElement>(".chat-messages");
+}
+
+function revealWebSearchSources(details: HTMLDetailsElement) {
+  const scroller = getChatMessagesScroller(details);
+  if (!scroller) {
+    details.scrollIntoView({ block: "nearest" });
+    return;
+  }
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  const detailsRect = details.getBoundingClientRect();
+  const availableHeight = scrollerRect.height - WEB_SEARCH_SOURCES_REVEAL_PADDING * 2;
+
+  if (detailsRect.height <= availableHeight) {
+    if (detailsRect.top < scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING) {
+      scroller.scrollTop -= scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING - detailsRect.top;
+      return;
+    }
+
+    if (detailsRect.bottom > scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING) {
+      scroller.scrollTop += detailsRect.bottom - (scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING);
+    }
+    return;
+  }
+
+  if (
+    detailsRect.top < scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING ||
+    detailsRect.bottom > scrollerRect.bottom - WEB_SEARCH_SOURCES_REVEAL_PADDING
+  ) {
+    scroller.scrollTop += detailsRect.top - (scrollerRect.top + WEB_SEARCH_SOURCES_REVEAL_PADDING);
+  }
+}
+
+function scheduleWebSearchSourcesReveal(details: HTMLDetailsElement) {
+  if (typeof window === "undefined") return;
+
+  window.requestAnimationFrame(() => {
+    revealWebSearchSources(details);
+    window.requestAnimationFrame(() => {
+      revealWebSearchSources(details);
+    });
+  });
+
+  [WEB_SEARCH_SOURCES_ANIMATION_MS + 40, WEB_SEARCH_SOURCES_ANIMATION_MS + 180].forEach((delay) => {
+    window.setTimeout(() => {
+      revealWebSearchSources(details);
+    }, delay);
+  });
+}
+
 function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
   const list = getWebSearchSourcesList(details);
   if (!list || typeof list.animate !== "function" || prefersReducedMotion()) {
@@ -43,24 +96,32 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
     if (list) resetWebSearchSourcesListStyles(list);
+    if (shouldOpen) scheduleWebSearchSourcesReveal(details);
     return;
   }
 
   const currentHeight = list.getBoundingClientRect().height;
   cancelWebSearchSourcesAnimation(details);
 
+  let startHeight = currentHeight;
+  let endHeight = 0;
+
   if (shouldOpen) {
     details.open = true;
+    list.style.height = "auto";
+    endHeight = list.scrollHeight;
+    startHeight = currentHeight > 0 ? currentHeight : 0;
+    scheduleWebSearchSourcesReveal(details);
+  } else {
+    startHeight = currentHeight || list.scrollHeight;
   }
-
-  const startHeight = shouldOpen ? currentHeight : currentHeight || list.scrollHeight;
-  const endHeight = shouldOpen ? list.scrollHeight : 0;
 
   details.dataset.webSearchSourcesState = shouldOpen ? "opening" : "closing";
   list.style.overflow = "hidden";
   list.style.height = `${startHeight}px`;
   list.style.opacity = shouldOpen ? (startHeight > 0 ? "1" : "0") : "1";
   list.style.transform = shouldOpen && startHeight === 0 ? "translateY(-6px)" : "translateY(0)";
+  void list.offsetHeight;
 
   const animation = list.animate(
     [
@@ -89,6 +150,7 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
     resetWebSearchSourcesListStyles(list);
+    if (shouldOpen) scheduleWebSearchSourcesReveal(details);
   };
 }
 

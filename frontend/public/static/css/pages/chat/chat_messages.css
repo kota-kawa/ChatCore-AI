@@ -767,7 +767,7 @@ chat-action-menu {
   display: grid;
   gap: 0.45rem;
   margin: 0;
-  padding: 0.65rem;
+  padding: 0.65rem 0.65rem 0.9rem;
   list-style: none;
   transform-origin: top;
 }
