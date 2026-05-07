@@ -769,6 +769,12 @@ chat-action-menu {
   margin: 0;
   padding: 0.65rem;
   list-style: none;
+  transform-origin: top;
+}
+
+.bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
+.bot-message .web-search-sources[data-web-search-sources-state="closing"] .web-search-sources__list {
+  will-change: height, opacity, transform;
 }
 
 .bot-message .web-search-sources__item {
