@@ -180,24 +180,24 @@
 }
 
 .chat-header-model-option:hover {
-  background: rgba(25, 195, 125, 0.08);
+  background: rgba(15, 118, 110, 0.08);
 }
 
 .chat-header-model-option.is-selected {
-  background: rgba(25, 195, 125, 0.15);
-  color: var(--success-strong, #0f5132);
+  background: rgba(15, 118, 110, 0.15);
+  color: var(--success-strong, #134e4a);
   font-weight: 600;
 }
 
 [data-theme="dark"] .chat-header-model-option.is-selected {
-  background: linear-gradient(135deg, #0f7a51 0%, #19c37d 100%);
+  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   color: #ffffff;
   font-weight: 700;
-  box-shadow: inset 3px 0 0 rgba(110, 231, 183, 0.95);
+  box-shadow: inset 3px 0 0 rgba(94, 234, 212, 0.95);
 }
 
 [data-theme="dark"] .chat-header-model-option.is-selected:hover {
-  background: linear-gradient(135deg, #0d6945 0%, #15a86b 100%);
+  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
   color: #ffffff;
 }
 
@@ -279,7 +279,7 @@
 .chat-share-status {
   margin: 0.55rem 0 0;
   min-height: 1.25rem;
-  color: var(--success-color, #15803d);
+  color: var(--success-color, #0f766e);
   font-size: var(--text-sm, 0.875rem);
 }
 
@@ -367,7 +367,7 @@
   top: 0.75rem;
   left: 0.85rem;
   display: inline-flex;
-  color: var(--success-strong, #0f5132) !important;
+  color: var(--success-strong, #134e4a) !important;
   z-index: var(--z-chat-sidebar-toggle, 44);
   font-size: 1.25rem;
 }
@@ -573,7 +573,7 @@
     min-height: 2.65rem;
     font-size: 1.2rem;
     z-index: 49;
-    color: var(--success-strong, #0f5132) !important;
+    color: var(--success-strong, #134e4a) !important;
     background: rgba(255, 255, 255, 0.92) !important;
     border: 1px solid rgba(198, 216, 207, 0.9);
     backdrop-filter: blur(12px) saturate(140%);
@@ -582,7 +582,7 @@
 
   body.chat-page.sidebar-visible .chat-sidebar-toggle {
     color: #ffffff !important;
-    background: rgba(15, 122, 81, 0.92) !important;
+    background: rgba(19, 78, 74, 0.92) !important;
     border-color: rgba(255, 255, 255, 0.22);
   }
 
@@ -595,7 +595,7 @@
   [data-theme="dark"] .chat-sidebar-toggle {
     background: rgba(15, 23, 42, 0.92) !important;
     border-color: rgba(148, 163, 184, 0.22);
-    color: #6ee7b7 !important;
+    color: #5eead4 !important;
   }
 
   /* モデル選択ドロップダウン: iOS でスクロール可能にする */

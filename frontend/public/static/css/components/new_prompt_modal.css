@@ -44,7 +44,7 @@
     transform var(--transition-normal, 0.2s ease),
     box-shadow var(--transition-normal, 0.2s ease),
     filter var(--transition-slow, 0.3s ease);
-  box-shadow: 0 14px 24px rgba(15, 122, 81, 0.22);
+  box-shadow: 0 14px 24px rgba(19, 78, 74, 0.22);
   flex-shrink: 0;
 }
 
@@ -75,7 +75,7 @@
     1rem
     max(1rem, env(safe-area-inset-bottom));
   background: var(--chat-modal-overlay,
-    radial-gradient(circle at top, rgba(22, 163, 74, 0.12), transparent 38%),
+    radial-gradient(circle at top, rgba(13, 148, 136, 0.12), transparent 38%),
     rgba(4, 12, 10, 0.52));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -107,7 +107,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 252, 250, 0.98) 100%));
   padding: 1.15rem;
   border-radius: var(--chat-modal-panel-radius, 28px);
-  border: 1px solid var(--chat-modal-border, rgba(15, 122, 81, 0.16));
+  border: 1px solid var(--chat-modal-border, rgba(19, 78, 74, 0.16));
   box-shadow: var(--chat-modal-shadow, 0 32px 70px rgba(0, 0, 0, 0.2));
   animation: slideUp var(--chat-modal-enter-duration, 0.24s) ease-out;
 }
@@ -120,8 +120,8 @@
   gap: 1rem;
   padding: 1.2rem 1.2rem 1rem;
   border-radius: 22px;
-  background: var(--chat-modal-header-bg, linear-gradient(135deg, rgba(15, 122, 81, 0.12) 0%, rgba(187, 247, 208, 0.1) 44%, rgba(255, 255, 255, 0.78) 100%));
-  border: 1px solid var(--chat-modal-header-border, rgba(15, 122, 81, 0.12));
+  background: var(--chat-modal-header-bg, linear-gradient(135deg, rgba(19, 78, 74, 0.12) 0%, rgba(153, 246, 228, 0.1) 44%, rgba(255, 255, 255, 0.78) 100%));
+  border: 1px solid var(--chat-modal-header-border, rgba(19, 78, 74, 0.12));
   overflow: hidden;
 }
 
@@ -132,7 +132,7 @@
   width: 180px;
   height: 180px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(34, 197, 94, 0.18) 0%, transparent 68%);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.18) 0%, transparent 68%);
   pointer-events: none;
 }
 
@@ -180,8 +180,8 @@
   padding: 0.32rem 0.68rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  color: #166534;
-  border: 1px solid rgba(34, 197, 94, 0.16);
+  color: #134e4a;
+  border: 1px solid rgba(20, 184, 166, 0.16);
   font-size: var(--text-2xs, 0.75rem);
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -231,7 +231,7 @@
 .new-post-form .form-group label {
   margin-bottom: 0;
   font-weight: 700;
-  color: #13543a;
+  color: #134e4a;
   font-size: var(--text-sm, 0.875rem);
 }
 
@@ -258,8 +258,8 @@
 .new-post-form .form-group input[type="text"]:focus,
 .new-post-form .form-group textarea:focus,
 .new-post-form .form-group select:focus {
-  border-color: rgba(15, 122, 81, 0.46);
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+  border-color: rgba(19, 78, 74, 0.46);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
   outline: none;
 }
 
@@ -272,13 +272,13 @@
 }
 
 .composer-status[data-variant="info"] {
-  background: rgba(15, 122, 81, 0.08);
-  color: #13543a;
+  background: rgba(19, 78, 74, 0.08);
+  color: #134e4a;
 }
 
 .composer-status[data-variant="success"] {
-  background: rgba(34, 197, 94, 0.1);
-  color: #166534;
+  background: rgba(20, 184, 166, 0.1);
+  color: #134e4a;
 }
 
 .composer-status[data-variant="error"] {
@@ -296,8 +296,8 @@
   gap: 0.72rem;
   padding: 0.9rem 0.96rem;
   border-radius: 18px;
-  border: 1px solid rgba(15, 122, 81, 0.12);
-  background: rgba(240, 253, 244, 0.72);
+  border: 1px solid rgba(19, 78, 74, 0.12);
+  background: rgba(240, 253, 250, 0.72);
   cursor: pointer;
 }
 
@@ -312,7 +312,7 @@
 }
 
 .composer-toggle__copy strong {
-  color: #14532d;
+  color: #134e4a;
   font-size: var(--text-sm, 0.875rem);
 }
 
@@ -326,8 +326,8 @@
   padding: 0.95rem;
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(240, 253, 244, 0.92) 0%, rgba(255, 255, 255, 0.96) 100%);
-  border: 1px solid rgba(22, 163, 74, 0.14);
+    linear-gradient(180deg, rgba(240, 253, 250, 0.92) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border: 1px solid rgba(13, 148, 136, 0.14);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
@@ -389,35 +389,35 @@
 
 /* Hero section */
 [data-theme="dark"] .new-prompt-modal__hero h2 {
-  color: #d1fae5;
+  color: #ccfbf1;
 }
 
 [data-theme="dark"] .new-prompt-modal__eyebrow {
-  color: #34d399;
+  color: #2dd4bf;
 }
 
 [data-theme="dark"] .new-prompt-modal__hero-badges span {
   background: rgba(17, 24, 39, 0.88);
-  color: #6ee7b7;
-  border-color: rgba(25, 195, 125, 0.26);
+  color: #5eead4;
+  border-color: rgba(15, 118, 110, 0.26);
   box-shadow: none;
 }
 
 /* Close button */
 [data-theme="dark"] .new-modal-close-btn {
   background: rgba(17, 24, 39, 0.92);
-  color: #a7f3d0;
+  color: #99f6e4;
   box-shadow: 0 12px 20px rgba(2, 6, 23, 0.28);
 }
 
 [data-theme="dark"] .new-modal-close-btn:hover {
   background: rgba(22, 33, 54, 0.98);
-  color: #6ee7b7;
+  color: #5eead4;
 }
 
 /* Form labels and inputs */
 [data-theme="dark"] .new-post-form .form-group label {
-  color: #6ee7b7;
+  color: #5eead4;
 }
 
 [data-theme="dark"] .new-post-form .form-group input[type="text"],
@@ -437,19 +437,19 @@
 [data-theme="dark"] .new-post-form .form-group textarea:focus,
 [data-theme="dark"] .new-post-form .form-group select:focus {
   background: rgba(17, 24, 39, 1);
-  border-color: rgba(25, 195, 125, 0.48);
-  box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.1);
+  border-color: rgba(15, 118, 110, 0.48);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
 }
 
 /* Status messages */
 [data-theme="dark"] .composer-status[data-variant="info"] {
-  background: rgba(25, 195, 125, 0.12);
-  color: #6ee7b7;
+  background: rgba(15, 118, 110, 0.12);
+  color: #5eead4;
 }
 
 [data-theme="dark"] .composer-status[data-variant="success"] {
-  background: rgba(52, 211, 153, 0.12);
-  color: #a7f3d0;
+  background: rgba(45, 212, 191, 0.12);
+  color: #99f6e4;
 }
 
 [data-theme="dark"] .composer-status[data-variant="error"] {
@@ -460,17 +460,17 @@
 /* Guardrail toggle */
 [data-theme="dark"] .composer-toggle {
   background: rgba(15, 23, 42, 0.72);
-  border-color: rgba(25, 195, 125, 0.22);
+  border-color: rgba(15, 118, 110, 0.22);
 }
 
 [data-theme="dark"] .composer-toggle__copy strong {
-  color: #a7f3d0;
+  color: #99f6e4;
 }
 
 /* Guardrail fields */
 [data-theme="dark"] #new-guardrail-fields {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(12, 18, 30, 0.92) 100%);
-  border-color: rgba(25, 195, 125, 0.18);
+  border-color: rgba(15, 118, 110, 0.18);
   box-shadow: none;
 }
 

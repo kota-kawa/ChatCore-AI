@@ -16,7 +16,7 @@
   max-height: calc(100vh - 48px);
   box-shadow: var(--chat-modal-shadow, 0 18px 40px rgba(0, 0, 0, 0.18));
   overflow: hidden;
-  border: 1px solid var(--chat-modal-border, rgba(25, 195, 125, 0.2));
+  border: 1px solid var(--chat-modal-border, rgba(15, 118, 110, 0.2));
   display: flex;
   flex-direction: column;
   animation: slideUp var(--chat-modal-enter-duration, 0.24s) ease-out;
@@ -100,7 +100,7 @@
 }
 
 .custom-form-label__required {
-  color: var(--success-color, #15803d);
+  color: var(--success-color, #0f766e);
 }
 
 .custom-form-control {
@@ -108,7 +108,7 @@
   padding: 0.75rem 0.85rem;
   font-size: var(--text-md, 1rem);
   line-height: var(--leading-normal, 1.5);
-  border: 1px solid #dfe9e5;
+  border: 1px solid #d7e8e5;
   border-radius: 10px;
   transition:
     border var(--transition-normal, 0.2s ease),
@@ -117,7 +117,7 @@
 
 .custom-form-control:focus {
   border-color: var(--primary-color);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(25, 195, 125, 0.2));
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
 }
 
@@ -142,8 +142,8 @@
 }
 
 [data-theme="dark"] .custom-form-control:focus {
-  border-color: rgba(25, 195, 125, 0.48);
-  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
+  border-color: rgba(15, 118, 110, 0.48);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
 }
 
 [data-theme="dark"] .custom-form-text {

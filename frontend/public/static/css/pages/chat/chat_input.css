@@ -15,7 +15,7 @@
   max-width: 800px;
   margin: 0 auto;
   background:
-    radial-gradient(circle at 100% 0%, rgba(159, 244, 203, 0.16), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(153, 246, 228, 0.16), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 249, 246, 0.96) 100%);
   border: 1px solid rgba(166, 186, 174, 0.28);
   border-radius: 28px;
@@ -31,9 +31,9 @@
 }
 
 .input-wrapper:focus-within {
-  border-color: rgba(25, 195, 125, 0.42);
+  border-color: rgba(15, 118, 110, 0.42);
   box-shadow:
-    0 0 0 4px rgba(25, 195, 125, 0.12),
+    0 0 0 4px rgba(15, 118, 110, 0.12),
     0 18px 38px rgba(13, 61, 41, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
   background:
@@ -116,11 +116,11 @@
     var(--chat-button-sheen, radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.3), transparent 34%)),
     linear-gradient(
       135deg,
-      var(--chat-button-base, var(--primary-color, #19c37d)) 0%,
-      var(--chat-button-accent, var(--primary-hover, #15a86b)) 100%
+      var(--chat-button-base, var(--primary-color, #0f766e)) 0%,
+      var(--chat-button-accent, var(--primary-hover, #115e59)) 100%
     );
   box-shadow:
-    0 14px 24px var(--chat-button-shadow-color, rgba(15, 122, 81, 0.22)),
+    0 14px 24px var(--chat-button-shadow-color, rgba(19, 78, 74, 0.22)),
     var(--chat-button-edge-highlight, inset 0 1px 0 rgba(255, 255, 255, 0.24));
   transition:
     background var(--transition-fast, 0.15s ease),
@@ -176,7 +176,7 @@
 
 [data-theme="dark"] .input-wrapper {
   background:
-    radial-gradient(circle at 100% 0%, rgba(25, 195, 125, 0.08), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(30, 41, 59, 0.98) 0%, rgba(17, 24, 39, 0.96) 100%);
   border-color: rgba(148, 163, 184, 0.24);
   box-shadow:
@@ -185,13 +185,13 @@
 }
 
 [data-theme="dark"] .input-wrapper:focus-within {
-  border-color: rgba(25, 195, 125, 0.42);
+  border-color: rgba(15, 118, 110, 0.42);
   box-shadow:
-    0 0 0 4px rgba(25, 195, 125, 0.12),
+    0 0 0 4px rgba(15, 118, 110, 0.12),
     0 18px 38px rgba(2, 6, 23, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   background:
-    radial-gradient(circle at 100% 0%, rgba(25, 195, 125, 0.12), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.12), transparent 34%),
     linear-gradient(180deg, rgba(22, 33, 54, 0.99) 0%, rgba(15, 23, 42, 0.97) 100%);
 }
 
@@ -286,10 +286,10 @@
 
 /* ===== Thinking インジケータ (constellation 含む - そのまま保持) ===== */
 .thinking-message {
-  --constellation-panel-border: rgba(25, 195, 125, 0.3);
-  --constellation-panel-glow: rgba(58, 214, 149, 0.28);
-  --constellation-surface-highlight: rgba(159, 244, 203, 0.18);
-  --constellation-stage-highlight: rgba(116, 233, 180, 0.18);
+  --constellation-panel-border: rgba(15, 118, 110, 0.3);
+  --constellation-panel-glow: rgba(45, 212, 191, 0.28);
+  --constellation-surface-highlight: rgba(153, 246, 228, 0.18);
+  --constellation-stage-highlight: rgba(94, 234, 212, 0.18);
   --constellation-stage-highlight-soft: rgba(208, 255, 232, 0.12);
   --constellation-stage-aurora: rgba(67, 201, 138, 0.14);
   --constellation-stage-start: rgba(12, 82, 58, 0.98);
@@ -327,7 +327,7 @@
   border: 1px solid rgba(96, 229, 173, 0.34);
   box-shadow:
     inset 0 1px 0 rgba(233, 255, 242, 0.08),
-    0 0 0 1px rgba(58, 214, 149, 0.08),
+    0 0 0 1px rgba(45, 212, 191, 0.08),
     0 14px 28px rgba(0, 0, 0, 0.28);
   animation: constellationStageDrift 6.4s ease-in-out infinite;
 }
