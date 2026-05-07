@@ -848,18 +848,25 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
         url = source.url.strip()
         if not url:
             continue
+        source_index = len(sources_lines) + 1
         title = source.title.strip() or url
         hostname = source.hostname.strip()
-        suffix = (
-            f' <span class="web-search-sources__hostname">- {escape(hostname)}</span>'
+        hostname_line = (
+            f'<span class="web-search-sources__hostname">{escape(hostname)}</span>'
             if hostname
             else ""
         )
         sources_lines.append(
             (
                 '<li class="web-search-sources__item">'
-                f'<a href="{escape(url, quote=True)}" target="_blank">'
-                f"{escape(title)}</a>{suffix}</li>"
+                f'<a class="web-search-sources__link" href="{escape(url, quote=True)}" target="_blank">'
+                f'<span class="web-search-sources__index">{source_index}</span>'
+                '<span class="web-search-sources__content">'
+                f'<span class="web-search-sources__title">{escape(title)}</span>'
+                f"{hostname_line}"
+                "</span>"
+                '<span class="web-search-sources__external">↗</span>'
+                "</a></li>"
             )
         )
 
@@ -869,7 +876,14 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
     return "\n".join(
         [
             '<details class="web-search-sources">',
-            f"<summary>参照したWebサイト ({len(sources_lines)}件)</summary>",
+            '<summary class="web-search-sources__summary">',
+            '<span class="web-search-sources__summary-main">',
+            '<span class="web-search-sources__summary-icon"></span>',
+            '<span class="web-search-sources__label">参照したWebサイト</span>',
+            "</span>",
+            f'<span class="web-search-sources__count">{len(sources_lines)}件</span>',
+            '<span class="web-search-sources__chevron"></span>',
+            "</summary>",
             '<ul class="web-search-sources__list">',
             *sources_lines,
             "</ul>",

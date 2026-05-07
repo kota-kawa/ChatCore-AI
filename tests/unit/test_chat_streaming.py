@@ -368,8 +368,11 @@ class ChatStreamingTestCase(unittest.TestCase):
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
 
         self.assertIn("回答本文", body)
-        self.assertIn("<summary>参照したWebサイト (1件)</summary>", body)
+        self.assertIn('\\"web-search-sources__summary\\"', body)
+        self.assertIn('\\"web-search-sources__count\\">1件', body)
         self.assertIn("https://example.com/python", persisted_messages[0])
+        self.assertIn('<summary class="web-search-sources__summary">', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">1件</span>', persisted_messages[0])
         self.assertTrue(persisted_messages[0].startswith("回答本文\n\n<details"))
 
     def test_background_generation_job_reports_response_generation_status(self):

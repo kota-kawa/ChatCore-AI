@@ -389,10 +389,16 @@ class WebSearchServiceTestCase(unittest.TestCase):
         block = web_search.build_web_search_sources_markdown(result)
 
         self.assertIn('<details class="web-search-sources">', block)
-        self.assertIn("<summary>参照したWebサイト (2件)</summary>", block)
-        self.assertIn('<a href="https://example.com/a" target="_blank">Title A</a>', block)
-        self.assertIn('<span class="web-search-sources__hostname">- example.com</span>', block)
-        self.assertIn('<a href="https://example.com/b" target="_blank">Title B</a>', block)
+        self.assertIn('<summary class="web-search-sources__summary">', block)
+        self.assertIn('<span class="web-search-sources__label">参照したWebサイト</span>', block)
+        self.assertIn('<span class="web-search-sources__count">2件</span>', block)
+        self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
+        self.assertIn('<span class="web-search-sources__index">1</span>', block)
+        self.assertIn('<span class="web-search-sources__title">Title A</span>', block)
+        self.assertIn('<span class="web-search-sources__hostname">example.com</span>', block)
+        self.assertIn('<a class="web-search-sources__link" href="https://example.com/b" target="_blank">', block)
+        self.assertIn('<span class="web-search-sources__index">2</span>', block)
+        self.assertIn('<span class="web-search-sources__title">Title B</span>', block)
         self.assertTrue(block.endswith("</details>"))
 
     def test_build_web_search_sources_markdown_escapes_source_html(self):
