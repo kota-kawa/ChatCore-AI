@@ -17,6 +17,36 @@ function persistStoredHistory(key: string, entries: StoredHistoryEntry[]) {
   localStorage.setItem(key, JSON.stringify(entries));
 }
 
+export type StoredHistoryWriteResult = {
+  stored: boolean;
+  truncated: boolean;
+  retainedEntries: number;
+  droppedEntries: number;
+  reason?: "quota_exceeded" | "storage_error";
+};
+
+function storedHistoryWriteSuccess(entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
+  return {
+    stored: true,
+    truncated: false,
+    retainedEntries: entries.length,
+    droppedEntries: 0,
+  };
+}
+
+function storedHistoryWriteFailure(
+  entries: StoredHistoryEntry[],
+  reason: StoredHistoryWriteResult["reason"],
+): StoredHistoryWriteResult {
+  return {
+    stored: false,
+    truncated: false,
+    retainedEntries: 0,
+    droppedEntries: entries.length,
+    reason,
+  };
+}
+
 export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   try {
     const raw = localStorage.getItem(getStoredHistoryKey(roomId));
@@ -40,13 +70,14 @@ export function readStoredHistory(roomId: string): StoredHistoryEntry[] {
   }
 }
 
-export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]) {
+export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
   const storageKey = getStoredHistoryKey(roomId);
   try {
     persistStoredHistory(storageKey, entries);
+    return storedHistoryWriteSuccess(entries);
   } catch (error) {
     if (!isQuotaExceededError(error) || entries.length <= 1) {
-      return;
+      return storedHistoryWriteFailure(entries, isQuotaExceededError(error) ? "quota_exceeded" : "storage_error");
     }
 
     // Preserve the newest messages when storage is near quota.
@@ -60,24 +91,32 @@ export function writeStoredHistory(roomId: string, entries: StoredHistoryEntry[]
 
       try {
         persistStoredHistory(storageKey, retainedEntries);
-        return;
+        return {
+          stored: true,
+          truncated: true,
+          retainedEntries: retainedEntries.length,
+          droppedEntries: entries.length - retainedEntries.length,
+          reason: "quota_exceeded",
+        };
       } catch (retryError) {
         if (!isQuotaExceededError(retryError)) {
-          return;
+          return storedHistoryWriteFailure(entries, "storage_error");
         }
       }
     }
   }
+
+  return storedHistoryWriteFailure(entries, "quota_exceeded");
 }
 
-export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry) {
+export function appendStoredHistory(roomId: string, entry: StoredHistoryEntry): StoredHistoryWriteResult {
   const existing = readStoredHistory(roomId);
-  writeStoredHistory(roomId, [...existing, entry]);
+  return writeStoredHistory(roomId, [...existing, entry]);
 }
 
-export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry[]) {
+export function prependStoredHistory(roomId: string, entries: StoredHistoryEntry[]): StoredHistoryWriteResult {
   const existing = readStoredHistory(roomId);
-  writeStoredHistory(roomId, [...entries, ...existing]);
+  return writeStoredHistory(roomId, [...entries, ...existing]);
 }
 
 export function removeStoredHistory(roomId: string) {

@@ -39,6 +39,7 @@ import {
   toStoredSender,
   writeCachedAuthState,
   writeStoredHistory,
+  type StoredHistoryWriteResult,
 } from "../../lib/chat_page/storage";
 import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_utils";
 import {
@@ -230,6 +231,7 @@ export function useHomePageController() {
 
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
+  const localStorageWarningShownRef = useRef(false);
   const generationGuardRef = useRef<GenerationGuard | null>(null);
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
@@ -307,6 +309,15 @@ export function useHomePageController() {
     return true;
   }, []);
 
+  const notifyLocalStorageWriteFailure = useCallback(() => {
+    if (localStorageWarningShownRef.current) return;
+    localStorageWarningShownRef.current = true;
+    showToast(
+      "ブラウザの保存容量が不足しているため、この端末に現在のチャット状態を保存できませんでした。",
+      { variant: "error" },
+    );
+  }, []);
+
   const disconnectActiveGeneration = useCallback(() => {
     const generation = generationGuardRef.current?.abortActive() ?? null;
     const abortController = generation?.abortController ?? abortControllerRef.current;
@@ -348,9 +359,9 @@ export function useHomePageController() {
         localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
       }
     } catch {
-      // ignore localStorage failures
+      notifyLocalStorageWriteFailure();
     }
-  }, [disconnectActiveGeneration]);
+  }, [disconnectActiveGeneration, notifyLocalStorageWriteFailure]);
 
   const appendAssistantErrorMessage = useCallback(
     (roomId: string, errorMessage: string) => {
@@ -372,6 +383,25 @@ export function useHomePageController() {
     [removeThinkingMessages, scheduleAutoScrollIfNeeded],
   );
 
+  const notifyStoredHistoryWriteIssue = useCallback((result: StoredHistoryWriteResult) => {
+    if (result.stored && !result.truncated) return;
+    if (localStorageWarningShownRef.current) return;
+
+    localStorageWarningShownRef.current = true;
+    if (result.stored) {
+      showToast(
+        "ブラウザの保存容量が不足したため、この端末に保存するチャット表示キャッシュの古い一部を削除しました。",
+        { variant: "error" },
+      );
+      return;
+    }
+
+    showToast(
+      "ブラウザの保存容量が不足しているため、この端末にチャット履歴を保存できませんでした。リロード前に必要な内容を控えてください。",
+      { variant: "error" },
+    );
+  }, []);
+
   const saveUiMessagesToLocalStorage = useCallback((roomId: string, uiMessages: UiChatMessage[]) => {
     const normalized = uiMessages
       .filter((message) => message.sender === "user" || message.sender === "assistant")
@@ -379,8 +409,8 @@ export function useHomePageController() {
         text: message.text,
         sender: toStoredSender(message.sender),
       }));
-    writeStoredHistory(roomId, normalized);
-  }, []);
+    notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized));
+  }, [notifyStoredHistoryWriteIssue]);
 
   const loadLocalChatHistory = useCallback(
     (roomId: string) => {
@@ -502,7 +532,7 @@ export function useHomePageController() {
             });
           }
           if (persist && finalText && isGenerationActive(generation)) {
-            appendStoredHistory(roomId, { text: finalText, sender: "bot" });
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
           }
           scheduleAutoScrollIfNeeded(true);
           return;
@@ -522,7 +552,7 @@ export function useHomePageController() {
         });
 
         if (persist && finalText && isGenerationActive(generation)) {
-          appendStoredHistory(roomId, { text: finalText, sender: "bot" });
+          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
         }
         scheduleAutoScrollIfNeeded(true);
       };
@@ -651,7 +681,13 @@ export function useHomePageController() {
         appendAssistantErrorMessage(roomId, "ストリームが途中で終了しました。");
       }
     },
-    [appendAssistantErrorMessage, isGenerationActive, removeThinkingMessages, scheduleAutoScrollIfNeeded],
+    [
+      appendAssistantErrorMessage,
+      isGenerationActive,
+      notifyStoredHistoryWriteIssue,
+      removeThinkingMessages,
+      scheduleAutoScrollIfNeeded,
+    ],
   );
 
   const connectToGenerationStream = useCallback(
@@ -822,11 +858,13 @@ export function useHomePageController() {
       setHistoryHasMore(pagination.hasMore);
       setHistoryNextBeforeId(pagination.nextBeforeId);
 
-      prependStoredHistory(
-        roomId,
-        uiMessages
-          .filter((message) => message.sender === "user" || message.sender === "assistant")
-          .map((message) => ({ text: message.text, sender: toStoredSender(message.sender) })),
+      notifyStoredHistoryWriteIssue(
+        prependStoredHistory(
+          roomId,
+          uiMessages
+            .filter((message) => message.sender === "user" || message.sender === "assistant")
+            .map((message) => ({ text: message.text, sender: toStoredSender(message.sender) })),
+        ),
       );
     } catch (error) {
       console.error("追加履歴取得失敗:", error);
@@ -834,7 +872,7 @@ export function useHomePageController() {
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder]);
+  }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder, notifyStoredHistoryWriteIssue]);
 
   const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
@@ -918,7 +956,7 @@ export function useHomePageController() {
         if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
         return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
       });
-      appendStoredHistory(roomId, { text: message, sender: "user" });
+      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: message, sender: "user" }));
       streamLastEventIdByRoomRef.current.set(roomId, 0);
       scheduleAutoScrollIfNeeded(true);
 
@@ -971,7 +1009,7 @@ export function useHomePageController() {
         });
 
         if (response.ok && data.response && isGenerationActive(generation)) {
-          appendStoredHistory(roomId, { text: data.response, sender: "bot" });
+          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
         }
         scheduleAutoScrollIfNeeded(true);
       } catch (error) {
@@ -998,6 +1036,7 @@ export function useHomePageController() {
       appendAssistantErrorMessage,
       consumeStreamingChatResponse,
       isGenerationActive,
+      notifyStoredHistoryWriteIssue,
       releaseGeneration,
       removeThinkingMessages,
       scheduleAutoScrollIfNeeded,
