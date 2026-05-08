@@ -17,7 +17,10 @@ import { setLoggedInState } from "../../scripts/core/app_state";
 import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { isNearBottom } from "../../lib/chat_page/dom";
-import { buildTaskOrderForPersistence } from "../../lib/chat_page/home_page_controller_utils";
+import {
+  buildTaskOrderForPersistence,
+  isLatestChatTurnAnswered,
+} from "../../lib/chat_page/home_page_controller_utils";
 import {
   prependUiChatMessagesWithinLimit,
   rememberStreamEventId,
@@ -827,23 +830,33 @@ export function useHomePageController() {
   const loadChatHistory = useCallback(
     async (roomId: string, shouldCheckGeneration = true) => {
       try {
-        const { messages: historyMessages, pagination, roomMode } = await fetchChatHistoryPage(roomId);
+        let loadedHistory = await fetchChatHistoryPage(roomId);
         if (currentRoomIdRef.current !== roomId) return;
 
-        const uiMessages: UiChatMessage[] = historyMessages.map((entry) => ({
-          id: nextMessageId("history", messageSeqRef),
-          sender: normalizeHistorySender(entry.sender),
-          text: typeof entry.message === "string" ? entry.message : "",
-        }));
+        const toUiMessages = (historyMessages: typeof loadedHistory.messages): UiChatMessage[] =>
+          historyMessages.map((entry) => ({
+            id: nextMessageId("history", messageSeqRef),
+            sender: normalizeHistorySender(entry.sender),
+            text: typeof entry.message === "string" ? entry.message : "",
+          }));
 
-        setCurrentRoomMode(roomMode);
-        setHistoryHasMore(pagination.hasMore);
-        setHistoryNextBeforeId(pagination.nextBeforeId);
+        const syncLoadedHistoryState = () => {
+          setCurrentRoomMode(loadedHistory.roomMode);
+          setHistoryHasMore(loadedHistory.pagination.hasMore);
+          setHistoryNextBeforeId(loadedHistory.pagination.nextBeforeId);
+        };
+
+        const commitHistoryMessages = (nextMessages: UiChatMessage[]) => {
+          setMessages(nextMessages);
+          saveUiMessagesToLocalStorage(roomId, nextMessages);
+          scheduleAutoScrollIfNeeded(true);
+        };
+
+        let uiMessages = toUiMessages(loadedHistory.messages);
+        syncLoadedHistoryState();
 
         if (!shouldCheckGeneration) {
-          setMessages(uiMessages);
-          saveUiMessagesToLocalStorage(roomId, uiMessages);
-          scheduleAutoScrollIfNeeded(true);
+          commitHistoryMessages(uiMessages);
           return;
         }
 
@@ -859,38 +872,36 @@ export function useHomePageController() {
 
         if (currentRoomIdRef.current !== roomId) return;
 
+        if (generationStatus.is_generating && isLatestChatTurnAnswered(uiMessages)) {
+          try {
+            loadedHistory = await fetchChatHistoryPage(roomId);
+            if (currentRoomIdRef.current !== roomId) return;
+            uiMessages = toUiMessages(loadedHistory.messages);
+            syncLoadedHistoryState();
+          } catch {
+            // Keep the already-loaded history if a consistency refresh fails.
+          }
+        }
+
+        if (isLatestChatTurnAnswered(uiMessages)) {
+          streamLastEventIdByRoomRef.current.delete(roomId);
+          commitHistoryMessages(uiMessages);
+          return;
+        }
+
         if (generationStatus.is_generating) {
-          setMessages(uiMessages);
-          saveUiMessagesToLocalStorage(roomId, uiMessages);
-          scheduleAutoScrollIfNeeded(true);
+          commitHistoryMessages(uiMessages);
           void connectToGenerationStream(roomId);
           return;
         }
 
         if (generationStatus.has_replayable_job) {
-          let lastAssistantIndex = -1;
-          for (let i = uiMessages.length - 1; i >= 0; i -= 1) {
-            if (uiMessages[i]?.sender === "assistant") {
-              lastAssistantIndex = i;
-              break;
-            }
-          }
-
-          const replayBaseMessages =
-            lastAssistantIndex >= 0
-              ? [...uiMessages.slice(0, lastAssistantIndex), ...uiMessages.slice(lastAssistantIndex + 1)]
-              : uiMessages;
-
-          setMessages(replayBaseMessages);
-          saveUiMessagesToLocalStorage(roomId, replayBaseMessages);
-          scheduleAutoScrollIfNeeded(true);
+          commitHistoryMessages(uiMessages);
           void connectToGenerationStream(roomId);
           return;
         }
 
-        setMessages(uiMessages);
-        saveUiMessagesToLocalStorage(roomId, uiMessages);
-        scheduleAutoScrollIfNeeded(true);
+        commitHistoryMessages(uiMessages);
       } catch (error) {
         console.error("履歴取得失敗:", error);
       }

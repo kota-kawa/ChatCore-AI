@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildTaskOrderForPersistence } from "../lib/chat_page/home_page_controller_utils";
+import {
+  buildTaskOrderForPersistence,
+  isLatestChatTurnAnswered,
+} from "../lib/chat_page/home_page_controller_utils";
 
 test("buildTaskOrderForPersistence excludes default tasks and empty names", () => {
   const order = buildTaskOrderForPersistence([
@@ -44,4 +47,35 @@ test("buildTaskOrderForPersistence excludes default tasks and empty names", () =
   ]);
 
   assert.deepEqual(order, ["Create report", "Send summary"]);
+});
+
+test("isLatestChatTurnAnswered is true when an assistant reply follows the latest user message", () => {
+  assert.equal(
+    isLatestChatTurnAnswered([
+      { sender: "user" },
+      { sender: "assistant" },
+    ]),
+    true,
+  );
+});
+
+test("isLatestChatTurnAnswered is false when the latest user message is still pending", () => {
+  assert.equal(
+    isLatestChatTurnAnswered([
+      { sender: "user" },
+      { sender: "assistant" },
+      { sender: "user" },
+    ]),
+    false,
+  );
+});
+
+test("isLatestChatTurnAnswered ignores thinking placeholders", () => {
+  assert.equal(
+    isLatestChatTurnAnswered([
+      { sender: "user" },
+      { sender: "thinking" },
+    ]),
+    false,
+  );
 });
