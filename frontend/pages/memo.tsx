@@ -920,6 +920,8 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const hasSelection = selectedIds.size > 0;
+  const activeCollection = activeCollectionId !== null ? collections.find((c) => c.id === activeCollectionId) : null;
+  const hasActiveFilters = Boolean(query.trim()) || sortMode !== "recent" || archiveScope !== "active" || activeCollectionId !== null;
 
   return (
     <>
@@ -952,39 +954,45 @@ export default function MemoPage() {
           <header className="memo-toolbar memo-card">
             <div className="memo-toolbar__top-row">
               <div className="memo-toolbar__title">
-                <h1>メモワークスペース</h1>
-                <p>検索・整理・共有を1ページで完結。保存した会話をすぐ再利用できます。</p>
+                <h1>メモ</h1>
+                <span className="memo-toolbar__count">
+                  <i className="bi bi-journal-text" aria-hidden="true"></i>
+                  {totalMemoCount}件
+                </span>
               </div>
               <div className="memo-toolbar__actions">
                 <button
                   type="button"
                   className={`memo-toolbar__icon-btn${isBulkMode ? " is-active" : ""}`}
                   onClick={() => { if (isBulkMode) exitBulkMode(); else setIsBulkMode(true); }}
+                  aria-label={isBulkMode ? "一括選択を終了" : "一括操作モード"}
                   data-tooltip={isBulkMode ? "一括選択を終了" : "一括操作モード"}
                   data-tooltip-placement="bottom"
                 >
-                  <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`}></i>
-                  <span className="memo-toolbar__btn-label">{isBulkMode ? "選択終了" : "一括操作"}</span>
+                  <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`} aria-hidden="true"></i>
+                  <span className="sr-only">{isBulkMode ? "一括選択を終了" : "一括操作モード"}</span>
                 </button>
                 <button
                   type="button"
                   className="memo-toolbar__icon-btn"
                   onClick={() => setIsCollectionPanelOpen(true)}
+                  aria-label="コレクション管理"
                   data-tooltip="コレクション管理"
                   data-tooltip-placement="bottom"
                 >
-                  <i className="bi bi-folder2-open"></i>
-                  <span className="memo-toolbar__btn-label">コレクション</span>
+                  <i className="bi bi-folder2-open" aria-hidden="true"></i>
+                  <span className="sr-only">コレクション管理</span>
                 </button>
                 <button
                   type="button"
                   className="memo-toolbar__icon-btn"
                   onClick={() => setIsExportModalOpen(true)}
+                  aria-label="エクスポート"
                   data-tooltip="エクスポート"
                   data-tooltip-placement="bottom"
                 >
-                  <i className="bi bi-download"></i>
-                  <span className="memo-toolbar__btn-label">エクスポート</span>
+                  <i className="bi bi-download" aria-hidden="true"></i>
+                  <span className="sr-only">エクスポート</span>
                 </button>
               </div>
             </div>
@@ -999,37 +1007,70 @@ export default function MemoPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="タイトル・タグ・本文から検索"
               />
-              {sortMode === "semantic" && <span className="memo-search__badge">AI検索</span>}
+              {sortMode === "semantic" && (
+                <span className="memo-search__badge" data-tooltip="AI類似検索" data-tooltip-placement="top">
+                  <i className="bi bi-stars" aria-hidden="true"></i>
+                  AI
+                </span>
+              )}
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="memo-toolbar__search-clear"
+                  onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("recent"); setActiveCollectionId(null); }}
+                  aria-label="検索と絞り込みをクリア"
+                  data-tooltip="検索と絞り込みをクリア"
+                  data-tooltip-placement="top"
+                >
+                  <i className="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+              )}
             </div>
 
             <div className="memo-toolbar__filters">
-              <MemoSelect
-                value={sortMode}
-                onChange={(v) => setSortMode(v)}
-                options={[
-                  { value: "recent", label: "新しい順" },
-                  { value: "updated", label: "更新順" },
-                  { value: "oldest", label: "古い順" },
-                  { value: "title", label: "タイトル順" },
-                  { value: "semantic", label: "AI類似検索" },
-                ]}
-              />
-              <MemoSelect
-                value={archiveScope}
-                onChange={(v) => setArchiveScope(v)}
-                options={[
-                  { value: "active", label: "通常メモ" },
-                  { value: "all", label: "すべて" },
-                  { value: "archived", label: "アーカイブのみ" },
-                ]}
-              />
-              <button
-                type="button"
-                className="memo-toolbar__clear"
-                onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("recent"); setActiveCollectionId(null); }}
-              >
-                クリア
-              </button>
+              <div className="memo-filter-chips" role="group" aria-label="表示範囲">
+                <button
+                  type="button"
+                  className={`memo-filter-chip${archiveScope === "active" ? " is-active" : ""}`}
+                  onClick={() => setArchiveScope("active")}
+                  aria-pressed={archiveScope === "active"}
+                >
+                  <i className="bi bi-inbox" aria-hidden="true"></i>
+                  通常
+                </button>
+                <button
+                  type="button"
+                  className={`memo-filter-chip${archiveScope === "all" ? " is-active" : ""}`}
+                  onClick={() => setArchiveScope("all")}
+                  aria-pressed={archiveScope === "all"}
+                >
+                  <i className="bi bi-collection" aria-hidden="true"></i>
+                  すべて
+                </button>
+                <button
+                  type="button"
+                  className={`memo-filter-chip${archiveScope === "archived" ? " is-active" : ""}`}
+                  onClick={() => setArchiveScope("archived")}
+                  aria-pressed={archiveScope === "archived"}
+                >
+                  <i className="bi bi-archive" aria-hidden="true"></i>
+                  アーカイブ
+                </button>
+              </div>
+              <div className="memo-sort-control">
+                <i className="bi bi-sort-down" aria-hidden="true"></i>
+                <MemoSelect
+                  value={sortMode}
+                  onChange={(v) => setSortMode(v)}
+                  options={[
+                    { value: "recent", label: "新しい順" },
+                    { value: "updated", label: "更新順" },
+                    { value: "oldest", label: "古い順" },
+                    { value: "title", label: "タイトル順" },
+                    { value: "semantic", label: "AI類似検索" },
+                  ]}
+                />
+              </div>
             </div>
 
             {/* Collection filter chips */}
@@ -1143,7 +1184,7 @@ export default function MemoPage() {
             {/* ── Memo list ── */}
             <section className="memo-card memo-history-panel">
               <div className="memo-panel__header">
-                <h2>メモ一覧{activeCollectionId !== null && collections.find(c => c.id === activeCollectionId) && <span className="memo-panel__collection-label"> — {collections.find(c => c.id === activeCollectionId)?.name}</span>}</h2>
+                <h2>メモ一覧{activeCollection && <span className="memo-panel__collection-label"> — {activeCollection.name}</span>}</h2>
                 <p>{totalMemoCount}件</p>
               </div>
 

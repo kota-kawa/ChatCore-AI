@@ -3,7 +3,7 @@ const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["highlight.js", "marked"],
+  transpilePackages: ["marked"],
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
