@@ -14,6 +14,7 @@ import { useHomePageUiState } from "./use_home_page_ui_state";
 import { useHomePageAiAgentState } from "./use_home_page_ai_agent_state";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
+import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { buildTaskOrderForPersistence } from "../../lib/chat_page/home_page_controller_utils";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
@@ -1897,15 +1898,25 @@ export function useHomePageController() {
     let cancelled = false;
 
     fetch("/api/current_user", { credentials: "same-origin" })
-      .then((response) => response.json())
-      .then((data) => {
+      .then(readCurrentUserLoggedIn)
+      .then((nextLoggedIn) => {
         if (cancelled) return;
-        const nextLoggedIn = Boolean(data?.logged_in);
         writeCachedAuthState(nextLoggedIn);
         setLoggedIn(nextLoggedIn);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
+        if (error instanceof CurrentUserAuthError) {
+          writeCachedAuthState(false);
+          setLoggedIn(false);
+          showToast(
+            error.status === 401
+              ? "ログインセッションが切れました。再ログインしてください。"
+              : "認証状態を確認できませんでした。再ログインしてください。",
+            { variant: "error" },
+          );
+          return;
+        }
         if (!canFallback) {
           setLoggedIn(false);
         }
