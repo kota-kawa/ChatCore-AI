@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -87,9 +88,15 @@ function SetupSectionComponent() {
   const { handleAccessChat, handleSetupSendMessage } = useHomePageChatContext();
   const isSetupInfoWithinLimit = setupInfo.length <= MAX_SETUP_INFO_LENGTH;
   const canSendSetupMessage = setupInfo.trim().length > 0 && isSetupInfoWithinLimit && !isChatLaunching;
+  const selectedModelIndex = Math.max(
+    0,
+    MODEL_OPTIONS.findIndex((option) => option.value === selectedModel),
+  );
 
   // DOM refs
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const modelTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const modelOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
   const taskObjectSequenceRef = useRef(0);
 
@@ -114,11 +121,23 @@ function SetupSectionComponent() {
   const saveModeFeedbackTimeoutRef = useRef<number | null>(null);
   const hasSeenInitialTemporaryModeRef = useRef(false);
   const [saveModeFeedbackVisible, setSaveModeFeedbackVisible] = useState(false);
+  const [activeModelOptionIndex, setActiveModelOptionIndex] = useState(selectedModelIndex);
 
   // Sync dragging index from React state → ref
   useEffect(() => {
     draggingTaskIndexRef.current = draggingTaskIndex;
   }, [draggingTaskIndex]);
+
+  useEffect(() => {
+    setActiveModelOptionIndex(selectedModelIndex);
+  }, [selectedModelIndex]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    window.requestAnimationFrame(() => {
+      modelOptionRefs.current[activeModelOptionIndex]?.focus();
+    });
+  }, [activeModelOptionIndex, modelMenuOpen]);
 
   useEffect(() => {
     if (!storedSetupStateLoaded) return;
@@ -292,6 +311,108 @@ function SetupSectionComponent() {
       handleTaskDragEnd(finalDragIndex, finalDropTarget);
     },
     [handleTaskDragEnd],
+  );
+
+  const focusModelOption = useCallback((index: number) => {
+    const lastIndex = MODEL_OPTIONS.length - 1;
+    const nextIndex = Math.min(Math.max(index, 0), lastIndex);
+    setActiveModelOptionIndex(nextIndex);
+    window.requestAnimationFrame(() => {
+      modelOptionRefs.current[nextIndex]?.focus();
+    });
+  }, []);
+
+  const selectModelOption = useCallback(
+    (index: number) => {
+      const option = MODEL_OPTIONS[index];
+      if (!option) return;
+      setSelectedModel(option.value);
+      setModelMenuOpen(false);
+      modelTriggerRef.current?.focus();
+    },
+    [setModelMenuOpen, setSelectedModel],
+  );
+
+  const openModelMenuAt = useCallback(
+    (index: number) => {
+      const lastIndex = MODEL_OPTIONS.length - 1;
+      const nextIndex = Math.min(Math.max(index, 0), lastIndex);
+      setActiveModelOptionIndex(nextIndex);
+      setModelMenuOpen(true);
+      window.requestAnimationFrame(() => {
+        modelOptionRefs.current[nextIndex]?.focus();
+      });
+    },
+    [setModelMenuOpen],
+  );
+
+  const handleSetupInfoKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.nativeEvent.isComposing || event.key === "Process") return;
+      if (event.key !== "Enter" || event.shiftKey) return;
+
+      event.preventDefault();
+      if (!canSendSetupMessage) return;
+      finishPointerDrag();
+      void handleSetupSendMessage();
+    },
+    [canSendSetupMessage, finishPointerDrag, handleSetupSendMessage],
+  );
+
+  const handleModelTriggerKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        openModelMenuAt(modelMenuOpen ? Math.min(activeModelOptionIndex + 1, MODEL_OPTIONS.length - 1) : selectedModelIndex);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        openModelMenuAt(modelMenuOpen ? Math.max(activeModelOptionIndex - 1, 0) : selectedModelIndex);
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openModelMenuAt(selectedModelIndex);
+      }
+    },
+    [activeModelOptionIndex, modelMenuOpen, openModelMenuAt, selectedModelIndex],
+  );
+
+  const handleModelOptionKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusModelOption(index >= MODEL_OPTIONS.length - 1 ? 0 : index + 1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusModelOption(index <= 0 ? MODEL_OPTIONS.length - 1 : index - 1);
+        return;
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        focusModelOption(0);
+        return;
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        focusModelOption(MODEL_OPTIONS.length - 1);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setModelMenuOpen(false);
+        modelTriggerRef.current?.focus();
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectModelOption(index);
+      }
+    },
+    [focusModelOption, selectModelOption, setModelMenuOpen],
   );
 
   const handleTaskPointerDown = useCallback(
@@ -541,7 +662,7 @@ function SetupSectionComponent() {
         <h2 className="setup-form-title">Chat Core</h2>
 
         <div className="form-group setup-info-group">
-          <label className="form-label">やりたいことを入力（任意）</label>
+          <label className="form-label" htmlFor="setup-info">やりたいことを入力（任意）</label>
           <div className="setup-info-field-shell">
             <div className="chat-save-mode-control">
               <button
@@ -590,6 +711,7 @@ function SetupSectionComponent() {
                 onChange={(event) => {
                   setSetupInfo(event.target.value);
                 }}
+                onKeyDown={handleSetupInfoKeyDown}
               ></textarea>
 
               <button
@@ -620,7 +742,7 @@ function SetupSectionComponent() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">AIモデル選択</label>
+          <label className="form-label" htmlFor="ai-model">AIモデル選択</label>
 
           <select
             id="ai-model"
@@ -639,28 +761,44 @@ function SetupSectionComponent() {
 
           <div ref={modelSelectRef} className={`model-select ${modelMenuOpen ? "is-open" : ""}`.trim()}>
             <button
+              ref={modelTriggerRef}
               type="button"
               className="model-select-trigger"
               aria-haspopup="listbox"
               aria-expanded={modelMenuOpen ? "true" : "false"}
+              aria-controls="ai-model-listbox"
               onClick={() => {
+                if (!modelMenuOpen) {
+                  setActiveModelOptionIndex(selectedModelIndex);
+                }
                 setModelMenuOpen((previous) => !previous);
               }}
+              onKeyDown={handleModelTriggerKeyDown}
             >
               {selectedModelLabel}
             </button>
 
-            <div className="model-select-menu" role="listbox">
-              {MODEL_OPTIONS.map((option) => (
+            <div className="model-select-menu" id="ai-model-listbox" role="listbox" aria-label="AIモデル選択">
+              {MODEL_OPTIONS.map((option, index) => (
                 <button
                   key={option.value}
+                  ref={(node) => {
+                    modelOptionRefs.current[index] = node;
+                  }}
+                  id={`ai-model-option-${index}`}
                   type="button"
                   className={`model-select-option ${selectedModel === option.value ? "is-selected" : ""}`.trim()}
                   role="option"
                   aria-selected={selectedModel === option.value ? "true" : "false"}
+                  tabIndex={modelMenuOpen && activeModelOptionIndex === index ? 0 : -1}
+                  onFocus={() => {
+                    setActiveModelOptionIndex(index);
+                  }}
+                  onKeyDown={(event) => {
+                    handleModelOptionKeyDown(event, index);
+                  }}
                   onClick={() => {
-                    setSelectedModel(option.value);
-                    setModelMenuOpen(false);
+                    selectModelOption(index);
                   }}
                 >
                   {option.label}

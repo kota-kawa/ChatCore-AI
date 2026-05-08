@@ -49,6 +49,11 @@ function ChatMainSectionComponent() {
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
+  const canSendChatMessage =
+    hasCurrentRoom &&
+    !isChatLaunching &&
+    chatInput.trim().length > 0 &&
+    chatInput.length <= MAX_CHAT_MESSAGE_LENGTH;
 
   const handleRoomCardKeyDown = (
     event: React.KeyboardEvent<HTMLDivElement>,
@@ -326,8 +331,9 @@ function ChatMainSectionComponent() {
                 aria-label={isGenerating ? "停止" : "送信"}
                 data-tooltip={isGenerating ? "生成を停止" : "メッセージを送信"}
                 data-tooltip-placement="top"
-                disabled={isChatLaunching}
+                disabled={isChatLaunching || (!isGenerating && !canSendChatMessage)}
                 onClick={() => {
+                  if (!isGenerating && !canSendChatMessage) return;
                   handleSendMessage();
                 }}
               >
