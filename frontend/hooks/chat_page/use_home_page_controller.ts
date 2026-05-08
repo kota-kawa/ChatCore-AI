@@ -40,6 +40,11 @@ import {
   writeStoredHistory,
 } from "../../lib/chat_page/storage";
 import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_utils";
+import {
+  createGenerationGuard,
+  type ActiveGeneration,
+  type GenerationGuard,
+} from "../../lib/chat_page/generation_guard";
 import type {
   ChatHistoryPagination,
   ChatRoom,
@@ -224,6 +229,10 @@ export function useHomePageController() {
 
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
+  const generationGuardRef = useRef<GenerationGuard | null>(null);
+  if (!generationGuardRef.current) {
+    generationGuardRef.current = createGenerationGuard();
+  }
   const hasCurrentRoom = Boolean(currentRoomId);
   const { data: cachedChatRooms, mutate: mutateChatRooms } = useSWR<ChatRoom[]>(
     loggedIn ? "/api/get_chat_rooms" : null,
@@ -268,13 +277,62 @@ export function useHomePageController() {
     return timeoutId;
   }, []);
 
-  const disconnectActiveGeneration = useCallback(() => {
-    const abortController = abortControllerRef.current;
-    if (!abortController) return;
-    abortController.abort();
-    abortControllerRef.current = null;
-    setIsGenerating(false);
+  const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
+    return list.filter((message) => message.sender !== "thinking");
   }, []);
+
+  const acquireGeneration = useCallback(
+    (roomId: string) => {
+      const generation = generationGuardRef.current?.acquire(roomId) ?? null;
+      if (!generation) return null;
+
+      abortControllerRef.current = generation.abortController;
+      setIsGenerating(true);
+      return generation;
+    },
+    [],
+  );
+
+  const isGenerationActive = useCallback((generation: ActiveGeneration) => {
+    return generationGuardRef.current?.isActive(generation) === true;
+  }, []);
+
+  const releaseGeneration = useCallback((generation: ActiveGeneration) => {
+    if (generationGuardRef.current?.release(generation) !== true) return false;
+    if (abortControllerRef.current === generation.abortController) {
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+    return true;
+  }, []);
+
+  const disconnectActiveGeneration = useCallback(() => {
+    const generation = generationGuardRef.current?.abortActive() ?? null;
+    const abortController = generation?.abortController ?? abortControllerRef.current;
+    if (!abortController) return;
+
+    if (!generation) {
+      abortController.abort();
+    }
+    if (abortControllerRef.current === abortController) {
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+
+    const stoppedRoomId = generation?.roomId ?? currentRoomIdRef.current;
+    if (!stoppedRoomId) return;
+
+    setMessages((previous) => {
+      if (currentRoomIdRef.current !== stoppedRoomId) return previous;
+      return removeThinkingMessages(previous).map((message) => {
+        if (!message.streaming) return message;
+        return {
+          ...message,
+          streaming: false,
+        };
+      });
+    });
+  }, [removeThinkingMessages]);
 
   const persistCurrentRoomId = useCallback((roomId: string | null, mode?: ChatRoomMode) => {
     if (currentRoomIdRef.current !== roomId) {
@@ -292,10 +350,6 @@ export function useHomePageController() {
       // ignore localStorage failures
     }
   }, [disconnectActiveGeneration]);
-
-  const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
-    return list.filter((message) => message.sender !== "thinking");
-  }, []);
 
   const appendAssistantErrorMessage = useCallback(
     (roomId: string, errorMessage: string) => {
@@ -376,7 +430,9 @@ export function useHomePageController() {
   }, []);
 
   const consumeStreamingChatResponse = useCallback(
-    async (response: Response, roomId: string) => {
+    async (response: Response, generation: ActiveGeneration) => {
+      const { roomId } = generation;
+
       if (!response.body) {
         throw new Error("ストリーム応答を受信できませんでした。");
       }
@@ -395,7 +451,7 @@ export function useHomePageController() {
         const newId = streamingMessageId;
 
         setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId) return previous;
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return [
             ...removeThinkingMessages(previous),
             {
@@ -412,7 +468,7 @@ export function useHomePageController() {
 
       const updateThinkingStatus = (statusText: string) => {
         setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId) return previous;
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return previous.map((message) => {
             if (message.sender !== "thinking") return message;
             return {
@@ -428,7 +484,7 @@ export function useHomePageController() {
         if (!streamingMessageId) {
           if (finalText) {
             setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId) return previous;
+              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
               return [
                 ...removeThinkingMessages(previous),
                 {
@@ -440,11 +496,11 @@ export function useHomePageController() {
             });
           } else {
             setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId) return previous;
+              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
               return removeThinkingMessages(previous);
             });
           }
-          if (persist && finalText) {
+          if (persist && finalText && isGenerationActive(generation)) {
             appendStoredHistory(roomId, { text: finalText, sender: "bot" });
           }
           scheduleAutoScrollIfNeeded(true);
@@ -453,7 +509,7 @@ export function useHomePageController() {
 
         const streamId = streamingMessageId;
         setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId) return previous;
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return removeThinkingMessages(previous).map((message) => {
             if (message.id !== streamId) return message;
             return {
@@ -464,7 +520,7 @@ export function useHomePageController() {
           });
         });
 
-        if (persist && finalText) {
+        if (persist && finalText && isGenerationActive(generation)) {
           appendStoredHistory(roomId, { text: finalText, sender: "bot" });
         }
         scheduleAutoScrollIfNeeded(true);
@@ -473,6 +529,7 @@ export function useHomePageController() {
       const processBlock = (block: string) => {
         const parsed = parseStreamEventBlock(block);
         if (!parsed) return;
+        if (!isGenerationActive(generation)) return;
 
         if (typeof parsed.id === "number" && parsed.id > 0) {
           streamLastEventIdByRoomRef.current.set(roomId, parsed.id);
@@ -485,7 +542,7 @@ export function useHomePageController() {
           streamedText += text;
 
           setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId) return previous;
+            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
             return previous.map((message) => {
               if (message.id !== streamId) return message;
               return {
@@ -556,6 +613,7 @@ export function useHomePageController() {
       try {
         while (true) {
           const { value, done } = await reader.read();
+          if (!isGenerationActive(generation)) return;
           buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
 
           const blocks = buffer.split(/\r?\n\r?\n/);
@@ -567,7 +625,9 @@ export function useHomePageController() {
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          finalizeStreamingMessage(streamedText, false);
+          if (isGenerationActive(generation)) {
+            finalizeStreamingMessage(streamedText, false);
+          }
           return;
         }
         throw error;
@@ -577,7 +637,7 @@ export function useHomePageController() {
         });
       }
 
-      if (streamError) {
+      if (streamError && isGenerationActive(generation)) {
         if (streamedText) {
           finalizeStreamingMessage(streamedText, false);
         } else {
@@ -586,24 +646,21 @@ export function useHomePageController() {
         return;
       }
 
-      if (!completed) {
+      if (!completed && isGenerationActive(generation)) {
         appendAssistantErrorMessage(roomId, "ストリームが途中で終了しました。");
       }
     },
-    [appendAssistantErrorMessage, removeThinkingMessages, scheduleAutoScrollIfNeeded],
+    [appendAssistantErrorMessage, isGenerationActive, removeThinkingMessages, scheduleAutoScrollIfNeeded],
   );
 
   const connectToGenerationStream = useCallback(
     async (roomId: string) => {
-      if (abortControllerRef.current) return;
-
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-      setIsGenerating(true);
+      const generation = acquireGeneration(roomId);
+      if (!generation) return;
 
       const thinkingId = nextMessageId("thinking", messageSeqRef);
       setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId) return previous;
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
         return [
           ...removeThinkingMessages(previous),
           {
@@ -623,35 +680,41 @@ export function useHomePageController() {
       try {
         const response = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
           credentials: "same-origin",
-          signal: abortController.signal,
+          signal: generation.abortController.signal,
           headers,
         });
 
         if (!response.ok) {
           const rawPayload = await readJsonBodySafe(response);
-          appendAssistantErrorMessage(
-            roomId,
-            extractApiErrorMessage(rawPayload, "チャットの応答取得に失敗しました。", response.status),
-          );
+          if (isGenerationActive(generation)) {
+            appendAssistantErrorMessage(
+              roomId,
+              extractApiErrorMessage(rawPayload, "チャットの応答取得に失敗しました。", response.status),
+            );
+          }
           return;
         }
 
-        await consumeStreamingChatResponse(response, roomId);
+        await consumeStreamingChatResponse(response, generation);
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (isGenerationActive(generation) && !(error instanceof DOMException && error.name === "AbortError")) {
           appendAssistantErrorMessage(
             roomId,
             error instanceof Error ? error.message : "チャットの応答取得に失敗しました。",
           );
         }
       } finally {
-        if (abortControllerRef.current === abortController) {
-          abortControllerRef.current = null;
-          setIsGenerating(false);
-        }
+        releaseGeneration(generation);
       }
     },
-    [appendAssistantErrorMessage, consumeStreamingChatResponse],
+    [
+      acquireGeneration,
+      appendAssistantErrorMessage,
+      consumeStreamingChatResponse,
+      isGenerationActive,
+      releaseGeneration,
+      removeThinkingMessages,
+    ],
   );
 
   const loadChatHistory = useCallback(
@@ -836,11 +899,8 @@ export function useHomePageController() {
 
   const generateResponse = useCallback(
     async (message: string, model: string, roomId: string) => {
-      if (abortControllerRef.current) return;
-
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-      setIsGenerating(true);
+      const generation = acquireGeneration(roomId);
+      if (!generation) return;
 
       const userMessage: UiChatMessage = {
         id: nextMessageId("user", messageSeqRef),
@@ -854,7 +914,7 @@ export function useHomePageController() {
       };
 
       setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId) return previous;
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
         return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
       });
       appendStoredHistory(roomId, { text: message, sender: "user" });
@@ -871,12 +931,12 @@ export function useHomePageController() {
             chat_room_id: roomId,
             model,
           }),
-          signal: abortController.signal,
+          signal: generation.abortController.signal,
         });
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
-          await consumeStreamingChatResponse(response, roomId);
+          await consumeStreamingChatResponse(response, generation);
           return;
         }
 
@@ -884,7 +944,7 @@ export function useHomePageController() {
         const data = normalizeChatResponsePayload(rawPayload);
 
         setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId) return previous;
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           const trimmed = removeThinkingMessages(previous);
 
           if (response.ok && data.response) {
@@ -909,29 +969,38 @@ export function useHomePageController() {
           ];
         });
 
-        if (response.ok && data.response) {
+        if (response.ok && data.response && isGenerationActive(generation)) {
           appendStoredHistory(roomId, { text: data.response, sender: "bot" });
         }
         scheduleAutoScrollIfNeeded(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId) return previous;
-            return removeThinkingMessages(previous);
-          });
+          if (isGenerationActive(generation)) {
+            setMessages((previous) => {
+              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+              return removeThinkingMessages(previous);
+            });
+          }
           return;
         }
 
         const errorMessage = error instanceof Error ? error.message : String(error);
-        appendAssistantErrorMessage(roomId, errorMessage);
-      } finally {
-        if (abortControllerRef.current === abortController) {
-          abortControllerRef.current = null;
-          setIsGenerating(false);
+        if (isGenerationActive(generation)) {
+          appendAssistantErrorMessage(roomId, errorMessage);
         }
+      } finally {
+        releaseGeneration(generation);
       }
     },
-    [appendAssistantErrorMessage, consumeStreamingChatResponse, removeThinkingMessages, scheduleAutoScrollIfNeeded],
+    [
+      acquireGeneration,
+      appendAssistantErrorMessage,
+      consumeStreamingChatResponse,
+      isGenerationActive,
+      releaseGeneration,
+      removeThinkingMessages,
+      scheduleAutoScrollIfNeeded,
+    ],
   );
 
   const stopGeneration = useCallback(async () => {
@@ -1255,6 +1324,10 @@ export function useHomePageController() {
           createNewChatRoom(roomId, roomTitle, roomMode),
           waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
         ]);
+        if (currentRoomIdRef.current !== roomId) {
+          setLaunchingTaskName(null);
+          return;
+        }
         removeStoredHistory(roomId);
         const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
         setPageViewState("chat");
@@ -1321,6 +1394,9 @@ export function useHomePageController() {
         createNewChatRoom(roomId, roomTitle, roomMode),
         waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
       ]);
+      if (currentRoomIdRef.current !== roomId) {
+        return;
+      }
       removeStoredHistory(roomId);
       const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
       setPageViewState("chat");
