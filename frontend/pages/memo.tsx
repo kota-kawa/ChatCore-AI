@@ -83,6 +83,7 @@ type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "add_ta
 // ---------------------------------------------------------------------------
 
 const DEFAULT_LIMIT = 50;
+const MAX_VISIBLE_MEMO_TAGS = 3;
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
 const SHARE_EXPIRES_OPTIONS = [
@@ -1184,8 +1185,14 @@ export default function MemoPage() {
             {/* ── Memo list ── */}
             <section className="memo-card memo-history-panel">
               <div className="memo-panel__header">
-                <h2>メモ一覧{activeCollection && <span className="memo-panel__collection-label"> — {activeCollection.name}</span>}</h2>
-                <p>{totalMemoCount}件</p>
+                <div className="memo-panel__heading">
+                  <h2><i className="bi bi-list-ul" aria-hidden="true"></i>メモ一覧</h2>
+                  {activeCollection && <CollectionBadge name={activeCollection.name} color={activeCollection.color || "#6b7280"} />}
+                </div>
+                <span className="memo-panel__count">
+                  <i className="bi bi-journal-text" aria-hidden="true"></i>
+                  {totalMemoCount}件
+                </span>
               </div>
 
               {memoLoadError && <div className="memo-history__empty">{memoLoadError.message}</div>}
@@ -1204,6 +1211,9 @@ export default function MemoPage() {
                     const isBusy = actionLoadingId === memoId;
                     const isSelected = selectedIds.has(memoId);
                     const tags = splitTags(memo.tags);
+                    const visibleTags = tags.slice(0, MAX_VISIBLE_MEMO_TAGS);
+                    const hiddenTagCount = Math.max(tags.length - visibleTags.length, 0);
+                    const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
 
                     return (
                       <li key={memoId}>
@@ -1228,20 +1238,30 @@ export default function MemoPage() {
                             >
                               <div className="memo-item__heading">
                                 <h3 className="memo-item__title">{memo.title || "保存したメモ"}</h3>
-                                <time className="memo-item__date">
-                                  {formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || ""}
-                                </time>
+                                {displayDate && (
+                                  <time className="memo-item__date">
+                                    <i className="bi bi-clock" aria-hidden="true"></i>
+                                    {displayDate}
+                                  </time>
+                                )}
                               </div>
                             </button>
                             <div className="memo-item__status-icons" aria-label="メモ状態">
-                              {memo.is_pinned && <i className="bi bi-pin-angle-fill" data-tooltip="ピン留め中" data-tooltip-placement="top"></i>}
-                              {memo.is_archived && (
-                                <span className="memo-item__archive-badge">
-                                  <i className="bi bi-archive-fill" aria-hidden="true"></i>
-                                  アーカイブ
+                              {memo.is_pinned && (
+                                <span className="memo-item__status-icon" aria-label="ピン留め中" data-tooltip="ピン留め中" data-tooltip-placement="top">
+                                  <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
                                 </span>
                               )}
-                              {memo.is_active && <i className="bi bi-link-45deg" data-tooltip="共有中" data-tooltip-placement="top"></i>}
+                              {memo.is_archived && (
+                                <span className="memo-item__archive-badge" aria-label="アーカイブ済み" data-tooltip="アーカイブ済み" data-tooltip-placement="top">
+                                  <i className="bi bi-archive-fill" aria-hidden="true"></i>
+                                </span>
+                              )}
+                              {memo.is_active && (
+                                <span className="memo-item__status-icon" aria-label="共有中" data-tooltip="共有中" data-tooltip-placement="top">
+                                  <i className="bi bi-link-45deg" aria-hidden="true"></i>
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1284,16 +1304,19 @@ export default function MemoPage() {
                                 className="memo-item__open memo-item__open--content"
                                 onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
                               >
-                                <div className="memo-item__meta-row">
-                                  {memo.collection_name && (
-                                    <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
-                                  )}
-                                  <div className="memo-tag-list">
-                                    {tags.length
-                                      ? tags.map((tag) => <span key={tag} className="memo-tag">{tag}</span>)
-                                      : <span className="memo-tag memo-tag--muted">タグなし</span>}
+                                {(memo.collection_name || visibleTags.length > 0) && (
+                                  <div className="memo-item__meta-row">
+                                    {memo.collection_name && (
+                                      <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
+                                    )}
+                                    {visibleTags.length > 0 && (
+                                      <div className="memo-tag-list" aria-label="タグ">
+                                        {visibleTags.map((tag) => <span key={tag} className="memo-tag">{tag}</span>)}
+                                        {hiddenTagCount > 0 && <span className="memo-tag memo-tag--more">+{hiddenTagCount}</span>}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
+                                )}
                                 {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
                               </button>
 

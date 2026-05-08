@@ -185,19 +185,50 @@ body.memo-page.modal-open {
   align-items: center;
   justify-content: space-between;
   gap: 0.9rem;
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.68rem;
+}
+
+.memo-panel__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .memo-panel__header h2 {
   margin: 0;
-  font-size: 1.22rem;
+  font-size: 1.08rem;
   color: #4a2b09;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  white-space: nowrap;
+}
+
+.memo-panel__header h2 i {
+  font-size: 0.95rem;
+  color: #8f5a17;
 }
 
 .memo-panel__header p {
   margin: 0;
   color: var(--memo-text-muted);
   font-size: 0.84rem;
+}
+
+.memo-panel__count {
+  min-height: 30px;
+  border: 1px solid rgba(191, 122, 23, 0.16);
+  border-radius: 999px;
+  padding: 0.24rem 0.62rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--memo-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .memo-flash {
@@ -226,19 +257,19 @@ body.memo-page.modal-open {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.76rem;
+  gap: 0.58rem;
   overflow: auto;
 }
 
 .memo-item {
-  border: 1px solid rgba(191, 122, 23, 0.15);
-  border-radius: 16px;
+  border: 1px solid rgba(191, 122, 23, 0.13);
+  border-radius: 12px;
   background: var(--memo-card-strong);
-  padding: 0.78rem;
+  padding: 0.72rem;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
-  box-shadow: 0 8px 18px rgba(41, 24, 6, 0.08);
+  gap: 0.52rem;
+  box-shadow: 0 4px 12px rgba(41, 24, 6, 0.06);
 }
 
 .memo-item.is-archived {
@@ -249,19 +280,22 @@ body.memo-page.modal-open {
 .memo-item__archive-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
-  font-size: 0.7rem;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 0.82rem;
   font-weight: 700;
   color: #6b7280;
   background: rgba(107, 114, 128, 0.1);
   border: 1px solid rgba(107, 114, 128, 0.22);
   border-radius: 999px;
-  padding: 0.18rem 0.52rem;
+  padding: 0;
   letter-spacing: 0.01em;
 }
 
 .memo-item__header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.7rem;
 }
@@ -288,7 +322,7 @@ body.memo-page.modal-open {
   margin: 0;
   font-size: 0.98rem;
   font-weight: 800;
-  line-height: 1.38;
+  line-height: 1.34;
   color: #4a2b09;
 }
 
@@ -296,13 +330,29 @@ body.memo-page.modal-open {
   color: #a07d56;
   font-size: 0.76rem;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
 }
 
 .memo-item__status-icons {
   display: inline-flex;
   align-items: center;
-  gap: 0.42rem;
+  gap: 0.3rem;
   color: #9a5b10;
+  flex-shrink: 0;
+}
+
+.memo-item__status-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
 }
 
 .memo-item__inline-edit {
@@ -347,25 +397,30 @@ body.memo-page.modal-open {
 .memo-item__open--content {
   display: flex;
   flex-direction: column;
-  gap: 0.58rem;
+  gap: 0.46rem;
 }
 
 .memo-tag-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .memo-tag {
   display: inline-flex;
   align-items: center;
+  max-width: 9rem;
   border-radius: 999px;
   border: 1px solid rgba(217, 119, 6, 0.2);
   background: rgba(245, 158, 11, 0.1);
   color: #9a5b10;
-  padding: 0.26rem 0.62rem;
-  font-size: 0.72rem;
+  padding: 0.22rem 0.52rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 button.memo-tag {
@@ -378,27 +433,42 @@ button.memo-tag {
   color: #8b7355;
 }
 
+.memo-tag--more {
+  border-color: rgba(120, 113, 108, 0.2);
+  background: rgba(120, 113, 108, 0.1);
+  color: #8b7355;
+}
+
 .memo-item__excerpt {
   margin: 0;
   color: var(--memo-text-muted);
-  font-size: 0.88rem;
-  line-height: 1.62;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .memo-item__excerpt p {
   margin: 0;
 }
 
+.memo-item__excerpt > * {
+  margin-top: 0;
+}
+
 .memo-item__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  justify-content: flex-end;
+  gap: 0.32rem;
 }
 
 .memo-item__action {
-  min-height: 36px;
+  min-height: 34px;
   border: 1px solid rgba(191, 122, 23, 0.2);
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(255, 249, 240, 0.92);
   color: #8f5a17;
   display: inline-flex;
@@ -408,8 +478,8 @@ button.memo-tag {
 }
 
 .memo-item__action {
-  width: 38px;
-  flex: 0 0 38px;
+  width: 36px;
+  flex: 0 0 36px;
 }
 
 .memo-item__action.is-active {
@@ -994,6 +1064,7 @@ textarea.memo-control {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  max-width: 14rem;
   font-size: 0.72rem;
   font-weight: 700;
   border-radius: 6px;
@@ -1001,13 +1072,16 @@ textarea.memo-control {
   background: color-mix(in srgb, var(--badge-color, #6b7280) 14%, transparent);
   color: var(--badge-color, #6b7280);
   border: 1px solid color-mix(in srgb, var(--badge-color, #6b7280) 28%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memo-item__meta-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 /* Panel collection label */
@@ -1870,6 +1944,16 @@ textarea.memo-control {
   color: #cbd5e1;
 }
 
+[data-theme="dark"] .memo-panel__count {
+  background: rgba(15, 23, 42, 0.58);
+  border-color: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .memo-panel__header h2 i {
+  color: #fbbf24;
+}
+
 [data-theme="dark"] .memo-toolbar__search:focus-within {
   background: rgba(15, 23, 42, 0.84);
   border-color: rgba(251, 191, 36, 0.42);
@@ -1976,6 +2060,18 @@ textarea.memo-control {
 
   .memo-sort-control {
     min-width: 0;
+  }
+
+  .memo-panel__header {
+    align-items: flex-start;
+  }
+
+  .memo-panel__heading {
+    flex-wrap: wrap;
+  }
+
+  .memo-panel__count {
+    flex-shrink: 0;
   }
 
   .memo-mobile-tabs {
@@ -2097,6 +2193,12 @@ textarea.memo-control {
 
 [data-theme="dark"] .memo-tag--muted {
   color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+[data-theme="dark"] .memo-tag--more {
+  color: #cbd5e1;
   border-color: rgba(148, 163, 184, 0.24);
   background: rgba(148, 163, 184, 0.1);
 }
