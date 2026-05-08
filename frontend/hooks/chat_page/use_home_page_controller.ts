@@ -75,6 +75,7 @@ import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/se
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
+const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 
 function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
@@ -464,15 +465,7 @@ export function useHomePageController() {
     async (response: Response, generation: ActiveGeneration) => {
       const { roomId } = generation;
 
-      if (!response.body) {
-        throw new Error("ストリーム応答を受信できませんでした。");
-      }
-
-      const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-      let completed = false;
-      let streamError: string | null = null;
       let streamingMessageId: string | null = null;
       let streamedText = "";
 
@@ -557,7 +550,33 @@ export function useHomePageController() {
         scheduleAutoScrollIfNeeded(true);
       };
 
-      const processBlock = (block: string) => {
+      const persistInterruptedStream = (message: string) => {
+        if (streamedText) {
+          finalizeStreamingMessage(streamedText, true);
+          appendAssistantErrorMessage(roomId, message);
+          return;
+        }
+        appendAssistantErrorMessage(roomId, message);
+      };
+
+      const openReconnectStream = async () => {
+        const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
+        if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
+
+        try {
+          const reconnectResponse = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
+            credentials: "same-origin",
+            signal: generation.abortController.signal,
+            headers: { "Last-Event-ID": String(lastEventId) },
+          });
+          if (!reconnectResponse.ok) return null;
+          return reconnectResponse;
+        } catch {
+          return null;
+        }
+      };
+
+      const processBlock = (block: string, streamState: { completed: boolean; streamError: string | null }) => {
         const parsed = parseStreamEventBlock(block);
         if (!parsed) return;
         if (!isGenerationActive(generation)) return;
@@ -620,7 +639,7 @@ export function useHomePageController() {
         }
 
         if (parsed.event === "done") {
-          completed = true;
+          streamState.completed = true;
           const responseText = typeof parsed.data.response === "string" ? parsed.data.response : streamedText;
           finalizeStreamingMessage(responseText, true);
           streamLastEventIdByRoomRef.current.delete(roomId);
@@ -628,57 +647,105 @@ export function useHomePageController() {
         }
 
         if (parsed.event === "aborted") {
-          completed = true;
+          streamState.completed = true;
           finalizeStreamingMessage(streamedText, false);
           return;
         }
 
         if (parsed.event === "error") {
-          streamError =
+          streamState.streamError =
             typeof parsed.data.message === "string"
               ? parsed.data.message
               : "ストリーミング生成中にエラーが発生しました。";
         }
       };
 
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (!isGenerationActive(generation)) return;
-          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-          const blocks = buffer.split(/\r?\n\r?\n/);
-          buffer = blocks.pop() || "";
-          blocks.forEach(processBlock);
-
-          if (streamError) break;
-          if (done) break;
+      const readStreamResponse = async (streamResponse: Response) => {
+        if (!streamResponse.body) {
+          throw new Error("ストリーム応答を受信できませんでした。");
         }
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          if (isGenerationActive(generation)) {
-            finalizeStreamingMessage(streamedText, false);
+
+        const reader = streamResponse.body.getReader();
+        const streamState = {
+          completed: false,
+          streamError: null as string | null,
+        };
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (!isGenerationActive(generation)) return "inactive" as const;
+            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+            const blocks = buffer.split(/\r?\n\r?\n/);
+            buffer = blocks.pop() || "";
+            blocks.forEach((block) => processBlock(block, streamState));
+
+            if (streamState.streamError) break;
+            if (done) break;
           }
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            if (generation.abortController.signal.aborted || !isGenerationActive(generation)) {
+              return "aborted" as const;
+            }
+            return "interrupted" as const;
+          }
+          throw error;
+        } finally {
+          reader.cancel().catch(() => {
+            // no-op
+          });
+        }
+
+        if (streamState.streamError) {
+          return {
+            status: "error" as const,
+            message: streamState.streamError,
+          };
+        }
+
+        return streamState.completed ? ("completed" as const) : ("interrupted" as const);
+      };
+
+      let activeResponse = response;
+      for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
+        const result = await readStreamResponse(activeResponse);
+        if (!isGenerationActive(generation)) return;
+
+        if (result === "completed" || result === "aborted" || result === "inactive") {
           return;
         }
-        throw error;
-      } finally {
-        reader.cancel().catch(() => {
-          // no-op
-        });
-      }
 
-      if (streamError && isGenerationActive(generation)) {
-        if (streamedText) {
-          finalizeStreamingMessage(streamedText, false);
-        } else {
-          appendAssistantErrorMessage(roomId, streamError);
+        if (typeof result === "object" && result.status === "error") {
+          persistInterruptedStream(
+            streamedText
+              ? `${result.message} ここまでの応答を保存しました。`
+              : result.message,
+          );
+          return;
         }
-        return;
-      }
 
-      if (!completed && isGenerationActive(generation)) {
-        appendAssistantErrorMessage(roomId, "ストリームが途中で終了しました。");
+        const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
+        if (!streamedText || reconnectDelay === undefined) {
+          persistInterruptedStream(
+            streamedText
+              ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
+              : "ストリームが途中で終了しました。",
+          );
+          return;
+        }
+
+        await waitForDuration(reconnectDelay);
+        if (!isGenerationActive(generation)) return;
+
+        const reconnectResponse = await openReconnectStream();
+        if (!reconnectResponse) {
+          persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
+          return;
+        }
+        activeResponse = reconnectResponse;
       }
     },
     [
