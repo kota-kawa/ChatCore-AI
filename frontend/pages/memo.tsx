@@ -940,7 +940,8 @@ export default function MemoPage() {
 
         <div
           id="auth-buttons"
-          style={{ display: isLoggedIn ? "none" : "", position: "fixed", top: "10px", right: "10px", zIndex: "var(--z-floating-controls)" }}
+          className="memo-auth-bar"
+          style={{ display: isLoggedIn ? "none" : "" }}
         >
           <button type="button" id="login-btn" className="auth-btn" onClick={() => { window.location.href = "/login"; }}>
             <i className="bi bi-person-circle"></i>
