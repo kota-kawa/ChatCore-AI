@@ -1,6 +1,7 @@
 import asyncio
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from blueprints.chat.messages import (
@@ -214,6 +215,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             session={},
         )
         saved_messages = []
+        fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
@@ -251,7 +253,9 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
                                             return_value="ok",
                                         ) as mock_llm:
                                             with patch("blueprints.chat.messages.logger.exception") as mock_log:
-                                                response = asyncio.run(chat(request))
+                                                with patch("blueprints.chat.messages.datetime") as mock_dt:
+                                                    mock_dt.now.return_value.astimezone.return_value = fixed_time
+                                                    response = asyncio.run(chat(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
@@ -263,7 +267,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertEqual(
             conversation_messages[0]["content"].strip(),
-            _build_base_system_prompt().strip(),
+            _build_base_system_prompt(fixed_time).strip(),
         )
         self.assertEqual(
             conversation_messages[1]["content"],
