@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -84,6 +85,7 @@ import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/se
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
 const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
@@ -261,6 +263,16 @@ export function useHomePageController() {
       setSidebarOpen(false);
     }
   }, [setSidebarOpen]);
+
+  const prepareChatViewTransition = useCallback(() => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+
+    document.body.classList.add("chat-view-active");
+    document.body.classList.remove("setup-view-active");
+  }, []);
 
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
     const container = chatMessagesRef.current;
@@ -979,6 +991,9 @@ export function useHomePageController() {
   const switchChatRoom = useCallback(
     (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
       const forceReload = options?.forceReload === true;
+      if (pageViewState !== "chat") {
+        prepareChatViewTransition();
+      }
 
       if (currentRoomIdRef.current === roomId && !forceReload) {
         setPageViewState("chat");
@@ -1000,7 +1015,17 @@ export function useHomePageController() {
       loadLocalChatHistory(roomId);
       void loadChatHistory(roomId, true);
     },
-    [chatRooms, closeOverlaySidebar, currentRoomIdRef, loadChatHistory, loadLocalChatHistory, persistCurrentRoomId, setPageViewState],
+    [
+      chatRooms,
+      closeOverlaySidebar,
+      currentRoomIdRef,
+      loadChatHistory,
+      loadLocalChatHistory,
+      pageViewState,
+      persistCurrentRoomId,
+      prepareChatViewTransition,
+      setPageViewState,
+    ],
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
@@ -1344,6 +1369,7 @@ export function useHomePageController() {
       return;
     }
 
+    prepareChatViewTransition();
     setPageViewState("chat");
     closeOverlaySidebar();
     setOpenRoomActionsFor(null);
@@ -1391,6 +1417,7 @@ export function useHomePageController() {
     loadChatRooms,
     loadLocalChatHistory,
     persistCurrentRoomId,
+    prepareChatViewTransition,
     setCurrentRoomMode,
     setHistoryHasMore,
     setHistoryNextBeforeId,
@@ -1438,6 +1465,7 @@ export function useHomePageController() {
       setHistoryNextBeforeId(null);
       setIsLoadingOlder(false);
       closeOverlaySidebar();
+      prepareChatViewTransition();
       setPageViewState("launching");
 
       try {
@@ -1476,6 +1504,7 @@ export function useHomePageController() {
       isTaskOrderEditing,
       loadChatRooms,
       persistCurrentRoomId,
+      prepareChatViewTransition,
       selectedModel,
       setLaunchingTaskName,
       setPageViewState,
@@ -1508,6 +1537,7 @@ export function useHomePageController() {
     setHistoryNextBeforeId(null);
     setIsLoadingOlder(false);
     closeOverlaySidebar();
+    prepareChatViewTransition();
     setPageViewState("launching");
 
     try {
@@ -1541,6 +1571,7 @@ export function useHomePageController() {
     generateResponse,
     loadChatRooms,
     persistCurrentRoomId,
+    prepareChatViewTransition,
     selectedModel,
     setPageViewState,
     setupInfo,
@@ -1845,7 +1876,7 @@ export function useHomePageController() {
     void import("../../scripts/components/user_icon");
   }, []);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     document.body.classList.add("chat-page");
     return () => {
       clearTrackedTimeouts();
@@ -1872,7 +1903,7 @@ export function useHomePageController() {
     };
   }, [setSidebarOpen]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const chatViewActive = pageViewState === "chat" || pageViewState === "launching";
     document.body.classList.toggle("chat-view-active", chatViewActive);
     document.body.classList.toggle("setup-view-active", pageViewState === "setup");

@@ -994,47 +994,17 @@ body.chat-page .chat-share-sns a:hover {
   body.chat-page {
     --chat-mobile-gutter: clamp(0.875rem, 4vw, 1.1rem);
     --chat-mobile-toolbar-space: calc(3.65rem + env(safe-area-inset-top, 0px));
-  }
-
-  .chat-page-shell {
-    padding: 0;
-    align-items: stretch;
-    justify-content: stretch;
-    min-height: var(--chat-visual-viewport-height, 100dvh);
-    background: #f7f8f7;
-  }
-
-  .chat-page-stage {
-    width: 100%;
-    min-height: var(--chat-visual-viewport-height, 100dvh);
-    place-items: stretch;
-    perspective: none;
-  }
-
-  .chat-page-stage[data-view="setup"] {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* チャット表示中はページ全体を visual viewport に固定して
-     iOS Safari がキーボードでヘッダーを画面外へ追いやらないようにする。 */
-  html:has(.chat-page-stage[data-view="chat"]),
-  html:has(.chat-page-stage[data-view="launching"]) {
-    overflow: hidden;
-    height: 100%;
-  }
-
-  body.chat-page.chat-view-active,
-  body.chat-page:has(.chat-page-stage[data-view="chat"]),
-  body.chat-page:has(.chat-page-stage[data-view="launching"]) {
     overflow: hidden;
     height: 100%;
     overscroll-behavior: none;
   }
 
-  body.chat-page.chat-view-active .chat-page-shell,
-  .chat-page-shell:has(.chat-page-stage[data-view="chat"]),
-  .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
+  html:has(body.chat-page) {
+    overflow: hidden;
+    height: 100%;
+  }
+
+  .chat-page-shell {
     position: fixed;
     top: var(--chat-visual-viewport-offset-top, 0px);
     left: 0;
@@ -1042,9 +1012,31 @@ body.chat-page .chat-share-sns a:hover {
     width: 100%;
     height: var(--chat-visual-viewport-height, 100dvh);
     min-height: 0;
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
     overflow: hidden;
-    /* キーボード開閉でガクつかないように、わずかな高さ変化はトランジションする */
+    background: #f7f8f7;
     transition: height 120ms ease, top 120ms ease;
+  }
+
+  .chat-page-stage {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    place-items: stretch;
+    perspective: none;
+    overflow: hidden;
+  }
+
+  .chat-page-stage[data-view="setup"] {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  .chat-page-shell:has(.chat-page-stage[data-view="launching"]) {
+    transition: none;
   }
 
   body.chat-page.chat-view-active .chat-page-stage,

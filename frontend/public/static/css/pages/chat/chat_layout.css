@@ -16,11 +16,11 @@
   flex-direction: column;
   min-height: 0;
   opacity: 0;
-  transform: translateY(56px);
+  transform: translateZ(0);
   pointer-events: none;
+  will-change: opacity;
   transition:
     opacity 0.28s ease,
-    transform 0.38s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.38s ease;
 }
 
@@ -37,14 +37,14 @@
 }
 
 #chat-container[data-view="launching"] {
-  transform: translateY(0);
+  transform: translateZ(0);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.03),
     0 24px 48px -12px rgba(0, 0, 0, 0.12);
 }
 
 #chat-container[data-view="chat"] {
-  transform: translateY(0);
+  transform: translateZ(0);
   pointer-events: auto;
 }
 
