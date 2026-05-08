@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import useSWR from "swr";
+import { useBodyScrollLock } from "../use_body_scroll_lock";
 import { useHomePageChatState } from "./use_home_page_chat_state";
 import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
@@ -1843,7 +1844,6 @@ export function useHomePageController() {
       document.body.classList.remove("setup-view-active");
       document.body.classList.remove("sidebar-visible");
       document.body.classList.remove("new-prompt-modal-open");
-      document.body.style.overflow = "";
     };
   }, [clearTrackedTimeouts, disconnectActiveGeneration]);
 
@@ -1947,15 +1947,7 @@ export function useHomePageController() {
   const hasBlockingModalOpen =
     isNewPromptModalOpen || shareModalOpen || taskEditModalOpen || Boolean(taskDetail);
 
-  useEffect(() => {
-    if (!hasBlockingModalOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [hasBlockingModalOpen]);
+  useBodyScrollLock(hasBlockingModalOpen);
 
   useEffect(() => {
     bindSetupViewportFit();

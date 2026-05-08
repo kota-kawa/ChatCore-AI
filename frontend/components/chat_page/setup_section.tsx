@@ -705,7 +705,7 @@ function SetupSectionComponent() {
                 id="setup-info"
                 data-agent-id="chat.setup-message"
                 rows={4}
-                maxLength={MAX_SETUP_INFO_LENGTH}
+                aria-describedby={setupInfo.length > 0 ? "setup-info-counter" : undefined}
                 placeholder="例：沖縄旅行のプランを考えたい　／　英語メールを添削してほしい　／　Pythonのエラーを直したい"
                 value={setupInfo}
                 onChange={(event) => {
@@ -733,7 +733,11 @@ function SetupSectionComponent() {
             </div>
           </div>
           {setupInfo.length > 0 && (
-            <div className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}>
+            <div
+              id="setup-info-counter"
+              className={`setup-info-counter${setupInfo.length > MAX_SETUP_INFO_LENGTH ? " setup-info-counter--over" : ""}`}
+              role={setupInfo.length > MAX_SETUP_INFO_LENGTH ? "alert" : "status"}
+            >
               {setupInfo.length > MAX_SETUP_INFO_LENGTH
                 ? `文字数制限を超えています（${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字）`
                 : `${setupInfo.length.toLocaleString()} / ${MAX_SETUP_INFO_LENGTH.toLocaleString()}文字`}

@@ -58,8 +58,8 @@ export function useHomePageUiState() {
     if (!storedSetupStateLoaded) return;
 
     try {
-      if (setupInfo.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.setupInfoDraft, setupInfo.slice(0, MAX_SETUP_INFO_LENGTH));
+      if (setupInfo.length > 0 && setupInfo.length <= MAX_SETUP_INFO_LENGTH) {
+        localStorage.setItem(STORAGE_KEYS.setupInfoDraft, setupInfo);
       } else {
         localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
       }
