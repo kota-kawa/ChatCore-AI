@@ -4,67 +4,38 @@ import {
   useLayoutEffect,
   useRef,
   type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import useSWR from "swr";
 import { useBodyScrollLock } from "../use_body_scroll_lock";
 import { useHomePageChatState } from "./use_home_page_chat_state";
 import { useHomePageNewPromptState } from "./use_home_page_new_prompt_state";
 import { useHomePageShareState } from "./use_home_page_share_state";
+import { useHomePageShareActions } from "./use_home_page_share_actions";
 import { useHomePageTaskState } from "./use_home_page_task_state";
+import { useHomePageTaskActions } from "./use_home_page_task_actions";
 import { useHomePageUiState } from "./use_home_page_ui_state";
 import { useHomePageAiAgentState } from "./use_home_page_ai_agent_state";
+import { useHomePageGenerationActions } from "./use_home_page_generation_actions";
+import { useHomePageRoomActions } from "./use_home_page_room_actions";
 import { setLoggedInState } from "../../scripts/core/app_state";
-import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
-import { isNearBottom } from "../../lib/chat_page/dom";
 import {
-  buildTaskOrderForPersistence,
-  isLatestChatTurnAnswered,
-} from "../../lib/chat_page/home_page_controller_utils";
-import {
-  prependUiChatMessagesWithinLimit,
-  rememberStreamEventId,
-} from "../../lib/chat_page/message_window";
-import { nextMessageId } from "../../lib/chat_page/message_ids";
-import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
-import {
-  normalizeChatHistoryPayload,
-  normalizeChatResponsePayload,
   normalizeChatRoomsPayload,
-  normalizeGenerationStatusPayload,
-  normalizeShareChatRoomPayload,
 } from "../../lib/chat_page/api_contract";
 import {
-  appendStoredHistory,
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
-  normalizeHistorySender,
-  normalizeStoredSender,
-  prependStoredHistory,
   readCachedAuthState,
-  readStoredHistory,
-  removeStoredHistory,
-  toStoredSender,
   writeCachedAuthState,
-  writeStoredHistory,
-  type StoredHistoryWriteResult,
 } from "../../lib/chat_page/storage";
-import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_utils";
 import {
   createGenerationGuard,
-  type ActiveGeneration,
   type GenerationGuard,
 } from "../../lib/chat_page/generation_guard";
 import type {
-  ChatHistoryPagination,
   ChatRoom,
-  ChatRoomMode,
-  NormalizedTask,
   PromptAssistController,
-  UiChatMessage,
 } from "../../lib/chat_page/types";
-import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
 import { showToast } from "../../scripts/core/toast";
 import {
@@ -74,17 +45,12 @@ import {
 } from "../../scripts/core/runtime_validation";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
-import type { TaskItem } from "../../scripts/setup/setup_types";
 import {
   invalidateTasksCache,
-  readCachedTasks,
-  writeCachedTasks,
 } from "../../scripts/setup/setup_tasks_cache";
 import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
-const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
-const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function isOverlaySidebarViewport() {
@@ -102,12 +68,6 @@ const fetchChatRooms = async (url: string): Promise<ChatRoom[]> => {
 
   return payload.rooms;
 };
-
-function waitForDuration(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
 
 export function useHomePageController() {
   const {
@@ -240,6 +200,23 @@ export function useHomePageController() {
     toggleAiAgentModal,
   } = useHomePageAiAgentState();
 
+  const {
+    closeShareModal,
+    createShareLink,
+    openShareModal,
+    copyShareLink,
+    shareWithNativeSheet,
+  } = useHomePageShareActions({
+    currentRoomIdRef,
+    currentRoomMode,
+    shareUrl,
+    setShareStatus,
+    setShareUrl,
+    setShareLoading,
+    setShareModalOpen,
+    shareCacheRef,
+  });
+
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
   const localStorageWarningShownRef = useRef(false);
@@ -247,6 +224,58 @@ export function useHomePageController() {
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
   }
+  const {
+    refreshTasks,
+    toggleTaskOrderEditing,
+    handleTaskDragStart,
+    handleTaskDragEnd,
+    handleTaskDelete,
+    openTaskEditModal,
+    closeTaskEditModal,
+    handleTaskEditSave,
+  } = useHomePageTaskActions({
+    tasks,
+    setTasks,
+    isTaskOrderEditing,
+    setIsTaskOrderEditing,
+    setTasksExpanded,
+    setDraggingTaskIndex,
+    draggingTaskIndexRef,
+    taskEditForm,
+    setTaskEditForm,
+    setTaskEditModalOpen,
+  });
+  const {
+    disconnectActiveGeneration,
+    persistCurrentRoomId,
+    loadLocalChatHistory,
+    loadChatHistory,
+    loadOlderChatHistory,
+    createNewChatRoom,
+    generateResponse,
+    stopGeneration,
+    removeStoredHistory,
+  } = useHomePageGenerationActions({
+    abortControllerRef,
+    chatMessagesRef,
+    currentRoomIdRef,
+    generationGuardRef,
+    historyHasMore,
+    historyNextBeforeId,
+    isLoadingOlder,
+    localStorageWarningShownRef,
+    messageSeqRef,
+    pendingAutoScrollRef,
+    prependScrollRestoreRef,
+    streamLastEventIdByRoomRef,
+    setCurrentRoomId,
+    setCurrentRoomMode,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsGenerating,
+    setIsLoadingOlder,
+    setMessages,
+  });
   const hasCurrentRoom = Boolean(currentRoomId);
   const { data: cachedChatRooms, mutate: mutateChatRooms } = useSWR<ChatRoom[]>(
     loggedIn ? "/api/get_chat_rooms" : null,
@@ -274,17 +303,6 @@ export function useHomePageController() {
     document.body.classList.remove("setup-view-active");
   }, []);
 
-  const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
-    const container = chatMessagesRef.current;
-    if (!container) {
-      pendingAutoScrollRef.current = true;
-      return;
-    }
-    if (force || isNearBottom(container)) {
-      pendingAutoScrollRef.current = true;
-    }
-  }, []);
-
   const clearTrackedTimeouts = useCallback(() => {
     trackedTimeoutIdsRef.current.forEach((timeoutId) => {
       window.clearTimeout(timeoutId);
@@ -301,924 +319,57 @@ export function useHomePageController() {
     return timeoutId;
   }, []);
 
-  const removeThinkingMessages = useCallback((list: UiChatMessage[]) => {
-    return list.filter((message) => message.sender !== "thinking");
-  }, []);
-
-  const acquireGeneration = useCallback(
-    (roomId: string) => {
-      const generation = generationGuardRef.current?.acquire(roomId) ?? null;
-      if (!generation) return null;
-
-      abortControllerRef.current = generation.abortController;
-      setIsGenerating(true);
-      return generation;
-    },
-    [],
-  );
-
-  const isGenerationActive = useCallback((generation: ActiveGeneration) => {
-    return generationGuardRef.current?.isActive(generation) === true;
-  }, []);
-
-  const releaseGeneration = useCallback((generation: ActiveGeneration) => {
-    if (generationGuardRef.current?.release(generation) !== true) return false;
-    if (abortControllerRef.current === generation.abortController) {
-      abortControllerRef.current = null;
-    }
-    setIsGenerating(false);
-    return true;
-  }, []);
-
-  const notifyLocalStorageWriteFailure = useCallback(() => {
-    if (localStorageWarningShownRef.current) return;
-    localStorageWarningShownRef.current = true;
-    showToast(
-      "ブラウザの保存容量が不足しているため、この端末に現在のチャット状態を保存できませんでした。",
-      { variant: "error" },
-    );
-  }, []);
-
-  const disconnectActiveGeneration = useCallback(() => {
-    const generation = generationGuardRef.current?.abortActive() ?? null;
-    const abortController = generation?.abortController ?? abortControllerRef.current;
-    if (!abortController) return;
-
-    if (!generation) {
-      abortController.abort();
-    }
-    if (abortControllerRef.current === abortController) {
-      abortControllerRef.current = null;
-    }
-    setIsGenerating(false);
-
-    const stoppedRoomId = generation?.roomId ?? currentRoomIdRef.current;
-    if (!stoppedRoomId) return;
-
-    setMessages((previous) => {
-      if (currentRoomIdRef.current !== stoppedRoomId) return previous;
-      return removeThinkingMessages(previous).map((message) => {
-        if (!message.streaming) return message;
-        return {
-          ...message,
-          streaming: false,
-        };
-      });
-    });
-  }, [removeThinkingMessages]);
-
-  const persistCurrentRoomId = useCallback((roomId: string | null, mode?: ChatRoomMode) => {
-    if (currentRoomIdRef.current !== roomId) {
-      disconnectActiveGeneration();
-    }
-    currentRoomIdRef.current = roomId;
-    setCurrentRoomId(roomId);
-    try {
-      if (roomId && mode !== "temporary") {
-        localStorage.setItem(STORAGE_KEYS.currentChatRoomId, roomId);
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
-      }
-    } catch {
-      notifyLocalStorageWriteFailure();
-    }
-  }, [disconnectActiveGeneration, notifyLocalStorageWriteFailure]);
-
-  const appendAssistantErrorMessage = useCallback(
-    (roomId: string, errorMessage: string) => {
-      const id = nextMessageId("assistant-error", messageSeqRef);
-      setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId) return previous;
-        return [
-          ...removeThinkingMessages(previous),
-          {
-            id,
-            sender: "assistant",
-            text: `エラー: ${errorMessage}`,
-            error: true,
-          },
-        ];
-      });
-      scheduleAutoScrollIfNeeded(true);
-    },
-    [removeThinkingMessages, scheduleAutoScrollIfNeeded],
-  );
-
-  const notifyStoredHistoryWriteIssue = useCallback((result: StoredHistoryWriteResult) => {
-    if (result.stored && !result.truncated) return;
-    if (localStorageWarningShownRef.current) return;
-
-    localStorageWarningShownRef.current = true;
-    if (result.stored) {
-      showToast(
-        "ブラウザの保存容量が不足したため、この端末に保存するチャット表示キャッシュの古い一部を削除しました。",
-        { variant: "error" },
-      );
-      return;
-    }
-
-    showToast(
-      "ブラウザの保存容量が不足しているため、この端末にチャット履歴を保存できませんでした。リロード前に必要な内容を控えてください。",
-      { variant: "error" },
-    );
-  }, []);
-
-  const saveUiMessagesToLocalStorage = useCallback((roomId: string, uiMessages: UiChatMessage[]) => {
-    const normalized = uiMessages
-      .filter((message) => message.sender === "user" || message.sender === "assistant")
-      .map((message) => ({
-        text: message.text,
-        sender: toStoredSender(message.sender),
-      }));
-    notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized));
-  }, [notifyStoredHistoryWriteIssue]);
-
-  const loadLocalChatHistory = useCallback(
-    (roomId: string) => {
-      const localEntries = readStoredHistory(roomId);
-      const localMessages: UiChatMessage[] = localEntries.map((entry) => ({
-        id: nextMessageId("local", messageSeqRef),
-        sender: normalizeStoredSender(entry.sender),
-        text: entry.text,
-      }));
-
-      setMessages(localMessages);
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      scheduleAutoScrollIfNeeded(true);
-    },
-    [scheduleAutoScrollIfNeeded],
-  );
-
-  const fetchChatHistoryPage = useCallback(async (roomId: string, beforeId?: number | null) => {
-    const params = new URLSearchParams({
-      room_id: roomId,
-      limit: String(CHAT_HISTORY_PAGE_SIZE),
-    });
-    if (typeof beforeId === "number") {
-      params.set("before_id", String(beforeId));
-    }
-
-    const response = await fetch(`/api/get_chat_history?${params.toString()}`, {
-      credentials: "same-origin",
-    });
-    const rawPayload = await readJsonBodySafe(response);
-    const payload = normalizeChatHistoryPayload(rawPayload);
-
-    if (!response.ok || payload.error) {
-      throw new Error(extractApiErrorMessage(rawPayload, "履歴取得に失敗しました。", response.status));
-    }
-
-    const normalizedPagination: ChatHistoryPagination = {
-      hasMore: payload.pagination.hasMore,
-      nextBeforeId: payload.pagination.nextBeforeId,
-    };
-
-    return {
-      messages: payload.messages,
-      pagination: normalizedPagination,
-      roomMode: payload.roomMode,
-    };
-  }, []);
-
-  const consumeStreamingChatResponse = useCallback(
-    async (response: Response, generation: ActiveGeneration) => {
-      const { roomId } = generation;
-
-      const decoder = new TextDecoder();
-      let streamingMessageId: string | null = null;
-      let streamedText = "";
-
-      const ensureStreamingMessage = () => {
-        if (streamingMessageId) return streamingMessageId;
-        streamingMessageId = nextMessageId("assistant-stream", messageSeqRef);
-        const newId = streamingMessageId;
-
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return [
-            ...removeThinkingMessages(previous),
-            {
-              id: newId,
-              sender: "assistant",
-              text: "",
-              streaming: true,
-            },
-          ];
-        });
-        scheduleAutoScrollIfNeeded();
-        return newId;
-      };
-
-      const updateThinkingStatus = (statusText: string) => {
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return previous.map((message) => {
-            if (message.sender !== "thinking") return message;
-            return {
-              ...message,
-              text: statusText,
-            };
-          });
-        });
-        scheduleAutoScrollIfNeeded();
-      };
-
-      const finalizeStreamingMessage = (finalText: string, persist = true) => {
-        if (!streamingMessageId) {
-          if (finalText) {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return [
-                ...removeThinkingMessages(previous),
-                {
-                  id: nextMessageId("assistant", messageSeqRef),
-                  sender: "assistant",
-                  text: finalText,
-                },
-              ];
-            });
-          } else {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
-          if (persist && finalText && isGenerationActive(generation)) {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
-          }
-          scheduleAutoScrollIfNeeded(true);
-          return;
-        }
-
-        const streamId = streamingMessageId;
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          return removeThinkingMessages(previous).map((message) => {
-            if (message.id !== streamId) return message;
-            return {
-              ...message,
-              text: finalText || message.text,
-              streaming: false,
-            };
-          });
-        });
-
-        if (persist && finalText && isGenerationActive(generation)) {
-          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
-        }
-        scheduleAutoScrollIfNeeded(true);
-      };
-
-      const persistInterruptedStream = (message: string) => {
-        if (streamedText) {
-          finalizeStreamingMessage(streamedText, true);
-          appendAssistantErrorMessage(roomId, message);
-          return;
-        }
-        appendAssistantErrorMessage(roomId, message);
-      };
-
-      const openReconnectStream = async () => {
-        const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
-        if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
-
-        try {
-          const reconnectResponse = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
-            credentials: "same-origin",
-            signal: generation.abortController.signal,
-            headers: { "Last-Event-ID": String(lastEventId) },
-          });
-          if (!reconnectResponse.ok) return null;
-          return reconnectResponse;
-        } catch {
-          return null;
-        }
-      };
-
-      const processBlock = (block: string, streamState: { completed: boolean; streamError: string | null }) => {
-        const parsed = parseStreamEventBlock(block);
-        if (!parsed) return;
-        if (!isGenerationActive(generation)) return;
-
-        if (!rememberStreamEventId(streamLastEventIdByRoomRef.current, roomId, parsed.id)) return;
-
-        if (parsed.event === "chunk") {
-          const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
-          if (!text) return;
-          const streamId = ensureStreamingMessage();
-          streamedText += text;
-
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-            return previous.map((message) => {
-              if (message.id !== streamId) return message;
-              return {
-                ...message,
-                text: streamedText,
-                streaming: true,
-              };
-            });
-          });
-          scheduleAutoScrollIfNeeded();
-          return;
-        }
-
-        if (parsed.event === "web_search_planning_started") {
-          updateThinkingStatus("検索が必要か判断しています");
-          return;
-        }
-
-        if (parsed.event === "web_search_started") {
-          updateThinkingStatus("関連情報を取得しています");
-          return;
-        }
-
-        if (parsed.event === "web_search_completed") {
-          updateThinkingStatus("検索結果を読み込んでいます");
-          return;
-        }
-
-        if (parsed.event === "web_search_failed") {
-          const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
-          if (message.includes("APIキー") || message.includes("設定")) {
-            updateThinkingStatus("検索設定を確認できませんでした。回答を作成しています");
-          } else if (message.includes("上限")) {
-            updateThinkingStatus("Web検索の上限に達しました。回答を作成しています");
-          } else {
-            updateThinkingStatus("Web検索に失敗しました。回答を作成しています");
-          }
-          return;
-        }
-
-        if (parsed.event === "response_generation_started") {
-          updateThinkingStatus("回答を作成しています");
-          return;
-        }
-
-        if (parsed.event === "done") {
-          streamState.completed = true;
-          const responseText = typeof parsed.data.response === "string" ? parsed.data.response : streamedText;
-          finalizeStreamingMessage(responseText, true);
-          streamLastEventIdByRoomRef.current.delete(roomId);
-          return;
-        }
-
-        if (parsed.event === "aborted") {
-          streamState.completed = true;
-          finalizeStreamingMessage(streamedText, false);
-          return;
-        }
-
-        if (parsed.event === "error") {
-          streamState.streamError =
-            typeof parsed.data.message === "string"
-              ? parsed.data.message
-              : "ストリーミング生成中にエラーが発生しました。";
-        }
-      };
-
-      const readStreamResponse = async (streamResponse: Response) => {
-        if (!streamResponse.body) {
-          throw new Error("ストリーム応答を受信できませんでした。");
-        }
-
-        const reader = streamResponse.body.getReader();
-        const streamState = {
-          completed: false,
-          streamError: null as string | null,
-        };
-        let buffer = "";
-
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (!isGenerationActive(generation)) return "inactive" as const;
-            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-
-            const blocks = buffer.split(/\r?\n\r?\n/);
-            buffer = blocks.pop() || "";
-            blocks.forEach((block) => processBlock(block, streamState));
-
-            if (streamState.streamError) break;
-            if (done) break;
-          }
-        } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            if (generation.abortController.signal.aborted || !isGenerationActive(generation)) {
-              return "aborted" as const;
-            }
-            return "interrupted" as const;
-          }
-          throw error;
-        } finally {
-          reader.cancel().catch(() => {
-            // no-op
-          });
-        }
-
-        if (streamState.streamError) {
-          return {
-            status: "error" as const,
-            message: streamState.streamError,
-          };
-        }
-
-        return streamState.completed ? ("completed" as const) : ("interrupted" as const);
-      };
-
-      let activeResponse = response;
-      for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
-        const result = await readStreamResponse(activeResponse);
-        if (!isGenerationActive(generation)) return;
-
-        if (result === "completed" || result === "aborted" || result === "inactive") {
-          return;
-        }
-
-        if (typeof result === "object" && result.status === "error") {
-          persistInterruptedStream(
-            streamedText
-              ? `${result.message} ここまでの応答を保存しました。`
-              : result.message,
-          );
-          return;
-        }
-
-        const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
-        if (!streamedText || reconnectDelay === undefined) {
-          persistInterruptedStream(
-            streamedText
-              ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
-              : "ストリームが途中で終了しました。",
-          );
-          return;
-        }
-
-        await waitForDuration(reconnectDelay);
-        if (!isGenerationActive(generation)) return;
-
-        const reconnectResponse = await openReconnectStream();
-        if (!reconnectResponse) {
-          persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
-          return;
-        }
-        activeResponse = reconnectResponse;
-      }
-    },
-    [
-      appendAssistantErrorMessage,
-      isGenerationActive,
-      notifyStoredHistoryWriteIssue,
-      removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
-    ],
-  );
-
-  const connectToGenerationStream = useCallback(
-    async (roomId: string) => {
-      const generation = acquireGeneration(roomId);
-      if (!generation) return;
-
-      const thinkingId = nextMessageId("thinking", messageSeqRef);
-      setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-        return [
-          ...removeThinkingMessages(previous),
-          {
-            id: thinkingId,
-            sender: "thinking",
-            text: "AIが応答を準備しています",
-          },
-        ];
-      });
-
-      const headers: Record<string, string> = {};
-      const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
-      if (typeof lastEventId === "number" && lastEventId > 0) {
-        headers["Last-Event-ID"] = String(lastEventId);
-      }
-
-      try {
-        const response = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
-          credentials: "same-origin",
-          signal: generation.abortController.signal,
-          headers,
-        });
-
-        if (!response.ok) {
-          const rawPayload = await readJsonBodySafe(response);
-          if (isGenerationActive(generation)) {
-            appendAssistantErrorMessage(
-              roomId,
-              extractApiErrorMessage(rawPayload, "チャットの応答取得に失敗しました。", response.status),
-            );
-          }
-          return;
-        }
-
-        await consumeStreamingChatResponse(response, generation);
-      } catch (error) {
-        if (isGenerationActive(generation) && !(error instanceof DOMException && error.name === "AbortError")) {
-          appendAssistantErrorMessage(
-            roomId,
-            error instanceof Error ? error.message : "チャットの応答取得に失敗しました。",
-          );
-        }
-      } finally {
-        releaseGeneration(generation);
-      }
-    },
-    [
-      acquireGeneration,
-      appendAssistantErrorMessage,
-      consumeStreamingChatResponse,
-      isGenerationActive,
-      releaseGeneration,
-      removeThinkingMessages,
-    ],
-  );
-
-  const loadChatHistory = useCallback(
-    async (roomId: string, shouldCheckGeneration = true) => {
-      try {
-        let loadedHistory = await fetchChatHistoryPage(roomId);
-        if (currentRoomIdRef.current !== roomId) return;
-
-        const toUiMessages = (historyMessages: typeof loadedHistory.messages): UiChatMessage[] =>
-          historyMessages.map((entry) => ({
-            id: nextMessageId("history", messageSeqRef),
-            sender: normalizeHistorySender(entry.sender),
-            text: typeof entry.message === "string" ? entry.message : "",
-          }));
-
-        const syncLoadedHistoryState = () => {
-          setCurrentRoomMode(loadedHistory.roomMode);
-          setHistoryHasMore(loadedHistory.pagination.hasMore);
-          setHistoryNextBeforeId(loadedHistory.pagination.nextBeforeId);
-        };
-
-        const commitHistoryMessages = (nextMessages: UiChatMessage[]) => {
-          setMessages(nextMessages);
-          saveUiMessagesToLocalStorage(roomId, nextMessages);
-          scheduleAutoScrollIfNeeded(true);
-        };
-
-        let uiMessages = toUiMessages(loadedHistory.messages);
-        syncLoadedHistoryState();
-
-        if (!shouldCheckGeneration) {
-          commitHistoryMessages(uiMessages);
-          return;
-        }
-
-        let generationStatus = normalizeGenerationStatusPayload({});
-        try {
-          const statusResponse = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
-            credentials: "same-origin",
-          });
-          generationStatus = normalizeGenerationStatusPayload(await readJsonBodySafe(statusResponse));
-        } catch {
-          generationStatus = normalizeGenerationStatusPayload({});
-        }
-
-        if (currentRoomIdRef.current !== roomId) return;
-
-        if (generationStatus.is_generating && isLatestChatTurnAnswered(uiMessages)) {
-          try {
-            loadedHistory = await fetchChatHistoryPage(roomId);
-            if (currentRoomIdRef.current !== roomId) return;
-            uiMessages = toUiMessages(loadedHistory.messages);
-            syncLoadedHistoryState();
-          } catch {
-            // Keep the already-loaded history if a consistency refresh fails.
-          }
-        }
-
-        if (isLatestChatTurnAnswered(uiMessages)) {
-          streamLastEventIdByRoomRef.current.delete(roomId);
-          commitHistoryMessages(uiMessages);
-          return;
-        }
-
-        if (generationStatus.is_generating) {
-          commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId);
-          return;
-        }
-
-        if (generationStatus.has_replayable_job) {
-          commitHistoryMessages(uiMessages);
-          void connectToGenerationStream(roomId);
-          return;
-        }
-
-        commitHistoryMessages(uiMessages);
-      } catch (error) {
-        console.error("履歴取得失敗:", error);
-      }
-    },
-    [connectToGenerationStream, fetchChatHistoryPage, saveUiMessagesToLocalStorage, scheduleAutoScrollIfNeeded],
-  );
-
-  const loadOlderChatHistory = useCallback(async () => {
-    const roomId = currentRoomIdRef.current;
-    if (!roomId) return;
-    if (!historyHasMore) return;
-    if (historyNextBeforeId === null) return;
-    if (isLoadingOlder) return;
-
-    const container = chatMessagesRef.current;
-    if (!container) return;
-
-    setIsLoadingOlder(true);
-    prependScrollRestoreRef.current = {
-      prevScrollHeight: container.scrollHeight,
-      prevScrollTop: container.scrollTop,
-    };
-
-    try {
-      const { messages: olderMessages, pagination } = await fetchChatHistoryPage(roomId, historyNextBeforeId);
-      if (currentRoomIdRef.current !== roomId) return;
-
-      const uiMessages = olderMessages.map((entry) => ({
-        id: nextMessageId("history-older", messageSeqRef),
-        sender: normalizeHistorySender(entry.sender),
-        text: typeof entry.message === "string" ? entry.message : "",
-      }));
-
-      setMessages((previous) => prependUiChatMessagesWithinLimit(uiMessages, previous));
-      setHistoryHasMore(pagination.hasMore);
-      setHistoryNextBeforeId(pagination.nextBeforeId);
-
-      notifyStoredHistoryWriteIssue(
-        prependStoredHistory(
-          roomId,
-          uiMessages
-            .filter((message) => message.sender === "user" || message.sender === "assistant")
-            .map((message) => ({ text: message.text, sender: toStoredSender(message.sender) })),
-        ),
-      );
-    } catch (error) {
-      console.error("追加履歴取得失敗:", error);
-      prependScrollRestoreRef.current = null;
-    } finally {
-      setIsLoadingOlder(false);
-    }
-  }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder, notifyStoredHistoryWriteIssue]);
-
-  const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
-    try {
-      const rooms = loggedIn
-        ? (await mutateChatRooms()) ?? cachedChatRooms ?? []
-        : await fetchChatRooms("/api/get_chat_rooms");
-      setChatRooms(rooms);
-
-      const activeRoomId = currentRoomIdRef.current;
-      if (activeRoomId) {
-        const activeRoom = rooms.find((room) => room.id === activeRoomId);
-        if (activeRoom) {
-          setCurrentRoomMode(activeRoom.mode);
-        }
-      }
-      return rooms;
-    } catch (error) {
-      console.error("ルーム一覧取得失敗:", error);
-      return cachedChatRooms ?? [];
-    }
-  }, [cachedChatRooms, loggedIn, mutateChatRooms]);
-
-  const switchChatRoom = useCallback(
-    (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
-      const forceReload = options?.forceReload === true;
-      if (pageViewState !== "chat") {
-        prepareChatViewTransition();
-      }
-
-      if (currentRoomIdRef.current === roomId && !forceReload) {
-        setPageViewState("chat");
-        closeOverlaySidebar();
-        setOpenRoomActionsFor(null);
-        return;
-      }
-
-      const nextRoom = chatRooms.find((room) => room.id === roomId);
-      if (currentRoomIdRef.current !== roomId) {
-        persistCurrentRoomId(roomId, roomMode ?? nextRoom?.mode);
-      }
-      setCurrentRoomMode(roomMode ?? nextRoom?.mode ?? "normal");
-      setPageViewState("chat");
-      closeOverlaySidebar();
-      setOpenRoomActionsFor(null);
-      setShareStatus({ message: "共有リンクを準備しています...", error: false });
-      setShareUrl("");
-      loadLocalChatHistory(roomId);
-      void loadChatHistory(roomId, true);
-    },
-    [
-      chatRooms,
-      closeOverlaySidebar,
-      currentRoomIdRef,
-      loadChatHistory,
-      loadLocalChatHistory,
-      pageViewState,
-      persistCurrentRoomId,
-      prepareChatViewTransition,
-      setPageViewState,
-    ],
-  );
-
-  const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
-    const response = await fetch("/api/new_chat_room", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ id: roomId, title, mode }),
-    });
-
-    const payload = (await readJsonBodySafe(response)) as { error?: string };
-    if (!response.ok || payload.error) {
-      throw new Error(extractApiErrorMessage(payload, "チャットルーム作成に失敗しました。", response.status));
-    }
-  }, []);
-
-  const generateResponse = useCallback(
-    async (message: string, model: string, roomId: string) => {
-      const generation = acquireGeneration(roomId);
-      if (!generation) return;
-
-      const userMessage: UiChatMessage = {
-        id: nextMessageId("user", messageSeqRef),
-        sender: "user",
-        text: message,
-      };
-      const thinkingMessage: UiChatMessage = {
-        id: nextMessageId("thinking", messageSeqRef),
-        sender: "thinking",
-        text: "AIが応答を準備しています",
-      };
-
-      setMessages((previous) => {
-        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-        return [...removeThinkingMessages(previous), userMessage, thinkingMessage];
-      });
-      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: message, sender: "user" }));
-      streamLastEventIdByRoomRef.current.set(roomId, 0);
-      scheduleAutoScrollIfNeeded(true);
-
-      try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            message,
-            chat_room_id: roomId,
-            model,
-          }),
-          signal: generation.abortController.signal,
-        });
-
-        const contentType = response.headers.get("content-type") || "";
-        if (contentType.includes("text/event-stream")) {
-          await consumeStreamingChatResponse(response, generation);
-          return;
-        }
-
-        const rawPayload = await readJsonBodySafe(response);
-        const data = normalizeChatResponsePayload(rawPayload);
-
-        setMessages((previous) => {
-          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-          const trimmed = removeThinkingMessages(previous);
-
-          if (response.ok && data.response) {
-            return [
-              ...trimmed,
-              {
-                id: nextMessageId("assistant", messageSeqRef),
-                sender: "assistant",
-                text: data.response,
-              },
-            ];
-          }
-
-          return [
-            ...trimmed,
-            {
-              id: nextMessageId("assistant-error", messageSeqRef),
-              sender: "assistant",
-              text: `エラー: ${extractApiErrorMessage(rawPayload, "予期しないエラーが発生しました。", response.status)}`,
-              error: true,
-            },
-          ];
-        });
-
-        if (response.ok && data.response && isGenerationActive(generation)) {
-          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
-        }
-        scheduleAutoScrollIfNeeded(true);
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          if (isGenerationActive(generation)) {
-            setMessages((previous) => {
-              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-              return removeThinkingMessages(previous);
-            });
-          }
-          return;
-        }
-
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (isGenerationActive(generation)) {
-          appendAssistantErrorMessage(roomId, errorMessage);
-        }
-      } finally {
-        releaseGeneration(generation);
-      }
-    },
-    [
-      acquireGeneration,
-      appendAssistantErrorMessage,
-      consumeStreamingChatResponse,
-      isGenerationActive,
-      notifyStoredHistoryWriteIssue,
-      releaseGeneration,
-      removeThinkingMessages,
-      scheduleAutoScrollIfNeeded,
-    ],
-  );
-
-  const stopGeneration = useCallback(async () => {
-    const roomId = currentRoomIdRef.current;
-    disconnectActiveGeneration();
-    if (!roomId) return;
-
-    try {
-      await fetch("/api/chat_stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ chat_room_id: roomId }),
-      });
-    } catch {
-      // best effort
-    }
-  }, [disconnectActiveGeneration]);
-
-  const refreshTasks = useCallback(
-    async (forceRefresh = false) => {
-      if (!forceRefresh) {
-        const cached = readCachedTasks();
-        if (Array.isArray(cached) && cached.length > 0) {
-          setTasks(normalizeTaskList(cached));
-          return;
-        }
-      }
-
-      setTasks(FALLBACK_TASKS);
-
-      try {
-        const { payload } = await fetchJsonOrThrow<{ tasks?: TaskItem[] }>("/api/tasks", undefined, {
-          defaultMessage: "タスクの読み込みに失敗しました。",
-        });
-
-        const fetchedTasks = Array.isArray(payload.tasks) ? payload.tasks : [];
-        if (fetchedTasks.length > 0) {
-          writeCachedTasks(fetchedTasks);
-        }
-
-        setTasks(normalizeTaskList(fetchedTasks));
-      } catch (error) {
-        console.error("タスク読み込みに失敗:", error);
-        setTasks(FALLBACK_TASKS);
-      }
-    },
-    [],
-  );
-
-  const saveTaskOrder = useCallback(async (nextTasks: NormalizedTask[]) => {
-    const order = buildTaskOrderForPersistence(nextTasks);
-
-    if (order.length === 0) return;
-
-    try {
-      await fetchJsonOrThrow("/api/update_tasks_order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ order }),
-      });
-      invalidateTasksCache();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "並び順の保存に失敗しました。";
-      showToast(`並び順の保存に失敗: ${message}`, { variant: "error" });
-    }
-  }, []);
-
-  const closeShareModal = useCallback(() => {
-    setShareModalOpen(false);
-  }, []);
+  const {
+    loadChatRooms,
+    switchChatRoom,
+    showSetupForm,
+    handleAccessChat,
+    handleNewChat,
+    handleTaskCardLaunch,
+    handleSetupSendMessage,
+    handleSendMessage,
+    handleChatInputKeyDown,
+    handleDeleteRoom,
+    handleRenameRoom,
+  } = useHomePageRoomActions({
+    cachedChatRooms,
+    chatInput,
+    chatRooms,
+    closeOverlaySidebar,
+    closeShareModal,
+    createNewChatRoom,
+    currentRoomIdRef,
+    fetchChatRooms,
+    generateResponse,
+    isGenerating,
+    isTaskOrderEditing,
+    loadChatHistory,
+    loadLocalChatHistory,
+    loggedIn,
+    mutateChatRooms,
+    pageViewState,
+    persistCurrentRoomId,
+    prepareChatViewTransition,
+    removeStoredHistory,
+    selectedModel,
+    setupInfo,
+    stopGeneration,
+    taskLaunchInProgressRef,
+    temporaryModeEnabled,
+    setChatInput,
+    setChatRooms,
+    setCurrentRoomMode,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsLoadingOlder,
+    setLaunchingTaskName,
+    setMessages,
+    setOpenRoomActionsFor,
+    setPageViewState,
+    setSetupInfo,
+    setShareStatus,
+    setShareUrl,
+  });
 
   const resetNewPromptComposer = useCallback(() => {
     setIsPromptSubmitting(false);
@@ -1238,568 +389,6 @@ export function useHomePageController() {
       variant: "info",
     });
   }, []);
-
-  const setShareActionLoading = useCallback((loading: boolean) => {
-    setShareLoading(loading);
-  }, []);
-
-  const createShareLink = useCallback(
-    async (forceRefresh = false) => {
-      const roomId = currentRoomIdRef.current;
-      if (!roomId) {
-        setShareStatus({ message: "共有するチャットルームを選択してください。", error: true });
-        setShareUrl("");
-        return;
-      }
-      if (currentRoomMode === "temporary") {
-        setShareStatus({ message: "未保存チャットは共有できません。", error: true });
-        setShareUrl("");
-        return;
-      }
-
-      if (!forceRefresh && shareCacheRef.current.has(roomId)) {
-        const cached = shareCacheRef.current.get(roomId) || "";
-        setShareUrl(cached);
-        setShareStatus({ message: "共有リンクを表示しています。", error: false });
-        return;
-      }
-
-      setShareActionLoading(true);
-      setShareStatus({ message: "共有リンクを生成しています...", error: false });
-
-      try {
-        const response = await fetch("/api/share_chat_room", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ room_id: roomId }),
-        });
-        const rawPayload = await readJsonBodySafe(response);
-        const data = normalizeShareChatRoomPayload(rawPayload);
-
-        if (!response.ok || !data.shareUrl) {
-          throw new Error(extractApiErrorMessage(rawPayload, "共有リンクの作成に失敗しました。", response.status));
-        }
-
-        shareCacheRef.current.set(roomId, data.shareUrl);
-        setShareUrl(data.shareUrl);
-        setShareStatus({ message: "共有リンクを作成しました。", error: false });
-      } catch (error) {
-        setShareStatus({
-          message: error instanceof Error ? error.message : "共有リンクの作成に失敗しました。",
-          error: true,
-        });
-      } finally {
-        setShareActionLoading(false);
-      }
-    },
-    [currentRoomMode, setShareActionLoading],
-  );
-
-  const openShareModal = useCallback(() => {
-    if (currentRoomMode === "temporary") {
-      setShareStatus({ message: "未保存チャットは共有できません。", error: true });
-      return;
-    }
-    setShareModalOpen(true);
-    void createShareLink(false);
-  }, [createShareLink, currentRoomMode]);
-
-  const copyShareLink = useCallback(async () => {
-    if (!shareUrl.trim()) {
-      setShareStatus({ message: "先に共有リンクを生成してください。", error: true });
-      return;
-    }
-
-    try {
-      await copyTextToClipboard(shareUrl);
-      setShareStatus({ message: "リンクをコピーしました。", error: false });
-    } catch (error) {
-      setShareStatus({
-        message: error instanceof Error ? error.message : "リンクのコピーに失敗しました。",
-        error: true,
-      });
-    }
-  }, [shareUrl]);
-
-  const shareWithNativeSheet = useCallback(async () => {
-    if (!shareUrl.trim()) {
-      setShareStatus({ message: "先に共有リンクを生成してください。", error: true });
-      return;
-    }
-    if (!navigator.share) {
-      setShareStatus({ message: "このブラウザはネイティブ共有に対応していません。", error: true });
-      return;
-    }
-
-    try {
-      await navigator.share({
-        title: "Chat Core 共有チャット",
-        text: "このチャットルームを共有しました。",
-        url: shareUrl,
-      });
-      setShareStatus({ message: "共有シートを開きました。", error: false });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      setShareStatus({
-        message: error instanceof Error ? error.message : "共有に失敗しました。",
-        error: true,
-      });
-    }
-  }, [shareUrl]);
-
-  const showSetupForm = useCallback(() => {
-    setPageViewState("setup");
-    closeOverlaySidebar();
-    setLaunchingTaskName(null);
-    setSetupInfo("");
-    closeShareModal();
-    scheduleSetupViewportFit();
-  }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskName, setPageViewState]);
-
-  const handleAccessChat = useCallback(async () => {
-    const activeRoomId = currentRoomIdRef.current;
-    const preferredLoadedRoom =
-      (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
-
-    if (preferredLoadedRoom) {
-      switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
-      return;
-    }
-
-    prepareChatViewTransition();
-    setPageViewState("chat");
-    closeOverlaySidebar();
-    setOpenRoomActionsFor(null);
-
-    if (activeRoomId) {
-      loadLocalChatHistory(activeRoomId);
-    } else {
-      setMessages([]);
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      setIsLoadingOlder(false);
-    }
-
-    try {
-      const rooms = await loadChatRooms();
-      const preferredFetchedRoom =
-        (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
-
-      if (preferredFetchedRoom) {
-        switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
-        return;
-      }
-
-      setMessages([]);
-      persistCurrentRoomId(null);
-      setCurrentRoomMode("normal");
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      setIsLoadingOlder(false);
-    } catch (error) {
-      console.error("ルーム一覧取得失敗:", error);
-      if (!activeRoomId) {
-        setMessages([]);
-        persistCurrentRoomId(null);
-        setCurrentRoomMode("normal");
-        setHistoryHasMore(false);
-        setHistoryNextBeforeId(null);
-        setIsLoadingOlder(false);
-      }
-    }
-  }, [
-    chatRooms,
-    closeOverlaySidebar,
-    currentRoomIdRef,
-    loadChatRooms,
-    loadLocalChatHistory,
-    persistCurrentRoomId,
-    prepareChatViewTransition,
-    setCurrentRoomMode,
-    setHistoryHasMore,
-    setHistoryNextBeforeId,
-    setIsLoadingOlder,
-    setMessages,
-    setOpenRoomActionsFor,
-    setPageViewState,
-    setSidebarOpen,
-    switchChatRoom,
-  ]);
-
-  const handleNewChat = useCallback(() => {
-    persistCurrentRoomId(null);
-    setCurrentRoomMode("normal");
-    setMessages([]);
-    setShareUrl("");
-    setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
-    showSetupForm();
-  }, [persistCurrentRoomId, showSetupForm]);
-
-  const handleTaskCardLaunch = useCallback(
-    async (task: NormalizedTask) => {
-      if (isTaskOrderEditing) return;
-      if (taskLaunchInProgressRef.current) return;
-
-      taskLaunchInProgressRef.current = true;
-      setLaunchingTaskName(task.name);
-
-      const roomId = Date.now().toString();
-      const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
-      const currentSetupInfo = setupInfo.trim();
-      const roomTitle = (currentSetupInfo || "新規チャット").slice(0, 255);
-      const firstMessage = currentSetupInfo
-        ? `【タスク】${task.name}\n【状況・作業環境】${currentSetupInfo}`
-        : `【タスク】${task.name}`;
-
-      persistCurrentRoomId(roomId, roomMode);
-      setCurrentRoomMode(roomMode);
-      setMessages([]);
-      setChatInput("");
-      setOpenRoomActionsFor(null);
-      setShareUrl("");
-      setShareStatus({ message: "共有リンクを準備しています...", error: false });
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      setIsLoadingOlder(false);
-      closeOverlaySidebar();
-      prepareChatViewTransition();
-      setPageViewState("launching");
-
-      try {
-        await Promise.all([
-          createNewChatRoom(roomId, roomTitle, roomMode),
-          waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
-        ]);
-        if (currentRoomIdRef.current !== roomId) {
-          setLaunchingTaskName(null);
-          return;
-        }
-        removeStoredHistory(roomId);
-        const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
-        setPageViewState("chat");
-        setLaunchingTaskName(null);
-
-        void loadChatRooms();
-        await generationPromise;
-      } catch (error) {
-        setPageViewState("setup");
-        setLaunchingTaskName(null);
-        setMessages([]);
-        persistCurrentRoomId(null);
-        setCurrentRoomMode("normal");
-        showToast(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`, {
-          variant: "error",
-        });
-      } finally {
-        taskLaunchInProgressRef.current = false;
-      }
-    },
-    [
-      closeOverlaySidebar,
-      createNewChatRoom,
-      generateResponse,
-      isTaskOrderEditing,
-      loadChatRooms,
-      persistCurrentRoomId,
-      prepareChatViewTransition,
-      selectedModel,
-      setLaunchingTaskName,
-      setPageViewState,
-      setupInfo,
-      temporaryModeEnabled,
-    ],
-  );
-
-  const handleSetupSendMessage = useCallback(async () => {
-    if (taskLaunchInProgressRef.current) return;
-
-    const firstMessage = setupInfo.trim();
-    if (!firstMessage) return;
-    if (firstMessage.length > MAX_SETUP_INFO_LENGTH) return;
-
-    taskLaunchInProgressRef.current = true;
-
-    const roomId = Date.now().toString();
-    const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
-    const roomTitle = firstMessage.slice(0, 255) || "新規チャット";
-
-    persistCurrentRoomId(roomId, roomMode);
-    setCurrentRoomMode(roomMode);
-    setMessages([]);
-    setChatInput("");
-    setOpenRoomActionsFor(null);
-    setShareUrl("");
-    setShareStatus({ message: "共有リンクを準備しています...", error: false });
-    setHistoryHasMore(false);
-    setHistoryNextBeforeId(null);
-    setIsLoadingOlder(false);
-    closeOverlaySidebar();
-    prepareChatViewTransition();
-    setPageViewState("launching");
-
-    try {
-      await Promise.all([
-        createNewChatRoom(roomId, roomTitle, roomMode),
-        waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
-      ]);
-      if (currentRoomIdRef.current !== roomId) {
-        return;
-      }
-      removeStoredHistory(roomId);
-      const generationPromise = generateResponse(firstMessage, selectedModel, roomId);
-      setPageViewState("chat");
-
-      void loadChatRooms();
-      await generationPromise;
-    } catch (error) {
-      setPageViewState("setup");
-      setMessages([]);
-      persistCurrentRoomId(null);
-      setCurrentRoomMode("normal");
-      showToast(`チャットルーム作成に失敗: ${error instanceof Error ? error.message : String(error)}`, {
-        variant: "error",
-      });
-    } finally {
-      taskLaunchInProgressRef.current = false;
-    }
-  }, [
-    closeOverlaySidebar,
-    createNewChatRoom,
-    generateResponse,
-    loadChatRooms,
-    persistCurrentRoomId,
-    prepareChatViewTransition,
-    selectedModel,
-    setPageViewState,
-    setupInfo,
-    temporaryModeEnabled,
-  ]);
-
-  const handleSendMessage = useCallback(() => {
-    if (isGenerating) {
-      void stopGeneration();
-      return;
-    }
-
-    const roomId = currentRoomIdRef.current;
-    if (!roomId) return;
-
-    const message = chatInput.trim();
-    if (!message) return;
-
-    if (message.length > MAX_CHAT_MESSAGE_LENGTH) return;
-
-    setChatInput("");
-    void generateResponse(message, selectedModel, roomId);
-  }, [chatInput, generateResponse, isGenerating, selectedModel, stopGeneration]);
-
-  const handleChatInputKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (event.nativeEvent.isComposing) return;
-      if (event.key !== "Enter" || event.shiftKey) return;
-      event.preventDefault();
-      handleSendMessage();
-    },
-    [handleSendMessage],
-  );
-
-  const handleDeleteRoom = useCallback(
-    async (roomId: string, roomTitle: string) => {
-      const confirmed = await showConfirmModal(`「${roomTitle}」を削除しますか？`);
-      if (!confirmed) return;
-
-      try {
-        const response = await fetch("/api/delete_chat_room", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ room_id: roomId }),
-        });
-        const payload = await readJsonBodySafe(response);
-
-        if (!response.ok) {
-          throw new Error(extractApiErrorMessage(payload, "削除失敗", response.status));
-        }
-
-        if (roomId === currentRoomIdRef.current) {
-          persistCurrentRoomId(null);
-          setMessages([]);
-          setShareUrl("");
-          setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
-          closeShareModal();
-        }
-
-        setOpenRoomActionsFor(null);
-        void loadChatRooms();
-      } catch (error) {
-        showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
-      }
-    },
-    [closeShareModal, loadChatRooms, persistCurrentRoomId],
-  );
-
-  const handleRenameRoom = useCallback(
-    async (roomId: string, currentTitle: string) => {
-      const nextTitle = window.prompt("新しいチャットルーム名", currentTitle);
-      if (!nextTitle || !nextTitle.trim()) return;
-
-      try {
-        const response = await fetch("/api/rename_chat_room", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ room_id: roomId, new_title: nextTitle.trim() }),
-        });
-        const payload = await readJsonBodySafe(response);
-
-        if (!response.ok) {
-          throw new Error(extractApiErrorMessage(payload, "名前変更失敗", response.status));
-        }
-
-        setOpenRoomActionsFor(null);
-        void loadChatRooms();
-      } catch (error) {
-        showToast(`名前変更失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
-      }
-    },
-    [loadChatRooms],
-  );
-
-  const toggleTaskOrderEditing = useCallback(() => {
-    setIsTaskOrderEditing((previous) => {
-      const next = !previous;
-      if (next) {
-        setTasksExpanded(true);
-      } else {
-        draggingTaskIndexRef.current = null;
-        setDraggingTaskIndex(null);
-        setTasksExpanded(false);
-        void saveTaskOrder(tasks);
-      }
-      return next;
-    });
-  }, [saveTaskOrder, tasks]);
-
-  const handleTaskDragStart = useCallback(
-    (index: number) => {
-      if (!isTaskOrderEditing) return;
-      draggingTaskIndexRef.current = index;
-      setDraggingTaskIndex(index);
-    },
-    [isTaskOrderEditing],
-  );
-
-  const handleTaskDragEnd = useCallback((dragIndex: number, dropTargetIndex: number) => {
-    draggingTaskIndexRef.current = null;
-    setDraggingTaskIndex(null);
-
-    if (dragIndex === dropTargetIndex) return;
-
-    setTasks((previous) => {
-      if (dragIndex < 0 || dragIndex >= previous.length) return previous;
-      if (dropTargetIndex < 0 || dropTargetIndex >= previous.length) return previous;
-      const next = [...previous];
-      const [moved] = next.splice(dragIndex, 1);
-      if (!moved) return previous;
-      next.splice(dropTargetIndex, 0, moved);
-      return next;
-    });
-  }, []);
-
-  const handleTaskDelete = useCallback(
-    async (taskName: string) => {
-      const confirmed = await showConfirmModal("このタスクを削除してもよろしいですか？");
-      if (!confirmed) return;
-
-      try {
-        await fetchJsonOrThrow("/api/delete_task", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ task: taskName }),
-        });
-
-        setTasks((previous) => {
-          const next = previous.filter((task) => task.name !== taskName);
-          void saveTaskOrder(next);
-          return next;
-        });
-        invalidateTasksCache();
-      } catch (error) {
-        showToast(`削除に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
-          variant: "error",
-        });
-      }
-    },
-    [saveTaskOrder],
-  );
-
-  const openTaskEditModal = useCallback((task: NormalizedTask) => {
-    setTaskEditForm({
-      old_task: task.name,
-      new_task: task.name,
-      prompt_template: task.prompt_template,
-      response_rules: task.response_rules,
-      output_skeleton: task.output_skeleton,
-      input_examples: task.input_examples,
-      output_examples: task.output_examples,
-    });
-    setTaskEditModalOpen(true);
-  }, []);
-
-  const closeTaskEditModal = useCallback(() => {
-    setTaskEditModalOpen(false);
-  }, []);
-
-  const handleTaskEditSave = useCallback(async () => {
-    const payload = {
-      old_task: taskEditForm.old_task,
-      new_task: taskEditForm.new_task.trim(),
-      prompt_template: taskEditForm.prompt_template,
-      response_rules: taskEditForm.response_rules,
-      output_skeleton: taskEditForm.output_skeleton,
-      input_examples: taskEditForm.input_examples,
-      output_examples: taskEditForm.output_examples,
-    };
-
-    if (!payload.new_task) {
-      showToast("タイトルを入力してください。", { variant: "error" });
-      return;
-    }
-
-    try {
-      await fetchJsonOrThrow("/api/edit_task", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(payload),
-      });
-
-      setTasks((previous) =>
-        previous.map((task) => {
-          if (task.name !== taskEditForm.old_task) return task;
-          return {
-            ...task,
-            name: payload.new_task,
-            prompt_template: payload.prompt_template,
-            response_rules: payload.response_rules,
-            output_skeleton: payload.output_skeleton,
-            input_examples: payload.input_examples,
-            output_examples: payload.output_examples,
-          };
-        }),
-      );
-      invalidateTasksCache();
-      closeTaskEditModal();
-    } catch (error) {
-      showToast(`更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
-        variant: "error",
-      });
-    }
-  }, [closeTaskEditModal, taskEditForm]);
 
   const handlePromptSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
