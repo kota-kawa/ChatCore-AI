@@ -1,12 +1,22 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
+import { capUiChatMessages } from "../../lib/chat_page/message_window";
 import type { ChatRoom, ChatRoomMode, UiChatMessage } from "../../lib/chat_page/types";
 
 export function useHomePageChatState() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [currentRoomMode, setCurrentRoomMode] = useState<ChatRoomMode>("normal");
-  const [messages, setMessages] = useState<UiChatMessage[]>([]);
+  const [messages, setRawMessages] = useState<UiChatMessage[]>([]);
+  const setMessages = useCallback<Dispatch<SetStateAction<UiChatMessage[]>>>((nextMessages) => {
+    setRawMessages((previous) => {
+      const resolvedMessages =
+        typeof nextMessages === "function"
+          ? (nextMessages as (previousMessages: UiChatMessage[]) => UiChatMessage[])(previous)
+          : nextMessages;
+      return capUiChatMessages(resolvedMessages);
+    });
+  }, []);
   const [chatInput, setChatInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);

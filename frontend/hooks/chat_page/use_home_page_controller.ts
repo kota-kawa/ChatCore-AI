@@ -17,6 +17,10 @@ import { CHAT_HISTORY_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH 
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { isNearBottom } from "../../lib/chat_page/dom";
 import { buildTaskOrderForPersistence } from "../../lib/chat_page/home_page_controller_utils";
+import {
+  prependUiChatMessagesWithinLimit,
+  rememberStreamEventId,
+} from "../../lib/chat_page/message_window";
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
@@ -581,9 +585,7 @@ export function useHomePageController() {
         if (!parsed) return;
         if (!isGenerationActive(generation)) return;
 
-        if (typeof parsed.id === "number" && parsed.id > 0) {
-          streamLastEventIdByRoomRef.current.set(roomId, parsed.id);
-        }
+        if (!rememberStreamEventId(streamLastEventIdByRoomRef.current, roomId, parsed.id)) return;
 
         if (parsed.event === "chunk") {
           const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
@@ -921,7 +923,7 @@ export function useHomePageController() {
         text: typeof entry.message === "string" ? entry.message : "",
       }));
 
-      setMessages((previous) => [...uiMessages, ...previous]);
+      setMessages((previous) => prependUiChatMessagesWithinLimit(uiMessages, previous));
       setHistoryHasMore(pagination.hasMore);
       setHistoryNextBeforeId(pagination.nextBeforeId);
 
