@@ -12,6 +12,451 @@ body {
   color: var(--text-dark, #1a1a1a);
 }
 
+#chat-share-modal.cc-share-modal {
+  --cc-share-backdrop: rgba(11, 27, 25, 0.56);
+  --cc-share-content-border: rgba(174, 211, 203, 0.52);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(247, 252, 251, 0.965) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(11, 27, 25, 0.28),
+    0 12px 30px rgba(15, 118, 110, 0.14);
+  --cc-share-text-strong: #12312d;
+  --cc-share-text-muted: #54645d;
+  --cc-share-control-border: rgba(174, 211, 203, 0.9);
+  --cc-share-control-bg: rgba(250, 252, 251, 0.94);
+  --cc-share-close-color: #54706a;
+  --cc-share-accent: #0f766e;
+  --cc-share-accent-hover: #115e59;
+  --cc-share-primary-text: #ffffff;
+  --cc-share-focus-border: rgba(15, 118, 110, 0.34);
+  --cc-share-focus-ring: rgba(15, 118, 110, 0.1);
+  --cc-share-surface: rgba(255, 255, 255, 0.84);
+  --cc-share-surface-hover: rgba(247, 251, 249, 0.98);
+}
+
+#promptShareModal.cc-share-modal {
+  --cc-share-backdrop: rgba(18, 22, 30, 0.58);
+  --cc-share-content-border: rgba(181, 208, 239, 0.42);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(246, 250, 255, 0.965) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(18, 24, 34, 0.28),
+    0 12px 30px rgba(79, 156, 245, 0.14);
+  --cc-share-text-strong: var(--ps-text-strong, #202124);
+  --cc-share-text-muted: var(--ps-text-muted, #5f6368);
+  --cc-share-control-border: rgba(189, 211, 234, 0.9);
+  --cc-share-control-bg: rgba(248, 251, 255, 0.94);
+  --cc-share-close-color: #5f7288;
+  --cc-share-accent: #28517b;
+  --cc-share-accent-hover: #174ea6;
+  --cc-share-primary-text: #ffffff;
+  --cc-share-focus-border: rgba(26, 115, 232, 0.42);
+  --cc-share-focus-ring: rgba(26, 115, 232, 0.12);
+  --cc-share-surface: rgba(255, 255, 255, 0.92);
+  --cc-share-surface-hover: #ffffff;
+}
+
+#memo-share-modal.cc-share-modal {
+  --cc-share-backdrop: rgba(41, 24, 6, 0.54);
+  --cc-share-content-border: rgba(217, 119, 6, 0.26);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(255, 251, 235, 0.985) 0%, rgba(255, 247, 237, 0.965) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(41, 24, 6, 0.3),
+    0 12px 30px rgba(217, 119, 6, 0.14);
+  --cc-share-text-strong: #4a2b09;
+  --cc-share-text-muted: #9a7a52;
+  --cc-share-control-border: rgba(191, 122, 23, 0.26);
+  --cc-share-control-bg: rgba(255, 255, 255, 0.86);
+  --cc-share-close-color: #7b4b13;
+  --cc-share-accent: #8f5a17;
+  --cc-share-accent-hover: #4a2b09;
+  --cc-share-primary-text: #ffffff;
+  --cc-share-focus-border: rgba(217, 119, 6, 0.42);
+  --cc-share-focus-ring: rgba(217, 119, 6, 0.12);
+  --cc-share-surface: rgba(255, 255, 255, 0.78);
+  --cc-share-surface-hover: rgba(255, 255, 255, 0.96);
+}
+
+[data-theme="dark"] #chat-share-modal.cc-share-modal {
+  --cc-share-backdrop: rgba(2, 6, 23, 0.68);
+  --cc-share-content-border: rgba(20, 184, 166, 0.22);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(18, 38, 36, 0.97) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.42),
+    0 12px 28px rgba(20, 184, 166, 0.10);
+  --cc-share-text-strong: #f8fafc;
+  --cc-share-text-muted: #94a3b8;
+  --cc-share-control-border: rgba(45, 212, 191, 0.22);
+  --cc-share-control-bg: rgba(15, 23, 42, 0.86);
+  --cc-share-close-color: #5eead4;
+  --cc-share-accent: #5eead4;
+  --cc-share-accent-hover: #99f6e4;
+  --cc-share-primary-text: #052e2b;
+  --cc-share-focus-border: rgba(45, 212, 191, 0.46);
+  --cc-share-focus-ring: rgba(45, 212, 191, 0.12);
+  --cc-share-surface: rgba(15, 23, 42, 0.86);
+  --cc-share-surface-hover: rgba(30, 41, 59, 1);
+}
+
+[data-theme="dark"] #promptShareModal.cc-share-modal {
+  --cc-share-backdrop: rgba(2, 6, 23, 0.68);
+  --cc-share-content-border: rgba(96, 165, 250, 0.22);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.97) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.42),
+    0 12px 28px rgba(37, 99, 235, 0.12);
+  --cc-share-text-strong: #f8fafc;
+  --cc-share-text-muted: #94a3b8;
+  --cc-share-control-border: rgba(96, 165, 250, 0.24);
+  --cc-share-control-bg: rgba(15, 23, 42, 0.86);
+  --cc-share-close-color: #93c5fd;
+  --cc-share-accent: #93c5fd;
+  --cc-share-accent-hover: #bfdbfe;
+  --cc-share-primary-text: #0f172a;
+  --cc-share-focus-border: rgba(96, 165, 250, 0.46);
+  --cc-share-focus-ring: rgba(96, 165, 250, 0.12);
+  --cc-share-surface: rgba(15, 23, 42, 0.86);
+  --cc-share-surface-hover: rgba(30, 41, 59, 1);
+}
+
+[data-theme="dark"] #memo-share-modal.cc-share-modal {
+  --cc-share-backdrop: rgba(2, 6, 23, 0.68);
+  --cc-share-content-border: rgba(245, 158, 11, 0.24);
+  --cc-share-content-bg: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(37, 28, 14, 0.97) 100%);
+  --cc-share-content-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.42),
+    0 12px 28px rgba(245, 158, 11, 0.10);
+  --cc-share-text-strong: #fbbf24;
+  --cc-share-text-muted: #cbd5e1;
+  --cc-share-control-border: rgba(245, 158, 11, 0.24);
+  --cc-share-control-bg: rgba(15, 23, 42, 0.86);
+  --cc-share-close-color: #fbbf24;
+  --cc-share-accent: #fbbf24;
+  --cc-share-accent-hover: #fde68a;
+  --cc-share-primary-text: #1f2937;
+  --cc-share-focus-border: rgba(245, 158, 11, 0.46);
+  --cc-share-focus-ring: rgba(245, 158, 11, 0.12);
+  --cc-share-surface: rgba(15, 23, 42, 0.86);
+  --cc-share-surface-hover: rgba(30, 41, 59, 1);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
+  background: var(--cc-share-backdrop);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
+  position: relative;
+  width: min(92%, 620px);
+  max-height: 92vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-radius: 20px;
+  border: 1px solid var(--cc-share-content-border);
+  background: var(--cc-share-content-bg);
+  color: var(--cc-share-text-strong);
+  box-shadow: var(--cc-share-content-shadow);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close {
+  position: absolute;
+  top: 0.95rem;
+  right: 0.95rem;
+  z-index: 2;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--cc-share-control-border);
+  background: var(--cc-share-surface);
+  color: var(--cc-share-close-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close:hover {
+  background: var(--cc-share-surface-hover);
+  border-color: var(--cc-share-focus-border);
+  color: var(--cc-share-accent-hover);
+  transform: translateY(-1px);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0 3.35rem 0 0;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
+  margin: 0;
+  color: var(--cc-share-text-strong);
+  font-size: 1.48rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__lead {
+  margin: 0;
+  color: var(--cc-share-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row {
+  margin: 0;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row--labeled {
+  display: grid;
+  grid-template-columns: 95px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row label {
+  color: var(--cc-share-text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input,
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--cc-share-control-border);
+  background: var(--cc-share-control-bg);
+  color: var(--cc-share-text-strong);
+  font: inherit;
+  padding: 0.86rem 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input:focus,
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger:focus-visible {
+  outline: none;
+  border-color: var(--cc-share-focus-border);
+  box-shadow:
+    0 0 0 4px var(--cc-share-focus-ring),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__status {
+  margin: 0;
+  min-height: 1.35rem;
+  color: var(--cc-share-accent);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__status--error {
+  color: #dc2626;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__actions {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__icon-btn {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:is(.primary-button, .submit-btn) {
+  border: 1px solid var(--cc-share-accent);
+  background: var(--cc-share-accent);
+  color: var(--cc-share-primary-text);
+  box-shadow: 0 10px 22px var(--cc-share-focus-ring);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn.secondary-button {
+  border: 1px solid var(--cc-share-control-border);
+  background: var(--cc-share-surface);
+  color: var(--cc-share-accent);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.05);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__icon-btn i {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--cc-share-text-muted);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.34rem 0.74rem;
+  border: 1px solid var(--cc-share-control-border);
+  border-radius: 999px;
+  background: var(--cc-share-surface);
+  color: var(--cc-share-text-muted);
+  font-weight: 700;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 46px;
+  padding: 0.54rem 0.72rem;
+  border-radius: 14px;
+  border: 1px solid var(--cc-share-control-border);
+  background: var(--cc-share-surface);
+  color: var(--cc-share-accent);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a:hover {
+  background: var(--cc-share-surface-hover);
+  border-color: var(--cc-share-focus-border);
+  color: var(--cc-share-accent-hover);
+  transform: translateY(-1px);
+}
+
+:is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns .share-x-icon {
+  width: 0.94rem;
+  height: 0.94rem;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
+  background: var(--cc-share-backdrop);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
+  border-color: var(--cc-share-content-border);
+  background: var(--cc-share-content-bg);
+  color: var(--cc-share-text-strong);
+  box-shadow: var(--cc-share-content-shadow);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
+  color: var(--cc-share-text-strong);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__lead {
+  color: var(--cc-share-text-muted);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row .memo-select__trigger,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal button.cc-share-modal__icon-btn.secondary-button,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta span {
+  border-color: var(--cc-share-control-border);
+  background: var(--cc-share-surface);
+  color: var(--cc-share-accent);
+  box-shadow: none;
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row input {
+  color: var(--cc-share-text-strong);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row label,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__meta {
+  color: var(--cc-share-text-muted);
+}
+
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__close:hover,
+[data-theme="dark"] :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns a:hover {
+  background: var(--cc-share-surface-hover);
+  border-color: var(--cc-share-focus-border);
+  color: var(--cc-share-accent-hover);
+}
+
+@media (max-width: 640px) {
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal {
+    padding: 0.75rem;
+    align-items: center;
+  }
+
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__content {
+    width: min(100%, 620px);
+    max-height: calc(100dvh - 1.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    padding: 1rem 0.95rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 18px;
+  }
+
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header {
+    padding-right: 3rem;
+  }
+
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h2,
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__header h3 {
+    font-size: 1.24rem;
+  }
+
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__row--labeled,
+  :is(#chat-share-modal, #promptShareModal, #memo-share-modal).cc-share-modal.cc-share-modal .cc-share-modal__sns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cc-tooltip {
   position: fixed;
   top: 0;

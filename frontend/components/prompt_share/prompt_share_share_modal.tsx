@@ -41,7 +41,7 @@ export function PromptShareShareModal({
   return (
     <div
       id="promptShareModal"
-      className={`post-modal prompt-share-modal${isOpen ? " show" : ""}`}
+      className={`post-modal prompt-share-modal cc-share-modal${isOpen ? " show" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="promptShareModalTitle"
@@ -53,10 +53,10 @@ export function PromptShareShareModal({
         }
       }}
     >
-      <div className="post-modal-content prompt-share-dialog" tabIndex={-1}>
+      <div className="post-modal-content prompt-share-dialog cc-share-modal__content" tabIndex={-1}>
         <button
           type="button"
-          className="prompt-share-dialog__close"
+          className="prompt-share-dialog__close cc-share-modal__close"
           id="closePromptShareModal"
           aria-label="共有モーダルを閉じる"
           onClick={onClose}
@@ -66,15 +66,15 @@ export function PromptShareShareModal({
           </svg>
         </button>
 
-        <header className="prompt-share-dialog__header">
+        <header className="prompt-share-dialog__header cc-share-modal__header">
           <h2 id="promptShareModalTitle">プロンプトを共有</h2>
-          <p className="prompt-share-dialog__lead">
+          <p className="prompt-share-dialog__lead cc-share-modal__lead">
             このプロンプト専用のURLをコピーしたり、そのまま共有できます。
           </p>
         </header>
 
-        <div className="prompt-share-dialog__body">
-          <div className="prompt-share-dialog__row">
+        <div className="prompt-share-dialog__body cc-share-modal__body">
+          <div className="prompt-share-dialog__row cc-share-modal__row">
             <input
               type="text"
               id="prompt-share-link-input"
@@ -86,16 +86,16 @@ export function PromptShareShareModal({
 
           <p
             id="prompt-share-status"
-            className={`prompt-share-dialog__status${shareStatus.isError ? " prompt-share-dialog__status--error" : ""}`}
+            className={`prompt-share-dialog__status cc-share-modal__status${shareStatus.isError ? " prompt-share-dialog__status--error cc-share-modal__status--error" : ""}`}
           >
             {shareStatus.text}
           </p>
 
-          <div className="prompt-share-dialog__actions">
+          <div className="prompt-share-dialog__actions cc-share-modal__actions">
             <button
               type="button"
               id="prompt-share-copy-btn"
-              className="submit-btn prompt-share-icon-btn"
+              className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
               aria-label="リンクをコピー"
               title="リンクをコピー"
               ref={promptShareCopyButtonRef}
@@ -111,7 +111,7 @@ export function PromptShareShareModal({
               <button
                 type="button"
                 id="prompt-share-web-btn"
-                className="submit-btn prompt-share-icon-btn"
+                className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
                 aria-label="端末で共有"
                 title="端末で共有"
                 disabled={shareActionLoading}
@@ -124,7 +124,7 @@ export function PromptShareShareModal({
             ) : null}
           </div>
 
-          <div className="prompt-share-dialog__sns">
+          <div className="prompt-share-dialog__sns cc-share-modal__sns">
             <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
               <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path

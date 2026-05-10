@@ -1635,7 +1635,8 @@ export default function MemoPage() {
 
         {/* ── Share modal ── */}
         <div
-          className={`memo-share-modal${isShareModalOpen ? " is-visible" : ""}`}
+          id="memo-share-modal"
+          className={`memo-share-modal cc-share-modal${isShareModalOpen ? " is-visible" : ""}`}
           role="dialog"
           aria-modal="true"
           aria-hidden={isShareModalOpen ? "false" : "true"}
@@ -1646,20 +1647,20 @@ export default function MemoPage() {
             }
           }}
         >
-          <div className="memo-share-modal__content" tabIndex={-1}>
-            <button type="button" className="memo-share-modal__close" aria-label="共有モーダルを閉じる" onClick={closeShareModal}>
+          <div className="memo-share-modal__content cc-share-modal__content" tabIndex={-1}>
+            <button type="button" className="memo-share-modal__close cc-share-modal__close" aria-label="共有モーダルを閉じる" onClick={closeShareModal}>
               <i className="bi bi-x-lg"></i>
             </button>
-            <header className="memo-share-modal__header">
+            <header className="memo-share-modal__header cc-share-modal__header">
               <h3 id="memoShareTitle">共有設定: {shareMemoTitle}</h3>
-              <p>リンク作成・期限設定・無効化をここで管理できます。</p>
+              <p className="cc-share-modal__lead">リンク作成・期限設定・無効化をここで管理できます。</p>
             </header>
-            <div className="memo-share-modal__body">
-              <div className="memo-share-modal__row">
+            <div className="memo-share-modal__body cc-share-modal__body">
+              <div className="memo-share-modal__row cc-share-modal__row cc-share-modal__row--labeled">
                 <label htmlFor="memo-share-link-input">共有リンク</label>
                 <input id="memo-share-link-input" type="text" readOnly value={shareUrl} placeholder="共有リンクを作成してください" />
               </div>
-              <div className="memo-share-modal__row">
+              <div className="memo-share-modal__row cc-share-modal__row cc-share-modal__row--labeled">
                 <label htmlFor="memo-share-expiry">有効期限</label>
                 <MemoSelect
                   id="memo-share-expiry"
@@ -1670,21 +1671,21 @@ export default function MemoPage() {
                   options={SHARE_EXPIRES_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
                 />
               </div>
-              <div className="memo-share-modal__actions">
-                <button type="button" className="primary-button memo-share-modal__icon-btn" aria-label="共有リンクを作成" title="共有リンクを作成" onClick={() => { void createShareLink(false); }} disabled={shareLoading}><i className="bi bi-link-45deg"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn" aria-label="共有リンクを再生成" title="共有リンクを再生成" onClick={() => { void createShareLink(true); }} disabled={shareLoading}><i className="bi bi-arrow-repeat"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn" aria-label="共有リンクを無効化" title="共有リンクを無効化" onClick={() => { void revokeShareLink(); }} disabled={shareLoading}><i className="bi bi-slash-circle"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn" aria-label="リンクをコピー" title="リンクをコピー" onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
+              <div className="memo-share-modal__actions cc-share-modal__actions">
+                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを作成" title="共有リンクを作成" onClick={() => { void createShareLink(false); }} disabled={shareLoading}><i className="bi bi-link-45deg"></i></button>
+                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを再生成" title="共有リンクを再生成" onClick={() => { void createShareLink(true); }} disabled={shareLoading}><i className="bi bi-arrow-repeat"></i></button>
+                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを無効化" title="共有リンクを無効化" onClick={() => { void revokeShareLink(); }} disabled={shareLoading}><i className="bi bi-slash-circle"></i></button>
+                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="リンクをコピー" title="リンクをコピー" onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
                 {supportsNativeShare && (
-                  <button type="button" className="secondary-button memo-share-modal__icon-btn" aria-label="端末で共有" title="端末で共有" onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
+                  <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="端末で共有" title="端末で共有" onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
                 )}
               </div>
-              {shareStatus && <p className={`memo-share-modal__status memo-share-modal__status--${shareStatus.type}`}>{shareStatus.text}</p>}
-              <div className="memo-share-modal__meta">
+              {shareStatus && <p className={`memo-share-modal__status cc-share-modal__status memo-share-modal__status--${shareStatus.type}${shareStatus.type === "error" ? " cc-share-modal__status--error" : ""}`}>{shareStatus.text}</p>}
+              <div className="memo-share-modal__meta cc-share-modal__meta">
                 <span>{shareState?.is_active ? "公開中" : "未公開 / 無効"}</span>
                 <span>{shareState?.expires_at ? `期限: ${formatDateTime(shareState.expires_at) || shareState.expires_at}` : "期限: 無期限"}</span>
               </div>
-              <div className="memo-share-modal__sns">
+              <div className="memo-share-modal__sns cc-share-modal__sns">
                 <a target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
                   <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path

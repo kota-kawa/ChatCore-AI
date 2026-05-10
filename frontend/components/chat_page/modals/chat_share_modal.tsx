@@ -47,7 +47,7 @@ export function ChatShareModal({
     <div
       ref={modalRef}
       id="chat-share-modal"
-      className={`chat-share-modal modal-base ${shareModalOpen ? "is-open" : ""}`.trim()}
+      className={`chat-share-modal modal-base cc-share-modal ${shareModalOpen ? "is-open" : ""}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-hidden={shareModalOpen ? "false" : "true"}
@@ -59,23 +59,23 @@ export function ChatShareModal({
         }
       }}
     >
-      <div className="chat-share-modal__content" tabIndex={-1}>
+      <div className="chat-share-modal__content cc-share-modal__content" tabIndex={-1}>
         <ModalCloseButton
           id="chat-share-close-btn"
-          className="chat-share-close-btn"
+          className="chat-share-close-btn cc-share-modal__close"
           label="共有モーダルを閉じる"
           onClick={closeShareModal}
         />
 
-        <header className="chat-share-modal__header">
+        <header className="chat-share-modal__header cc-share-modal__header">
           <h2 id="chat-share-title">チャットを共有</h2>
-          <p className="chat-share-modal__desc">
+          <p className="chat-share-modal__desc cc-share-modal__lead">
             共有リンクを作成すると、このチャットルームの履歴をURL経由で閲覧できます。
           </p>
         </header>
 
-        <div className="chat-share-modal__body">
-          <div className="chat-share-link-row">
+        <div className="chat-share-modal__body cc-share-modal__body">
+          <div className="chat-share-link-row cc-share-modal__row">
             <input
               type="text"
               id="chat-share-link-input"
@@ -85,15 +85,18 @@ export function ChatShareModal({
             />
           </div>
 
-          <p id="chat-share-status" className={`chat-share-status ${shareStatus.error ? "chat-share-status--error" : ""}`.trim()}>
+          <p
+            id="chat-share-status"
+            className={`chat-share-status cc-share-modal__status ${shareStatus.error ? "chat-share-status--error cc-share-modal__status--error" : ""}`.trim()}
+          >
             {shareStatus.message}
           </p>
 
-          <div className="chat-share-actions">
+          <div className="chat-share-actions cc-share-modal__actions">
             <button
               type="button"
               id="chat-share-copy-btn"
-              className="primary-button chat-share-icon-btn"
+              className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
               aria-label="リンクをコピー"
               title="リンクをコピー"
               disabled={shareLoading}
@@ -104,7 +107,7 @@ export function ChatShareModal({
             <button
               type="button"
               id="chat-share-web-btn"
-              className="primary-button chat-share-icon-btn"
+              className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
               aria-label="端末で共有"
               title="端末で共有"
               disabled={shareLoading}
@@ -115,7 +118,7 @@ export function ChatShareModal({
             </button>
           </div>
 
-          <div className="chat-share-sns">
+          <div className="chat-share-sns cc-share-modal__sns">
             <a id="chat-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareXUrl}>
               <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
