@@ -30,6 +30,7 @@ function ChatMainSectionComponent() {
     isRoomSelectionMode,
     selectedRoomIds,
     isBulkDeletingRooms,
+    chatMessageListResetKey,
     historyHasMore,
     historyNextBeforeId,
     isLoadingOlder,
@@ -358,6 +359,7 @@ function ChatMainSectionComponent() {
           </button>
 
           <ChatMessageList
+            key={`${currentRoomId || "no-room"}:${chatMessageListResetKey}`}
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
             setupInfo={setupInfo}

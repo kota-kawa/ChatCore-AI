@@ -172,6 +172,8 @@ export function useHomePageGenerationActions({
   const persistCurrentRoomId = useCallback((roomId: string | null, mode?: ChatRoomMode) => {
     if (currentRoomIdRef.current !== roomId) {
       disconnectActiveGeneration();
+      prependScrollRestoreRef.current = null;
+      setIsLoadingOlder(false);
     }
     currentRoomIdRef.current = roomId;
     setCurrentRoomId(roomId);
@@ -244,9 +246,11 @@ export function useHomePageGenerationActions({
         text: entry.text,
       }));
 
+      prependScrollRestoreRef.current = null;
       setMessages(localMessages);
       setHistoryHasMore(false);
       setHistoryNextBeforeId(null);
+      setIsLoadingOlder(false);
       scheduleAutoScrollIfNeeded(true);
     },
     [scheduleAutoScrollIfNeeded],
@@ -661,6 +665,8 @@ export function useHomePageGenerationActions({
         };
 
         const commitHistoryMessages = (nextMessages: UiChatMessage[]) => {
+          prependScrollRestoreRef.current = null;
+          setIsLoadingOlder(false);
           setMessages(nextMessages);
           saveUiMessagesToLocalStorage(roomId, nextMessages);
           scheduleAutoScrollIfNeeded(true);
@@ -741,7 +747,10 @@ export function useHomePageGenerationActions({
 
     try {
       const { messages: olderMessages, pagination } = await fetchChatHistoryPage(roomId, historyNextBeforeId);
-      if (currentRoomIdRef.current !== roomId) return;
+      if (currentRoomIdRef.current !== roomId) {
+        prependScrollRestoreRef.current = null;
+        return;
+      }
 
       const uiMessages = olderMessages.map((entry) => ({
         id: nextMessageId("history-older", messageSeqRef),

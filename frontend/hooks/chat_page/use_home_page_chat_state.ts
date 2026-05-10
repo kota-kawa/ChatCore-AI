@@ -27,6 +27,7 @@ export function useHomePageChatState() {
   const [isRoomSelectionMode, setIsRoomSelectionMode] = useState(false);
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(() => new Set());
   const [isBulkDeletingRooms, setIsBulkDeletingRooms] = useState(false);
+  const [chatMessageListResetKey, setChatMessageListResetKey] = useState(0);
 
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const currentRoomIdRef = useRef<string | null>(null);
@@ -65,6 +66,8 @@ export function useHomePageChatState() {
     setSelectedRoomIds,
     isBulkDeletingRooms,
     setIsBulkDeletingRooms,
+    chatMessageListResetKey,
+    setChatMessageListResetKey,
     chatMessagesRef,
     currentRoomIdRef,
     streamLastEventIdByRoomRef,

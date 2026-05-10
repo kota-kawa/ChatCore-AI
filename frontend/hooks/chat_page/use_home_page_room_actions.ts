@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useRef,
   type Dispatch,
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
@@ -63,6 +64,7 @@ type UseHomePageRoomActionsParams = {
   setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
   setIsBulkDeletingRooms: Dispatch<SetStateAction<boolean>>;
+  setChatMessageListResetKey: Dispatch<SetStateAction<number>>;
   setHistoryNextBeforeId: Dispatch<SetStateAction<number | null>>;
   setIsLoadingOlder: Dispatch<SetStateAction<boolean>>;
   setIsRoomSelectionMode: Dispatch<SetStateAction<boolean>>;
@@ -107,6 +109,7 @@ export function useHomePageRoomActions({
   setCurrentRoomMode,
   setHistoryHasMore,
   setIsBulkDeletingRooms,
+  setChatMessageListResetKey,
   setHistoryNextBeforeId,
   setIsLoadingOlder,
   setIsRoomSelectionMode,
@@ -119,13 +122,20 @@ export function useHomePageRoomActions({
   setShareStatus,
   setShareUrl,
 }: UseHomePageRoomActionsParams) {
+  const accessChatInProgressRef = useRef(false);
+
+  const resetChatMessageList = useCallback(() => {
+    setChatMessageListResetKey((previous) => previous + 1);
+  }, [setChatMessageListResetKey]);
+
   const clearCurrentRoomAfterDelete = useCallback(() => {
+    resetChatMessageList();
     persistCurrentRoomId(null);
     setMessages([]);
     setShareUrl("");
     setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
     closeShareModal();
-  }, [closeShareModal, persistCurrentRoomId, setMessages, setShareStatus, setShareUrl]);
+  }, [closeShareModal, persistCurrentRoomId, resetChatMessageList, setMessages, setShareStatus, setShareUrl]);
 
   const cancelRoomSelection = useCallback(() => {
     setIsRoomSelectionMode(false);
@@ -192,6 +202,7 @@ export function useHomePageRoomActions({
         return;
       }
 
+      resetChatMessageList();
       const nextRoom = chatRooms.find((room) => room.id === roomId);
       if (currentRoomIdRef.current !== roomId) {
         persistCurrentRoomId(roomId, roomMode ?? nextRoom?.mode);
@@ -214,6 +225,7 @@ export function useHomePageRoomActions({
       pageViewState,
       persistCurrentRoomId,
       prepareChatViewTransition,
+      resetChatMessageList,
       setPageViewState,
     ],
   );
@@ -228,55 +240,65 @@ export function useHomePageRoomActions({
   }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskName, setPageViewState]);
 
   const handleAccessChat = useCallback(async () => {
-    const activeRoomId = currentRoomIdRef.current;
-    const preferredLoadedRoom =
-      (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
-
-    if (preferredLoadedRoom) {
-      switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
-      return;
-    }
-
-    prepareChatViewTransition();
-    setPageViewState("chat");
-    closeOverlaySidebar();
-    setOpenRoomActionsFor(null);
-
-    if (activeRoomId) {
-      loadLocalChatHistory(activeRoomId);
-    } else {
-      setMessages([]);
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      setIsLoadingOlder(false);
-    }
+    if (accessChatInProgressRef.current) return;
+    accessChatInProgressRef.current = true;
 
     try {
-      const rooms = await loadChatRooms();
-      const preferredFetchedRoom =
-        (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
+      const activeRoomId = currentRoomIdRef.current;
+      const preferredLoadedRoom =
+        (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
 
-      if (preferredFetchedRoom) {
-        switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
+      if (preferredLoadedRoom) {
+        switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
         return;
       }
 
-      setMessages([]);
-      persistCurrentRoomId(null);
-      setCurrentRoomMode("normal");
-      setHistoryHasMore(false);
-      setHistoryNextBeforeId(null);
-      setIsLoadingOlder(false);
-    } catch (error) {
-      console.error("ルーム一覧取得失敗:", error);
-      if (!activeRoomId) {
+      prepareChatViewTransition();
+      setPageViewState("chat");
+      closeOverlaySidebar();
+      setOpenRoomActionsFor(null);
+      resetChatMessageList();
+
+      if (activeRoomId) {
+        loadLocalChatHistory(activeRoomId);
+      } else {
+        setMessages([]);
+        setHistoryHasMore(false);
+        setHistoryNextBeforeId(null);
+        setIsLoadingOlder(false);
+      }
+
+      try {
+        const rooms = await loadChatRooms();
+        const preferredFetchedRoom =
+          (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
+
+        if (preferredFetchedRoom) {
+          switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
+          return;
+        }
+
+        resetChatMessageList();
         setMessages([]);
         persistCurrentRoomId(null);
         setCurrentRoomMode("normal");
         setHistoryHasMore(false);
         setHistoryNextBeforeId(null);
         setIsLoadingOlder(false);
+      } catch (error) {
+        console.error("ルーム一覧取得失敗:", error);
+        if (!activeRoomId) {
+          resetChatMessageList();
+          setMessages([]);
+          persistCurrentRoomId(null);
+          setCurrentRoomMode("normal");
+          setHistoryHasMore(false);
+          setHistoryNextBeforeId(null);
+          setIsLoadingOlder(false);
+        }
       }
+    } finally {
+      accessChatInProgressRef.current = false;
     }
   }, [
     chatRooms,
@@ -286,6 +308,7 @@ export function useHomePageRoomActions({
     loadLocalChatHistory,
     persistCurrentRoomId,
     prepareChatViewTransition,
+    resetChatMessageList,
     setCurrentRoomMode,
     setHistoryHasMore,
     setHistoryNextBeforeId,
@@ -307,6 +330,7 @@ export function useHomePageRoomActions({
   }, [cancelRoomSelection, persistCurrentRoomId, showSetupForm]);
 
   const resetLaunchingRoomState = useCallback((roomId: string, roomMode: ChatRoomMode) => {
+    resetChatMessageList();
     persistCurrentRoomId(roomId, roomMode);
     setCurrentRoomMode(roomMode);
     setMessages([]);
@@ -320,7 +344,7 @@ export function useHomePageRoomActions({
     closeOverlaySidebar();
     prepareChatViewTransition();
     setPageViewState("launching");
-  }, [closeOverlaySidebar, persistCurrentRoomId, prepareChatViewTransition, setPageViewState]);
+  }, [closeOverlaySidebar, persistCurrentRoomId, prepareChatViewTransition, resetChatMessageList, setPageViewState]);
 
   const handleTaskCardLaunch = useCallback(
     async (task: NormalizedTask) => {

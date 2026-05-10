@@ -67,6 +67,7 @@ type HomePageChatContextValue = Pick<
   | "isRoomSelectionMode"
   | "selectedRoomIds"
   | "isBulkDeletingRooms"
+  | "chatMessageListResetKey"
   | "historyHasMore"
   | "historyNextBeforeId"
   | "isLoadingOlder"
@@ -214,6 +215,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       isRoomSelectionMode: controller.isRoomSelectionMode,
       selectedRoomIds: controller.selectedRoomIds,
       isBulkDeletingRooms: controller.isBulkDeletingRooms,
+      chatMessageListResetKey: controller.chatMessageListResetKey,
       historyHasMore: controller.historyHasMore,
       historyNextBeforeId: controller.historyNextBeforeId,
       isLoadingOlder: controller.isLoadingOlder,
@@ -249,6 +251,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.isRoomSelectionMode,
       controller.selectedRoomIds,
       controller.isBulkDeletingRooms,
+      controller.chatMessageListResetKey,
       controller.historyHasMore,
       controller.historyNextBeforeId,
       controller.isLoadingOlder,
