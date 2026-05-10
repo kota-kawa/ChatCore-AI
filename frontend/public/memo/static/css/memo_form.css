@@ -905,25 +905,7 @@ textarea.memo-control {
 }
 
 .memo-share-modal__row {
-  display: grid;
-  grid-template-columns: 95px minmax(0, 1fr);
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.memo-share-modal__row label {
-  color: #7b4b13;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.memo-share-modal__row .memo-select__trigger {
-  min-height: 48px;
-  border-radius: 16px;
-  border-color: rgba(191, 122, 23, 0.26);
-  background: rgba(255, 255, 255, 0.86);
-  padding: 0.72rem 1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  margin: 0;
 }
 
 .memo-share-modal__actions {
@@ -2297,10 +2279,6 @@ textarea.memo-control {
 
   .memo-item__action {
     flex: 1 1 42px;
-  }
-
-  .memo-share-modal__row {
-    grid-template-columns: 1fr;
   }
 
   .memo-share-modal__sns {
