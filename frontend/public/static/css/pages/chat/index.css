@@ -691,9 +691,28 @@ body.chat-page .custom-form-text {
 }
 
 body.chat-page .chat-share-modal__content {
-  width: min(580px, calc(100vw - 2rem));
-  padding: 1.18rem 1.22rem 1.24rem;
-  background: var(--chat-modal-surface-bg);
+  width: min(620px, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 34%),
+    var(--chat-modal-surface-bg);
+  box-shadow:
+    0 32px 80px rgba(11, 27, 25, 0.28),
+    0 12px 30px rgba(15, 118, 110, 0.14);
+}
+
+body.chat-page .chat-share-close-btn {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(174, 211, 203, 0.9);
+  color: #54706a;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+}
+
+body.chat-page .chat-share-close-btn:hover {
+  background: #ffffff;
+  border-color: rgba(133, 190, 178, 0.95);
+  color: #12312d;
 }
 
 body.chat-page .chat-share-modal__desc {
@@ -720,6 +739,7 @@ body.chat-page #chat-share-link-input:focus {
 body.chat-page .chat-share-sns a {
   background: rgba(255, 255, 255, 0.84);
   border-color: rgba(204, 218, 212, 0.9);
+  color: var(--primary-color, #0f766e);
   box-shadow: 0 10px 18px rgba(15, 23, 42, 0.04);
 }
 
@@ -915,6 +935,19 @@ body.chat-page .chat-share-sns a:hover {
 
 [data-theme="dark"] body.chat-page .chat-share-modal__desc {
   color: #9ca3af;
+}
+
+[data-theme="dark"] body.chat-page .chat-share-close-btn {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #94a3b8;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.34);
+}
+
+[data-theme="dark"] body.chat-page .chat-share-close-btn:hover {
+  background: rgba(30, 41, 59, 1);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #f1f5f9;
 }
 
 [data-theme="dark"] body.chat-page #chat-share-link-input {
