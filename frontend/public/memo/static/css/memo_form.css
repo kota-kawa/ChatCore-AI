@@ -505,6 +505,66 @@ button.memo-tag {
   cursor: not-allowed;
 }
 
+.memo-item__menu-wrap {
+  position: relative;
+}
+
+.memo-item__dropdown {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  min-width: 152px;
+  background: rgba(255, 249, 240, 0.98);
+  border: 1px solid rgba(191, 122, 23, 0.22);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.13);
+  z-index: 200;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.memo-item__dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #8f5a17;
+  font-size: 0.875rem;
+  text-align: left;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.memo-item__dropdown-item:hover {
+  background: rgba(191, 122, 23, 0.1);
+}
+
+.memo-item__dropdown-item.is-active {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.memo-item__dropdown-item--danger {
+  color: #b42318;
+}
+
+.memo-item__dropdown-item--danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.memo-item__dropdown-divider {
+  height: 1px;
+  background: rgba(191, 122, 23, 0.15);
+  margin: 2px 8px;
+}
+
 .memo-form {
   display: flex;
   flex-direction: column;
@@ -2182,6 +2242,37 @@ textarea.memo-control {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-item__dropdown {
+  background: rgba(15, 23, 42, 0.97);
+  border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .memo-item__dropdown-item {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-item__dropdown-item:hover {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+[data-theme="dark"] .memo-item__dropdown-item.is-active {
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+[data-theme="dark"] .memo-item__dropdown-item--danger {
+  color: #f87171;
+}
+
+[data-theme="dark"] .memo-item__dropdown-item--danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+[data-theme="dark"] .memo-item__dropdown-divider {
+  background: rgba(148, 163, 184, 0.18);
 }
 
 [data-theme="dark"] .memo-history__empty {

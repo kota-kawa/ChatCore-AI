@@ -362,6 +362,9 @@ export default function MemoPage() {
   const [editingCollectionName, setEditingCollectionName] = useState("");
   const [editingCollectionColor, setEditingCollectionColor] = useState("#6b7280");
 
+  // Memo item dropdown menu
+  const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
+
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"markdown" | "json" | "csv">("markdown");
@@ -455,6 +458,16 @@ export default function MemoPage() {
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); };
   }, [isShareModalOpen, selectedMemo, isCollectionPanelOpen, isExportModalOpen]);
+
+  useEffect(() => {
+    if (!openMenuMemoId) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element).closest?.(".memo-item__menu-wrap"))
+        setOpenMenuMemoId("");
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => { document.removeEventListener("mousedown", onDown); };
+  }, [openMenuMemoId]);
 
   // Exit bulk mode when memos change drastically
   useEffect(() => {
@@ -1209,6 +1222,7 @@ export default function MemoPage() {
                 <ul className="memo-history__list">
                   {memos.map((memo) => {
                     const memoId = String(memo.id);
+                    const isMenuOpen = openMenuMemoId === memoId;
                     const isEditing = editingMemoId === memoId;
                     const isBusy = actionLoadingId === memoId;
                     const isSelected = selectedIds.has(memoId);
@@ -1330,18 +1344,62 @@ export default function MemoPage() {
                                   <button type="button" className="memo-item__action" onClick={() => startQuickEdit(memo)} disabled={isBusy} data-tooltip="タイトル・タグを編集" data-tooltip-placement="top">
                                     <i className="bi bi-pencil-square"></i>
                                   </button>
-                                  <button type="button" className={`memo-item__action${memo.is_pinned ? " is-active" : ""}`} onClick={() => { void handleTogglePin(memo); }} disabled={isBusy} data-tooltip={memo.is_pinned ? "ピン留め解除" : "ピン留め"} data-tooltip-placement="top">
-                                    <i className="bi bi-pin-angle"></i>
-                                  </button>
-                                  <button type="button" className={`memo-item__action${memo.is_archived ? " is-active" : ""}`} onClick={() => { void handleToggleArchive(memo); }} disabled={isBusy} data-tooltip={memo.is_archived ? "アーカイブ解除" : "アーカイブ"} data-tooltip-placement="top">
-                                    <i className="bi bi-archive"></i>
-                                  </button>
-                                  <button type="button" className="memo-item__action" onClick={() => { void openShareModal(memo); }} disabled={isBusy} data-tooltip="共有設定" data-tooltip-placement="top">
-                                    <i className="bi bi-share"></i>
-                                  </button>
-                                  <button type="button" className="memo-item__action memo-item__action--danger" onClick={() => { void handleDeleteMemo(memo); }} disabled={isBusy} data-tooltip="削除" data-tooltip-placement="top">
-                                    <i className="bi bi-trash3"></i>
-                                  </button>
+                                  <div className="memo-item__menu-wrap">
+                                    <button
+                                      type="button"
+                                      className={`memo-item__action${isMenuOpen ? " is-active" : ""}`}
+                                      onClick={() => { setOpenMenuMemoId(isMenuOpen ? "" : memoId); }}
+                                      disabled={isBusy}
+                                      data-tooltip="その他の操作"
+                                      data-tooltip-placement="top"
+                                      aria-haspopup="true"
+                                      aria-expanded={isMenuOpen}
+                                      aria-label="その他の操作"
+                                    >
+                                      <i className="bi bi-three-dots"></i>
+                                    </button>
+                                    {isMenuOpen && (
+                                      <div className="memo-item__dropdown" role="menu">
+                                        <button
+                                          type="button"
+                                          className={`memo-item__dropdown-item${memo.is_pinned ? " is-active" : ""}`}
+                                          role="menuitem"
+                                          onClick={() => { void handleTogglePin(memo); setOpenMenuMemoId(""); }}
+                                        >
+                                          <i className={`bi ${memo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`}></i>
+                                          {memo.is_pinned ? "ピン留め解除" : "ピン留め"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`memo-item__dropdown-item${memo.is_archived ? " is-active" : ""}`}
+                                          role="menuitem"
+                                          onClick={() => { void handleToggleArchive(memo); setOpenMenuMemoId(""); }}
+                                        >
+                                          <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
+                                          {memo.is_archived ? "アーカイブ解除" : "アーカイブ"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="memo-item__dropdown-item"
+                                          role="menuitem"
+                                          onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); }}
+                                        >
+                                          <i className="bi bi-share"></i>
+                                          共有設定
+                                        </button>
+                                        <div className="memo-item__dropdown-divider" role="separator"></div>
+                                        <button
+                                          type="button"
+                                          className="memo-item__dropdown-item memo-item__dropdown-item--danger"
+                                          role="menuitem"
+                                          onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); }}
+                                        >
+                                          <i className="bi bi-trash3"></i>
+                                          削除
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </>
