@@ -16,11 +16,12 @@
   flex-direction: column;
   min-height: 0;
   opacity: 0;
-  transform: translateZ(0);
+  transform: translate3d(0, 18px, 0) scale(0.985);
   pointer-events: none;
-  will-change: opacity;
+  will-change: opacity, transform;
   transition:
     opacity 0.28s ease,
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.38s ease;
 }
 
@@ -46,6 +47,33 @@
 #chat-container[data-view="chat"] {
   transform: translateZ(0);
   pointer-events: auto;
+  animation: chatContainerEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes chatContainerEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.02),
+      0 16px 34px -18px rgba(0, 0, 0, 0.12);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateZ(0);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.03),
+      0 24px 48px -12px rgba(0, 0, 0, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #chat-container,
+  #setup-container {
+    transition: opacity 0.01ms linear !important;
+    animation: none !important;
+  }
 }
 
 /* ヘッダー */
