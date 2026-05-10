@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: cd21e840761395d2f59fcf73e35811a146a93b287963beed8438007c0912f87d
+// Schema fingerprint: c0e60a147b1d66e20ec031dec749ee0f4431e3e4955db1cbd9482cd248810032
 
 import { z } from "zod";
 
@@ -41,7 +41,7 @@ export type EditTaskRequest = z.infer<typeof EditTaskRequestSchema>;
 export const AddTaskRequestSchema = z.object({ "title": z.string().min(1), "prompt_content": z.string().min(1), "response_rules": z.string().default(""), "output_skeleton": z.string().default(""), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type AddTaskRequest = z.infer<typeof AddTaskRequestSchema>;
 
-export const PromptAssistRequestSchema = z.object({ "target": z.enum(["task_modal","shared_prompt_modal"]), "action": z.enum(["generate_draft","improve","shorten","expand","generate_examples"]), "fields": z.object({ "title": z.string().max(256).default(""), "content": z.string().max(4000).default(""), "prompt_content": z.string().max(4000).default(""), "category": z.string().max(256).default(""), "author": z.string().max(256).default(""), "prompt_type": z.string().default("text"), "input_examples": z.string().max(4000).default(""), "output_examples": z.string().max(4000).default(""), "ai_model": z.string().max(256).default("") }).optional() });
+export const PromptAssistRequestSchema = z.object({ "target": z.enum(["task_modal","shared_prompt_modal"]), "action": z.enum(["generate_draft","improve","shorten","expand","generate_examples"]), "instruction": z.string().max(4000).default(""), "fields": z.object({ "title": z.string().max(256).default(""), "content": z.string().max(4000).default(""), "prompt_content": z.string().max(4000).default(""), "category": z.string().max(256).default(""), "author": z.string().max(256).default(""), "prompt_type": z.string().default("text"), "input_examples": z.string().max(4000).default(""), "output_examples": z.string().max(4000).default(""), "ai_model": z.string().max(256).default("") }).optional() });
 export type PromptAssistRequest = z.infer<typeof PromptAssistRequestSchema>;
 
 export const SharedPromptCreateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().min(1), "content": z.string().min(1), "author": z.string().min(1), "prompt_type": z.enum(["text","image"]).default("text"), "input_examples": z.string().default(""), "output_examples": z.string().default(""), "ai_model": z.string().default("") });
