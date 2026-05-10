@@ -92,12 +92,6 @@ const MEMO_ACTION_MENU_GAP = 6;
 const MEMO_ACTION_MENU_VIEWPORT_MARGIN = 8;
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
-const SHARE_EXPIRES_OPTIONS = [
-  { value: "7", label: "7日で期限切れ" },
-  { value: "30", label: "30日で期限切れ" },
-  { value: "90", label: "90日で期限切れ" },
-  { value: "never", label: "無期限" },
-] as const;
 const EXPORT_FORMATS = [
   { value: "markdown", label: "Markdown (.md)", icon: "bi-markdown" },
   { value: "json", label: "JSON (.json)", icon: "bi-filetype-json" },
@@ -365,12 +359,9 @@ export default function MemoPage() {
 
   // Share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [shareMemoId, setShareMemoId] = useState<string>("");
-  const [shareMemoTitle, setShareMemoTitle] = useState("");
   const [shareState, setShareState] = useState<SharePayload | null>(null);
   const [shareStatus, setShareStatus] = useState<FlashState | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
-  const [shareExpiry, setShareExpiry] = useState<(typeof SHARE_EXPIRES_OPTIONS)[number]["value"]>("30");
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
 
   // Bulk selection
@@ -813,82 +804,49 @@ export default function MemoPage() {
       { defaultMessage: "共有情報の取得に失敗しました。" },
     );
     setShareState(payload);
-    if (payload.expires_at) {
-      const diff = Math.round((new Date(payload.expires_at).getTime() - Date.now()) / 86400000);
-      if (diff <= 8 && diff > 0) setShareExpiry("7");
-      else if (diff <= 32 && diff > 0) setShareExpiry("30");
-      else if (diff <= 95 && diff > 0) setShareExpiry("90");
-      else setShareExpiry("30");
-    } else setShareExpiry("never");
+    return payload;
   }, []);
 
   const openShareModal = useCallback(async (memo: MemoSummary) => {
     const memoId = String(memo.id || "");
     if (!memoId) { showFlash("error", "共有対象のメモが見つかりません。"); return; }
     setIsShareModalOpen(true);
-    setShareMemoId(memoId);
-    setShareMemoTitle(memo.title || "保存したメモ");
     setShareState(null);
     setShareStatus({ type: "success", text: "共有情報を読み込んでいます..." });
     setShareLoading(true);
     try {
-      await loadShareState(memoId);
-      setShareStatus({ type: "success", text: "共有設定を確認できます。" });
+      const payload = await loadShareState(memoId);
+      if (payload.share_url && payload.is_active) {
+        setShareStatus({ type: "success", text: "共有リンクを表示しています。" });
+        return;
+      }
+
+      setShareStatus({ type: "success", text: "共有リンクを作成しています..." });
+      const { payload: createdPayload } = await fetchJsonOrThrow<SharePayload>(
+        `/memo/api/${memoId}/share`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ force_refresh: false, expires_in_days: 30 }),
+        },
+        { defaultMessage: "共有リンクの作成に失敗しました。" },
+      );
+      setShareState(createdPayload);
+      setShareStatus({ type: "success", text: "共有リンクを作成しました。" });
+      await mutate();
     } catch (error) {
       setShareStatus({ type: "error", text: error instanceof Error ? error.message : "共有情報の取得に失敗しました。" });
     } finally {
       setShareLoading(false);
     }
-  }, [loadShareState, showFlash]);
+  }, [loadShareState, mutate, showFlash]);
 
   const closeShareModal = useCallback(() => {
     setIsShareModalOpen(false);
-    setShareMemoId("");
-    setShareMemoTitle("");
     setShareStatus(null);
     setShareState(null);
   }, []);
-
-  const createShareLink = useCallback(async (forceRefresh: boolean) => {
-    if (!shareMemoId) return;
-    setShareLoading(true);
-    setShareStatus({ type: "success", text: forceRefresh ? "共有リンクを再生成しています..." : "共有リンクを作成しています..." });
-    const expiresInDays = shareExpiry === "never" ? null : Number(shareExpiry);
-    try {
-      const { payload } = await fetchJsonOrThrow<SharePayload>(
-        `/memo/api/${shareMemoId}/share`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ force_refresh: forceRefresh, expires_in_days: expiresInDays }) },
-        { defaultMessage: "共有リンクの作成に失敗しました。" },
-      );
-      setShareState(payload);
-      setShareStatus({ type: "success", text: forceRefresh ? "共有リンクを再生成しました。" : "共有リンクを作成しました。" });
-      await mutate();
-    } catch (error) {
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : "共有リンクの作成に失敗しました。" });
-    } finally {
-      setShareLoading(false);
-    }
-  }, [mutate, shareExpiry, shareMemoId]);
-
-  const revokeShareLink = useCallback(async () => {
-    if (!shareMemoId) return;
-    setShareLoading(true);
-    setShareStatus({ type: "success", text: "共有リンクを無効化しています..." });
-    try {
-      const { payload } = await fetchJsonOrThrow<SharePayload>(
-        `/memo/api/${shareMemoId}/share/revoke`,
-        { method: "POST", credentials: "same-origin" },
-        { defaultMessage: "共有リンクの無効化に失敗しました。" },
-      );
-      setShareState(payload);
-      setShareStatus({ type: "success", text: "共有リンクを無効化しました。" });
-      await mutate();
-    } catch (error) {
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : "共有リンクの無効化に失敗しました。" });
-    } finally {
-      setShareLoading(false);
-    }
-  }, [mutate, shareMemoId]);
 
   const copyShareLink = useCallback(async () => {
     if (!shareUrl) { setShareStatus({ type: "error", text: "先に共有リンクを作成してください。" }); return; }
@@ -1652,38 +1610,27 @@ export default function MemoPage() {
               <i className="bi bi-x-lg"></i>
             </button>
             <header className="memo-share-modal__header cc-share-modal__header">
-              <h3 id="memoShareTitle">共有設定: {shareMemoTitle}</h3>
-              <p className="cc-share-modal__lead">リンク作成・期限設定・無効化をここで管理できます。</p>
+              <h3 id="memoShareTitle">メモを共有</h3>
+              <p className="cc-share-modal__lead">
+                このメモ専用のURLをコピーしたり、そのまま共有できます。
+              </p>
             </header>
             <div className="memo-share-modal__body cc-share-modal__body">
-              <div className="memo-share-modal__row cc-share-modal__row cc-share-modal__row--labeled">
-                <label htmlFor="memo-share-link-input">共有リンク</label>
-                <input id="memo-share-link-input" type="text" readOnly value={shareUrl} placeholder="共有リンクを作成してください" />
-              </div>
-              <div className="memo-share-modal__row cc-share-modal__row cc-share-modal__row--labeled">
-                <label htmlFor="memo-share-expiry">有効期限</label>
-                <MemoSelect
-                  id="memo-share-expiry"
-                  className="memo-select--full"
-                  value={shareExpiry}
-                  onChange={(v) => setShareExpiry(v as (typeof SHARE_EXPIRES_OPTIONS)[number]["value"])}
-                  disabled={shareLoading}
-                  options={SHARE_EXPIRES_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+              <div className="memo-share-modal__row cc-share-modal__row">
+                <input
+                  id="memo-share-link-input"
+                  type="text"
+                  readOnly
+                  value={shareUrl}
+                  placeholder="共有リンクを準備しています"
                 />
               </div>
-              <div className="memo-share-modal__actions cc-share-modal__actions">
-                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを作成" title="共有リンクを作成" onClick={() => { void createShareLink(false); }} disabled={shareLoading}><i className="bi bi-link-45deg"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを再生成" title="共有リンクを再生成" onClick={() => { void createShareLink(true); }} disabled={shareLoading}><i className="bi bi-arrow-repeat"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="共有リンクを無効化" title="共有リンクを無効化" onClick={() => { void revokeShareLink(); }} disabled={shareLoading}><i className="bi bi-slash-circle"></i></button>
-                <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="リンクをコピー" title="リンクをコピー" onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
-                {supportsNativeShare && (
-                  <button type="button" className="secondary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="端末で共有" title="端末で共有" onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
-                )}
-              </div>
               {shareStatus && <p className={`memo-share-modal__status cc-share-modal__status memo-share-modal__status--${shareStatus.type}${shareStatus.type === "error" ? " cc-share-modal__status--error" : ""}`}>{shareStatus.text}</p>}
-              <div className="memo-share-modal__meta cc-share-modal__meta">
-                <span>{shareState?.is_active ? "公開中" : "未公開 / 無効"}</span>
-                <span>{shareState?.expires_at ? `期限: ${formatDateTime(shareState.expires_at) || shareState.expires_at}` : "期限: 無期限"}</span>
+              <div className="memo-share-modal__actions cc-share-modal__actions">
+                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="リンクをコピー" title="リンクをコピー" onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
+                {supportsNativeShare && (
+                  <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="端末で共有" title="端末で共有" onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
+                )}
               </div>
               <div className="memo-share-modal__sns cc-share-modal__sns">
                 <a target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
