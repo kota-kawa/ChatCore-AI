@@ -322,6 +322,86 @@ body {
   color: #cbd5e1;
 }
 
+/* Memo page: modal theme overrides */
+body.memo-page .cc-alert-modal__dialog {
+  border-color: rgba(21, 94, 117, 0.2);
+  background: #ffffff;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.16);
+}
+
+body.memo-page .cc-alert-modal__close {
+  color: var(--memo-text-muted);
+}
+
+body.memo-page .cc-alert-modal__close:hover {
+  background: var(--memo-amber-soft);
+}
+
+body.memo-page .cc-alert-modal__title {
+  color: var(--memo-text);
+}
+
+body.memo-page .cc-alert-modal__message {
+  color: var(--memo-text);
+}
+
+body.memo-page .cc-alert-modal__button {
+  background: var(--memo-amber);
+}
+
+body.memo-page .cc-alert-modal__button:hover {
+  background: var(--memo-amber-strong);
+}
+
+body.memo-page .cc-alert-modal__button--secondary {
+  background: var(--memo-amber-soft);
+  color: var(--memo-amber-strong);
+}
+
+body.memo-page .cc-alert-modal__button--secondary:hover {
+  background: rgba(15, 118, 110, 0.2);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__dialog {
+  border-color: var(--memo-border);
+  background: var(--memo-card-strong);
+  box-shadow: var(--memo-shadow);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__close {
+  color: var(--memo-text-muted);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__close:hover {
+  background: var(--memo-amber-soft);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__title {
+  color: var(--memo-text);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__message {
+  color: var(--memo-text);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__button {
+  background: var(--memo-amber);
+  color: #0f172a;
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__button:hover {
+  background: var(--memo-amber-strong);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__button--secondary {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--memo-text);
+}
+
+[data-theme="dark"] body.memo-page .cc-alert-modal__button--secondary:hover {
+  background: rgba(148, 163, 184, 0.22);
+}
+
 @layer components {
   .cc-inline-loading {
     @apply inline-flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm font-medium text-slate-600 shadow-sm backdrop-blur;
