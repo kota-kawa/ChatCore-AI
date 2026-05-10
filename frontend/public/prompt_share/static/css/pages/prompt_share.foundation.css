@@ -211,13 +211,14 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 .hero-action--primary {
   position: relative;
   isolation: isolate;
-  background: linear-gradient(135deg, #4f9dff 0%, #2f7ded 52%, #1f64dc 100%);
-  border-color: rgba(255, 255, 255, 0.42);
+  background: linear-gradient(135deg, #3b8eff 0%, #2272e8 52%, #1655d0 100%);
+  border-color: rgba(255, 255, 255, 0.72);
   color: #ffffff;
   padding: 0.62rem 1.2rem;
   box-shadow:
-    0 14px 30px rgba(23, 86, 188, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.46);
+    0 14px 30px rgba(18, 72, 172, 0.52),
+    0 2px 8px rgba(15, 50, 140, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
 
 .hero-action--primary::before {
@@ -231,10 +232,11 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .hero-action--primary:hover {
-  filter: saturate(1.1) brightness(1.03);
+  filter: saturate(1.1) brightness(1.05);
   box-shadow:
-    0 20px 36px rgba(19, 79, 176, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.54);
+    0 20px 36px rgba(15, 62, 158, 0.52),
+    0 4px 12px rgba(12, 40, 120, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   transform: translateY(-2px);
 }
 
