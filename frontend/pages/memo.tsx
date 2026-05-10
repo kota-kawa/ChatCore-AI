@@ -19,6 +19,7 @@ import { formatLLMOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
 import { setLoggedInState } from "../scripts/core/app_state";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
+import { showConfirmModal } from "../scripts/core/alert_modal";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -609,7 +610,7 @@ export default function MemoPage() {
   }, [mutate, refreshSelectedMemoIfNeeded, showFlash, withActionLoading]);
 
   const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
-    const confirmed = window.confirm(`「${memo.title || "保存したメモ"}」を削除しますか？`);
+    const confirmed = await showConfirmModal(`「${memo.title || "保存したメモ"}」を削除しますか？`);
     if (!confirmed) return;
     await withActionLoading(memo.id, async () => {
       try {
@@ -880,7 +881,7 @@ export default function MemoPage() {
   }, [editingCollectionColor, editingCollectionName, mutate, mutateCollections, showFlash]);
 
   const handleDeleteCollection = useCallback(async (collectionId: number, name: string) => {
-    const confirmed = window.confirm(`「${name}」を削除しますか？\nコレクション内のメモはコレクションから外れます。`);
+    const confirmed = await showConfirmModal(`「${name}」を削除しますか？\nコレクション内のメモはコレクションから外れます。`);
     if (!confirmed) return;
     setCollectionActionLoading(true);
     try {
