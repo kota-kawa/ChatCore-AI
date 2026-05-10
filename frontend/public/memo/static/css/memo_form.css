@@ -495,6 +495,12 @@ button.memo-tag {
   background: rgba(245, 158, 11, 0.16);
 }
 
+.memo-item__action.is-copied {
+  border-color: rgba(15, 118, 110, 0.38);
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+}
+
 .memo-item__action--danger {
   color: #b42318;
   border-color: rgba(248, 113, 113, 0.35);
@@ -510,10 +516,8 @@ button.memo-tag {
 }
 
 .memo-item__dropdown {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  min-width: 152px;
+  position: fixed;
+  min-width: 168px;
   background: rgba(255, 249, 240, 0.98);
   border: 1px solid rgba(191, 122, 23, 0.22);
   border-radius: 10px;
@@ -523,6 +527,7 @@ button.memo-tag {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  overflow-y: auto;
 }
 
 .memo-item__dropdown-item {
@@ -2242,6 +2247,12 @@ textarea.memo-control {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.24);
   color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-item__action.is-copied {
+  border-color: rgba(45, 212, 191, 0.36);
+  background: rgba(20, 184, 166, 0.14);
+  color: #5eead4;
 }
 
 [data-theme="dark"] .memo-item__dropdown {

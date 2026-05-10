@@ -78,6 +78,7 @@ type CollectionListPayload = { collections?: Collection[]; error?: string };
 type FlashState = { type: "success" | "error"; text: string };
 type HttpError = Error & { status?: number };
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "add_tags" | "set_collection" | "clear_collection";
+type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -85,6 +86,10 @@ type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "add_ta
 
 const DEFAULT_LIMIT = 50;
 const MAX_VISIBLE_MEMO_TAGS = 3;
+const MEMO_ACTION_MENU_WIDTH = 168;
+const MEMO_ACTION_MENU_ESTIMATED_HEIGHT = 172;
+const MEMO_ACTION_MENU_GAP = 6;
+const MEMO_ACTION_MENU_VIEWPORT_MARGIN = 8;
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
 const SHARE_EXPIRES_OPTIONS = [
@@ -137,6 +142,28 @@ function buildMemoListUrl(options: {
   if (options.collectionId !== null) params.set("collection_id", String(options.collectionId));
 
   return `/memo/api/recent?${params.toString()}`;
+}
+
+function getMemoActionMenuPosition(trigger: HTMLElement): MemoActionMenuPosition {
+  const rect = trigger.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = MEMO_ACTION_MENU_WIDTH;
+  const left = Math.min(
+    Math.max(MEMO_ACTION_MENU_VIEWPORT_MARGIN, rect.right - width),
+    Math.max(MEMO_ACTION_MENU_VIEWPORT_MARGIN, viewportWidth - width - MEMO_ACTION_MENU_VIEWPORT_MARGIN),
+  );
+  const spaceAbove = rect.top - MEMO_ACTION_MENU_VIEWPORT_MARGIN;
+  const spaceBelow = viewportHeight - rect.bottom - MEMO_ACTION_MENU_VIEWPORT_MARGIN;
+  const openBelow = spaceBelow >= MEMO_ACTION_MENU_ESTIMATED_HEIGHT || spaceBelow >= spaceAbove;
+  const availableHeight = Math.max(
+    120,
+    (openBelow ? spaceBelow : spaceAbove) - MEMO_ACTION_MENU_GAP,
+  );
+  const top = openBelow
+    ? Math.min(rect.bottom + MEMO_ACTION_MENU_GAP, viewportHeight - MEMO_ACTION_MENU_VIEWPORT_MARGIN - availableHeight)
+    : Math.max(MEMO_ACTION_MENU_VIEWPORT_MARGIN, rect.top - MEMO_ACTION_MENU_GAP - Math.min(MEMO_ACTION_MENU_ESTIMATED_HEIGHT, availableHeight));
+  return { top, left, width, maxHeight: availableHeight };
 }
 
 const loadMemoList = async (url: string): Promise<MemoListState> => {
@@ -364,6 +391,8 @@ export default function MemoPage() {
 
   // Memo item dropdown menu
   const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
+  const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);
+  const [copiedMemoId, setCopiedMemoId] = useState<string>("");
 
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -462,11 +491,24 @@ export default function MemoPage() {
   useEffect(() => {
     if (!openMenuMemoId) return;
     const onDown = (e: MouseEvent) => {
-      if (!(e.target as Element).closest?.(".memo-item__menu-wrap"))
+      const target = e.target as Element;
+      if (!target.closest?.(".memo-item__menu-wrap") && !target.closest?.(".memo-item__dropdown")) {
         setOpenMenuMemoId("");
+        setMenuPosition(null);
+      }
+    };
+    const onScrollOrResize = () => {
+      setOpenMenuMemoId("");
+      setMenuPosition(null);
     };
     document.addEventListener("mousedown", onDown);
-    return () => { document.removeEventListener("mousedown", onDown); };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
   }, [openMenuMemoId]);
 
   // Exit bulk mode when memos change drastically
@@ -683,9 +725,23 @@ export default function MemoPage() {
     const content = `${memo.title || "保存したメモ"}\n\n${parseMemoText(memo.excerpt)}`;
     try {
       await copyTextToClipboard(content.trim());
-      showFlash("success", "メモの要約をコピーしました。");
+      const memoId = String(memo.id);
+      setCopiedMemoId(memoId);
+      setTimeout(() => {
+        setCopiedMemoId((current) => (current === memoId ? "" : current));
+      }, 1400);
     } catch (error) { showFlash("error", error instanceof Error ? error.message : "コピーに失敗しました。"); }
   }, [showFlash]);
+
+  const toggleMemoActionMenu = useCallback((memoId: string, trigger: HTMLElement) => {
+    if (openMenuMemoId === memoId) {
+      setOpenMenuMemoId("");
+      setMenuPosition(null);
+      return;
+    }
+    setMenuPosition(getMemoActionMenuPosition(trigger));
+    setOpenMenuMemoId(memoId);
+  }, [openMenuMemoId]);
 
   // -----------------------------------------------------------------------
   // Bulk operations
@@ -1226,6 +1282,7 @@ export default function MemoPage() {
                     const isEditing = editingMemoId === memoId;
                     const isBusy = actionLoadingId === memoId;
                     const isSelected = selectedIds.has(memoId);
+                    const isCopied = copiedMemoId === memoId;
                     const tags = splitTags(memo.tags);
                     const visibleTags = tags.slice(0, MAX_VISIBLE_MEMO_TAGS);
                     const hiddenTagCount = Math.max(tags.length - visibleTags.length, 0);
@@ -1338,8 +1395,16 @@ export default function MemoPage() {
 
                               {!isBulkMode && (
                                 <div className="memo-item__actions">
-                                  <button type="button" className="memo-item__action" onClick={() => { void copyMemoExcerpt(memo); }} disabled={isBusy} data-tooltip="要約をコピー" data-tooltip-placement="top">
-                                    <i className="bi bi-files"></i>
+                                  <button
+                                    type="button"
+                                    className={`memo-item__action${isCopied ? " is-copied" : ""}`}
+                                    onClick={() => { void copyMemoExcerpt(memo); }}
+                                    disabled={isBusy}
+                                    aria-label={isCopied ? "コピーしました" : "要約をコピー"}
+                                    data-tooltip={isCopied ? "コピーしました" : "要約をコピー"}
+                                    data-tooltip-placement="top"
+                                  >
+                                    <i className={`bi ${isCopied ? "bi-check2" : "bi-files"}`}></i>
                                   </button>
                                   <button type="button" className="memo-item__action" onClick={() => startQuickEdit(memo)} disabled={isBusy} data-tooltip="タイトル・タグを編集" data-tooltip-placement="top">
                                     <i className="bi bi-pencil-square"></i>
@@ -1348,7 +1413,7 @@ export default function MemoPage() {
                                     <button
                                       type="button"
                                       className={`memo-item__action${isMenuOpen ? " is-active" : ""}`}
-                                      onClick={() => { setOpenMenuMemoId(isMenuOpen ? "" : memoId); }}
+                                      onClick={(event) => { toggleMemoActionMenu(memoId, event.currentTarget); }}
                                       disabled={isBusy}
                                       data-tooltip="その他の操作"
                                       data-tooltip-placement="top"
@@ -1358,13 +1423,23 @@ export default function MemoPage() {
                                     >
                                       <i className="bi bi-three-dots"></i>
                                     </button>
-                                    {isMenuOpen && (
-                                      <div className="memo-item__dropdown" role="menu">
+                                    {isMenuOpen && menuPosition && createPortal(
+                                      <div
+                                        className="memo-item__dropdown"
+                                        role="menu"
+                                        style={{
+                                          position: "fixed",
+                                          top: menuPosition.top,
+                                          left: menuPosition.left,
+                                          width: menuPosition.width,
+                                          maxHeight: menuPosition.maxHeight,
+                                        }}
+                                      >
                                         <button
                                           type="button"
                                           className={`memo-item__dropdown-item${memo.is_pinned ? " is-active" : ""}`}
                                           role="menuitem"
-                                          onClick={() => { void handleTogglePin(memo); setOpenMenuMemoId(""); }}
+                                          onClick={() => { void handleTogglePin(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                         >
                                           <i className={`bi ${memo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`}></i>
                                           {memo.is_pinned ? "ピン留め解除" : "ピン留め"}
@@ -1373,7 +1448,7 @@ export default function MemoPage() {
                                           type="button"
                                           className={`memo-item__dropdown-item${memo.is_archived ? " is-active" : ""}`}
                                           role="menuitem"
-                                          onClick={() => { void handleToggleArchive(memo); setOpenMenuMemoId(""); }}
+                                          onClick={() => { void handleToggleArchive(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                         >
                                           <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
                                           {memo.is_archived ? "アーカイブ解除" : "アーカイブ"}
@@ -1382,7 +1457,7 @@ export default function MemoPage() {
                                           type="button"
                                           className="memo-item__dropdown-item"
                                           role="menuitem"
-                                          onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); }}
+                                          onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                         >
                                           <i className="bi bi-share"></i>
                                           共有設定
@@ -1392,12 +1467,13 @@ export default function MemoPage() {
                                           type="button"
                                           className="memo-item__dropdown-item memo-item__dropdown-item--danger"
                                           role="menuitem"
-                                          onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); }}
+                                          onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                         >
                                           <i className="bi bi-trash3"></i>
                                           削除
                                         </button>
-                                      </div>
+                                      </div>,
+                                      document.body,
                                     )}
                                   </div>
                                 </div>
