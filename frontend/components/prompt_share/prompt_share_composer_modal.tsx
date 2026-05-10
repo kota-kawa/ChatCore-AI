@@ -111,7 +111,7 @@ export function PromptShareComposerModal({
               <p className="composer-hero__eyebrow">Prompt Share Composer</p>
               <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
               <p className="post-modal-lead">
-                AI 補助を使いながら、公開用の見やすさと使いやすさまでその場で仕上げます。
+                本文の下書きはAI補助で作ることもできます。投稿すると一覧に表示され、他のユーザーから参照できます。
               </p>
             </div>
             <div className="composer-hero__chips" aria-hidden="true">

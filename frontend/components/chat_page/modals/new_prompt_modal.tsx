@@ -94,12 +94,12 @@ export function NewPromptModal({
           <div className="new-prompt-modal__hero-copy">
             <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
             <h2 id="new-prompt-modal-title">新しいプロンプトを作成</h2>
-            <p className="new-prompt-modal__lead">AI 補助を使いながら、短時間で実用的なタスクに整えられます。</p>
+            <p className="new-prompt-modal__lead">タイトルと内容を書いて投稿します。下のAI補助で下書きを作ることもできます。</p>
           </div>
           <div className="new-prompt-modal__hero-badges" aria-hidden="true">
             <span>下書き</span>
-            <span>調整</span>
-            <span>例</span>
+            <span>編集</span>
+            <span>投稿</span>
           </div>
         </div>
 

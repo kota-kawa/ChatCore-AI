@@ -680,6 +680,7 @@ async def prompt_assist(
             payload.target,
             payload.action,
             dump_fields() if callable(dump_fields) else payload.fields.dict(),
+            payload.instruction,
         )
         return jsonify(result)
     except ValueError as exc:

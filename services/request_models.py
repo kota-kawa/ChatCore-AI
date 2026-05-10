@@ -110,6 +110,7 @@ class PromptAssistFields(RequestPayloadModel):
 class PromptAssistRequest(RequestPayloadModel):
     target: Literal["task_modal", "shared_prompt_modal"]
     action: Literal["generate_draft", "improve", "shorten", "expand", "generate_examples"]
+    instruction: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
     fields: PromptAssistFields = Field(default_factory=PromptAssistFields)
 
 
