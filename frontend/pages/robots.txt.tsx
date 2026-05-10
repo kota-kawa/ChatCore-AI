@@ -26,23 +26,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     ? (/^https?:\/\//i.test(configuredOrigin) ? configuredOrigin : `https://${configuredOrigin}`)
     : requestOrigin).replace(/\/+$/, "");
 
-  const body = [
-    "User-agent: *",
-    "Allow: /",
-    "Disallow: /api/",
-    "Disallow: /admin",
-    "Disallow: /login",
-    "Disallow: /register",
-    "Disallow: /settings",
-    "Disallow: /memo",
-    "Disallow: /prompt_share/manage_prompts",
-    "Disallow: /google-login",
-    "Disallow: /google-callback",
-    "Disallow: /logout",
-    "",
-    `Sitemap: ${origin ? `${origin}/sitemap.xml` : "/sitemap.xml"}`,
-    ""
-  ].join("\n");
+  const body = buildRobotsTxt(origin);
 
   context.res.setHeader("Content-Type", "text/plain; charset=utf-8");
   context.res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
@@ -51,6 +35,22 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   return { props: {} };
 };
+
+export function buildRobotsTxt(origin: string) {
+  return [
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /api/",
+    "Disallow: /admin/api/",
+    "Disallow: /memo/api/",
+    "Disallow: /prompt_manage/api/",
+    "Disallow: /prompt_share/api/",
+    "Disallow: /search/",
+    "",
+    `Sitemap: ${origin ? `${origin}/sitemap.xml` : "/sitemap.xml"}`,
+    ""
+  ].join("\n");
+}
 
 export default function RobotsTxt() {
   return null;
