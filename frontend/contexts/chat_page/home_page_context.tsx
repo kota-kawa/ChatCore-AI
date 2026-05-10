@@ -64,6 +64,9 @@ type HomePageChatContextValue = Pick<
   | "currentRoomId"
   | "currentRoomMode"
   | "openRoomActionsFor"
+  | "isRoomSelectionMode"
+  | "selectedRoomIds"
+  | "isBulkDeletingRooms"
   | "historyHasMore"
   | "historyNextBeforeId"
   | "isLoadingOlder"
@@ -77,6 +80,10 @@ type HomePageChatContextValue = Pick<
   | "setOpenRoomActionsFor"
   | "handleRenameRoom"
   | "handleDeleteRoom"
+  | "handleBulkDeleteRooms"
+  | "enterRoomSelectionMode"
+  | "toggleRoomSelection"
+  | "cancelRoomSelection"
   | "setSidebarOpen"
   | "loadOlderChatHistory"
   | "setChatInput"
@@ -204,6 +211,9 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       currentRoomId: controller.currentRoomId,
       currentRoomMode: controller.currentRoomMode,
       openRoomActionsFor: controller.openRoomActionsFor,
+      isRoomSelectionMode: controller.isRoomSelectionMode,
+      selectedRoomIds: controller.selectedRoomIds,
+      isBulkDeletingRooms: controller.isBulkDeletingRooms,
       historyHasMore: controller.historyHasMore,
       historyNextBeforeId: controller.historyNextBeforeId,
       isLoadingOlder: controller.isLoadingOlder,
@@ -217,6 +227,10 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       setOpenRoomActionsFor: controller.setOpenRoomActionsFor,
       handleRenameRoom: controller.handleRenameRoom,
       handleDeleteRoom: controller.handleDeleteRoom,
+      handleBulkDeleteRooms: controller.handleBulkDeleteRooms,
+      enterRoomSelectionMode: controller.enterRoomSelectionMode,
+      toggleRoomSelection: controller.toggleRoomSelection,
+      cancelRoomSelection: controller.cancelRoomSelection,
       setSidebarOpen: controller.setSidebarOpen,
       loadOlderChatHistory: controller.loadOlderChatHistory,
       setChatInput: controller.setChatInput,
@@ -232,6 +246,9 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.currentRoomId,
       controller.currentRoomMode,
       controller.openRoomActionsFor,
+      controller.isRoomSelectionMode,
+      controller.selectedRoomIds,
+      controller.isBulkDeletingRooms,
       controller.historyHasMore,
       controller.historyNextBeforeId,
       controller.isLoadingOlder,
@@ -245,6 +262,10 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.setOpenRoomActionsFor,
       controller.handleRenameRoom,
       controller.handleDeleteRoom,
+      controller.handleBulkDeleteRooms,
+      controller.enterRoomSelectionMode,
+      controller.toggleRoomSelection,
+      controller.cancelRoomSelection,
       controller.setSidebarOpen,
       controller.loadOlderChatHistory,
       controller.setChatInput,

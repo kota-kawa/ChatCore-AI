@@ -57,16 +57,20 @@ type UseHomePageRoomActionsParams = {
   stopGeneration: () => Promise<void>;
   taskLaunchInProgressRef: MutableRefObject<boolean>;
   temporaryModeEnabled: boolean;
+  selectedRoomIds: Set<string>;
   setChatInput: Dispatch<SetStateAction<string>>;
   setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
   setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
+  setIsBulkDeletingRooms: Dispatch<SetStateAction<boolean>>;
   setHistoryNextBeforeId: Dispatch<SetStateAction<number | null>>;
   setIsLoadingOlder: Dispatch<SetStateAction<boolean>>;
+  setIsRoomSelectionMode: Dispatch<SetStateAction<boolean>>;
   setLaunchingTaskName: Dispatch<SetStateAction<string | null>>;
   setMessages: Dispatch<SetStateAction<UiChatMessage[]>>;
   setOpenRoomActionsFor: Dispatch<SetStateAction<string | null>>;
   setPageViewState: Dispatch<SetStateAction<PageViewState>>;
+  setSelectedRoomIds: Dispatch<SetStateAction<Set<string>>>;
   setSetupInfo: Dispatch<SetStateAction<string>>;
   setShareStatus: (status: ShareStatus) => void;
   setShareUrl: Dispatch<SetStateAction<string>>;
@@ -97,20 +101,62 @@ export function useHomePageRoomActions({
   stopGeneration,
   taskLaunchInProgressRef,
   temporaryModeEnabled,
+  selectedRoomIds,
   setChatInput,
   setChatRooms,
   setCurrentRoomMode,
   setHistoryHasMore,
+  setIsBulkDeletingRooms,
   setHistoryNextBeforeId,
   setIsLoadingOlder,
+  setIsRoomSelectionMode,
   setLaunchingTaskName,
   setMessages,
   setOpenRoomActionsFor,
   setPageViewState,
+  setSelectedRoomIds,
   setSetupInfo,
   setShareStatus,
   setShareUrl,
 }: UseHomePageRoomActionsParams) {
+  const clearCurrentRoomAfterDelete = useCallback(() => {
+    persistCurrentRoomId(null);
+    setMessages([]);
+    setShareUrl("");
+    setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
+    closeShareModal();
+  }, [closeShareModal, persistCurrentRoomId, setMessages, setShareStatus, setShareUrl]);
+
+  const cancelRoomSelection = useCallback(() => {
+    setIsRoomSelectionMode(false);
+    setSelectedRoomIds(new Set());
+    setOpenRoomActionsFor(null);
+  }, [setIsRoomSelectionMode, setOpenRoomActionsFor, setSelectedRoomIds]);
+
+  const enterRoomSelectionMode = useCallback(
+    (initialRoomId?: string) => {
+      setIsRoomSelectionMode(true);
+      setSelectedRoomIds(new Set(initialRoomId ? [initialRoomId] : []));
+      setOpenRoomActionsFor(null);
+    },
+    [setIsRoomSelectionMode, setOpenRoomActionsFor, setSelectedRoomIds],
+  );
+
+  const toggleRoomSelection = useCallback(
+    (roomId: string) => {
+      setSelectedRoomIds((previous) => {
+        const next = new Set(previous);
+        if (next.has(roomId)) {
+          next.delete(roomId);
+        } else {
+          next.add(roomId);
+        }
+        return next;
+      });
+    },
+    [setSelectedRoomIds],
+  );
+
   const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
       const rooms = loggedIn
@@ -251,13 +297,14 @@ export function useHomePageRoomActions({
   ]);
 
   const handleNewChat = useCallback(() => {
+    cancelRoomSelection();
     persistCurrentRoomId(null);
     setCurrentRoomMode("normal");
     setMessages([]);
     setShareUrl("");
     setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
     showSetupForm();
-  }, [persistCurrentRoomId, showSetupForm]);
+  }, [cancelRoomSelection, persistCurrentRoomId, showSetupForm]);
 
   const resetLaunchingRoomState = useCallback((roomId: string, roomMode: ChatRoomMode) => {
     persistCurrentRoomId(roomId, roomMode);
@@ -440,11 +487,7 @@ export function useHomePageRoomActions({
         }
 
         if (roomId === currentRoomIdRef.current) {
-          persistCurrentRoomId(null);
-          setMessages([]);
-          setShareUrl("");
-          setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
-          closeShareModal();
+          clearCurrentRoomAfterDelete();
         }
 
         setOpenRoomActionsFor(null);
@@ -453,8 +496,50 @@ export function useHomePageRoomActions({
         showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [closeShareModal, loadChatRooms, persistCurrentRoomId],
+    [clearCurrentRoomAfterDelete, currentRoomIdRef, loadChatRooms, setOpenRoomActionsFor],
   );
+
+  const handleBulkDeleteRooms = useCallback(async () => {
+    const roomIds = Array.from(selectedRoomIds);
+    if (roomIds.length === 0) return;
+
+    const confirmed = await showConfirmModal(`${roomIds.length}件のチャットを削除しますか？`);
+    if (!confirmed) return;
+
+    setIsBulkDeletingRooms(true);
+    try {
+      const response = await fetch("/api/delete_chat_rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ room_ids: roomIds }),
+      });
+      const payload = await readJsonBodySafe(response);
+
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(payload, "削除失敗", response.status));
+      }
+
+      if (currentRoomIdRef.current && selectedRoomIds.has(currentRoomIdRef.current)) {
+        clearCurrentRoomAfterDelete();
+      }
+
+      cancelRoomSelection();
+      void loadChatRooms();
+      showToast(`${roomIds.length}件のチャットを削除しました。`, { variant: "success" });
+    } catch (error) {
+      showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
+    } finally {
+      setIsBulkDeletingRooms(false);
+    }
+  }, [
+    cancelRoomSelection,
+    clearCurrentRoomAfterDelete,
+    currentRoomIdRef,
+    loadChatRooms,
+    selectedRoomIds,
+    setIsBulkDeletingRooms,
+  ]);
 
   const handleRenameRoom = useCallback(
     async (roomId: string, currentTitle: string) => {
@@ -494,6 +579,10 @@ export function useHomePageRoomActions({
     handleSendMessage,
     handleChatInputKeyDown,
     handleDeleteRoom,
+    handleBulkDeleteRooms,
     handleRenameRoom,
+    enterRoomSelectionMode,
+    toggleRoomSelection,
+    cancelRoomSelection,
   };
 }

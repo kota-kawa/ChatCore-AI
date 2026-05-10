@@ -23,6 +23,7 @@ from services.datetime_serialization import serialize_datetime_iso
 
 from services.request_models import (
     ChatRoomIdRequest,
+    ChatRoomIdsRequest,
     NewChatRoomRequest,
     RenameChatRoomRequest,
     ShareChatRoomRequest,
@@ -160,6 +161,61 @@ def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
         cursor.execute(del_room_q, (room_id,))
         conn.commit()
         return {"message": "削除しました"}
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+def _unique_room_ids(room_ids: list[str]) -> list[str]:
+    return list(dict.fromkeys(room_ids))
+
+
+def _placeholders(count: int) -> str:
+    return ", ".join(["%s"] * count)
+
+
+def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:
+    # 一括削除は全IDの所有者確認後に実行し、部分削除を避ける
+    # Validate every room before deleting so bulk actions do not partially apply.
+    unique_room_ids = _unique_room_ids(room_ids)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        placeholders = _placeholders(len(unique_room_ids))
+        cursor.execute(
+            f"SELECT id, user_id FROM chat_rooms WHERE id IN ({placeholders})",
+            tuple(unique_room_ids),
+        )
+        rows = cursor.fetchall()
+        found_by_id = {str(room_id): owner_id for room_id, owner_id in rows}
+
+        if len(found_by_id) != len(unique_room_ids):
+            raise ApiServiceError(ERROR_CHAT_ROOM_NOT_FOUND, 404)
+        if any(owner_id != user_id for owner_id in found_by_id.values()):
+            raise ApiServiceError("他ユーザーのチャットルームは削除できません", 403)
+
+        cursor.execute(
+            f"DELETE FROM chat_history WHERE chat_room_id IN ({placeholders})",
+            tuple(unique_room_ids),
+        )
+        cursor.execute(
+            f"DELETE FROM chat_rooms WHERE id IN ({placeholders})",
+            tuple(unique_room_ids),
+        )
+        conn.commit()
+        return {
+            "message": "削除しました",
+            "deleted_count": len(unique_room_ids),
+            "deleted_room_ids": unique_room_ids,
+        }
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
     finally:
         if cursor is not None:
             cursor.close()
@@ -327,6 +383,41 @@ async def delete_chat_room(request: Request):
             return jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
         unregister_guest_room(session, room_id)
         return jsonify({"message": "エフェメラルチャットルームを削除しました"}, status_code=200)
+
+
+@chat_bp.post("/api/delete_chat_rooms", name="chat.delete_chat_rooms")
+async def delete_chat_rooms(request: Request):
+    await run_blocking(cleanup_ephemeral_chats)
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        ChatRoomIdsRequest,
+        error_message="room_ids is required",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    session = request.session
+    if "user_id" not in session:
+        return jsonify({"error": ERROR_LOGIN_REQUIRED}, status_code=401)
+
+    try:
+        response_payload = await run_blocking(
+            _delete_rooms_for_user,
+            payload.room_ids,
+            session["user_id"],
+        )
+        return jsonify(response_payload, status_code=200)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to bulk delete chat rooms for authenticated user.",
+        )
 
 
 @chat_bp.post("/api/rename_chat_room", name="chat.rename_chat_room")

@@ -49,6 +49,10 @@ class ChatRoomIdRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
 
 
+class ChatRoomIdsRequest(RequestPayloadModel):
+    room_ids: list[ChatRoomIdStr] = Field(min_length=1, max_length=100)
+
+
 class RenameChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
     new_title: NonEmptyStr

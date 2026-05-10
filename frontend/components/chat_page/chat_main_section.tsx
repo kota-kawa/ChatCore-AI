@@ -27,6 +27,9 @@ function ChatMainSectionComponent() {
     currentRoomId,
     currentRoomMode,
     openRoomActionsFor,
+    isRoomSelectionMode,
+    selectedRoomIds,
+    isBulkDeletingRooms,
     historyHasMore,
     historyNextBeforeId,
     isLoadingOlder,
@@ -40,6 +43,10 @@ function ChatMainSectionComponent() {
     setOpenRoomActionsFor,
     handleRenameRoom,
     handleDeleteRoom,
+    handleBulkDeleteRooms,
+    enterRoomSelectionMode,
+    toggleRoomSelection,
+    cancelRoomSelection,
     setSidebarOpen,
     loadOlderChatHistory,
     setChatInput,
@@ -49,6 +56,8 @@ function ChatMainSectionComponent() {
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
+  const selectedRoomCount = selectedRoomIds.size;
+  const hasSelectedRooms = selectedRoomCount > 0;
   const canSendChatMessage =
     hasCurrentRoom &&
     !isChatLaunching &&
@@ -62,6 +71,10 @@ function ChatMainSectionComponent() {
   ) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
+    if (isRoomSelectionMode) {
+      toggleRoomSelection(roomId);
+      return;
+    }
     switchChatRoom(roomId, roomMode);
   };
 
@@ -180,36 +193,75 @@ function ChatMainSectionComponent() {
           id="chat-room-sidebar"
           aria-hidden={sidebarOpen ? "false" : "true"}
         >
-          <button
-            id="new-chat-btn"
-            className="new-chat-btn"
-            onClick={() => {
-              handleNewChat();
-            }}
-          >
-            <i className="bi bi-plus-lg"></i> 新規チャット
-          </button>
+          {isRoomSelectionMode ? (
+            <div className="room-selection-bar" aria-live="polite">
+              <span className="room-selection-bar__count">{selectedRoomCount}件選択中</span>
+              <button
+                type="button"
+                className="room-selection-bar__button room-selection-bar__button--danger"
+                disabled={!hasSelectedRooms || isBulkDeletingRooms}
+                onClick={() => {
+                  void handleBulkDeleteRooms();
+                }}
+              >
+                <i className="bi bi-trash" aria-hidden="true"></i>
+                <span>{isBulkDeletingRooms ? "削除中..." : "削除"}</span>
+              </button>
+              <button
+                type="button"
+                className="room-selection-bar__button"
+                disabled={isBulkDeletingRooms}
+                onClick={() => {
+                  cancelRoomSelection();
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          ) : (
+            <button
+              id="new-chat-btn"
+              className="new-chat-btn"
+              onClick={() => {
+                handleNewChat();
+              }}
+            >
+              <i className="bi bi-plus-lg"></i> 新規チャット
+            </button>
+          )}
 
           <div id="chat-room-list">
             {chatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
               const roomTitle = room.title || "新規チャット";
               const roomMenuId = `room-actions-menu-${room.id}`;
+              const roomSelected = selectedRoomIds.has(room.id);
 
               return (
                 <div
                   key={room.id}
-                  className={`chat-room-card ${currentRoomId === room.id ? "active" : ""}`.trim()}
-                  role="button"
+                  className={`chat-room-card ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""}`.trim()}
+                  role={isRoomSelectionMode ? "checkbox" : "button"}
                   tabIndex={0}
                   aria-current={currentRoomId === room.id ? "page" : undefined}
+                  aria-checked={isRoomSelectionMode ? (roomSelected ? "true" : "false") : undefined}
                   onClick={() => {
+                    if (isRoomSelectionMode) {
+                      toggleRoomSelection(room.id);
+                      return;
+                    }
                     switchChatRoom(room.id, room.mode);
                   }}
                   onKeyDown={(event) => {
                     handleRoomCardKeyDown(event, room.id, room.mode);
                   }}
                 >
+                  {isRoomSelectionMode && (
+                    <span className="chat-room-card__check" aria-hidden="true">
+                      <i className={`bi ${roomSelected ? "bi-check-lg" : "bi-circle"}`}></i>
+                    </span>
+                  )}
+
                   <div className="chat-room-card__trigger">
                     <span className="chat-room-card__title-row">
                       <span>{roomTitle}</span>
@@ -219,55 +271,69 @@ function ChatMainSectionComponent() {
                     </span>
                   </div>
 
-                  <div className="chat-room-card-actions">
-                    <button
-                      type="button"
-                      className="room-actions-icon"
-                      aria-label={`${roomTitle} の操作メニューを開く`}
-                      aria-haspopup="menu"
-                      aria-expanded={roomMenuOpen ? "true" : "false"}
-                      aria-controls={roomMenuId}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
-                      }}
-                    >
-                      <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
-                    </button>
-
-                    <div
-                      id={roomMenuId}
-                      className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}
-                      role="menu"
-                      aria-hidden={roomMenuOpen ? "false" : "true"}
-                    >
+                  {!isRoomSelectionMode && (
+                    <div className="chat-room-card-actions">
                       <button
                         type="button"
-                        className="menu-item menu-item--rename"
-                        role="menuitem"
+                        className="room-actions-icon"
+                        aria-label={`${roomTitle} の操作メニューを開く`}
+                        aria-haspopup="menu"
+                        aria-expanded={roomMenuOpen ? "true" : "false"}
+                        aria-controls={roomMenuId}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setOpenRoomActionsFor(null);
-                          void handleRenameRoom(room.id, room.title);
+                          setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
                         }}
                       >
-                        <i className="bi bi-pencil-square menu-item__icon"></i> 名前変更
+                        <i className="bi bi-three-dots-vertical" aria-hidden="true"></i>
                       </button>
 
-                      <button
-                        type="button"
-                        className="menu-item menu-item--delete"
-                        role="menuitem"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setOpenRoomActionsFor(null);
-                          void handleDeleteRoom(room.id, room.title);
-                        }}
+                      <div
+                        id={roomMenuId}
+                        className={`room-actions-menu ${roomMenuOpen ? "is-open" : ""}`.trim()}
+                        role="menu"
+                        aria-hidden={roomMenuOpen ? "false" : "true"}
                       >
-                        <i className="bi bi-trash menu-item__icon"></i> 削除
-                      </button>
+                        <button
+                          type="button"
+                          className="menu-item menu-item--rename"
+                          role="menuitem"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenRoomActionsFor(null);
+                            void handleRenameRoom(room.id, room.title);
+                          }}
+                        >
+                          <i className="bi bi-pencil-square menu-item__icon"></i> 名前変更
+                        </button>
+
+                        <button
+                          type="button"
+                          className="menu-item menu-item--select"
+                          role="menuitem"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            enterRoomSelectionMode(room.id);
+                          }}
+                        >
+                          <i className="bi bi-check2-square menu-item__icon"></i> 複数選択
+                        </button>
+
+                        <button
+                          type="button"
+                          className="menu-item menu-item--delete"
+                          role="menuitem"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenRoomActionsFor(null);
+                            void handleDeleteRoom(room.id, room.title);
+                          }}
+                        >
+                          <i className="bi bi-trash menu-item__icon"></i> 削除
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

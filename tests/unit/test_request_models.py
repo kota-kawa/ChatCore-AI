@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from services.request_models import (
     AddTaskRequest,
     ChatMessageRequest,
+    ChatRoomIdsRequest,
     MemoCreateRequest,
     PromptAssistRequest,
     PromptLikeRequest,
@@ -76,6 +77,18 @@ class RequestModelsTestCase(unittest.TestCase):
                     "chat_room_id": "room-1",
                 },
             )
+
+    def test_chat_room_ids_requires_non_empty_list(self):
+        with self.assertRaises(ValidationError):
+            _validate(ChatRoomIdsRequest, {"room_ids": []})
+
+    def test_chat_room_ids_rejects_more_than_100_rooms(self):
+        with self.assertRaises(ValidationError):
+            _validate(ChatRoomIdsRequest, {"room_ids": [str(index) for index in range(101)]})
+
+    def test_chat_room_ids_rejects_blank_room_id(self):
+        with self.assertRaises(ValidationError):
+            _validate(ChatRoomIdsRequest, {"room_ids": ["room-1", "   "]})
 
     def test_prompt_assist_rejects_oversized_fields(self):
         with self.assertRaises(ValidationError):

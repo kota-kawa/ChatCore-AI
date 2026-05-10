@@ -24,6 +24,9 @@ export function useHomePageChatState() {
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openRoomActionsFor, setOpenRoomActionsFor] = useState<string | null>(null);
+  const [isRoomSelectionMode, setIsRoomSelectionMode] = useState(false);
+  const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(() => new Set());
+  const [isBulkDeletingRooms, setIsBulkDeletingRooms] = useState(false);
 
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
   const currentRoomIdRef = useRef<string | null>(null);
@@ -56,6 +59,12 @@ export function useHomePageChatState() {
     setSidebarOpen,
     openRoomActionsFor,
     setOpenRoomActionsFor,
+    isRoomSelectionMode,
+    setIsRoomSelectionMode,
+    selectedRoomIds,
+    setSelectedRoomIds,
+    isBulkDeletingRooms,
+    setIsBulkDeletingRooms,
     chatMessagesRef,
     currentRoomIdRef,
     streamLastEventIdByRoomRef,
