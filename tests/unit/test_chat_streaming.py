@@ -441,7 +441,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 "guest:sid-1:default",
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="gpt-5-mini-2025-08-07",
+                model="gpt-5-mini",
                 persist_response=lambda _: None,
             )
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")

@@ -36,7 +36,10 @@ WEB_SEARCH_PLANNER_MAX_MESSAGES = 10
 WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL = 2
 WEB_SEARCH_PLANNER_REPAIR_ATTEMPTS_PER_MODEL = 1
-OPENAI_PLANNER_MODEL = "gpt-5-mini-2025-08-07"
+OPENAI_PLANNER_MODEL = (
+    os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5-mini").strip()
+    or "gpt-5-mini"
+)
 
 _SENSITIVE_MARKERS = (
     "api_key",
@@ -400,8 +403,16 @@ def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
             _PlannerCandidate(model=normalized, supports_json_mode=supports_json_mode)
         )
 
-    # 信頼性の高い JSON 強制モード対応モデルを優先
-    if os.environ.get("Gemini_API_KEY", "").strip():
+    # ユーザーが選択したプロバイダを優先し、別プロバイダのクォータ消費を避ける。
+    selected = str(selected_model or "").strip()
+    if selected:
+        add(selected, supports_json_mode=True)
+
+    # 選択モデルが失敗した場合のフォールバック候補。
+    if (
+        os.environ.get("GEMINI_API_KEY", "").strip()
+        or os.environ.get("Gemini_API_KEY", "").strip()
+    ):
         add(
             os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash"),
             supports_json_mode=True,
@@ -413,11 +424,6 @@ def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
             os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
             supports_json_mode=True,
         )
-
-    # ユーザー選択モデルは最終フォールバック（JSON モード可否は呼び出し側で判定）
-    selected = str(selected_model or "").strip()
-    if selected and selected not in seen:
-        candidates.append(_PlannerCandidate(model=selected, supports_json_mode=True))
     return candidates
 
 

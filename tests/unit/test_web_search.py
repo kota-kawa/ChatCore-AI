@@ -176,12 +176,12 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertFalse(decision.should_search)
         mock_llm.assert_called_once()
 
-    def test_decide_web_search_prefers_gemini_planner_when_api_key_set(self):
+    def test_decide_web_search_prefers_selected_model_before_fallback_keys(self):
         messages = [{"role": "user", "content": "今日の天気を教えて"}]
 
         with patch.dict(
             os.environ,
-            {"Gemini_API_KEY": "test", "OPENAI_API_KEY": "", "GROQ_API_KEY": ""},
+            {"Gemini_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
             clear=False,
         ):
             with patch.object(
@@ -192,8 +192,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 decision = web_search.decide_web_search(messages, "openai/gpt-oss-120b")
 
         self.assertTrue(decision.should_search)
-        # Gemini should have been tried first as the most reliable planner
-        self.assertEqual(mock_llm.call_args.args[1], "gemini-2.5-flash")
+        self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
 
     def test_search_brave_llm_context_parses_sources(self):
         response = MagicMock()

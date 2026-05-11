@@ -197,7 +197,7 @@ export const THINKING_CONSTELLATION_LINKS = THINKING_CONSTELLATION_VARIANTS[0]?.
 export const MODEL_OPTIONS: ModelOption[] = [
   { value: "openai/gpt-oss-120b", label: "GROQ | GPT-OSS 120B（標準・高品質な応答）", shortLabel: "GPT-OSS 120B" },
   {
-    value: "gpt-5-mini-2025-08-07",
+    value: "gpt-5-mini",
     label: "OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）",
     shortLabel: "GPT-5 mini",
   },

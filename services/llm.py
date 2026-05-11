@@ -39,10 +39,20 @@ def _get_positive_int_env(name: str, default: int) -> int:
         return default
     return value if value > 0 else default
 
+
+def _get_gemini_api_key() -> str:
+    return os.environ.get("GEMINI_API_KEY", "") or os.environ.get("Gemini_API_KEY", "")
+
+
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_LEGACY_MODEL = "openai/gpt-oss-20b"
+GPT_5_MINI_MODEL = "gpt-5-mini"
 GPT_5_MINI_2025_08_07_MODEL = "gpt-5-mini-2025-08-07"
+OPENAI_DEFAULT_MODEL = (
+    os.environ.get("OPENAI_DEFAULT_MODEL", GPT_5_MINI_MODEL).strip()
+    or GPT_5_MINI_MODEL
+)
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
@@ -68,7 +78,7 @@ _SENSITIVE_ASSIGNMENT_PATTERNS = (
 )
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # サポート対象モデルを明示し、入力バリデーションの単一情報源にする
 # Keep supported model names explicit as the single validation source.
@@ -77,10 +87,14 @@ VALID_GEMINI_MODELS = {
     "gemini-2.5-flash",
 }
 VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_120B_MODEL, GPT_OSS_20B_LEGACY_MODEL}
-VALID_OPENAI_MODELS = {GPT_5_MINI_2025_08_07_MODEL}
+VALID_OPENAI_MODELS = {
+    OPENAI_DEFAULT_MODEL,
+    GPT_5_MINI_MODEL,
+    GPT_5_MINI_2025_08_07_MODEL,
+}
 
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
-gemini_api_key = os.environ.get("Gemini_API_KEY", "")
+gemini_api_key = _get_gemini_api_key()
 openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
 # APIキーがある場合のみクライアントを構築し、未設定時は None を保持する
@@ -276,6 +290,23 @@ def _raise_invalid_model_error(model_name: str) -> None:
     )
 
 
+def _chat_completion_token_limit_kwargs(model_name: str) -> dict[str, int]:
+    if is_openai_model(model_name):
+        return {"max_completion_tokens": LLM_MAX_TOKENS}
+    return {"max_tokens": LLM_MAX_TOKENS}
+
+
+def _chat_completion_tool_kwargs(
+    tools: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    if not tools:
+        return {}
+    return {
+        "tools": tools,
+        "tool_choice": "auto",
+    }
+
+
 def _redact_sensitive_text(value: str) -> str:
     # 既知トークン形式と key=value 形式の両方を伏せ字化する
     # Redact both known token patterns and key=value style secrets.
@@ -366,11 +397,14 @@ def get_groq_response(
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
+        request_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": sanitized_messages,
+            **_chat_completion_token_limit_kwargs(model_name),
+            **_chat_completion_tool_kwargs(tools),
+        }
         response = groq_client.chat.completions.create(
-            model=model_name,
-            messages=sanitized_messages,
-            max_tokens=LLM_MAX_TOKENS,
-            tools=tools,
+            **request_kwargs,
         )
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None)
@@ -413,12 +447,15 @@ def _get_openai_compatible_response_stream(
     stream = None
     tool_call_parts: dict[int, dict[str, Any]] = {}
     try:
+        request_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": sanitized_messages,
+            **_chat_completion_token_limit_kwargs(model_name),
+            "stream": True,
+            **_chat_completion_tool_kwargs(tools),
+        }
         stream = client.chat.completions.create(
-            model=model_name,
-            messages=sanitized_messages,
-            max_tokens=LLM_MAX_TOKENS,
-            stream=True,
-            tools=tools,
+            **request_kwargs,
         )
         for chunk in stream:
             if not chunk.choices:
@@ -508,15 +545,18 @@ def get_gemini_response(
     # Run chat completion through the Gemini client.
     """Google Gemini API呼び出し (via OpenAI client)"""
     if gemini_client is None:
-        raise LlmConfigurationError("Gemini_API_KEY が未設定です。")
+        raise LlmConfigurationError("GEMINI_API_KEY または Gemini_API_KEY が未設定です。")
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
+        request_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": sanitized_messages,
+            **_chat_completion_token_limit_kwargs(model_name),
+            **_chat_completion_tool_kwargs(tools),
+        }
         response = gemini_client.chat.completions.create(
-            model=model_name,
-            messages=sanitized_messages,
-            max_tokens=LLM_MAX_TOKENS,
-            tools=tools,
+            **request_kwargs,
         )
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None)
@@ -553,7 +593,7 @@ def get_gemini_response_stream(
         client=gemini_client,
         conversation_messages=conversation_messages,
         model_name=model_name,
-        missing_key_message="Gemini_API_KEY が未設定です。",
+        missing_key_message="GEMINI_API_KEY または Gemini_API_KEY が未設定です。",
         provider_error_message="Google Gemini streaming API call failed.",
         tools=tools,
     )
@@ -577,11 +617,14 @@ def get_openai_response(
         # OpenAI Responses API supports tools in a different way or might need chat.completions
         # For simplicity and consistency, if tools are provided, we use chat.completions
         if tools:
+            request_kwargs: dict[str, Any] = {
+                "model": model_name,
+                "messages": sanitized_messages,
+                **_chat_completion_token_limit_kwargs(model_name),
+                **_chat_completion_tool_kwargs(tools),
+            }
             response = openai_client.chat.completions.create(
-                model=model_name,
-                messages=sanitized_messages,
-                max_tokens=LLM_MAX_TOKENS,
-                tools=tools,
+                **request_kwargs,
             )
             message = response.choices[0].message
             tool_calls = getattr(message, "tool_calls", None)
@@ -720,12 +763,15 @@ def _get_chat_completions_json_response(
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
+        request_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": sanitized_messages,
+            **_chat_completion_token_limit_kwargs(model_name),
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+        }
         response = client.chat.completions.create(
-            model=model_name,
-            messages=sanitized_messages,
-            max_tokens=LLM_MAX_TOKENS,
-            temperature=0,
-            response_format={"type": "json_object"},
+            **request_kwargs,
         )
         return response.choices[0].message.content
     except Exception as exc:
@@ -774,7 +820,7 @@ def get_llm_json_response(
             conversation_messages=conversation_messages,
             model_name=model_name,
             provider_name="Google Gemini",
-            missing_key_message="Gemini_API_KEY が未設定です。",
+            missing_key_message="GEMINI_API_KEY または Gemini_API_KEY が未設定です。",
             fallback_message="Google Gemini JSON API call failed.",
         )
     if is_groq_model(model_name):

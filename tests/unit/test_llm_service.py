@@ -95,6 +95,14 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "gemini-ok")
         mock_gemini.chat.completions.create.assert_called_once()
 
+    def test_gemini_api_key_accepts_standard_uppercase_env_name(self):
+        with patch.dict(
+            llm.os.environ,
+            {"GEMINI_API_KEY": "standard-key", "Gemini_API_KEY": ""},
+            clear=False,
+        ):
+            self.assertEqual(llm._get_gemini_api_key(), "standard-key")
+
     def test_get_llm_response_routes_to_openai_responses(self):
         mock_openai = MagicMock()
         mock_openai.responses.create.return_value = SimpleNamespace(output_text="openai-ok")
@@ -105,7 +113,7 @@ class LlmServiceTestCase(unittest.TestCase):
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": "hello"},
                 ],
-                llm.GPT_5_MINI_2025_08_07_MODEL,
+                llm.GPT_5_MINI_MODEL,
             )
 
         self.assertEqual(response, "openai-ok")
@@ -217,7 +225,7 @@ class LlmServiceTestCase(unittest.TestCase):
             with self.assertRaises(llm.LlmConfigurationError):
                 llm.get_openai_response(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                    llm.GPT_5_MINI_MODEL,
                 )
 
     def test_get_gemini_response_stream_yields_chunks_and_closes_stream(self):
@@ -240,6 +248,26 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, ["gemini", "-stream"])
         self.assertTrue(mock_stream.closed)
         self.assertTrue(mock_gemini.chat.completions.create.call_args.kwargs["stream"])
+
+    def test_get_gemini_response_stream_sends_tool_choice_when_tools_are_present(self):
+        mock_gemini = MagicMock()
+        mock_stream = _MockStream(_mock_stream_chunk("gemini"))
+        mock_gemini.chat.completions.create.return_value = mock_stream
+        tools = [{"type": "function", "function": {"name": "web_search"}}]
+
+        with patch.object(llm, "gemini_client", mock_gemini):
+            response = list(
+                llm.get_gemini_response_stream(
+                    [{"role": "user", "content": "hello"}],
+                    "gemini-2.5-flash",
+                    tools=tools,
+                )
+            )
+
+        self.assertEqual(response, ["gemini"])
+        request_kwargs = mock_gemini.chat.completions.create.call_args.kwargs
+        self.assertEqual(request_kwargs["tools"], tools)
+        self.assertEqual(request_kwargs["tool_choice"], "auto")
 
     def test_get_groq_response_stream_yields_chunks_and_closes_stream(self):
         mock_groq = MagicMock()
@@ -333,7 +361,7 @@ class LlmServiceTestCase(unittest.TestCase):
                         {"role": "system", "content": "You are a helpful assistant."},
                         {"role": "user", "content": "hello"},
                     ],
-                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                    llm.GPT_5_MINI_MODEL,
                 )
             )
 
@@ -354,13 +382,17 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_openai_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                    llm.GPT_5_MINI_MODEL,
                     tools=[{"type": "function", "function": {"name": "web_search"}}],
                 )
             )
 
         self.assertEqual(response, ["tool", "-stream"])
         mock_openai.chat.completions.create.assert_called_once()
+        chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
+        self.assertEqual(chat_kwargs["max_completion_tokens"], llm.LLM_MAX_TOKENS)
+        self.assertNotIn("max_tokens", chat_kwargs)
+        self.assertEqual(chat_kwargs["tool_choice"], "auto")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
@@ -373,7 +405,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_llm_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_2025_08_07_MODEL,
+                    llm.GPT_5_MINI_MODEL,
                 )
             )
 
