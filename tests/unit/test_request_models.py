@@ -38,17 +38,29 @@ class RequestModelsTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _validate(MemoCreateRequest, {"input_content": "foo", "ai_response": "   "})
 
-    def test_prompt_create_rejects_blank_required_field(self):
+    def test_prompt_create_rejects_blank_title(self):
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
                 {
-                    "title": "title",
-                    "category": "   ",
+                    "title": "   ",
+                    "category": "",
                     "content": "content",
                     "author": "author",
                 },
             )
+
+    def test_prompt_create_accepts_blank_category(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {
+                "title": "title",
+                "category": "",
+                "content": "content",
+                "author": "author",
+            },
+        )
+        self.assertEqual(result.category, "")
 
     def test_prompt_list_entry_parses_prompt_id_type(self):
         payload = _validate(

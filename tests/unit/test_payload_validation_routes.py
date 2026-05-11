@@ -33,12 +33,12 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "タイトルとプロンプト内容は必須です。")
         mock_add.assert_not_called()
 
-    def test_create_prompt_rejects_blank_required_category(self):
+    def test_create_prompt_rejects_blank_title(self):
         request = make_request(
             "/prompt_share/api/prompts",
             {
-                "title": "title",
-                "category": "   ",
+                "title": "   ",
+                "category": "",
                 "content": "content",
                 "author": "author",
             },
@@ -52,6 +52,25 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "必要なフィールドが不足しています。")
         mock_create.assert_not_called()
+
+    def test_create_prompt_accepts_no_category(self):
+        request = make_request(
+            "/prompt_share/api/prompts",
+            {
+                "title": "title",
+                "category": "",
+                "content": "content",
+                "author": "author",
+            },
+            session={"user_id": 1},
+        )
+
+        with patch("blueprints.prompt_share.prompt_share_api._create_prompt_for_user") as mock_create:
+            mock_create.return_value = {"id": 1}
+            response = asyncio.run(create_prompt(request))
+
+        self.assertEqual(response.status_code, 201)
+        mock_create.assert_called_once()
 
 
 if __name__ == "__main__":
