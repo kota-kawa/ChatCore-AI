@@ -1,6 +1,6 @@
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
-import { PROMPT_ASSIST_PRIMARY_FIELDS } from "./constants";
+import { PROMPT_ASSIST_PRIMARY_FIELDS, PROMPT_ASSIST_SKILL_META, PROMPT_ASSIST_TARGET_META } from "./constants";
 import { createPromptAssistMarkup } from "./markup";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import type {
@@ -38,6 +38,9 @@ export function initPromptAssist(config: PromptAssistConfig) {
   const resultEl = root.querySelector<HTMLElement>("[data-assist-result]");
   const applyButton = root.querySelector<HTMLButtonElement>("[data-assist-apply]");
   const retryButton = root.querySelector<HTMLButtonElement>("[data-assist-retry]");
+  const titleEl = root.querySelector<HTMLElement>("[data-assist-title]");
+  const leadEl = root.querySelector<HTMLElement>("[data-assist-lead]");
+  const briefLabelEl = root.querySelector<HTMLElement>("[data-assist-brief-label]");
 
   if (
     !containerEl ||
@@ -251,5 +254,14 @@ export function initPromptAssist(config: PromptAssistConfig) {
     briefEl.focus();
   });
 
-  return { reset };
+  const updateForPromptType = (promptType: string) => {
+    if (target !== "shared_prompt_modal") return;
+    const meta = promptType === "skill" ? PROMPT_ASSIST_SKILL_META : PROMPT_ASSIST_TARGET_META[target];
+    if (titleEl) titleEl.textContent = meta.title;
+    if (leadEl) leadEl.textContent = meta.lead;
+    if (briefLabelEl) briefLabelEl.textContent = meta.briefLabel;
+    briefEl.placeholder = meta.briefPlaceholder;
+  };
+
+  return { reset, updateForPromptType };
 }

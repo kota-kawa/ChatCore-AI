@@ -62,6 +62,19 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.category, "")
 
+    def test_prompt_create_requires_content_for_text_type(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {
+                    "title": "My Prompt",
+                    "category": "",
+                    "content": "",
+                    "author": "author",
+                    "prompt_type": "text",
+                },
+            )
+
     def test_prompt_create_requires_skill_markdown_for_skill_type(self):
         with self.assertRaises(ValidationError):
             _validate(

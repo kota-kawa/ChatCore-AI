@@ -153,12 +153,14 @@ export function PromptShareDetailModal({
               <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
             </div>
 
-            <div className="form-group">
-              <label>
-                <strong>内容:</strong>
-              </label>
-              <p id="modalPromptContent">{detailPrompt?.content || ""}</p>
-            </div>
+            {detailPromptType !== "skill" ? (
+              <div className="form-group">
+                <label>
+                  <strong>内容:</strong>
+                </label>
+                <p id="modalPromptContent">{detailPrompt?.content || ""}</p>
+              </div>
+            ) : null}
 
             <div className="form-group">
               <label>
@@ -176,7 +178,7 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
-            {detailPrompt?.input_examples ? (
+            {detailPromptType !== "skill" && detailPrompt?.input_examples ? (
               <div id="modalInputExamplesGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>入力例:</strong>
@@ -185,7 +187,7 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
-            {detailPrompt?.output_examples ? (
+            {detailPromptType !== "skill" && detailPrompt?.output_examples ? (
               <div id="modalOutputExamplesGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>出力例:</strong>

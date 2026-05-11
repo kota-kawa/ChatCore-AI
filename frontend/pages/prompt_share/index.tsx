@@ -177,7 +177,7 @@ export default function PromptSharePage() {
 
   const promptAssistRootRef = useRef<HTMLDivElement | null>(null);
   const promptAssistInitializedRef = useRef(false);
-  const promptAssistControllerRef = useRef<{ reset: () => void } | null>(null);
+  const promptAssistControllerRef = useRef<{ reset: () => void; updateForPromptType: (t: string) => void } | null>(null);
   const promptTypeRef = useRef<PromptType>("text");
 
   const promptDetailCloseButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -1090,11 +1090,11 @@ export default function PromptSharePage() {
       const formData = new FormData();
       formData.append("title", postTitle);
       formData.append("category", postCategory === "未選択" ? "" : postCategory);
-      formData.append("content", postContent);
+      formData.append("content", promptType === "skill" ? "" : postContent);
       formData.append("author", postAuthor);
       formData.append("prompt_type", promptType);
-      formData.append("input_examples", guardrailEnabled ? postInputExample : "");
-      formData.append("output_examples", guardrailEnabled ? postOutputExample : "");
+      formData.append("input_examples", promptType !== "skill" && guardrailEnabled ? postInputExample : "");
+      formData.append("output_examples", promptType !== "skill" && guardrailEnabled ? postOutputExample : "");
       formData.append("ai_model", postAiModel);
       formData.append("skill_markdown", promptType === "skill" ? postSkillMarkdown : "");
       formData.append("skill_python_script", promptType === "skill" ? postSkillPythonScript : "");
@@ -1261,6 +1261,10 @@ export default function PromptSharePage() {
   }, [clearPromptImageSelection, promptType]);
 
   useEffect(() => {
+    promptAssistControllerRef.current?.updateForPromptType(promptType);
+  }, [promptType]);
+
+  useEffect(() => {
     const handleDocumentClick = () => {
       setOpenDropdownPromptId(null);
     };
@@ -1281,7 +1285,9 @@ export default function PromptSharePage() {
       !promptPostAuthorInputRef.current ||
       !promptPostAiModelSelectRef.current ||
       !promptPostInputExamplesRef.current ||
-      !promptPostOutputExamplesRef.current
+      !promptPostOutputExamplesRef.current ||
+      !promptPostSkillMarkdownRef.current ||
+      !promptPostSkillPythonScriptRef.current
     ) {
       return;
     }
@@ -1293,6 +1299,16 @@ export default function PromptSharePage() {
         title: { label: "タイトル", element: promptPostTitleInputRef.current, setValue: setPostTitle },
         category: { label: "カテゴリ", element: promptPostCategorySelectRef.current, setValue: setPostCategory },
         content: { label: "プロンプト内容", element: promptPostContentTextareaRef.current, setValue: setPostContent },
+        skill_markdown: {
+          label: "SKILL定義",
+          element: promptPostSkillMarkdownRef.current,
+          setValue: setPostSkillMarkdown
+        },
+        skill_python_script: {
+          label: "追加Pythonスクリプト",
+          element: promptPostSkillPythonScriptRef.current,
+          setValue: setPostSkillPythonScript
+        },
         author: { label: "投稿者名", element: promptPostAuthorInputRef.current, setValue: setPostAuthor },
         ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {

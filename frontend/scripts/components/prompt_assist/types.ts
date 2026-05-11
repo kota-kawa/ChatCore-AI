@@ -11,6 +11,8 @@ export type PromptAssistFieldName =
   | "title"
   | "content"
   | "prompt_content"
+  | "skill_markdown"
+  | "skill_python_script"
   | "category"
   | "author"
   | "prompt_type"

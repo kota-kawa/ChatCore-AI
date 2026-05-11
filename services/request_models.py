@@ -100,6 +100,8 @@ class PromptAssistFields(RequestPayloadModel):
     title: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
     prompt_content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
+    skill_markdown: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
+    skill_python_script: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
     category: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     author: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     prompt_type: str = "text"
@@ -129,7 +131,7 @@ class AiAgentRequest(RequestPayloadModel):
 class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: str = ""
-    content: NonEmptyStr
+    content: str = ""
     author: NonEmptyStr
     prompt_type: Literal["text", "image", "skill"] = "text"
     input_examples: str = ""
@@ -140,8 +142,12 @@ class SharedPromptCreateRequest(RequestPayloadModel):
 
     @model_validator(mode="after")
     def validate_skill_fields(self) -> "SharedPromptCreateRequest":
-        if self.prompt_type == "skill" and not self.skill_markdown:
-            raise ValueError("SKILL投稿では skill_markdown が必須です。")
+        if self.prompt_type == "skill":
+            if not self.skill_markdown:
+                raise ValueError("SKILL投稿では skill_markdown が必須です。")
+            return self
+        if not self.content:
+            raise ValueError("通常投稿では content が必須です。")
         return self
 
 

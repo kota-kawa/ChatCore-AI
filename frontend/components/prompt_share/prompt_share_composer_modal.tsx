@@ -611,22 +611,26 @@ export function PromptShareComposerModal({
             <section className="composer-section composer-section--content" aria-labelledby="composerContentTitle">
               <div className="composer-section__header">
                 <div>
-                  <p className="composer-section__eyebrow">Content</p>
-                  <h3 id="composerContentTitle">プロンプト本文</h3>
+                  <p className="composer-section__eyebrow">{promptType === "skill" ? "SKILL" : "Content"}</p>
+                  <h3 id="composerContentTitle">
+                    {promptType === "skill" ? "SKILL作成サポート" : "プロンプト本文"}
+                  </h3>
                 </div>
                 <p className="composer-section__description">
-                  指示文の意図や条件が明確に伝わるように、本文を先にまとめます。
+                  {promptType === "skill"
+                    ? "SKILLではAI補助を使ってMarkdown定義と必要なPythonスクリプトを作成できます。"
+                    : "指示文の意図や条件が明確に伝わるように、本文を先にまとめます。"}
                 </p>
               </div>
 
-              <div className="form-group">
+              <div className="form-group" hidden={promptType === "skill"}>
                 <label htmlFor="prompt-content">プロンプト内容</label>
                 <span className="form-group__hint">役割、前提条件、出力形式まで書くと再利用しやすくなります。</span>
                 <textarea
                   id="prompt-content"
                   rows={6}
                   placeholder="具体的なプロンプト内容を入力"
-                  required
+                  required={promptType !== "skill"}
                   ref={promptPostContentTextareaRef}
                   value={postContent}
                   onChange={(event) => {
@@ -772,7 +776,7 @@ export function PromptShareComposerModal({
               </div>
             </section>
 
-            <section className="composer-section" aria-labelledby="composerExamplesTitle">
+            <section className="composer-section" aria-labelledby="composerExamplesTitle" hidden={promptType === "skill"}>
               <div className="composer-section__header">
                 <div>
                   <p className="composer-section__eyebrow">Examples</p>

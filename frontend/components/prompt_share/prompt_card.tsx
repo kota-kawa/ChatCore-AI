@@ -53,6 +53,10 @@ function PromptCardComponent({
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
+  const cardPreview =
+    promptTypeValue === "skill"
+      ? truncateContent(prompt.skill_markdown || "SKILLの詳細を開いて内容を確認してください。")
+      : truncateContent(prompt.content);
 
   return (
     <div
@@ -159,7 +163,7 @@ function PromptCardComponent({
       ) : null}
 
       <h3>{truncateTitle(prompt.title)}</h3>
-      <p className="prompt-card__content">{truncateContent(prompt.content)}</p>
+      <p className="prompt-card__content">{cardPreview}</p>
 
       <div className="prompt-meta">
         <div className="prompt-actions">

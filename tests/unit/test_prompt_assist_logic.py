@@ -156,6 +156,78 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         with self.assertRaises(LlmProviderError):
             _parse_prompt_assist_response("[\"not\", \"object\"]")
 
+    def test_validate_prompt_assist_request_blocks_generate_examples_for_skill(self):
+        with self.assertRaises(ValueError) as ctx:
+            _validate_prompt_assist_request(
+                "shared_prompt_modal",
+                "generate_examples",
+                {"skill_markdown": "# My Skill", "prompt_type": "skill"},
+            )
+        self.assertIn("SKILL", str(ctx.exception))
+
+    def test_validate_prompt_assist_request_skill_improve_requires_skill_markdown(self):
+        with self.assertRaises(ValueError) as ctx:
+            _validate_prompt_assist_request(
+                "shared_prompt_modal",
+                "improve",
+                {"skill_markdown": "", "prompt_type": "skill"},
+            )
+        self.assertIn("SKILL定義", str(ctx.exception))
+
+    def test_build_prompt_assist_messages_for_skill_uses_skill_allowed_fields(self):
+        messages = _build_prompt_assist_messages(
+            "shared_prompt_modal",
+            "generate_draft",
+            {
+                "title": "Git Helper",
+                "prompt_type": "skill",
+                "skill_markdown": "",
+                "skill_python_script": "",
+                "content": "",
+                "input_examples": "",
+                "output_examples": "",
+                "category": "",
+                "author": "",
+                "ai_model": "",
+            },
+        )
+        user_content = messages[1]["content"]
+        self.assertIn("skill_markdown", user_content)
+        self.assertIn("SKILL定義", user_content)
+        self.assertNotIn('"content"', user_content.split("<allowed_fields>")[1].split("</allowed_fields>")[0])
+
+    def test_normalize_prompt_assist_response_excludes_content_for_skill(self):
+        current_fields = {
+            "title": "Git Helper",
+            "skill_markdown": "",
+            "skill_python_script": "",
+            "prompt_type": "skill",
+            "content": "",
+            "input_examples": "",
+            "output_examples": "",
+            "category": "",
+            "author": "",
+            "ai_model": "",
+        }
+        parsed_response = {
+            "suggested_fields": {
+                "title": "Git Helper Skill",
+                "skill_markdown": "# Git Helper\n\n## 目的\nGitコマンドを補助する",
+                "content": "should be excluded",
+                "input_examples": "should be excluded",
+            },
+            "warnings": [],
+            "summary": "SKILL定義を作成しました。",
+        }
+        normalized = _normalize_prompt_assist_response(
+            "shared_prompt_modal",
+            parsed_response,
+            current_fields,
+        )
+        self.assertIn("skill_markdown", normalized["suggested_fields"])
+        self.assertNotIn("content", normalized["suggested_fields"])
+        self.assertNotIn("input_examples", normalized["suggested_fields"])
+
 
 if __name__ == "__main__":
     unittest.main()

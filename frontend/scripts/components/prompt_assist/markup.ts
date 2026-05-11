@@ -8,12 +8,12 @@ export function createPromptAssistMarkup(target: PromptAssistTarget) {
       <div class="prompt-assist__head">
         <span class="prompt-assist__icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
         <div class="prompt-assist__head-copy">
-          <strong class="prompt-assist__title">${meta.title}</strong>
-          <small class="prompt-assist__lead">${meta.lead}</small>
+          <strong class="prompt-assist__title" data-assist-title>${meta.title}</strong>
+          <small class="prompt-assist__lead" data-assist-lead>${meta.lead}</small>
         </div>
       </div>
       <label class="prompt-assist__brief">
-        <span class="prompt-assist__brief-label">${meta.briefLabel}</span>
+        <span class="prompt-assist__brief-label" data-assist-brief-label>${meta.briefLabel}</span>
         <textarea
           class="prompt-assist__brief-input"
           data-assist-brief

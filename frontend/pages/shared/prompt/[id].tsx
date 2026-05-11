@@ -79,8 +79,11 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   if (!prompt) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
+  const isSkillPrompt = prompt.prompt_type === "skill";
   const summarySource =
-    prompt.content || prompt.skill_markdown || prompt.output_examples || prompt.input_examples || "";
+    (isSkillPrompt
+      ? prompt.skill_markdown || prompt.skill_python_script || ""
+      : prompt.content || prompt.output_examples || prompt.input_examples || "") || "";
   const normalized = stripPreviewText(summarySource);
   if (!normalized) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
@@ -132,6 +135,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
 
 export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
   const prompt = payload.prompt;
+  const isSkillPrompt = prompt?.prompt_type === "skill";
   const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
   const promptTypeLabel = (() => {
@@ -205,19 +209,21 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </div>
             ) : null}
 
-            <section className="shared-prompt-section">
-              <h2>内容</h2>
-              <MarkdownContent text={prompt.content || ""} className="md-content" />
-            </section>
+            {!isSkillPrompt ? (
+              <section className="shared-prompt-section">
+                <h2>内容</h2>
+                <MarkdownContent text={prompt.content || ""} className="md-content" />
+              </section>
+            ) : null}
 
-            {prompt.input_examples ? (
+            {!isSkillPrompt && prompt.input_examples ? (
               <section className="shared-prompt-section">
                 <h2>入力例</h2>
                 <MarkdownContent text={prompt.input_examples} className="md-content" />
               </section>
             ) : null}
 
-            {prompt.output_examples ? (
+            {!isSkillPrompt && prompt.output_examples ? (
               <section className="shared-prompt-section">
                 <h2>出力例</h2>
                 <MarkdownContent text={prompt.output_examples} className="md-content" />
