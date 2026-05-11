@@ -34,6 +34,7 @@ prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depend
 logger = logging.getLogger(__name__)
 PROMPT_TYPE_TEXT = "text"
 PROMPT_TYPE_IMAGE = "image"
+PROMPT_TYPE_SKILL = "skill"
 PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
     BASE_DIR,
     "frontend",
@@ -66,6 +67,8 @@ def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
 
 def _normalize_prompt_type(value: Any) -> str:
     normalized = str(value or "").strip().lower()
+    if normalized in {PROMPT_TYPE_SKILL, "skill_prompt", "claude_skill", "codex_skill"}:
+        return PROMPT_TYPE_SKILL
     if normalized in {PROMPT_TYPE_IMAGE, "image_prompt", "image-generation", "image_generation"}:
         return PROMPT_TYPE_IMAGE
     return PROMPT_TYPE_TEXT
@@ -78,6 +81,8 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
         prompt["created_at"] = created_at.isoformat()
     prompt["prompt_type"] = _normalize_prompt_type(prompt.get("prompt_type"))
     prompt["reference_image_url"] = prompt.get("reference_image_url") or None
+    prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
+    prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     return prompt
 
@@ -242,6 +247,8 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.ai_model,
                 p.prompt_type,
                 p.reference_image_url,
+                p.skill_markdown,
+                p.skill_python_script,
                 p.created_at,
                 COALESCE(pc.comment_count, 0) AS comment_count,
                 CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
@@ -307,6 +314,8 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 ai_model,
                 prompt_type,
                 reference_image_url,
+                skill_markdown,
+                skill_python_script,
                 (
                     SELECT COUNT(*)
                     FROM prompt_comments AS pc
@@ -345,6 +354,8 @@ def _create_prompt_for_user(
     output_examples: str,
     ai_model: str,
     reference_image_url: str | None,
+    skill_markdown: str,
+    skill_python_script: str,
 ) -> Any:
     conn = None
     cursor = None
@@ -359,6 +370,8 @@ def _create_prompt_for_user(
                 author,
                 prompt_type,
                 reference_image_url,
+                skill_markdown,
+                skill_python_script,
                 input_examples,
                 output_examples,
                 ai_model,
@@ -367,7 +380,7 @@ def _create_prompt_for_user(
                 created_at,
                 updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
             RETURNING id
         """
         cursor.execute(
@@ -379,6 +392,8 @@ def _create_prompt_for_user(
                 author,
                 _normalize_prompt_type(prompt_type),
                 reference_image_url,
+                skill_markdown,
+                skill_python_script,
                 input_examples,
                 output_examples,
                 ai_model or None,
@@ -1130,6 +1145,8 @@ async def create_prompt(request: Request):
             "input_examples": form.get("input_examples", ""),
             "output_examples": form.get("output_examples", ""),
             "ai_model": form.get("ai_model", ""),
+            "skill_markdown": form.get("skill_markdown", ""),
+            "skill_python_script": form.get("skill_python_script", ""),
         }
     else:
         data, error_response = await require_json_dict(request)
@@ -1152,6 +1169,8 @@ async def create_prompt(request: Request):
         )
 
     reference_image_url = None
+    skill_markdown = payload.skill_markdown if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
+    skill_python_script = payload.skill_python_script if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
     try:
         if image_file is not None:
             reference_image_url = await run_blocking(_save_prompt_reference_image, image_file, user_id)
@@ -1167,6 +1186,8 @@ async def create_prompt(request: Request):
             payload.output_examples,
             payload.ai_model,
             reference_image_url,
+            skill_markdown,
+            skill_python_script,
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
     except ValueError as exc:

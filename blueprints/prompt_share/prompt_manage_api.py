@@ -34,6 +34,8 @@ def _serialize_prompt_list_entry(row: dict[str, Any]) -> dict[str, Any]:
             "author": row.get("author"),
             "prompt_type": row.get("prompt_type") or "text",
             "reference_image_url": row.get("reference_image_url"),
+            "skill_markdown": row.get("skill_markdown") or "",
+            "skill_python_script": row.get("skill_python_script") or "",
             "input_examples": row.get("input_examples"),
             "output_examples": row.get("output_examples"),
             "created_at": (
@@ -59,6 +61,8 @@ def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
                     output_examples,
                     prompt_type,
                     reference_image_url,
+                    skill_markdown,
+                    skill_python_script,
                     created_at
                 FROM prompts
                 WHERE user_id = %s
@@ -108,6 +112,8 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
                        p.author,
                        p.prompt_type,
                        p.reference_image_url,
+                       p.skill_markdown,
+                       p.skill_python_script,
                        p.input_examples,
                        p.output_examples,
                        p.created_at AS prompt_created_at,

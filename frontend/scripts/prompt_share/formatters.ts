@@ -29,15 +29,22 @@ export function getBookmarkButtonMarkup(isBookmarked: boolean) {
 }
 
 export function normalizePromptType(value?: string): PromptType {
-  return value === "image" ? "image" : "text";
+  if (value === "image" || value === "skill") {
+    return value;
+  }
+  return "text";
 }
 
 export function getPromptTypeLabel(promptType: PromptType) {
-  return promptType === "image" ? "画像生成" : "通常";
+  if (promptType === "image") return "画像生成";
+  if (promptType === "skill") return "SKILL";
+  return "通常";
 }
 
 export function getPromptTypeIconClass(promptType: PromptType) {
-  return promptType === "image" ? "bi-image" : "bi-chat-square-text";
+  if (promptType === "image") return "bi-image";
+  if (promptType === "skill") return "bi-code-slash";
+  return "bi-chat-square-text";
 }
 
 export function normalizePromptData(prompt: PromptData): PromptData {
@@ -45,6 +52,8 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     ...prompt,
     prompt_type: normalizePromptType(prompt.prompt_type),
     reference_image_url: prompt.reference_image_url || "",
+    skill_markdown: prompt.skill_markdown || "",
+    skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),
     bookmarked: Boolean(prompt.bookmarked),
     saved_to_list: Boolean(prompt.saved_to_list),

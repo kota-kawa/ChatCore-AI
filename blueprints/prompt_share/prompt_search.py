@@ -28,8 +28,14 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     created_at = prompt.get("created_at")
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
-    prompt["prompt_type"] = "image" if prompt.get("prompt_type") == "image" else "text"
+    normalized_prompt_type = str(prompt.get("prompt_type") or "").strip().lower()
+    if normalized_prompt_type in {"image", "skill"}:
+        prompt["prompt_type"] = normalized_prompt_type
+    else:
+        prompt["prompt_type"] = "text"
     prompt["reference_image_url"] = prompt.get("reference_image_url") or None
+    prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
+    prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
     prompt["liked"] = bool(prompt.get("liked"))
     prompt["bookmarked"] = bool(prompt.get("bookmarked"))
     prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
@@ -72,6 +78,8 @@ def _search_public_prompts(query, page, per_page, user_id=None):
               p.output_examples,
               p.prompt_type,
               p.reference_image_url,
+              p.skill_markdown,
+              p.skill_python_script,
               p.created_at,
               COALESCE(pc.comment_count, 0) AS comment_count,
               CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,

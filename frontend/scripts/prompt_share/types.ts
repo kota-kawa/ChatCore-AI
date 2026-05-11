@@ -1,4 +1,4 @@
-export type PromptType = "text" | "image";
+export type PromptType = "text" | "image" | "skill";
 
 export type PromptPagination = {
   page?: number;
@@ -17,6 +17,8 @@ export type PromptData = {
   author?: string;
   prompt_type?: PromptType | string;
   reference_image_url?: string;
+  skill_markdown?: string;
+  skill_python_script?: string;
   input_examples?: string;
   output_examples?: string;
   ai_model?: string;

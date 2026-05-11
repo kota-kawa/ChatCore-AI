@@ -73,7 +73,11 @@ def _normalize_field_value(value: Any) -> str:
 def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
     target_config = PROMPT_ASSIST_TARGETS[target]
     normalized = {key: _normalize_field_value(fields.get(key, "")) for key in target_config["context_fields"]}
-    normalized["prompt_type"] = "image" if normalized.get("prompt_type") == "image" else "text"
+    normalized_prompt_type = normalized.get("prompt_type")
+    if normalized_prompt_type in {"image", "skill"}:
+        normalized["prompt_type"] = normalized_prompt_type
+    else:
+        normalized["prompt_type"] = "text"
     return normalized
 
 

@@ -165,6 +165,12 @@
   border: 1px solid #f2d39a;
 }
 
+.prompt-share-page .prompt-card__type-pill--skill {
+  color: #1d4ed8;
+  background: #e8f0ff;
+  border: 1px solid #b7cbff;
+}
+
 .prompt-share-page .prompt-card__type-pill i {
   font-size: 0.72rem;
 }

@@ -11,6 +11,8 @@ type SharedPrompt = {
   author?: string;
   prompt_type?: string;
   reference_image_url?: string | null;
+  skill_markdown?: string;
+  skill_python_script?: string;
   input_examples?: string;
   output_examples?: string;
   ai_model?: string;
@@ -77,7 +79,8 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   if (!prompt) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
-  const summarySource = prompt.content || prompt.output_examples || prompt.input_examples || "";
+  const summarySource =
+    prompt.content || prompt.skill_markdown || prompt.output_examples || prompt.input_examples || "";
   const normalized = stripPreviewText(summarySource);
   if (!normalized) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
@@ -131,7 +134,11 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
   const prompt = payload.prompt;
   const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
-  const promptTypeLabel = prompt?.prompt_type === "image" ? "画像生成プロンプト" : "通常プロンプト";
+  const promptTypeLabel = (() => {
+    if (prompt?.prompt_type === "image") return "画像生成プロンプト";
+    if (prompt?.prompt_type === "skill") return "SKILL";
+    return "通常プロンプト";
+  })();
   const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, (() => {
     try {
       const parsed = new URL(pageUrl);
@@ -214,6 +221,20 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               <section className="shared-prompt-section">
                 <h2>出力例</h2>
                 <MarkdownContent text={prompt.output_examples} className="md-content" />
+              </section>
+            ) : null}
+
+            {prompt.skill_markdown ? (
+              <section className="shared-prompt-section">
+                <h2>SKILL定義 (Markdown)</h2>
+                <MarkdownContent text={prompt.skill_markdown} className="md-content" />
+              </section>
+            ) : null}
+
+            {prompt.skill_python_script ? (
+              <section className="shared-prompt-section">
+                <h2>追加 Python スクリプト</h2>
+                <MarkdownContent text={`\`\`\`python\n${prompt.skill_python_script}\n\`\`\``} className="md-content" />
               </section>
             ) : null}
           </article>

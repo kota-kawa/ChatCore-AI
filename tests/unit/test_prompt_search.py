@@ -29,6 +29,8 @@ class FakeCursor:
                     "output_examples": "",
                     "prompt_type": "text",
                     "reference_image_url": None,
+                    "skill_markdown": "",
+                    "skill_python_script": "",
                     "created_at": "2024-01-01T00:00:00",
                     "liked": True,
                     "bookmarked": False,
@@ -74,6 +76,7 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertTrue(payload["prompts"][0]["liked"])
         self.assertFalse(payload["prompts"][0]["bookmarked"])
         self.assertTrue(payload["prompts"][0]["saved_to_list"])
+        self.assertEqual(payload["prompts"][0]["skill_markdown"], "")
         self.assertEqual(payload["pagination"]["page"], 2)
         self.assertEqual(payload["pagination"]["per_page"], 20)
         self.assertEqual(payload["pagination"]["total"], 55)

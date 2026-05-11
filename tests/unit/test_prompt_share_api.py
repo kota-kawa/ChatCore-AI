@@ -20,6 +20,8 @@ class PromptShareApiTestCase(unittest.TestCase):
             "ai_model": "gemini-2.5-flash",
             "prompt_type": "text",
             "reference_image_url": None,
+            "skill_markdown": "",
+            "skill_python_script": "",
             "created_at": datetime(2024, 1, 2, 3, 4, 5).isoformat(),
         }
 
@@ -33,6 +35,7 @@ class PromptShareApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["prompt"]["id"], 12)
         self.assertEqual(payload["prompt"]["title"], "共有タイトル")
+        self.assertEqual(payload["prompt"]["skill_markdown"], "")
 
     def test_get_prompt_detail_returns_404_for_missing_prompt(self):
         with patch(

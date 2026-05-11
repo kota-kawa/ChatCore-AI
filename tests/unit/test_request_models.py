@@ -62,6 +62,36 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.category, "")
 
+    def test_prompt_create_requires_skill_markdown_for_skill_type(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {
+                    "title": "Skill title",
+                    "category": "",
+                    "content": "概要",
+                    "author": "author",
+                    "prompt_type": "skill",
+                    "skill_markdown": "   ",
+                },
+            )
+
+    def test_prompt_create_accepts_skill_payload_with_python_script(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {
+                "title": "Skill title",
+                "category": "",
+                "content": "概要",
+                "author": "author",
+                "prompt_type": "skill",
+                "skill_markdown": "# Skill",
+                "skill_python_script": "print('hello')",
+            },
+        )
+        self.assertEqual(result.prompt_type, "skill")
+        self.assertEqual(result.skill_markdown, "# Skill")
+
     def test_prompt_list_entry_parses_prompt_id_type(self):
         payload = _validate(
             PromptListEntryCreateRequest,

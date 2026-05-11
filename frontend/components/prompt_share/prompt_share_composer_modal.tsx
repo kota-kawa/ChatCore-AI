@@ -38,6 +38,10 @@ type PromptShareComposerModalProps = {
   setPostInputExample: (value: string) => void;
   postOutputExample: string;
   setPostOutputExample: (value: string) => void;
+  postSkillMarkdown: string;
+  setPostSkillMarkdown: (value: string) => void;
+  postSkillPythonScript: string;
+  setPostSkillPythonScript: (value: string) => void;
   updatePromptFeedbackErrorIfNeeded: () => void;
   categoryOptions: string[];
   promptPostStatus: PromptPostStatus;
@@ -48,6 +52,8 @@ type PromptShareComposerModalProps = {
   promptPostAiModelSelectRef: RefObject<HTMLSelectElement>;
   promptPostInputExamplesRef: RefObject<HTMLTextAreaElement>;
   promptPostOutputExamplesRef: RefObject<HTMLTextAreaElement>;
+  promptPostSkillMarkdownRef: RefObject<HTMLTextAreaElement>;
+  promptPostSkillPythonScriptRef: RefObject<HTMLTextAreaElement>;
   promptImageInputRef: RefObject<HTMLInputElement>;
   promptAssistRootRef: RefObject<HTMLDivElement>;
   promptImagePreviewUrl: string;
@@ -434,6 +440,10 @@ export function PromptShareComposerModal({
   setPostInputExample,
   postOutputExample,
   setPostOutputExample,
+  postSkillMarkdown,
+  setPostSkillMarkdown,
+  postSkillPythonScript,
+  setPostSkillPythonScript,
   updatePromptFeedbackErrorIfNeeded,
   categoryOptions,
   promptPostStatus,
@@ -444,6 +454,8 @@ export function PromptShareComposerModal({
   promptPostAiModelSelectRef,
   promptPostInputExamplesRef,
   promptPostOutputExamplesRef,
+  promptPostSkillMarkdownRef,
+  promptPostSkillPythonScriptRef,
   promptImageInputRef,
   promptAssistRootRef,
   promptImagePreviewUrl,
@@ -538,6 +550,25 @@ export function PromptShareComposerModal({
                     <span className="prompt-type-option__body">
                       <strong>画像生成プロンプト</strong>
                       <small>Midjourney、Stable Diffusion、Flux など向け</small>
+                    </span>
+                  </label>
+
+                  <label className={`prompt-type-option${promptType === "skill" ? " prompt-type-option--active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="prompt-type"
+                      value="skill"
+                      checked={promptType === "skill"}
+                      onChange={(event) => {
+                        setPromptType(normalizePromptType(event.target.value));
+                      }}
+                    />
+                    <span className="prompt-type-option__icon">
+                      <i className="bi bi-code-slash"></i>
+                    </span>
+                    <span className="prompt-type-option__body">
+                      <strong>SKILL</strong>
+                      <small>Claude Code / Codex CLI で使う手順・テンプレートを共有</small>
                     </span>
                   </label>
                 </div>
@@ -698,6 +729,45 @@ export function PromptShareComposerModal({
                       </button>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div id="skillPromptFields" className="skill-prompt-fields" hidden={promptType !== "skill"}>
+                <div className="form-group">
+                  <label htmlFor="prompt-skill-markdown">SKILL定義（Markdown）</label>
+                  <span className="form-group__hint">
+                    SKILLの使い方、ルール、入出力例を Markdown で記述してください。
+                  </span>
+                  <textarea
+                    id="prompt-skill-markdown"
+                    rows={10}
+                    placeholder={"# SKILL名\n\n## 目的\n- ...\n\n## 手順\n1. ..."}
+                    required={promptType === "skill"}
+                    ref={promptPostSkillMarkdownRef}
+                    value={postSkillMarkdown}
+                    onChange={(event) => {
+                      setPostSkillMarkdown(event.target.value);
+                      updatePromptFeedbackErrorIfNeeded();
+                    }}
+                  ></textarea>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="prompt-skill-python-script">追加 Python スクリプト（任意）</label>
+                  <span className="form-group__hint">
+                    必要であれば補助スクリプトを貼り付けてください（.py の内容をそのまま記載）。
+                  </span>
+                  <textarea
+                    id="prompt-skill-python-script"
+                    rows={8}
+                    placeholder={"def run(input_text: str) -> str:\n    return input_text"}
+                    ref={promptPostSkillPythonScriptRef}
+                    value={postSkillPythonScript}
+                    onChange={(event) => {
+                      setPostSkillPythonScript(event.target.value);
+                      updatePromptFeedbackErrorIfNeeded();
+                    }}
+                  ></textarea>
                 </div>
               </div>
             </section>

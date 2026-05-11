@@ -29,6 +29,17 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertEqual(normalized["author"], "")
         self.assertEqual(normalized["prompt_type"], "text")
 
+    def test_normalize_fields_keeps_skill_prompt_type_for_shared_prompt_modal(self):
+        normalized = _normalize_fields(
+            "shared_prompt_modal",
+            {
+                "title": "Skill",
+                "content": "content",
+                "prompt_type": "skill",
+            },
+        )
+        self.assertEqual(normalized["prompt_type"], "skill")
+
     def test_validate_prompt_assist_request_requires_primary_field_for_improve(self):
         with self.assertRaises(ValueError):
             _validate_prompt_assist_request(

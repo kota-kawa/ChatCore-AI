@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 
+import MarkdownContent from "../MarkdownContent";
 import {
   formatPromptDate,
   getPromptTypeLabel,
@@ -53,6 +54,8 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
+  const detailPromptType = detailPrompt ? normalizePromptType(detailPrompt.prompt_type) : "text";
+
   return (
     <div
       id="promptDetailModal"
@@ -124,7 +127,7 @@ export function PromptShareDetailModal({
                 <strong>タイプ:</strong>
               </label>
               <p id="modalPromptType">
-                {detailPrompt ? getPromptTypeLabel(normalizePromptType(detailPrompt.prompt_type)) : ""}
+                {detailPrompt ? getPromptTypeLabel(detailPromptType) : ""}
               </p>
             </div>
 
@@ -188,6 +191,26 @@ export function PromptShareDetailModal({
                   <strong>出力例:</strong>
                 </label>
                 <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
+              </div>
+            ) : null}
+
+            {detailPromptType === "skill" && detailPrompt?.skill_markdown ? (
+              <div id="modalSkillMarkdownGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>SKILL定義 (Markdown):</strong>
+                </label>
+                <MarkdownContent text={detailPrompt.skill_markdown} className="prompt-detail-markdown md-content" />
+              </div>
+            ) : null}
+
+            {detailPromptType === "skill" && detailPrompt?.skill_python_script ? (
+              <div id="modalSkillPythonScriptGroup" className="form-group" style={{ display: "block" }}>
+                <label>
+                  <strong>追加 Python スクリプト:</strong>
+                </label>
+                <pre className="prompt-detail-code">
+                  <code>{detailPrompt.skill_python_script}</code>
+                </pre>
               </div>
             ) : null}
           </section>

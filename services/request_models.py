@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 # Keep backend validation aligned with the frontend chat input limit.
@@ -13,6 +13,7 @@ MAX_PROMPT_ASSIST_TEXT_LENGTH = 4000
 MAX_PROMPT_ASSIST_META_LENGTH = 256
 MAX_PROMPT_COMMENT_LENGTH = 1000
 MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH = 500
+MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 30000
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -130,10 +131,18 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     category: str = ""
     content: NonEmptyStr
     author: NonEmptyStr
-    prompt_type: Literal["text", "image"] = "text"
+    prompt_type: Literal["text", "image", "skill"] = "text"
     input_examples: str = ""
     output_examples: str = ""
     ai_model: str = ""
+    skill_markdown: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
+    skill_python_script: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
+
+    @model_validator(mode="after")
+    def validate_skill_fields(self) -> "SharedPromptCreateRequest":
+        if self.prompt_type == "skill" and not self.skill_markdown:
+            raise ValueError("SKILL投稿では skill_markdown が必須です。")
+        return self
 
 
 class BookmarkCreateRequest(RequestPayloadModel):

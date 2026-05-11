@@ -139,6 +139,8 @@ export default function PromptSharePage() {
   const [guardrailEnabled, setGuardrailEnabled] = useState(false);
   const [postInputExample, setPostInputExample] = useState("");
   const [postOutputExample, setPostOutputExample] = useState("");
+  const [postSkillMarkdown, setPostSkillMarkdown] = useState("");
+  const [postSkillPythonScript, setPostSkillPythonScript] = useState("");
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [promptImagePreviewUrl, setPromptImagePreviewUrl] = useState("");
   const [promptImagePreviewName, setPromptImagePreviewName] = useState("");
@@ -168,6 +170,8 @@ export default function PromptSharePage() {
   const promptPostAiModelSelectRef = useRef<HTMLSelectElement | null>(null);
   const promptPostInputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptPostSkillMarkdownRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptPostSkillPythonScriptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const promptImageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1092,6 +1096,8 @@ export default function PromptSharePage() {
       formData.append("input_examples", guardrailEnabled ? postInputExample : "");
       formData.append("output_examples", guardrailEnabled ? postOutputExample : "");
       formData.append("ai_model", postAiModel);
+      formData.append("skill_markdown", promptType === "skill" ? postSkillMarkdown : "");
+      formData.append("skill_python_script", promptType === "skill" ? postSkillPythonScript : "");
 
       if (promptType === "image" && referenceImageFile) {
         formData.append("reference_image", referenceImageFile);
@@ -1114,6 +1120,8 @@ export default function PromptSharePage() {
         setGuardrailEnabled(false);
         setPostInputExample("");
         setPostOutputExample("");
+        setPostSkillMarkdown("");
+        setPostSkillPythonScript("");
         clearPromptImageSelection();
 
         await loadPrompts();
@@ -1148,6 +1156,8 @@ export default function PromptSharePage() {
       postContent,
       postInputExample,
       postOutputExample,
+      postSkillMarkdown,
+      postSkillPythonScript,
       postTitle,
       promptType,
       referenceImageFile,
@@ -1503,6 +1513,10 @@ export default function PromptSharePage() {
           setPostInputExample={setPostInputExample}
           postOutputExample={postOutputExample}
           setPostOutputExample={setPostOutputExample}
+          postSkillMarkdown={postSkillMarkdown}
+          setPostSkillMarkdown={setPostSkillMarkdown}
+          postSkillPythonScript={postSkillPythonScript}
+          setPostSkillPythonScript={setPostSkillPythonScript}
           updatePromptFeedbackErrorIfNeeded={updatePromptFeedbackErrorIfNeeded}
           categoryOptions={PROMPT_CATEGORY_OPTIONS}
           promptPostStatus={promptPostStatus}
@@ -1513,6 +1527,8 @@ export default function PromptSharePage() {
           promptPostAiModelSelectRef={promptPostAiModelSelectRef}
           promptPostInputExamplesRef={promptPostInputExamplesRef}
           promptPostOutputExamplesRef={promptPostOutputExamplesRef}
+          promptPostSkillMarkdownRef={promptPostSkillMarkdownRef}
+          promptPostSkillPythonScriptRef={promptPostSkillPythonScriptRef}
           promptImageInputRef={promptImageInputRef}
           promptAssistRootRef={promptAssistRootRef}
           promptImagePreviewUrl={promptImagePreviewUrl}
