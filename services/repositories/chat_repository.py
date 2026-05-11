@@ -130,6 +130,43 @@ class ChatRepository:
 
         raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
 
+    def delete_last_assistant_message(self, chat_room_id: str) -> bool:
+        """Delete the last assistant message (and any messages after it) from a chat room."""
+        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+            with self._connection_getter() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        """
+                        SELECT id FROM chat_history
+                        WHERE chat_room_id = %s AND sender = 'assistant'
+                        ORDER BY id DESC LIMIT 1
+                        """,
+                        (chat_room_id,),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        return False
+                    last_id = row[0]
+                    cursor.execute(
+                        "DELETE FROM chat_history WHERE chat_room_id = %s AND id >= %s",
+                        (chat_room_id, last_id),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+                except Error as exc:
+                    self._rollback(conn)
+                    if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                        self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                        continue
+                    raise
+                except BaseException:
+                    self._rollback(conn)
+                    raise
+                finally:
+                    cursor.close()
+        return False
+
     def rename_room(self, room_id: str, new_title: str) -> None:
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:

@@ -152,6 +152,21 @@ class EphemeralChatStore:
             del self._memory[sid]
         return True
 
+    def delete_last_assistant_message(self, sid: str, room_id: str) -> bool:
+        """Delete the last assistant message (and any messages after it) from an ephemeral room."""
+        room = self.get_room(sid, room_id)
+        if not room:
+            return False
+        messages = room.get("messages") or []
+        last_idx = -1
+        for i, message in enumerate(messages):
+            if message.get("role") == "assistant":
+                last_idx = i
+        if last_idx < 0:
+            return False
+        room["messages"] = messages[:last_idx]
+        return self._save_room(sid, room_id, room)
+
     def delete_room_if_no_assistant_messages(self, sid: str, room_id: str) -> bool:
         room = self.get_room(sid, room_id)
         if not room:

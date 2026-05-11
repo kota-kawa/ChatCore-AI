@@ -4,6 +4,7 @@ import html
 import logging
 from collections.abc import Iterator
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 from fastapi import Depends, Request
@@ -14,6 +15,7 @@ from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
+    delete_last_assistant_message_from_db,
     save_message_to_db,
     get_chat_room_messages,
     validate_room_owner,
@@ -739,6 +741,183 @@ async def chat(
         llm_daily_limit_service=resolved_llm_daily_limit_service,
         chat_generation_service=resolved_chat_generation_service,
     )
+
+
+@chat_bp.post("/api/chat_regenerate", name="chat.chat_regenerate")
+async def chat_regenerate(
+    request: Request,
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+    chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
+):
+    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
+    resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
+
+    await run_blocking(cleanup_ephemeral_chats)
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    chat_room_id_raw = data.get("chat_room_id")
+    model_raw = data.get("model") or GEMINI_DEFAULT_MODEL
+
+    if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
+        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+    chat_room_id = chat_room_id_raw.strip()
+
+    try:
+        validate_model_name(model_raw)
+    except LlmInvalidModelError as exc:
+        return jsonify({"error": str(exc)}, status_code=400)
+    model = model_raw
+
+    session = request.session
+    sid = None
+    room_mode = "temporary"
+    user_id = session.get("user_id")
+
+    if "user_id" in session:
+        try:
+            room_mode, sid, legacy_response = await run_blocking(
+                _resolve_authenticated_room_target,
+                chat_room_id,
+                user_id,
+                "他ユーザーのチャットルームには投稿できません",
+            )
+            if legacy_response is not None:
+                return legacy_response
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
+        except Exception:
+            return log_and_internal_server_error(logger, "Failed to validate chat room ownership for regenerate.")
+
+        if room_mode == "temporary":
+            sid = get_temporary_user_store_key(user_id)
+            await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
+            all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+        else:
+            await run_blocking(delete_last_assistant_message_from_db, chat_room_id)
+            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
+    else:
+        sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
+        if guest_error is not None:
+            return guest_error
+        await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
+        all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+
+    normalized_all_messages = _normalize_messages_for_llm(all_messages)
+    active_task_request = _find_latest_task_launch_request(normalized_all_messages)
+    prompt_data = None
+    if active_task_request is not None:
+        prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
+
+    task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
+    room_summary = ""
+    memory_facts: list[str] = []
+    user_profile_prompt = None
+
+    if user_id is not None:
+        try:
+            user = await run_blocking(get_user_by_id, user_id)
+            user_profile_prompt = _build_user_profile_prompt(user)
+        except Exception:
+            logger.warning("Failed to load user profile context for regenerate; proceeding without it.")
+
+    if user_id is not None and room_mode == "normal":
+        try:
+            summary_payload = await run_blocking(get_room_summary, chat_room_id)
+            room_summary = str((summary_payload or {}).get("summary") or "")
+        except Exception:
+            logger.warning("Failed to load room summary for regenerate; proceeding without it.")
+        try:
+            memory_facts = await run_blocking(list_room_memory_facts, chat_room_id)
+        except Exception:
+            logger.warning("Failed to load memory facts for regenerate; proceeding without them.")
+
+    conversation_messages = build_context_messages(
+        base_system_prompt=_build_base_system_prompt(),
+        user_profile_prompt=user_profile_prompt,
+        task_prompt=task_prompt,
+        room_summary=room_summary,
+        memory_facts=memory_facts,
+        recent_messages=normalized_all_messages,
+    )
+
+    generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
+    if has_active_generation(generation_key, service=resolved_chat_generation_service):
+        return jsonify(
+            {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
+            status_code=409,
+        )
+
+    can_access_llm, _, daily_limit = await run_blocking(
+        consume_llm_daily_quota,
+        service=resolved_llm_daily_limit_service,
+    )
+    if not can_access_llm:
+        return jsonify_rate_limited(
+            (
+                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                "日付が変わってから再度お試しください。"
+            ),
+            retry_after=get_seconds_until_daily_reset(),
+        )
+
+    if is_streaming_model(model):
+        on_finished = None
+        if user_id is not None and room_mode == "normal":
+            def persist_response(response: str) -> None:
+                save_message_to_db(chat_room_id, response, "assistant")
+
+            def on_finished() -> None:
+                try:
+                    updated_messages = get_chat_room_messages(chat_room_id)
+                    rebuild_room_summary(chat_room_id, updated_messages)
+                except Exception:
+                    logger.warning(
+                        "Failed to rebuild room summary after regeneration for %s.", chat_room_id
+                    )
+        else:
+            persist_response = partial(
+                ephemeral_store.append_message,
+                sid,
+                chat_room_id,
+                "assistant",
+            )
+
+        try:
+            job = start_generation_job(
+                generation_key,
+                conversation_messages=conversation_messages,
+                model=model,
+                persist_response=persist_response,
+                on_finished=on_finished,
+                on_error=partial(
+                    _cleanup_failed_room_without_assistant_response,
+                    chat_room_id,
+                    user_id=user_id,
+                    sid=sid,
+                ),
+                service=resolved_chat_generation_service,
+            )
+        except ChatGenerationAlreadyRunningError:
+            return jsonify(
+                {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
+                status_code=409,
+            )
+
+        return _build_llm_stream_response(_iter_llm_stream_events(job))
+
+    try:
+        bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
+    except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
+        return jsonify({"error": str(exc)}, status_code=500)
+
+    if user_id is not None and room_mode == "normal":
+        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
+    elif sid is not None:
+        await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
+
+    return jsonify({"response": bot_reply})
 
 
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")

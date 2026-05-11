@@ -43,6 +43,7 @@ type UseHomePageRoomActionsParams = {
   currentRoomIdRef: MutableRefObject<string | null>;
   fetchChatRooms: (url: string) => Promise<ChatRoom[]>;
   generateResponse: (message: string, model: string, roomId: string) => Promise<void>;
+  regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   isGenerating: boolean;
   isTaskOrderEditing: boolean;
   loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<void>;
@@ -88,6 +89,7 @@ export function useHomePageRoomActions({
   currentRoomIdRef,
   fetchChatRooms,
   generateResponse,
+  regenerateLastResponse,
   isGenerating,
   isTaskOrderEditing,
   loadChatHistory,
@@ -482,6 +484,15 @@ export function useHomePageRoomActions({
     void generateResponse(message, selectedModel, roomId);
   }, [chatInput, generateResponse, isGenerating, selectedModel, stopGeneration]);
 
+  const handleRegenerateMessage = useCallback(() => {
+    if (isGenerating) return;
+
+    const roomId = currentRoomIdRef.current;
+    if (!roomId) return;
+
+    void regenerateLastResponse(selectedModel, roomId);
+  }, [isGenerating, regenerateLastResponse, selectedModel]);
+
   const handleChatInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
@@ -601,6 +612,7 @@ export function useHomePageRoomActions({
     handleTaskCardLaunch,
     handleSetupSendMessage,
     handleSendMessage,
+    handleRegenerateMessage,
     handleChatInputKeyDown,
     handleDeleteRoom,
     handleBulkDeleteRooms,

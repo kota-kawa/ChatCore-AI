@@ -90,6 +90,7 @@ type HomePageChatContextValue = Pick<
   | "setChatInput"
   | "handleChatInputKeyDown"
   | "handleSendMessage"
+  | "handleRegenerateMessage"
 >;
 
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
@@ -238,6 +239,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       setChatInput: controller.setChatInput,
       handleChatInputKeyDown: controller.handleChatInputKeyDown,
       handleSendMessage: controller.handleSendMessage,
+      handleRegenerateMessage: controller.handleRegenerateMessage,
     }),
     [
       controller.handleAccessChat,
@@ -274,6 +276,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.setChatInput,
       controller.handleChatInputKeyDown,
       controller.handleSendMessage,
+      controller.handleRegenerateMessage,
     ],
   );
 

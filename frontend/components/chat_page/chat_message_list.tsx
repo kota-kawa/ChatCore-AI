@@ -15,6 +15,7 @@ import type { UiChatMessage } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { CopyActionButton } from "./copy_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
+import { RegenerateActionButton } from "./regenerate_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 
@@ -26,8 +27,10 @@ type ChatMessageListRow =
 
 type ChatMessageRowProps = {
   rows: ChatMessageListRow[];
+  isGenerating: boolean;
   isLoadingOlder: boolean;
   loadOlderChatHistory: () => Promise<void>;
+  onRegenerate: () => void;
 };
 
 type ChatMessageRowComponentProps = ChatMessageRowProps & {
@@ -43,8 +46,10 @@ type ChatMessageRowComponentProps = ChatMessageRowProps & {
 function ChatMessageRow({
   ariaAttributes,
   index,
+  isGenerating,
   isLoadingOlder,
   loadOlderChatHistory,
+  onRegenerate,
   rows,
   style,
 }: ChatMessageRowComponentProps) {
@@ -120,6 +125,10 @@ function ChatMessageRow({
     );
   }
 
+  const isLastAssistantMessage =
+    message.sender === "assistant" &&
+    !rows.slice(index + 1).some((r) => r.kind === "message" && r.message.sender === "assistant");
+
   return (
     <div {...ariaAttributes} className={rowClassName} style={style}>
       <div
@@ -142,6 +151,12 @@ function ChatMessageRow({
                 }}
               />
             )}
+            {!message.error && isLastAssistantMessage && (
+              <RegenerateActionButton
+                onRegenerate={onRegenerate}
+                disabled={isGenerating}
+              />
+            )}
           </div>
         )}
       </div>
@@ -161,6 +176,7 @@ type ChatMessageListProps = {
   launchingTaskName: string | null;
   loadOlderChatHistory: () => Promise<void>;
   messages: UiChatMessage[];
+  onRegenerate: () => void;
 };
 
 function ChatMessageListComponent({
@@ -175,6 +191,7 @@ function ChatMessageListComponent({
   launchingTaskName,
   loadOlderChatHistory,
   messages,
+  onRegenerate,
 }: ChatMessageListProps) {
   const rowHeight = useDynamicRowHeight({
     defaultRowHeight: 104,
@@ -228,10 +245,12 @@ function ChatMessageListComponent({
   const rowProps = useMemo<ChatMessageRowProps>(
     () => ({
       rows,
+      isGenerating,
       isLoadingOlder,
       loadOlderChatHistory,
+      onRegenerate,
     }),
-    [isLoadingOlder, loadOlderChatHistory, rows],
+    [isGenerating, isLoadingOlder, loadOlderChatHistory, onRegenerate, rows],
   );
 
   const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";

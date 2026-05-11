@@ -916,6 +916,109 @@ export function useHomePageGenerationActions({
     }
   }, [disconnectActiveGeneration]);
 
+  const regenerateLastResponse = useCallback(
+    async (model: string, roomId: string) => {
+      setMessages((previous) => {
+        let lastAssistantIdx = -1;
+        for (let i = previous.length - 1; i >= 0; i--) {
+          if (previous[i].sender === "assistant" && !previous[i].streaming) {
+            lastAssistantIdx = i;
+            break;
+          }
+        }
+        if (lastAssistantIdx < 0) return previous;
+        return removeThinkingMessages(previous.slice(0, lastAssistantIdx));
+      });
+
+      const stored = readStoredHistory(roomId);
+      let lastBotLocalIdx = -1;
+      for (let i = stored.length - 1; i >= 0; i--) {
+        if (stored[i].sender === "bot") {
+          lastBotLocalIdx = i;
+          break;
+        }
+      }
+      if (lastBotLocalIdx >= 0) {
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, lastBotLocalIdx)));
+      }
+
+      const generation = acquireGeneration(roomId);
+      if (!generation) return;
+
+      const thinkingId = nextMessageId("thinking", messageSeqRef);
+      setMessages((previous) => {
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+        return [
+          ...removeThinkingMessages(previous),
+          {
+            id: thinkingId,
+            sender: "thinking",
+            text: "AIが応答を準備しています",
+          },
+        ];
+      });
+      streamLastEventIdByRoomRef.current.set(roomId, 0);
+      scheduleAutoScrollIfNeeded(true);
+
+      try {
+        const response = await fetch("/api/chat_regenerate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ chat_room_id: roomId, model }),
+          signal: generation.abortController.signal,
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/event-stream")) {
+          await consumeStreamingChatResponse(response, generation);
+          return;
+        }
+
+        const rawPayload = await readJsonBodySafe(response);
+        setMessages((previous) => {
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+          return [
+            ...removeThinkingMessages(previous),
+            {
+              id: nextMessageId("assistant-error", messageSeqRef),
+              sender: "assistant",
+              text: `エラー: ${extractApiErrorMessage(rawPayload, "再生成に失敗しました。", response.status)}`,
+              error: true,
+            },
+          ];
+        });
+        scheduleAutoScrollIfNeeded(true);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          if (isGenerationActive(generation)) {
+            setMessages((previous) => {
+              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+              return removeThinkingMessages(previous);
+            });
+          }
+          return;
+        }
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (isGenerationActive(generation)) {
+          appendAssistantErrorMessage(roomId, errorMessage);
+        }
+      } finally {
+        releaseGeneration(generation);
+      }
+    },
+    [
+      acquireGeneration,
+      appendAssistantErrorMessage,
+      consumeStreamingChatResponse,
+      isGenerationActive,
+      notifyStoredHistoryWriteIssue,
+      releaseGeneration,
+      removeThinkingMessages,
+      scheduleAutoScrollIfNeeded,
+    ],
+  );
+
   return {
     scheduleAutoScrollIfNeeded,
     disconnectActiveGeneration,
@@ -928,6 +1031,7 @@ export function useHomePageGenerationActions({
     loadOlderChatHistory,
     createNewChatRoom,
     generateResponse,
+    regenerateLastResponse,
     stopGeneration,
     removeStoredHistory,
   };

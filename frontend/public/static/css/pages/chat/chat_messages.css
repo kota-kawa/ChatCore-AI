@@ -882,7 +882,8 @@ chat-action-menu {
 }
 
 .copy-btn,
-.memo-save-btn {
+.memo-save-btn,
+.regenerate-btn {
   position: static !important;
   display: inline-flex;
   align-items: center;
@@ -909,13 +910,15 @@ chat-action-menu {
 }
 
 .copy-btn:hover,
-.memo-save-btn:hover {
+.memo-save-btn:hover,
+.regenerate-btn:hover {
   background: rgba(255, 255, 255, 1);
   color: var(--text-dark, #1a1a1a);
 }
 
-.memo-save-btn:disabled {
-  cursor: wait;
+.memo-save-btn:disabled,
+.regenerate-btn:disabled {
+  cursor: not-allowed;
   opacity: var(--disabled-opacity, 0.6);
 }
 
@@ -927,6 +930,10 @@ chat-action-menu {
   opacity: 1 !important;
 }
 
+.regenerate-btn:hover:not(:disabled) {
+  opacity: 1 !important;
+}
+
 .copy-btn:focus-visible {
   opacity: 1;
   outline: 2px solid var(--primary-alpha-28, rgba(15, 118, 110, 0.28));
@@ -934,6 +941,12 @@ chat-action-menu {
 }
 
 .memo-save-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--primary-alpha-28, rgba(15, 118, 110, 0.28));
+  outline-offset: 1px;
+}
+
+.regenerate-btn:focus-visible {
   opacity: 1;
   outline: 2px solid var(--primary-alpha-28, rgba(15, 118, 110, 0.28));
   outline-offset: 1px;
@@ -978,12 +991,21 @@ chat-action-menu {
   pointer-events: none;
 }
 
+.message-wrapper--streaming .regenerate-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (hover: none), (pointer: coarse) {
   .copy-btn {
     opacity: 0.94;
   }
 
   .memo-save-btn {
+    opacity: 0.94;
+  }
+
+  .regenerate-btn {
     opacity: 0.94;
   }
 }
@@ -1216,14 +1238,16 @@ chat-action-menu {
 }
 
 [data-theme="dark"] .copy-btn,
-[data-theme="dark"] .memo-save-btn {
+[data-theme="dark"] .memo-save-btn,
+[data-theme="dark"] .regenerate-btn {
   background: rgba(30, 41, 59, 0.92);
   border-color: rgba(148, 163, 184, 0.22);
   color: #94a3b8;
 }
 
 [data-theme="dark"] .copy-btn:hover,
-[data-theme="dark"] .memo-save-btn:hover {
+[data-theme="dark"] .memo-save-btn:hover,
+[data-theme="dark"] .regenerate-btn:hover:not(:disabled) {
   background: rgba(30, 41, 59, 1);
   color: #e2e8f0;
 }
@@ -1258,6 +1282,10 @@ chat-action-menu {
   }
 
   .memo-save-btn {
+    opacity: 0.8;
+  }
+
+  .regenerate-btn {
     opacity: 0.8;
   }
 
@@ -1402,6 +1430,12 @@ chat-action-menu {
   }
 
   .memo-save-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: var(--text-sm, 0.875rem);
+  }
+
+  .regenerate-btn {
     width: 1.75rem;
     height: 1.75rem;
     font-size: var(--text-sm, 0.875rem);

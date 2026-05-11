@@ -26,6 +26,10 @@ def delete_chat_room_if_no_assistant_messages(room_id: str, user_id: int) -> boo
     return _get_chat_repository().delete_room_if_no_assistant_messages(room_id, user_id)
 
 
+def delete_last_assistant_message_from_db(chat_room_id: str) -> bool:
+    return _get_chat_repository().delete_last_assistant_message(chat_room_id)
+
+
 def rename_chat_room_in_db(room_id: str, new_title: str) -> None:
     return _get_chat_repository().rename_room(room_id, new_title)
 

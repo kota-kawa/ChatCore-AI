@@ -53,6 +53,7 @@ function ChatMainSectionComponent() {
     setChatInput,
     handleChatInputKeyDown,
     handleSendMessage,
+    handleRegenerateMessage,
   } = useHomePageChatContext();
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -371,6 +372,7 @@ function ChatMainSectionComponent() {
             launchingTaskName={launchingTaskName}
             loadOlderChatHistory={loadOlderChatHistory}
             messages={messages}
+            onRegenerate={handleRegenerateMessage}
           />
 
           <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
