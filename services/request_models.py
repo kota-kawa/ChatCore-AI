@@ -63,10 +63,20 @@ class ShareChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
 
 
+MAX_ATTACHED_FILE_CONTENT_LENGTH = 100_000  # ~100 KB per file
+MAX_ATTACHED_FILES = 5
+
+
+class AttachedFileItem(RequestPayloadModel):
+    name: str = Field(min_length=1, max_length=256)
+    content: str = Field(default="", max_length=MAX_ATTACHED_FILE_CONTENT_LENGTH)
+
+
 class ChatMessageRequest(RequestPayloadModel):
     message: ChatMessageStr
     chat_room_id: ChatRoomIdStr = "default"
     model: ModelNameStr | None = None
+    attached_files: list[AttachedFileItem] = Field(default_factory=list, max_length=MAX_ATTACHED_FILES)
 
 
 class UpdateTasksOrderRequest(RequestPayloadModel):

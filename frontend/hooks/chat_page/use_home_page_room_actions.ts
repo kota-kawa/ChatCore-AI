@@ -9,7 +9,7 @@ import {
 import type { KeyedMutator } from "swr";
 
 import { MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
-import type { ChatRoom, ChatRoomMode, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import type { AttachedFile, ChatRoom, ChatRoomMode, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import {
@@ -43,7 +43,9 @@ type UseHomePageRoomActionsParams = {
   currentRoomIdRef: MutableRefObject<string | null>;
   fetchChatRooms: (url: string) => Promise<ChatRoom[]>;
   editAndRegenerateMessage: (newMessage: string, trailingUserCount: number, model: string, roomId: string) => Promise<void>;
-  generateResponse: (message: string, model: string, roomId: string) => Promise<void>;
+  attachedFiles: AttachedFile[];
+  setAttachedFiles: Dispatch<SetStateAction<AttachedFile[]>>;
+  generateResponse: (message: string, model: string, roomId: string, attachedFiles?: AttachedFile[]) => Promise<void>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   isGenerating: boolean;
   isTaskOrderEditing: boolean;
@@ -81,6 +83,8 @@ type UseHomePageRoomActionsParams = {
 };
 
 export function useHomePageRoomActions({
+  attachedFiles,
+  setAttachedFiles,
   cachedChatRooms,
   chatInput,
   chatRooms,
@@ -482,9 +486,11 @@ export function useHomePageRoomActions({
 
     if (message.length > MAX_CHAT_MESSAGE_LENGTH) return;
 
+    const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
     setChatInput("");
-    void generateResponse(message, selectedModel, roomId);
-  }, [chatInput, generateResponse, isGenerating, selectedModel, stopGeneration]);
+    setAttachedFiles([]);
+    void generateResponse(message, selectedModel, roomId, filesToSend);
+  }, [attachedFiles, chatInput, generateResponse, isGenerating, selectedModel, setAttachedFiles, stopGeneration]);
 
   const handleRegenerateMessage = useCallback(() => {
     if (isGenerating) return;

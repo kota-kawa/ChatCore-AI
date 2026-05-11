@@ -1,24 +1,32 @@
 import { memo, useMemo } from "react";
 
 import { formatUserInputForDisplay } from "../../scripts/chat/chat_ui";
-import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
 type UserMessageHtmlProps = {
   text: string;
+  attachedFileNames?: string[];
 };
 
-/**
- * ユーザーメッセージのHTML表示コンポーネント
- * 修正: useLayoutEffect による後付け注入を止め、最初からコンテンツをレンダリングすることで
- * 描画時の高さのガタつき（一瞬小さく表示される現象）を根本的に解消します。
- */
-function UserMessageHtmlComponent({ text }: UserMessageHtmlProps) {
+function UserMessageHtmlComponent({ text, attachedFileNames }: UserMessageHtmlProps) {
+  // formatUserInputForDisplay runs text through marked (a markdown parser) with
+  // HTML sanitization applied internally, so dangerouslySetInnerHTML is safe here.
   const formatted = useMemo(() => formatUserInputForDisplay(text), [text]);
 
-  // renderSanitizedHTML の内部で行っているサニタイズ処理を考慮しつつ、
-  // コンポーネントとして一貫した出力を即時に行うために dangerouslySetInnerHTML を使用します。
-  // (中身のサニタイズは formatUserInputForDisplay および markedParser 内で保証されています)
-  return <div dangerouslySetInnerHTML={{ __html: formatted }}></div>;
+  return (
+    <>
+      {attachedFileNames && attachedFileNames.length > 0 && (
+        <div className="user-message-attachments">
+          {attachedFileNames.map((name) => (
+            <div key={name} className="user-message-attachment-chip">
+              <i className="bi bi-file-earmark-text" aria-hidden="true"></i>
+              <span>{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div dangerouslySetInnerHTML={{ __html: formatted }}></div>
+    </>
+  );
 }
 
 export const UserMessageHtml = memo(UserMessageHtmlComponent);

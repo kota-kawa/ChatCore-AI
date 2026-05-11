@@ -26,6 +26,7 @@ import {
   type StoredHistoryWriteResult,
 } from "../../lib/chat_page/storage";
 import type {
+  AttachedFile,
   ChatHistoryPagination,
   ChatRoomMode,
   UiChatMessage,
@@ -793,7 +794,7 @@ export function useHomePageGenerationActions({
   }, []);
 
   const generateResponse = useCallback(
-    async (message: string, model: string, roomId: string) => {
+    async (message: string, model: string, roomId: string, attachedFiles?: AttachedFile[]) => {
       const generation = acquireGeneration(roomId);
       if (!generation) return;
 
@@ -801,6 +802,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("user", messageSeqRef),
         sender: "user",
         text: message,
+        attachedFileNames: attachedFiles?.length ? attachedFiles.map((f) => f.name) : undefined,
       };
       const thinkingMessage: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
@@ -825,6 +827,7 @@ export function useHomePageGenerationActions({
             message,
             chat_room_id: roomId,
             model,
+            attached_files: attachedFiles?.map((f) => ({ name: f.name, content: f.content })) ?? [],
           }),
           signal: generation.abortController.signal,
         });

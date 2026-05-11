@@ -88,6 +88,8 @@ type HomePageChatContextValue = Pick<
   | "setSidebarOpen"
   | "loadOlderChatHistory"
   | "setChatInput"
+  | "attachedFiles"
+  | "setAttachedFiles"
   | "handleChatInputKeyDown"
   | "handleSendMessage"
   | "handleRegenerateMessage"
@@ -238,6 +240,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       setSidebarOpen: controller.setSidebarOpen,
       loadOlderChatHistory: controller.loadOlderChatHistory,
       setChatInput: controller.setChatInput,
+      attachedFiles: controller.attachedFiles,
+      setAttachedFiles: controller.setAttachedFiles,
       handleChatInputKeyDown: controller.handleChatInputKeyDown,
       handleSendMessage: controller.handleSendMessage,
       handleRegenerateMessage: controller.handleRegenerateMessage,
@@ -276,6 +280,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.setSidebarOpen,
       controller.loadOlderChatHistory,
       controller.setChatInput,
+      controller.attachedFiles,
+      controller.setAttachedFiles,
       controller.handleChatInputKeyDown,
       controller.handleSendMessage,
       controller.handleRegenerateMessage,

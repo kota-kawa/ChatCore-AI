@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { capUiChatMessages } from "../../lib/chat_page/message_window";
-import type { ChatRoom, ChatRoomMode, UiChatMessage } from "../../lib/chat_page/types";
+import type { AttachedFile, ChatRoom, ChatRoomMode, UiChatMessage } from "../../lib/chat_page/types";
 
 export function useHomePageChatState() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
@@ -18,6 +18,7 @@ export function useHomePageChatState() {
     });
   }, []);
   const [chatInput, setChatInput] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyNextBeforeId, setHistoryNextBeforeId] = useState<number | null>(null);
@@ -48,6 +49,8 @@ export function useHomePageChatState() {
     setMessages,
     chatInput,
     setChatInput,
+    attachedFiles,
+    setAttachedFiles,
     isGenerating,
     setIsGenerating,
     historyHasMore,

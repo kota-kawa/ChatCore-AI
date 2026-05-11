@@ -106,6 +106,7 @@ class ChatPostUseCase:
         user_message = payload.message
         chat_room_id = payload.chat_room_id
         model = payload.model or self.default_model
+        attached_files = payload.attached_files or []
 
         try:
             deps.validate_model_name(model)
@@ -191,6 +192,21 @@ class ChatPostUseCase:
             )
 
         normalized_all_messages = deps.normalize_messages_for_llm(all_messages)
+
+        if attached_files:
+            file_blocks = []
+            for f in attached_files:
+                name = str(f.name).strip()
+                content = str(f.content).strip()
+                if name and content:
+                    file_blocks.append(f'<file name="{name}">\n{content}\n</file>')
+            if file_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
+                file_context = "<attached_files>\n" + "\n".join(file_blocks) + "\n</attached_files>"
+                last_msg = normalized_all_messages[-1]
+                normalized_all_messages = list(normalized_all_messages[:-1]) + [
+                    {**last_msg, "content": f"{file_context}\n\n{last_msg.get('content', '')}"}
+                ]
+
         active_task_request = deps.find_latest_task_launch_request(normalized_all_messages)
         prompt_data = None
         if active_task_request is not None:

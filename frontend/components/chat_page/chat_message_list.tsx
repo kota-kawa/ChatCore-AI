@@ -219,7 +219,7 @@ function ChatMessageRow({
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper user-message-wrapper">
           <div className="user-message">
-            <UserMessageHtml text={message.text} />
+            <UserMessageHtml text={message.text} attachedFileNames={message.attachedFileNames} />
           </div>
           {isLaunchPreview ? (
             <div className="message-actions" style={{ visibility: "hidden" }}>

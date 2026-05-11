@@ -19,12 +19,20 @@ export type ChatRoom = {
 
 export type ChatSender = "user" | "assistant" | "thinking";
 
+export type AttachedFile = {
+  id: string;
+  name: string;
+  size: number;
+  content: string;
+};
+
 export type UiChatMessage = {
   id: string;
   sender: ChatSender;
   text: string;
   streaming?: boolean;
   error?: boolean;
+  attachedFileNames?: string[];
 };
 
 export type ChatHistoryMessagePayload = {

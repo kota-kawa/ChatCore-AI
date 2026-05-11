@@ -268,6 +268,153 @@
   }
 }
 
+/* ─── ファイル添付ボタン ─── */
+.chat-file-input-hidden {
+  display: none;
+}
+
+.chat-attach-btn {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  transition: color var(--transition-fast, 0.15s ease), background var(--transition-fast, 0.15s ease);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-attach-btn:hover {
+  color: var(--primary-color, #0f766e);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.chat-attach-btn:active {
+  transform: scale(0.92);
+}
+
+.chat-attach-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+[data-theme="dark"] .chat-attach-btn {
+  color: var(--text-muted, #64748b);
+}
+
+[data-theme="dark"] .chat-attach-btn:hover {
+  color: var(--primary-color, #2dd4bf);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+/* ─── 添付ファイルチップ（コンポーザー内） ─── */
+.chat-attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-width: 800px;
+  margin: 0 auto 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.chat-attached-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 20px;
+  padding: 0.22rem 0.35rem 0.22rem 0.55rem;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--text-secondary, #374151);
+  max-width: 200px;
+}
+
+.chat-attached-file-chip__icon {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--primary-color, #0f766e);
+}
+
+.chat-attached-file-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-attached-file-chip__size {
+  flex-shrink: 0;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.68rem;
+}
+
+.chat-attached-file-chip__remove {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  padding: 0;
+  transition: color var(--transition-fast, 0.15s ease), background var(--transition-fast, 0.15s ease);
+}
+
+.chat-attached-file-chip__remove:hover {
+  color: var(--danger-color, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+[data-theme="dark"] .chat-attached-file-chip {
+  background: rgba(45, 212, 191, 0.06);
+  border-color: rgba(45, 212, 191, 0.18);
+  color: var(--text-secondary, #cbd5e1);
+}
+
+[data-theme="dark"] .chat-attached-file-chip__icon {
+  color: var(--primary-color, #2dd4bf);
+}
+
+/* ─── 送信済みメッセージの添付ファイルバッジ ─── */
+.user-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.user-message-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 14px;
+  padding: 0.18rem 0.55rem 0.18rem 0.4rem;
+  font-size: var(--text-xs, 0.75rem);
+  color: inherit;
+  opacity: 0.88;
+}
+
+.user-message-attachment-chip i {
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+
 /* 文字数カウンター */
 .chat-input-counter {
   max-width: 800px;
