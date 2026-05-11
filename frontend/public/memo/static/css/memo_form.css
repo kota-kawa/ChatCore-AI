@@ -798,6 +798,8 @@ textarea.memo-control {
 }
 
 .memo-modal__body {
+  flex: 1;
+  min-height: 0;
   padding: 0 1.15rem 1.1rem;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1573,6 +1575,8 @@ textarea.memo-control {
 }
 
 .memo-collection-modal__body {
+  flex: 1;
+  min-height: 0;
   padding: 0 1.15rem 1.1rem;
   overflow-y: auto;
   display: flex;

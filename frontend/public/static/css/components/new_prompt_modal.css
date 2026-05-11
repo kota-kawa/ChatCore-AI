@@ -68,8 +68,6 @@
 .new-prompt-modal {
   z-index: var(--z-modal, 80);
   width: 100%;
-  min-height: 100dvh;
-  align-items: flex-start;
   padding:
     max(1rem, env(safe-area-inset-top))
     1rem
@@ -77,10 +75,7 @@
   background: var(--chat-modal-overlay,
     radial-gradient(circle at top, rgba(13, 148, 136, 0.12), transparent 38%),
     rgba(4, 12, 10, 0.52));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  overflow: hidden;
   opacity: 0;
   visibility: hidden;
   transition:
@@ -99,9 +94,10 @@
 .new-prompt-modal-content {
   position: relative;
   width: min(720px, 100%);
-  margin: 0 auto;
-  max-height: none;
-  overflow: visible;
+  max-height: 90dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--chat-modal-surface-bg,
     radial-gradient(circle at top left, rgba(134, 239, 172, 0.22), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 252, 250, 0.98) 100%));
@@ -220,6 +216,10 @@
   flex-direction: column;
   gap: 0.95rem;
   margin-top: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .new-post-form .form-group {
