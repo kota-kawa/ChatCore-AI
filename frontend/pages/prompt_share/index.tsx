@@ -1085,7 +1085,7 @@ export default function PromptSharePage() {
 
       const formData = new FormData();
       formData.append("title", postTitle);
-      formData.append("category", postCategory);
+      formData.append("category", postCategory === "未選択" ? "" : postCategory);
       formData.append("content", postContent);
       formData.append("author", postAuthor);
       formData.append("prompt_type", promptType);
@@ -1280,18 +1280,18 @@ export default function PromptSharePage() {
       root: promptAssistRootRef.current,
       target: "shared_prompt_modal",
       fields: {
-        title: { label: "タイトル", element: promptPostTitleInputRef.current },
-        category: { label: "カテゴリ", element: promptPostCategorySelectRef.current },
-        content: { label: "プロンプト内容", element: promptPostContentTextareaRef.current },
-        author: { label: "投稿者名", element: promptPostAuthorInputRef.current },
-        ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current },
+        title: { label: "タイトル", element: promptPostTitleInputRef.current, setValue: setPostTitle },
+        category: { label: "カテゴリ", element: promptPostCategorySelectRef.current, setValue: setPostCategory },
+        content: { label: "プロンプト内容", element: promptPostContentTextareaRef.current, setValue: setPostContent },
+        author: { label: "投稿者名", element: promptPostAuthorInputRef.current, setValue: setPostAuthor },
+        ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {
           label: "投稿タイプ",
           element: null,
           getValue: () => promptTypeRef.current
         },
-        input_examples: { label: "入力例", element: promptPostInputExamplesRef.current },
-        output_examples: { label: "出力例", element: promptPostOutputExamplesRef.current }
+        input_examples: { label: "入力例", element: promptPostInputExamplesRef.current, setValue: setPostInputExample },
+        output_examples: { label: "出力例", element: promptPostOutputExamplesRef.current, setValue: setPostOutputExample }
       },
       beforeApplyField: (fieldName) => {
         if (fieldName === "input_examples" || fieldName === "output_examples") {

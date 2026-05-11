@@ -120,14 +120,25 @@ export function initPromptAssist(config: PromptAssistConfig) {
   const applyFieldValue = (fieldName: PromptAssistFieldName) => {
     const fieldConfig = fields[fieldName];
     const nextValue = latestSuggestion[fieldName];
-    if (!fieldConfig?.element || typeof nextValue !== "string") {
+    if (!fieldConfig || typeof nextValue !== "string") {
+      return;
+    }
+    if (!fieldConfig.element && !fieldConfig.setValue) {
       return;
     }
     beforeApplyField?.(fieldName);
-    fieldConfig.element.value = nextValue;
-    fieldConfig.element.dispatchEvent(new Event("input", { bubbles: true }));
-    fieldConfig.element.dispatchEvent(new Event("change", { bubbles: true }));
-    animateAppliedField(fieldConfig);
+    if (fieldConfig.setValue) {
+      fieldConfig.setValue(nextValue);
+      if (fieldConfig.element) {
+        fieldConfig.element.value = nextValue;
+        animateAppliedField(fieldConfig);
+      }
+    } else if (fieldConfig.element) {
+      fieldConfig.element.value = nextValue;
+      fieldConfig.element.dispatchEvent(new Event("input", { bubbles: true }));
+      fieldConfig.element.dispatchEvent(new Event("change", { bubbles: true }));
+      animateAppliedField(fieldConfig);
+    }
   };
 
   const renderPreview = (response: PromptAssistResponse) => {

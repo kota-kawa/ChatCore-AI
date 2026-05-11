@@ -567,7 +567,6 @@ export function PromptShareComposerModal({
                   <PromptComposerSelect
                     selectId="prompt-category"
                     nativeRef={promptPostCategorySelectRef}
-                    required
                     value={postCategory}
                     options={categorySelectOptions}
                     menuLabel="カテゴリを選択"

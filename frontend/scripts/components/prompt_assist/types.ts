@@ -32,6 +32,7 @@ export type PromptAssistFieldConfig = {
   label: string;
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
   getValue?: () => string;
+  setValue?: (value: string) => void;
 };
 
 export type PromptAssistConfig = {

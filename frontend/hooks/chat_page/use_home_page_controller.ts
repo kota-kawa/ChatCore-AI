@@ -879,10 +879,10 @@ export function useHomePageController() {
       root: newPromptAssistRootRef.current,
       target: "task_modal",
       fields: {
-        title: { label: "タイトル", element: titleInputRef.current },
-        prompt_content: { label: "プロンプト内容", element: contentInputRef.current },
-        input_examples: { label: "入力例", element: inputExampleRef.current },
-        output_examples: { label: "出力例", element: outputExampleRef.current },
+        title: { label: "タイトル", element: titleInputRef.current, setValue: setNewPromptTitle },
+        prompt_content: { label: "プロンプト内容", element: contentInputRef.current, setValue: setNewPromptContent },
+        input_examples: { label: "入力例", element: inputExampleRef.current, setValue: setNewPromptInputExample },
+        output_examples: { label: "出力例", element: outputExampleRef.current, setValue: setNewPromptOutputExample },
       },
       beforeApplyField: (fieldName) => {
         if (fieldName === "input_examples" || fieldName === "output_examples") {

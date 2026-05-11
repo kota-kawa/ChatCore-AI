@@ -127,7 +127,7 @@ class AiAgentRequest(RequestPayloadModel):
 
 class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
-    category: NonEmptyStr
+    category: str = ""
     content: NonEmptyStr
     author: NonEmptyStr
     prompt_type: Literal["text", "image"] = "text"
