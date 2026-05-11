@@ -493,11 +493,6 @@ export function PromptShareComposerModal({
                 本文の下書きはAI補助で作ることもできます。投稿すると一覧に表示され、他のユーザーから参照できます。
               </p>
             </div>
-            <div className="composer-hero__chips" aria-hidden="true">
-              <span>Searchable</span>
-              <span>Polished</span>
-              <span>Share Ready</span>
-            </div>
           </div>
 
           <form className="post-form" id="postForm" onSubmit={onSubmit}>
@@ -507,9 +502,6 @@ export function PromptShareComposerModal({
                   <p className="composer-section__eyebrow">Basics</p>
                   <h3 id="composerBasicsTitle">投稿の基本情報</h3>
                 </div>
-                <p className="composer-section__description">
-                  まずは投稿タイプとタイトルを決めて、一覧で見つけやすい形に整えます。
-                </p>
               </div>
 
               <div className="form-group">
@@ -657,9 +649,6 @@ export function PromptShareComposerModal({
                   <p className="composer-section__eyebrow">Details</p>
                   <h3 id="composerMetaTitle">投稿設定</h3>
                 </div>
-                <p className="composer-section__description">
-                  投稿者名や使用モデルを添えると、利用者が使いどころを判断しやすくなります。
-                </p>
               </div>
 
               <div className="composer-field-grid composer-field-grid--two">
