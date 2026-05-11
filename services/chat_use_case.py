@@ -18,6 +18,7 @@ from services.llm import (
     LlmServiceError,
 )
 from services.request_models import ChatMessageRequest
+from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
     build_web_search_sources_markdown,
     maybe_augment_messages_with_web_search,
@@ -193,19 +194,35 @@ class ChatPostUseCase:
 
         normalized_all_messages = deps.normalize_messages_for_llm(all_messages)
 
+        # Build context blocks to prepend to the last user message.
+        # Order: fetched URL content → attached file content → user message text.
+        prefix_blocks: list[str] = []
+
+        urls_in_message = extract_urls_from_text(user_message)
+        if urls_in_message:
+            fetched_urls = await run_blocking(fetch_urls_content, urls_in_message)
+            if fetched_urls:
+                url_xml = "\n".join(
+                    f'<url href="{url}">\n{content}\n</url>'
+                    for url, content in fetched_urls.items()
+                )
+                prefix_blocks.append(f"<fetched_urls>\n{url_xml}\n</fetched_urls>")
+
         if attached_files:
-            file_blocks = []
-            for f in attached_files:
-                name = str(f.name).strip()
-                content = str(f.content).strip()
-                if name and content:
-                    file_blocks.append(f'<file name="{name}">\n{content}\n</file>')
-            if file_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
-                file_context = "<attached_files>\n" + "\n".join(file_blocks) + "\n</attached_files>"
-                last_msg = normalized_all_messages[-1]
-                normalized_all_messages = list(normalized_all_messages[:-1]) + [
-                    {**last_msg, "content": f"{file_context}\n\n{last_msg.get('content', '')}"}
-                ]
+            file_blocks = [
+                f'<file name="{str(f.name).strip()}">\n{str(f.content).strip()}\n</file>'
+                for f in attached_files
+                if str(f.name).strip() and str(f.content).strip()
+            ]
+            if file_blocks:
+                prefix_blocks.append("<attached_files>\n" + "\n".join(file_blocks) + "\n</attached_files>")
+
+        if prefix_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
+            prefix = "\n\n".join(prefix_blocks)
+            last_msg = normalized_all_messages[-1]
+            normalized_all_messages = list(normalized_all_messages[:-1]) + [
+                {**last_msg, "content": f"{prefix}\n\n{last_msg.get('content', '')}"}
+            ]
 
         active_task_request = deps.find_latest_task_launch_request(normalized_all_messages)
         prompt_data = None

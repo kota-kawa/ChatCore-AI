@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useRef, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 
 function ChatMainSectionComponent() {
   const {
@@ -69,6 +70,8 @@ function ChatMainSectionComponent() {
     !isChatLaunching &&
     chatInput.trim().length > 0 &&
     chatInput.length <= MAX_CHAT_MESSAGE_LENGTH;
+
+  const detectedUrls = useMemo(() => extractUrlsFromText(chatInput), [chatInput]);
 
   const MAX_FILE_SIZE_BYTES = 1_048_576; // 1 MB
   const ACCEPTED_FILE_TYPES = [
@@ -439,6 +442,17 @@ function ChatMainSectionComponent() {
           />
 
           <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
+            {detectedUrls.length > 0 && (
+              <div className="chat-detected-urls" aria-label="送信時にAIが読み取るURL">
+                {detectedUrls.map((url) => (
+                  <div key={url} className="chat-detected-url-chip" title={url}>
+                    <i className="bi bi-globe2 chat-detected-url-chip__icon" aria-hidden="true"></i>
+                    <span className="chat-detected-url-chip__domain">{getUrlDomain(url)}</span>
+                    <span className="chat-detected-url-chip__label">AIが読み取り</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {attachedFiles.length > 0 && (
               <div className="chat-attached-files">
                 {attachedFiles.map((file) => (
