@@ -2737,16 +2737,10 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .composer-footer {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 1rem;
-  padding: 1rem 1.1rem 0.15rem;
-  margin: -0.15rem -0.1rem 0;
-  background: linear-gradient(180deg, rgba(246, 250, 255, 0) 0%, rgba(246, 250, 255, 0.88) 22%, rgba(246, 250, 255, 0.98) 100%);
-  backdrop-filter: blur(10px);
+  padding: 1rem 0 0.5rem;
 }
 
 .composer-footer__note {
