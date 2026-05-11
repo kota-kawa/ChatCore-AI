@@ -36,6 +36,12 @@ Click a thumbnail to open the video on YouTube.
 ## Overview
 Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq, Google Gemini, and OpenAI APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
 
+## Background
+
+Using AI chat services daily, I kept running into the same friction: writing almost identical prompts over and over — drafting emails, asking for code fixes, requesting detailed explanations on a topic. Re-typing the same instructions every session was tedious and slowed down my workflow.
+
+Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** system: frequently used prompt patterns are defined once as templates, then launched with a single click and minimal situational input. Beyond personal efficiency, the service also emphasizes **customizability** (tasks and prompts are fully editable per user) and **community prompt sharing**, so useful patterns can be discovered, saved, and reused by others.
+
 ## Key Features
 - **Email-based authentication** with 6‑digit verification codes
 - **Google OAuth** sign-in
@@ -214,6 +220,12 @@ Click a thumbnail to open the video on YouTube.
 
 ## 概要
 Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq・Google Gemini・OpenAI API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
+
+## 制作背景
+
+ChatGPT などの AI チャットサービスを日常的に使うなかで、「〇〇のメールを作成して」「このコードを修正して」「〇〇について詳しく教えて」など、毎回ほぼ同じ内容を入力し直す手間を強く感じていました。反復的な作業を毎回一から書くのは非効率で、本来集中すべき作業の妨げになっていました。
+
+この課題を解消するために Chat-Core-AI を制作しました。よく使う指示パターンをあらかじめ **タスク** として登録しておくことで、最小限の状況入力とワンクリックで AI との対話を即座に開始できます。また、タスクやプロンプトを自分好みに編集・並び替えできる **高いカスタマイズ性** と、便利なプロンプトをコミュニティで発見・保存・再利用できる **プロンプト共有** 機能も重視して設計しています。
 
 ## 主な機能
 - **メール認証**（6 桁コード）
