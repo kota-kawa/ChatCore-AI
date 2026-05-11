@@ -152,6 +152,19 @@ class EphemeralChatStore:
             del self._memory[sid]
         return True
 
+    def delete_messages_from_trailing_user_count(self, sid: str, room_id: str, trailing_user_count: int) -> bool:
+        """Delete messages from the user message that has `trailing_user_count` user messages after it."""
+        room = self.get_room(sid, room_id)
+        if not room:
+            return False
+        messages = room.get("messages") or []
+        user_indices = [i for i, m in enumerate(messages) if m.get("role") == "user"]
+        if len(user_indices) <= trailing_user_count:
+            return False
+        target_msg_index = user_indices[len(user_indices) - 1 - trailing_user_count]
+        room["messages"] = messages[:target_msg_index]
+        return self._save_room(sid, room_id, room)
+
     def delete_last_assistant_message(self, sid: str, room_id: str) -> bool:
         """Delete the last assistant message (and any messages after it) from an ephemeral room."""
         room = self.get_room(sid, room_id)

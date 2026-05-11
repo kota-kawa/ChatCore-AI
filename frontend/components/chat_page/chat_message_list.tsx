@@ -5,21 +5,104 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
 } from "react";
 import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window";
 
 import { InlineLoading } from "../ui/inline_loading";
+import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import type { UiChatMessage } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
 import { CopyActionButton } from "./copy_action_button";
+import { EditActionButton } from "./edit_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { RegenerateActionButton } from "./regenerate_action_button";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+function UserMessageEditForm({
+  initialText,
+  onSubmit,
+  onCancel,
+}: {
+  initialText: string;
+  onSubmit: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(initialText);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.nativeEvent.isComposing) return;
+      if (event.key === "Escape") {
+        onCancel();
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const trimmed = text.trim();
+        if (trimmed && trimmed.length <= MAX_CHAT_MESSAGE_LENGTH) {
+          onSubmit(trimmed);
+        }
+      }
+    },
+    [onCancel, onSubmit, text],
+  );
+
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(event.target.value);
+    const el = event.currentTarget;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, []);
+
+  const trimmed = text.trim();
+  const canSubmit = trimmed.length > 0 && trimmed.length <= MAX_CHAT_MESSAGE_LENGTH;
+
+  return (
+    <div className="user-message-edit-form">
+      <textarea
+        ref={textareaRef}
+        className="user-message-edit-textarea"
+        value={text}
+        rows={1}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+      />
+      <div className="user-message-edit-actions">
+        <button type="button" className="user-message-edit-cancel" onClick={onCancel}>
+          キャンセル
+        </button>
+        <button
+          type="button"
+          className="user-message-edit-submit"
+          disabled={!canSubmit}
+          onClick={() => {
+            if (canSubmit) onSubmit(trimmed);
+          }}
+        >
+          送信
+        </button>
+      </div>
+    </div>
+  );
+}
 
 type ChatMessageListRow =
   | { kind: "load-more" }
@@ -31,6 +114,10 @@ type ChatMessageRowProps = {
   isLoadingOlder: boolean;
   loadOlderChatHistory: () => Promise<void>;
   onRegenerate: () => void;
+  editingMessageId: string | null;
+  onEditStart: (messageId: string) => void;
+  onEditCancel: () => void;
+  onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
 };
 
 type ChatMessageRowComponentProps = ChatMessageRowProps & {
@@ -50,6 +137,10 @@ function ChatMessageRow({
   isLoadingOlder,
   loadOlderChatHistory,
   onRegenerate,
+  editingMessageId,
+  onEditStart,
+  onEditCancel,
+  onEditAndRegenerate,
   rows,
   style,
 }: ChatMessageRowComponentProps) {
@@ -101,6 +192,29 @@ function ChatMessageRow({
 
   if (message.sender === "user") {
     const isLaunchPreview = message.id === "launch-preview-user";
+    const isEditing = editingMessageId === message.id;
+
+    if (!isLaunchPreview && isEditing) {
+      const trailingUserCount = rows
+        .slice(index + 1)
+        .filter((r) => r.kind === "message" && r.message.sender === "user").length;
+      return (
+        <div {...ariaAttributes} className={rowClassName} style={style}>
+          <div className="message-wrapper user-message-wrapper">
+            <UserMessageEditForm
+              initialText={message.text}
+              onSubmit={(text) => {
+                onEditAndRegenerate(text, trailingUserCount);
+                onEditCancel();
+              }}
+              onCancel={onEditCancel}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const isEditDisabled = isGenerating || editingMessageId !== null;
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper user-message-wrapper">
@@ -113,6 +227,12 @@ function ChatMessageRow({
             </div>
           ) : (
             <div className="message-actions">
+              <EditActionButton
+                onEdit={() => {
+                  onEditStart(message.id);
+                }}
+                disabled={isEditDisabled}
+              />
               <CopyActionButton
                 getText={() => {
                   return message.text;
@@ -177,6 +297,7 @@ type ChatMessageListProps = {
   loadOlderChatHistory: () => Promise<void>;
   messages: UiChatMessage[];
   onRegenerate: () => void;
+  onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
 };
 
 function ChatMessageListComponent({
@@ -192,7 +313,17 @@ function ChatMessageListComponent({
   loadOlderChatHistory,
   messages,
   onRegenerate,
+  onEditAndRegenerate,
 }: ChatMessageListProps) {
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+
+  const handleEditStart = useCallback((messageId: string) => {
+    setEditingMessageId(messageId);
+  }, []);
+
+  const handleEditCancel = useCallback(() => {
+    setEditingMessageId(null);
+  }, []);
   const rowHeight = useDynamicRowHeight({
     defaultRowHeight: 104,
     key: currentRoomId || "no-room",
@@ -249,8 +380,22 @@ function ChatMessageListComponent({
       isLoadingOlder,
       loadOlderChatHistory,
       onRegenerate,
+      editingMessageId,
+      onEditStart: handleEditStart,
+      onEditCancel: handleEditCancel,
+      onEditAndRegenerate,
     }),
-    [isGenerating, isLoadingOlder, loadOlderChatHistory, onRegenerate, rows],
+    [
+      rows,
+      isGenerating,
+      isLoadingOlder,
+      loadOlderChatHistory,
+      onRegenerate,
+      editingMessageId,
+      handleEditStart,
+      handleEditCancel,
+      onEditAndRegenerate,
+    ],
   );
 
   const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";

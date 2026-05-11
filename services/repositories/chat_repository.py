@@ -130,6 +130,46 @@ class ChatRepository:
 
         raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
 
+    def delete_messages_from_trailing_user_count(self, chat_room_id: str, trailing_user_count: int) -> bool:
+        """Delete messages starting from the user message that has `trailing_user_count` user
+        messages after it (counting from the newest).  trailing_user_count=0 targets the last
+        user message; trailing_user_count=1 targets the second-to-last, etc.
+
+        Returns True if any rows were deleted.
+        """
+        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+            with self._connection_getter() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT id FROM chat_history WHERE chat_room_id = %s AND sender = 'user' ORDER BY id ASC",
+                        (chat_room_id,),
+                    )
+                    user_ids = [row[0] for row in cursor.fetchall()]
+
+                    if len(user_ids) <= trailing_user_count:
+                        return False
+
+                    target_id = user_ids[len(user_ids) - 1 - trailing_user_count]
+                    cursor.execute(
+                        "DELETE FROM chat_history WHERE chat_room_id = %s AND id >= %s",
+                        (chat_room_id, target_id),
+                    )
+                    conn.commit()
+                    return cursor.rowcount > 0
+                except Error as exc:
+                    self._rollback(conn)
+                    if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                        self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                        continue
+                    raise
+                except BaseException:
+                    self._rollback(conn)
+                    raise
+                finally:
+                    cursor.close()
+        return False
+
     def delete_last_assistant_message(self, chat_room_id: str) -> bool:
         """Delete the last assistant message (and any messages after it) from a chat room."""
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):

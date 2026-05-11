@@ -916,6 +916,114 @@ export function useHomePageGenerationActions({
     }
   }, [disconnectActiveGeneration]);
 
+  const editAndRegenerateMessage = useCallback(
+    async (newMessage: string, trailingUserCount: number, model: string, roomId: string) => {
+      setMessages((previous) => {
+        const userIndices: number[] = [];
+        previous.forEach((m, i) => {
+          if (m.sender === "user") userIndices.push(i);
+        });
+        if (userIndices.length <= trailingUserCount) return previous;
+        const targetIdx = userIndices[userIndices.length - 1 - trailingUserCount];
+        return removeThinkingMessages(previous.slice(0, targetIdx));
+      });
+
+      const stored = readStoredHistory(roomId);
+      const userStoredIndices: number[] = [];
+      stored.forEach((e, i) => {
+        if (e.sender === "user") userStoredIndices.push(i);
+      });
+      if (userStoredIndices.length > trailingUserCount) {
+        const targetStoredIdx = userStoredIndices[userStoredIndices.length - 1 - trailingUserCount];
+        notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, stored.slice(0, targetStoredIdx)));
+      }
+
+      const generation = acquireGeneration(roomId);
+      if (!generation) return;
+
+      const userMsg: UiChatMessage = {
+        id: nextMessageId("user", messageSeqRef),
+        sender: "user",
+        text: newMessage,
+      };
+      const thinkingMsg: UiChatMessage = {
+        id: nextMessageId("thinking", messageSeqRef),
+        sender: "thinking",
+        text: "AIが応答を準備しています",
+      };
+
+      setMessages((previous) => {
+        if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+        return [...removeThinkingMessages(previous), userMsg, thinkingMsg];
+      });
+      notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: newMessage, sender: "user" }));
+      streamLastEventIdByRoomRef.current.set(roomId, 0);
+      scheduleAutoScrollIfNeeded(true);
+
+      try {
+        const response = await fetch("/api/chat_edit_and_regenerate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            chat_room_id: roomId,
+            new_message: newMessage,
+            trailing_user_count: trailingUserCount,
+            model,
+          }),
+          signal: generation.abortController.signal,
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/event-stream")) {
+          await consumeStreamingChatResponse(response, generation);
+          return;
+        }
+
+        const rawPayload = await readJsonBodySafe(response);
+        setMessages((previous) => {
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+          return [
+            ...removeThinkingMessages(previous),
+            {
+              id: nextMessageId("assistant-error", messageSeqRef),
+              sender: "assistant",
+              text: `エラー: ${extractApiErrorMessage(rawPayload, "編集・再生成に失敗しました。", response.status)}`,
+              error: true,
+            },
+          ];
+        });
+        scheduleAutoScrollIfNeeded(true);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          if (isGenerationActive(generation)) {
+            setMessages((previous) => {
+              if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+              return removeThinkingMessages(previous);
+            });
+          }
+          return;
+        }
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (isGenerationActive(generation)) {
+          appendAssistantErrorMessage(roomId, errorMessage);
+        }
+      } finally {
+        releaseGeneration(generation);
+      }
+    },
+    [
+      acquireGeneration,
+      appendAssistantErrorMessage,
+      consumeStreamingChatResponse,
+      isGenerationActive,
+      notifyStoredHistoryWriteIssue,
+      releaseGeneration,
+      removeThinkingMessages,
+      scheduleAutoScrollIfNeeded,
+    ],
+  );
+
   const regenerateLastResponse = useCallback(
     async (model: string, roomId: string) => {
       setMessages((previous) => {
@@ -1031,6 +1139,7 @@ export function useHomePageGenerationActions({
     loadOlderChatHistory,
     createNewChatRoom,
     generateResponse,
+    editAndRegenerateMessage,
     regenerateLastResponse,
     stopGeneration,
     removeStoredHistory,

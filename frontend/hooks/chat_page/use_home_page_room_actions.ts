@@ -42,6 +42,7 @@ type UseHomePageRoomActionsParams = {
   createNewChatRoom: (roomId: string, title: string, mode: ChatRoomMode) => Promise<void>;
   currentRoomIdRef: MutableRefObject<string | null>;
   fetchChatRooms: (url: string) => Promise<ChatRoom[]>;
+  editAndRegenerateMessage: (newMessage: string, trailingUserCount: number, model: string, roomId: string) => Promise<void>;
   generateResponse: (message: string, model: string, roomId: string) => Promise<void>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   isGenerating: boolean;
@@ -87,6 +88,7 @@ export function useHomePageRoomActions({
   closeShareModal,
   createNewChatRoom,
   currentRoomIdRef,
+  editAndRegenerateMessage,
   fetchChatRooms,
   generateResponse,
   regenerateLastResponse,
@@ -493,6 +495,16 @@ export function useHomePageRoomActions({
     void regenerateLastResponse(selectedModel, roomId);
   }, [isGenerating, regenerateLastResponse, selectedModel]);
 
+  const handleEditAndRegenerateMessage = useCallback(
+    (newMessage: string, trailingUserCount: number) => {
+      if (isGenerating) return;
+      const roomId = currentRoomIdRef.current;
+      if (!roomId) return;
+      void editAndRegenerateMessage(newMessage, trailingUserCount, selectedModel, roomId);
+    },
+    [editAndRegenerateMessage, isGenerating, selectedModel],
+  );
+
   const handleChatInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
@@ -613,6 +625,7 @@ export function useHomePageRoomActions({
     handleSetupSendMessage,
     handleSendMessage,
     handleRegenerateMessage,
+    handleEditAndRegenerateMessage,
     handleChatInputKeyDown,
     handleDeleteRoom,
     handleBulkDeleteRooms,

@@ -26,6 +26,10 @@ def delete_chat_room_if_no_assistant_messages(room_id: str, user_id: int) -> boo
     return _get_chat_repository().delete_room_if_no_assistant_messages(room_id, user_id)
 
 
+def truncate_chat_room_for_edit(chat_room_id: str, trailing_user_count: int) -> bool:
+    return _get_chat_repository().delete_messages_from_trailing_user_count(chat_room_id, trailing_user_count)
+
+
 def delete_last_assistant_message_from_db(chat_room_id: str) -> bool:
     return _get_chat_repository().delete_last_assistant_message(chat_room_id)
 
