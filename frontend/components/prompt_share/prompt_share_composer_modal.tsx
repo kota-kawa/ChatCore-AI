@@ -1,4 +1,13 @@
-import type { ChangeEvent, FormEvent, RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MutableRefObject,
+  type RefObject
+} from "react";
 
 import { normalizePromptType } from "../../scripts/prompt_share/formatters";
 import type { PromptType } from "../../scripts/prompt_share/types";
@@ -47,6 +56,359 @@ type PromptShareComposerModalProps = {
   onClearReferenceImage: () => void;
 };
 
+type PromptComposerSelectOption = {
+  value: string;
+  label: string;
+  group?: string;
+};
+
+const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOption[] }[] = [
+  {
+    label: "OpenAI",
+    options: [
+      { value: "ChatGPT (GPT-5.4)", label: "ChatGPT (GPT-5.4)" },
+      { value: "ChatGPT (GPT-5.4 mini)", label: "ChatGPT (GPT-5.4 mini)" },
+      { value: "ChatGPT (o3)", label: "ChatGPT (o3)" },
+      { value: "ChatGPT (GPT-4o)", label: "ChatGPT (GPT-4o)" }
+    ]
+  },
+  {
+    label: "Anthropic",
+    options: [
+      { value: "Claude Opus 4.6", label: "Claude Opus 4.6" },
+      { value: "Claude Sonnet 4.6", label: "Claude Sonnet 4.6" },
+      { value: "Claude Haiku 4.5", label: "Claude Haiku 4.5" },
+      { value: "Claude 3.7 Sonnet", label: "Claude 3.7 Sonnet" }
+    ]
+  },
+  {
+    label: "Google",
+    options: [
+      { value: "Gemini 3.1 Pro", label: "Gemini 3.1 Pro" },
+      { value: "Gemini 3.1 Flash", label: "Gemini 3.1 Flash" },
+      { value: "Gemini 2.0 Flash", label: "Gemini 2.0 Flash" }
+    ]
+  },
+  {
+    label: "Meta",
+    options: [
+      { value: "Llama 4 Maverick", label: "Llama 4 Maverick" },
+      { value: "Llama 4 Scout", label: "Llama 4 Scout" }
+    ]
+  },
+  {
+    label: "DeepSeek",
+    options: [
+      { value: "DeepSeek-R1", label: "DeepSeek-R1" },
+      { value: "DeepSeek-V3", label: "DeepSeek-V3" }
+    ]
+  },
+  {
+    label: "xAI",
+    options: [{ value: "Grok 3", label: "Grok 3" }]
+  },
+  {
+    label: "画像生成",
+    options: [
+      { value: "Midjourney", label: "Midjourney" },
+      { value: "Stable Diffusion", label: "Stable Diffusion" },
+      { value: "FLUX", label: "FLUX" },
+      { value: "DALL-E 3", label: "DALL-E 3" }
+    ]
+  }
+];
+
+const AI_MODEL_OPTIONS: PromptComposerSelectOption[] = [
+  { value: "", label: "未設定" },
+  ...AI_MODEL_OPTION_GROUPS.flatMap((group) =>
+    group.options.map((option) => ({ ...option, group: group.label }))
+  ),
+  { value: "その他", label: "その他" }
+];
+
+function PromptComposerSelect({
+  selectId,
+  nativeRef,
+  value,
+  options,
+  groupedOptions,
+  onChange,
+  onAfterChange,
+  required = false,
+  menuLabel
+}: {
+  selectId: string;
+  nativeRef: RefObject<HTMLSelectElement>;
+  value: string;
+  options: PromptComposerSelectOption[];
+  groupedOptions?: { label: string; options: PromptComposerSelectOption[] }[];
+  onChange: (value: string) => void;
+  onAfterChange: () => void;
+  required?: boolean;
+  menuLabel: string;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value)
+  );
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const selectedLabel = options[selectedIndex]?.label ?? value;
+  const listboxId = `${selectId}-menu`;
+
+  useEffect(() => {
+    setActiveIndex(selectedIndex);
+  }, [selectedIndex]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    optionRefs.current[activeIndex]?.focus();
+  }, [activeIndex, isOpen]);
+
+  const selectOption = (index: number) => {
+    const option = options[index];
+    if (!option) {
+      return;
+    }
+    onChange(option.value);
+    onAfterChange();
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const openAt = (index: number) => {
+    setActiveIndex(Math.min(Math.max(index, 0), options.length - 1));
+    setIsOpen(true);
+  };
+
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openAt(isOpen ? activeIndex + 1 : selectedIndex);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      openAt(isOpen ? activeIndex - 1 : selectedIndex);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openAt(selectedIndex);
+    }
+  };
+
+  const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openAt(index + 1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      openAt(index - 1);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      openAt(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      openAt(options.length - 1);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectOption(index);
+    }
+  };
+
+  let optionIndex = 0;
+
+  return (
+    <div ref={rootRef} className={`prompt-composer-select${isOpen ? " is-open" : ""}`.trim()}>
+      <select
+        id={selectId}
+        className="prompt-composer-select-native"
+        required={required}
+        ref={nativeRef}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          onAfterChange();
+        }}
+      >
+        {groupedOptions ? (
+          <>
+            <option value="">未設定</option>
+            {groupedOptions.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+            <option value="その他">その他</option>
+          </>
+        ) : (
+          options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))
+        )}
+      </select>
+
+      <button
+        ref={triggerRef}
+        type="button"
+        className="prompt-composer-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen ? "true" : "false"}
+        aria-controls={listboxId}
+        aria-label={menuLabel}
+        onClick={() => {
+          setActiveIndex(selectedIndex);
+          setIsOpen((previous) => !previous);
+        }}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span className="prompt-composer-select__label">{selectedLabel}</span>
+        <i className="bi bi-chevron-down prompt-composer-select__chevron"></i>
+      </button>
+
+      <div className="prompt-composer-select__menu" id={listboxId} role="listbox" aria-label={menuLabel}>
+        {groupedOptions ? (
+          <>
+            <PromptComposerSelectOptionButton
+              index={optionIndex++}
+              option={options[0]}
+              value={value}
+              optionRefs={optionRefs}
+              activeIndex={activeIndex}
+              onSelect={selectOption}
+              onKeyDown={handleOptionKeyDown}
+            />
+            {groupedOptions.map((group) => (
+              <div key={group.label} className="prompt-composer-select__group">
+                <div className="prompt-composer-select__group-label">{group.label}</div>
+                {group.options.map((option) => (
+                  <PromptComposerSelectOptionButton
+                    key={option.value}
+                    index={optionIndex++}
+                    option={option}
+                    value={value}
+                    optionRefs={optionRefs}
+                    activeIndex={activeIndex}
+                    onSelect={selectOption}
+                    onKeyDown={handleOptionKeyDown}
+                  />
+                ))}
+              </div>
+            ))}
+            <PromptComposerSelectOptionButton
+              index={optionIndex++}
+              option={options[options.length - 1]}
+              value={value}
+              optionRefs={optionRefs}
+              activeIndex={activeIndex}
+              onSelect={selectOption}
+              onKeyDown={handleOptionKeyDown}
+            />
+          </>
+        ) : (
+          options.map((option, index) => (
+            <PromptComposerSelectOptionButton
+              key={option.value}
+              index={index}
+              option={option}
+              value={value}
+              optionRefs={optionRefs}
+              activeIndex={activeIndex}
+              onSelect={selectOption}
+              onKeyDown={handleOptionKeyDown}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PromptComposerSelectOptionButton({
+  index,
+  option,
+  value,
+  optionRefs,
+  activeIndex,
+  onSelect,
+  onKeyDown
+}: {
+  index: number;
+  option: PromptComposerSelectOption;
+  value: string;
+  optionRefs: MutableRefObject<Array<HTMLButtonElement | null>>;
+  activeIndex: number;
+  onSelect: (index: number) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
+}) {
+  const selected = value === option.value;
+
+  return (
+    <button
+      ref={(node) => {
+        optionRefs.current[index] = node;
+      }}
+      type="button"
+      className={`prompt-composer-select__option${selected ? " is-selected" : ""}`.trim()}
+      role="option"
+      aria-selected={selected ? "true" : "false"}
+      tabIndex={activeIndex === index ? 0 : -1}
+      onClick={() => {
+        onSelect(index);
+      }}
+      onKeyDown={(event) => {
+        onKeyDown(event, index);
+      }}
+    >
+      <span className="prompt-composer-select__option-label">{option.label}</span>
+      {selected ? <i className="bi bi-check-lg prompt-composer-select__check"></i> : null}
+    </button>
+  );
+}
+
 export function PromptShareComposerModal({
   isOpen,
   isPostSubmitting,
@@ -89,6 +451,11 @@ export function PromptShareComposerModal({
   onReferenceImageChange,
   onClearReferenceImage
 }: PromptShareComposerModalProps) {
+  const categorySelectOptions = categoryOptions.map((category) => ({
+    value: category,
+    label: category
+  }));
+
   return (
     <div
       id="postModal"
@@ -197,22 +564,16 @@ export function PromptShareComposerModal({
                 <div className="form-group">
                   <label htmlFor="prompt-category">カテゴリ</label>
                   <span className="form-group__hint">検索や絞り込みに使われるため、目的に近いものを選択してください。</span>
-                  <select
-                    id="prompt-category"
+                  <PromptComposerSelect
+                    selectId="prompt-category"
+                    nativeRef={promptPostCategorySelectRef}
                     required
-                    ref={promptPostCategorySelectRef}
                     value={postCategory}
-                    onChange={(event) => {
-                      setPostCategory(event.target.value);
-                      updatePromptFeedbackErrorIfNeeded();
-                    }}
-                  >
-                    {categoryOptions.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
+                    options={categorySelectOptions}
+                    menuLabel="カテゴリを選択"
+                    onChange={setPostCategory}
+                    onAfterChange={updatePromptFeedbackErrorIfNeeded}
+                  />
                 </div>
               </div>
             </section>
@@ -289,52 +650,16 @@ export function PromptShareComposerModal({
                 <div className="form-group">
                   <label htmlFor="prompt-ai-model">使用AIモデル（任意）</label>
                   <span className="form-group__hint">このプロンプトを試したモデルを残すと、再現条件の共有に役立ちます。</span>
-                  <select
-                    id="prompt-ai-model"
-                    ref={promptPostAiModelSelectRef}
+                  <PromptComposerSelect
+                    selectId="prompt-ai-model"
+                    nativeRef={promptPostAiModelSelectRef}
                     value={postAiModel}
-                    onChange={(event) => {
-                      setPostAiModel(event.target.value);
-                      updatePromptFeedbackErrorIfNeeded();
-                    }}
-                  >
-                    <option value="">未設定</option>
-                    <optgroup label="OpenAI">
-                      <option value="ChatGPT (GPT-5.4)">ChatGPT (GPT-5.4)</option>
-                      <option value="ChatGPT (GPT-5.4 mini)">ChatGPT (GPT-5.4 mini)</option>
-                      <option value="ChatGPT (o3)">ChatGPT (o3)</option>
-                      <option value="ChatGPT (GPT-4o)">ChatGPT (GPT-4o)</option>
-                    </optgroup>
-                    <optgroup label="Anthropic">
-                      <option value="Claude Opus 4.6">Claude Opus 4.6</option>
-                      <option value="Claude Sonnet 4.6">Claude Sonnet 4.6</option>
-                      <option value="Claude Haiku 4.5">Claude Haiku 4.5</option>
-                      <option value="Claude 3.7 Sonnet">Claude 3.7 Sonnet</option>
-                    </optgroup>
-                    <optgroup label="Google">
-                      <option value="Gemini 3.1 Pro">Gemini 3.1 Pro</option>
-                      <option value="Gemini 3.1 Flash">Gemini 3.1 Flash</option>
-                      <option value="Gemini 2.0 Flash">Gemini 2.0 Flash</option>
-                    </optgroup>
-                    <optgroup label="Meta">
-                      <option value="Llama 4 Maverick">Llama 4 Maverick</option>
-                      <option value="Llama 4 Scout">Llama 4 Scout</option>
-                    </optgroup>
-                    <optgroup label="DeepSeek">
-                      <option value="DeepSeek-R1">DeepSeek-R1</option>
-                      <option value="DeepSeek-V3">DeepSeek-V3</option>
-                    </optgroup>
-                    <optgroup label="xAI">
-                      <option value="Grok 3">Grok 3</option>
-                    </optgroup>
-                    <optgroup label="画像生成">
-                      <option value="Midjourney">Midjourney</option>
-                      <option value="Stable Diffusion">Stable Diffusion</option>
-                      <option value="FLUX">FLUX</option>
-                      <option value="DALL-E 3">DALL-E 3</option>
-                    </optgroup>
-                    <option value="その他">その他</option>
-                  </select>
+                    options={AI_MODEL_OPTIONS}
+                    groupedOptions={AI_MODEL_OPTION_GROUPS}
+                    menuLabel="使用AIモデルを選択"
+                    onChange={setPostAiModel}
+                    onAfterChange={updatePromptFeedbackErrorIfNeeded}
+                  />
                 </div>
               </div>
 

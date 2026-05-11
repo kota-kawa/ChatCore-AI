@@ -627,6 +627,74 @@
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
 }
 
+[data-theme="dark"] .prompt-composer-select__trigger {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(17, 24, 39, 0.88) 100%);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #f1f5f9;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-composer-select__trigger:hover {
+  background: rgba(15, 23, 42, 0.94);
+  border-color: rgba(96, 165, 250, 0.42);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.16);
+}
+
+[data-theme="dark"] .prompt-composer-select.is-open .prompt-composer-select__trigger,
+[data-theme="dark"] .prompt-composer-select__trigger:focus-visible {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: rgba(59, 130, 246, 0.58);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+}
+
+[data-theme="dark"] .prompt-composer-select__chevron {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-composer-select__menu {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(17, 24, 39, 0.98) 100%);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.38),
+    0 8px 18px rgba(37, 99, 235, 0.08);
+  scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
+}
+
+[data-theme="dark"] .prompt-composer-select__menu::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.46);
+  background-clip: padding-box;
+}
+
+[data-theme="dark"] .prompt-composer-select__group + .prompt-composer-select__option,
+[data-theme="dark"] .prompt-composer-select__option + .prompt-composer-select__group {
+  border-top-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .prompt-composer-select__group-label {
+  color: #64748b;
+}
+
+[data-theme="dark"] .prompt-composer-select__option {
+  color: #dbeafe;
+}
+
+[data-theme="dark"] .prompt-composer-select__option:hover,
+[data-theme="dark"] .prompt-composer-select__option:focus-visible {
+  background: rgba(59, 130, 246, 0.13);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .prompt-composer-select__option.is-selected {
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.92) 0%, rgba(59, 130, 246, 0.9) 100%);
+  border-color: rgba(96, 165, 250, 0.48);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
+}
+
 /* ── コンポーザー: セクション ── */
 [data-theme="dark"] .composer-section {
   background: rgba(17, 24, 39, 0.8);
