@@ -121,7 +121,7 @@
 .post-modal.show .composer-hero,
 .post-modal.show .post-form > * {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
 
 #promptDetailModal .post-modal-content {
