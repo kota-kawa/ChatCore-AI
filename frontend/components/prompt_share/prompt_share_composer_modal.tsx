@@ -841,9 +841,6 @@ export function PromptShareComposerModal({
             </section>
 
             <div className="composer-footer">
-              <p className="composer-footer__note">
-                入力内容はそのまま保持されます。送信後に一覧へ反映され、他のユーザーから参照できるようになります。
-              </p>
               <button type="submit" className="submit-btn" disabled={isPostSubmitting}>
                 <i className={`bi ${isPostSubmitting ? "bi-stars" : "bi-upload"}`}></i>
                 {isPostSubmitting ? " 投稿を準備中..." : " 投稿する"}
