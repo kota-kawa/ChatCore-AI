@@ -468,6 +468,11 @@ export function PromptShareComposerModal({
     label: category
   }));
 
+  const [showSkillInfo, setShowSkillInfo] = useState(false);
+  useEffect(() => {
+    setShowSkillInfo(false);
+  }, [promptType]);
+
   return (
     <div
       id="postModal"
@@ -604,15 +609,32 @@ export function PromptShareComposerModal({
               <div className="composer-section__header">
                 <div>
                   <p className="composer-section__eyebrow">{promptType === "skill" ? "SKILL" : "Content"}</p>
-                  <h3 id="composerContentTitle">
-                    {promptType === "skill" ? "SKILL作成サポート" : "プロンプト本文"}
-                  </h3>
+                  <div className="composer-section__title-row">
+                    <h3 id="composerContentTitle">
+                      {promptType === "skill" ? "SKILL作成サポート" : "プロンプト本文"}
+                    </h3>
+                    {promptType === "skill" ? (
+                      <button
+                        type="button"
+                        className={`composer-info-btn${showSkillInfo ? " is-active" : ""}`}
+                        aria-label="SKILLについての説明を表示"
+                        aria-expanded={showSkillInfo}
+                        onClick={() => { setShowSkillInfo((v) => !v); }}
+                      >
+                        <i className="bi bi-info-circle" aria-hidden="true"></i>
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <p className="composer-section__description">
-                  {promptType === "skill"
-                    ? "SKILLではAI補助を使ってMarkdown定義と必要なPythonスクリプトを作成できます。"
-                    : "指示文の意図や条件が明確に伝わるように、本文を先にまとめます。"}
-                </p>
+                {promptType !== "skill" ? (
+                  <p className="composer-section__description">
+                    指示文の意図や条件が明確に伝わるように、本文を先にまとめます。
+                  </p>
+                ) : showSkillInfo ? (
+                  <p className="composer-section__description">
+                    SKILLではAI補助を使ってMarkdown定義と必要なPythonスクリプトを作成できます。
+                  </p>
+                ) : null}
               </div>
 
               <div className="form-group" style={{ display: promptType === "skill" ? "none" : "" }}>
