@@ -473,7 +473,7 @@ body.chat-page .cc-alert-modal__button--secondary {
 }
 
 body.chat-page :where(
-  .new-prompt-modal-content,
+  .new-prompt-modal-body,
   .custom-modal-body,
   .task-detail-modal-shell,
   .task-detail-section-body
@@ -488,7 +488,7 @@ body.chat-page :where(
 }
 
 body.chat-page :where(
-  .new-prompt-modal-content,
+  .new-prompt-modal-body,
   .custom-modal-body,
   .task-detail-modal-shell,
   .task-detail-section-body,
@@ -511,7 +511,7 @@ body.chat-page :where(.task-detail-modal-close, .new-modal-close-btn, .custom-mo
 }
 
 body.chat-page .new-prompt-modal-content {
-  max-height: none;
+  max-height: 90dvh;
 }
 
 body.chat-page .io-modal-content {

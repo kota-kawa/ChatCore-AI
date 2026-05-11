@@ -90,26 +90,27 @@ export function NewPromptModal({
           }}
         />
 
-        <div className="new-prompt-modal__hero">
-          <div className="new-prompt-modal__hero-copy">
-            <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
-            <h2 id="new-prompt-modal-title">新しいプロンプトを作成</h2>
-            <p className="new-prompt-modal__lead">タイトルと内容を書いて投稿します。下のAI補助で下書きを作ることもできます。</p>
+        <div className="new-prompt-modal-body">
+          <div className="new-prompt-modal__hero">
+            <div className="new-prompt-modal__hero-copy">
+              <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
+              <h2 id="new-prompt-modal-title">新しいプロンプトを作成</h2>
+              <p className="new-prompt-modal__lead">タイトルと内容を書いて投稿します。下のAI補助で下書きを作ることもできます。</p>
+            </div>
+            <div className="new-prompt-modal__hero-badges" aria-hidden="true">
+              <span>下書き</span>
+              <span>編集</span>
+              <span>投稿</span>
+            </div>
           </div>
-          <div className="new-prompt-modal__hero-badges" aria-hidden="true">
-            <span>下書き</span>
-            <span>編集</span>
-            <span>投稿</span>
-          </div>
-        </div>
 
-        <form
-          className="new-post-form"
-          id="newPostForm"
-          onSubmit={(event) => {
-            onSubmit(event);
-          }}
-        >
+          <form
+            className="new-post-form"
+            id="newPostForm"
+            onSubmit={(event) => {
+              onSubmit(event);
+            }}
+          >
           <div className="form-group">
             <label htmlFor="new-prompt-title">タイトル</label>
             <input
@@ -210,6 +211,7 @@ export function NewPromptModal({
             )}
           </button>
         </form>
+        </div>
       </div>
     </div>
   );

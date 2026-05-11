@@ -1516,6 +1516,8 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .post-modal-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: auto;
   padding: 1.2rem;

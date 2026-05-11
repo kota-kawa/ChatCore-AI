@@ -211,15 +211,18 @@
   transform: translateY(-1px);
 }
 
+.new-prompt-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .new-post-form {
   display: flex;
   flex-direction: column;
   gap: 0.95rem;
   margin-top: 1rem;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .new-post-form .form-group {
