@@ -29,6 +29,7 @@ from services.chat_state import (
     remember_facts_from_message,
 )
 from services.chat_generation import (
+    ChatGenerationAlreadyRunningError,
     ChatGenerationEvent,
     ChatGenerationService,
     ChatGenerationJob,
@@ -60,6 +61,10 @@ from services.llm import (
     GEMINI_DEFAULT_MODEL,
     is_streaming_model,
     is_retryable_llm_error,
+    LlmAuthenticationError,
+    LlmInvalidModelError,
+    LlmRateLimitError,
+    LlmServiceError,
     validate_model_name,
 )
 from services.chat_contract import (
