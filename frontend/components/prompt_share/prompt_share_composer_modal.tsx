@@ -623,7 +623,7 @@ export function PromptShareComposerModal({
                 </p>
               </div>
 
-              <div className="form-group" hidden={promptType === "skill"}>
+              <div className="form-group" style={{ display: promptType === "skill" ? "none" : "" }}>
                 <label htmlFor="prompt-content">プロンプト内容</label>
                 <span className="form-group__hint">役割、前提条件、出力形式まで書くと再利用しやすくなります。</span>
                 <textarea
