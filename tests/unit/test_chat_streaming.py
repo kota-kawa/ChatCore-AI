@@ -505,7 +505,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         generation_finished = threading.Event()
         session = {"user_id": 42}
 
-        def save_message(room_id, message, sender):
+        def save_message(room_id, message, sender, attached_file_names=None):
             stored_messages.append((room_id, message, sender))
             if sender == "assistant":
                 generation_finished.set()
