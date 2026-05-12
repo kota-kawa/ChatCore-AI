@@ -645,6 +645,10 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  background: rgba(19, 78, 74, 0.1) !important;
+  border: 1px solid rgba(19, 78, 74, 0.3) !important;
+  color: #134e4a !important;
+  box-shadow: none !important;
 }
 
 .task-detail-toggle i {
@@ -1202,9 +1206,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     height: 40px;
     min-width: 40px;
     min-height: 40px;
-    background: rgba(19, 78, 74, 0.07) !important;
-    border: 1px solid rgba(19, 78, 74, 0.12) !important;
-    color: var(--primary-dark, #134e4a) !important;
+    background: rgba(19, 78, 74, 0.1) !important;
+    border: 1px solid rgba(19, 78, 74, 0.3) !important;
+    color: #134e4a !important;
     box-shadow: none !important;
   }
 
@@ -1475,8 +1479,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   [data-theme="dark"] .task-detail-toggle {
-    background: rgba(15, 118, 110, 0.14) !important;
-    border-color: rgba(15, 118, 110, 0.22) !important;
+    background: rgba(15, 118, 110, 0.18) !important;
+    border-color: rgba(15, 118, 110, 0.38) !important;
     color: #5eead4 !important;
   }
 }
