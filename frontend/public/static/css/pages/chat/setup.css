@@ -154,8 +154,7 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
-  padding-right: calc(4.75rem + env(safe-area-inset-right, 0px));
-  padding-left: calc(4.75rem + env(safe-area-inset-left, 0px));
+  padding-right: calc(1.84rem + 104px + env(safe-area-inset-right, 0px));
   padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
   display: block;
 }
@@ -169,7 +168,7 @@
 
 .setup-info-input-area .setup-attach-btn {
   position: absolute;
-  left: calc(0.72rem + env(safe-area-inset-left, 0px));
+  right: calc(0.72rem + 52px + 0.4rem + env(safe-area-inset-right, 0px));
   bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
   z-index: 2;
   --chat-button-base: #059669;
@@ -671,8 +670,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 #setup-container.setup-fit-compact #setup-info {
-  padding-right: 4.4rem;
-  padding-left: 4.4rem;
+  padding-right: calc(1.84rem + 104px);
   padding-bottom: 3.9rem;
 }
 
@@ -716,8 +714,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 #setup-container.setup-fit-tight #setup-info {
-  padding-right: 4.1rem;
-  padding-left: 4.1rem;
+  padding-right: calc(1.84rem + 104px);
   padding-bottom: 3.7rem;
 }
 
@@ -1101,8 +1098,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   #setup-info {
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
-    padding-right: 4.2rem;
-    padding-left: 4.2rem;
+    padding-right: calc(1.6rem + 96px);
     padding-bottom: 3.95rem;
   }
 
@@ -1112,7 +1108,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 
   .setup-info-input-area .setup-attach-btn {
-    left: 0.62rem;
+    right: calc(0.62rem + 48px + 0.35rem);
     bottom: 0.62rem;
   }
 
