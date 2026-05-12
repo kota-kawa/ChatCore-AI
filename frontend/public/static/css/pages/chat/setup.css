@@ -172,9 +172,9 @@
   left: calc(0.72rem + env(safe-area-inset-left, 0px));
   bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
   z-index: 2;
-  --chat-button-base: #3b82f6;
-  --chat-button-accent: #2563eb;
-  --chat-button-shadow-color: rgba(59, 130, 246, 0.28);
+  --chat-button-base: #0891b2;
+  --chat-button-accent: #0e7490;
+  --chat-button-shadow-color: rgba(8, 145, 178, 0.28);
   --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
@@ -1399,9 +1399,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* Setup attach button (dark mode: brighter blue) */
 [data-theme="dark"] .setup-info-input-area .setup-attach-btn {
-  --chat-button-base: #60a5fa;
-  --chat-button-accent: #3b82f6;
-  --chat-button-shadow-color: rgba(96, 165, 250, 0.28);
+  --chat-button-base: #22d3ee;
+  --chat-button-accent: #06b6d4;
+  --chat-button-shadow-color: rgba(34, 211, 238, 0.28);
 }
 
 /* Task detail modal sections */
