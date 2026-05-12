@@ -118,6 +118,14 @@
   position: relative;
 }
 
+.setup-attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  padding-right: 3.5rem;
+}
+
 .setup-form textarea,
 .setup-form select {
   width: 100%;
@@ -147,6 +155,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb-current) var(--scrollbar-track-current);
   padding-right: calc(4.75rem + env(safe-area-inset-right, 0px));
+  padding-left: calc(4.75rem + env(safe-area-inset-left, 0px));
   padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px));
   display: block;
 }
@@ -156,6 +165,17 @@
   right: calc(0.72rem + env(safe-area-inset-right, 0px));
   bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
   z-index: 2;
+}
+
+.setup-info-input-area .setup-attach-btn {
+  position: absolute;
+  left: calc(0.72rem + env(safe-area-inset-left, 0px));
+  bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
+  z-index: 2;
+  --chat-button-base: #3b82f6;
+  --chat-button-accent: #2563eb;
+  --chat-button-shadow-color: rgba(59, 130, 246, 0.28);
+  --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 body.chat-page #setup-info::-webkit-scrollbar {
@@ -652,6 +672,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-compact #setup-info {
   padding-right: 4.4rem;
+  padding-left: 4.4rem;
   padding-bottom: 3.9rem;
 }
 
@@ -696,6 +717,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 #setup-container.setup-fit-tight #setup-info {
   padding-right: 4.1rem;
+  padding-left: 4.1rem;
   padding-bottom: 3.7rem;
 }
 
@@ -1080,11 +1102,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
     padding-right: 4.2rem;
+    padding-left: 4.2rem;
     padding-bottom: 3.95rem;
   }
 
   .setup-info-input-area .setup-send-btn {
     right: 0.62rem;
+    bottom: 0.62rem;
+  }
+
+  .setup-info-input-area .setup-attach-btn {
+    left: 0.62rem;
     bottom: 0.62rem;
   }
 
@@ -1367,6 +1395,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 [data-theme="dark"] .chat-save-mode-toggle.is-active .chat-save-mode-toggle__check {
   color: #ffffff;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+}
+
+/* Setup attach button (dark mode: brighter blue) */
+[data-theme="dark"] .setup-info-input-area .setup-attach-btn {
+  --chat-button-base: #60a5fa;
+  --chat-button-accent: #3b82f6;
+  --chat-button-shadow-color: rgba(96, 165, 250, 0.28);
 }
 
 /* Task detail modal sections */

@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -85,12 +86,75 @@ function SetupSectionComponent() {
     setTasksExpanded,
   } = useHomePageTaskContext();
 
-  const { handleAccessChat, handleSetupSendMessage } = useHomePageChatContext();
+  const {
+    handleAccessChat,
+    handleSetupSendMessage,
+    attachedFiles,
+    setAttachedFiles,
+  } = useHomePageChatContext();
   const isSetupInfoWithinLimit = setupInfo.length <= MAX_SETUP_INFO_LENGTH;
   const canSendSetupMessage = setupInfo.trim().length > 0 && isSetupInfoWithinLimit && !isChatLaunching;
   const selectedModelIndex = Math.max(
     0,
     MODEL_OPTIONS.findIndex((option) => option.value === selectedModel),
+  );
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const MAX_FILE_SIZE_BYTES = 1_048_576;
+  const ACCEPTED_FILE_TYPES = [
+    "text/plain", "text/markdown", "text/csv", "text/html",
+    "text/css", "text/javascript", "text/xml",
+    "application/json", "application/xml",
+  ];
+  const ACCEPTED_EXTENSIONS = /\.(txt|md|csv|json|xml|html|css|js|ts|tsx|jsx|py|rb|go|rs|java|c|cpp|h|sh|yaml|yml|sql|log|ini|toml|env|gitignore)$/i;
+
+  const handleFileInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+
+      Array.from(files).forEach((file) => {
+        if (attachedFiles.length >= 5) return;
+
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          import("../../scripts/core/toast").then(({ showToast }) => {
+            showToast(`「${file.name}」は1MBを超えるため添付できません。`, { variant: "error" });
+          });
+          return;
+        }
+
+        const isTextType = ACCEPTED_FILE_TYPES.includes(file.type) || ACCEPTED_EXTENSIONS.test(file.name);
+        if (!isTextType) {
+          import("../../scripts/core/toast").then(({ showToast }) => {
+            showToast(`「${file.name}」はサポートされていないファイル形式です。`, { variant: "error" });
+          });
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = typeof e.target?.result === "string" ? e.target.result : "";
+          const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          setAttachedFiles((prev) => {
+            if (prev.length >= 5) return prev;
+            if (prev.some((f) => f.name === file.name)) return prev;
+            return [...prev, { id, name: file.name, size: file.size, content }];
+          });
+        };
+        reader.readAsText(file, "utf-8");
+      });
+
+      if (event.target) event.target.value = "";
+    },
+    [attachedFiles.length, setAttachedFiles],
+  );
+
+  const handleRemoveAttachedFile = useCallback(
+    (fileId: string) => {
+      setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+    },
+    [setAttachedFiles],
   );
 
   // DOM refs
@@ -700,7 +764,43 @@ function SetupSectionComponent() {
               </span>
             </div>
 
+            {attachedFiles.length > 0 && (
+              <div className="setup-attached-files">
+                {attachedFiles.map((file) => (
+                  <div key={file.id} className="chat-attached-file-chip">
+                    <i className="bi bi-file-earmark-text chat-attached-file-chip__icon" aria-hidden="true"></i>
+                    <span className="chat-attached-file-chip__name" title={file.name}>{file.name}</span>
+                    <span className="chat-attached-file-chip__size">
+                      {file.size < 1024
+                        ? `${file.size}B`
+                        : file.size < 1_048_576
+                        ? `${(file.size / 1024).toFixed(1)}KB`
+                        : `${(file.size / 1_048_576).toFixed(1)}MB`}
+                    </span>
+                    <button
+                      type="button"
+                      className="chat-attached-file-chip__remove"
+                      aria-label={`${file.name}を削除`}
+                      onClick={() => handleRemoveAttachedFile(file.id)}
+                    >
+                      <i className="bi bi-x" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="setup-info-input-area">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".txt,.md,.csv,.json,.xml,.html,.css,.js,.ts,.tsx,.jsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.sh,.yaml,.yml,.sql,.log,.ini,.toml"
+                className="chat-file-input-hidden"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={handleFileInputChange}
+              />
               <textarea
                 id="setup-info"
                 data-agent-id="chat.setup-message"
@@ -713,6 +813,18 @@ function SetupSectionComponent() {
                 }}
                 onKeyDown={handleSetupInfoKeyDown}
               ></textarea>
+
+              <button
+                type="button"
+                className="setup-attach-btn"
+                aria-label="ファイルを添付"
+                data-tooltip="ファイルを添付"
+                data-tooltip-placement="top"
+                disabled={isChatLaunching || attachedFiles.length >= 5}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <i className="bi bi-paperclip" aria-hidden="true"></i>
+              </button>
 
               <button
                 type="button"

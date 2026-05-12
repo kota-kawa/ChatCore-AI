@@ -11,7 +11,7 @@
 .input-wrapper {
   display: flex;
   gap: 0.38rem;
-  align-items: flex-end;
+  align-items: center;
   max-width: 800px;
   margin: 0 auto;
   background:
@@ -76,7 +76,8 @@
 }
 
 #send-btn,
-.setup-send-btn {
+.setup-send-btn,
+.setup-attach-btn {
   --send-btn-visual-inset: 4px;
   flex: 0 0 52px;
   width: 52px;
@@ -107,7 +108,8 @@
 }
 
 #send-btn::before,
-.setup-send-btn::before {
+.setup-send-btn::before,
+.setup-attach-btn::before {
   content: "";
   position: absolute;
   inset: var(--send-btn-visual-inset);
@@ -129,12 +131,14 @@
 }
 
 #send-btn:active,
-.setup-send-btn:active {
+.setup-send-btn:active,
+.setup-attach-btn:active {
   transform: scale(0.92);
 }
 
 #send-btn i,
-.setup-send-btn i {
+.setup-send-btn i,
+.setup-attach-btn i {
   position: relative;
   z-index: 1;
   font-size: var(--text-base, 0.9375rem);
@@ -142,7 +146,8 @@
 }
 
 #send-btn:disabled,
-.setup-send-btn:disabled {
+.setup-send-btn:disabled,
+.setup-attach-btn:disabled {
   cursor: default;
   opacity: 0.54;
 }
@@ -242,7 +247,8 @@
   }
 
   #send-btn,
-  .setup-send-btn {
+  .setup-send-btn,
+  .setup-attach-btn {
     --send-btn-visual-inset: 5px;
     flex-basis: 48px;
     width: 48px;
@@ -252,7 +258,8 @@
   }
 
   #send-btn i,
-  .setup-send-btn i {
+  .setup-send-btn i,
+  .setup-attach-btn i {
     font-size: var(--text-sm, 0.875rem);
   }
 
