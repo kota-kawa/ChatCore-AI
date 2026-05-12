@@ -500,9 +500,23 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   display: block;
 }
 
-/* 初期描画時のフラッシュ防止: 折りたたみ時はデスクトップで 7 件目以降を隠す */
-.task-selection.tasks-collapsed:not(.tasks-expanded) .task-wrapper:nth-child(n + 7) {
-  display: none;
+.task-overflow-container {
+  flex: 0 0 100%;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task-overflow-container.is-open {
+  grid-template-rows: 1fr;
+}
+
+.task-overflow-inner {
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--setup-task-gap);
+  padding-top: var(--setup-task-gap);
 }
 
 /* カード本体のスタイル */
@@ -1120,10 +1134,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     gap: var(--setup-task-gap);
     width: 100%;
     overflow-x: hidden;
-  }
-
-  .task-selection.tasks-collapsed:not(.tasks-expanded) .task-wrapper:nth-child(n + 5) {
-    display: none;
   }
 
   .task-selection-header {

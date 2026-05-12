@@ -34,6 +34,7 @@ type HomePageTaskContextValue = Pick<
   | "isTaskOrderEditing"
   | "isNewPromptModalOpen"
   | "tasksExpanded"
+  | "taskCollapseLimit"
   | "showTaskToggleButton"
   | "visibleTaskCountText"
   | "launchingTaskName"
@@ -161,6 +162,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       isTaskOrderEditing: controller.isTaskOrderEditing,
       isNewPromptModalOpen: controller.isNewPromptModalOpen,
       tasksExpanded: controller.tasksExpanded,
+      taskCollapseLimit: controller.taskCollapseLimit,
       showTaskToggleButton: controller.showTaskToggleButton,
       visibleTaskCountText: controller.visibleTaskCountText,
       launchingTaskName: controller.launchingTaskName,
@@ -185,6 +187,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.isTaskOrderEditing,
       controller.isNewPromptModalOpen,
       controller.tasksExpanded,
+      controller.taskCollapseLimit,
       controller.showTaskToggleButton,
       controller.visibleTaskCountText,
       controller.launchingTaskName,

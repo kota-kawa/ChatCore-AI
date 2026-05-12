@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import type { NormalizedTask } from "../../lib/chat_page/types";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 
 const POINTER_DRAG_START_THRESHOLD_PX = 8;
@@ -68,6 +69,7 @@ function SetupSectionComponent() {
     isTaskOrderEditing,
     isNewPromptModalOpen,
     tasksExpanded,
+    taskCollapseLimit,
     showTaskToggleButton,
     visibleTaskCountText,
     launchingTaskName,
@@ -965,13 +967,11 @@ function SetupSectionComponent() {
         </div>
 
         <div
-          className={`task-selection ${
-            showTaskToggleButton ? "tasks-collapsed" : ""
-          } ${tasksExpanded || isTaskOrderEditing ? "tasks-expanded" : ""}`.trim()}
+          className="task-selection"
           id="task-selection"
           data-launching={launchingTaskName ? "true" : "false"}
         >
-          {tasks.map((task, index) => {
+          {(isTaskOrderEditing ? tasks : tasks.slice(0, taskCollapseLimit)).map((task, index) => {
             const taskDomKey = getTaskDomKey(task);
             return (
               <div
@@ -1061,6 +1061,67 @@ function SetupSectionComponent() {
               </div>
             );
           })}
+
+          {showTaskToggleButton && !isTaskOrderEditing && tasks.length > taskCollapseLimit && (
+            <div className={`task-overflow-container${tasksExpanded ? " is-open" : ""}`}>
+              <div className="task-overflow-inner">
+                {tasks.slice(taskCollapseLimit).map((task, offsetIndex) => {
+                  const index = taskCollapseLimit + offsetIndex;
+                  const taskDomKey = getTaskDomKey(task);
+                  return (
+                    <div
+                      key={taskDomKey}
+                      ref={(node) => {
+                        setTaskWrapperRef(taskDomKey, node);
+                      }}
+                      className={`task-wrapper ${
+                        draggingTaskIndex === index ? "dragging" : ""
+                      }`.trim()}
+                      data-task-index={index}
+                      data-task-dom-key={taskDomKey}
+                      onPointerDown={(event) => {
+                        handleTaskPointerDown(event, index, taskDomKey);
+                      }}
+                    >
+                      <div
+                        className="prompt-card"
+                        data-launching={launchingTaskName === task.name ? "true" : "false"}
+                        data-task={task.name}
+                        data-prompt_template={task.prompt_template}
+                        data-response_rules={task.response_rules}
+                        data-output_skeleton={task.output_skeleton}
+                        data-input_examples={task.input_examples}
+                        data-output_examples={task.output_examples}
+                        data-is_default={task.is_default ? "true" : "false"}
+                        onClick={() => {
+                          void handleTaskCardLaunch(task);
+                        }}
+                      >
+                        <div className="header-container">
+                          <div className="task-header">{task.name}</div>
+                          <button
+                            type="button"
+                            className="task-detail-toggle"
+                            aria-label={`${task.name}の詳細を表示`}
+                            data-tooltip="タスクの詳細を表示"
+                            data-tooltip-placement="top"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              finishPointerDrag();
+                              setTaskDetail(task);
+                            }}
+                          >
+                            <i className="bi bi-caret-down"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {showTaskToggleButton && (
             <button

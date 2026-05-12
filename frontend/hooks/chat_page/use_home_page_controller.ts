@@ -931,6 +931,7 @@ export function useHomePageController() {
     tasksExpanded,
     showTaskToggleButton,
     visibleTaskCountText,
+    taskCollapseLimit,
     launchingTaskName,
     draggingTaskIndex,
     modelSelectRef,
