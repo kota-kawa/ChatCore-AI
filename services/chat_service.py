@@ -14,8 +14,13 @@ def _get_chat_repository() -> ChatRepository:
     )
 
 
-def save_message_to_db(chat_room_id: str, message: str, sender: str) -> int | None:
-    return _get_chat_repository().save_message(chat_room_id, message, sender)
+def save_message_to_db(
+    chat_room_id: str,
+    message: str,
+    sender: str,
+    attached_file_names: list[str] | None = None,
+) -> int | None:
+    return _get_chat_repository().save_message(chat_room_id, message, sender, attached_file_names)
 
 
 def create_chat_room_in_db(room_id: str, user_id: int, title: str, mode: str = "normal") -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 import time
 from collections.abc import Callable
@@ -32,17 +33,24 @@ class ChatRepository:
         self._sleep = sleep
         self._token_generator = token_generator
 
-    def save_message(self, chat_room_id: str, message: str, sender: str) -> int | None:
+    def save_message(
+        self,
+        chat_room_id: str,
+        message: str,
+        sender: str,
+        attached_file_names: list[str] | None = None,
+    ) -> int | None:
+        file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
                 try:
                     query = """
-                        INSERT INTO chat_history (chat_room_id, message, sender)
-                        VALUES (%s, %s, %s)
+                        INSERT INTO chat_history (chat_room_id, message, sender, attached_file_names)
+                        VALUES (%s, %s, %s, %s)
                         RETURNING id
                     """
-                    cursor.execute(query, (chat_room_id, message, sender))
+                    cursor.execute(query, (chat_room_id, message, sender, file_names_json))
                     row = cursor.fetchone()
                     conn.commit()
                     return row[0] if row else None
@@ -420,9 +428,9 @@ class ChatRepository:
             cursor = conn.cursor()
             try:
                 query = """
-                    SELECT id, message, sender, timestamp
+                    SELECT id, message, sender, timestamp, attached_file_names
                     FROM (
-                        SELECT id, message, sender, timestamp
+                        SELECT id, message, sender, timestamp, attached_file_names
                         FROM chat_history
                         WHERE chat_room_id = %s
                           AND (%s IS NULL OR id < %s)
@@ -438,15 +446,24 @@ class ChatRepository:
                     rows = rows[1:]
 
                 messages = []
-                for (message_id, msg, sender, ts) in rows:
-                    messages.append(
-                        {
-                            "id": message_id,
-                            "message": msg,
-                            "sender": sender,
-                            "timestamp": serialize_datetime_iso(ts),
-                        }
-                    )
+                for (message_id, msg, sender, ts, file_names_json) in rows:
+                    file_names: list[str] | None = None
+                    if file_names_json:
+                        try:
+                            parsed = json.loads(file_names_json)
+                            if isinstance(parsed, list):
+                                file_names = [str(n) for n in parsed if isinstance(n, str)]
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    entry: dict[str, Any] = {
+                        "id": message_id,
+                        "message": msg,
+                        "sender": sender,
+                        "timestamp": serialize_datetime_iso(ts),
+                    }
+                    if file_names:
+                        entry["attached_file_names"] = file_names
+                    messages.append(entry)
 
                 next_before_id = messages[0]["id"] if has_more and messages else None
                 return {

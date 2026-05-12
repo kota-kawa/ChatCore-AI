@@ -167,11 +167,13 @@ class ChatPostUseCase:
                     chat_room_id,
                 )
             else:
+                attached_file_name_list = [f.name for f in attached_files] if attached_files else None
                 saved_user_message_id = await run_blocking(
                     deps.save_message_to_db,
                     chat_room_id,
                     formatted_user_message,
                     "user",
+                    attached_file_name_list,
                 )
                 all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
         else:

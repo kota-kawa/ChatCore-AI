@@ -657,6 +657,7 @@ export function useHomePageGenerationActions({
             id: nextMessageId("history", messageSeqRef),
             sender: normalizeHistorySender(entry.sender),
             text: typeof entry.message === "string" ? entry.message : "",
+            ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
           }));
 
         const syncLoadedHistoryState = () => {
@@ -757,6 +758,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("history-older", messageSeqRef),
         sender: normalizeHistorySender(entry.sender),
         text: typeof entry.message === "string" ? entry.message : "",
+        ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
       }));
 
       setMessages((previous) => prependUiChatMessagesWithinLimit(uiMessages, previous));

@@ -40,6 +40,7 @@ export type ChatHistoryMessagePayload = {
   message?: string;
   sender?: string;
   timestamp?: string;
+  attached_file_names?: string[];
 };
 
 export type ChatHistoryPaginationPayload = {
