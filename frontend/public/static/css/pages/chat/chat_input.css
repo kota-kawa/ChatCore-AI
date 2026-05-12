@@ -293,16 +293,16 @@
 }
 
 .chat-attach-btn {
-  --chat-button-base: #0891b2;
-  --chat-button-accent: #0e7490;
-  --chat-button-shadow-color: rgba(8, 145, 178, 0.28);
+  --chat-button-base: #059669;
+  --chat-button-accent: #047857;
+  --chat-button-shadow-color: rgba(5, 150, 105, 0.28);
   --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 [data-theme="dark"] .chat-attach-btn {
-  --chat-button-base: #22d3ee;
-  --chat-button-accent: #06b6d4;
-  --chat-button-shadow-color: rgba(34, 211, 238, 0.28);
+  --chat-button-base: #34d399;
+  --chat-button-accent: #10b981;
+  --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
 }
 
 /* ─── 添付ファイルチップ（コンポーザー内） ─── */
