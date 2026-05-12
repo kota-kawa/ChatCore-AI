@@ -11,7 +11,7 @@
 .input-wrapper {
   display: flex;
   gap: 0.38rem;
-  align-items: center;
+  align-items: flex-end;
   max-width: 800px;
   margin: 0 auto;
   background:
