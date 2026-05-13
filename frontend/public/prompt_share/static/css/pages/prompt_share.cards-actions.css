@@ -356,12 +356,12 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn:hover {
-  background: var(--ps-like-tint);
+  background: transparent;
   color: var(--ps-like);
 }
 
 .prompt-share-page .prompt-action-btn.bookmark-btn:hover {
-  background: var(--ps-bookmark-tint);
+  background: transparent;
   color: var(--ps-bookmark);
 }
 
@@ -370,36 +370,41 @@
   background: rgba(72, 147, 224, 0.16);
 }
 
+.prompt-share-page .prompt-action-btn.like-btn:active,
+.prompt-share-page .prompt-action-btn.bookmark-btn:active {
+  background: transparent;
+}
+
 .prompt-share-page .prompt-action-btn:disabled {
   opacity: 0.68;
   cursor: wait;
 }
 
 .prompt-share-page .bookmark-btn.bookmarked {
-  color: #ffffff;
-  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
-  box-shadow: 0 4px 12px rgba(142, 68, 173, 0.35);
+  color: var(--ps-bookmark);
+  background: transparent;
+  box-shadow: none;
 }
 
 .prompt-share-page .bookmark-btn.bookmarked i {
-  color: #ffffff !important;
+  color: var(--ps-bookmark) !important;
   font-family: "bootstrap-icons" !important;
 }
 
 .prompt-share-page .like-btn.liked {
-  color: #ffffff;
-  background: linear-gradient(135deg, #e74c3c 0%, #ff7675 100%);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.35);
+  color: var(--ps-like);
+  background: transparent;
+  box-shadow: none;
 }
 
 .prompt-share-page .like-btn.liked i {
-  color: #ffffff !important;
+  color: var(--ps-like) !important;
   font-family: "bootstrap-icons" !important;
 }
 
 /* Dark theme overrides */
 [data-theme="dark"] .like-btn.liked {
-  background: rgba(231, 76, 60, 0.25);
+  background: transparent;
   color: #ff7675;
   box-shadow: none;
 }
@@ -408,8 +413,8 @@
 }
 
 [data-theme="dark"] .bookmark-btn.bookmarked {
-  background: rgba(142, 68, 173, 0.25);
-  color: #dcdde1;
+  background: transparent;
+  color: #a29bfe;
   box-shadow: none;
 }
 [data-theme="dark"] .bookmark-btn.bookmarked i {
