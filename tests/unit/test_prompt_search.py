@@ -96,6 +96,22 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 
+    def test_search_public_prompts_filters_by_prompt_type(self):
+        fake_cursor = FakeCursor()
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
+            _search_public_prompts("sample", 1, 10, 9, "image")
+
+        count_query, count_params = fake_cursor.executed[0]
+        self.assertIn("COALESCE(prompt_type, 'text') = %s", count_query)
+        self.assertEqual(count_params, ("image", "%sample%", "%sample%", "%sample%", "%sample%"))
+
+        search_query, search_params = fake_cursor.executed[1]
+        self.assertIn("COALESCE(p.prompt_type, 'text') = %s", search_query)
+        self.assertEqual(search_params[:4], (9, 9, 9, "image"))
+        self.assertEqual(search_params[-2:], (10, 0))
+
     def test_search_public_prompts_returns_empty_payload_when_query_is_blank(self):
         payload = _search_public_prompts("", 1, 20)
 

@@ -4,6 +4,7 @@
   .hero-action,
   .search-box button,
   .category-card,
+  .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
   .close-btn,
@@ -47,6 +48,7 @@
 }
 
 .prompt-share-page .category-card.active,
+.prompt-share-page .prompt-type-filter-btn.active,
 .prompt-share-page .meatball-menu[aria-expanded="true"] {
   --ps-button-base: rgba(234, 243, 255, 0.98);
   --ps-button-accent: #ffffff;
@@ -58,6 +60,7 @@
   #auth-buttons .auth-btn,
   .hero-action,
   .category-card,
+  .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
   .close-btn,
@@ -76,6 +79,7 @@
   #auth-buttons .auth-btn,
   .hero-action,
   .category-card,
+  .prompt-type-filter-btn,
   .prompt-action-btn,
   .meatball-menu,
   .close-btn,
@@ -100,6 +104,7 @@
     .hero-action,
     .search-box button,
     .category-card,
+    .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
     .close-btn,
@@ -114,6 +119,7 @@
     #auth-buttons .auth-btn,
     .hero-action,
     .category-card,
+    .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
     .close-btn,
@@ -125,6 +131,7 @@
     #auth-buttons .auth-btn,
     .hero-action,
     .category-card,
+    .prompt-type-filter-btn,
     .prompt-action-btn,
     .meatball-menu,
     .close-btn,
@@ -140,4 +147,3 @@
     transform: translateY(-50%);
   }
 }
-

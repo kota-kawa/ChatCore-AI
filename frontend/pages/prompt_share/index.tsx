@@ -38,7 +38,7 @@ import {
   PROMPT_SHARE_TEXT,
   PROMPT_SHARE_TITLE
 } from "../../scripts/prompt_share/constants";
-import { normalizePromptData } from "../../scripts/prompt_share/formatters";
+import { normalizePromptData, normalizePromptType } from "../../scripts/prompt_share/formatters";
 import {
   readCachedAuthState,
   readPromptCache,
@@ -56,6 +56,7 @@ import { PromptShareDetailModal } from "../../components/prompt_share/prompt_sha
 import {
   PROMPT_CATEGORIES,
   PROMPT_CATEGORY_OPTIONS,
+  PROMPT_TYPE_FILTERS,
   SEARCH_RESULTS_PER_PAGE
 } from "../../components/prompt_share/prompt_share_page_constants";
 import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
@@ -63,7 +64,8 @@ import type {
   ModalKey,
   PromptFeedback,
   PromptPostStatus,
-  PromptPostStatusVariant
+  PromptPostStatusVariant,
+  PromptTypeFilter
 } from "../../components/prompt_share/prompt_share_page_types";
 import {
   getCategoryCountLabel,
@@ -101,6 +103,7 @@ export default function PromptSharePage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedCategoryTitle, setSelectedCategoryTitle] = useState("全てのプロンプト");
   const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
+  const [selectedPromptTypeFilter, setSelectedPromptTypeFilter] = useState<PromptTypeFilter>("all");
 
   const [prompts, setPrompts] = useState<PromptRecord[]>([]);
   const [isPromptsLoading, setIsPromptsLoading] = useState(true);
@@ -154,6 +157,7 @@ export default function PromptSharePage() {
   const nextPromptClientIdRef = useRef(0);
   const promptsRef = useRef<PromptRecord[]>([]);
   const selectedCategoryRef = useRef("all");
+  const selectedPromptTypeFilterRef = useRef<PromptTypeFilter>("all");
   const hasAutoFilledAuthorRef = useRef(false);
   const activeModalRef = useRef<ModalKey>(null);
 
@@ -200,6 +204,10 @@ export default function PromptSharePage() {
   useEffect(() => {
     selectedCategoryRef.current = selectedCategory;
   }, [selectedCategory]);
+
+  useEffect(() => {
+    selectedPromptTypeFilterRef.current = selectedPromptTypeFilter;
+  }, [selectedPromptTypeFilter]);
 
   useEffect(() => {
     hasAutoFilledAuthorRef.current = hasAutoFilledAuthor;
@@ -290,19 +298,58 @@ export default function PromptSharePage() {
     }));
   }, []);
 
-  const countVisiblePrompts = useCallback((items: PromptRecord[], category: string | null) => {
-    if (!category || category === "all") {
-      return items.length;
-    }
-    return items.filter((item) => (item.category || "") === category).length;
+  const getPromptTypeFilterLabel = useCallback((promptTypeFilter: PromptTypeFilter) => {
+    return PROMPT_TYPE_FILTERS.find((option) => option.value === promptTypeFilter)?.label || "全て";
   }, []);
 
-  const visiblePrompts = useMemo(() => {
-    if (!appliedCategoryFilter || appliedCategoryFilter === "all") {
-      return prompts;
+  const filterPrompts = useCallback(
+    (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
+      return items.filter((item) => {
+        const categoryMatches = !category || category === "all" || (item.category || "") === category;
+        const promptTypeMatches =
+          promptTypeFilter === "all" || normalizePromptType(item.prompt_type) === promptTypeFilter;
+        return categoryMatches && promptTypeMatches;
+      });
+    },
+    []
+  );
+
+  const countVisiblePrompts = useCallback(
+    (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
+      return filterPrompts(items, category, promptTypeFilter).length;
+    },
+    [filterPrompts]
+  );
+
+  const buildPromptCountMeta = useCallback(
+    (
+      items: PromptRecord[],
+      category: string | null,
+      promptTypeFilter: PromptTypeFilter,
+      options?: { searchTotal?: number }
+    ) => {
+      const visibleCount = countVisiblePrompts(items, category, promptTypeFilter);
+      const typeSuffix = promptTypeFilter === "all" ? "" : ` / ${getPromptTypeFilterLabel(promptTypeFilter)}`;
+
+      if (typeof options?.searchTotal === "number") {
+        return `検索結果${typeSuffix}: ${visibleCount}件 / ${options.searchTotal}件`;
+      }
+
+      return `${getCategoryCountLabel(category || "all")}${typeSuffix}: ${visibleCount}件`;
+    },
+    [countVisiblePrompts, getPromptTypeFilterLabel]
+  );
+
+  const getFilterEmptyMessage = useCallback(() => {
+    if (selectedPromptTypeFilterRef.current === "all") {
+      return "条件に一致するプロンプトが見つかりませんでした。";
     }
-    return prompts.filter((prompt) => (prompt.category || "") === appliedCategoryFilter);
-  }, [prompts, appliedCategoryFilter]);
+    return `${getPromptTypeFilterLabel(selectedPromptTypeFilterRef.current)}のプロンプトが見つかりませんでした。`;
+  }, [getPromptTypeFilterLabel]);
+
+  const visiblePrompts = useMemo(() => {
+    return filterPrompts(prompts, appliedCategoryFilter, selectedPromptTypeFilter);
+  }, [filterPrompts, prompts, appliedCategoryFilter, selectedPromptTypeFilter]);
   const hasMoreSearchResults =
     activeSearchQuery.trim().length > 0 && Boolean(searchPagination?.has_next);
 
@@ -486,8 +533,9 @@ export default function PromptSharePage() {
   );
 
   const loadPrompts = useCallback(
-    async (options?: { categoryToApply?: string }) => {
+    async (options?: { categoryToApply?: string; promptTypeToApply?: PromptTypeFilter }) => {
       const categoryToApply = options?.categoryToApply || selectedCategoryRef.current;
+      const promptTypeToApply = options?.promptTypeToApply || selectedPromptTypeFilterRef.current;
       if (promptsRef.current.length === 0) {
         setIsPromptsLoading(true);
       }
@@ -505,6 +553,7 @@ export default function PromptSharePage() {
         setActiveSearchQuery("");
         setSearchPagination(null);
         setSelectedCategory(categoryToApply);
+        setSelectedPromptTypeFilter(promptTypeToApply);
         setAppliedCategoryFilter(categoryToApply);
         setSelectedCategoryTitle(getCategoryTitle(categoryToApply));
 
@@ -517,8 +566,7 @@ export default function PromptSharePage() {
           });
         }
 
-        const visibleCount = countVisiblePrompts(promptRecords, categoryToApply);
-        setPromptCountMeta(`${getCategoryCountLabel(categoryToApply)}: ${visibleCount}件`);
+        setPromptCountMeta(buildPromptCountMeta(promptRecords, categoryToApply, promptTypeToApply));
       } catch (error) {
         console.error("プロンプト取得エラー:", error);
         const message = error instanceof Error ? error.message : String(error);
@@ -531,15 +579,16 @@ export default function PromptSharePage() {
         setIsPromptsLoading(false);
       }
     },
-    [countVisiblePrompts, toPromptRecords]
+    [buildPromptCountMeta, toPromptRecords]
   );
 
-  const searchPrompts = useCallback(async () => {
+  const searchPrompts = useCallback(async (options?: { promptTypeToApply?: PromptTypeFilter }) => {
     const query = searchInput.trim();
+    const promptTypeToApply = options?.promptTypeToApply || selectedPromptTypeFilterRef.current;
 
     if (!query) {
       setSelectedCategoryTitle("全てのプロンプト");
-      await loadPrompts();
+      await loadPrompts({ promptTypeToApply });
       return;
     }
 
@@ -551,7 +600,8 @@ export default function PromptSharePage() {
     try {
       const data = await fetchPromptSearchResults(query, {
         page: 1,
-        perPage: SEARCH_RESULTS_PER_PAGE
+        perPage: SEARCH_RESULTS_PER_PAGE,
+        promptType: promptTypeToApply
       });
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
@@ -559,6 +609,7 @@ export default function PromptSharePage() {
       const promptRecords = toPromptRecords(normalizedPrompts);
 
       setPrompts(promptRecords);
+      setSelectedPromptTypeFilter(promptTypeToApply);
       setActiveSearchQuery(query);
       setSearchPagination(data.pagination || null);
       setAppliedCategoryFilter(null);
@@ -572,7 +623,9 @@ export default function PromptSharePage() {
         });
       }
       setPromptCountMeta(
-        `検索結果: ${promptRecords.length}件 / ${Number(data.pagination?.total || promptRecords.length)}件`
+        buildPromptCountMeta(promptRecords, null, promptTypeToApply, {
+          searchTotal: Number(data.pagination?.total || promptRecords.length)
+        })
       );
     } catch (error) {
       console.error("検索エラー:", error);
@@ -585,7 +638,7 @@ export default function PromptSharePage() {
     } finally {
       setIsPromptsLoading(false);
     }
-  }, [loadPrompts, searchInput, toPromptRecords]);
+  }, [buildPromptCountMeta, loadPrompts, searchInput, toPromptRecords]);
 
   const loadMoreSearchResults = useCallback(async () => {
     const query = activeSearchQuery.trim();
@@ -598,7 +651,8 @@ export default function PromptSharePage() {
     try {
       const data = await fetchPromptSearchResults(query, {
         page: nextPage,
-        perPage: Number(searchPagination.per_page || SEARCH_RESULTS_PER_PAGE)
+        perPage: Number(searchPagination.per_page || SEARCH_RESULTS_PER_PAGE),
+        promptType: selectedPromptTypeFilterRef.current
       });
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
@@ -610,7 +664,9 @@ export default function PromptSharePage() {
       setSearchPagination(data.pagination || null);
       setPromptFeedback(null);
       setPromptCountMeta(
-        `検索結果: ${nextPrompts.length}件 / ${Number(data.pagination?.total || nextPrompts.length)}件`
+        buildPromptCountMeta(nextPrompts, null, selectedPromptTypeFilterRef.current, {
+          searchTotal: Number(data.pagination?.total || nextPrompts.length)
+        })
       );
     } catch (error) {
       console.error("追加検索エラー:", error);
@@ -622,7 +678,7 @@ export default function PromptSharePage() {
     } finally {
       setIsLoadingMoreSearchResults(false);
     }
-  }, [activeSearchQuery, searchPagination, toPromptRecords]);
+  }, [activeSearchQuery, buildPromptCountMeta, searchPagination, toPromptRecords]);
 
   const buildPromptShareUrl = useCallback((prompt: PromptRecord | null) => {
     const promptId = getPromptId(prompt);
@@ -1020,20 +1076,38 @@ export default function PromptSharePage() {
     (category: string) => {
       setOpenDropdownPromptId(null);
       setSelectedCategory(category);
+      const promptTypeToApply = selectedPromptTypeFilterRef.current;
 
       if (searchInput.trim()) {
         setSearchInput("");
-        void loadPrompts({ categoryToApply: category });
+        void loadPrompts({ categoryToApply: category, promptTypeToApply });
         return;
       }
 
       setAppliedCategoryFilter(category);
       setSelectedCategoryTitle(getCategoryTitle(category));
 
-      const visibleCount = countVisiblePrompts(promptsRef.current, category);
-      setPromptCountMeta(`${getCategoryCountLabel(category)}: ${visibleCount}件`);
+      setPromptCountMeta(buildPromptCountMeta(promptsRef.current, category, promptTypeToApply));
     },
-    [countVisiblePrompts, loadPrompts, searchInput]
+    [buildPromptCountMeta, loadPrompts, searchInput]
+  );
+
+  const handlePromptTypeFilterClick = useCallback(
+    (promptTypeFilter: PromptTypeFilter) => {
+      setOpenDropdownPromptId(null);
+      setSelectedPromptTypeFilter(promptTypeFilter);
+      selectedPromptTypeFilterRef.current = promptTypeFilter;
+
+      if (activeSearchQuery.trim() || searchInput.trim()) {
+        void searchPrompts({ promptTypeToApply: promptTypeFilter });
+        return;
+      }
+
+      setPromptCountMeta(
+        buildPromptCountMeta(promptsRef.current, selectedCategoryRef.current, promptTypeFilter)
+      );
+    },
+    [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
   );
 
   const handleSearchInputKeyDown = useCallback(
@@ -1124,7 +1198,10 @@ export default function PromptSharePage() {
         setPostSkillPythonScript("");
         clearPromptImageSelection();
 
-        await loadPrompts();
+        await loadPrompts({
+          categoryToApply: selectedCategoryRef.current,
+          promptTypeToApply: selectedPromptTypeFilterRef.current
+        });
 
         if (postCloseTimerRef.current !== null) {
           window.clearTimeout(postCloseTimerRef.current);
@@ -1247,12 +1324,11 @@ export default function PromptSharePage() {
       setPrompts(promptRecords);
       setPromptFeedback(null);
       setIsPromptsLoading(false);
-      const visibleCount = countVisiblePrompts(promptRecords, "all");
-      setPromptCountMeta(`${getCategoryCountLabel("all")}: ${visibleCount}件`);
+      setPromptCountMeta(buildPromptCountMeta(promptRecords, "all", selectedPromptTypeFilterRef.current));
     }
 
     void loadPrompts();
-  }, [countVisiblePrompts, loadPrompts, toPromptRecords]);
+  }, [buildPromptCountMeta, loadPrompts, toPromptRecords]);
 
   useEffect(() => {
     if (promptType !== "image") {
@@ -1450,8 +1526,18 @@ export default function PromptSharePage() {
     };
   }, [activeModal, detailModalView, detailPrompt]);
 
+  const filterEmptyFeedback = useMemo<PromptFeedback | null>(() => {
+    if (isPromptsLoading || promptFeedback || prompts.length === 0 || visiblePrompts.length > 0) {
+      return null;
+    }
+    return {
+      message: getFilterEmptyMessage(),
+      variant: "empty"
+    };
+  }, [getFilterEmptyMessage, isPromptsLoading, promptFeedback, prompts.length, visiblePrompts.length]);
+
   const showPromptFeedback = Boolean(promptFeedback && visiblePrompts.length === 0 && !isPromptsLoading);
-  const feedbackToShow = showPromptFeedback ? promptFeedback : null;
+  const feedbackToShow = showPromptFeedback ? promptFeedback : filterEmptyFeedback;
 
   return (
     <>
@@ -1477,6 +1563,9 @@ export default function PromptSharePage() {
         categories={PROMPT_CATEGORIES}
         selectedCategory={selectedCategory}
         onCategoryClick={handleCategoryClick}
+        promptTypeFilters={PROMPT_TYPE_FILTERS}
+        selectedPromptTypeFilter={selectedPromptTypeFilter}
+        onPromptTypeFilterClick={handlePromptTypeFilterClick}
         selectedCategoryTitle={selectedCategoryTitle}
         promptCountMeta={promptCountMeta}
         hasMoreSearchResults={hasMoreSearchResults}

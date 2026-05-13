@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 SEARCH_DEFAULT_PAGE = 1
 SEARCH_DEFAULT_PER_PAGE = 20
 SEARCH_MAX_PER_PAGE = 100
+SEARCH_PROMPT_TYPES = {"text", "image", "skill"}
 
 
 def _parse_positive_int(raw_value: str | None, default: int) -> int:
@@ -43,7 +44,12 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     return prompt
 
 
-def _search_public_prompts(query, page, per_page, user_id=None):
+def _normalize_prompt_type_filter(value):
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in SEARCH_PROMPT_TYPES else None
+
+
+def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None):
     # 公開プロンプトを title/content/category/author で部分一致検索する
     # Search public prompts with partial matching across multiple columns.
     page = max(int(page), SEARCH_DEFAULT_PAGE)
@@ -67,7 +73,10 @@ def _search_public_prompts(query, page, per_page, user_id=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         offset = (page - 1) * per_page
-        sql = """
+        prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
+        select_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
+        count_type_condition = "AND COALESCE(prompt_type, 'text') = %s" if prompt_type_filter else ""
+        sql = f"""
             SELECT
               p.id,
               p.title,
@@ -106,6 +115,7 @@ def _search_public_prompts(query, page, per_page, user_id=None):
              AND ple.prompt_id = p.id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
+              {select_type_condition}
               AND (
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
@@ -116,11 +126,12 @@ def _search_public_prompts(query, page, per_page, user_id=None):
             LIMIT %s
             OFFSET %s
         """
-        count_sql = """
+        count_sql = f"""
             SELECT COUNT(*) AS total
             FROM prompts
             WHERE is_public = TRUE
               AND deleted_at IS NULL
+              {count_type_condition}
               AND (
                 title   LIKE %s OR
                 content LIKE %s OR
@@ -129,24 +140,32 @@ def _search_public_prompts(query, page, per_page, user_id=None):
               )
         """
         like_query = f"%{query}%"
-        count_params = (like_query, like_query, like_query, like_query)
-        cursor.execute(count_sql, count_params)
+        count_params = []
+        if prompt_type_filter:
+            count_params.append(prompt_type_filter)
+        count_params.extend([like_query, like_query, like_query, like_query])
+        cursor.execute(count_sql, tuple(count_params))
         count_row = cursor.fetchone() or {}
         total = int(count_row.get("total") or 0)
 
+        search_params = [
+            user_id,
+            user_id,
+            user_id,
+        ]
+        if prompt_type_filter:
+            search_params.append(prompt_type_filter)
+        search_params.extend([
+            like_query,
+            like_query,
+            like_query,
+            like_query,
+            per_page,
+            offset,
+        ])
         cursor.execute(
             sql,
-            (
-                user_id,
-                user_id,
-                user_id,
-                like_query,
-                like_query,
-                like_query,
-                like_query,
-                per_page,
-                offset,
-            ),
+            tuple(search_params),
         )
         total_pages = (total + per_page - 1) // per_page if total > 0 else 0
         return {
@@ -174,6 +193,7 @@ async def search_prompts(request: Request):
     Search public prompts by query parameter `q`.
     """
     query = request.query_params.get('q', '').strip()
+    prompt_type = _normalize_prompt_type_filter(request.query_params.get("prompt_type"))
     page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)
     per_page = _parse_positive_int(
         request.query_params.get("per_page"),
@@ -182,7 +202,7 @@ async def search_prompts(request: Request):
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
     try:
-        payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id)
+        payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id, prompt_type)
         return jsonify({"status": "success", **payload})
     except Exception:
         return log_and_internal_server_error(

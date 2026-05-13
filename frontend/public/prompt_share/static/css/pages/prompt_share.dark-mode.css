@@ -122,6 +122,38 @@
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
 }
 
+[data-theme="dark"] .prompt-filter-heading {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-filter-block {
+  border-top-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] .prompt-type-filter-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e5e7eb;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .prompt-type-filter-btn i {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .prompt-type-filter-btn:hover {
+  border-color: #3b82f6;
+  background: #334155;
+}
+
+[data-theme="dark"] .prompt-type-filter-btn.active {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-color: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
 [data-theme="dark"] .prompt-card {
   background: #1f2937;
   border-color: #374151;

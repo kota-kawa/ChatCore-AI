@@ -1,7 +1,8 @@
 import type {
   PromptCommentsResponse,
   PromptData,
-  PromptFeedResponse
+  PromptFeedResponse,
+  PromptType
 } from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
 
@@ -150,7 +151,7 @@ export function fetchPromptList() {
 
 export function fetchPromptSearchResults(
   query: string,
-  options?: { page?: number; perPage?: number }
+  options?: { page?: number; perPage?: number; promptType?: PromptType | "all" }
 ) {
   const params = new URLSearchParams({ q: query });
   if (options?.page) {
@@ -158,6 +159,9 @@ export function fetchPromptSearchResults(
   }
   if (options?.perPage) {
     params.set("per_page", String(options.perPage));
+  }
+  if (options?.promptType && options.promptType !== "all") {
+    params.set("prompt_type", options.promptType);
   }
 
   return fetchJsonOrThrow<PromptFeedResponse>(

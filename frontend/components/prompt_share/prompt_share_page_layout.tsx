@@ -1,7 +1,7 @@
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { PromptCard, type PromptRecord } from "./prompt_card";
-import type { PromptCategory, PromptFeedback } from "./prompt_share_page_types";
+import type { PromptCategory, PromptFeedback, PromptTypeFilter, PromptTypeFilterOption } from "./prompt_share_page_types";
 
 type PromptSharePageLayoutProps = {
   authUiReady: boolean;
@@ -14,6 +14,9 @@ type PromptSharePageLayoutProps = {
   categories: PromptCategory[];
   selectedCategory: string;
   onCategoryClick: (category: string) => void;
+  promptTypeFilters: PromptTypeFilterOption[];
+  selectedPromptTypeFilter: PromptTypeFilter;
+  onPromptTypeFilterClick: (promptTypeFilter: PromptTypeFilter) => void;
   selectedCategoryTitle: string;
   promptCountMeta: string;
   hasMoreSearchResults: boolean;
@@ -49,6 +52,9 @@ export function PromptSharePageLayout({
   categories,
   selectedCategory,
   onCategoryClick,
+  promptTypeFilters,
+  selectedPromptTypeFilter,
+  onPromptTypeFilterClick,
   selectedCategoryTitle,
   promptCountMeta,
   hasMoreSearchResults,
@@ -174,6 +180,28 @@ export function PromptSharePageLayout({
                 <span>{category.label}</span>
               </button>
             ))}
+          </div>
+
+          <div className="prompt-filter-block">
+            <div id="prompt-type-filter-title" className="prompt-filter-heading">
+              表示タイプ
+            </div>
+            <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-type-filter-title">
+              {promptTypeFilters.map((promptTypeFilter) => (
+                <button
+                  key={promptTypeFilter.value}
+                  type="button"
+                  className={`prompt-type-filter-btn${selectedPromptTypeFilter === promptTypeFilter.value ? " active" : ""}`}
+                  aria-pressed={selectedPromptTypeFilter === promptTypeFilter.value ? "true" : "false"}
+                  onClick={() => {
+                    onPromptTypeFilterClick(promptTypeFilter.value);
+                  }}
+                >
+                  <i className={promptTypeFilter.iconClass}></i>
+                  <span>{promptTypeFilter.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 

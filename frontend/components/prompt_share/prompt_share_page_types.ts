@@ -1,5 +1,15 @@
+import type { PromptType } from "../../scripts/prompt_share/types";
+
 export type PromptCategory = {
   value: string;
+  iconClass: string;
+  label: string;
+};
+
+export type PromptTypeFilter = "all" | PromptType;
+
+export type PromptTypeFilterOption = {
+  value: PromptTypeFilter;
   iconClass: string;
   label: string;
 };

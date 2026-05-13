@@ -1,4 +1,4 @@
-import type { PromptCategory } from "./prompt_share_page_types";
+import type { PromptCategory, PromptTypeFilterOption } from "./prompt_share_page_types";
 
 export const SEARCH_RESULTS_PER_PAGE = 20;
 
@@ -13,6 +13,13 @@ export const PROMPT_CATEGORIES: PromptCategory[] = [
   { value: "音楽", iconClass: "bi bi-music-note", label: "音楽" },
   { value: "旅行", iconClass: "bi bi-geo-alt", label: "旅行" },
   { value: "グルメ", iconClass: "bi bi-shop", label: "グルメ" }
+];
+
+export const PROMPT_TYPE_FILTERS: PromptTypeFilterOption[] = [
+  { value: "all", iconClass: "bi bi-layers", label: "全て" },
+  { value: "text", iconClass: "bi bi-chat-square-text", label: "通常プロンプト" },
+  { value: "image", iconClass: "bi bi-image", label: "画像プロンプト" },
+  { value: "skill", iconClass: "bi bi-code-slash", label: "スキル" }
 ];
 
 export const PROMPT_CATEGORY_OPTIONS = [

@@ -87,6 +87,14 @@
     padding: 0.4rem 0.65rem;
   }
 
+  .prompt-type-filter-btn {
+    flex: 0 0 calc(50% - 0.25rem);
+    max-width: calc(50% - 0.25rem);
+    min-height: 40px;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.65rem;
+  }
+
   .prompt-share-page .prompt-cards {
     grid-template-columns: 1fr;
     gap: 0.72rem;
@@ -233,6 +241,13 @@
     font-size: 0.82rem;
   }
 
+  .prompt-type-filter-btn {
+    flex: 0 0 calc(50% - 0.25rem);
+    max-width: calc(50% - 0.25rem);
+    min-height: 40px;
+    font-size: 0.8rem;
+  }
+
   .prompt-share-page .prompt-card h3 {
     font-size: 0.96rem;
   }
@@ -313,4 +328,3 @@
     min-width: 0;
   }
 }
-
