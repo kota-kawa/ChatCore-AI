@@ -1010,63 +1010,103 @@ chat-action-menu {
 }
 
 /* ── ユーザーメッセージ編集フォーム ── */
+.user-message-wrapper:has(.user-message-edit-form) {
+  width: min(82%, var(--chat-readable-width-narrow, 680px));
+}
+
+@keyframes editFormAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .user-message-edit-form {
-  width: min(100%, 40rem);
-  min-width: min(24rem, 100%);
+  width: 100%;
+  min-width: min(22rem, 100%);
   display: flex;
   flex-direction: column;
-  gap: 0.42rem;
-  padding: 0.48rem;
-  border: none;
+  gap: 0;
+  padding: 0;
+  border: 1.5px solid rgba(15, 118, 110, 0.32);
   border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) var(--radius-xs, 4px) var(--radius-lg, 20px);
-  background: var(--primary-color, #0f766e);
-  color: var(--text-light, #ffffff);
-  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
-  animation: userMessageAppear 0.2s ease-out;
+  background: var(--surface-primary, #ffffff);
+  box-shadow:
+    0 0 0 4px rgba(15, 118, 110, 0.06),
+    0 4px 20px rgba(15, 118, 110, 0.1),
+    0 1px 4px rgba(15, 23, 42, 0.06);
+  animation: editFormAppear 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.user-message-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.52rem 1rem 0.42rem;
+  color: var(--primary-color, #0f766e);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(15, 118, 110, 0.08);
+  background: rgba(15, 118, 110, 0.03);
+}
+
+.user-message-edit-header i {
+  font-size: 0.82rem;
 }
 
 .user-message-edit-textarea {
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  min-height: 2.35rem;
+  min-height: 2.6rem;
   max-height: 15rem;
   overflow-y: auto;
-  padding: 0.28rem 0.42rem;
-  border-radius: calc(var(--radius-lg, 20px) - 6px) calc(var(--radius-lg, 20px) - 6px) var(--radius-xs, 4px) calc(var(--radius-lg, 20px) - 6px);
-  border: 1px solid transparent;
+  padding: 0.7rem 1rem 0.6rem;
+  border: none;
   background: transparent;
-  color: inherit;
-  caret-color: currentColor;
+  color: var(--text-dark, #1a1a1a);
+  caret-color: var(--primary-color, #0f766e);
   font-size: var(--text-base, 0.9375rem);
   line-height: var(--leading-loose, 1.65);
   font-family: inherit;
   outline: none;
-  transition:
-    background var(--transition-fast, 0.15s ease),
-    border-color var(--transition-fast, 0.15s ease),
-    box-shadow var(--transition-fast, 0.15s ease);
 }
 
 .user-message-edit-textarea::selection {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(15, 118, 110, 0.18);
 }
 
 .user-message-edit-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.74);
-}
-
-.user-message-edit-textarea:focus {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: var(--text-muted, #9ca3af);
 }
 
 .user-message-edit-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 0.38rem;
+  gap: 0.4rem;
+  padding: 0.48rem 0.72rem;
+  border-top: 1px solid rgba(15, 118, 110, 0.08);
+  background: rgba(15, 118, 110, 0.025);
+}
+
+.user-message-edit-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-message-edit-cancel,
@@ -1074,12 +1114,12 @@ chat-action-menu {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.34rem;
+  gap: 0.3rem;
   min-height: 1.85rem;
-  padding: 0.34rem 0.78rem;
+  padding: 0.3rem 0.78rem;
   border-radius: var(--radius-full, 999px);
   font-size: var(--text-xs, 0.8125rem);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
@@ -1087,45 +1127,47 @@ chat-action-menu {
     background var(--transition-fast, 0.15s ease),
     border-color var(--transition-fast, 0.15s ease),
     color var(--transition-fast, 0.15s ease),
-    opacity var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease),
     transform var(--transition-fast, 0.15s ease);
 }
 
 .user-message-edit-cancel i,
 .user-message-edit-submit i {
-  font-size: 0.86em;
+  font-size: 0.82em;
   line-height: 1;
 }
 
 .user-message-edit-cancel {
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
 }
 
 .user-message-edit-cancel:hover {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.22);
+  background: rgba(15, 23, 42, 0.04);
+  color: var(--text-dark, #1a1a1a);
 }
 
 .user-message-edit-submit {
-  border: 1px solid rgba(255, 255, 255, 0.96);
-  background: rgba(255, 255, 255, 0.96);
-  color: var(--primary-dark, #134e4a);
-  box-shadow: 0 1px 4px rgba(7, 21, 17, 0.12);
+  border: 1px solid var(--primary-color, #0f766e);
+  background: var(--primary-color, #0f766e);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 118, 110, 0.25);
 }
 
 .user-message-edit-submit:hover:not(:disabled) {
-  background: #ffffff;
-  color: var(--primary-dark-hover, #0f3f3b);
+  background: var(--primary-hover, #115e59);
+  border-color: var(--primary-hover, #115e59);
+  box-shadow: 0 3px 10px rgba(15, 118, 110, 0.3);
   transform: translateY(-1px);
 }
 
 .user-message-edit-submit:disabled {
-  opacity: 0.62;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -1391,38 +1433,58 @@ chat-action-menu {
 }
 
 [data-theme="dark"] .user-message-edit-form {
-  background: var(--primary-color, #0f766e);
-  color: #ffffff;
-  box-shadow: 0 2px 10px rgba(2, 6, 23, 0.24);
+  background: var(--surface-secondary, #1e293b);
+  border-color: rgba(45, 212, 191, 0.28);
+  box-shadow:
+    0 0 0 4px rgba(15, 118, 110, 0.08),
+    0 4px 22px rgba(2, 6, 23, 0.32);
+}
+
+[data-theme="dark"] .user-message-edit-header {
+  color: rgba(94, 234, 212, 0.9);
+  border-bottom-color: rgba(45, 212, 191, 0.1);
+  background: rgba(15, 118, 110, 0.06);
 }
 
 [data-theme="dark"] .user-message-edit-textarea {
-  background: transparent;
-  color: inherit;
-  border-color: transparent;
+  color: rgba(248, 250, 252, 0.92);
+  caret-color: rgba(45, 212, 191, 0.9);
 }
 
-[data-theme="dark"] .user-message-edit-textarea:focus {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+[data-theme="dark"] .user-message-edit-textarea::selection {
+  background: rgba(45, 212, 191, 0.2);
+}
+
+[data-theme="dark"] .user-message-edit-actions {
+  border-top-color: rgba(45, 212, 191, 0.1);
+  background: rgba(15, 118, 110, 0.05);
+}
+
+[data-theme="dark"] .user-message-edit-hint {
+  color: rgba(148, 163, 184, 0.65);
 }
 
 [data-theme="dark"] .user-message-edit-cancel {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(148, 163, 184, 0.24);
+  color: #94a3b8;
 }
 
 [data-theme="dark"] .user-message-edit-cancel:hover {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.08);
+  color: #e2e8f0;
 }
 
 [data-theme="dark"] .user-message-edit-submit {
-  background: rgba(255, 255, 255, 0.96);
-  color: var(--primary-dark, #134e4a);
+  background: rgba(13, 148, 136, 0.85);
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow: 0 1px 4px rgba(2, 6, 23, 0.3);
+}
+
+[data-theme="dark"] .user-message-edit-submit:hover:not(:disabled) {
+  background: rgba(15, 118, 110, 1);
+  border-color: rgba(45, 212, 191, 0.7);
+  box-shadow: 0 3px 12px rgba(15, 118, 110, 0.3);
 }
 
 [data-theme="dark"] .scroll-to-bottom-btn {
@@ -1538,23 +1600,35 @@ chat-action-menu {
     border-radius: 18px 18px 4px 18px;
   }
 
+  .user-message-wrapper:has(.user-message-edit-form) {
+    width: min(92%, var(--chat-readable-width-narrow, 680px));
+  }
+
   .user-message-edit-form {
-    min-width: min(20rem, 100%);
-    padding: 0.42rem;
+    min-width: min(18rem, 100%);
     border-radius: 18px 18px 4px 18px;
   }
 
+  .user-message-edit-header {
+    padding: 0.44rem 0.9rem 0.36rem;
+    font-size: 0.68rem;
+  }
+
   .user-message-edit-textarea {
-    min-height: 2.2rem;
-    padding: 0.24rem 0.36rem;
+    min-height: 2.3rem;
+    padding: 0.6rem 0.9rem 0.5rem;
     font-size: var(--text-base, 0.9375rem);
     line-height: 1.58;
+  }
+
+  .user-message-edit-hint {
+    display: none;
   }
 
   .user-message-edit-cancel,
   .user-message-edit-submit {
     min-height: 1.78rem;
-    padding: 0.32rem 0.68rem;
+    padding: 0.28rem 0.65rem;
   }
 
   .bot-message {
