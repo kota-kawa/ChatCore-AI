@@ -663,11 +663,12 @@ async def prompt_assist(
     can_access_llm, _, daily_limit = await run_blocking(
         consume_llm_daily_quota,
         service=resolved_llm_daily_limit_service,
+        user_key=f"user:{user_id}",
     )
     if not can_access_llm:
         return jsonify_rate_limited(
             (
-                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
                 "日付が変わってから再度お試しください。"
             ),
             retry_after=get_seconds_until_daily_reset(),

@@ -291,9 +291,17 @@ class ChatPostUseCase:
                 status_code=409,
             )
 
+        quota_user_key: str | None
+        if user_id is not None:
+            quota_user_key = f"user:{user_id}"
+        elif sid:
+            quota_user_key = f"sid:{sid}"
+        else:
+            quota_user_key = None
         can_access_llm, _, daily_limit = await run_blocking(
             deps.consume_llm_daily_quota,
             service=llm_daily_limit_service,
+            user_key=quota_user_key,
         )
         if not can_access_llm:
             await run_blocking(
@@ -304,7 +312,7 @@ class ChatPostUseCase:
             )
             return deps.jsonify_rate_limited(
                 (
-                    f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                    f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
                     "日付が変わってから再度お試しください。"
                 ),
                 retry_after=deps.get_seconds_until_daily_reset(),

@@ -27,6 +27,13 @@ DEFAULT_PASSKEY_AUTH_OPTIONS_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_VERIFY_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS = 300
 DEFAULT_GUEST_CHAT_DAILY_LIMIT = 10
+# Verification-code brute force defence: cap total submit attempts per email
+# and per IP across all sessions in a rolling 1-hour window. The previous
+# session-scoped attempts counter was bypassable by simply opening a new
+# session each round.
+DEFAULT_VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT = 10
+DEFAULT_VERIFICATION_ATTEMPT_PER_IP_LIMIT = 60
+DEFAULT_VERIFICATION_ATTEMPT_WINDOW_SECONDS = 3600
 GUEST_CHAT_DAILY_LIMIT_ENV = "GUEST_CHAT_DAILY_LIMIT"
 TRUSTED_PROXY_IPS_ENV = "TRUSTED_PROXY_IPS"
 DEFAULT_TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
@@ -423,6 +430,63 @@ return {1, current, key_ttl}
             ),
         )
 
+    def consume_verification_attempt_limit(
+        self,
+        request: Request,
+        email: str,
+    ) -> tuple[bool, str | None]:
+        # Track every verification-code submission attempt per email and per IP
+        # across all sessions, so an attacker can't reset the in-session
+        # attempts counter by opening a fresh session. Hitting either limit
+        # locks further submissions for the rolling window.
+        client_ip = get_request_client_ip(request)
+        normalized_email = (email or "").strip().lower()
+
+        per_email_limit = _get_positive_int_env(
+            "VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT",
+            DEFAULT_VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT,
+        )
+        per_ip_limit = _get_positive_int_env(
+            "VERIFICATION_ATTEMPT_PER_IP_LIMIT",
+            DEFAULT_VERIFICATION_ATTEMPT_PER_IP_LIMIT,
+        )
+        window_seconds = _get_positive_int_env(
+            "VERIFICATION_ATTEMPT_WINDOW_SECONDS",
+            DEFAULT_VERIFICATION_ATTEMPT_WINDOW_SECONDS,
+        )
+
+        allowed, _, retry_after = self.consume_rate_limit(
+            "verify_code:email",
+            normalized_email or "unknown",
+            limit=per_email_limit,
+            window_seconds=window_seconds,
+        )
+        if not allowed:
+            return (
+                False,
+                (
+                    "認証コードの試行回数が多すぎます。"
+                    f"{retry_after}秒ほど待ってから再試行してください。"
+                ),
+            )
+
+        allowed, _, retry_after = self.consume_rate_limit(
+            "verify_code:ip",
+            client_ip,
+            limit=per_ip_limit,
+            window_seconds=window_seconds,
+        )
+        if not allowed:
+            return (
+                False,
+                (
+                    "認証コードの試行回数が多すぎます。"
+                    f"{retry_after}秒ほど待ってから再試行してください。"
+                ),
+            )
+
+        return True, None
+
     def consume_passkey_auth_verify_limit(self, request: Request) -> tuple[bool, str | None]:
         client_ip = get_request_client_ip(request)
         per_ip_limit = _get_positive_int_env(
@@ -550,3 +614,17 @@ def consume_passkey_auth_verify_limit(
         else get_auth_limit_service(request)
     )
     return target.consume_passkey_auth_verify_limit(request)
+
+
+def consume_verification_attempt_limit(
+    request: Request,
+    email: str,
+    *,
+    service: AuthLimitService | None = None,
+) -> tuple[bool, str | None]:
+    target = (
+        service
+        if isinstance(service, AuthLimitService)
+        else get_auth_limit_service(request)
+    )
+    return target.consume_verification_attempt_limit(request, email)

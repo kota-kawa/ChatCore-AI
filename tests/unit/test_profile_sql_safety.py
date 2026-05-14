@@ -50,11 +50,13 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
         self.assertIn("UPDATE users", query)
         self.assertIn("llm_profile_context = %s", query)
         self.assertIn("avatar_url = COALESCE(%s, avatar_url)", query)
+        # The email column must never be touched by the generic profile
+        # update — email changes go through the verified email-change flow.
+        self.assertNotIn("email = %s", query)
         self.assertEqual(
             params,
             (
                 "alice",
-                "alice@example.com",
                 "hello",
                 "日本語で簡潔に答えてください",
                 None,
@@ -80,11 +82,11 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
 
         query, params = fake_connection._cursor.executed[0]
         self.assertIn("UPDATE users", query)
+        self.assertNotIn("email = %s", query)
         self.assertEqual(
             params,
             (
                 "bob",
-                "bob@example.com",
                 "bio",
                 "箇条書きを優先",
                 "/static/uploads/bob.png",

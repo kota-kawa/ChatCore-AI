@@ -1,16 +1,43 @@
 import logging
 import os
 import secrets
+import time
 
-from fastapi import Request
+from fastapi import Depends, Request
 from werkzeug.utils import secure_filename
 
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
 from services.async_utils import run_blocking
+from services.auth_limits import (
+    AuthLimitService,
+    consume_auth_email_send_limits,
+    get_auth_limit_service,
+)
 from services.db import get_db_connection
-from services.users import get_user_by_id
-from services.web import BASE_DIR, jsonify, log_and_internal_server_error
+from services.email_service import send_email
+from services.llm_daily_limit import (
+    LlmDailyLimitService,
+    consume_auth_email_daily_quota,
+    get_llm_daily_limit_service,
+    get_seconds_until_daily_reset,
+)
+from services.request_models import EmailChangeConfirmRequest, EmailChangeRequest
+from services.security import constant_time_compare, generate_verification_code
+from services.users import get_user_by_email, get_user_by_id
+from services.web import (
+    BASE_DIR,
+    jsonify,
+    jsonify_rate_limited,
+    log_and_internal_server_error,
+    require_json_dict,
+    validate_payload_model,
+)
 
 from . import chat_bp
+
+EMAIL_CHANGE_CODE_TTL_SECONDS = 600
+EMAIL_CHANGE_CODE_MAX_ATTEMPTS = 5
+EMAIL_CHANGE_SESSION_KEY = "email_change"
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +156,14 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
 
 
 def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_context):
-    # 入力されたプロフィール項目のみを users テーブルへ更新する
-    # Update users table with submitted profile fields.
+    # Update only non-identity profile fields. The email column is intentionally
+    # excluded — changing the email is privileged and must go through the
+    # verification flow at /api/user/email (request_change + confirm_change),
+    # otherwise an attacker holding any authenticated session could rewrite
+    # the email and intercept future verification mails. The `email` argument
+    # is kept in the signature for backwards compatibility with the test
+    # fixtures but is no longer written to the database.
+    _ = email  # intentionally ignored; see docstring above
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -138,13 +171,12 @@ def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_
                 """
                 UPDATE users
                    SET username = %s,
-                       email = %s,
                        bio = %s,
                        llm_profile_context = %s,
                        avatar_url = COALESCE(%s, avatar_url)
                  WHERE id = %s
                 """,
-                (username, email, bio, llm_profile_context, avatar_url, user_id),
+                (username, bio, llm_profile_context, avatar_url, user_id),
             )
             conn.commit()
         except Exception:
@@ -183,14 +215,33 @@ async def user_profile(request: Request):
     # ---------- POST ----------
     form = await request.form()
     username = (form.get('username') or '').strip()
-    email = (form.get('email') or '').strip()
+    submitted_email = (form.get('email') or '').strip()
     bio = (form.get('bio') or '').strip()
     llm_profile_context = (form.get('llm_profile_context') or '').strip()
     avatar_f = form.get('avatar')      # 画像ファイル (任意)
     # Optional avatar file from multipart form.
 
-    if not username or not email:
-        return jsonify({'error': 'ユーザー名とメールアドレスは必須です'}, status_code=400)
+    if not username:
+        return jsonify({'error': 'ユーザー名は必須です'}, status_code=400)
+
+    # Reject attempts to change the email through the generic profile-update
+    # endpoint. Email changes must go through the verification flow so an
+    # attacker holding a single authenticated session cannot retarget
+    # verification mails to an address they control.
+    current_user = await run_blocking(get_user_by_id, user_id)
+    current_email = (current_user or {}).get('email', '') if current_user else ''
+    if submitted_email and submitted_email.lower() != (current_email or '').lower():
+        return jsonify(
+            {
+                'error': (
+                    'メールアドレスを変更するには、新しいアドレス宛に送信される'
+                    '認証コードによる確認が必要です。設定画面の「メールアドレス変更」'
+                    'からお手続きください。'
+                ),
+            },
+            status_code=400,
+        )
+    email = current_email
 
     # 画像アップロード (あれば)
     # Upload avatar file if one is provided.
@@ -235,3 +286,225 @@ async def user_profile(request: Request):
             logger,
             "Failed to update user profile.",
         )
+
+
+def _clear_email_change_session(session: dict) -> None:
+    session.pop(EMAIL_CHANGE_SESSION_KEY, None)
+
+
+def _commit_email_change(user_id: int, new_email: str) -> bool:
+    # Atomically rewrite users.email after the new address has been verified.
+    # Returns False if some other account claimed the address between the
+    # request and the confirmation step, so the caller can report a clear
+    # error instead of leaving the row in an inconsistent state.
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT id FROM users WHERE LOWER(email) = LOWER(%s)
+                """,
+                (new_email,),
+            )
+            row = cursor.fetchone()
+            if row and row[0] != user_id:
+                conn.rollback()
+                return False
+            cursor.execute(
+                """
+                UPDATE users SET email = %s WHERE id = %s
+                """,
+                (new_email, user_id),
+            )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+
+
+@chat_bp.post('/api/user/email/request_change', name='chat.request_email_change')
+async def request_email_change(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
+    if 'user_id' not in request.session:
+        return jsonify({'error': 'ログインが必要です'}, status_code=401)
+    user_id = request.session['user_id']
+
+    data, error_response = await require_json_dict(request, status='fail')
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        EmailChangeRequest,
+        error_message='メールアドレスの形式が正しくありません',
+        status='fail',
+    )
+    if validation_error is not None:
+        return validation_error
+
+    new_email = payload.new_email
+    user = await run_blocking(get_user_by_id, user_id)
+    if not user:
+        return jsonify({'error': 'ユーザーが存在しません'}, status_code=404)
+
+    current_email = (user.get('email') or '').lower()
+    if new_email == current_email:
+        return jsonify(
+            {'error': '現在のメールアドレスと同じです'},
+            status_code=400,
+        )
+
+    existing = await run_blocking(get_user_by_email, new_email)
+    if existing and existing.get('id') != user_id:
+        # Don't leak existence: keep the message generic but block the change.
+        return jsonify(
+            {'error': 'このメールアドレスは利用できません'},
+            status_code=400,
+        )
+
+    allowed, limit_error = consume_auth_email_send_limits(
+        request,
+        new_email,
+        service=auth_limit_service,
+    )
+    if not allowed:
+        return jsonify_rate_limited(
+            limit_error or '試行回数が多すぎます。時間をおいて再試行してください。',
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status='fail',
+        )
+
+    can_send_email, _, daily_limit = await run_blocking(
+        consume_auth_email_daily_quota,
+        service=llm_daily_limit_service,
+    )
+    if not can_send_email:
+        return jsonify_rate_limited(
+            (
+                f'本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。'
+                '日付が変わってから再度お試しください。'
+            ),
+            retry_after=get_seconds_until_daily_reset(),
+            status='fail',
+        )
+
+    code = generate_verification_code()
+    request.session[EMAIL_CHANGE_SESSION_KEY] = {
+        'code': code,
+        'new_email': new_email,
+        'issued_at': int(time.time()),
+        'attempts': 0,
+    }
+
+    subject = 'AIチャットサービス: メールアドレス変更の確認'
+    body_text = (
+        '以下の確認コードを設定画面に入力してメールアドレスを変更してください。\n\n'
+        f'確認コード: {code}\n\n'
+        '心当たりがない場合はこのメールを無視してください。'
+    )
+    try:
+        await run_blocking(
+            send_email,
+            to_address=new_email,
+            subject=subject,
+            body_text=body_text,
+        )
+        return jsonify({'status': 'success'})
+    except Exception:
+        _clear_email_change_session(request.session)
+        return log_and_internal_server_error(
+            logger,
+            'Failed to send email-change verification code.',
+            status='fail',
+        )
+
+
+@chat_bp.post('/api/user/email/confirm_change', name='chat.confirm_email_change')
+async def confirm_email_change(request: Request):
+    if 'user_id' not in request.session:
+        return jsonify({'error': 'ログインが必要です'}, status_code=401)
+    user_id = request.session['user_id']
+
+    data, error_response = await require_json_dict(request, status='fail')
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        EmailChangeConfirmRequest,
+        error_message='確認コードを入力してください',
+        status='fail',
+    )
+    if validation_error is not None:
+        return validation_error
+
+    state = request.session.get(EMAIL_CHANGE_SESSION_KEY)
+    if not isinstance(state, dict) or not state.get('code') or not state.get('new_email'):
+        return jsonify(
+            {'status': 'fail', 'error': 'メールアドレス変更のセッション情報がありません。最初からやり直してください'},
+            status_code=400,
+        )
+
+    issued_at = int(state.get('issued_at') or 0)
+    attempts = int(state.get('attempts') or 0)
+
+    if issued_at <= 0 or int(time.time()) - issued_at > EMAIL_CHANGE_CODE_TTL_SECONDS:
+        _clear_email_change_session(request.session)
+        return jsonify(
+            {'status': 'fail', 'error': '確認コードの有効期限が切れています'},
+            status_code=400,
+        )
+
+    if attempts >= EMAIL_CHANGE_CODE_MAX_ATTEMPTS:
+        _clear_email_change_session(request.session)
+        return jsonify(
+            {'status': 'fail', 'error': '確認コードの試行回数が上限に達しました'},
+            status_code=429,
+        )
+
+    expected_code = str(state.get('code') or '')
+    submitted_code = str(payload.auth_code or '')
+    if not constant_time_compare(submitted_code, expected_code):
+        attempts += 1
+        state['attempts'] = attempts
+        request.session[EMAIL_CHANGE_SESSION_KEY] = state
+        if attempts >= EMAIL_CHANGE_CODE_MAX_ATTEMPTS:
+            _clear_email_change_session(request.session)
+            return jsonify(
+                {'status': 'fail', 'error': '確認コードの試行回数が上限に達しました'},
+                status_code=429,
+            )
+        return jsonify(
+            {'status': 'fail', 'error': '確認コードが一致しません'},
+            status_code=400,
+        )
+
+    new_email = state['new_email']
+    try:
+        committed = await run_blocking(_commit_email_change, user_id, new_email)
+    except Exception:
+        _clear_email_change_session(request.session)
+        return log_and_internal_server_error(
+            logger,
+            'Failed to commit email-change update.',
+            status='fail',
+        )
+
+    _clear_email_change_session(request.session)
+    if not committed:
+        return jsonify(
+            {'status': 'fail', 'error': 'このメールアドレスは利用できません'},
+            status_code=409,
+        )
+
+    request.session['user_email'] = new_email
+    return jsonify({'status': 'success', 'email': new_email})

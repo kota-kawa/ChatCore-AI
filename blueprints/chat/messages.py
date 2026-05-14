@@ -123,6 +123,16 @@ def _resolve_llm_daily_limit_service(
     return get_llm_daily_limit_service(request)
 
 
+def _build_llm_quota_user_key(user_id: int | None, sid: str | None) -> str | None:
+    # Per-caller key used to scope the LLM daily quota. Without this, one
+    # user could burn the global per-day cap and DoS every other user.
+    if user_id is not None:
+        return f"user:{user_id}"
+    if sid:
+        return f"sid:{sid}"
+    return None
+
+
 def _resolve_chat_generation_service(
     request: Request,
     service: ChatGenerationService | None,
@@ -858,11 +868,12 @@ async def chat_regenerate(
     can_access_llm, _, daily_limit = await run_blocking(
         consume_llm_daily_quota,
         service=resolved_llm_daily_limit_service,
+        user_key=_build_llm_quota_user_key(user_id, sid),
     )
     if not can_access_llm:
         return jsonify_rate_limited(
             (
-                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
                 "日付が変わってから再度お試しください。"
             ),
             retry_after=get_seconds_until_daily_reset(),
@@ -1073,11 +1084,12 @@ async def chat_edit_and_regenerate(
     can_access_llm, _, daily_limit = await run_blocking(
         consume_llm_daily_quota,
         service=resolved_llm_daily_limit_service,
+        user_key=_build_llm_quota_user_key(user_id, sid),
     )
     if not can_access_llm:
         return jsonify_rate_limited(
             (
-                f"本日のLLM API利用上限（全ユーザー合計 {daily_limit} 回）に達しました。"
+                f"本日のLLM API利用上限（1ユーザーあたり {daily_limit} 回）に達しました。"
                 "日付が変わってから再度お試しください。"
             ),
             retry_after=get_seconds_until_daily_reset(),

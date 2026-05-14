@@ -79,6 +79,7 @@ from services.auth_limits import (
     consume_auth_email_send_limits,
     consume_passkey_auth_options_limit,
     consume_passkey_auth_verify_limit,
+    consume_verification_attempt_limit,
     get_auth_limit_service,
 )
 from services.request_models import AuthCodeRequest, EmailRequest
@@ -160,6 +161,7 @@ AUTH_FAILURE_STATUS_CODE = 401
 def _clear_login_verification_session(session: dict[str, Any]) -> None:
     session.pop("login_verification_code", None)
     session.pop("login_temp_user_id", None)
+    session.pop("login_temp_email", None)
     session.pop("login_verification_code_issued_at", None)
     session.pop("login_verification_code_attempts", None)
 
@@ -432,6 +434,7 @@ async def api_current_user(request: Request):
         session.pop("user_email", None)
         session.pop("login_verification_code", None)
         session.pop("login_temp_user_id", None)
+        session.pop("login_temp_email", None)
         session.pop("login_verification_code_issued_at", None)
         session.pop("login_verification_code_attempts", None)
         _clear_google_oauth_session(session)
@@ -1216,6 +1219,7 @@ async def api_send_login_code(
     code = generate_verification_code()
     request.session["login_verification_code"] = code
     request.session["login_temp_user_id"] = user["id"]
+    request.session["login_temp_email"] = email  # rate-limit key (cross-session)
     request.session["login_verification_code_issued_at"] = int(time.time())
     request.session["login_verification_code_attempts"] = 0
     subject = "AIチャットサービス: ログイン認証コード"
@@ -1231,7 +1235,10 @@ async def api_send_login_code(
         )
 
 @auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")
-async def api_verify_login_code(request: Request):
+async def api_verify_login_code(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
     """
     ログイン用の認証コード確認 API
     - POST JSON: { "authCode": "ユーザーが入力した認証コード" }
@@ -1275,6 +1282,27 @@ async def api_verify_login_code(request: Request):
         return jsonify(
             {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
             status_code=AUTH_FAILURE_STATUS_CODE,
+        )
+
+    # Cross-session brute-force defence: in-session attempts above can be
+    # bypassed by opening a new session per try, so we additionally enforce a
+    # per-email/per-IP rolling-window cap that survives session resets.
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    email_for_limit = str(session.get("login_temp_email") or "")
+    allowed, limit_error = await run_blocking(
+        consume_verification_attempt_limit,
+        request,
+        email_for_limit,
+        service=resolved_auth_limit_service,
+    )
+    if not allowed:
+        return jsonify_rate_limited(
+            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
         )
 
     submitted_code = str(auth_code or "")

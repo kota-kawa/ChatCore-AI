@@ -1,10 +1,31 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
+
+# RFC 5321 caps the full address at 254 chars. The pattern is a deliberately
+# strict subset — it rejects CR/LF (mail-header injection) and any non-printable
+# whitespace, which is the whole point of pre-validating before the address is
+# used as an SMTP envelope or written into a `To:` header.
+EMAIL_ADDRESS_MAX_LENGTH = 254
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def _validate_email_address(value: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise ValueError("メールアドレスが指定されていません")
+    if len(cleaned) > EMAIL_ADDRESS_MAX_LENGTH:
+        raise ValueError("メールアドレスが長すぎます")
+    if any(ch in cleaned for ch in ("\r", "\n", "\t", "\x00")):
+        raise ValueError("メールアドレスに使用できない文字が含まれています")
+    if not _EMAIL_RE.match(cleaned):
+        raise ValueError("メールアドレスの形式が正しくありません")
+    return cleaned.lower()
 # Keep backend validation aligned with the frontend chat input limit.
 MAX_CHAT_MESSAGE_LENGTH = 30000
 MAX_CHAT_ROOM_ID_LENGTH = 128
@@ -30,6 +51,28 @@ class EmailRequest(RequestPayloadModel):
     # メールアドレス入力用ペイロード
     # Payload for email address input.
     email: NonEmptyStr
+
+    @model_validator(mode="after")
+    def _normalize_email(self) -> "EmailRequest":
+        self.email = _validate_email_address(self.email)
+        return self
+
+
+class EmailChangeRequest(RequestPayloadModel):
+    # メールアドレス変更APIの入力（新しいメールアドレス）
+    # Payload for the email-change request endpoint.
+    new_email: NonEmptyStr
+
+    @model_validator(mode="after")
+    def _normalize_new_email(self) -> "EmailChangeRequest":
+        self.new_email = _validate_email_address(self.new_email)
+        return self
+
+
+class EmailChangeConfirmRequest(RequestPayloadModel):
+    # メールアドレス変更確認APIの入力（受信した6桁コード）
+    # Payload to confirm an email change with the verification code.
+    auth_code: NonEmptyStr
 
 
 class AuthCodeRequest(RequestPayloadModel):

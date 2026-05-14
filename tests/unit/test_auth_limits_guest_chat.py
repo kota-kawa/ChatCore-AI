@@ -132,6 +132,63 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(first, (True, None))
         self.assertEqual(second, (False, "1日1回までです"))
 
+    def test_verification_attempt_limit_blocks_after_per_email_cap(self):
+        # Cross-session brute-force: same email submitted from rotating IPs
+        # still hits the per-email cap.
+        os.environ["VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT"] = "3"
+        os.environ["VERIFICATION_ATTEMPT_PER_IP_LIMIT"] = "10000"
+        os.environ["VERIFICATION_ATTEMPT_WINDOW_SECONDS"] = "3600"
+
+        try:
+            with patch("services.auth_limits.get_redis_client", return_value=None):
+                results = []
+                for i in range(4):
+                    request = make_request(
+                        headers=[(b"x-forwarded-for", f"203.0.113.{20 + i}".encode())],
+                        client_host="127.0.0.1",
+                    )
+                    results.append(
+                        auth_limits.consume_verification_attempt_limit(
+                            request, "victim@example.com"
+                        )
+                    )
+        finally:
+            os.environ.pop("VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT", None)
+            os.environ.pop("VERIFICATION_ATTEMPT_PER_IP_LIMIT", None)
+            os.environ.pop("VERIFICATION_ATTEMPT_WINDOW_SECONDS", None)
+
+        self.assertEqual(results[0][0], True)
+        self.assertEqual(results[1][0], True)
+        self.assertEqual(results[2][0], True)
+        self.assertEqual(results[3][0], False)
+        self.assertIn("試行回数", results[3][1] or "")
+
+    def test_verification_attempt_limit_blocks_after_per_ip_cap(self):
+        os.environ["VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT"] = "10000"
+        os.environ["VERIFICATION_ATTEMPT_PER_IP_LIMIT"] = "3"
+        os.environ["VERIFICATION_ATTEMPT_WINDOW_SECONDS"] = "3600"
+
+        try:
+            with patch("services.auth_limits.get_redis_client", return_value=None):
+                results = []
+                for i in range(4):
+                    request = make_request(
+                        headers=[(b"x-forwarded-for", b"203.0.113.50")],
+                        client_host="127.0.0.1",
+                    )
+                    # Different emails each call, so only the IP cap kicks in.
+                    results.append(
+                        auth_limits.consume_verification_attempt_limit(
+                            request, f"victim{i}@example.com"
+                        )
+                    )
+        finally:
+            os.environ.pop("VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT", None)
+            os.environ.pop("VERIFICATION_ATTEMPT_PER_IP_LIMIT", None)
+            os.environ.pop("VERIFICATION_ATTEMPT_WINDOW_SECONDS", None)
+
+        self.assertEqual([r[0] for r in results], [True, True, True, False])
+
     def test_admin_login_limit_ignores_spoofed_forwarded_for(self):
         os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = "1"
         request_a = make_request(

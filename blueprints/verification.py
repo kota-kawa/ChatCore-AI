@@ -8,6 +8,7 @@ from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_s
 from services.auth_limits import (
     AuthLimitService,
     consume_auth_email_send_limits,
+    consume_verification_attempt_limit,
     get_auth_limit_service,
 )
 from services.auth_session import establish_authenticated_session
@@ -47,6 +48,7 @@ AUTH_FAILURE_STATUS_CODE = 401
 def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code", None)
     session.pop("temp_user_id", None)
+    session.pop("temp_email", None)
     session.pop("verification_code_issued_at", None)
     session.pop("verification_code_attempts", None)
 
@@ -147,6 +149,7 @@ async def api_send_verification_email(
     code = generate_verification_code()
     request.session["verification_code"] = code
     request.session["temp_user_id"] = user_id  # どのユーザーか紐付け
+    request.session["temp_email"] = email  # rate-limit key (cross-session)
     request.session["verification_code_issued_at"] = int(time.time())
     request.session["verification_code_attempts"] = 0
     # Link verification flow to this user id.
@@ -164,7 +167,10 @@ async def api_send_verification_email(
         )
 
 @verification_bp.post("/api/verify_registration_code", name="verification.api_verify_registration_code")
-async def api_verify_registration_code(request: Request):
+async def api_verify_registration_code(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+):
     """
     register.html の「認証する」ボタンで呼ばれる。
     ・セッション保存の認証コードと照合
@@ -214,6 +220,28 @@ async def api_verify_registration_code(request: Request):
         return jsonify(
             {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
             status_code=AUTH_FAILURE_STATUS_CODE,
+        )
+
+    # Cross-session brute-force defence: the in-session attempts counter above
+    # is bypassable by opening a new session per attempt, so we additionally
+    # enforce a per-email/per-IP rolling-window cap that survives session
+    # resets. The email was captured into the session when the code was sent.
+    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    email_for_limit = str(session.get("temp_email") or "")
+    allowed, limit_error = await run_blocking(
+        consume_verification_attempt_limit,
+        request,
+        email_for_limit,
+        service=resolved_auth_limit_service,
+    )
+    if not allowed:
+        return jsonify_rate_limited(
+            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
+            retry_after=parse_retry_after_seconds(
+                limit_error,
+                default=DEFAULT_RETRY_AFTER_SECONDS,
+            ),
+            status="fail",
         )
 
     submitted_code = str(user_code or "")

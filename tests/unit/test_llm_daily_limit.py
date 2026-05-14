@@ -118,6 +118,35 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.assertEqual(second, (True, 0, 2))
         self.assertEqual(third, (False, 0, 2))
 
+    def test_per_user_quota_does_not_drain_other_users(self):
+        # Regression guard: a single user must not be able to deny service to
+        # everyone else by burning the global daily budget.
+        os.environ["LLM_DAILY_API_LIMIT"] = "2"
+
+        with patch("services.llm_daily_limit.get_redis_client", return_value=None):
+            a1 = llm_daily_limit.consume_llm_daily_quota(
+                current_date="2026-02-26", user_key="user:1"
+            )
+            a2 = llm_daily_limit.consume_llm_daily_quota(
+                current_date="2026-02-26", user_key="user:1"
+            )
+            a3 = llm_daily_limit.consume_llm_daily_quota(
+                current_date="2026-02-26", user_key="user:1"
+            )
+            # user 2 must still have a fresh budget despite user 1 being capped
+            b1 = llm_daily_limit.consume_llm_daily_quota(
+                current_date="2026-02-26", user_key="user:2"
+            )
+            b2 = llm_daily_limit.consume_llm_daily_quota(
+                current_date="2026-02-26", user_key="user:2"
+            )
+
+        self.assertEqual(a1, (True, 1, 2))
+        self.assertEqual(a2, (True, 0, 2))
+        self.assertEqual(a3, (False, 0, 2))
+        self.assertEqual(b1, (True, 1, 2))
+        self.assertEqual(b2, (True, 0, 2))
+
     def test_brave_web_search_monthly_limit_defaults_to_500(self):
         os.environ.pop("BRAVE_WEB_SEARCH_MONTHLY_LIMIT", None)
 

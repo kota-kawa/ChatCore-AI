@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from collections.abc import Callable
@@ -173,15 +174,24 @@ return {1, current}
         env_name: str,
         default_limit: int,
         current_date: str | None = None,
+        user_key: str | None = None,
     ) -> tuple[bool, int, int]:
         # 1日単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替える
         # Consume quota using a day-scoped key, preferring Redis and falling back to memory.
+        # When user_key is provided the quota is scoped per user/session so one
+        # caller cannot burn the global daily budget for everyone else.
         daily_limit = _get_limit(env_name, default_limit)
         if daily_limit <= 0:
             return False, 0, daily_limit
 
         today = current_date or date.today().isoformat()
-        quota_key = f"{key_prefix}:{today}"
+        if user_key:
+            # Hash to avoid leaking user identifiers into Redis keys and to
+            # keep key length bounded regardless of input.
+            hashed = hashlib.sha256(user_key.encode("utf-8", errors="replace")).hexdigest()
+            quota_key = f"{key_prefix}:user:{hashed}:{today}"
+        else:
+            quota_key = f"{key_prefix}:{today}"
 
         redis_client = self._get_redis_client()
         if redis_client is not None:
@@ -240,14 +250,22 @@ return {1, current}
         )
         return allowed, remaining, monthly_limit
 
-    def consume_llm_daily_quota(self, current_date: str | None = None) -> tuple[bool, int, int]:
+    def consume_llm_daily_quota(
+        self,
+        current_date: str | None = None,
+        *,
+        user_key: str | None = None,
+    ) -> tuple[bool, int, int]:
         # チャット応答 API 用の日次上限を 1 回分消費する
-        # Consume one unit from the daily quota for chat API usage.
+        # Consume one unit from the daily quota for chat API usage. The quota
+        # is scoped per user_key so a single account can't deny service to
+        # everyone else by burning the global daily budget.
         return self._consume_daily_quota(
             key_prefix=_LLM_DAILY_COUNT_KEY_PREFIX,
             env_name=LLM_DAILY_API_LIMIT_ENV,
             default_limit=DEFAULT_LLM_DAILY_API_LIMIT,
             current_date=current_date,
+            user_key=user_key,
         )
 
     def consume_auth_email_daily_quota(
@@ -335,13 +353,14 @@ def consume_llm_daily_quota(
     current_date: str | None = None,
     *,
     service: LlmDailyLimitService | None = None,
+    user_key: str | None = None,
 ) -> tuple[bool, int, int]:
     target = (
         service
         if isinstance(service, LlmDailyLimitService)
         else get_llm_daily_limit_service()
     )
-    return target.consume_llm_daily_quota(current_date=current_date)
+    return target.consume_llm_daily_quota(current_date=current_date, user_key=user_key)
 
 
 def consume_auth_email_daily_quota(
