@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import math
 import os
@@ -27,6 +28,8 @@ DEFAULT_PASSKEY_AUTH_VERIFY_PER_IP_LIMIT = 30
 DEFAULT_PASSKEY_AUTH_WINDOW_SECONDS = 300
 DEFAULT_GUEST_CHAT_DAILY_LIMIT = 10
 GUEST_CHAT_DAILY_LIMIT_ENV = "GUEST_CHAT_DAILY_LIMIT"
+TRUSTED_PROXY_IPS_ENV = "TRUSTED_PROXY_IPS"
+DEFAULT_TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
 
 
 def _get_positive_int_env(name: str, default: int) -> int:
@@ -39,15 +42,98 @@ def _get_positive_int_env(name: str, default: int) -> int:
     return max(parsed, 0)
 
 
-def get_request_client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if isinstance(forwarded_for, str) and forwarded_for.strip():
-        return forwarded_for.split(",")[0].strip()
+def _parse_ip_address(raw_value: str | None) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    if not isinstance(raw_value, str):
+        return None
 
+    value = raw_value.strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1 : value.index("]")]
+    elif value.count(":") == 1 and "." in value:
+        value = value.rsplit(":", 1)[0]
+
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError:
+        return None
+
+
+def _get_trusted_proxy_networks() -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    raw_value = os.getenv(TRUSTED_PROXY_IPS_ENV)
+    if raw_value is None:
+        raw_entries = DEFAULT_TRUSTED_PROXY_IPS
+    else:
+        raw_entries = tuple(entry.strip() for entry in raw_value.split(","))
+
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in raw_entries:
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid trusted proxy entry %r.", entry)
+
+    return tuple(networks)
+
+
+def _is_trusted_proxy_ip(
+    client_ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    trusted_networks: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...],
+) -> bool:
+    return any(client_ip in network for network in trusted_networks)
+
+
+def _get_forwarded_for_ips(header_value: str | None) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    if not isinstance(header_value, str):
+        return []
+
+    forwarded_ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for raw_part in header_value.split(","):
+        parsed_ip = _parse_ip_address(raw_part)
+        if parsed_ip is not None:
+            forwarded_ips.append(parsed_ip)
+
+    return forwarded_ips
+
+
+def _get_request_client_host(request: Request) -> str | None:
     client = getattr(request, "client", None)
     client_host = getattr(client, "host", None)
     if isinstance(client_host, str) and client_host.strip():
         return client_host.strip()
+    return None
+
+
+def get_request_client_ip(request: Request) -> str:
+    client_host = _get_request_client_host(request)
+    direct_client_ip = _parse_ip_address(client_host)
+    trusted_proxy_networks = _get_trusted_proxy_networks()
+
+    if direct_client_ip is not None and _is_trusted_proxy_ip(
+        direct_client_ip,
+        trusted_proxy_networks,
+    ):
+        forwarded_ips = _get_forwarded_for_ips(request.headers.get("x-forwarded-for"))
+        for forwarded_ip in reversed(forwarded_ips):
+            if not _is_trusted_proxy_ip(forwarded_ip, trusted_proxy_networks):
+                return str(forwarded_ip)
+
+        if forwarded_ips:
+            return str(forwarded_ips[0])
+
+        real_ip = _parse_ip_address(request.headers.get("x-real-ip"))
+        if real_ip is not None:
+            return str(real_ip)
+
+    if direct_client_ip is not None:
+        return str(direct_client_ip)
+
+    if client_host:
+        return client_host
 
     return "unknown"
 

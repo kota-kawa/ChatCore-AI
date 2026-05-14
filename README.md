@@ -75,6 +75,7 @@ docker-compose up --build
 
 - Frontend: `http://localhost:3000`
 - API: `http://localhost:5004`
+- When running behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy IPs/CIDRs that may supply `X-Forwarded-For`.
 
 ## Database Migrations (Alembic)
 Schema management is unified on Alembic. `docker-compose up --build` now waits for PostgreSQL and runs `alembic upgrade head` automatically before starting the API. No separate `init.sql` bootstrap is required or used.
@@ -260,6 +261,7 @@ docker-compose up --build
 
 - フロントエンド: `http://localhost:3000`
 - API: `http://localhost:5004`
+- リバースプロキシ配下で動かす場合は、`X-Forwarded-For` を渡せるプロキシの IP/CIDR を `TRUSTED_PROXY_IPS` に設定してください。
 
 ## データベースマイグレーション（Alembic）
 スキーマ管理は Alembic に統一しています。`docker-compose up --build` では PostgreSQL の起動待ち後に `alembic upgrade head` を実行してから API を起動します。`init.sql` のような別系統の初期化スクリプトは使いません。

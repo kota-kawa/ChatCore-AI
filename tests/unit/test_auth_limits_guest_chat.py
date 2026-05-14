@@ -6,18 +6,23 @@ from services import auth_limits
 from tests.helpers.request_helpers import build_request
 
 
-def make_request(*, headers=None):
-    return build_request(
+def make_request(*, headers=None, client_host="testclient"):
+    request = build_request(
         method="POST",
         path="/api/chat",
         session={},
         headers=headers or [],
     )
+    request.scope["client"] = (client_host, 50000)
+    return request
 
 
 class GuestChatLimitTestCase(unittest.TestCase):
     def setUp(self):
         self.original_guest_limit = os.environ.get("GUEST_CHAT_DAILY_LIMIT")
+        self.original_trusted_proxies = os.environ.get("TRUSTED_PROXY_IPS")
+        self.original_admin_login_limit = os.environ.get("ADMIN_LOGIN_PER_IP_LIMIT")
+        os.environ["TRUSTED_PROXY_IPS"] = "127.0.0.1,::1"
         auth_limits.clear_in_memory_rate_limit_state()
 
     def tearDown(self):
@@ -25,11 +30,22 @@ class GuestChatLimitTestCase(unittest.TestCase):
             os.environ.pop("GUEST_CHAT_DAILY_LIMIT", None)
         else:
             os.environ["GUEST_CHAT_DAILY_LIMIT"] = self.original_guest_limit
+        if self.original_trusted_proxies is None:
+            os.environ.pop("TRUSTED_PROXY_IPS", None)
+        else:
+            os.environ["TRUSTED_PROXY_IPS"] = self.original_trusted_proxies
+        if self.original_admin_login_limit is None:
+            os.environ.pop("ADMIN_LOGIN_PER_IP_LIMIT", None)
+        else:
+            os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = self.original_admin_login_limit
         auth_limits.clear_in_memory_rate_limit_state()
 
     def test_guest_chat_limit_blocks_after_reaching_cap(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "2"
-        request = make_request(headers=[(b"x-forwarded-for", b"198.51.100.10")])
+        request = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.10")],
+            client_host="127.0.0.1",
+        )
 
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first = auth_limits.consume_guest_chat_daily_limit(request)
@@ -42,7 +58,10 @@ class GuestChatLimitTestCase(unittest.TestCase):
 
     def test_guest_chat_limit_invalid_env_falls_back_to_default(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "invalid"
-        request = make_request(headers=[(b"x-forwarded-for", b"203.0.113.11")])
+        request = make_request(
+            headers=[(b"x-forwarded-for", b"203.0.113.11")],
+            client_host="127.0.0.1",
+        )
 
         with patch("services.auth_limits.get_redis_client", return_value=None):
             for _ in range(auth_limits.DEFAULT_GUEST_CHAT_DAILY_LIMIT):
@@ -59,8 +78,14 @@ class GuestChatLimitTestCase(unittest.TestCase):
 
     def test_guest_chat_limit_uses_forwarded_ip_for_identifier(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
-        request_a = make_request(headers=[(b"x-forwarded-for", b"203.0.113.101, 10.0.0.1")])
-        request_b = make_request(headers=[(b"x-forwarded-for", b"203.0.113.102, 10.0.0.1")])
+        request_a = make_request(
+            headers=[(b"x-forwarded-for", b"203.0.113.101")],
+            client_host="127.0.0.1",
+        )
+        request_b = make_request(
+            headers=[(b"x-forwarded-for", b"203.0.113.102")],
+            client_host="127.0.0.1",
+        )
 
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first_a = auth_limits.consume_guest_chat_daily_limit(request_a)
@@ -70,6 +95,61 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(first_a, (True, None))
         self.assertEqual(second_a, (False, "1日1回までです"))
         self.assertEqual(first_b, (True, None))
+
+    def test_guest_chat_limit_ignores_forwarded_for_from_untrusted_client(self):
+        os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
+        request_a = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.201")],
+            client_host="203.0.113.50",
+        )
+        request_b = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.202")],
+            client_host="203.0.113.50",
+        )
+
+        with patch("services.auth_limits.get_redis_client", return_value=None):
+            first = auth_limits.consume_guest_chat_daily_limit(request_a)
+            second = auth_limits.consume_guest_chat_daily_limit(request_b)
+
+        self.assertEqual(first, (True, None))
+        self.assertEqual(second, (False, "1日1回までです"))
+
+    def test_guest_chat_limit_uses_rightmost_untrusted_forwarded_ip(self):
+        os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
+        request_a = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.250, 203.0.113.60")],
+            client_host="127.0.0.1",
+        )
+        request_b = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.251, 203.0.113.60")],
+            client_host="127.0.0.1",
+        )
+
+        with patch("services.auth_limits.get_redis_client", return_value=None):
+            first = auth_limits.consume_guest_chat_daily_limit(request_a)
+            second = auth_limits.consume_guest_chat_daily_limit(request_b)
+
+        self.assertEqual(first, (True, None))
+        self.assertEqual(second, (False, "1日1回までです"))
+
+    def test_admin_login_limit_ignores_spoofed_forwarded_for(self):
+        os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = "1"
+        request_a = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.211")],
+            client_host="203.0.113.70",
+        )
+        request_b = make_request(
+            headers=[(b"x-forwarded-for", b"198.51.100.212")],
+            client_host="203.0.113.70",
+        )
+
+        with patch("services.auth_limits.get_redis_client", return_value=None):
+            first = auth_limits.consume_admin_login_limit(request_a)
+            second = auth_limits.consume_admin_login_limit(request_b)
+
+        self.assertEqual(first, (True, None))
+        self.assertFalse(second[0])
+        self.assertIn("管理者ログインの試行回数が多すぎます。", second[1])
 
 
 if __name__ == "__main__":
