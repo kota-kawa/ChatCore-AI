@@ -7,7 +7,6 @@ from itsdangerous import URLSafeSerializer
 from starlette.datastructures import MutableHeaders
 
 from services.session_middleware import (
-    COOKIE_BACKEND,
     REDIS_BACKEND,
     SESSION_IDS_TO_DELETE_SCOPE_KEY,
     PermanentSessionMiddleware,
@@ -126,9 +125,7 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
         self.assertEqual(captured["session"]["foo"], "bar")
 
-    def test_session_falls_back_to_cookie_when_redis_unavailable(self):
-        captured = {}
-
+    def test_session_cookie_is_cleared_when_redis_unavailable(self):
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -143,29 +140,22 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
             asyncio.run(middleware(make_scope(), receive, send))
 
-        signed = get_session_cookie(messages)
-        serializer = URLSafeSerializer("secret", salt="strike.session")
-        payload = serializer.loads(signed)
-        self.assertEqual(payload["backend"], COOKIE_BACKEND)
-        self.assertEqual(payload["data"]["foo"], "bar")
+        header_values = [
+            value.decode("latin-1")
+            for message in messages
+            if message["type"] == "http.response.start"
+            for key, value in message["headers"]
+            if key.lower() == b"set-cookie"
+        ]
+        self.assertEqual(len(header_values), 1)
+        cookie = SimpleCookie()
+        cookie.load(header_values[0])
+        # No session data may be embedded in the cookie when Redis is down;
+        # instead the cookie must be cleared to force re-authentication.
+        self.assertEqual(cookie["session"].value, "")
+        self.assertEqual(cookie["session"]["max-age"], "0")
 
-        async def app_read(scope, receive, send):
-            captured["session"] = dict(scope["session"])
-            await send({"type": "http.response.start", "status": 200, "headers": []})
-            await send({"type": "http.response.body", "body": b"ok"})
-
-        with patch("services.session_middleware.get_redis_client", return_value=None):
-            middleware = PermanentSessionMiddleware(app_read, secret_key="secret", max_age=60)
-            messages = []
-
-            async def send(message):
-                messages.append(message)
-
-            asyncio.run(middleware(make_scope(f"session={signed}"), receive, send))
-
-        self.assertEqual(captured["session"]["foo"], "bar")
-
-    def test_session_falls_back_to_cookie_when_redis_write_fails(self):
+    def test_session_cookie_is_cleared_when_redis_write_fails(self):
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -180,11 +170,49 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
             asyncio.run(middleware(make_scope(), receive, send))
 
-        signed = get_session_cookie(messages)
+        header_values = [
+            value.decode("latin-1")
+            for message in messages
+            if message["type"] == "http.response.start"
+            for key, value in message["headers"]
+            if key.lower() == b"set-cookie"
+        ]
+        self.assertEqual(len(header_values), 1)
+        cookie = SimpleCookie()
+        cookie.load(header_values[0])
+        self.assertEqual(cookie["session"].value, "")
+        self.assertEqual(cookie["session"]["max-age"], "0")
+
+    def test_legacy_cookie_backed_session_is_rejected(self):
+        # A cookie minted by the old cookie-fallback path must be ignored: its
+        # contents (verification codes, is_admin, etc.) are signed but not
+        # encrypted, so we treat any such cookie as expired.
         serializer = URLSafeSerializer("secret", salt="strike.session")
-        payload = serializer.loads(signed)
-        self.assertEqual(payload["backend"], COOKIE_BACKEND)
-        self.assertEqual(payload["data"]["foo"], "bar")
+        legacy_cookie = serializer.dumps(
+            {"backend": "cookie", "data": {"verification_code": "123456", "is_admin": True}}
+        )
+
+        captured = {}
+
+        async def app(scope, receive, send):
+            captured["session"] = dict(scope["session"])
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        with patch("services.session_middleware.get_redis_client", return_value=DummyRedis()):
+            middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
+            messages = []
+
+            async def send(message):
+                messages.append(message)
+
+            asyncio.run(
+                middleware(make_scope(f"session={legacy_cookie}"), receive, send)
+            )
+
+        # Only the CSRF token may be present; the legacy payload must not leak in.
+        self.assertNotIn("verification_code", captured["session"])
+        self.assertNotIn("is_admin", captured["session"])
 
     def test_session_cookie_can_use_samesite_none_with_secure(self):
         async def app(scope, receive, send):

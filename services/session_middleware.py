@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 from http.cookies import SimpleCookie
 from typing import Any
@@ -14,8 +15,9 @@ from services.async_utils import run_blocking
 from services.cache import get_redis_client, mark_redis_unavailable
 from services.csrf import CSRF_SESSION_KEY
 
+logger = logging.getLogger(__name__)
+
 REDIS_BACKEND = "redis"
-COOKIE_BACKEND = "cookie"
 SESSION_IDS_TO_DELETE_SCOPE_KEY = "_session_ids_to_delete"
 
 
@@ -31,8 +33,10 @@ def rotate_session_identifier(request: Request) -> None:
 
 
 class PermanentSessionMiddleware:
-    # Redis が利用可能ならサーバー側保存を優先し、障害時は署名付き Cookie へフォールバックする
-    # Prefer Redis-backed sessions when available and fallback to signed cookie payloads on failure.
+    # セッションは Redis にのみ保存する。Redis に書けない場合はセッションを発行せず Cookie をクリアする
+    # Sessions are stored only in Redis. If Redis is unavailable the cookie is cleared
+    # rather than written with a signed-but-unencrypted payload that would leak
+    # verification codes, admin flags, and OAuth state to anyone who reads the cookie.
     def __init__(
         self,
         app: ASGIApp,
@@ -117,7 +121,13 @@ class HybridSessionMiddleware:
         if isinstance(payload, str):
             return {"backend": REDIS_BACKEND, "id": payload}
         if isinstance(payload, dict):
-            return payload
+            # Legacy cookie-backed payloads ({"backend": "cookie", "data": {...}})
+            # are intentionally ignored here: they used to embed sensitive session
+            # data directly in the cookie, so we treat any such cookie as expired
+            # to force the user to re-authenticate against the Redis-backed flow.
+            if payload.get("backend") == REDIS_BACKEND:
+                return payload
+            return None
         return None
 
     def _restore_session(
@@ -126,14 +136,7 @@ class HybridSessionMiddleware:
         if not cookie_state:
             return {}, None
 
-        backend = cookie_state.get("backend")
-        if backend == COOKIE_BACKEND:
-            data = cookie_state.get("data")
-            if isinstance(data, dict):
-                return data, None
-            return {}, None
-
-        if backend != REDIS_BACKEND:
+        if cookie_state.get("backend") != REDIS_BACKEND:
             return {}, None
 
         session_id = cookie_state.get("id")
@@ -194,11 +197,19 @@ class HybridSessionMiddleware:
             )
             return
 
-        self._set_cookie(
-            headers,
-            self.serializer.dumps({"backend": COOKIE_BACKEND, "data": session}),
-            cookie_max_age,
+        # Redis is unavailable: refuse to persist the session. We previously
+        # fell back to writing the entire session dict into the cookie via a
+        # signed-but-unencrypted serializer, which leaked email verification
+        # codes, the is_admin flag, OAuth state and passkey challenges to
+        # anyone who could read the cookie. Clearing the cookie forces the
+        # user to re-authenticate once Redis comes back, which is the safe
+        # failure mode.
+        logger.warning(
+            "Session not persisted because Redis is unavailable; clearing session cookie."
         )
+        scope["session"] = {}
+        scope["session_id"] = None
+        self._set_cookie(headers, "", max_age=0)
 
     def _save_session(self, session_id: str, session: dict[str, Any]) -> bool:
         redis_client = get_redis_client()

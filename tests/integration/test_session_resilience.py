@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from itsdangerous import URLSafeSerializer
 
 from services.auth_session import establish_authenticated_session
-from services.session_middleware import COOKIE_BACKEND, REDIS_BACKEND, PermanentSessionMiddleware
+from services.session_middleware import REDIS_BACKEND, PermanentSessionMiddleware
 
 
 class DummyRedis:
@@ -110,23 +110,24 @@ class SessionResilienceIntegrationTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_session_falls_back_to_cookie_when_redis_is_unavailable(self):
+    def test_session_is_cleared_when_redis_is_unavailable(self):
         async def scenario():
             with patch("services.session_middleware.get_redis_client", return_value=None):
                 async with self._make_client() as client:
                     set_response = await client.post("/session/set", json={"foo": "bar"})
-                    payload = self._decode_session_cookie(set_response)
-                    self.assertEqual(payload["backend"], COOKIE_BACKEND)
-                    self.assertEqual(payload["data"]["foo"], "bar")
+                    # No session cookie may carry the data — Redis being down
+                    # must clear the cookie rather than persist secrets in it.
+                    cookie_value = set_response.cookies.get("session")
+                    self.assertIn(cookie_value, (None, ""))
 
                     read_response = await client.get("/session/read")
 
             self.assertEqual(read_response.status_code, 200)
-            self.assertEqual(read_response.json()["session"]["foo"], "bar")
+            self.assertNotIn("foo", read_response.json()["session"])
 
         asyncio.run(scenario())
 
-    def test_session_falls_back_to_cookie_when_redis_write_fails(self):
+    def test_session_is_cleared_when_redis_write_fails(self):
         async def scenario():
             with patch(
                 "services.session_middleware.get_redis_client",
@@ -134,11 +135,10 @@ class SessionResilienceIntegrationTestCase(unittest.TestCase):
             ):
                 async with self._make_client() as client:
                     set_response = await client.post("/session/set", json={"foo": "bar"})
-                    payload = self._decode_session_cookie(set_response)
+                    cookie_value = set_response.cookies.get("session")
 
             self.assertEqual(set_response.status_code, 200)
-            self.assertEqual(payload["backend"], COOKIE_BACKEND)
-            self.assertEqual(payload["data"]["foo"], "bar")
+            self.assertIn(cookie_value, (None, ""))
 
         asyncio.run(scenario())
 

@@ -140,15 +140,18 @@ class FetchUrlContentTest(unittest.TestCase):
         content: bytes,
         content_type: str = "text/html; charset=utf-8",
         status_code: int = 200,
+        headers: dict | None = None,
     ) -> MagicMock:
         resp = MagicMock()
         resp.status_code = status_code
-        resp.headers = {"content-type": content_type}
+        merged_headers = {"content-type": content_type}
+        if headers:
+            merged_headers.update(headers)
+        resp.headers = merged_headers
         resp.apparent_encoding = "utf-8"
         resp.iter_content.return_value = iter([content])
         resp.raise_for_status = MagicMock()
-        resp.__enter__ = MagicMock(return_value=resp)
-        resp.__exit__ = MagicMock(return_value=False)
+        resp.close = MagicMock()
         return resp
 
     def test_returns_text_for_valid_html_url(self):
@@ -225,6 +228,150 @@ class FetchUrlContentTest(unittest.TestCase):
         ):
             result = url_fetcher.fetch_url_content("https://example.com")
         self.assertIsNone(result)
+
+
+class FetchUrlRedirectTest(unittest.TestCase):
+    def _redirect_response(self, location: str, status: int = 302) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = status
+        resp.headers = {"Location": location, "content-type": "text/html"}
+        resp.apparent_encoding = "utf-8"
+        resp.iter_content.return_value = iter([b""])
+        resp.raise_for_status = MagicMock()
+        resp.close = MagicMock()
+        return resp
+
+    def _ok_response(self, body: bytes = b"<p>final</p>") -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = {"content-type": "text/html; charset=utf-8"}
+        resp.apparent_encoding = "utf-8"
+        resp.iter_content.return_value = iter([body])
+        resp.raise_for_status = MagicMock()
+        resp.close = MagicMock()
+        return resp
+
+    def test_rejects_redirect_to_internal_address(self):
+        redirect = self._redirect_response("http://169.254.169.254/latest/meta-data/")
+
+        def resolver(host):
+            return {
+                "example.com": "93.184.216.34",
+                "169.254.169.254": "169.254.169.254",
+            }[host]
+
+        with (
+            patch("socket.gethostbyname", side_effect=resolver),
+            patch("requests.get", return_value=redirect) as mock_get,
+        ):
+            result = url_fetcher.fetch_url_content("https://example.com")
+
+        self.assertIsNone(result)
+        # The metadata service must never have been contacted.
+        self.assertEqual(mock_get.call_count, 1)
+        called_url = mock_get.call_args_list[0].args[0]
+        self.assertEqual(called_url, "https://example.com")
+
+    def test_follows_safe_redirect_chain(self):
+        responses = iter(
+            [
+                self._redirect_response("https://b.example.com/next"),
+                self._ok_response(b"<p>done</p>"),
+            ]
+        )
+
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", side_effect=lambda *a, **k: next(responses)),
+        ):
+            result = url_fetcher.fetch_url_content("https://a.example.com")
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("done", result)
+
+    def test_aborts_redirect_loop_after_max_hops(self):
+        def loop(*args, **kwargs):
+            return self._redirect_response("https://loop.example.com/again")
+
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", side_effect=loop) as mock_get,
+        ):
+            result = url_fetcher.fetch_url_content("https://loop.example.com")
+
+        self.assertIsNone(result)
+        self.assertLessEqual(mock_get.call_count, url_fetcher.MAX_REDIRECT_HOPS + 1)
+
+    def test_disables_auto_redirects_at_request_level(self):
+        captured: dict = {}
+
+        def capture(*args, **kwargs):
+            captured["kwargs"] = kwargs
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.headers = {"content-type": "text/html"}
+            resp.apparent_encoding = "utf-8"
+            resp.iter_content.return_value = iter([b"<p>x</p>"])
+            resp.raise_for_status = MagicMock()
+            resp.close = MagicMock()
+            return resp
+
+        with (
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch("requests.get", side_effect=capture),
+        ):
+            url_fetcher.fetch_url_content("https://example.com")
+
+        self.assertIs(captured["kwargs"].get("allow_redirects"), False)
+
+
+class DnsPinningTest(unittest.TestCase):
+    def test_pinned_create_connection_replaces_host_with_validated_ip(self):
+        calls: list[tuple] = []
+
+        def fake_create_connection(address, *args, **kwargs):
+            calls.append(address)
+            return object()
+
+        with patch.object(
+            url_fetcher,
+            "_original_urllib3_create_connection",
+            side_effect=fake_create_connection,
+        ):
+            with url_fetcher._pin_dns({"example.com": "93.184.216.34"}):
+                url_fetcher._pinned_create_connection(("example.com", 443))
+
+        self.assertEqual(calls, [("93.184.216.34", 443)])
+
+    def test_pinned_create_connection_passes_through_when_unpinned(self):
+        calls: list[tuple] = []
+
+        def fake_create_connection(address, *args, **kwargs):
+            calls.append(address)
+            return object()
+
+        with patch.object(
+            url_fetcher,
+            "_original_urllib3_create_connection",
+            side_effect=fake_create_connection,
+        ):
+            url_fetcher._pinned_create_connection(("other.example.com", 80))
+
+        self.assertEqual(calls, [("other.example.com", 80)])
+
+    def test_pin_dns_restores_previous_mapping(self):
+        with url_fetcher._pin_dns({"a": "1.1.1.1"}):
+            with url_fetcher._pin_dns({"b": "2.2.2.2"}):
+                self.assertEqual(
+                    getattr(url_fetcher._dns_pin_local, "mapping", None),
+                    {"b": "2.2.2.2"},
+                )
+            self.assertEqual(
+                getattr(url_fetcher._dns_pin_local, "mapping", None),
+                {"a": "1.1.1.1"},
+            )
+        self.assertIsNone(getattr(url_fetcher._dns_pin_local, "mapping", None))
 
 
 class FetchUrlsContentTest(unittest.TestCase):
