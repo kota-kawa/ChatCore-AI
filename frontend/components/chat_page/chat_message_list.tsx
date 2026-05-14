@@ -87,6 +87,7 @@ function UserMessageEditForm({
       />
       <div className="user-message-edit-actions">
         <button type="button" className="user-message-edit-cancel" onClick={onCancel}>
+          <i className="bi bi-x-lg" aria-hidden="true"></i>
           キャンセル
         </button>
         <button
@@ -97,7 +98,8 @@ function UserMessageEditForm({
             if (canSubmit) onSubmit(trimmed);
           }}
         >
-          送信
+          <i className="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          再生成
         </button>
       </div>
     </div>

@@ -1011,81 +1011,121 @@ chat-action-menu {
 
 /* ── ユーザーメッセージ編集フォーム ── */
 .user-message-edit-form {
-  width: 100%;
+  width: min(100%, 40rem);
+  min-width: min(24rem, 100%);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.42rem;
+  padding: 0.48rem;
+  border: none;
+  border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) var(--radius-xs, 4px) var(--radius-lg, 20px);
+  background: var(--primary-color, #0f766e);
+  color: var(--text-light, #ffffff);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
+  animation: userMessageAppear 0.2s ease-out;
 }
 
 .user-message-edit-textarea {
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  min-height: 2.6rem;
+  min-height: 2.35rem;
   max-height: 15rem;
   overflow-y: auto;
-  padding: 0.75rem 1.05rem;
-  border-radius: var(--radius-lg, 20px);
-  border: 1.5px solid var(--primary-color, #0f766e);
-  background: var(--surface-primary, #fff);
-  color: var(--text-primary, #1a1a1a);
+  padding: 0.28rem 0.42rem;
+  border-radius: calc(var(--radius-lg, 20px) - 6px) calc(var(--radius-lg, 20px) - 6px) var(--radius-xs, 4px) calc(var(--radius-lg, 20px) - 6px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  caret-color: currentColor;
   font-size: var(--text-base, 0.9375rem);
   line-height: var(--leading-loose, 1.65);
   font-family: inherit;
   outline: none;
-  transition: border-color var(--transition-fast, 0.15s ease);
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease);
+}
+
+.user-message-edit-textarea::selection {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.user-message-edit-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .user-message-edit-textarea:focus {
-  border-color: var(--primary-color, #0f766e);
-  box-shadow: 0 0 0 3px var(--primary-alpha-16, rgba(15, 118, 110, 0.16));
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .user-message-edit-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.38rem;
 }
 
-.user-message-edit-cancel {
-  padding: 0.35rem 0.9rem;
+.user-message-edit-cancel,
+.user-message-edit-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  min-height: 1.85rem;
+  padding: 0.34rem 0.78rem;
   border-radius: var(--radius-full, 999px);
-  border: 1px solid rgba(15, 23, 42, 0.16);
-  background: transparent;
-  color: var(--text-secondary, #6b7280);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-xs, 0.8125rem);
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
   font-family: inherit;
   transition:
     background var(--transition-fast, 0.15s ease),
-    color var(--transition-fast, 0.15s ease);
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease),
+    opacity var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+.user-message-edit-cancel i,
+.user-message-edit-submit i {
+  font-size: 0.86em;
+  line-height: 1;
+}
+
+.user-message-edit-cancel {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .user-message-edit-cancel:hover {
-  background: rgba(15, 23, 42, 0.06);
-  color: var(--text-primary, #1a1a1a);
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
 .user-message-edit-submit {
-  padding: 0.35rem 0.9rem;
-  border-radius: var(--radius-full, 999px);
-  border: none;
-  background: var(--primary-color, #0f766e);
-  color: #fff;
-  font-size: var(--text-sm, 0.875rem);
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: 500;
-  transition: background var(--transition-fast, 0.15s ease);
+  border: 1px solid rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--primary-dark, #134e4a);
+  box-shadow: 0 1px 4px rgba(7, 21, 17, 0.12);
 }
 
 .user-message-edit-submit:hover:not(:disabled) {
-  background: var(--primary-dark, #115e59);
+  background: #ffffff;
+  color: var(--primary-dark-hover, #0f3f3b);
+  transform: translateY(-1px);
 }
 
 .user-message-edit-submit:disabled {
-  opacity: 0.5;
+  opacity: 0.62;
   cursor: not-allowed;
+  transform: none;
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -1350,25 +1390,39 @@ chat-action-menu {
   color: #e2e8f0;
 }
 
+[data-theme="dark"] .user-message-edit-form {
+  background: var(--primary-color, #0f766e);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(2, 6, 23, 0.24);
+}
+
 [data-theme="dark"] .user-message-edit-textarea {
-  background: var(--surface-elevated, rgba(30, 41, 59, 0.92));
-  color: #e2e8f0;
-  border-color: rgba(15, 118, 110, 0.5);
+  background: transparent;
+  color: inherit;
+  border-color: transparent;
 }
 
 [data-theme="dark"] .user-message-edit-textarea:focus {
-  border-color: rgba(15, 118, 110, 0.8);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .user-message-edit-cancel {
-  border-color: rgba(148, 163, 184, 0.22);
-  color: #94a3b8;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 [data-theme="dark"] .user-message-edit-cancel:hover {
-  background: rgba(148, 163, 184, 0.1);
-  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .user-message-edit-submit {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--primary-dark, #134e4a);
 }
 
 [data-theme="dark"] .scroll-to-bottom-btn {
@@ -1482,6 +1536,25 @@ chat-action-menu {
     font-size: var(--text-base, 0.9375rem);
     line-height: 1.58;
     border-radius: 18px 18px 4px 18px;
+  }
+
+  .user-message-edit-form {
+    min-width: min(20rem, 100%);
+    padding: 0.42rem;
+    border-radius: 18px 18px 4px 18px;
+  }
+
+  .user-message-edit-textarea {
+    min-height: 2.2rem;
+    padding: 0.24rem 0.36rem;
+    font-size: var(--text-base, 0.9375rem);
+    line-height: 1.58;
+  }
+
+  .user-message-edit-cancel,
+  .user-message-edit-submit {
+    min-height: 1.78rem;
+    padding: 0.32rem 0.68rem;
   }
 
   .bot-message {
