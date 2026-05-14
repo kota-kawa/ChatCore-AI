@@ -38,6 +38,7 @@ from services.runtime_config import (  # noqa: E402
     get_session_secret_key,
     is_production_env,
 )
+from services.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
 
@@ -138,6 +139,7 @@ app.add_middleware(
     https_only=https_only,
 )
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.state.session_secret = secret_key
 app.state.session_cookie = "session"

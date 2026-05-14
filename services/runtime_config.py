@@ -57,19 +57,18 @@ def get_session_secret_key() -> str | None:
 
 
 def get_session_same_site() -> str:
-    # 本番では OAuth 戻りの互換性を優先して None を既定にし、
-    # 明示設定時は妥当な SameSite 値のみ受け付ける。
-    # Default to None in production for OAuth compatibility, while validating overrides.
+    # SameSite=Lax を既定にして、フレーム内やサブリソースのクロスサイト送信を抑える。
+    # Default to SameSite=Lax to avoid cross-site iframe/subresource session sends.
     configured = (os.getenv("FASTAPI_SESSION_SAMESITE") or "").strip().lower()
     if not configured:
-        return "none" if is_production_env() else "lax"
+        return "lax"
 
     if configured not in VALID_SESSION_SAMESITE_VALUES:
         logger.warning(
             "Invalid FASTAPI_SESSION_SAMESITE=%r. Falling back to the environment default.",
             configured,
         )
-        return "none" if is_production_env() else "lax"
+        return "lax"
 
     if configured == "none" and not is_production_env():
         logger.warning(

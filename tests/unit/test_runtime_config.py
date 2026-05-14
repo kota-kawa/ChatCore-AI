@@ -48,9 +48,9 @@ class RuntimeConfigTestCase(unittest.TestCase):
         with patch.dict("os.environ", {}, clear=True):
             self.assertIsNone(get_session_secret_key())
 
-    def test_get_session_same_site_defaults_to_none_in_production(self):
+    def test_get_session_same_site_defaults_to_lax_in_production(self):
         with patch.dict("os.environ", {"FASTAPI_ENV": "production"}, clear=True):
-            self.assertEqual(get_session_same_site(), "none")
+            self.assertEqual(get_session_same_site(), "lax")
 
     def test_get_session_same_site_defaults_to_lax_in_development(self):
         with patch.dict("os.environ", {"FASTAPI_ENV": "development"}, clear=True):
@@ -70,7 +70,7 @@ class RuntimeConfigTestCase(unittest.TestCase):
             {"FASTAPI_ENV": "production", "FASTAPI_SESSION_SAMESITE": "invalid"},
             clear=True,
         ):
-            self.assertEqual(get_session_same_site(), "none")
+            self.assertEqual(get_session_same_site(), "lax")
 
     def test_get_session_same_site_rejects_none_outside_production(self):
         with patch.dict(
