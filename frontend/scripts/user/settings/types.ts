@@ -86,7 +86,7 @@ export const PromptListEntrySchema = PromptListEntryApiUnionSchema.transform(nor
 export type PromptListEntry = z.infer<typeof PromptListEntrySchema>;
 
 export const toPromptListEntry = (raw: unknown): PromptListEntry => {
-  return parseWithSchema(PromptListEntrySchema, raw, "プロンプトリストデータの形式が不正です。");
+  return parseWithSchema(PromptListEntrySchema, raw, "保存したプロンプトデータの形式が不正です。");
 };
 
 export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
@@ -104,7 +104,7 @@ export function parsePromptListResponse(raw: unknown): PromptListEntry[] {
   const response = parseWithSchema(
     PromptListApiResponseSchema,
     raw,
-    "プロンプトリストレスポンスの形式が不正です。"
+    "保存したプロンプトレスポンスの形式が不正です。"
   );
   return (response.prompts ?? []).map((entry) => normalizePromptListEntry(entry));
 }

@@ -99,8 +99,8 @@ const ACCOUNT_DELETE_CONFIRMATION_TEXT = "アカウント削除";
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
-  { section: "prompts", iconClass: "bi bi-shield-lock", label: "プロンプト管理" },
-  { section: "prompt-list", iconClass: "bi bi-list-stars", label: "プロンプトリスト" },
+  { section: "prompts", iconClass: "bi bi-shield-lock", label: "投稿したプロンプト" },
+  { section: "prompt-list", iconClass: "bi bi-list-stars", label: "保存したプロンプト" },
   { section: "notifications", iconClass: "bi bi-bell", label: "通知設定" },
   { section: "security", iconClass: "bi bi-key", label: "セキュリティ" }
 ];
@@ -619,13 +619,13 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "プロンプトリストの取得に失敗しました。"
+          defaultMessage: "保存したプロンプトの取得に失敗しました。"
         }
       );
       setPromptListEntries(parsePromptListResponse(payload));
     } catch (error) {
       setPromptListEntries([]);
-      setPromptListError(error instanceof Error ? error.message : "プロンプトリストの取得に失敗しました。");
+      setPromptListError(error instanceof Error ? error.message : "保存したプロンプトの取得に失敗しました。");
     } finally {
       setPromptListLoading(false);
     }
@@ -979,7 +979,7 @@ export default function UserSettingsPage() {
       return;
     }
 
-    const confirmed = await showConfirmModal("プロンプトリストから削除しますか？");
+    const confirmed = await showConfirmModal("保存したプロンプトから削除しますか？");
     if (!confirmed) {
       return;
     }
@@ -992,14 +992,14 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "プロンプトリストの削除に失敗しました。"
+          defaultMessage: "保存したプロンプトの削除に失敗しました。"
         }
       );
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "プロンプトを削除しました。", { variant: "success" });
       await loadPromptList();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "プロンプトリストの削除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : "保存したプロンプトの削除に失敗しました。", { variant: "error" });
     }
   }, [loadPromptList]);
 
@@ -1327,9 +1327,9 @@ export default function UserSettingsPage() {
 
             <div id="prompts-section" className={`settings-section${isSectionActive("prompts") ? " active" : ""}`}>
               <div className="settings-card">
-                <h2>プロンプト管理</h2>
+                <h2>投稿したプロンプト</h2>
                 <div className="header-bar">
-                  <h3 className="section-title">My Prompts</h3>
+                  <h3 className="section-title">投稿したプロンプト</h3>
                 </div>
 
                 {myPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
@@ -1344,15 +1344,15 @@ export default function UserSettingsPage() {
 
             <div id="prompt-list-section" className={`settings-section${isSectionActive("prompt-list") ? " active" : ""}`}>
               <div className="settings-card">
-                <h2>プロンプトリスト</h2>
+                <h2>保存したプロンプト</h2>
                 <div className="header-bar">
-                  <h3 className="section-title">Prompt List</h3>
+                  <h3 className="section-title">保存したプロンプト</h3>
                 </div>
 
                 {promptListLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
                 {!promptListLoading && promptListError ? <p>{promptListError}</p> : null}
                 {!promptListLoading && !promptListError && promptListEntries.length === 0 ? (
-                  <p>プロンプトリストは存在しません。</p>
+                  <p>保存したプロンプトは存在しません。</p>
                 ) : null}
 
                 <div id="promptListEntries" className="prompt-grid">

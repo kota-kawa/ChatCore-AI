@@ -14,5 +14,5 @@ async def index(request: Request):
 
 @prompt_share_bp.get("/manage_prompts", name="prompt_share.manage_prompts")
 async def manage_prompts(request: Request):
-    """Next.js 側のプロンプト管理画面へリダイレクト"""
+    """Next.js 側の投稿したプロンプト画面へリダイレクト"""
     return redirect_to_frontend(request)

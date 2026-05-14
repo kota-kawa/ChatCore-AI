@@ -397,8 +397,8 @@ export default function PromptManagePage() {
   return (
     <>
       <SeoHead
-        title="マイプロンプト管理 | Chat Core"
-        description="Chat Coreで保存したプロンプトを管理するページです。"
+        title="投稿したプロンプト | Chat Core"
+        description="Chat Coreで投稿したプロンプトを管理するページです。"
         canonicalPath="/prompt_share/manage_prompts"
         noindex
       >
@@ -414,7 +414,7 @@ export default function PromptManagePage() {
 
         <main className="container main-container">
           <div className="header-bar">
-            <h2 className="section-title">My Prompts</h2>
+            <h2 className="section-title">投稿したプロンプト</h2>
           </div>
 
           {isLoading ? <p>プロンプトを読み込み中です...</p> : null}

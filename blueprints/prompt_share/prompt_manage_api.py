@@ -250,7 +250,7 @@ async def get_saved_prompts(request: Request):
 
 @prompt_manage_api_bp.get("/prompt_list", name="prompt_manage_api.get_prompt_list")
 async def get_prompt_list(request: Request):
-    """ログインユーザーのプロンプトリストを取得するエンドポイント"""
+    """ログインユーザーの保存したプロンプトを取得するエンドポイント"""
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 
@@ -269,7 +269,7 @@ async def get_prompt_list(request: Request):
     "/prompt_list/{entry_id}", name="prompt_manage_api.delete_prompt_list_entry"
 )
 async def delete_prompt_list_entry(entry_id: int, request: Request):
-    """プロンプトリストからエントリを削除するエンドポイント"""
+    """保存したプロンプトからエントリを削除するエンドポイント"""
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 

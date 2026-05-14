@@ -524,7 +524,7 @@ def _add_prompt_list_entry_for_user(
         )
         conn.commit()
         saved_id = _extract_id(cursor.fetchone())
-        return {"message": "プロンプトリストに保存しました。", "saved_id": saved_id}, 201
+        return {"message": "保存したプロンプトに追加しました。", "saved_id": saved_id}, 201
     except Exception:
         if conn is not None:
             conn.rollback()

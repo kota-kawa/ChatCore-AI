@@ -985,7 +985,7 @@ export default function PromptSharePage() {
       }
 
       if (prompt.saved_to_list) {
-        showToast("このプロンプトはすでにプロンプトリストに保存されています。", { variant: "info" });
+        showToast("このプロンプトはすでに保存したプロンプトに追加されています。", { variant: "info" });
         return;
       }
 
@@ -998,7 +998,7 @@ export default function PromptSharePage() {
         }));
       } catch (error) {
         console.error("プロンプト保存中にエラーが発生しました:", error);
-        showToast("プロンプトリストへの保存中にエラーが発生しました。", { variant: "error" });
+        showToast("保存したプロンプトへの追加中にエラーが発生しました。", { variant: "error" });
       } finally {
         setSaveToListPending(promptId, false);
       }

@@ -40,7 +40,7 @@ _PAGE_MAP: list[tuple[re.Pattern[str], str, list[tuple[str, int]]]] = [
     ),
     (
         re.compile(r"^/prompt_share/manage"),
-        "プロンプト管理ページ",
+        "投稿したプロンプトページ",
         [
             ("frontend/pages/prompt_share/manage_prompts.tsx", 130),
         ],

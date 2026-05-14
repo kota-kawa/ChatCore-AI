@@ -35,7 +35,7 @@ GLOBAL_ACTIONS: tuple[AgentAction, ...] = (
     AgentAction("チャットを開く", "navigate", "/", "メインのAIチャット画面へ移動する。"),
     AgentAction("プロンプト共有を開く", "navigate", "/prompt_share", "公開プロンプトの検索・投稿画面へ移動する。"),
     AgentAction("メモを開く", "navigate", "/memo", "保存済みメモの作成・閲覧画面へ移動する。"),
-    AgentAction("設定を開く", "navigate", "/settings", "プロフィール、外観、Passkey、プロンプト管理へ移動する。"),
+    AgentAction("設定を開く", "navigate", "/settings", "プロフィール、外観、Passkey、投稿したプロンプトへ移動する。"),
     AgentAction("ログインを開く", "navigate", "/login", "ログイン・登録画面へ移動する。"),
 )
 
@@ -104,7 +104,7 @@ PAGES: tuple[AgentPage, ...] = (
         ),
     ),
     AgentPage(
-        label="プロンプト管理",
+        label="投稿したプロンプト",
         path_pattern=re.compile(r"^/prompt_share/manage"),
         route="/prompt_share/manage",
         summary="自分の投稿プロンプトを管理する画面。",
@@ -134,18 +134,18 @@ PAGES: tuple[AgentPage, ...] = (
         label="設定",
         path_pattern=re.compile(r"^/settings/?$"),
         route="/settings",
-        summary="プロフィール、外観テーマ、プロンプト管理、プロンプトリスト、通知、セキュリティ/Passkeyを管理する画面。",
+        summary="プロフィール、外観テーマ、投稿したプロンプト、保存したプロンプト、通知、セキュリティ/Passkeyを管理する画面。",
         features=(
             "プロフィール、メール、自己紹介、AI向けプロフィール文脈を編集できる。",
             "ライト/ダーク/システム連動テーマを切り替えられる。",
-            "自分のプロンプトと保存済みプロンプトリストを管理できる。",
+            "投稿したプロンプトと保存したプロンプトを管理できる。",
             "Passkey登録と保存済みPasskey管理ができる。",
         ),
         actions=(
             AgentAction("プロフィール設定", "click", "[data-section='profile']", "プロフィール設定タブを開く。"),
             AgentAction("外観", "click", "[data-section='appearance']", "外観タブを開く。"),
-            AgentAction("プロンプト管理", "click", "[data-section='prompts']", "自分のプロンプト管理タブを開く。"),
-            AgentAction("プロンプトリスト", "click", "[data-section='prompt-list']", "保存済みプロンプトリストタブを開く。"),
+            AgentAction("投稿したプロンプト", "click", "[data-section='prompts']", "投稿したプロンプトタブを開く。"),
+            AgentAction("保存したプロンプト", "click", "[data-section='prompt-list']", "保存したプロンプトタブを開く。"),
             AgentAction("通知設定", "click", "[data-section='notifications']", "通知設定タブを開く。"),
             AgentAction("セキュリティ", "click", "[data-section='security']", "セキュリティ/Passkeyタブを開く。"),
         ),

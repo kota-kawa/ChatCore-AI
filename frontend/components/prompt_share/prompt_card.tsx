@@ -127,7 +127,7 @@ function PromptCardComponent({
             void onSaveToList(prompt);
           }}
         >
-          {isSavedToList ? "プロンプトリストに保存済み" : "プロンプトリストに保存"}
+          {isSavedToList ? "保存したプロンプトに追加済み" : "保存したプロンプトに追加"}
         </button>
         <button
           className="dropdown-item"
