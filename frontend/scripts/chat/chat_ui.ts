@@ -5,7 +5,7 @@ import { Marked } from "marked";
 
 import { getSharedDomRefs } from "../core/dom";
 import { isRecord } from "../core/runtime_validation";
-import { copyTextToClipboard } from "./message_utils";
+import { copyTextToClipboard, sanitizeMessageHtml } from "./message_utils";
 import { refreshChatShareState } from "./chat_share";
 
 type MarkedParseOptions = {
@@ -446,7 +446,9 @@ function formatUserInputForDisplay(text: string) {
     gfm: true,
     breaks: true
   });
-  const html = typeof parsed === "string" ? parsed : formatMarkdownFallback(normalized);
+  const html = sanitizeMessageHtml(
+    typeof parsed === "string" ? parsed : formatMarkdownFallback(normalized)
+  );
   rememberMarkdownHtml(userMarkdownHtmlCache, normalized, html);
   return html;
 }

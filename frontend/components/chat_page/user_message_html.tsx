@@ -8,8 +8,8 @@ type UserMessageHtmlProps = {
 };
 
 function UserMessageHtmlComponent({ text, attachedFileNames }: UserMessageHtmlProps) {
-  // formatUserInputForDisplay runs text through marked (a markdown parser) with
-  // HTML sanitization applied internally, so dangerouslySetInnerHTML is safe here.
+  // formatUserInputForDisplay escapes the fallback path and sanitizes marked HTML
+  // before returning it, so dangerouslySetInnerHTML is limited to safe markup.
   const formatted = useMemo(() => formatUserInputForDisplay(text), [text]);
 
   return (

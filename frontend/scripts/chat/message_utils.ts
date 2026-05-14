@@ -25,7 +25,45 @@ function compactBotMessageHtml(html: string) {
 
 const SAFE_URI_PATTERN = /^(?:(?:https?|mailto|tel):|\/(?!\/)|#|\.{1,2}\/|[^:/?#]+(?:[/?#]|$))/i;
 const SANITIZED_HTML_CACHE_LIMIT = 160;
+const DEFAULT_ALLOWED_MESSAGE_TAGS = [
+  "a",
+  "strong",
+  "em",
+  "code",
+  "pre",
+  "br",
+  "p",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "img",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "div",
+  "span",
+  "button",
+  "i",
+  "details",
+  "summary"
+];
 const sanitizedHtmlCache = new Map<string, string>();
+
+type SanitizeMessageHtmlOptions = {
+  allowedTags?: string[];
+  compactBotMessage?: boolean;
+};
 
 function rememberSanitizedHtml(key: string, value: string) {
   sanitizedHtmlCache.set(key, value);
@@ -37,6 +75,8 @@ function rememberSanitizedHtml(key: string, value: string) {
 }
 
 function normalizeSanitizedHtml(html: string) {
+  if (typeof document === "undefined") return html;
+
   const template = document.createElement("template");
   template.innerHTML = html;
 
@@ -56,63 +96,53 @@ function normalizeSanitizedHtml(html: string) {
   return template.innerHTML;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeMessageHtml(dirtyHtml: string, options: SanitizeMessageHtmlOptions = {}) {
+  const allowedTags = options.allowedTags || DEFAULT_ALLOWED_MESSAGE_TAGS;
+  const cacheKey = `${options.compactBotMessage ? "bot" : "plain"}\0${allowedTags.join(",")}\0${dirtyHtml}`;
+  const cached = sanitizedHtmlCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const purifier = DOMPurify as typeof DOMPurify & {
+    sanitize?: (dirty: string, config?: Record<string, unknown>) => string;
+  };
+  let clean =
+    typeof purifier.sanitize === "function"
+      ? purifier.sanitize(dirtyHtml, {
+          ALLOWED_TAGS: allowedTags,
+          ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"],
+          ALLOWED_URI_REGEXP: SAFE_URI_PATTERN,
+          ALLOW_DATA_ATTR: false
+        })
+      : escapeHtml(dirtyHtml);
+
+  clean = normalizeSanitizedHtml(clean);
+  if (options.compactBotMessage) {
+    clean = compactBotMessageHtml(clean);
+  }
+
+  rememberSanitizedHtml(cacheKey, clean);
+  return clean;
+}
+
 function renderSanitizedHTML(
   element: HTMLElement,
   dirtyHtml: string,
-  allowed: string[] = [
-    "a",
-    "strong",
-    "em",
-    "code",
-    "pre",
-    "br",
-    "p",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "img",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hr",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "div",
-    "span",
-    "button",
-    "i",
-    "details",
-    "summary"
-  ]
+  allowed: string[] = DEFAULT_ALLOWED_MESSAGE_TAGS
 ) {
   const isBotMessage = element.classList.contains("bot-message");
-  const cacheKey = `${isBotMessage ? "bot" : "plain"}\0${allowed.join(",")}\0${dirtyHtml}`;
-  const cached = sanitizedHtmlCache.get(cacheKey);
-  if (cached !== undefined) {
-    element.innerHTML = cached;
-    return;
-  }
-
-  let clean = DOMPurify.sanitize(dirtyHtml, {
-    ALLOWED_TAGS: allowed,
-    ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"],
-    ALLOWED_URI_REGEXP: SAFE_URI_PATTERN,
-    ALLOW_DATA_ATTR: false
+  element.innerHTML = sanitizeMessageHtml(dirtyHtml, {
+    allowedTags: allowed,
+    compactBotMessage: isBotMessage
   });
-  clean = normalizeSanitizedHtml(clean);
-  if (isBotMessage) {
-    clean = compactBotMessageHtml(clean);
-  }
-  rememberSanitizedHtml(cacheKey, clean);
-  element.innerHTML = clean;
 }
 
 /**
@@ -324,6 +354,7 @@ function scrollMessageToTop(_element?: HTMLElement) {
 }
 
 export {
+  sanitizeMessageHtml,
   renderSanitizedHTML,
   setTextWithLineBreaks,
   isChatViewportNearBottom,
