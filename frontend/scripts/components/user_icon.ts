@@ -104,8 +104,8 @@ tpl.innerHTML = `
       transform: scale(0.97);
     }
     .avatar {
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 3rem;
+      height: 3rem;
       border-radius: 50%;
       object-fit: cover;
       display: block;
@@ -113,7 +113,7 @@ tpl.innerHTML = `
     /* ▼ dropdown */
     .dropdown {
       position: absolute;
-      top: 3rem;
+      top: 3.5rem;
       right: 0;
       background: #fff;
       border: 1px solid #ddd;
