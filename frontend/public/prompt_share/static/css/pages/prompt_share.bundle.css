@@ -1318,9 +1318,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-share-page .prompt-action-btn {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -1380,7 +1380,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 
 .prompt-share-page .prompt-action-btn i,
 .prompt-share-page .meatball-menu i {
-  font-size: 1.15rem;
+  font-size: 1.35rem;
   display: inline-block;
   font-family: "bootstrap-icons" !important;
   font-style: normal;
@@ -3899,7 +3899,7 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   }
 
   .prompt-action-btn i {
-    font-size: 0.88rem;
+    font-size: 1.18rem;
   }
 
   .prompt-share-page .prompt-actions {
@@ -3908,9 +3908,9 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   }
 
   .prompt-share-page .prompt-action-btn {
-    width: 38px;
-    height: 38px;
-    min-height: 38px;
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
   }
 
   .post-modal-content {

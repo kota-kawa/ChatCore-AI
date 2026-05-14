@@ -269,9 +269,9 @@
 }
 
 .prompt-share-page .prompt-action-btn {
-  width: 40px;
-  height: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -331,7 +331,7 @@
 
 .prompt-share-page .prompt-action-btn i,
 .prompt-share-page .meatball-menu i {
-  font-size: 1.15rem;
+  font-size: 1.35rem;
   display: inline-block;
   font-family: "bootstrap-icons" !important;
   font-style: normal;
