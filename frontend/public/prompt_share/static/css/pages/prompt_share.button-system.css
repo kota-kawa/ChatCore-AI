@@ -98,6 +98,17 @@
   transform: translateY(-50%) scale(0.97);
 }
 
+.prompt-share-page .prompt-action-btn.like-btn,
+.prompt-share-page .prompt-action-btn.bookmark-btn,
+.prompt-share-page .prompt-action-btn.like-btn:hover:not(:disabled),
+.prompt-share-page .prompt-action-btn.bookmark-btn:hover:not(:disabled),
+.prompt-share-page .prompt-action-btn.like-btn:active:not(:disabled),
+.prompt-share-page .prompt-action-btn.bookmark-btn:active:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page :where(
     #auth-buttons .auth-btn,

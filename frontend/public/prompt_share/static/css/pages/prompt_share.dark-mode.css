@@ -257,6 +257,14 @@
   color: #f9fafb;
 }
 
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.like-btn,
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.bookmark-btn,
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.like-btn:hover,
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.bookmark-btn:hover {
+  background: transparent;
+  box-shadow: none;
+}
+
 [data-theme="dark"] .post-modal-content {
   background: #111827;
   border-color: rgba(255, 255, 255, 0.1);
