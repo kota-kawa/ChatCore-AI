@@ -367,77 +367,103 @@ function EditPromptModal({
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const inputClassName = [
+    "w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5",
+    "text-sm text-slate-900 shadow-sm outline-none transition",
+    "placeholder:text-slate-400",
+    "focus:border-primary focus:ring-4 focus:ring-primary/10",
+    "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
+    "[html[data-theme='dark']_&]:border-slate-700",
+    "[html[data-theme='dark']_&]:bg-slate-900/80",
+    "[html[data-theme='dark']_&]:text-slate-100",
+    "[html[data-theme='dark']_&]:focus:border-emerald-400",
+    "[html[data-theme='dark']_&]:focus:ring-emerald-400/15"
+  ].join(" ");
+  const labelClassName = "mb-2 block text-sm font-semibold text-slate-700 [html[data-theme='dark']_&]:text-slate-200";
+
   return (
     <div
       id="editModal"
-      className="modal show"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm [html[data-theme='dark']_&]:bg-slate-950/75"
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
-      style={{ display: "block", backgroundColor: "rgba(15, 23, 42, 0.5)" }}
+      aria-labelledby="editPromptModalTitle"
       onClick={(event) => {
         if (event.target === event.currentTarget && !saving) {
           onClose();
         }
       }}
     >
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable" role="document">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">
-              <i className="bi bi-pencil-square me-2"></i>プロンプト編集
-            </h5>
+      <div className="flex max-h-[min(92vh,820px)] w-full max-w-3xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl shadow-slate-950/25 [html[data-theme='dark']_&]:border-slate-700/80 [html[data-theme='dark']_&]:bg-slate-950" role="document">
+        <div className="flex min-h-0 w-full flex-col">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-slate-50 px-6 py-5 [html[data-theme='dark']_&]:border-slate-800 [html[data-theme='dark']_&]:bg-slate-900">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg text-primary ring-1 ring-primary/15 [html[data-theme='dark']_&]:bg-emerald-400/10 [html[data-theme='dark']_&]:text-emerald-300 [html[data-theme='dark']_&]:ring-emerald-400/20" aria-hidden="true">
+                <i className="bi bi-pencil-square"></i>
+              </span>
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-[0.22em] text-primary [html[data-theme='dark']_&]:text-emerald-300">投稿したプロンプト</p>
+                <h5 id="editPromptModalTitle" className="m-0 text-xl font-semibold text-slate-950 [html[data-theme='dark']_&]:text-slate-50">
+                  プロンプトを編集
+                </h5>
+              </div>
+            </div>
             <button
               type="button"
-              className="btn-close"
-              aria-label="Close"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 [html[data-theme='dark']_&]:border-slate-700 [html[data-theme='dark']_&]:bg-slate-900 [html[data-theme='dark']_&]:text-slate-300 [html[data-theme='dark']_&]:hover:bg-slate-800 [html[data-theme='dark']_&]:hover:text-white"
+              aria-label="閉じる"
               onClick={onClose}
               disabled={saving}
-            ></button>
+            >
+              <i className="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
           </div>
 
-          <div className="modal-body">
-            <form id="editForm" className="modal-form" onSubmit={onSubmit}>
+          <form id="editForm" className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
               <input type="hidden" id="editPromptId" value={formState.id} readOnly />
 
-              <div className="form-group">
-                <label htmlFor="editTitle" className="form-label">
-                  タイトル
-                </label>
-                <input
-                  type="text"
-                  className="form-control input-field"
-                  id="editTitle"
-                  name="title"
-                  required
-                  value={formState.title}
-                  onChange={onChange}
-                  disabled={saving}
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="editTitle" className={labelClassName}>
+                    タイトル
+                  </label>
+                  <input
+                    type="text"
+                    className={inputClassName}
+                    id="editTitle"
+                    name="title"
+                    required
+                    value={formState.title}
+                    onChange={onChange}
+                    disabled={saving}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="editCategory" className={labelClassName}>
+                    カテゴリ
+                  </label>
+                  <input
+                    type="text"
+                    className={inputClassName}
+                    id="editCategory"
+                    name="category"
+                    required
+                    value={formState.category}
+                    onChange={onChange}
+                    disabled={saving}
+                  />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="editCategory" className="form-label">
-                  カテゴリ
-                </label>
-                <input
-                  type="text"
-                  className="form-control input-field"
-                  id="editCategory"
-                  name="category"
-                  required
-                  value={formState.category}
-                  onChange={onChange}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="editContent" className="form-label">
+              <div>
+                <label htmlFor="editContent" className={labelClassName}>
                   内容
                 </label>
                 <textarea
-                  className="form-control input-field"
+                  className={`${inputClassName} min-h-44 resize-y leading-6`}
                   id="editContent"
                   name="content"
                   rows={5}
@@ -448,43 +474,58 @@ function EditPromptModal({
                 ></textarea>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="editInputExamples" className="form-label">
-                  入力例
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editInputExamples"
-                  name="inputExamples"
-                  rows={3}
-                  value={formState.inputExamples}
-                  onChange={onChange}
-                  disabled={saving}
-                ></textarea>
-              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="editInputExamples" className={labelClassName}>
+                    入力例
+                  </label>
+                  <textarea
+                    className={`${inputClassName} min-h-32 resize-y leading-6`}
+                    id="editInputExamples"
+                    name="inputExamples"
+                    rows={3}
+                    value={formState.inputExamples}
+                    onChange={onChange}
+                    disabled={saving}
+                  ></textarea>
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="editOutputExamples" className="form-label">
-                  出力例
-                </label>
-                <textarea
-                  className="form-control input-field"
-                  id="editOutputExamples"
-                  name="outputExamples"
-                  rows={3}
-                  value={formState.outputExamples}
-                  onChange={onChange}
-                  disabled={saving}
-                ></textarea>
+                <div>
+                  <label htmlFor="editOutputExamples" className={labelClassName}>
+                    出力例
+                  </label>
+                  <textarea
+                    className={`${inputClassName} min-h-32 resize-y leading-6`}
+                    id="editOutputExamples"
+                    name="outputExamples"
+                    rows={3}
+                    value={formState.outputExamples}
+                    onChange={onChange}
+                    disabled={saving}
+                  ></textarea>
+                </div>
               </div>
+            </div>
 
-              <div className="form-actions">
-                <button type="submit" className="btn btn-primary w-100" disabled={saving}>
-                  <i className="bi bi-save me-2"></i>{saving ? "更新中..." : "更新する"}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200/80 bg-white px-6 py-4 sm:flex-row sm:justify-end [html[data-theme='dark']_&]:border-slate-800 [html[data-theme='dark']_&]:bg-slate-950">
+              <button
+                type="button"
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 [html[data-theme='dark']_&]:border-slate-700 [html[data-theme='dark']_&]:bg-slate-900 [html[data-theme='dark']_&]:text-slate-200 [html[data-theme='dark']_&]:hover:bg-slate-800"
+                onClick={onClose}
+                disabled={saving}
+              >
+                閉じる
+              </button>
+              <button
+                type="submit"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/10 transition hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 [html[data-theme='dark']_&]:shadow-emerald-950/30"
+                disabled={saving}
+              >
+                <i className="bi bi-save" aria-hidden="true"></i>
+                {saving ? "更新中..." : "更新する"}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
