@@ -131,6 +131,7 @@ export default function PromptSharePage() {
   const [openDropdownPromptId, setOpenDropdownPromptId] = useState<string | null>(null);
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [bookmarkPendingIds, setBookmarkPendingIds] = useState<Set<string>>(new Set());
+  const [actionEffectIds, setActionEffectIds] = useState<Set<string>>(new Set());
   const [saveToListPendingIds, setSaveToListPendingIds] = useState<Set<string>>(new Set());
 
   const [promptType, setPromptType] = useState<PromptType>("text");
@@ -183,6 +184,9 @@ export default function PromptSharePage() {
   const promptAssistInitializedRef = useRef(false);
   const promptAssistControllerRef = useRef<{ reset: () => void; updateForPromptType: (t: string) => void } | null>(null);
   const promptTypeRef = useRef<PromptType>("text");
+  const likePendingIdsRef = useRef<Set<string>>(new Set());
+  const bookmarkPendingIdsRef = useRef<Set<string>>(new Set());
+  const actionEffectTimersRef = useRef<Map<string, number>>(new Map());
 
   const promptDetailCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const promptShareCopyButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -220,6 +224,15 @@ export default function PromptSharePage() {
   useEffect(() => {
     promptTypeRef.current = promptType;
   }, [promptType]);
+
+  useEffect(() => {
+    return () => {
+      actionEffectTimersRef.current.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      actionEffectTimersRef.current.clear();
+    };
+  }, []);
 
   const toCachedPromptData = useCallback((items: PromptRecord[]) => {
     return items.map(({ clientId, ...prompt }) => prompt);
@@ -456,27 +469,45 @@ export default function PromptSharePage() {
   );
 
   const setLikePending = useCallback((clientId: string, pending: boolean) => {
-    setLikePendingIds((current) => {
-      const next = new Set(current);
-      if (pending) {
-        next.add(clientId);
-      } else {
-        next.delete(clientId);
-      }
-      return next;
-    });
+    if (pending) {
+      likePendingIdsRef.current.add(clientId);
+    } else {
+      likePendingIdsRef.current.delete(clientId);
+    }
+    setLikePendingIds(new Set(likePendingIdsRef.current));
   }, []);
 
   const setBookmarkPending = useCallback((clientId: string, pending: boolean) => {
-    setBookmarkPendingIds((current) => {
+    if (pending) {
+      bookmarkPendingIdsRef.current.add(clientId);
+    } else {
+      bookmarkPendingIdsRef.current.delete(clientId);
+    }
+    setBookmarkPendingIds(new Set(bookmarkPendingIdsRef.current));
+  }, []);
+
+  const triggerActionEffect = useCallback((effectId: string) => {
+    const activeTimerId = actionEffectTimersRef.current.get(effectId);
+    if (activeTimerId) {
+      window.clearTimeout(activeTimerId);
+    }
+
+    setActionEffectIds((current) => {
       const next = new Set(current);
-      if (pending) {
-        next.add(clientId);
-      } else {
-        next.delete(clientId);
-      }
+      next.add(effectId);
       return next;
     });
+
+    const timerId = window.setTimeout(() => {
+      actionEffectTimersRef.current.delete(effectId);
+      setActionEffectIds((current) => {
+        const next = new Set(current);
+        next.delete(effectId);
+        return next;
+      });
+    }, 720);
+
+    actionEffectTimersRef.current.set(effectId, timerId);
   }, []);
 
   const setSaveToListPending = useCallback((clientId: string, pending: boolean) => {
@@ -1014,24 +1045,35 @@ export default function PromptSharePage() {
       }
 
       const promptId = prompt.clientId;
+      if (likePendingIdsRef.current.has(promptId)) {
+        return;
+      }
+
       const shouldLike = !prompt.liked;
       setLikePending(promptId, true);
+      updatePromptRecord(promptId, (currentPrompt) => ({
+        ...currentPrompt,
+        liked: shouldLike
+      }));
+      if (shouldLike) {
+        triggerActionEffect(`${promptId}:like`);
+      }
+
       try {
         const request = shouldLike ? savePromptLike(prompt) : removePromptLike(prompt);
         await request;
-
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          liked: shouldLike
-        }));
       } catch (error) {
         console.error("いいね操作エラー:", error);
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          liked: !shouldLike
+        }));
         showToast("いいねの更新中にエラーが発生しました。", { variant: "error" });
       } finally {
         setLikePending(promptId, false);
       }
     },
-    [isLoggedIn, setLikePending, updatePromptRecord]
+    [isLoggedIn, setLikePending, triggerActionEffect, updatePromptRecord]
   );
 
   const handleTogglePromptBookmark = useCallback(
@@ -1042,24 +1084,35 @@ export default function PromptSharePage() {
       }
 
       const promptId = prompt.clientId;
+      if (bookmarkPendingIdsRef.current.has(promptId)) {
+        return;
+      }
+
       const shouldBookmark = !prompt.bookmarked;
       setBookmarkPending(promptId, true);
+      updatePromptRecord(promptId, (currentPrompt) => ({
+        ...currentPrompt,
+        bookmarked: shouldBookmark
+      }));
+      if (shouldBookmark) {
+        triggerActionEffect(`${promptId}:bookmark`);
+      }
+
       try {
         const request = shouldBookmark ? savePromptBookmark(prompt) : removePromptBookmark(prompt);
         await request;
-
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          bookmarked: shouldBookmark
-        }));
       } catch (error) {
         console.error("ブックマーク操作エラー:", error);
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          bookmarked: !shouldBookmark
+        }));
         showToast("ブックマークの更新中にエラーが発生しました。", { variant: "error" });
       } finally {
         setBookmarkPending(promptId, false);
       }
     },
-    [isLoggedIn, setBookmarkPending, updatePromptRecord]
+    [isLoggedIn, setBookmarkPending, triggerActionEffect, updatePromptRecord]
   );
 
   const openComposerModal = useCallback(() => {
@@ -1580,6 +1633,7 @@ export default function PromptSharePage() {
         openDropdownPromptId={openDropdownPromptId}
         likePendingIds={likePendingIds}
         bookmarkPendingIds={bookmarkPendingIds}
+        actionEffectIds={actionEffectIds}
         saveToListPendingIds={saveToListPendingIds}
         onOpenDetail={openPromptDetailModal}
         onOpenComments={openPromptCommentsModal}

@@ -20,6 +20,8 @@ type PromptCardProps = {
   isDropdownOpen: boolean;
   isLikePending: boolean;
   isBookmarkPending: boolean;
+  isLikeEffectActive: boolean;
+  isBookmarkEffectActive: boolean;
   isSaveToListPending: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
@@ -36,6 +38,8 @@ function PromptCardComponent({
   isDropdownOpen,
   isLikePending,
   isBookmarkPending,
+  isLikeEffectActive,
+  isBookmarkEffectActive,
   isSaveToListPending,
   onOpenDetail,
   onOpenComments,
@@ -182,34 +186,40 @@ function PromptCardComponent({
             <span className="prompt-action-count">{commentCount}</span>
           </button>
           <button
-            className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}`}
+            className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}${isLikePending ? " is-pending" : ""}${isLikeEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label="いいね"
+            aria-label={prompt.liked ? "いいねを解除" : "いいね"}
             aria-pressed={prompt.liked ? "true" : "false"}
-            data-tooltip="このプロンプトにいいね"
+            aria-disabled={isLikePending ? "true" : "false"}
+            data-tooltip={prompt.liked ? "いいねを解除" : "このプロンプトにいいね"}
             data-tooltip-placement="top"
-            disabled={isLikePending}
             onClick={(event) => {
               event.stopPropagation();
+              if (isLikePending) {
+                return;
+              }
               void onToggleLike(prompt);
             }}
           >
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
           </button>
           <button
-            className={`prompt-action-btn bookmark-btn${isBookmarked ? " bookmarked" : ""}`}
+            className={`prompt-action-btn bookmark-btn${isBookmarked ? " bookmarked" : ""}${isBookmarkPending ? " is-pending" : ""}${isBookmarkEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label="保存"
+            aria-label={isBookmarked ? "ブックマークを解除" : "ブックマーク"}
             aria-pressed={isBookmarked ? "true" : "false"}
-            data-tooltip={isBookmarked ? "保存を解除" : "このプロンプトを保存"}
+            aria-disabled={isBookmarkPending ? "true" : "false"}
+            data-tooltip={isBookmarked ? "ブックマークを解除" : "このプロンプトをブックマーク"}
             data-tooltip-placement="top"
-            disabled={isBookmarkPending}
             onClick={(event) => {
               event.stopPropagation();
+              if (isBookmarkPending) {
+                return;
+              }
               void onToggleBookmark(prompt);
             }}
           >
-            <i className={`bi ${isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark"}`}></i>
+            <i className={`bi ${isBookmarked ? "bi-bookmark-fill" : "bi-bookmark"}`}></i>
           </button>
         </div>
       </div>

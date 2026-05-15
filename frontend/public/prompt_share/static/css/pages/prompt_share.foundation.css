@@ -27,10 +27,10 @@ body.prompt-share-page,
   --ps-like-strong: #a44b61;
   --ps-like-tint: rgba(192, 93, 116, 0.14);
   --ps-like-shadow: rgba(192, 93, 116, 0.26);
-  --ps-bookmark: #b8872f;
-  --ps-bookmark-strong: #94691f;
-  --ps-bookmark-tint: rgba(184, 135, 47, 0.15);
-  --ps-bookmark-shadow: rgba(184, 135, 47, 0.24);
+  --ps-bookmark: #8b5cf6;
+  --ps-bookmark-strong: #6d28d9;
+  --ps-bookmark-tint: rgba(139, 92, 246, 0.15);
+  --ps-bookmark-shadow: rgba(139, 92, 246, 0.3);
   --ps-shadow-soft: 0 1px 3px rgba(60, 64, 67, 0.18);
   --ps-shadow-hover: 0 8px 24px rgba(60, 64, 67, 0.2);
   --ps-fab-sheen: radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.34), transparent 34%);

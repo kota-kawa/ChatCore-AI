@@ -29,6 +29,7 @@ type PromptSharePageLayoutProps = {
   openDropdownPromptId: string | null;
   likePendingIds: Set<string>;
   bookmarkPendingIds: Set<string>;
+  actionEffectIds: Set<string>;
   saveToListPendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
@@ -67,6 +68,7 @@ export function PromptSharePageLayout({
   openDropdownPromptId,
   likePendingIds,
   bookmarkPendingIds,
+  actionEffectIds,
   saveToListPendingIds,
   onOpenDetail,
   onOpenComments,
@@ -248,6 +250,8 @@ export function PromptSharePageLayout({
                   isDropdownOpen={openDropdownPromptId === promptId}
                   isLikePending={likePendingIds.has(promptId)}
                   isBookmarkPending={bookmarkPendingIds.has(promptId)}
+                  isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
+                  isBookmarkEffectActive={actionEffectIds.has(`${promptId}:bookmark`)}
                   isSaveToListPending={saveToListPendingIds.has(promptId)}
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
