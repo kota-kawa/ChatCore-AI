@@ -76,6 +76,7 @@ type SharePayload = {
 type CollectionListPayload = { collections?: Collection[]; error?: string };
 type FlashState = { type: "success" | "error"; text: string };
 type HttpError = Error & { status?: number };
+type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "add_tags" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
@@ -91,6 +92,7 @@ const MEMO_ACTION_MENU_GAP = 6;
 const MEMO_ACTION_MENU_VIEWPORT_MARGIN = 8;
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
+const DETAIL_AUTOSAVE_DELAY_MS = 900;
 const EXPORT_FORMATS = [
   { value: "markdown", label: "Markdown (.md)", icon: "bi-markdown" },
   { value: "json", label: "JSON (.json)", icon: "bi-filetype-json" },
@@ -347,12 +349,21 @@ export default function MemoPage() {
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
-  const [isDetailEditing, setIsDetailEditing] = useState(false);
+  const [detailPreviewMode, setDetailPreviewMode] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditTags, setDetailEditTags] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
   const [detailEditAiResponse, setDetailEditAiResponse] = useState("");
-  const [detailEditSaving, setDetailEditSaving] = useState(false);
+  const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
+  const [detailSaveError, setDetailSaveError] = useState("");
+  const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detailSaveSequenceRef = useRef(0);
+  const detailEditSnapshotRef = useRef({
+    title: "",
+    tags: "",
+    collectionId: null as number | null,
+    aiResponse: "",
+  });
 
   const [actionLoadingId, setActionLoadingId] = useState<string>("");
 
@@ -467,26 +478,29 @@ export default function MemoPage() {
   }, [router.isReady, router.query.saved]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (isExportModalOpen) { setIsExportModalOpen(false); return; }
-      if (isCollectionPanelOpen) { setIsCollectionPanelOpen(false); return; }
-      if (isShareModalOpen) { setIsShareModalOpen(false); return; }
-      if (selectedMemo) setSelectedMemo(null);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => { document.removeEventListener("keydown", onKeyDown); };
-  }, [isShareModalOpen, selectedMemo, isCollectionPanelOpen, isExportModalOpen]);
-
-  useEffect(() => {
     if (selectedMemo) return;
-    setIsDetailEditing(false);
+    if (detailAutoSaveTimerRef.current) {
+      clearTimeout(detailAutoSaveTimerRef.current);
+      detailAutoSaveTimerRef.current = null;
+    }
+    detailSaveSequenceRef.current += 1;
+    setDetailPreviewMode(false);
     setDetailEditTitle("");
     setDetailEditTags("");
     setDetailEditCollectionId(null);
     setDetailEditAiResponse("");
-    setDetailEditSaving(false);
+    setDetailSaveStatus("idle");
+    setDetailSaveError("");
   }, [selectedMemo]);
+
+  useEffect(() => {
+    detailEditSnapshotRef.current = {
+      title: detailEditTitle,
+      tags: detailEditTags,
+      collectionId: detailEditCollectionId,
+      aiResponse: detailEditAiResponse,
+    };
+  }, [detailEditAiResponse, detailEditCollectionId, detailEditTags, detailEditTitle]);
 
   useEffect(() => {
     if (!openMenuMemoId) return;
@@ -616,21 +630,48 @@ export default function MemoPage() {
   // Memo detail
   // -----------------------------------------------------------------------
 
-  const openMemoDetail = useCallback(async (memoId: string | number, options?: { edit?: boolean }) => {
+  const detailHasUnsavedChanges = useMemo(() => {
+    if (!selectedMemo) return false;
+    return (
+      detailEditTitle !== (selectedMemo.title || "") ||
+      detailEditTags !== (selectedMemo.tags || "") ||
+      detailEditCollectionId !== (selectedMemo.collection_id ?? null) ||
+      detailEditAiResponse !== (selectedMemo.ai_response || "")
+    );
+  }, [
+    detailEditAiResponse,
+    detailEditCollectionId,
+    detailEditTags,
+    detailEditTitle,
+    selectedMemo,
+  ]);
+
+  const clearDetailAutoSaveTimer = useCallback(() => {
+    if (!detailAutoSaveTimerRef.current) return;
+    clearTimeout(detailAutoSaveTimerRef.current);
+    detailAutoSaveTimerRef.current = null;
+  }, []);
+
+  const openMemoDetail = useCallback(async (memoId: string | number) => {
     setDetailError("");
     setDetailLoading(true);
-    setIsDetailEditing(false);
+    setDetailPreviewMode(false);
+    setDetailSaveStatus("idle");
+    setDetailSaveError("");
+    if (detailAutoSaveTimerRef.current) {
+      clearTimeout(detailAutoSaveTimerRef.current);
+      detailAutoSaveTimerRef.current = null;
+    }
+    detailSaveSequenceRef.current += 1;
     try {
       const memo = await loadMemoDetail(memoId);
       if (!memo) { setDetailError("メモの詳細を取得できませんでした。"); return; }
+      setDetailEditTitle(memo.title || "");
+      setDetailEditTags(memo.tags || "");
+      setDetailEditCollectionId(memo.collection_id ?? null);
+      setDetailEditAiResponse(memo.ai_response || "");
       setSelectedMemo(memo);
-      if (options?.edit) {
-        setDetailEditTitle(memo.title || "");
-        setDetailEditTags(memo.tags || "");
-        setDetailEditCollectionId(memo.collection_id ?? null);
-        setDetailEditAiResponse(memo.ai_response || "");
-        setIsDetailEditing(true);
-      }
+      setDetailSaveStatus("saved");
     } catch (error) {
       setDetailError(error instanceof Error ? error.message : "メモの詳細取得に失敗しました。");
     } finally {
@@ -638,39 +679,32 @@ export default function MemoPage() {
     }
   }, []);
 
-  const startDetailEdit = useCallback((memo: MemoDetail) => {
-    setDetailEditTitle(memo.title || "");
-    setDetailEditTags(memo.tags || "");
-    setDetailEditCollectionId(memo.collection_id ?? null);
-    setDetailEditAiResponse(memo.ai_response || "");
-    setIsDetailEditing(true);
-  }, []);
-
-  const cancelDetailEdit = useCallback(() => {
-    setIsDetailEditing(false);
-    setDetailEditTitle("");
-    setDetailEditTags("");
-    setDetailEditCollectionId(null);
-    setDetailEditAiResponse("");
-  }, []);
-
   const saveDetailEdit = useCallback(async () => {
-    if (!selectedMemo?.id) return;
+    if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
     if (!detailEditAiResponse.trim()) {
-      showFlash("error", "AIの回答を入力してください。");
-      return;
+      setDetailSaveStatus("error");
+      setDetailSaveError("AIの回答を入力してください。");
+      return false;
     }
-    setDetailEditSaving(true);
+    const snapshot = {
+      title: detailEditTitle,
+      tags: detailEditTags,
+      collectionId: detailEditCollectionId,
+      aiResponse: detailEditAiResponse,
+    };
+    const requestId = ++detailSaveSequenceRef.current;
+    setDetailSaveStatus("saving");
+    setDetailSaveError("");
     try {
       const body: Record<string, unknown> = {
-        title: detailEditTitle,
-        tags: detailEditTags,
-        ai_response: detailEditAiResponse,
+        title: snapshot.title,
+        tags: snapshot.tags,
+        ai_response: snapshot.aiResponse,
       };
 
       if (collections.length > 0) {
-        if (detailEditCollectionId !== null) {
-          body.collection_id = detailEditCollectionId;
+        if (snapshot.collectionId !== null) {
+          body.collection_id = snapshot.collectionId;
         } else {
           body.clear_collection = true;
         }
@@ -686,26 +720,89 @@ export default function MemoPage() {
         },
         { defaultMessage: "メモ本文の更新に失敗しました。", hasApplicationError: (data) => !data.memo },
       );
-      if (payload.memo) setSelectedMemo(payload.memo);
-      cancelDetailEdit();
-      showFlash("success", "メモを更新しました。");
-      await mutate();
+      if (requestId === detailSaveSequenceRef.current) {
+        if (payload.memo) {
+          setSelectedMemo(payload.memo);
+          const current = detailEditSnapshotRef.current;
+          const fieldsStillMatchSavedSnapshot =
+            current.title === snapshot.title &&
+            current.tags === snapshot.tags &&
+            current.collectionId === snapshot.collectionId &&
+            current.aiResponse === snapshot.aiResponse;
+          if (fieldsStillMatchSavedSnapshot) {
+            setDetailEditTitle(payload.memo.title || "");
+            setDetailEditTags(payload.memo.tags || "");
+            setDetailEditCollectionId(payload.memo.collection_id ?? null);
+            setDetailEditAiResponse(payload.memo.ai_response || "");
+          }
+        }
+        setDetailSaveStatus("saved");
+        setDetailSaveError("");
+      }
+      void mutate();
+      return true;
     } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "メモ本文の更新に失敗しました。");
-    } finally {
-      setDetailEditSaving(false);
+      if (requestId === detailSaveSequenceRef.current) {
+        setDetailSaveStatus("error");
+        setDetailSaveError(error instanceof Error ? error.message : "メモ本文の更新に失敗しました。");
+      }
+      return false;
     }
   }, [
-    cancelDetailEdit,
     collections.length,
     detailEditAiResponse,
     detailEditCollectionId,
     detailEditTags,
     detailEditTitle,
+    detailHasUnsavedChanges,
     mutate,
     selectedMemo?.id,
-    showFlash,
   ]);
+
+  const closeMemoDetail = useCallback(async () => {
+    clearDetailAutoSaveTimer();
+    if (detailHasUnsavedChanges && detailEditAiResponse.trim()) {
+      const saved = await saveDetailEdit();
+      if (!saved) return;
+    }
+    setSelectedMemo(null);
+  }, [clearDetailAutoSaveTimer, detailEditAiResponse, detailHasUnsavedChanges, saveDetailEdit]);
+
+  useEffect(() => {
+    clearDetailAutoSaveTimer();
+    if (!selectedMemo || !detailHasUnsavedChanges) return;
+    if (!detailEditAiResponse.trim()) {
+      setDetailSaveStatus("error");
+      setDetailSaveError("AIの回答を入力してください。");
+      return;
+    }
+
+    setDetailSaveStatus("idle");
+    setDetailSaveError("");
+    detailAutoSaveTimerRef.current = setTimeout(() => {
+      void saveDetailEdit();
+    }, DETAIL_AUTOSAVE_DELAY_MS);
+
+    return clearDetailAutoSaveTimer;
+  }, [
+    clearDetailAutoSaveTimer,
+    detailEditAiResponse,
+    detailHasUnsavedChanges,
+    saveDetailEdit,
+    selectedMemo,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (isExportModalOpen) { setIsExportModalOpen(false); return; }
+      if (isCollectionPanelOpen) { setIsCollectionPanelOpen(false); return; }
+      if (isShareModalOpen) { setIsShareModalOpen(false); return; }
+      if (selectedMemo) void closeMemoDetail();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); };
+  }, [closeMemoDetail, isShareModalOpen, selectedMemo, isCollectionPanelOpen, isExportModalOpen]);
 
   // -----------------------------------------------------------------------
   // Pin / Archive / Delete
@@ -1430,16 +1527,6 @@ export default function MemoPage() {
                                         </button>
                                         <button
                                           type="button"
-                                          className="memo-item__dropdown-item"
-                                          role="menuitem"
-                                          onClick={() => { void openMemoDetail(memoId, { edit: true }); setOpenMenuMemoId(""); setMenuPosition(null); }}
-                                        >
-                                          <i className="bi bi-pencil-square"></i>
-                                          内容を編集
-                                        </button>
-                                        <div className="memo-item__dropdown-divider" role="separator"></div>
-                                        <button
-                                          type="button"
                                           className="memo-item__dropdown-item memo-item__dropdown-item--danger"
                                           role="menuitem"
                                           onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
@@ -1565,129 +1652,114 @@ export default function MemoPage() {
 
         {/* ── Memo detail modal ── */}
         <div className={`memo-modal${selectedMemo ? " is-visible" : ""}`} aria-hidden={selectedMemo ? "false" : "true"}>
-          <div className="memo-modal__overlay" onClick={() => setSelectedMemo(null)}></div>
+          <div className="memo-modal__overlay" onClick={() => { void closeMemoDetail(); }}></div>
           <div className="memo-modal__content" role="dialog" aria-modal="true" aria-labelledby="memoModalTitle">
-            <button type="button" className="memo-modal__close" aria-label="閉じる" onClick={() => setSelectedMemo(null)}>
+            <button type="button" className="memo-modal__close" aria-label="閉じる" onClick={() => { void closeMemoDetail(); }}>
               <i className="bi bi-x-lg"></i>
             </button>
             <header className="memo-modal__header">
               <div className="memo-modal__title-row">
                 <div>
-                  <h3 id="memoModalTitle">{selectedMemo?.title || "保存したメモ"}</h3>
+                  <h3 id="memoModalTitle">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</h3>
                   <p className="memo-modal__date">{formatDateTime(selectedMemo?.updated_at || selectedMemo?.created_at) || selectedMemo?.created_at || ""}</p>
                 </div>
-                {selectedMemo && !isDetailEditing && (
-                  <button
-                    type="button"
-                    className="memo-modal__edit-btn"
-                    onClick={() => startDetailEdit(selectedMemo)}
-                    disabled={detailLoading}
-                  >
-                    <i className="bi bi-pencil-square" aria-hidden="true"></i>
-                    内容を編集
-                  </button>
+                {selectedMemo && (
+                  <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
+                    {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
+                    {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                    {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
+                    {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                    {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
+                  </div>
                 )}
               </div>
             </header>
             {detailLoading && <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>}
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
             {!detailLoading && selectedMemo && (
-              <>
-                {!isDetailEditing && <div className="memo-modal__tags">
-                  {selectedMemo.collection_name && <CollectionBadge name={selectedMemo.collection_name} color={selectedMemo.collection_color || "#6b7280"} />}
-                  {splitTags(selectedMemo.tags).length
-                    ? splitTags(selectedMemo.tags).map((tag) => <span className="memo-tag" key={tag}>{tag}</span>)
-                    : <span className="memo-tag memo-tag--muted">タグなし</span>}
-                </div>}
-                {isDetailEditing ? (
-                  <div className="memo-modal__body memo-modal__body--edit">
-                    <section className="memo-modal__section memo-modal__section--full memo-modal__edit-form">
-                      <div className="memo-modal__edit-fields">
-                        <div className="memo-modal__edit-grid">
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-title">タイトル</label>
-                            <input
-                              id="memo-detail-title"
-                              type="text"
-                              className="memo-control"
-                              value={detailEditTitle}
-                              onChange={(event) => setDetailEditTitle(event.target.value)}
-                              placeholder="空欄なら回答1行目を採用"
-                              maxLength={255}
-                              disabled={detailEditSaving}
-                            />
-                          </div>
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-tags">タグ</label>
-                            <input
-                              id="memo-detail-tags"
-                              type="text"
-                              className="memo-control"
-                              value={detailEditTags}
-                              onChange={(event) => setDetailEditTags(event.target.value)}
-                              placeholder="例: 設計 仕様"
-                              maxLength={255}
-                              disabled={detailEditSaving}
-                            />
-                          </div>
-                        </div>
-                        {collections.length > 0 && (
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-collection">コレクション</label>
-                            <MemoSelect
-                              id="memo-detail-collection"
-                              className="memo-select--full"
-                              value={String(detailEditCollectionId ?? "")}
-                              onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
-                              disabled={detailEditSaving}
-                              options={[
-                                { value: "", label: "コレクションなし" },
-                                ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
-                              ]}
-                            />
-                          </div>
-                        )}
-                        <label htmlFor="memo-detail-ai-response">AIの回答</label>
-                        <textarea
-                          id="memo-detail-ai-response"
-                          className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
-                          value={detailEditAiResponse}
-                          onChange={(event) => setDetailEditAiResponse(event.target.value)}
-                          placeholder="AIからの回答"
-                          disabled={detailEditSaving}
-                          required
+              <div className="memo-modal__body memo-modal__body--edit">
+                <section className="memo-modal__section memo-modal__section--full memo-modal__edit-form">
+                  <div className="memo-modal__edit-fields">
+                    <div className="memo-modal__edit-grid">
+                      <div className="memo-modal__edit-field">
+                        <label htmlFor="memo-detail-title">タイトル</label>
+                        <input
+                          id="memo-detail-title"
+                          type="text"
+                          className="memo-control"
+                          value={detailEditTitle}
+                          onChange={(event) => setDetailEditTitle(event.target.value)}
+                          placeholder="空欄なら回答1行目を採用"
+                          maxLength={255}
                         />
                       </div>
-                      <div className="memo-modal__edit-actions">
+                      <div className="memo-modal__edit-field">
+                        <label htmlFor="memo-detail-tags">タグ</label>
+                        <input
+                          id="memo-detail-tags"
+                          type="text"
+                          className="memo-control"
+                          value={detailEditTags}
+                          onChange={(event) => setDetailEditTags(event.target.value)}
+                          placeholder="例: 設計 仕様"
+                          maxLength={255}
+                        />
+                      </div>
+                    </div>
+                    {collections.length > 0 && (
+                      <div className="memo-modal__edit-field">
+                        <label htmlFor="memo-detail-collection">コレクション</label>
+                        <MemoSelect
+                          id="memo-detail-collection"
+                          className="memo-select--full"
+                          value={String(detailEditCollectionId ?? "")}
+                          onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
+                          options={[
+                            { value: "", label: "コレクションなし" },
+                            ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
+                          ]}
+                        />
+                      </div>
+                    )}
+                    <div className="memo-modal__response-header">
+                      <label htmlFor="memo-detail-ai-response">AIの回答</label>
+                      <div className="memo-response-tabs">
                         <button
                           type="button"
-                          className="primary-button"
-                          onClick={() => { void saveDetailEdit(); }}
-                          disabled={detailEditSaving || !detailEditAiResponse.trim()}
+                          className={`memo-response-tab${!detailPreviewMode ? " is-active" : ""}`}
+                          onClick={() => setDetailPreviewMode(false)}
                         >
-                          <i className={`bi ${detailEditSaving ? "bi-arrow-repeat memo-spin" : "bi-save"}`} aria-hidden="true"></i>
-                          保存
+                          <i className="bi bi-code-slash" aria-hidden="true"></i>編集
                         </button>
                         <button
                           type="button"
-                          className="secondary-button"
-                          onClick={cancelDetailEdit}
-                          disabled={detailEditSaving}
+                          className={`memo-response-tab${detailPreviewMode ? " is-active" : ""}`}
+                          onClick={() => setDetailPreviewMode(true)}
+                          disabled={!detailEditAiResponse.trim()}
                         >
-                          キャンセル
+                          <i className="bi bi-eye" aria-hidden="true"></i>プレビュー
                         </button>
                       </div>
-                    </section>
+                    </div>
+                    {detailPreviewMode ? (
+                      <div className="memo-preview-pane memo-modal__preview-pane">
+                        {detailEditAiResponse.trim()
+                          ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
+                          : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
+                      </div>
+                    ) : (
+                      <textarea
+                        id="memo-detail-ai-response"
+                        className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
+                        value={detailEditAiResponse}
+                        onChange={(event) => setDetailEditAiResponse(event.target.value)}
+                        placeholder="AIからの回答"
+                        required
+                      />
+                    )}
                   </div>
-                ) : (
-                  <div className="memo-modal__body">
-                    <section className="memo-modal__section memo-modal__section--full">
-                      <h4>AIの回答</h4>
-                      <MemoMarkdown text={parseMemoText(selectedMemo.ai_response)} className="memo-modal__markdown" />
-                    </section>
-                  </div>
-                )}
-              </>
+                </section>
+              </div>
             )}
           </div>
         </div>
