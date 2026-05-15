@@ -32,7 +32,7 @@ def fetch_memos_for_export(
             placeholders = ",".join(["%s"] * len(memo_ids))
             cursor.execute(
                 f"""
-                SELECT id, title, tags, input_content, ai_response, created_at, updated_at
+                SELECT id, title, tags, ai_response, created_at, updated_at
                 FROM memo_entries
                 WHERE user_id = %s AND id IN ({placeholders})
                 ORDER BY created_at DESC
@@ -42,7 +42,7 @@ def fetch_memos_for_export(
         else:
             cursor.execute(
                 """
-                SELECT id, title, tags, input_content, ai_response, created_at, updated_at
+                SELECT id, title, tags, ai_response, created_at, updated_at
                 FROM memo_entries
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -64,7 +64,6 @@ def build_markdown_export(memos: list[dict[str, Any]]) -> str:
         title = memo.get("title") or "保存したメモ"
         tags = memo.get("tags") or ""
         created = serialize_datetime_iso(memo.get("created_at")) or ""
-        input_c = parse_memo_text(memo.get("input_content"))
         ai_resp = parse_memo_text(memo.get("ai_response"))
 
         parts.append(f"## {title}\n")
@@ -73,8 +72,6 @@ def build_markdown_export(memos: list[dict[str, Any]]) -> str:
             parts.append(f"**タグ:** {tag_list}\n")
         if created:
             parts.append(f"**作成日時:** {created}\n")
-        if input_c:
-            parts.append(f"\n### 入力内容\n\n{input_c}\n")
         if ai_resp:
             parts.append(f"\n### AIの回答\n\n{ai_resp}\n")
         parts.append("\n---\n\n")
@@ -88,7 +85,6 @@ def build_json_export(memos: list[dict[str, Any]]) -> str:
             "id": memo.get("id"),
             "title": memo.get("title") or "保存したメモ",
             "tags": memo.get("tags") or "",
-            "input_content": parse_memo_text(memo.get("input_content")),
             "ai_response": parse_memo_text(memo.get("ai_response")),
             "created_at": serialize_datetime_iso(memo.get("created_at")),
             "updated_at": serialize_datetime_iso(memo.get("updated_at")),
@@ -99,13 +95,12 @@ def build_json_export(memos: list[dict[str, Any]]) -> str:
 def build_csv_export(memos: list[dict[str, Any]]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["id", "title", "tags", "input_content", "ai_response", "created_at", "updated_at"])
+    writer.writerow(["id", "title", "tags", "ai_response", "created_at", "updated_at"])
     for memo in memos:
         writer.writerow([
             memo.get("id", ""),
             memo.get("title") or "保存したメモ",
             memo.get("tags") or "",
-            parse_memo_text(memo.get("input_content")),
             parse_memo_text(memo.get("ai_response")),
             serialize_datetime_iso(memo.get("created_at")) or "",
             serialize_datetime_iso(memo.get("updated_at")) or "",

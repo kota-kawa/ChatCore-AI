@@ -193,7 +193,6 @@ function getAppActionReadySelectors(step: ActionStep) {
   }
   if (command === "memo.fillForm") {
     return [
-      "[data-agent-id='memo.input-content']",
       "[data-agent-id='memo.ai-response']",
       "[data-agent-id='memo.title']",
       "[data-agent-id='memo.tags']",
@@ -373,7 +372,6 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
 
   if (command === "memo.fillForm") {
     const fieldMap: Record<string, string> = {
-      input_content: "[data-agent-id='memo.input-content']",
       ai_response: "[data-agent-id='memo.ai-response']",
       title: "[data-agent-id='memo.title']",
       tags: "[data-agent-id='memo.tags']",

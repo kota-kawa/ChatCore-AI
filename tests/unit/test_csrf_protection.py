@@ -23,7 +23,6 @@ class CsrfProtectionTestCase(unittest.TestCase):
                 response = await client.post(
                     "/memo/api",
                     json={
-                        "input_content": "x",
                         "ai_response": "y",
                         "title": "",
                         "tags": "",
@@ -42,7 +41,6 @@ class CsrfProtectionTestCase(unittest.TestCase):
                 response = await client.post(
                     "/memo/api",
                     json={
-                        "input_content": "x",
                         "ai_response": "y",
                         "title": "",
                         "tags": "",

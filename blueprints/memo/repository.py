@@ -58,9 +58,9 @@ def fetch_memo_summaries(
         if normalized_query and not semantic_query_embedding:
             query_like = f"%{normalized_query}%"
             where_clauses.append(
-                "(me.title ILIKE %s OR me.tags ILIKE %s OR me.input_content ILIKE %s OR me.ai_response ILIKE %s)"
+                "(me.title ILIKE %s OR me.tags ILIKE %s OR me.ai_response ILIKE %s)"
             )
-            filter_params.extend([query_like, query_like, query_like, query_like])
+            filter_params.extend([query_like, query_like, query_like])
 
         normalized_tag = tag.strip()
         if normalized_tag:
@@ -170,7 +170,7 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT
-                me.id, me.title, me.tags, me.input_content, me.ai_response,
+                me.id, me.title, me.tags, me.ai_response,
                 me.created_at, me.updated_at, me.archived_at, me.pinned_at,
                 me.collection_id,
                 mc.name AS collection_name,
@@ -205,7 +205,6 @@ def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> 
 
 def insert_memo(
     user_id: int,
-    input_content: str,
     ai_response: str,
     resolved_title: str,
     tags: str,
@@ -232,11 +231,11 @@ def insert_memo(
 
         cursor.execute(
             """
-            INSERT INTO memo_entries (user_id, input_content, ai_response, title, tags, collection_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO memo_entries (user_id, ai_response, title, tags, collection_id)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (user_id, input_content, ai_response, resolved_title, tags or None, validated_collection_id),
+            (user_id, ai_response, resolved_title, tags or None, validated_collection_id),
         )
         connection.commit()
         row = cursor.fetchone()
@@ -254,7 +253,6 @@ def update_memo(
     *,
     title: str | None,
     tags: str | None,
-    input_content: str | None,
     ai_response: str | None,
     collection_id: int | None,
     clear_collection: bool,
@@ -265,7 +263,7 @@ def update_memo(
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
-            "SELECT title, tags, input_content, ai_response, collection_id FROM memo_entries WHERE id = %s AND user_id = %s LIMIT 1",
+            "SELECT title, tags, ai_response, collection_id FROM memo_entries WHERE id = %s AND user_id = %s LIMIT 1",
             (memo_id, user_id),
         )
         existing = cursor.fetchone()
@@ -286,10 +284,6 @@ def update_memo(
         if tags is not None:
             resolved_tags = tags.strip() or None
 
-        resolved_input = existing.get("input_content") or ""
-        if input_content is not None:
-            resolved_input = input_content
-
         resolved_collection: int | None = existing.get("collection_id")
         if clear_collection:
             resolved_collection = None
@@ -300,12 +294,11 @@ def update_memo(
         cursor.execute(
             """
             UPDATE memo_entries
-            SET title = %s, tags = %s, input_content = %s, ai_response = %s,
+            SET title = %s, tags = %s, ai_response = %s,
                 collection_id = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             """,
-            (resolved_title, resolved_tags, resolved_input, resolved_ai_response,
-             resolved_collection, memo_id, user_id),
+            (resolved_title, resolved_tags, resolved_ai_response, resolved_collection, memo_id, user_id),
         )
         connection.commit()
     finally:

@@ -36,7 +36,7 @@ class RequestModelsTestCase(unittest.TestCase):
 
     def test_memo_create_requires_non_empty_ai_response(self):
         with self.assertRaises(ValidationError):
-            _validate(MemoCreateRequest, {"input_content": "foo", "ai_response": "   "})
+            _validate(MemoCreateRequest, {"ai_response": "   "})
 
     def test_prompt_create_rejects_blank_title(self):
         with self.assertRaises(ValidationError):

@@ -314,7 +314,6 @@ function createMemoSaveBtn(getText: () => string) {
         },
         credentials: "same-origin",
         body: JSON.stringify({
-          input_content: "",
           ai_response: aiResponse,
           title: "",
           tags: ""

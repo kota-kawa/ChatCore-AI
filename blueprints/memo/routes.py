@@ -127,7 +127,6 @@ async def api_create_memo(request: Request):
         memo_id = await run_blocking(
             _memo_attr("_insert_memo"),
             user_id,
-            payload.input_content,
             payload.ai_response,
             resolved_title,
             payload.tags,
@@ -163,7 +162,6 @@ async def api_suggest_memo(request: Request):
     try:
         result = await run_blocking(
             _memo_attr("suggest_title_and_tags"),
-            payload.input_content,
             payload.ai_response,
         )
         return jsonify({"status": "success", **result})
@@ -433,7 +431,6 @@ async def api_update_memo(request: Request, memo_id: int):
     if (
         payload.title is None
         and payload.tags is None
-        and payload.input_content is None
         and payload.ai_response is None
         and payload.collection_id is None
         and not payload.clear_collection
@@ -447,7 +444,6 @@ async def api_update_memo(request: Request, memo_id: int):
             memo_id,
             title=payload.title,
             tags=payload.tags,
-            input_content=payload.input_content,
             ai_response=payload.ai_response,
             collection_id=payload.collection_id,
             clear_collection=payload.clear_collection,

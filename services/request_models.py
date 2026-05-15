@@ -243,7 +243,6 @@ class PromptUpdateRequest(RequestPayloadModel):
 class MemoCreateRequest(RequestPayloadModel):
     # メモ保存APIの入力
     # Input payload for memo creation API.
-    input_content: str = ""
     ai_response: NonEmptyStr
     title: str = ""
     tags: str = ""
@@ -257,7 +256,6 @@ class ShareMemoRequest(RequestPayloadModel):
 class MemoUpdateRequest(RequestPayloadModel):
     title: str | None = None
     tags: str | None = None
-    input_content: str | None = None
     ai_response: str | None = None
     collection_id: int | None = Field(default=None)
     clear_collection: bool = False
@@ -275,7 +273,6 @@ class MemoShareCreateRequest(RequestPayloadModel):
 class MemoSuggestRequest(RequestPayloadModel):
     # AI タイトル・タグ提案APIの入力
     # Input payload for AI-powered title/tag suggestion.
-    input_content: str = ""
     ai_response: NonEmptyStr
 
 

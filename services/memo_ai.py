@@ -16,7 +16,6 @@ EMBEDDING_MODEL = "nomic-embed-text-v1_5"
 EMBEDDING_MAX_INPUT_CHARS = 8000
 EMBEDDING_RESPONSE_SAMPLE_CHARS = 2000
 SUGGEST_RESPONSE_SAMPLE_CHARS = 1500
-SUGGEST_INPUT_SAMPLE_CHARS = 500
 SUGGEST_TITLE_MAX_LEN = 255
 SUGGEST_TAGS_MAX_LEN = 255
 
@@ -47,13 +46,12 @@ def _fallback_suggest(ai_response: str) -> dict[str, Any]:
     return {"title": "", "tags": ""}
 
 
-def suggest_title_and_tags(input_content: str, ai_response: str) -> dict[str, Any]:
+def suggest_title_and_tags(ai_response: str) -> dict[str, Any]:
     """Use LLM to suggest a title and space-separated tags for a memo.
 
     Returns a dict with keys ``title`` (str) and ``tags`` (str).
     Falls back to heuristics when the LLM is unavailable or returns malformed JSON.
     """
-    content_sample = (input_content or "").strip()[:SUGGEST_INPUT_SAMPLE_CHARS]
     response_sample = (ai_response or "").strip()[:SUGGEST_RESPONSE_SAMPLE_CHARS]
 
     messages = [
@@ -69,8 +67,7 @@ def suggest_title_and_tags(input_content: str, ai_response: str) -> dict[str, An
         {
             "role": "user",
             "content": (
-                f"【入力内容】\n{content_sample}\n\n"
-                f"【AIの回答】\n{response_sample}\n\n"
+                f"【メモ本文】\n{response_sample}\n\n"
                 "このメモに適切なタイトル（30文字以内）と3〜5個のタグを提案してください。"
                 '必ずJSONのみで回答: {"title": "...", "tags": ["...", "..."]}'
             ),

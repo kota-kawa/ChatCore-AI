@@ -380,45 +380,6 @@ body.memo-page.modal-open {
   font-size: 0.8rem;
 }
 
-.memo-item__inline-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.memo-item__inline-edit input {
-  min-height: 38px;
-  border: 1px solid rgba(191, 122, 23, 0.24);
-  border-radius: 10px;
-  padding: 0.42rem 0.66rem;
-  background: #fff;
-  color: var(--memo-text);
-  font: inherit;
-}
-
-.memo-item__inline-actions {
-  display: flex;
-  gap: 0.44rem;
-}
-
-.memo-item__inline-actions button {
-  min-height: 34px;
-  border: none;
-  border-radius: 999px;
-  padding: 0.35rem 0.82rem;
-  cursor: pointer;
-}
-
-.memo-item__inline-actions button:first-child {
-  background: linear-gradient(135deg, var(--memo-amber) 0%, var(--memo-amber-strong) 100%);
-  color: #fffdf8;
-}
-
-.memo-item__inline-actions button:last-child {
-  background: rgba(146, 64, 14, 0.1);
-  color: #7b4b13;
-}
-
 .memo-item__open--content {
   display: flex;
   flex-direction: column;
@@ -1368,8 +1329,7 @@ textarea.memo-control {
   gap: 0.35rem;
 }
 
-.memo-bulk-tag-input,
-.memo-bulk-collection-select {
+.memo-bulk-tag-input {
   min-height: 34px;
   border: 1px solid rgba(191, 122, 23, 0.24);
   border-radius: 8px;
@@ -1514,19 +1474,7 @@ textarea.memo-control {
   display: inline-block;
 }
 
-/* Collection select in quick edit */
-.memo-item__collection-select {
-  min-height: 38px;
-  border: 1px solid rgba(191, 122, 23, 0.24);
-  border-radius: 10px;
-  padding: 0.38rem 0.62rem;
-  background: #fff;
-  color: var(--memo-text);
-  font: inherit;
-  font-size: 0.85rem;
-}
-
-/* Modal section full width when no input content */
+/* Modal section full width */
 .memo-modal__section--full {
   grid-column: 1 / -1;
 }
@@ -1545,6 +1493,18 @@ textarea.memo-control {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.memo-modal__edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.memo-modal__edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .memo-modal__edit-fields label {
@@ -2121,8 +2081,6 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-bulk-tag-input,
-[data-theme="dark"] .memo-bulk-collection-select,
-[data-theme="dark"] .memo-item__collection-select,
 [data-theme="dark"] .memo-preview-pane {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.25);
@@ -2346,6 +2304,7 @@ textarea.memo-control {
   }
 
   .form-grid,
+  .memo-modal__edit-grid,
   .memo-modal__body {
     grid-template-columns: 1fr;
   }
@@ -2400,8 +2359,7 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-control,
-[data-theme="dark"] .memo-share-modal__body input,
-[data-theme="dark"] .memo-item__inline-edit input {
+[data-theme="dark"] .memo-share-modal__body input {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.25);
   color: #f8fafc;

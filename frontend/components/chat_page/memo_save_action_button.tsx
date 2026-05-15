@@ -36,7 +36,6 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          input_content: "",
           ai_response: aiResponse,
           title: "",
           tags: "",

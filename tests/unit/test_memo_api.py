@@ -139,7 +139,7 @@ class MemoApiTestCase(unittest.TestCase):
     def test_create_memo_requires_response(self):
         request = make_request(
             method="POST",
-            json_body={"input_content": "x", "ai_response": ""},
+            json_body={"ai_response": ""},
             session={"user_id": 7},
         )
         response = asyncio.run(api_create_memo(request))
@@ -150,7 +150,7 @@ class MemoApiTestCase(unittest.TestCase):
     def test_create_memo_requires_login(self):
         request = make_request(
             method="POST",
-            json_body={"input_content": "x", "ai_response": "ok"},
+            json_body={"ai_response": "ok"},
         )
         response = asyncio.run(api_create_memo(request))
         self.assertEqual(response.status_code, 401)
@@ -161,7 +161,7 @@ class MemoApiTestCase(unittest.TestCase):
     def test_create_memo_success(self):
         request = make_request(
             method="POST",
-            json_body={"input_content": "x", "ai_response": "ok", "title": "", "tags": ""},
+            json_body={"ai_response": "ok", "title": "", "tags": ""},
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
@@ -215,23 +215,22 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo"]["title"], "Updated title")
 
-    def test_update_memo_allows_content_edits(self):
+    def test_update_memo_allows_response_edits(self):
         request = make_request(
             method="PATCH",
             path="/memo/api/10",
-            json_body={"input_content": "updated input", "ai_response": "updated answer"},
+            json_body={"ai_response": "updated answer"},
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
             "blueprints.memo._update_memo",
-            return_value={"id": 10, "input_content": "updated input", "ai_response": "updated answer"},
+            return_value={"id": 10, "ai_response": "updated answer"},
         ) as mock_update, patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_update_memo(request, memo_id=10))
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo"]["ai_response"], "updated answer")
-        self.assertEqual(mock_update.call_args.kwargs["input_content"], "updated input")
         self.assertEqual(mock_update.call_args.kwargs["ai_response"], "updated answer")
 
     def test_delete_memo_success(self):
@@ -272,7 +271,7 @@ class MemoApiTestCase(unittest.TestCase):
         request = make_request(
             method="POST",
             path="/memo/api/suggest",
-            json_body={"input_content": "input", "ai_response": "response"},
+            json_body={"ai_response": "response"},
             session={"user_id": 7},
         )
         with patch(
@@ -500,7 +499,6 @@ class MemoApiTestCase(unittest.TestCase):
                         "title": "共有メモ",
                         "created_at": "2024-01-01T09:30:00",
                         "tags": "仕事",
-                        "input_content": "input",
                         "ai_response": "response",
                     }
                 },

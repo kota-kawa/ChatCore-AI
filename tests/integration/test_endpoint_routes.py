@@ -102,7 +102,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 "title": "サンプル",
                 "tags": "仕事",
                 "created_at": datetime(2024, 1, 1, 9, 30),
-                "input_content": "input",
                 "ai_response": "response",
             }
 
@@ -138,7 +137,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 response = await self._post_with_csrf(
                     client,
                     "/memo/api",
-                    json={"input_content": "hello", "ai_response": ""},
+                    json={"ai_response": ""},
                 )
 
             self.assertEqual(response.status_code, 400)
@@ -155,7 +154,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
                         client,
                         "/memo/api",
                         json={
-                            "input_content": "hello",
                             "ai_response": "ok",
                             "title": "",
                             "tags": "",
@@ -175,7 +173,7 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 response = await self._post_with_csrf(
                     client,
                     "/memo/api",
-                    json={"input_content": "hello", "ai_response": "ok"},
+                    json={"ai_response": "ok"},
                 )
 
             self.assertEqual(response.status_code, 401)
@@ -222,7 +220,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
                         client,
                         "/memo/api",
                         json={
-                            "input_content": "hello",
                             "ai_response": "ok",
                             "title": "",
                             "tags": "",

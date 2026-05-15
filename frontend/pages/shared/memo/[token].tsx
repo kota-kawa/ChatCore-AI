@@ -8,7 +8,6 @@ type SharedMemo = {
   title?: string;
   tags?: string;
   created_at?: string | null;
-  input_content?: string;
   ai_response?: string;
 };
 
@@ -39,7 +38,7 @@ function buildMetaDescription(payload: SharedMemoPayload) {
     return truncateSeoText(payload.error);
   }
   const memo = payload.memo;
-  const summarySource = memo?.ai_response || memo?.input_content || "";
+  const summarySource = memo?.ai_response || "";
   const normalized = stripMarkdownForDescription(summarySource);
   return truncateSeoText(normalized || "Chat Coreで共有されたメモの閲覧ページです。");
 }
@@ -136,11 +135,6 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
                 {tags.length ? tags.map((tag) => <span key={tag}>{tag}</span>) : <span>タグなし</span>}
               </div>
             </header>
-
-            <section className="shared-memo-section">
-              <h2>入力内容</h2>
-              <MarkdownContent text={memo.input_content || ""} className="md-content" />
-            </section>
 
             <section className="shared-memo-section">
               <h2>AIの回答</h2>

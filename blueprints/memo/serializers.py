@@ -73,7 +73,6 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         "pinned_at": serialize_datetime_iso(memo.get("pinned_at")),
         "is_archived": memo.get("archived_at") is not None,
         "is_pinned": memo.get("pinned_at") is not None,
-        "input_content": memo.get("input_content") or "",
         "ai_response": memo.get("ai_response") or "",
         "collection_id": memo.get("collection_id"),
         "collection_name": memo.get("collection_name"),
