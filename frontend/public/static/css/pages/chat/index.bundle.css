@@ -774,6 +774,33 @@ body.chat-page .chat-share-sns a:hover {
   z-index: 2;
 }
 
+@media (min-width: 577px) {
+  html:has(body.chat-page.chat-view-active),
+  body.chat-page.chat-view-active {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body.chat-page.chat-view-active .chat-page-shell {
+    position: fixed;
+    inset: 0;
+    min-height: 0;
+    height: var(--chat-visual-viewport-height, 100dvh);
+    overflow: hidden;
+  }
+
+  body.chat-page.chat-view-active .chat-page-stage {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.chat-page.chat-view-active #chat-container {
+    height: 100%;
+  }
+}
+
 [data-theme="dark"] body.chat-page {
   background: #080f1c;
 }
