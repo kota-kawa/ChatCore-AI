@@ -434,6 +434,21 @@ export default function MemoPage() {
     };
   }, [shareUrl]);
 
+  const detailPreviewTags = useMemo(() => splitTags(detailEditTags), [detailEditTags]);
+  const detailPreviewCollection = useMemo(() => {
+    if (!selectedMemo) return null;
+    if (detailEditCollectionId === null) return null;
+    const editedCollection = collections.find((collection) => collection.id === detailEditCollectionId);
+    if (editedCollection) return { name: editedCollection.name, color: editedCollection.color };
+    if (selectedMemo.collection_id === detailEditCollectionId && selectedMemo.collection_name) {
+      return {
+        name: selectedMemo.collection_name,
+        color: selectedMemo.collection_color || "#6b7280",
+      };
+    }
+    return null;
+  }, [collections, detailEditCollectionId, selectedMemo]);
+
   // -----------------------------------------------------------------------
   // Effects
   // -----------------------------------------------------------------------
@@ -558,6 +573,16 @@ export default function MemoPage() {
     const id = String(memoId);
     setActionLoadingId(id);
     try { await action(); } finally { setActionLoadingId(""); }
+  }, []);
+
+  const enterDetailEditMode = useCallback(() => {
+    setDetailPreviewMode(false);
+    setDetailMetaOpen(true);
+  }, []);
+
+  const enterDetailPreviewMode = useCallback(() => {
+    setDetailPreviewMode(true);
+    setDetailMetaOpen(false);
   }, []);
 
   const refreshSelectedMemoIfNeeded = useCallback(async () => {
@@ -1668,32 +1693,70 @@ export default function MemoPage() {
                 </div>
                 {selectedMemo && (
                   <div className="memo-modal__header-actions">
-                    <button
-                      type="button"
-                      className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
-                      onClick={() => setDetailMetaOpen((value) => !value)}
-                      aria-label="タイトル・タグ・コレクションを編集"
-                      aria-expanded={detailMetaOpen}
-                      aria-controls="memo-detail-meta-panel"
-                      data-tooltip="タイトル・タグ・コレクション"
-                      data-tooltip-placement="bottom"
-                    >
-                      <i className="bi bi-sliders" aria-hidden="true"></i>
-                    </button>
-                    <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
-                      {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
-                      {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                      {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
-                      {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                      {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
-                    </div>
+                    {detailPreviewMode ? (
+                      <button
+                        type="button"
+                        className="memo-modal__edit-btn"
+                        onClick={enterDetailEditMode}
+                      >
+                        <i className="bi bi-pencil-square" aria-hidden="true"></i>
+                        編集
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="memo-modal__edit-btn"
+                          onClick={enterDetailPreviewMode}
+                        >
+                          <i className="bi bi-eye" aria-hidden="true"></i>
+                          プレビュー
+                        </button>
+                        <button
+                          type="button"
+                          className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
+                          onClick={() => setDetailMetaOpen((value) => !value)}
+                          aria-label="タイトル・タグ・コレクションを編集"
+                          aria-expanded={detailMetaOpen}
+                          aria-controls="memo-detail-meta-panel"
+                          data-tooltip="タイトル・タグ・コレクション"
+                          data-tooltip-placement="bottom"
+                        >
+                          <i className="bi bi-sliders" aria-hidden="true"></i>
+                        </button>
+                        <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
+                          {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
+                          {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                          {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
+                          {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                          {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
             </header>
             {detailLoading && <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>}
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
-            {!detailLoading && selectedMemo && (
+            {!detailLoading && selectedMemo && detailPreviewMode && (
+              <div className="memo-modal__body memo-modal__body--preview">
+                <section className="memo-modal__section memo-modal__section--full">
+                  {(detailPreviewCollection || detailPreviewTags.length > 0) && (
+                    <div className="memo-modal__preview-meta">
+                      {detailPreviewCollection && (
+                        <CollectionBadge name={detailPreviewCollection.name} color={detailPreviewCollection.color || "#6b7280"} />
+                      )}
+                      {detailPreviewTags.map((tag) => <span key={tag} className="memo-tag">{tag}</span>)}
+                    </div>
+                  )}
+                  {detailEditAiResponse.trim()
+                    ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-modal__markdown" />
+                    : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
+                </section>
+              </div>
+            )}
+            {!detailLoading && selectedMemo && !detailPreviewMode && (
               <div className="memo-modal__body memo-modal__body--edit">
                 <section className="memo-modal__section memo-modal__section--full memo-modal__edit-form">
                   <div className="memo-modal__edit-fields">
@@ -1744,40 +1807,15 @@ export default function MemoPage() {
                     )}
                     <div className="memo-modal__response-header">
                       <label htmlFor="memo-detail-ai-response">AIの回答</label>
-                      <div className="memo-response-tabs">
-                        <button
-                          type="button"
-                          className={`memo-response-tab${!detailPreviewMode ? " is-active" : ""}`}
-                          onClick={() => setDetailPreviewMode(false)}
-                        >
-                          <i className="bi bi-code-slash" aria-hidden="true"></i>編集
-                        </button>
-                        <button
-                          type="button"
-                          className={`memo-response-tab${detailPreviewMode ? " is-active" : ""}`}
-                          onClick={() => setDetailPreviewMode(true)}
-                          disabled={!detailEditAiResponse.trim()}
-                        >
-                          <i className="bi bi-eye" aria-hidden="true"></i>プレビュー
-                        </button>
-                      </div>
                     </div>
-                    {detailPreviewMode ? (
-                      <div className="memo-preview-pane memo-modal__preview-pane">
-                        {detailEditAiResponse.trim()
-                          ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
-                          : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
-                      </div>
-                    ) : (
-                      <textarea
-                        id="memo-detail-ai-response"
-                        className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
-                        value={detailEditAiResponse}
-                        onChange={(event) => setDetailEditAiResponse(event.target.value)}
-                        placeholder="AIからの回答"
-                        required
-                      />
-                    )}
+                    <textarea
+                      id="memo-detail-ai-response"
+                      className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
+                      value={detailEditAiResponse}
+                      onChange={(event) => setDetailEditAiResponse(event.target.value)}
+                      placeholder="AIからの回答"
+                      required
+                    />
                   </div>
                 </section>
               </div>
