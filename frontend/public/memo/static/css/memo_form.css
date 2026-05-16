@@ -1564,19 +1564,6 @@ textarea.memo-control {
   overflow: hidden;
 }
 
-.memo-modal__body--preview {
-  display: flex;
-  flex-direction: column;
-}
-
-.memo-modal__preview-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-  margin-bottom: 0.75rem;
-}
-
 .memo-modal__edit-form {
   display: flex;
   flex-direction: column;
