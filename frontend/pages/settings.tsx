@@ -203,7 +203,7 @@ function SettingsSidebar({
       </ul>
 
       <div className="sidebar-footer">
-        <p>&copy; 2025 YourApp</p>
+        <p>&copy; 2026 ChatCore-AI</p>
       </div>
     </nav>
   );
