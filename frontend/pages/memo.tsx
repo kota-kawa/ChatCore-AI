@@ -349,7 +349,7 @@ export default function MemoPage() {
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
-  const [detailPreviewMode, setDetailPreviewMode] = useState(false);
+  const [detailPreviewMode, setDetailPreviewMode] = useState(true);
   const [detailMetaOpen, setDetailMetaOpen] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditTags, setDetailEditTags] = useState("");
@@ -485,7 +485,7 @@ export default function MemoPage() {
       detailAutoSaveTimerRef.current = null;
     }
     detailSaveSequenceRef.current += 1;
-    setDetailPreviewMode(false);
+    setDetailPreviewMode(true);
     setDetailMetaOpen(false);
     setDetailEditTitle("");
     setDetailEditTags("");
@@ -657,7 +657,7 @@ export default function MemoPage() {
   const openMemoDetail = useCallback(async (memoId: string | number) => {
     setDetailError("");
     setDetailLoading(true);
-    setDetailPreviewMode(false);
+    setDetailPreviewMode(true);
     setDetailMetaOpen(false);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
