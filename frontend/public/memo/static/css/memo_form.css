@@ -2375,7 +2375,9 @@ textarea.memo-control {
   }
 
   .memo-item__action {
-    flex: 1 1 42px;
+    width: 38px;
+    min-height: 36px;
+    flex: 0 0 38px;
   }
 
   .memo-share-modal__sns {
