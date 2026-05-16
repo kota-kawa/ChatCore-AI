@@ -350,6 +350,7 @@ export default function MemoPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailPreviewMode, setDetailPreviewMode] = useState(false);
+  const [detailMetaOpen, setDetailMetaOpen] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditTags, setDetailEditTags] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
@@ -485,6 +486,7 @@ export default function MemoPage() {
     }
     detailSaveSequenceRef.current += 1;
     setDetailPreviewMode(false);
+    setDetailMetaOpen(false);
     setDetailEditTitle("");
     setDetailEditTags("");
     setDetailEditCollectionId(null);
@@ -656,6 +658,7 @@ export default function MemoPage() {
     setDetailError("");
     setDetailLoading(true);
     setDetailPreviewMode(false);
+    setDetailMetaOpen(false);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
     if (detailAutoSaveTimerRef.current) {
@@ -1664,12 +1667,26 @@ export default function MemoPage() {
                   <p className="memo-modal__date">{formatDateTime(selectedMemo?.updated_at || selectedMemo?.created_at) || selectedMemo?.created_at || ""}</p>
                 </div>
                 {selectedMemo && (
-                  <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
-                    {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
-                    {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                    {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
-                    {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                    {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
+                  <div className="memo-modal__header-actions">
+                    <button
+                      type="button"
+                      className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
+                      onClick={() => setDetailMetaOpen((value) => !value)}
+                      aria-label="タイトル・タグ・コレクションを編集"
+                      aria-expanded={detailMetaOpen}
+                      aria-controls="memo-detail-meta-panel"
+                      data-tooltip="タイトル・タグ・コレクション"
+                      data-tooltip-placement="bottom"
+                    >
+                      <i className="bi bi-sliders" aria-hidden="true"></i>
+                    </button>
+                    <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
+                      {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
+                      {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                      {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
+                      {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
+                      {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1680,45 +1697,49 @@ export default function MemoPage() {
               <div className="memo-modal__body memo-modal__body--edit">
                 <section className="memo-modal__section memo-modal__section--full memo-modal__edit-form">
                   <div className="memo-modal__edit-fields">
-                    <div className="memo-modal__edit-grid">
-                      <div className="memo-modal__edit-field">
-                        <label htmlFor="memo-detail-title">タイトル</label>
-                        <input
-                          id="memo-detail-title"
-                          type="text"
-                          className="memo-control"
-                          value={detailEditTitle}
-                          onChange={(event) => setDetailEditTitle(event.target.value)}
-                          placeholder="空欄なら回答1行目を採用"
-                          maxLength={255}
-                        />
-                      </div>
-                      <div className="memo-modal__edit-field">
-                        <label htmlFor="memo-detail-tags">タグ</label>
-                        <input
-                          id="memo-detail-tags"
-                          type="text"
-                          className="memo-control"
-                          value={detailEditTags}
-                          onChange={(event) => setDetailEditTags(event.target.value)}
-                          placeholder="例: 設計 仕様"
-                          maxLength={255}
-                        />
-                      </div>
-                    </div>
-                    {collections.length > 0 && (
-                      <div className="memo-modal__edit-field">
-                        <label htmlFor="memo-detail-collection">コレクション</label>
-                        <MemoSelect
-                          id="memo-detail-collection"
-                          className="memo-select--full"
-                          value={String(detailEditCollectionId ?? "")}
-                          onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
-                          options={[
-                            { value: "", label: "コレクションなし" },
-                            ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
-                          ]}
-                        />
+                    {detailMetaOpen && (
+                      <div id="memo-detail-meta-panel" className="memo-modal__meta-panel">
+                        <div className="memo-modal__edit-grid">
+                          <div className="memo-modal__edit-field">
+                            <label htmlFor="memo-detail-title">タイトル</label>
+                            <input
+                              id="memo-detail-title"
+                              type="text"
+                              className="memo-control"
+                              value={detailEditTitle}
+                              onChange={(event) => setDetailEditTitle(event.target.value)}
+                              placeholder="空欄なら回答1行目を採用"
+                              maxLength={255}
+                            />
+                          </div>
+                          <div className="memo-modal__edit-field">
+                            <label htmlFor="memo-detail-tags">タグ</label>
+                            <input
+                              id="memo-detail-tags"
+                              type="text"
+                              className="memo-control"
+                              value={detailEditTags}
+                              onChange={(event) => setDetailEditTags(event.target.value)}
+                              placeholder="例: 設計 仕様"
+                              maxLength={255}
+                            />
+                          </div>
+                        </div>
+                        {collections.length > 0 && (
+                          <div className="memo-modal__edit-field">
+                            <label htmlFor="memo-detail-collection">コレクション</label>
+                            <MemoSelect
+                              id="memo-detail-collection"
+                              className="memo-select--full"
+                              value={String(detailEditCollectionId ?? "")}
+                              onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
+                              options={[
+                                { value: "", label: "コレクションなし" },
+                                ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
+                              ]}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="memo-modal__response-header">
