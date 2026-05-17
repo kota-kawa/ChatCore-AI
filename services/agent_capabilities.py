@@ -51,7 +51,7 @@ AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("prompt.openLogin", "プロンプト共有ページのログイン/登録導線を開く。", "{}", "#login-btn をクリックできる。"),
     AgentTool("prompt.scrollResults", "プロンプト一覧へスクロールする。", "{}", "#prompt-feed-section へスクロールできる。"),
     AgentTool("settings.openSection", "設定ページの指定セクションを開く。", '{"section": "security"}', "指定 data-section のナビ項目をクリックできる。"),
-    AgentTool("memo.fillForm", "メモ作成フォームへ値を入力する。", '{"ai_response": "...", "title": "...", "tags": "..."}', "指定されたフォーム値が反映される。"),
+    AgentTool("memo.fillForm", "メモ作成フォームへ値を入力する。", '{"ai_response": "...", "title": "..."}', "指定されたフォーム値が反映される。"),
     AgentTool("memo.save", "メモを保存する。", "{}", "保存ボタンをクリックできる。", risk="medium"),
 )
 
@@ -117,7 +117,7 @@ PAGES: tuple[AgentPage, ...] = (
         route="/memo",
         summary="AIの回答をメモとして保存し、最近のメモの閲覧・コピー・共有ができる画面。",
         features=(
-            "AI回答、タイトル、タグを入力してメモ保存できる。",
+            "AI回答、タイトルを入力してメモ保存できる。",
             "最近のメモを開いて詳細を確認できる。",
             "メモ本文をコピーできる。",
             "共有リンクを作成してコピー/ネイティブ共有できる。",
@@ -125,7 +125,6 @@ PAGES: tuple[AgentPage, ...] = (
         actions=(
             AgentAction("AI回答", "input", "[name='ai_response']", "保存したいAI回答を入力する。"),
             AgentAction("タイトル", "input", "[name='title']", "メモタイトルを入力する。"),
-            AgentAction("タグ", "input", "[name='tags']", "タグをカンマ区切りで入力する。"),
             AgentAction("メモ保存", "click", "button[type='submit']", "メモを保存する。"),
         ),
     ),

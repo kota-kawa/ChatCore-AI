@@ -46,7 +46,6 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": memo.get("id"),
         "title": memo.get("title") or "保存したメモ",
-        "tags": memo.get("tags") or "",
         "created_at": serialize_datetime_iso(memo.get("created_at")),
         "updated_at": serialize_datetime_iso(memo.get("updated_at")),
         "archived_at": serialize_datetime_iso(memo.get("archived_at")),
@@ -66,7 +65,6 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": memo.get("id"),
         "title": memo.get("title") or "保存したメモ",
-        "tags": memo.get("tags") or "",
         "created_at": serialize_datetime_iso(memo.get("created_at")),
         "updated_at": serialize_datetime_iso(memo.get("updated_at")),
         "archived_at": serialize_datetime_iso(memo.get("archived_at")),

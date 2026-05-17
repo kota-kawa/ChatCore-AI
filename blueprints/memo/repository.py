@@ -30,7 +30,6 @@ def fetch_memo_summaries(
     limit: int,
     offset: int,
     query: str,
-    tag: str,
     date_from: str,
     date_to: str,
     sort: str,
@@ -58,14 +57,9 @@ def fetch_memo_summaries(
         if normalized_query and not semantic_query_embedding:
             query_like = f"%{normalized_query}%"
             where_clauses.append(
-                "(me.title ILIKE %s OR me.tags ILIKE %s OR me.ai_response ILIKE %s)"
+                "(me.title ILIKE %s OR me.ai_response ILIKE %s)"
             )
-            filter_params.extend([query_like, query_like, query_like])
-
-        normalized_tag = tag.strip()
-        if normalized_tag:
-            filter_params.append(f"%{normalized_tag}%")
-            where_clauses.append("me.tags ILIKE %s")
+            filter_params.extend([query_like, query_like])
 
         parsed_date_from = date_start(date_from)
         if parsed_date_from is not None:
@@ -96,7 +90,7 @@ def fetch_memo_summaries(
 
             sem_sql = f"""
                 SELECT
-                    me.id, me.title, me.tags, me.created_at, me.updated_at,
+                    me.id, me.title, me.created_at, me.updated_at,
                     me.archived_at, me.pinned_at, me.embedding,
                     LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                     me.collection_id,
@@ -133,7 +127,7 @@ def fetch_memo_summaries(
 
         list_sql = f"""
             SELECT
-                me.id, me.title, me.tags, me.created_at, me.updated_at,
+                me.id, me.title, me.created_at, me.updated_at,
                 me.archived_at, me.pinned_at,
                 LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                 me.collection_id,
@@ -170,7 +164,7 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT
-                me.id, me.title, me.tags, me.ai_response,
+                me.id, me.title, me.ai_response,
                 me.created_at, me.updated_at, me.archived_at, me.pinned_at,
                 me.collection_id,
                 mc.name AS collection_name,
@@ -207,7 +201,6 @@ def insert_memo(
     user_id: int,
     ai_response: str,
     resolved_title: str,
-    tags: str,
     collection_id: int | None,
 ) -> int | None:
     connection = None
@@ -231,11 +224,11 @@ def insert_memo(
 
         cursor.execute(
             """
-            INSERT INTO memo_entries (user_id, ai_response, title, tags, collection_id)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO memo_entries (user_id, ai_response, title, collection_id)
+            VALUES (%s, %s, %s, %s)
             RETURNING id
             """,
-            (user_id, ai_response, resolved_title, tags or None, validated_collection_id),
+            (user_id, ai_response, resolved_title, validated_collection_id),
         )
         connection.commit()
         row = cursor.fetchone()
@@ -252,7 +245,6 @@ def update_memo(
     memo_id: int,
     *,
     title: str | None,
-    tags: str | None,
     ai_response: str | None,
     collection_id: int | None,
     clear_collection: bool,
@@ -263,7 +255,7 @@ def update_memo(
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
-            "SELECT title, tags, ai_response, collection_id FROM memo_entries WHERE id = %s AND user_id = %s LIMIT 1",
+            "SELECT title, ai_response, collection_id FROM memo_entries WHERE id = %s AND user_id = %s LIMIT 1",
             (memo_id, user_id),
         )
         existing = cursor.fetchone()
@@ -280,10 +272,6 @@ def update_memo(
         if title is not None:
             resolved_title = ensure_title(str(resolved_ai_response), title)
 
-        resolved_tags = existing.get("tags")
-        if tags is not None:
-            resolved_tags = tags.strip() or None
-
         resolved_collection: int | None = existing.get("collection_id")
         if clear_collection:
             resolved_collection = None
@@ -294,11 +282,11 @@ def update_memo(
         cursor.execute(
             """
             UPDATE memo_entries
-            SET title = %s, tags = %s, ai_response = %s,
+            SET title = %s, ai_response = %s,
                 collection_id = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             """,
-            (resolved_title, resolved_tags, resolved_ai_response, resolved_collection, memo_id, user_id),
+            (resolved_title, resolved_ai_response, resolved_collection, memo_id, user_id),
         )
         connection.commit()
     finally:
@@ -391,7 +379,6 @@ def bulk_action(
     action: str,
     memo_ids: list[int],
     *,
-    tags: str | None,
     collection_id: int | None,
 ) -> dict[str, Any]:
     if not memo_ids:
@@ -446,22 +433,6 @@ def bulk_action(
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
-        elif action == "add_tags" and tags is not None:
-            normalized_tags = tags.strip()
-            if normalized_tags:
-                cursor.execute(
-                    f"""
-                    UPDATE memo_entries
-                    SET tags = CASE
-                        WHEN tags IS NULL OR tags = '' THEN %s
-                        ELSE tags || ' ' || %s
-                    END,
-                    updated_at = CURRENT_TIMESTAMP
-                    WHERE id IN ({owned_ph})
-                    """,
-                    tuple([normalized_tags, normalized_tags, *owned_ids]),
-                )
-                affected = max(cursor.rowcount, 0)
         elif action == "set_collection" and collection_id is not None:
             cursor.execute(
                 "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",

@@ -62,13 +62,13 @@ export type PromptListEntryCreateRequest = z.infer<typeof PromptListEntryCreateR
 export const PromptUpdateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().min(1), "content": z.string().min(1), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type PromptUpdateRequest = z.infer<typeof PromptUpdateRequestSchema>;
 
-export const MemoCreateRequestSchema = z.object({ "ai_response": z.string().min(1), "title": z.string().default(""), "tags": z.string().default(""), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
+export const MemoCreateRequestSchema = z.object({ "ai_response": z.string().min(1), "title": z.string().default(""), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
 export type MemoCreateRequest = z.infer<typeof MemoCreateRequestSchema>;
 
 export const ShareMemoRequestSchema = z.object({ "memo_id": z.number().int() });
 export type ShareMemoRequest = z.infer<typeof ShareMemoRequestSchema>;
 
-export const MemoUpdateRequestSchema = z.object({ "title": z.union([z.string(), z.null()]).default(null), "tags": z.union([z.string(), z.null()]).default(null), "ai_response": z.union([z.string(), z.null()]).default(null), "collection_id": z.union([z.number().int(), z.null()]).default(null), "clear_collection": z.boolean().default(false) });
+export const MemoUpdateRequestSchema = z.object({ "title": z.union([z.string(), z.null()]).default(null), "ai_response": z.union([z.string(), z.null()]).default(null), "collection_id": z.union([z.number().int(), z.null()]).default(null), "clear_collection": z.boolean().default(false) });
 export type MemoUpdateRequest = z.infer<typeof MemoUpdateRequestSchema>;
 
 export const MemoToggleRequestSchema = z.object({ "enabled": z.boolean().default(true) });
@@ -80,7 +80,7 @@ export type MemoShareCreateRequest = z.infer<typeof MemoShareCreateRequestSchema
 export const MemoSuggestRequestSchema = z.object({ "ai_response": z.string().min(1) });
 export type MemoSuggestRequest = z.infer<typeof MemoSuggestRequestSchema>;
 
-export const MemoBulkActionRequestSchema = z.object({ "action": z.enum(["delete","archive","unarchive","pin","unpin","add_tags","set_collection","clear_collection"]), "memo_ids": z.array(z.number().int()).min(1).max(200), "tags": z.union([z.string(), z.null()]).default(null), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
+export const MemoBulkActionRequestSchema = z.object({ "action": z.enum(["delete","archive","unarchive","pin","unpin","set_collection","clear_collection"]), "memo_ids": z.array(z.number().int()).min(1).max(200), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
 export type MemoBulkActionRequest = z.infer<typeof MemoBulkActionRequestSchema>;
 
 export const MemoCollectionCreateRequestSchema = z.object({ "name": z.string().min(1).max(100), "color": z.string().max(20).default("#6b7280") });

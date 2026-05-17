@@ -6,7 +6,6 @@ import { stripMarkdownForDescription, truncateSeoText } from "../../../lib/seo";
 
 type SharedMemo = {
   title?: string;
-  tags?: string;
   created_at?: string | null;
   ai_response?: string;
 };
@@ -88,7 +87,6 @@ export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async
 export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedMemoPageProps) {
   const memo = payload.memo;
   const title = memo?.title || "共有メモ";
-  const tags = memo?.tags ? memo.tags.split(/\s+/).filter(Boolean) : [];
   const pageTitle = `${title} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
   const structuredData = memo
@@ -101,7 +99,6 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         datePublished: memo.created_at || undefined,
         url: pageUrl,
         inLanguage: "ja",
-        keywords: tags.join(", ") || undefined,
         isPartOf: {
           "@type": "WebSite",
           name: "Chat Core"
@@ -131,9 +128,6 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
             <header className="shared-memo-header">
               <h1>{title}</h1>
               {memo.created_at ? <p>保存日時: {formatDateTime(memo.created_at) || memo.created_at}</p> : null}
-              <div className="shared-memo-tags">
-                {tags.length ? tags.map((tag) => <span key={tag}>{tag}</span>) : <span>タグなし</span>}
-              </div>
             </header>
 
             <section className="shared-memo-section">

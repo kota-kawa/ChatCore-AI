@@ -100,7 +100,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
             sample = {
                 "id": 1,
                 "title": "サンプル",
-                "tags": "仕事",
                 "created_at": datetime(2024, 1, 1, 9, 30),
                 "ai_response": "response",
             }
@@ -156,7 +155,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
                         json={
                             "ai_response": "ok",
                             "title": "",
-                            "tags": "",
                         },
                     )
 
@@ -222,7 +220,6 @@ class EndpointRoutesTestCase(unittest.TestCase):
                         json={
                             "ai_response": "ok",
                             "title": "",
-                            "tags": "",
                         },
                     )
 

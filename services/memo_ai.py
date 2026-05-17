@@ -1,4 +1,4 @@
-"""AI-powered memo assistance: title/tag suggestion and semantic search via embeddings."""
+"""AI-powered memo assistance: title suggestion and semantic search via embeddings."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ EMBEDDING_MAX_INPUT_CHARS = 8000
 EMBEDDING_RESPONSE_SAMPLE_CHARS = 2000
 SUGGEST_RESPONSE_SAMPLE_CHARS = 1500
 SUGGEST_TITLE_MAX_LEN = 255
-SUGGEST_TAGS_MAX_LEN = 255
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +41,14 @@ def _fallback_suggest(ai_response: str) -> dict[str, Any]:
     for line in (ai_response or "").splitlines():
         cleaned = re.sub(r"^#+\s*", "", line).strip()
         if cleaned:
-            return {"title": cleaned[:100], "tags": ""}
-    return {"title": "", "tags": ""}
+            return {"title": cleaned[:100]}
+    return {"title": ""}
 
 
-def suggest_title_and_tags(ai_response: str) -> dict[str, Any]:
-    """Use LLM to suggest a title and space-separated tags for a memo.
+def suggest_title(ai_response: str) -> dict[str, Any]:
+    """Use LLM to suggest a title for a memo.
 
-    Returns a dict with keys ``title`` (str) and ``tags`` (str).
+    Returns a dict with key ``title`` (str).
     Falls back to heuristics when the LLM is unavailable or returns malformed JSON.
     """
     response_sample = (ai_response or "").strip()[:SUGGEST_RESPONSE_SAMPLE_CHARS]
@@ -59,17 +58,17 @@ def suggest_title_and_tags(ai_response: str) -> dict[str, Any]:
             "role": "system",
             "content": (
                 "あなたはメモ整理アシスタントです。"
-                "ユーザーが保存したいメモの内容から、適切なタイトルとタグを提案してください。"
+                "ユーザーが保存したいメモの内容から、適切なタイトルを提案してください。"
                 "必ず JSON オブジェクトのみを返してください。Markdown、コードフェンス、前置きは使わないでください。"
-                '形式: {"title": "タイトル（30文字以内）", "tags": ["タグ1", "タグ2", "タグ3"]}'
+                '形式: {"title": "タイトル（30文字以内）"}'
             ),
         },
         {
             "role": "user",
             "content": (
                 f"【メモ本文】\n{response_sample}\n\n"
-                "このメモに適切なタイトル（30文字以内）と3〜5個のタグを提案してください。"
-                '必ずJSONのみで回答: {"title": "...", "tags": ["...", "..."]}'
+                "このメモに適切なタイトル（30文字以内）を提案してください。"
+                '必ずJSONのみで回答: {"title": "..."}'
             ),
         },
     ]
@@ -82,15 +81,7 @@ def suggest_title_and_tags(ai_response: str) -> dict[str, Any]:
         data = _extract_json(raw)
         title = str(data.get("title") or "").strip()[:SUGGEST_TITLE_MAX_LEN]
 
-        tags_raw = data.get("tags", [])
-        if isinstance(tags_raw, list):
-            tags = " ".join(
-                str(t).strip() for t in tags_raw if str(t).strip()
-            )[:SUGGEST_TAGS_MAX_LEN]
-        else:
-            tags = str(tags_raw).strip()[:SUGGEST_TAGS_MAX_LEN]
-
-        return {"title": title, "tags": tags}
+        return {"title": title}
 
     except LlmProviderError:
         logger.warning("LLM unavailable for memo suggestion; using fallback.")
@@ -128,13 +119,11 @@ def generate_embedding(text: str) -> list[float] | None:
         return None
 
 
-def build_memo_embedding_text(title: str, tags: str, ai_response: str) -> str:
+def build_memo_embedding_text(title: str, ai_response: str) -> str:
     """Combine memo fields into a single string optimised for embedding."""
     parts: list[str] = []
     if title:
         parts.append(f"タイトル: {title}")
-    if tags:
-        parts.append(f"タグ: {tags}")
     if ai_response:
         parts.append(ai_response[:EMBEDDING_RESPONSE_SAMPLE_CHARS])
     return "\n".join(parts)

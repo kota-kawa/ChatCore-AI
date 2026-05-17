@@ -100,7 +100,7 @@ class MemoApiTestCase(unittest.TestCase):
     def test_recent_memos_returns_summary_payload(self):
         request = make_request(
             path="/memo/api/recent",
-            query_string=b"limit=5&q=design&tag=work&date_from=2026-04-01&date_to=2026-04-30",
+            query_string=b"limit=5&q=design&date_from=2026-04-01&date_to=2026-04-30",
             session={"user_id": 7},
         )
 
@@ -113,7 +113,6 @@ class MemoApiTestCase(unittest.TestCase):
                     request,
                     limit=5,
                     q="design",
-                    tag="work",
                     date_from="2026-04-01",
                     date_to="2026-04-30",
                 )
@@ -124,7 +123,6 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["memos"][0]["title"], "サンプル")
         self.assertEqual(mock_fetch.call_args.kwargs["query"], "design")
-        self.assertEqual(mock_fetch.call_args.kwargs["tag"], "work")
         self.assertEqual(mock_fetch.call_args.kwargs["date_from"], "2026-04-01")
         self.assertEqual(mock_fetch.call_args.kwargs["date_to"], "2026-04-30")
 
@@ -161,7 +159,7 @@ class MemoApiTestCase(unittest.TestCase):
     def test_create_memo_success(self):
         request = make_request(
             method="POST",
-            json_body={"ai_response": "ok", "title": "", "tags": ""},
+            json_body={"ai_response": "ok", "title": ""},
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
@@ -202,12 +200,12 @@ class MemoApiTestCase(unittest.TestCase):
         request = make_request(
             method="PATCH",
             path="/memo/api/10",
-            json_body={"title": "Updated title", "tags": "work"},
+            json_body={"title": "Updated title"},
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
             "blueprints.memo._update_memo",
-            return_value={"id": 10, "title": "Updated title", "tags": "work"},
+            return_value={"id": 10, "title": "Updated title"},
         ), patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_update_memo(request, memo_id=10))
         self.assertEqual(response.status_code, 200)
@@ -267,7 +265,7 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertTrue(payload["memo"]["is_pinned"])
 
-    def test_suggest_memo_returns_title_and_tags(self):
+    def test_suggest_memo_returns_title(self):
         request = make_request(
             method="POST",
             path="/memo/api/suggest",
@@ -275,21 +273,20 @@ class MemoApiTestCase(unittest.TestCase):
             session={"user_id": 7},
         )
         with patch(
-            "blueprints.memo.suggest_title_and_tags",
-            return_value={"title": "提案タイトル", "tags": "設計 仕様"},
+            "blueprints.memo.suggest_title",
+            return_value={"title": "提案タイトル"},
         ):
             response = asyncio.run(api_suggest_memo(request))
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["title"], "提案タイトル")
-        self.assertEqual(payload["tags"], "設計 仕様")
 
     def test_bulk_memo_passes_action_payload(self):
         request = make_request(
             method="POST",
             path="/memo/api/bulk",
-            json_body={"action": "add_tags", "memo_ids": [10, 11], "tags": "重要"},
+            json_body={"action": "archive", "memo_ids": [10, 11]},
             session={"user_id": 7},
         )
         with patch("blueprints.memo._bulk_action", return_value={"affected": 2}) as mock_bulk:
@@ -297,14 +294,13 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["affected"], 2)
-        self.assertEqual(mock_bulk.call_args.args[:3], (7, "add_tags", [10, 11]))
-        self.assertEqual(mock_bulk.call_args.kwargs["tags"], "重要")
+        self.assertEqual(mock_bulk.call_args.args[:3], (7, "archive", [10, 11]))
 
     def test_bulk_action_reports_actual_affected_rows(self):
         fake_cursor = FakeBulkCursor(owned_ids=[10, 11], rowcount=2)
         fake_conn = FakeBulkConnection(fake_cursor)
         with patch("blueprints.memo.get_db_connection", return_value=fake_conn):
-            result = _bulk_action(7, "archive", [10, 11], tags=None, collection_id=None)
+            result = _bulk_action(7, "archive", [10, 11], collection_id=None)
         self.assertEqual(result["affected"], 2)
         self.assertTrue(fake_conn.committed)
         self.assertTrue(fake_cursor.closed)
@@ -313,7 +309,7 @@ class MemoApiTestCase(unittest.TestCase):
         fake_cursor = FakeBulkCursor(owned_ids=[10, 11], collection_exists=False, rowcount=2)
         fake_conn = FakeBulkConnection(fake_cursor)
         with patch("blueprints.memo.get_db_connection", return_value=fake_conn):
-            result = _bulk_action(7, "set_collection", [10, 11], tags=None, collection_id=99)
+            result = _bulk_action(7, "set_collection", [10, 11], collection_id=99)
         self.assertEqual(result["affected"], 0)
         self.assertTrue(fake_conn.committed)
 
@@ -362,7 +358,7 @@ class MemoApiTestCase(unittest.TestCase):
         request = make_request(path="/memo/api/export", session={"user_id": 7})
         with patch(
             "blueprints.memo._fetch_memos_for_export",
-            return_value=[{"id": 10, "title": "Export", "tags": "仕事", "ai_response": "body"}],
+            return_value=[{"id": 10, "title": "Export", "ai_response": "body"}],
         ):
             response = asyncio.run(api_export_memos(request, format="json", ids="10"))
         self.assertEqual(response.status_code, 200)
@@ -498,7 +494,6 @@ class MemoApiTestCase(unittest.TestCase):
                         "id": 5,
                         "title": "共有メモ",
                         "created_at": "2024-01-01T09:30:00",
-                        "tags": "仕事",
                         "ai_response": "response",
                     }
                 },

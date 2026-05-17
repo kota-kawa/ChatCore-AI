@@ -57,25 +57,6 @@ body {
   color: #8b6a44;
 }
 
-.shared-memo-tags {
-  margin-top: 0.95rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.shared-memo-tags span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(245, 158, 11, 0.12);
-  color: #9a5b10;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
 .shared-memo-section {
   padding: 1.3rem 1.4rem;
 }

@@ -250,7 +250,6 @@ class MemoCreateRequest(RequestPayloadModel):
     # Input payload for memo creation API.
     ai_response: NonEmptyStr
     title: str = ""
-    tags: str = ""
     collection_id: int | None = None
 
 
@@ -260,7 +259,6 @@ class ShareMemoRequest(RequestPayloadModel):
 
 class MemoUpdateRequest(RequestPayloadModel):
     title: str | None = None
-    tags: str | None = None
     ai_response: str | None = None
     collection_id: int | None = Field(default=None)
     clear_collection: bool = False
@@ -284,9 +282,8 @@ class MemoSuggestRequest(RequestPayloadModel):
 class MemoBulkActionRequest(RequestPayloadModel):
     # 一括操作APIの入力
     # Input payload for bulk memo operations.
-    action: Literal["delete", "archive", "unarchive", "pin", "unpin", "add_tags", "set_collection", "clear_collection"]
+    action: Literal["delete", "archive", "unarchive", "pin", "unpin", "set_collection", "clear_collection"]
     memo_ids: list[int] = Field(min_length=1, max_length=200)
-    tags: str | None = None
     collection_id: int | None = None
 
 

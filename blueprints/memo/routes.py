@@ -54,7 +54,6 @@ async def api_recent_memos(
     limit: int = DEFAULT_MEMO_LIST_LIMIT,
     offset: int = 0,
     q: str = "",
-    tag: str = "",
     date_from: str = "",
     date_to: str = "",
     sort: str = "recent",
@@ -84,7 +83,6 @@ async def api_recent_memos(
             limit=safe_limit,
             offset=safe_offset,
             query=q,
-            tag=tag,
             date_from=date_from,
             date_to=date_to,
             sort=sort if sort != "semantic" else "recent",
@@ -129,12 +127,11 @@ async def api_create_memo(request: Request):
             user_id,
             payload.ai_response,
             resolved_title,
-            payload.tags,
             payload.collection_id,
         )
         flash(request, "メモを保存しました。", "success")
         if memo_id:
-            _memo_attr("_schedule_embedding")(memo_id, resolved_title, payload.tags, payload.ai_response)
+            _memo_attr("_schedule_embedding")(memo_id, resolved_title, payload.ai_response)
         return jsonify({"status": "success", "memo_id": memo_id})
     except Error:
         return log_and_internal_server_error(logger, "Failed to create memo entry.", status="fail")
@@ -161,7 +158,7 @@ async def api_suggest_memo(request: Request):
 
     try:
         result = await run_blocking(
-            _memo_attr("suggest_title_and_tags"),
+            _memo_attr("suggest_title"),
             payload.ai_response,
         )
         return jsonify({"status": "success", **result})
@@ -194,7 +191,6 @@ async def api_bulk_memo(request: Request):
             user_id,
             payload.action,
             payload.memo_ids,
-            tags=payload.tags,
             collection_id=payload.collection_id,
         )
         return jsonify({"status": "success", **result})
@@ -430,7 +426,6 @@ async def api_update_memo(request: Request, memo_id: int):
 
     if (
         payload.title is None
-        and payload.tags is None
         and payload.ai_response is None
         and payload.collection_id is None
         and not payload.clear_collection
@@ -443,16 +438,14 @@ async def api_update_memo(request: Request, memo_id: int):
             user_id,
             memo_id,
             title=payload.title,
-            tags=payload.tags,
             ai_response=payload.ai_response,
             collection_id=payload.collection_id,
             clear_collection=payload.clear_collection,
         )
-        if payload.ai_response is not None or payload.title is not None or payload.tags is not None:
+        if payload.ai_response is not None or payload.title is not None:
             _memo_attr("_schedule_embedding")(
                 memo_id,
                 memo.get("title", ""),
-                memo.get("tags", ""),
                 memo.get("ai_response", ""),
             )
         return jsonify({"status": "success", "memo": memo})

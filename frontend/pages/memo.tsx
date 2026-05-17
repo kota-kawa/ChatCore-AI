@@ -35,7 +35,6 @@ type Collection = {
 type MemoSummary = {
   id: number | string;
   title?: string;
-  tags?: string;
   created_at?: string | null;
   updated_at?: string | null;
   archived_at?: string | null;
@@ -77,7 +76,7 @@ type CollectionListPayload = { collections?: Collection[]; error?: string };
 type FlashState = { type: "success" | "error"; text: string };
 type HttpError = Error & { status?: number };
 type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
-type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "add_tags" | "set_collection" | "clear_collection";
+type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
 // ---------------------------------------------------------------------------
@@ -85,7 +84,6 @@ type MemoActionMenuPosition = { top: number; left: number; width: number; maxHei
 // ---------------------------------------------------------------------------
 
 const DEFAULT_LIMIT = 50;
-const MAX_VISIBLE_MEMO_TAGS = 3;
 const MEMO_ACTION_MENU_WIDTH = 168;
 const MEMO_ACTION_MENU_ESTIMATED_HEIGHT = 172;
 const MEMO_ACTION_MENU_GAP = 6;
@@ -111,11 +109,6 @@ function parseMemoText(raw: string | null | undefined) {
   } catch {
     return raw;
   }
-}
-
-function splitTags(raw: string | undefined) {
-  if (!raw) return [];
-  return raw.split(/[,\s、，]+/).map((t) => t.trim()).filter(Boolean);
 }
 
 function buildMemoListUrl(options: {
@@ -327,7 +320,6 @@ export default function MemoPage() {
   const [formState, setFormState] = useState({
     ai_response: "",
     title: "",
-    tags: "",
     collection_id: null as number | null,
   });
   const [previewMode, setPreviewMode] = useState(false);
@@ -352,7 +344,6 @@ export default function MemoPage() {
   const [detailPreviewMode, setDetailPreviewMode] = useState(true);
   const [detailMetaOpen, setDetailMetaOpen] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
-  const [detailEditTags, setDetailEditTags] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
   const [detailEditAiResponse, setDetailEditAiResponse] = useState("");
   const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
@@ -361,7 +352,6 @@ export default function MemoPage() {
   const detailSaveSequenceRef = useRef(0);
   const detailEditSnapshotRef = useRef({
     title: "",
-    tags: "",
     collectionId: null as number | null,
     aiResponse: "",
   });
@@ -378,7 +368,6 @@ export default function MemoPage() {
   // Bulk selection
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkTagInput, setBulkTagInput] = useState("");
   const [bulkCollectionId, setBulkCollectionId] = useState<number | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
 
@@ -488,7 +477,6 @@ export default function MemoPage() {
     setDetailPreviewMode(true);
     setDetailMetaOpen(false);
     setDetailEditTitle("");
-    setDetailEditTags("");
     setDetailEditCollectionId(null);
     setDetailEditAiResponse("");
     setDetailSaveStatus("idle");
@@ -498,11 +486,10 @@ export default function MemoPage() {
   useEffect(() => {
     detailEditSnapshotRef.current = {
       title: detailEditTitle,
-      tags: detailEditTags,
       collectionId: detailEditCollectionId,
       aiResponse: detailEditAiResponse,
     };
-  }, [detailEditAiResponse, detailEditCollectionId, detailEditTags, detailEditTitle]);
+  }, [detailEditAiResponse, detailEditCollectionId, detailEditTitle]);
 
   useEffect(() => {
     if (!openMenuMemoId) return;
@@ -588,7 +575,7 @@ export default function MemoPage() {
         },
         { defaultMessage: "メモの保存に失敗しました。" },
       );
-      setFormState({ ai_response: "", title: "", tags: "", collection_id: null });
+      setFormState({ ai_response: "", title: "", collection_id: null });
       setPreviewMode(false);
       showFlash("success", "メモを保存しました。");
       setActiveMobileTab("list");
@@ -605,7 +592,7 @@ export default function MemoPage() {
     if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を先に入力してください。"); return; }
     setAiSuggesting(true);
     try {
-      const { payload } = await fetchJsonOrThrow<{ title?: string; tags?: string }>(
+      const { payload } = await fetchJsonOrThrow<{ title?: string }>(
         "/memo/api/suggest",
         {
           method: "POST",
@@ -618,9 +605,8 @@ export default function MemoPage() {
       setFormState((prev) => ({
         ...prev,
         title: payload.title || prev.title,
-        tags: payload.tags || prev.tags,
       }));
-      showFlash("success", "AIがタイトルとタグを提案しました。");
+      showFlash("success", "AIがタイトルを提案しました。");
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "AI提案に失敗しました。");
     } finally {
@@ -636,14 +622,12 @@ export default function MemoPage() {
     if (!selectedMemo) return false;
     return (
       detailEditTitle !== (selectedMemo.title || "") ||
-      detailEditTags !== (selectedMemo.tags || "") ||
       detailEditCollectionId !== (selectedMemo.collection_id ?? null) ||
       detailEditAiResponse !== (selectedMemo.ai_response || "")
     );
   }, [
     detailEditAiResponse,
     detailEditCollectionId,
-    detailEditTags,
     detailEditTitle,
     selectedMemo,
   ]);
@@ -670,7 +654,6 @@ export default function MemoPage() {
       const memo = await loadMemoDetail(memoId);
       if (!memo) { setDetailError("メモの詳細を取得できませんでした。"); return; }
       setDetailEditTitle(memo.title || "");
-      setDetailEditTags(memo.tags || "");
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
       setSelectedMemo(memo);
@@ -691,7 +674,6 @@ export default function MemoPage() {
     }
     const snapshot = {
       title: detailEditTitle,
-      tags: detailEditTags,
       collectionId: detailEditCollectionId,
       aiResponse: detailEditAiResponse,
     };
@@ -701,7 +683,6 @@ export default function MemoPage() {
     try {
       const body: Record<string, unknown> = {
         title: snapshot.title,
-        tags: snapshot.tags,
         ai_response: snapshot.aiResponse,
       };
 
@@ -729,12 +710,10 @@ export default function MemoPage() {
           const current = detailEditSnapshotRef.current;
           const fieldsStillMatchSavedSnapshot =
             current.title === snapshot.title &&
-            current.tags === snapshot.tags &&
             current.collectionId === snapshot.collectionId &&
             current.aiResponse === snapshot.aiResponse;
           if (fieldsStillMatchSavedSnapshot) {
             setDetailEditTitle(payload.memo.title || "");
-            setDetailEditTags(payload.memo.tags || "");
             setDetailEditCollectionId(payload.memo.collection_id ?? null);
             setDetailEditAiResponse(payload.memo.ai_response || "");
           }
@@ -755,7 +734,6 @@ export default function MemoPage() {
     collections.length,
     detailEditAiResponse,
     detailEditCollectionId,
-    detailEditTags,
     detailEditTitle,
     detailHasUnsavedChanges,
     mutate,
@@ -901,7 +879,7 @@ export default function MemoPage() {
     setSelectedIds(new Set());
   }, []);
 
-  const executeBulkAction = useCallback(async (action: BulkAction, extra?: { tags?: string; collectionId?: number | null }) => {
+  const executeBulkAction = useCallback(async (action: BulkAction, extra?: { collectionId?: number | null }) => {
     if (selectedIds.size === 0) return;
     setBulkLoading(true);
     try {
@@ -909,7 +887,6 @@ export default function MemoPage() {
         action,
         memo_ids: Array.from(selectedIds).map(Number),
       };
-      if (extra?.tags !== undefined) body.tags = extra.tags;
       if (extra?.collectionId !== undefined) body.collection_id = extra.collectionId;
 
       await fetchJsonOrThrow(
@@ -919,13 +896,12 @@ export default function MemoPage() {
       );
       const labels: Record<BulkAction, string> = {
         delete: "削除", archive: "アーカイブ", unarchive: "アーカイブ解除",
-        pin: "ピン留め", unpin: "ピン留め解除", add_tags: "タグ追加",
+        pin: "ピン留め", unpin: "ピン留め解除",
         set_collection: "コレクション設定", clear_collection: "コレクション解除",
       };
       showFlash("success", `${selectedIds.size}件を${labels[action]}しました。`);
       if (action === "delete") setSelectedIds(new Set());
       await mutate();
-      setBulkTagInput("");
       setBulkCollectionId(null);
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "一括操作に失敗しました。");
@@ -1312,18 +1288,6 @@ export default function MemoPage() {
                 <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unarchive")} disabled={!hasSelection || bulkLoading} data-tooltip="アーカイブ解除" data-tooltip-placement="top">
                   <i className="bi bi-archive-fill"></i>解除
                 </button>
-                <div className="memo-bulk-bar__tag-group">
-                  <input
-                    type="text"
-                    className="memo-bulk-tag-input"
-                    value={bulkTagInput}
-                    onChange={(e) => setBulkTagInput(e.target.value)}
-                    placeholder="タグを追加"
-                  />
-                  <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("add_tags", { tags: bulkTagInput })} disabled={!hasSelection || bulkLoading || !bulkTagInput.trim()} data-tooltip="タグを追加" data-tooltip-placement="top">
-                    <i className="bi bi-tag"></i>タグ追加
-                  </button>
-                </div>
                 {collections.length > 0 && (
                   <div className="memo-bulk-bar__tag-group">
                     <MemoSelect
@@ -1386,9 +1350,6 @@ export default function MemoPage() {
                     const isBusy = actionLoadingId === memoId;
                     const isSelected = selectedIds.has(memoId);
                     const isCopied = copiedMemoId === memoId;
-                    const tags = splitTags(memo.tags);
-                    const visibleTags = tags.slice(0, MAX_VISIBLE_MEMO_TAGS);
-                    const hiddenTagCount = Math.max(tags.length - visibleTags.length, 0);
                     const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
 
                     return (
@@ -1446,17 +1407,9 @@ export default function MemoPage() {
                             className="memo-item__open memo-item__open--content"
                             onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
                           >
-                            {(memo.collection_name || visibleTags.length > 0) && (
+                            {memo.collection_name && (
                               <div className="memo-item__meta-row">
-                                {memo.collection_name && (
-                                  <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
-                                )}
-                                {visibleTags.length > 0 && (
-                                  <div className="memo-tag-list" aria-label="タグ">
-                                    {visibleTags.map((tag) => <span key={tag} className="memo-tag">{tag}</span>)}
-                                    {hiddenTagCount > 0 && <span className="memo-tag memo-tag--more">+{hiddenTagCount}</span>}
-                                  </div>
-                                )}
+                                <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
                               </div>
                             )}
                             {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
@@ -1600,12 +1553,12 @@ export default function MemoPage() {
                         className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
                         onClick={() => { void handleAiSuggest(); }}
                         disabled={aiSuggesting || !formState.ai_response.trim()}
-                        data-tooltip="AIがタイトルとタグを提案"
+                        data-tooltip="AIがタイトルを提案"
                         data-tooltip-placement="top"
                       >
                         {aiSuggesting
                           ? <><i className="bi bi-arrow-repeat memo-spin"></i>提案中…</>
-                          : <><i className="bi bi-stars"></i>AI提案</>}
+                          : <><i className="bi bi-stars"></i>AIタイトル提案</>}
                       </button>
                     </div>
                     <input
@@ -1619,10 +1572,6 @@ export default function MemoPage() {
                       maxLength={255}
                       placeholder="空欄なら回答1行目を採用"
                     />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="tags">タグ <span className="optional">(任意)</span></label>
-                    <input id="tags" name="tags" data-agent-id="memo.tags" type="text" className="memo-control" value={formState.tags} onChange={handleFormChange} maxLength={255} placeholder="例: 設計 仕様" />
                   </div>
                 </div>
 
@@ -1672,10 +1621,10 @@ export default function MemoPage() {
                       type="button"
                       className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
                       onClick={() => setDetailMetaOpen((value) => !value)}
-                      aria-label="タイトル・タグ・コレクションを編集"
+                      aria-label="タイトル・コレクションを編集"
                       aria-expanded={detailMetaOpen}
                       aria-controls="memo-detail-meta-panel"
-                      data-tooltip="タイトル・タグ・コレクション"
+                      data-tooltip="タイトル・コレクション"
                       data-tooltip-placement="bottom"
                     >
                       <i className="bi bi-sliders" aria-hidden="true"></i>
@@ -1699,31 +1648,17 @@ export default function MemoPage() {
                   <div className="memo-modal__edit-fields">
                     {detailMetaOpen && (
                       <div id="memo-detail-meta-panel" className="memo-modal__meta-panel">
-                        <div className="memo-modal__edit-grid">
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-title">タイトル</label>
-                            <input
-                              id="memo-detail-title"
-                              type="text"
-                              className="memo-control"
-                              value={detailEditTitle}
-                              onChange={(event) => setDetailEditTitle(event.target.value)}
-                              placeholder="空欄なら回答1行目を採用"
-                              maxLength={255}
-                            />
-                          </div>
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-tags">タグ</label>
-                            <input
-                              id="memo-detail-tags"
-                              type="text"
-                              className="memo-control"
-                              value={detailEditTags}
-                              onChange={(event) => setDetailEditTags(event.target.value)}
-                              placeholder="例: 設計 仕様"
-                              maxLength={255}
-                            />
-                          </div>
+                        <div className="memo-modal__edit-field">
+                          <label htmlFor="memo-detail-title">タイトル</label>
+                          <input
+                            id="memo-detail-title"
+                            type="text"
+                            className="memo-control"
+                            value={detailEditTitle}
+                            onChange={(event) => setDetailEditTitle(event.target.value)}
+                            placeholder="空欄なら回答1行目を採用"
+                            maxLength={255}
+                          />
                         </div>
                         {collections.length > 0 && (
                           <div className="memo-modal__edit-field">

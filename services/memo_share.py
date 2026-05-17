@@ -218,7 +218,6 @@ def get_shared_memo_payload(token: str) -> dict[str, Any]:
                 SELECT
                     me.id,
                     me.title,
-                    me.tags,
                     me.created_at,
                     me.ai_response
                 FROM shared_memo_entries sme
@@ -239,7 +238,6 @@ def get_shared_memo_payload(token: str) -> dict[str, Any]:
                 "memo": {
                     "id": row.get("id"),
                     "title": row.get("title") or "保存したメモ",
-                    "tags": row.get("tags") or "",
                     "created_at": serialize_datetime_iso(created_at),
                     "ai_response": row.get("ai_response") or "",
                 }

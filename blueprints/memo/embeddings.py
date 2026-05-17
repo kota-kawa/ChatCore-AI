@@ -42,12 +42,12 @@ def store_embedding(memo_id: int, embedding: list[float]) -> None:
             connection.close()
 
 
-def schedule_embedding(memo_id: int, title: str, tags: str, ai_response: str) -> None:
+def schedule_embedding(memo_id: int, title: str, ai_response: str) -> None:
     if not embeddings_available():
         return
 
     def _task() -> None:
-        text = build_memo_embedding_text(title, tags, ai_response)
+        text = build_memo_embedding_text(title, ai_response)
         embedding = generate_embedding(text)
         if embedding:
             store_embedding(memo_id, embedding)

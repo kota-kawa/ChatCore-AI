@@ -386,45 +386,6 @@ body.memo-page.modal-open {
   gap: 0.46rem;
 }
 
-.memo-tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.memo-tag {
-  display: inline-flex;
-  align-items: center;
-  max-width: 9rem;
-  border-radius: 999px;
-  border: 1px solid rgba(217, 119, 6, 0.2);
-  background: rgba(245, 158, 11, 0.1);
-  color: #9a5b10;
-  padding: 0.22rem 0.52rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-button.memo-tag {
-  cursor: pointer;
-}
-
-.memo-tag--muted {
-  border-color: rgba(120, 113, 108, 0.2);
-  background: rgba(120, 113, 108, 0.11);
-  color: #8b7355;
-}
-
-.memo-tag--more {
-  border-color: rgba(120, 113, 108, 0.2);
-  background: rgba(120, 113, 108, 0.1);
-  color: #8b7355;
-}
-
 .memo-item__excerpt {
   margin: 0;
   color: var(--memo-text-muted);
@@ -862,13 +823,6 @@ textarea.memo-control {
 .memo-modal__edit-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.memo-modal__tags {
-  padding: 0 1.15rem 0.8rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
 }
 
 .memo-modal__body {
@@ -1400,23 +1354,6 @@ textarea.memo-control {
 .memo-bulk-btn--danger {
   color: #b42318;
   border-color: rgba(248, 113, 113, 0.35);
-}
-
-.memo-bulk-bar__tag-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.memo-bulk-tag-input {
-  min-height: 34px;
-  border: 1px solid rgba(191, 122, 23, 0.24);
-  border-radius: 8px;
-  background: var(--memo-card-strong);
-  color: var(--memo-text);
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 0.3rem 0.62rem;
 }
 
 /* ============================================================
@@ -2190,7 +2127,6 @@ textarea.memo-control {
   color: #fbbf24;
 }
 
-[data-theme="dark"] .memo-bulk-tag-input,
 [data-theme="dark"] .memo-preview-pane {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.25);
@@ -2591,24 +2527,6 @@ textarea.memo-control {
   background:
     radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 34%),
     rgba(15, 23, 42, 0.92);
-}
-
-[data-theme="dark"] .memo-tag {
-  color: #fbbf24;
-  border-color: rgba(245, 158, 11, 0.24);
-  background: rgba(245, 158, 11, 0.14);
-}
-
-[data-theme="dark"] .memo-tag--muted {
-  color: #94a3b8;
-  border-color: rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.1);
-}
-
-[data-theme="dark"] .memo-tag--more {
-  color: #cbd5e1;
-  border-color: rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.1);
 }
 
 [data-theme="dark"] .memo-select__trigger {

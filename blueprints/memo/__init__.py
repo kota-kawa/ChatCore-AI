@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.db import get_db_connection
-from services.memo_ai import embeddings_available, generate_embedding, suggest_title_and_tags
+from services.memo_ai import embeddings_available, generate_embedding, suggest_title
 from services.memo_share import (
     create_or_get_shared_memo_token,
     get_memo_share_state,
@@ -115,5 +115,5 @@ __all__ = [
     "get_shared_memo_payload",
     "memo_bp",
     "revoke_shared_memo_token",
-    "suggest_title_and_tags",
+    "suggest_title",
 ]
