@@ -23,7 +23,6 @@ class EmailServiceConfigTestCase(unittest.TestCase):
             {
                 "RESEND_API_KEY": "re_test",
                 "RESEND_FROM_ADDRESS": "Chat Core <noreply@example.com>",
-                "SEND_ADDRESS": "legacy@example.com",
             },
             clear=True,
         ):
@@ -32,19 +31,16 @@ class EmailServiceConfigTestCase(unittest.TestCase):
         self.assertEqual(api_key, "re_test")
         self.assertEqual(from_address, "Chat Core <noreply@example.com>")
 
-    def test_load_resend_config_falls_back_to_send_address(self):
+    def test_load_resend_config_requires_resend_from_address(self):
         with patch.dict(
             "os.environ",
             {
                 "RESEND_API_KEY": "re_test",
-                "SEND_ADDRESS": "sender@example.com",
             },
             clear=True,
         ):
-            api_key, from_address = email_service._load_resend_config()
-
-        self.assertEqual(api_key, "re_test")
-        self.assertEqual(from_address, "sender@example.com")
+            with self.assertRaises(RuntimeError):
+                email_service._load_resend_config()
 
     def test_load_resend_config_raises_when_missing(self):
         with patch.dict("os.environ", {}, clear=True):

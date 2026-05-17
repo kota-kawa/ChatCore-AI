@@ -5,7 +5,6 @@ import requests
 RESEND_API_URL = "https://api.resend.com/emails"
 RESEND_API_KEY_ENV = "RESEND_API_KEY"
 RESEND_FROM_ADDRESS_ENV = "RESEND_FROM_ADDRESS"
-SEND_ADDRESS_ENV = "SEND_ADDRESS"
 REQUEST_TIMEOUT_SECONDS = 10
 
 
@@ -13,16 +12,11 @@ def _load_resend_config() -> tuple[str, str]:
     # 起動時ではなく送信時に明示的に失敗させる。
     # Fail explicitly at send time instead of import/startup time.
     api_key = (os.getenv(RESEND_API_KEY_ENV) or "").strip()
-    from_address = (
-        os.getenv(RESEND_FROM_ADDRESS_ENV)
-        or os.getenv(SEND_ADDRESS_ENV)
-        or ""
-    ).strip()
+    from_address = (os.getenv(RESEND_FROM_ADDRESS_ENV) or "").strip()
     if not api_key or not from_address:
         raise RuntimeError(
             "Resend email credentials are not configured. "
-            f"Set {RESEND_API_KEY_ENV} and {RESEND_FROM_ADDRESS_ENV} "
-            f"(or legacy {SEND_ADDRESS_ENV})."
+            f"Set {RESEND_API_KEY_ENV} and {RESEND_FROM_ADDRESS_ENV}."
         )
     return api_key, from_address
 
