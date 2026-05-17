@@ -5,6 +5,12 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from services.attached_files import (
+    MAX_ATTACHED_FILE_BASE64_LENGTH,
+    MAX_ATTACHED_FILE_CONTENT_LENGTH,
+    MAX_ATTACHED_FILES,
+)
+
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 
 # RFC 5321 caps the full address at 254 chars. The pattern is a deliberately
@@ -106,13 +112,11 @@ class ShareChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
 
 
-MAX_ATTACHED_FILE_CONTENT_LENGTH = 100_000  # ~100 KB per file
-MAX_ATTACHED_FILES = 5
-
-
 class AttachedFileItem(RequestPayloadModel):
     name: str = Field(min_length=1, max_length=256)
     content: str = Field(default="", max_length=MAX_ATTACHED_FILE_CONTENT_LENGTH)
+    media_type: str = Field(default="", max_length=128)
+    data_base64: str = Field(default="", max_length=MAX_ATTACHED_FILE_BASE64_LENGTH)
 
 
 class ChatMessageRequest(RequestPayloadModel):

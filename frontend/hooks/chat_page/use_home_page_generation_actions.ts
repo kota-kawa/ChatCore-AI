@@ -829,7 +829,13 @@ export function useHomePageGenerationActions({
             message,
             chat_room_id: roomId,
             model,
-            attached_files: attachedFiles?.map((f) => ({ name: f.name, content: f.content })) ?? [],
+            attached_files:
+              attachedFiles?.map((f) => ({
+                name: f.name,
+                content: f.content ?? "",
+                media_type: f.mediaType ?? "",
+                data_base64: f.dataBase64 ?? "",
+              })) ?? [],
           }),
           signal: generation.abortController.signal,
         });

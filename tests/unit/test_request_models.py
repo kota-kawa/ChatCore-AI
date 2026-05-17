@@ -133,6 +133,25 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
+    def test_chat_message_accepts_binary_attachment_metadata(self):
+        payload = _validate(
+            ChatMessageRequest,
+            {
+                "message": "この資料を要約して",
+                "chat_room_id": "room-1",
+                "attached_files": [
+                    {
+                        "name": "document.pdf",
+                        "media_type": "application/pdf",
+                        "data_base64": "QUJD",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(payload.attached_files[0].name, "document.pdf")
+        self.assertEqual(payload.attached_files[0].data_base64, "QUJD")
+
     def test_chat_room_ids_requires_non_empty_list(self):
         with self.assertRaises(ValidationError):
             _validate(ChatRoomIdsRequest, {"room_ids": []})

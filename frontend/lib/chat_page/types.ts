@@ -23,7 +23,9 @@ export type AttachedFile = {
   id: string;
   name: string;
   size: number;
-  content: string;
+  content?: string;
+  mediaType?: string;
+  dataBase64?: string;
 };
 
 export type UiChatMessage = {

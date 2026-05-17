@@ -2,6 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from 
 import { ChatMessageList } from "./chat_message_list";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  getAttachmentIconClass,
+  mergeChatAttachments,
+  readSelectedChatAttachments,
+} from "../../lib/chat_page/file_attachments";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 
 function ChatMainSectionComponent() {
@@ -73,55 +79,29 @@ function ChatMainSectionComponent() {
 
   const detectedUrls = useMemo(() => extractUrlsFromText(chatInput), [chatInput]);
 
-  const MAX_FILE_SIZE_BYTES = 1_048_576; // 1 MB
-  const ACCEPTED_FILE_TYPES = [
-    "text/plain", "text/markdown", "text/csv", "text/html",
-    "text/css", "text/javascript", "text/xml",
-    "application/json", "application/xml",
-  ];
-  const ACCEPTED_EXTENSIONS = /\.(txt|md|csv|json|xml|html|css|js|ts|tsx|jsx|py|rb|go|rs|java|c|cpp|h|sh|yaml|yml|sql|log|ini|toml|env|gitignore)$/i;
+  const notifyAttachmentError = useCallback((message: string) => {
+    import("../../scripts/core/toast").then(({ showToast }) => {
+      showToast(message, { variant: "error" });
+    });
+  }, []);
 
   const handleFileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
-      Array.from(files).forEach((file) => {
-        if (attachedFiles.length >= 5) return;
-
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          import("../../scripts/core/toast").then(({ showToast }) => {
-            showToast(`「${file.name}」は1MBを超えるため添付できません。`, { variant: "error" });
-          });
-          return;
-        }
-
-        const isTextType = ACCEPTED_FILE_TYPES.includes(file.type) || ACCEPTED_EXTENSIONS.test(file.name);
-        if (!isTextType) {
-          import("../../scripts/core/toast").then(({ showToast }) => {
-            showToast(`「${file.name}」はサポートされていないファイル形式です。`, { variant: "error" });
-          });
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const content = typeof e.target?.result === "string" ? e.target.result : "";
-          const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          setAttachedFiles((prev) => {
-            if (prev.length >= 5) return prev;
-            if (prev.some((f) => f.name === file.name)) return prev;
-            return [...prev, { id, name: file.name, size: file.size, content }];
-          });
-        };
-        reader.readAsText(file, "utf-8");
-      });
+      void readSelectedChatAttachments(Array.from(files), attachedFiles, notifyAttachmentError).then(
+        (selectedFiles) => {
+          if (selectedFiles.length === 0) return;
+          setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
+        },
+      );
 
       if (event.target) {
         event.target.value = "";
       }
     },
-    [attachedFiles.length, setAttachedFiles],
+    [attachedFiles, notifyAttachmentError, setAttachedFiles],
   );
 
   const handleRemoveAttachedFile = useCallback(
@@ -457,7 +437,10 @@ function ChatMainSectionComponent() {
               <div className="chat-attached-files">
                 {attachedFiles.map((file) => (
                   <div key={file.id} className="chat-attached-file-chip">
-                    <i className="bi bi-file-earmark-text chat-attached-file-chip__icon" aria-hidden="true"></i>
+                    <i
+                      className={`bi ${getAttachmentIconClass(file.name)} chat-attached-file-chip__icon`}
+                      aria-hidden="true"
+                    ></i>
                     <span className="chat-attached-file-chip__name" title={file.name}>{file.name}</span>
                     <span className="chat-attached-file-chip__size">
                       {file.size < 1024
@@ -483,7 +466,7 @@ function ChatMainSectionComponent() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".txt,.md,.csv,.json,.xml,.html,.css,.js,.ts,.tsx,.jsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.sh,.yaml,.yml,.sql,.log,.ini,.toml"
+                accept={CHAT_ATTACHMENT_ACCEPT}
                 className="chat-file-input-hidden"
                 aria-hidden="true"
                 tabIndex={-1}

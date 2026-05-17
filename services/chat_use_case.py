@@ -9,6 +9,11 @@ from typing import Any
 from fastapi import Request
 
 from services.api_errors import ApiServiceError
+from services.attached_files import (
+    AttachedFileValidationError,
+    format_attached_files_for_prompt,
+    prepare_attached_files,
+)
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
 from services.llm import (
@@ -151,6 +156,17 @@ class ChatPostUseCase:
                     "Failed to validate chat room ownership before posting.",
                 )
 
+        else:
+            sid, guest_error = await deps.validate_guest_room_access(session, chat_room_id)
+            if guest_error is not None:
+                return guest_error
+
+        try:
+            prepared_attached_files = await run_blocking(prepare_attached_files, attached_files)
+        except AttachedFileValidationError as exc:
+            return deps.jsonify({"error": str(exc)}, status_code=400)
+
+        if "user_id" in session:
             if room_mode == "temporary":
                 sid = deps.get_temporary_user_store_key(user_id)
                 await run_blocking(deps.ensure_ephemeral_room, sid, chat_room_id)
@@ -167,7 +183,7 @@ class ChatPostUseCase:
                     chat_room_id,
                 )
             else:
-                attached_file_name_list = [f.name for f in attached_files] if attached_files else None
+                attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
                 saved_user_message_id = await run_blocking(
                     deps.save_message_to_db,
                     chat_room_id,
@@ -177,10 +193,6 @@ class ChatPostUseCase:
                 )
                 all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
         else:
-            sid, guest_error = await deps.validate_guest_room_access(session, chat_room_id)
-            if guest_error is not None:
-                return guest_error
-
             await run_blocking(
                 deps.ephemeral_store.append_message,
                 sid,
@@ -210,14 +222,8 @@ class ChatPostUseCase:
                 )
                 prefix_blocks.append(f"<fetched_urls>\n{url_xml}\n</fetched_urls>")
 
-        if attached_files:
-            file_blocks = [
-                f'<file name="{str(f.name).strip()}">\n{str(f.content).strip()}\n</file>'
-                for f in attached_files
-                if str(f.name).strip() and str(f.content).strip()
-            ]
-            if file_blocks:
-                prefix_blocks.append("<attached_files>\n" + "\n".join(file_blocks) + "\n</attached_files>")
+        if prepared_attached_files:
+            prefix_blocks.append(format_attached_files_for_prompt(prepared_attached_files))
 
         if prefix_blocks and normalized_all_messages and normalized_all_messages[-1].get("role") == "user":
             prefix = "\n\n".join(prefix_blocks)
