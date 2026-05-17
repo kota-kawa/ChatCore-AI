@@ -41,6 +41,14 @@
   color: #ffffff;
 }
 
+.prompt-share-page .hero-action--primary {
+  --ps-button-base: #3b8eff;
+  --ps-button-accent: var(--ps-primary-strong);
+  --ps-button-shadow-color: rgba(18, 72, 172, 0.42);
+  border-color: rgba(255, 255, 255, 0.72);
+  color: #ffffff;
+}
+
 .prompt-share-page .hero-action--secondary {
   --ps-button-base: rgba(255, 255, 255, 0.32);
   --ps-button-accent: rgba(255, 255, 255, 0.16);
