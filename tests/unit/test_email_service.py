@@ -4,150 +4,92 @@ from unittest.mock import patch
 from services import email_service
 
 
-class FakeSMTP:
-    def __init__(
-        self,
-        *,
-        fail_on_starttls: bool = False,
-        fail_on_login: bool = False,
-        fail_on_send_message: bool = False,
-    ):
-        self.fail_on_starttls = fail_on_starttls
-        self.fail_on_login = fail_on_login
-        self.fail_on_send_message = fail_on_send_message
-        self.starttls_called = False
-        self.login_args = None
-        self.sent_message = None
-        self.closed = False
+class FakeResponse:
+    def __init__(self, status_code=200, json_payload=None, text=""):
+        self.status_code = status_code
+        self._json_payload = json_payload
+        self.text = text
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self.closed = True
-        return False
-
-    def starttls(self):
-        self.starttls_called = True
-        if self.fail_on_starttls:
-            raise RuntimeError("starttls failed")
-
-    def login(self, username, password):
-        self.login_args = (username, password)
-        if self.fail_on_login:
-            raise RuntimeError("login failed")
-
-    def send_message(self, message):
-        if self.fail_on_send_message:
-            raise RuntimeError("send_message failed")
-        self.sent_message = message
+    def json(self):
+        if isinstance(self._json_payload, Exception):
+            raise self._json_payload
+        return self._json_payload
 
 
-class EmailServiceCredentialsTestCase(unittest.TestCase):
-    def test_load_email_credentials_uses_send_password(self):
-        with patch.dict(
-            "os.environ",
-            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
-            clear=True,
-        ):
-            send_address, send_password = email_service._load_email_credentials()
-
-        self.assertEqual(send_address, "sender@example.com")
-        self.assertEqual(send_password, "app-password")
-
-    def test_load_email_credentials_falls_back_to_legacy_env(self):
+class EmailServiceConfigTestCase(unittest.TestCase):
+    def test_load_resend_config_uses_resend_from_address(self):
         with patch.dict(
             "os.environ",
             {
-                "SEND_ADDRESS": "sender@example.com",
-                "EMAIL_SEND_PASSWORD": "legacy-password",
+                "RESEND_API_KEY": "re_test",
+                "RESEND_FROM_ADDRESS": "Chat Core <noreply@example.com>",
+                "SEND_ADDRESS": "legacy@example.com",
             },
             clear=True,
         ):
-            send_address, send_password = email_service._load_email_credentials()
+            api_key, from_address = email_service._load_resend_config()
 
-        self.assertEqual(send_address, "sender@example.com")
-        self.assertEqual(send_password, "legacy-password")
+        self.assertEqual(api_key, "re_test")
+        self.assertEqual(from_address, "Chat Core <noreply@example.com>")
 
-    def test_load_email_credentials_raises_when_missing(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(RuntimeError):
-                email_service._load_email_credentials()
-
-    def test_send_email_uses_context_manager_and_sends_message(self):
-        fake_smtp = FakeSMTP()
+    def test_load_resend_config_falls_back_to_send_address(self):
         with patch.dict(
             "os.environ",
-            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
+            {
+                "RESEND_API_KEY": "re_test",
+                "SEND_ADDRESS": "sender@example.com",
+            },
             clear=True,
         ):
-            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp) as mock_smtp:
+            api_key, from_address = email_service._load_resend_config()
+
+        self.assertEqual(api_key, "re_test")
+        self.assertEqual(from_address, "sender@example.com")
+
+    def test_load_resend_config_raises_when_missing(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(RuntimeError):
+                email_service._load_resend_config()
+
+    def test_send_email_posts_plain_text_message_to_resend(self):
+        fake_response = FakeResponse(status_code=200, json_payload={"id": "email-id"})
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test",
+                "RESEND_FROM_ADDRESS": "Chat Core <noreply@example.com>",
+            },
+            clear=True,
+        ):
+            with patch(
+                "services.email_service.requests.post",
+                return_value=fake_response,
+            ) as mock_post:
                 email_service.send_email(
                     to_address="receiver@example.com",
                     subject="subject",
                     body_text="body",
                 )
 
-        mock_smtp.assert_called_once_with("smtp.gmail.com", 587)
-        self.assertTrue(fake_smtp.starttls_called)
-        self.assertEqual(fake_smtp.login_args, ("sender@example.com", "app-password"))
-        self.assertEqual(fake_smtp.sent_message["To"], "receiver@example.com")
-        self.assertTrue(fake_smtp.closed)
+        mock_post.assert_called_once_with(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": "Bearer re_test",
+                "Content-Type": "application/json",
+                "User-Agent": "Chat-Core/1.0",
+            },
+            json={
+                "from": "Chat Core <noreply@example.com>",
+                "to": ["receiver@example.com"],
+                "subject": "subject",
+                "text": "body",
+            },
+            timeout=10,
+        )
 
-    def test_send_email_closes_connection_when_starttls_raises(self):
-        fake_smtp = FakeSMTP(fail_on_starttls=True)
-        with patch.dict(
-            "os.environ",
-            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
-            clear=True,
-        ):
-            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp):
-                with self.assertRaises(RuntimeError):
-                    email_service.send_email(
-                        to_address="receiver@example.com",
-                        subject="subject",
-                        body_text="body",
-                    )
-
-        self.assertTrue(fake_smtp.closed)
-
-    def test_send_email_closes_connection_when_login_raises(self):
-        fake_smtp = FakeSMTP(fail_on_login=True)
-        with patch.dict(
-            "os.environ",
-            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
-            clear=True,
-        ):
-            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp):
-                with self.assertRaises(RuntimeError):
-                    email_service.send_email(
-                        to_address="receiver@example.com",
-                        subject="subject",
-                        body_text="body",
-                    )
-
-        self.assertTrue(fake_smtp.closed)
-
-    def test_send_email_closes_connection_when_send_message_raises(self):
-        fake_smtp = FakeSMTP(fail_on_send_message=True)
-        with patch.dict(
-            "os.environ",
-            {"SEND_ADDRESS": "sender@example.com", "SEND_PASSWORD": "app-password"},
-            clear=True,
-        ):
-            with patch("services.email_service.smtplib.SMTP", return_value=fake_smtp):
-                with self.assertRaises(RuntimeError):
-                    email_service.send_email(
-                        to_address="receiver@example.com",
-                        subject="subject",
-                        body_text="body",
-                    )
-
-        self.assertTrue(fake_smtp.closed)
-
-    def test_send_email_does_not_open_smtp_when_credentials_are_missing(self):
+    def test_send_email_does_not_call_resend_when_config_is_missing(self):
         with patch.dict("os.environ", {}, clear=True):
-            with patch("services.email_service.smtplib.SMTP") as mock_smtp:
+            with patch("services.email_service.requests.post") as mock_post:
                 with self.assertRaises(RuntimeError):
                     email_service.send_email(
                         to_address="receiver@example.com",
@@ -155,7 +97,56 @@ class EmailServiceCredentialsTestCase(unittest.TestCase):
                         body_text="body",
                     )
 
-        mock_smtp.assert_not_called()
+        mock_post.assert_not_called()
+
+    def test_send_email_raises_for_resend_error_message(self):
+        fake_response = FakeResponse(
+            status_code=403,
+            json_payload={"message": "invalid api key"},
+        )
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test",
+                "RESEND_FROM_ADDRESS": "sender@example.com",
+            },
+            clear=True,
+        ):
+            with patch(
+                "services.email_service.requests.post",
+                return_value=fake_response,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "403: invalid api key"):
+                    email_service.send_email(
+                        to_address="receiver@example.com",
+                        subject="subject",
+                        body_text="body",
+                    )
+
+    def test_send_email_raises_for_resend_plain_text_error(self):
+        fake_response = FakeResponse(
+            status_code=500,
+            json_payload=ValueError("not json"),
+            text="upstream failed",
+        )
+        with patch.dict(
+            "os.environ",
+            {
+                "RESEND_API_KEY": "re_test",
+                "RESEND_FROM_ADDRESS": "sender@example.com",
+            },
+            clear=True,
+        ):
+            with patch(
+                "services.email_service.requests.post",
+                return_value=fake_response,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "500: upstream failed"):
+                    email_service.send_email(
+                        to_address="receiver@example.com",
+                        subject="subject",
+                        body_text="body",
+                    )
 
 
 if __name__ == "__main__":

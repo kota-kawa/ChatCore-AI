@@ -254,6 +254,8 @@ cd ChatCore-AI
 
 # 2) 環境変数を設定
 cp .env.example .env
+# メール送信は Resend を使用します。
+# RESEND_API_KEY と RESEND_FROM_ADDRESS（未設定時は SEND_ADDRESS）を設定してください。
 
 # 3) ビルド＆起動
 docker-compose up --build

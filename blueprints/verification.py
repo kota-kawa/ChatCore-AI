@@ -79,12 +79,12 @@ async def api_send_verification_email(
     """
     register.html から「確認メール送信」ボタン押下で呼ばれる
     - メールアドレスをDBに登録 (is_verified=False)
-    - 6桁のコードを生成し、Gmailにて送信
+    - 6桁のコードを生成し、メールプロバイダ経由で送信
     - コードは session["verification_code"] に一時的に保存 (本番ではDBでもOK)
     - session["temp_user_id"] に仮保存
     Called by "Send verification email" on register page.
     - Ensure user exists with is_verified=False
-    - Generate six-digit code and send via Gmail
+    - Generate six-digit code and send through the configured email provider
     - Temporarily store code and user id in session
     """
     data, error_response = await require_json_dict(request, status="fail")

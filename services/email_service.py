@@ -1,41 +1,75 @@
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.utils import formatdate
 
+import requests
+
+RESEND_API_URL = "https://api.resend.com/emails"
+RESEND_API_KEY_ENV = "RESEND_API_KEY"
+RESEND_FROM_ADDRESS_ENV = "RESEND_FROM_ADDRESS"
 SEND_ADDRESS_ENV = "SEND_ADDRESS"
-SEND_PASSWORD_ENV = "SEND_PASSWORD"
-LEGACY_SEND_PASSWORD_ENV = "EMAIL_SEND_PASSWORD"
+REQUEST_TIMEOUT_SECONDS = 10
 
 
-def _load_email_credentials() -> tuple[str, str]:
-    # 新旧の環境変数を読み、未設定なら起動時ではなく送信時に明示的に失敗させる
-    # Read current/legacy env vars and fail explicitly at send time if missing.
-    send_address = (os.getenv(SEND_ADDRESS_ENV) or "").strip()
-    send_password = (
-        os.getenv(SEND_PASSWORD_ENV)
-        or os.getenv(LEGACY_SEND_PASSWORD_ENV)
+def _load_resend_config() -> tuple[str, str]:
+    # 起動時ではなく送信時に明示的に失敗させる。
+    # Fail explicitly at send time instead of import/startup time.
+    api_key = (os.getenv(RESEND_API_KEY_ENV) or "").strip()
+    from_address = (
+        os.getenv(RESEND_FROM_ADDRESS_ENV)
+        or os.getenv(SEND_ADDRESS_ENV)
         or ""
     ).strip()
-    if not send_address or not send_password:
+    if not api_key or not from_address:
         raise RuntimeError(
-            "Email credentials are not configured. "
-            f"Set {SEND_ADDRESS_ENV} and {SEND_PASSWORD_ENV}."
+            "Resend email credentials are not configured. "
+            f"Set {RESEND_API_KEY_ENV} and {RESEND_FROM_ADDRESS_ENV} "
+            f"(or legacy {SEND_ADDRESS_ENV})."
         )
-    return send_address, send_password
+    return api_key, from_address
+
+
+def _extract_resend_error(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        message = payload.get("message")
+        if isinstance(message, str) and message:
+            return message
+        error = payload.get("error")
+        if isinstance(error, str) and error:
+            return error
+        if isinstance(error, dict):
+            nested_message = error.get("message")
+            if isinstance(nested_message, str) and nested_message:
+                return nested_message
+
+    return response.text[:300]
 
 
 def send_email(to_address: str, subject: str, body_text: str) -> None:
-    # Gmail SMTP を使ってテキストメールを送信する
-    # Send a plain-text email through Gmail SMTP.
+    # Resend Email API を使ってテキストメールを送信する。
+    # Send a plain-text email through the Resend Email API.
     """指定アドレスにメール送信"""
-    send_address, send_password = _load_email_credentials()
-    with smtplib.SMTP("smtp.gmail.com", 587) as smtpobj:
-        smtpobj.starttls()
-        smtpobj.login(send_address, send_password)
-        msg = MIMEText(body_text)
-        msg['Subject'] = subject
-        msg['From'] = send_address
-        msg['To'] = to_address
-        msg['Date'] = formatdate()
-        smtpobj.send_message(msg)
+    api_key, from_address = _load_resend_config()
+    response = requests.post(
+        RESEND_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Chat-Core/1.0",
+        },
+        json={
+            "from": from_address,
+            "to": [to_address],
+            "subject": subject,
+            "text": body_text,
+        },
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    if response.status_code < 200 or response.status_code >= 300:
+        detail = _extract_resend_error(response)
+        raise RuntimeError(
+            f"Resend email request failed with status {response.status_code}: {detail}"
+        )
