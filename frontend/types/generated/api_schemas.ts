@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 621d7f8a0855b172a99057de0f645ab4e467ce2493de6dc01bc6abb85ae55a98
+// Schema fingerprint: 1b1b58d2834dc8b2effd247a291e6be5b4a7e3a8b947aa46d9ebfd09ddfa797c
 
 import { z } from "zod";
 
