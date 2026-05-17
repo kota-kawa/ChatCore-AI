@@ -582,15 +582,8 @@ textarea.memo-control {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.65rem;
-}
-
-.form-grid > .form-group > label,
-.form-grid .memo-field-header {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
 }
 
 .form-actions {
@@ -2420,7 +2413,6 @@ textarea.memo-control {
     display: none;
   }
 
-  .form-grid,
   .memo-modal__edit-grid,
   .memo-modal__body {
     grid-template-columns: 1fr;
