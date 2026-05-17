@@ -406,8 +406,9 @@ function ChatMessageListComponent({
   );
 
   const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";
+  const hasPerformedInitialScrollRef = useRef(false);
 
-  const scrollThinkingIntoView = useCallback(() => {
+  const scrollListToEnd = useCallback(() => {
     const listApi = listApiRef.current;
     const listElement = chatMessagesRef.current;
 
@@ -425,10 +426,53 @@ function ChatMessageListComponent({
     }
   }, [chatMessagesRef, rows.length]);
 
+  const scrollThinkingIntoView = scrollListToEnd;
+
   const handleListResize = useCallback(() => {
     if (!shouldRevealThinking || typeof window === "undefined") return;
     window.requestAnimationFrame(scrollThinkingIntoView);
   }, [scrollThinkingIntoView, shouldRevealThinking]);
+
+  // 初回マウント（room 切替や「これまでのチャットを見る」押下時）で、ユーザーがチャットの
+  // 一番上を一瞬見てから一番下にスクロールするのを避けるため、paint 前に末尾へ位置合わせする。
+  // react-window の動的行高計測がフレームをまたいで進むため、追加フレームでも再調整する。
+  useIsomorphicLayoutEffect(() => {
+    if (hasPerformedInitialScrollRef.current) return;
+    if (rows.length === 0) return;
+
+    hasPerformedInitialScrollRef.current = true;
+
+    scrollListToEnd();
+
+    if (typeof window === "undefined") return;
+
+    const animationFrameIds: number[] = [];
+    const timeoutIds: number[] = [];
+
+    const scheduleFrame = () => {
+      animationFrameIds.push(window.requestAnimationFrame(scrollListToEnd));
+    };
+
+    scheduleFrame();
+    animationFrameIds.push(
+      window.requestAnimationFrame(() => {
+        scrollListToEnd();
+        scheduleFrame();
+      }),
+    );
+    [80, 220].forEach((delay) => {
+      timeoutIds.push(window.setTimeout(scrollListToEnd, delay));
+    });
+
+    return () => {
+      animationFrameIds.forEach((frameId) => {
+        window.cancelAnimationFrame(frameId);
+      });
+      timeoutIds.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId);
+      });
+    };
+  }, [rows, scrollListToEnd]);
 
   useIsomorphicLayoutEffect(() => {
     if (!shouldRevealThinking) return;
