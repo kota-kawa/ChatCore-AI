@@ -274,6 +274,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           NGINX_SITE_PATH: ${{ secrets.NGINX_SITE_PATH }}
           NGINX_UPSTREAM_DIR: ${{ secrets.NGINX_UPSTREAM_DIR }}
+          NGINX_TEST_CMD: ${{ secrets.NGINX_TEST_CMD }}
           NGINX_RELOAD_CMD: ${{ secrets.NGINX_RELOAD_CMD }}
         run: |
           set -Eeuo pipefail
@@ -296,8 +297,21 @@ jobs:
             exit 1
           fi
 
+          remote_env_names=(
+            DEPLOY_PATH
+            NGINX_SITE_PATH
+            NGINX_UPSTREAM_DIR
+            NGINX_TEST_CMD
+            NGINX_RELOAD_CMD
+          )
+          remote_exports=()
+          for var_name in "${remote_env_names[@]}"; do
+            printf -v escaped_value '%q' "${!var_name:-}"
+            remote_exports+=("${var_name}=${escaped_value}")
+          done
+
           ssh -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p "${port}" "${SERVER_USER}@${SERVER_HOST}" \
-            "export DEPLOY_PATH='${DEPLOY_PATH}' NGINX_SITE_PATH='${NGINX_SITE_PATH}' NGINX_UPSTREAM_DIR='${NGINX_UPSTREAM_DIR}' NGINX_RELOAD_CMD='${NGINX_RELOAD_CMD}'; bash -s" <<'REMOTE_SCRIPT'
+            "export ${remote_exports[*]}; bash -s" <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
 
           cd "${DEPLOY_PATH}"
@@ -311,6 +325,22 @@ jobs:
           
           diagnose() {
             echo "--- Deployment Diagnostics ---"
+            echo "Timestamp: $(date -Is)"
+            echo "Host: $(hostname)"
+            echo "Path: $(pwd)"
+            echo "Git HEAD: $(git rev-parse --short HEAD 2>/dev/null || true)"
+            echo "Disk Usage:"
+            df -h . || true
+            echo "Memory Usage:"
+            free -h || true
+            echo "Docker Version:"
+            docker --version || true
+            docker compose version || true
+            echo "Nginx Command Configuration:"
+            printf 'NGINX_SITE_PATH=%s\n' "${NGINX_SITE_PATH:-<unset>}"
+            printf 'NGINX_UPSTREAM_DIR=%s\n' "${NGINX_UPSTREAM_DIR:-<unset>}"
+            if [ -n "${NGINX_TEST_CMD:-}" ]; then echo "NGINX_TEST_CMD=<set>"; else echo "NGINX_TEST_CMD=<unset>"; fi
+            if [ -n "${NGINX_RELOAD_CMD:-}" ]; then echo "NGINX_RELOAD_CMD=<set>"; else echo "NGINX_RELOAD_CMD=<unset>"; fi
             echo "Container Status:"
             docker compose --env-file .env -f deploy/docker-compose.bluegreen.yml ps || true
             echo "Recent Logs for Core Services:"
@@ -325,13 +355,14 @@ jobs:
           
           on_error() {
             local exit_code=$?
+            local line_number="${1:-unknown}"
             trap - ERR
-            echo "Error occurred during remote deployment execution (Exit Code: ${exit_code})"
+            echo "Error occurred during remote deployment execution at line ${line_number} (Exit Code: ${exit_code})"
             diagnose
             rollback || echo "Warning: Rollback failed or was partial." >&2
             exit "${exit_code}"
           }
-          trap on_error ERR
+          trap 'on_error ${LINENO}' ERR
 
           echo "Fetching latest changes..."
           git fetch origin main

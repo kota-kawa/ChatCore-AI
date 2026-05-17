@@ -14,7 +14,13 @@ DEPLOY_TARGET_COLOR="${DEPLOY_TARGET_COLOR:-}"
 
 is_empty_or_unresolved() {
   local value="${1:-}"
-  [ -z "${value}" ] || [[ "${value}" =~ ^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$ ]]
+  if [ -z "${value}" ]; then
+    return 0
+  fi
+
+  # Keep bare shell placeholders as invalid, but allow braced values such as
+  # ${POSTGRES_DB}; they may be intentionally expanded by the caller's env.
+  [[ "${value}" =~ ^\$[A-Za-z_][A-Za-z0-9_]*$ ]]
 }
 
 require_cmd() {
@@ -101,6 +107,19 @@ validate_required_env() {
   fi
 }
 
+require_noninteractive_sudo() {
+  if [ "$(id -u)" -eq 0 ]; then
+    return 0
+  fi
+
+  require_cmd sudo
+  if ! sudo -n true >/dev/null 2>&1; then
+    echo "Passwordless sudo is required for non-interactive deploy steps." >&2
+    echo "Grant the deploy user sudo NOPASSWD for nginx/install operations or run as root." >&2
+    exit 1
+  fi
+}
+
 require_cmd docker
 require_env_file
 require_nginx_site_source
@@ -108,12 +127,13 @@ load_env_file
 apply_legacy_env_fallbacks
 preflight_compose_config
 validate_required_env
+require_noninteractive_sudo
 
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
     "$@"
   else
-    sudo "$@"
+    sudo -n "$@"
   fi
 }
 
@@ -122,7 +142,7 @@ run_root_shell() {
   if [ "$(id -u)" -eq 0 ]; then
     bash -lc "${command_string}"
   else
-    sudo bash -lc "${command_string}"
+    sudo -n bash -lc "${command_string}"
   fi
 }
 
@@ -227,6 +247,29 @@ wait_for_service_completed() {
   return 1
 }
 
+wait_for_postgres_accepting_queries() {
+  local retries="${1:-45}"
+  local result
+
+  while [ "${retries}" -gt 0 ]; do
+    result="$(
+      compose exec -T db sh -ceu \
+        'PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 -Atc "SELECT 1"' \
+        2>/dev/null || true
+    )"
+    if [ "${result}" = "1" ]; then
+      echo "PostgreSQL is accepting queries."
+      return 0
+    fi
+
+    sleep 2
+    retries=$((retries - 1))
+  done
+
+  echo "Timed out waiting for PostgreSQL to accept queries." >&2
+  return 1
+}
+
 write_text_as_root() {
   local target_file="$1"
   local content="$2"
@@ -234,7 +277,7 @@ write_text_as_root() {
   if [ "$(id -u)" -eq 0 ]; then
     printf "%s" "${content}" > "${target_file}"
   else
-    printf "%s" "${content}" | sudo tee "${target_file}" >/dev/null
+    printf "%s" "${content}" | sudo -n tee "${target_file}" >/dev/null
   fi
 }
 
@@ -263,9 +306,16 @@ install_nginx_site_config() {
 
 write_upstream_files() {
   local color="$1"
-  local backend_port frontend_port
+  local backend_port frontend_port extra ports
 
-  read -r backend_port frontend_port < <(resolve_color_ports "${color}")
+  if ! ports="$(resolve_color_ports "${color}")"; then
+    return 1
+  fi
+  read -r backend_port frontend_port extra <<< "${ports}"
+  if [ -z "${backend_port}" ] || [ -z "${frontend_port}" ] || [ -n "${extra:-}" ]; then
+    echo "Failed to resolve exactly two ports for color: ${color}" >&2
+    return 1
+  fi
 
   run_root install -d -m 755 "${NGINX_UPSTREAM_DIR}"
 
@@ -364,6 +414,7 @@ start_core_services() {
   # before bootstrapping to prevent host-port conflicts on blue (5004/3000).
   NGINX_BOOTSTRAP_COLOR="${bootstrap_color}" compose up -d --remove-orphans db redis nginx_bootstrap
   wait_for_service_healthy db 90
+  wait_for_postgres_accepting_queries 45
   wait_for_service_healthy redis 90
   wait_for_service_completed nginx_bootstrap 45
 }
