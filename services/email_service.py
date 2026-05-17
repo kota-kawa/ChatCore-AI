@@ -1,4 +1,6 @@
+import html
 import os
+import re
 
 import requests
 
@@ -6,6 +8,7 @@ RESEND_API_URL = "https://api.resend.com/emails"
 RESEND_API_KEY_ENV = "RESEND_API_KEY"
 RESEND_FROM_ADDRESS_ENV = "RESEND_FROM_ADDRESS"
 REQUEST_TIMEOUT_SECONDS = 10
+VERIFICATION_CODE_PATTERN = re.compile(r"(?:認証コード|確認コード):\s*(\d{6})")
 
 
 def _load_resend_config() -> tuple[str, str]:
@@ -42,9 +45,106 @@ def _extract_resend_error(response: requests.Response) -> str:
     return response.text[:300]
 
 
+def _build_email_html(subject: str, body_text: str) -> str:
+    code_match = VERIFICATION_CODE_PATTERN.search(body_text)
+    code = code_match.group(1) if code_match else ""
+    intro_lines = [
+        line.strip()
+        for line in body_text.splitlines()
+        if line.strip() and not VERIFICATION_CODE_PATTERN.search(line)
+    ]
+    intro_html = "".join(
+        (
+            '<p style="margin:0 0 14px;color:#334155;font-size:15px;'
+            'line-height:1.7;">'
+            f"{html.escape(line)}"
+            "</p>"
+        )
+        for line in intro_lines
+    )
+    if not intro_html:
+        intro_html = (
+            '<p style="margin:0 0 14px;color:#334155;font-size:15px;line-height:1.7;">'
+            "Chat-Core AI からのお知らせです。"
+            "</p>"
+        )
+
+    if "ログイン" in subject:
+        heading = "ログイン認証コード"
+        eyebrow = "Secure sign-in"
+        note = "このコードはログイン画面でのみ使用してください。"
+    elif "メールアドレス変更" in subject:
+        heading = "メールアドレス変更の確認"
+        eyebrow = "Account security"
+        note = "心当たりがない場合は、このメールを無視してください。"
+    else:
+        heading = "アカウント認証コード"
+        eyebrow = "Welcome to Chat-Core AI"
+        note = "このコードを入力してアカウント登録を完了してください。"
+
+    code_html = ""
+    if code:
+        escaped_code = html.escape(code)
+        code_html = f"""
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 24px;">
+                      <tr>
+                        <td align="center" style="background:#f8fafc;border:1px solid #dbeafe;border-radius:14px;padding:22px 16px;">
+                          <div style="color:#64748b;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px;">Verification code</div>
+                          <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;color:#0f172a;font-size:34px;font-weight:800;letter-spacing:.24em;line-height:1;">{escaped_code}</div>
+                        </td>
+                      </tr>
+                    </table>
+        """
+
+    escaped_subject = html.escape(subject)
+    escaped_heading = html.escape(heading)
+    escaped_eyebrow = html.escape(eyebrow)
+    escaped_note = html.escape(note)
+    return f"""<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{escaped_subject}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef2f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;color:transparent;opacity:0;">{escaped_heading} from Chat-Core AI</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2f7;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbe3ef;box-shadow:0 16px 42px rgba(15,23,42,.12);">
+            <tr>
+              <td style="background:#0f172a;padding:26px 30px;">
+                <div style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:.02em;">Chat-Core AI</div>
+                <div style="color:#93c5fd;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin-top:8px;">{escaped_eyebrow}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px;">
+                <h1 style="margin:0 0 16px;color:#0f172a;font-size:24px;line-height:1.3;font-weight:800;">{escaped_heading}</h1>
+                {intro_html}
+                {code_html}
+                <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;color:#9a3412;font-size:13px;line-height:1.6;">
+                  {escaped_note}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 30px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
+                This message was sent by Chat-Core AI. Please do not reply to this automated email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
 def send_email(to_address: str, subject: str, body_text: str) -> None:
-    # Resend Email API を使ってテキストメールを送信する。
-    # Send a plain-text email through the Resend Email API.
+    # Resend Email API を使って HTML とテキストの両方を送信する。
+    # Send both HTML and plain-text email through the Resend Email API.
     """指定アドレスにメール送信"""
     api_key, from_address = _load_resend_config()
     response = requests.post(
@@ -59,6 +159,7 @@ def send_email(to_address: str, subject: str, body_text: str) -> None:
             "to": [to_address],
             "subject": subject,
             "text": body_text,
+            "html": _build_email_html(subject, body_text),
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
