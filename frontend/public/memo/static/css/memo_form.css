@@ -586,6 +586,13 @@ textarea.memo-control {
   gap: 0.65rem;
 }
 
+.form-grid > .form-group > label,
+.form-grid .memo-field-header {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
