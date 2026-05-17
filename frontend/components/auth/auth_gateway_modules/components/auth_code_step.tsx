@@ -27,6 +27,7 @@ export function AuthCodeStep({
         value={authCode}
         onChange={(event) => onAuthCodeChange(event.target.value)}
         autoComplete="one-time-code"
+        disabled={verifyingCode}
       />
       <button
         type="button"
@@ -34,12 +35,19 @@ export function AuthCodeStep({
         onClick={onVerifyCode}
         disabled={verifyingCode}
       >
-        認証して続ける
+        {verifyingCode ? "認証コードを確認中..." : "認証して続ける"}
       </button>
+      {verifyingCode ? (
+        <div className="code-status" role="status" aria-live="polite">
+          <span className="code-status-pulse" aria-hidden="true" />
+          <span>ログインの準備をしています。このままお待ちください。</span>
+        </div>
+      ) : null}
       <button
         type="button"
         className="ghost-btn"
         onClick={onBack}
+        disabled={verifyingCode}
       >
         戻る
       </button>

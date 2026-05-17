@@ -135,6 +135,11 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         margin-bottom: 16px;
       }
 
+      .email-input:disabled {
+        cursor: wait;
+        opacity: 0.72;
+      }
+
       .email-input::placeholder {
         color: rgba(255, 255, 255, 0.5);
       }
@@ -244,6 +249,41 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         animation: sectionIn 0.2s ease;
       }
 
+      .code-status {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        min-height: 36px;
+        margin: 12px 0 0;
+        padding: 9px 12px;
+        border: 1px solid rgba(25, 195, 125, 0.22);
+        border-radius: 14px;
+        background: rgba(25, 195, 125, 0.1);
+        color: rgba(234, 255, 243, 0.92);
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      .code-status-pulse {
+        width: 9px;
+        height: 9px;
+        flex: 0 0 auto;
+        border-radius: var(--radius-full, 999px);
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(25, 195, 125, 0.42);
+        animation: statusPulse 1.25s ease-out infinite;
+      }
+
+      @keyframes statusPulse {
+        70% {
+          box-shadow: 0 0 0 8px rgba(25, 195, 125, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(25, 195, 125, 0);
+        }
+      }
+
       @keyframes sectionIn {
         from {
           opacity: 0;
@@ -267,9 +307,25 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         inset: 0;
         display: grid;
         place-items: center;
-        background: rgba(7, 20, 14, 0.45);
+        padding: 24px;
+        background: rgba(7, 20, 14, 0.62);
+        backdrop-filter: blur(3px);
         border-radius: 24px;
         z-index: 3;
+        animation: overlayIn 0.18s ease;
+      }
+
+      .spinner-card {
+        display: flex;
+        width: min(100%, 320px);
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 22px 20px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 20px;
+        background: rgba(8, 20, 14, 0.9);
+        box-shadow: 0 20px 42px rgba(0, 0, 0, 0.34);
       }
 
       .spinner-ring {
@@ -281,9 +337,77 @@ export function AuthGatewayGlobalStyles({ fontFamily }: AuthGatewayGlobalStylesP
         animation: spin 0.85s linear infinite;
       }
 
+      .spinner-copy {
+        display: grid;
+        gap: 5px;
+      }
+
+      .spinner-title,
+      .spinner-message {
+        margin: 0;
+      }
+
+      .spinner-title {
+        color: #ffffff;
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+
+      .spinner-message {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.55;
+      }
+
+      .spinner-progress {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        justify-content: center;
+        min-height: 10px;
+      }
+
+      .spinner-progress span {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-full, 999px);
+        background: var(--accent);
+        animation: progressDot 1s ease-in-out infinite;
+      }
+
+      .spinner-progress span:nth-child(2) {
+        animation-delay: 0.16s;
+      }
+
+      .spinner-progress span:nth-child(3) {
+        animation-delay: 0.32s;
+      }
+
+      @keyframes overlayIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
       @keyframes spin {
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      @keyframes progressDot {
+        0%,
+        80%,
+        100% {
+          opacity: 0.35;
+          transform: translateY(0);
+        }
+        40% {
+          opacity: 1;
+          transform: translateY(-4px);
         }
       }
 

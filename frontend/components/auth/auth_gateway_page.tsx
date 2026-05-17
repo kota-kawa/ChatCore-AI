@@ -34,6 +34,7 @@ export default function AuthGatewayPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
+  const [redirectingAfterAuth, setRedirectingAfterAuth] = useState(false);
   const [passkeyPending, setPasskeyPending] = useState(false);
   const [supportsPasskeys, setSupportsPasskeys] = useState(false);
   const [emailAuthFlow, setEmailAuthFlow] = useState<EmailAuthFlow>(null);
@@ -57,10 +58,39 @@ export default function AuthGatewayPage() {
 
   const scheduleRedirect = (targetPath: string = getPostAuthRedirectPath()) => {
     clearTimer(redirectTimerRef);
+    setRedirectingAfterAuth(true);
     redirectTimerRef.current = setTimeout(() => {
       window.location.href = targetPath;
     }, REDIRECT_DELAY_MS);
   };
+
+  const loadingState = (() => {
+    if (redirectingAfterAuth) {
+      return {
+        message: "画面を準備しています。まもなく移動します。",
+        title: emailAuthFlow === "register" ? "アカウントを作成しました" : "ログインしています"
+      };
+    }
+    if (verifyingCode) {
+      return {
+        message: "認証コードを照合し、ログイン情報を準備しています。",
+        title: "認証コードを確認中"
+      };
+    }
+    if (sendingCode) {
+      return {
+        message: "メールに届く6桁のコードを確認してください。",
+        title: "認証メールを送信中"
+      };
+    }
+    if (passkeyPending) {
+      return {
+        message: "ブラウザまたは端末の案内に従ってください。",
+        title: "Passkeyを確認中"
+      };
+    }
+    return null;
+  })();
 
   useEffect(() => {
     ensureCsrfProtection();
@@ -123,6 +153,7 @@ export default function AuthGatewayPage() {
     setErrorMessage("");
     setEmailAuthFlow(null);
     setPasskeySetupProvider(null);
+    setRedirectingAfterAuth(false);
 
     if (!trimmedEmail) {
       setErrorMessage("メールアドレスを入力してください。");
@@ -154,6 +185,7 @@ export default function AuthGatewayPage() {
   const handleVerifyCode = async () => {
     const trimmedCode = authCode.trim();
     setErrorMessage("");
+    setRedirectingAfterAuth(false);
 
     if (!trimmedCode) {
       setErrorMessage("認証コードを入力してください。");
@@ -178,9 +210,6 @@ export default function AuthGatewayPage() {
           setStep("passkey");
           showModalMessage("アカウントを作成しました。必要ならこのままPasskeyを追加できます。");
         } else {
-          if (flow === "register") {
-            showModalMessage("アカウントを作成しました。");
-          }
           scheduleRedirect();
         }
       } else {
@@ -196,6 +225,7 @@ export default function AuthGatewayPage() {
 
   const handlePasskeyLogin = async () => {
     setErrorMessage("");
+    setRedirectingAfterAuth(false);
     setPasskeyPending(true);
     try {
       await authenticateWithPasskey();
@@ -212,6 +242,7 @@ export default function AuthGatewayPage() {
 
   const handlePasskeyRegistration = async () => {
     setErrorMessage("");
+    setRedirectingAfterAuth(false);
     setPasskeyPending(true);
     try {
       await registerPasskey();
@@ -235,7 +266,11 @@ export default function AuthGatewayPage() {
         <div className="chat-background" />
 
         <div className="auth-container">
-          <LoadingSpinnerOverlay visible={sendingCode || verifyingCode || passkeyPending} />
+          <LoadingSpinnerOverlay
+            message={loadingState?.message}
+            title={loadingState?.title}
+            visible={loadingState !== null}
+          />
 
           <div className="bot-icon">{step === "passkey" ? "🔐" : supportsPasskeys ? "🌿" : "✉️"}</div>
           <h1 className="title">アカウントに続ける</h1>
