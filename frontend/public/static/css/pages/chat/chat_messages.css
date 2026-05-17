@@ -36,6 +36,20 @@ chat-action-menu {
   display: block;
   gap: 0;
   padding: 0;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 仮想スクロールの初回末尾アンカリング中は、scrollTop 補正の「ガタつき」を
+   利用者に見せないため一覧自体を不可視にしておく。アンカリングが完了した時点で
+   このクラスが外れ、上の transition で滑らかにフェードインする。 */
+.chat-messages--anchoring {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-messages--virtual {
+    transition: opacity 0.01ms linear;
+  }
 }
 
 .chat-message-row {

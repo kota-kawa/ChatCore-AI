@@ -407,6 +407,11 @@ function ChatMessageListComponent({
 
   const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";
   const hasPerformedInitialScrollRef = useRef(false);
+  // 初回マウント直後は react-window が動的行高を計測する数フレームで scrollTop が
+  // 補正されることがあるため、その「ガタつき」を利用者から隠す目的で
+  // メッセージ一覧自体を一瞬だけ不可視にしておき、末尾アンカリングが落ち着いてから
+  // フェードインさせる。アンカリングが終わるまでの 80ms ほどを目安にする。
+  const [isInitialContentRevealed, setIsInitialContentRevealed] = useState(false);
 
   const scrollListToEnd = useCallback(() => {
     const listApi = listApiRef.current;
@@ -436,9 +441,15 @@ function ChatMessageListComponent({
   // 初回マウント（room 切替や「これまでのチャットを見る」押下時）で、ユーザーがチャットの
   // 一番上を一瞬見てから一番下にスクロールするのを避けるため、paint 前に末尾へ位置合わせする。
   // react-window の動的行高計測がフレームをまたいで進むため、追加フレームでも再調整する。
+  // その間は [isInitialContentRevealed=false] で一覧自体を不可視にしておき、
+  // 末尾アンカリングが完了してから表示する。
   useIsomorphicLayoutEffect(() => {
     if (hasPerformedInitialScrollRef.current) return;
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      // 表示する行が無い場合は隠す必要が無いので、空状態をそのまま見せる。
+      setIsInitialContentRevealed(true);
+      return;
+    }
 
     hasPerformedInitialScrollRef.current = true;
 
@@ -453,16 +464,27 @@ function ChatMessageListComponent({
       animationFrameIds.push(window.requestAnimationFrame(scrollListToEnd));
     };
 
+    // 3 連続フレームで再調整（動的行高の計測完了をまたぐ）。
     scheduleFrame();
     animationFrameIds.push(
       window.requestAnimationFrame(() => {
         scrollListToEnd();
         scheduleFrame();
+        animationFrameIds.push(
+          window.requestAnimationFrame(() => {
+            scrollListToEnd();
+            scheduleFrame();
+          }),
+        );
       }),
     );
-    [80, 220].forEach((delay) => {
-      timeoutIds.push(window.setTimeout(scrollListToEnd, delay));
-    });
+    // 末尾アンカリングの最終再調整。これが終わったら一覧を見せる。
+    timeoutIds.push(
+      window.setTimeout(() => {
+        scrollListToEnd();
+        setIsInitialContentRevealed(true);
+      }, 80),
+    );
 
     return () => {
       animationFrameIds.forEach((frameId) => {
@@ -518,7 +540,9 @@ function ChatMessageListComponent({
       aria-live="polite"
       aria-relevant="additions text"
       aria-label="チャットメッセージ"
-      className="chat-messages chat-messages--virtual scroll-pb-24"
+      className={`chat-messages chat-messages--virtual scroll-pb-24${
+        isInitialContentRevealed ? "" : " chat-messages--anchoring"
+      }`}
       defaultHeight={480}
       id="chat-messages"
       listRef={setListRef}
