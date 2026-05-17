@@ -1,4 +1,3 @@
-# スキーマを生成する
 from __future__ import annotations
 
 import hashlib
