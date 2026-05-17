@@ -90,8 +90,9 @@ class PromptSearchTestCase(unittest.TestCase):
 
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("LEFT JOIN prompt_likes AS pl", search_query)
+        self.assertIn("LEFT JOIN prompt_list_entries AS ple", search_query)
         self.assertIn("LIMIT %s OFFSET %s", search_query)
-        self.assertEqual(search_params[:3], (9, 9, 9))
+        self.assertEqual(search_params[:2], (9, 9))
         self.assertEqual(search_params[-2:], (20, 20))
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
@@ -109,7 +110,7 @@ class PromptSearchTestCase(unittest.TestCase):
 
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("COALESCE(p.prompt_type, 'text') = %s", search_query)
-        self.assertEqual(search_params[:4], (9, 9, 9, "image"))
+        self.assertEqual(search_params[:3], (9, 9, "image"))
         self.assertEqual(search_params[-2:], (10, 0))
 
     def test_search_public_prompts_returns_empty_payload_when_query_is_blank(self):

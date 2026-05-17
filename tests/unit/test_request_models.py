@@ -4,12 +4,14 @@ from pydantic import ValidationError
 
 from services.request_models import (
     AddTaskRequest,
+    BookmarkCreateRequest,
     ChatMessageRequest,
     ChatRoomIdsRequest,
     MemoCreateRequest,
     PromptAssistRequest,
     PromptLikeRequest,
     PromptListEntryCreateRequest,
+    PromptTaskCreateRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
 )
@@ -115,6 +117,20 @@ class RequestModelsTestCase(unittest.TestCase):
     def test_prompt_list_entry_requires_prompt_id(self):
         with self.assertRaises(ValidationError):
             _validate(PromptListEntryCreateRequest, {})
+
+    def test_bookmark_create_uses_prompt_id(self):
+        payload = _validate(
+            BookmarkCreateRequest,
+            {"prompt_id": "12"},
+        )
+        self.assertEqual(payload.prompt_id, 12)
+
+    def test_prompt_task_create_uses_prompt_id(self):
+        payload = _validate(
+            PromptTaskCreateRequest,
+            {"prompt_id": "12"},
+        )
+        self.assertEqual(payload.prompt_id, 12)
 
     def test_prompt_like_request_parses_prompt_id_type(self):
         payload = _validate(

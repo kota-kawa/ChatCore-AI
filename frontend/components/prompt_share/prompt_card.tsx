@@ -22,13 +22,13 @@ type PromptCardProps = {
   isBookmarkPending: boolean;
   isLikeEffectActive: boolean;
   isBookmarkEffectActive: boolean;
-  isSaveToListPending: boolean;
+  isAddAsTaskPending: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event: MouseEvent<HTMLButtonElement>) => void;
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
-  onSaveToList: (prompt: PromptRecord) => void;
+  onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onToggleBookmark: (prompt: PromptRecord) => void;
 };
@@ -40,19 +40,18 @@ function PromptCardComponent({
   isBookmarkPending,
   isLikeEffectActive,
   isBookmarkEffectActive,
-  isSaveToListPending,
+  isAddAsTaskPending,
   onOpenDetail,
   onOpenComments,
   onOpenShare,
   onToggleDropdown,
   onCloseDropdown,
-  onSaveToList,
+  onAddAsTask,
   onToggleLike,
   onToggleBookmark,
 }: PromptCardProps) {
   const promptTypeValue = normalizePromptType(prompt.prompt_type);
   const isBookmarked = Boolean(prompt.bookmarked);
-  const isSavedToList = Boolean(prompt.saved_to_list);
   const promptId = prompt.clientId;
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
@@ -124,14 +123,14 @@ function PromptCardComponent({
           className="dropdown-item"
           type="button"
           role="menuitem"
-          data-action="save-to-list"
-          disabled={isSavedToList || isSaveToListPending}
+          data-action="add-as-task"
+          disabled={isAddAsTaskPending}
           onClick={(event) => {
             event.stopPropagation();
-            void onSaveToList(prompt);
+            void onAddAsTask(prompt);
           }}
         >
-          {isSavedToList ? "保存したプロンプトに追加済み" : "保存したプロンプトに追加"}
+          {isAddAsTaskPending ? "タスクに追加中..." : "タスクとして追加"}
         </button>
         <button
           className="dropdown-item"

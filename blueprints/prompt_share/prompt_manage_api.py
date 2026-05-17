@@ -233,7 +233,7 @@ async def get_my_prompts(request: Request):
 
 @prompt_manage_api_bp.get("/saved_prompts", name="prompt_manage_api.get_saved_prompts")
 async def get_saved_prompts(request: Request):
-    """ログインユーザーが保存したプロンプト（ブックマーク）一覧を取得するエンドポイント"""
+    """ログインユーザーがタスクとして追加したプロンプト一覧を取得するエンドポイント"""
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 

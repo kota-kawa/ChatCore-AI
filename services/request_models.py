@@ -209,14 +209,15 @@ class SharedPromptCreateRequest(RequestPayloadModel):
 
 
 class BookmarkCreateRequest(RequestPayloadModel):
-    title: NonEmptyStr
-    content: NonEmptyStr
-    input_examples: str = ""
-    output_examples: str = ""
+    prompt_id: int
 
 
 class BookmarkDeleteRequest(RequestPayloadModel):
-    title: NonEmptyStr
+    prompt_id: int
+
+
+class PromptTaskCreateRequest(RequestPayloadModel):
+    prompt_id: int
 
 
 class PromptListEntryCreateRequest(RequestPayloadModel):

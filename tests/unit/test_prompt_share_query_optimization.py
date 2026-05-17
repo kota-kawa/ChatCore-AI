@@ -62,9 +62,9 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertEqual(len(fake_cursor.executed), 1)
         query, params = fake_cursor.executed[0]
         self.assertIn("LEFT JOIN prompt_likes AS pl", query)
-        self.assertIn("LEFT JOIN task_with_examples AS b", query)
         self.assertIn("LEFT JOIN prompt_list_entries AS ple", query)
-        self.assertEqual(params, (7, 7, 7))
+        self.assertNotIn("LEFT JOIN task_with_examples AS b", query)
+        self.assertEqual(params, (7, 7))
         self.assertTrue(prompts[0]["liked"])
         self.assertTrue(prompts[0]["bookmarked"])
         self.assertFalse(prompts[0]["saved_to_list"])

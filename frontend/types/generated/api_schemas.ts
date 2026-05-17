@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: b0d3f2f4cec914a72dbee3a544e8d95c029ba92c3e568fbedbd8236d36ffef6a
+// Schema fingerprint: 621d7f8a0855b172a99057de0f645ab4e467ce2493de6dc01bc6abb85ae55a98
 
 import { z } from "zod";
 
@@ -47,11 +47,14 @@ export type PromptAssistRequest = z.infer<typeof PromptAssistRequestSchema>;
 export const SharedPromptCreateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().default(""), "content": z.string().default(""), "author": z.string().min(1), "prompt_type": z.enum(["text","image","skill"]).default("text"), "input_examples": z.string().default(""), "output_examples": z.string().default(""), "ai_model": z.string().default(""), "skill_markdown": z.string().max(30000).default(""), "skill_python_script": z.string().max(30000).default("") });
 export type SharedPromptCreateRequest = z.infer<typeof SharedPromptCreateRequestSchema>;
 
-export const BookmarkCreateRequestSchema = z.object({ "title": z.string().min(1), "content": z.string().min(1), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
+export const BookmarkCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
 export type BookmarkCreateRequest = z.infer<typeof BookmarkCreateRequestSchema>;
 
-export const BookmarkDeleteRequestSchema = z.object({ "title": z.string().min(1) });
+export const BookmarkDeleteRequestSchema = z.object({ "prompt_id": z.number().int() });
 export type BookmarkDeleteRequest = z.infer<typeof BookmarkDeleteRequestSchema>;
+
+export const PromptTaskCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
+export type PromptTaskCreateRequest = z.infer<typeof PromptTaskCreateRequestSchema>;
 
 export const PromptListEntryCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
 export type PromptListEntryCreateRequest = z.infer<typeof PromptListEntryCreateRequestSchema>;

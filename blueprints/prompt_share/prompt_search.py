@@ -92,7 +92,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
               p.created_at,
               COALESCE(pc.comment_count, 0) AS comment_count,
               CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-              CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
+              CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
               CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
             LEFT JOIN (
@@ -106,10 +106,6 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id
-            LEFT JOIN task_with_examples AS b
-              ON b.user_id = %s
-             AND b.name = p.title
-             AND b.deleted_at IS NULL
             LEFT JOIN prompt_list_entries AS ple
               ON ple.user_id = %s
              AND ple.prompt_id = p.id
@@ -149,7 +145,6 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         total = int(count_row.get("total") or 0)
 
         search_params = [
-            user_id,
             user_id,
             user_id,
         ]

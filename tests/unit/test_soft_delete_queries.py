@@ -85,16 +85,16 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         self.assertNotIn("DELETE FROM prompts", query)
         self.assertEqual(params, (77, 8))
 
-    def test_remove_bookmark_marks_task_row_deleted(self):
+    def test_remove_bookmark_deletes_prompt_list_entry(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
         with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
-            _remove_bookmark_for_user(3, "Bookmark Title")
+            _remove_bookmark_for_user(3, 42)
 
         query, params = fake_cursor.executed[0]
-        self.assertIn("UPDATE task_with_examples SET deleted_at = CURRENT_TIMESTAMP", query)
-        self.assertEqual(params, (3, "Bookmark Title"))
+        self.assertIn("DELETE FROM prompt_list_entries", query)
+        self.assertEqual(params, (3, 42))
 
 
 if __name__ == "__main__":

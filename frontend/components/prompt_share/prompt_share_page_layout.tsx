@@ -30,13 +30,13 @@ type PromptSharePageLayoutProps = {
   likePendingIds: Set<string>;
   bookmarkPendingIds: Set<string>;
   actionEffectIds: Set<string>;
-  saveToListPendingIds: Set<string>;
+  addAsTaskPendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => void;
   onToggleDropdown: (promptId: string) => void;
   onCloseDropdown: () => void;
-  onSaveToList: (prompt: PromptRecord) => void;
+  onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onToggleBookmark: (prompt: PromptRecord) => void;
   children?: ReactNode;
@@ -69,13 +69,13 @@ export function PromptSharePageLayout({
   likePendingIds,
   bookmarkPendingIds,
   actionEffectIds,
-  saveToListPendingIds,
+  addAsTaskPendingIds,
   onOpenDetail,
   onOpenComments,
   onOpenShare,
   onToggleDropdown,
   onCloseDropdown,
-  onSaveToList,
+  onAddAsTask,
   onToggleLike,
   onToggleBookmark,
   children
@@ -252,13 +252,13 @@ export function PromptSharePageLayout({
                   isBookmarkPending={bookmarkPendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
                   isBookmarkEffectActive={actionEffectIds.has(`${promptId}:bookmark`)}
-                  isSaveToListPending={saveToListPendingIds.has(promptId)}
+                  isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
                   onOpenShare={onOpenShare}
                   onToggleDropdown={onToggleDropdown}
                   onCloseDropdown={onCloseDropdown}
-                  onSaveToList={onSaveToList}
+                  onAddAsTask={onAddAsTask}
                   onToggleLike={onToggleLike}
                   onToggleBookmark={onToggleBookmark}
                 />

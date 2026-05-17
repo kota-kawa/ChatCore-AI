@@ -19,6 +19,7 @@ from services.request_models import (
     PromptCommentReportRequest,
     PromptLikeRequest,
     PromptListEntryCreateRequest,
+    PromptTaskCreateRequest,
     SharedPromptCreateRequest,
 )
 from services.web import (
@@ -252,7 +253,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.created_at,
                 COALESCE(pc.comment_count, 0) AS comment_count,
                 CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-                CASE WHEN b.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
+                CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
                 CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
             LEFT JOIN (
@@ -266,10 +267,6 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id
-            LEFT JOIN task_with_examples AS b
-              ON b.user_id = %s
-             AND b.name = p.title
-             AND b.deleted_at IS NULL
             LEFT JOIN prompt_list_entries AS ple
               ON ple.user_id = %s
              AND ple.prompt_id = p.id
@@ -277,7 +274,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
               AND p.deleted_at IS NULL
             ORDER BY p.created_at DESC
             """,
-            (user_id, user_id, user_id),
+            (user_id, user_id),
         )
         prompts = []
         for row in cursor.fetchall():
@@ -409,18 +406,55 @@ def _create_prompt_for_user(
             conn.close()
 
 
-def _add_bookmark_for_user(
+def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
+    prompt_type = _normalize_prompt_type(prompt.get("prompt_type"))
+    if prompt_type != PROMPT_TYPE_SKILL:
+        return prompt.get("content") or ""
+
+    parts = []
+    skill_markdown = prompt.get("skill_markdown") or ""
+    skill_python_script = prompt.get("skill_python_script") or ""
+    if skill_markdown:
+        parts.append(skill_markdown)
+    if skill_python_script:
+        parts.append("```python\n" + skill_python_script + "\n```")
+    return "\n\n".join(parts) or (prompt.get("content") or "")
+
+
+def _add_prompt_as_task_for_user(
     user_id: int,
-    title: str,
-    content: str,
-    input_examples: str,
-    output_examples: str,
+    prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT title,
+                   content,
+                   input_examples,
+                   output_examples,
+                   prompt_type,
+                   skill_markdown,
+                   skill_python_script
+            FROM prompts
+            WHERE id = %s
+              AND is_public = TRUE
+              AND deleted_at IS NULL
+            """,
+            (prompt_id,),
+        )
+        prompt = cursor.fetchone()
+        if not prompt:
+            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
+
+        title = prompt.get("title") or ""
+        prompt_template = _compose_task_prompt_template(dict(prompt))
+        if not prompt_template:
+            return {"error": "タスクとして追加できる本文がありません。"}, 400
+
         cursor.execute(
             """
             SELECT id
@@ -433,7 +467,7 @@ def _add_bookmark_for_user(
         )
         existing = cursor.fetchone()
         if existing:
-            return {"message": "すでに保存されています。", "saved_id": existing["id"]}, 200
+            return {"message": "すでにタスクとして追加されています。", "saved_id": existing["id"]}, 200
 
         cursor.execute(
             """
@@ -442,11 +476,21 @@ def _add_bookmark_for_user(
             VALUES (%s,      %s,   %s,               %s,             %s)
             RETURNING id
             """,
-            (user_id, title, content, input_examples, output_examples),
+            (
+                user_id,
+                title,
+                prompt_template,
+                prompt.get("input_examples") or "",
+                prompt.get("output_examples") or "",
+            ),
         )
         conn.commit()
         saved_id = _extract_id(cursor.fetchone())
-        return {"message": "ブックマークが保存されました。", "saved_id": saved_id}, 201
+        return {"message": "タスクとして追加しました。", "saved_id": saved_id}, 201
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
     finally:
         if cursor is not None:
             cursor.close()
@@ -454,7 +498,21 @@ def _add_bookmark_for_user(
             conn.close()
 
 
-def _remove_bookmark_for_user(user_id: int, title: str) -> None:
+def _add_bookmark_for_user(
+    user_id: int,
+    prompt_id: int,
+) -> tuple[dict[str, Any], int]:
+    payload, status_code = _add_prompt_list_entry_for_user(user_id, prompt_id)
+    if "error" in payload:
+        return payload, status_code
+    return {
+        **payload,
+        "message": "ブックマークが保存されました。",
+        "bookmarked": True,
+    }, status_code
+
+
+def _remove_bookmark_for_user(user_id: int, prompt_id: int) -> int:
     conn = None
     cursor = None
     try:
@@ -462,15 +520,14 @@ def _remove_bookmark_for_user(user_id: int, title: str) -> None:
         cursor = conn.cursor()
         cursor.execute(
             """
-            UPDATE task_with_examples
-               SET deleted_at = CURRENT_TIMESTAMP
-             WHERE user_id = %s
-               AND name = %s
-               AND deleted_at IS NULL
+            DELETE FROM prompt_list_entries
+            WHERE user_id = %s
+              AND prompt_id = %s
             """,
-            (user_id, title),
+            (user_id, prompt_id),
         )
         conn.commit()
+        return cursor.rowcount
     finally:
         if cursor is not None:
             cursor.close()
@@ -1225,10 +1282,7 @@ async def add_bookmark(request: Request):
         response_payload, status_code = await run_blocking(
             _add_bookmark_for_user,
             user_id,
-            request_payload.title,
-            request_payload.content,
-            request_payload.input_examples,
-            request_payload.output_examples,
+            request_payload.prompt_id,
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
@@ -1257,12 +1311,50 @@ async def remove_bookmark(request: Request):
         return validation_error
 
     try:
-        await run_blocking(_remove_bookmark_for_user, user_id, request_payload.title)
-        return jsonify({"message": "ブックマークが削除されました。"})
+        deleted = await run_blocking(_remove_bookmark_for_user, user_id, request_payload.prompt_id)
+        status_code = 200 if deleted else 404
+        payload = (
+            {"message": "ブックマークが削除されました。", "bookmarked": False}
+            if deleted
+            else {"error": "対象のブックマークが見つかりませんでした。"}
+        )
+        return jsonify(payload, status_code=status_code)
     except Exception:
         return log_and_internal_server_error(
             logger,
             "Failed to remove bookmark.",
+        )
+
+
+@prompt_share_api_bp.post("/task", name="prompt_share_api.add_prompt_as_task")
+async def add_prompt_as_task(request: Request):
+    if "user_id" not in request.session:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    user_id = request.session["user_id"]
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    request_payload, validation_error = validate_payload_model(
+        data,
+        PromptTaskCreateRequest,
+        error_message="必要なフィールドが不足しています",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        response_payload, status_code = await run_blocking(
+            _add_prompt_as_task_for_user,
+            user_id,
+            request_payload.prompt_id,
+        )
+        return jsonify(response_payload, status_code=status_code)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to add prompt as task.",
         )
 
 

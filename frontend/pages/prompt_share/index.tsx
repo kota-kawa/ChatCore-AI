@@ -25,11 +25,11 @@ import {
   fetchPromptList,
   fetchPromptSearchResults,
   reportPromptComment,
+  addPromptAsTask,
   removePromptBookmark,
   removePromptLike,
   savePromptBookmark,
-  savePromptLike,
-  savePromptToList
+  savePromptLike
 } from "../../scripts/prompt_share/api";
 import {
   ACCEPTED_PROMPT_IMAGE_EXTENSIONS,
@@ -132,7 +132,7 @@ export default function PromptSharePage() {
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [bookmarkPendingIds, setBookmarkPendingIds] = useState<Set<string>>(new Set());
   const [actionEffectIds, setActionEffectIds] = useState<Set<string>>(new Set());
-  const [saveToListPendingIds, setSaveToListPendingIds] = useState<Set<string>>(new Set());
+  const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
 
   const [promptType, setPromptType] = useState<PromptType>("text");
   const [postTitle, setPostTitle] = useState("");
@@ -510,8 +510,8 @@ export default function PromptSharePage() {
     actionEffectTimersRef.current.set(effectId, timerId);
   }, []);
 
-  const setSaveToListPending = useCallback((clientId: string, pending: boolean) => {
-    setSaveToListPendingIds((current) => {
+  const setAddAsTaskPending = useCallback((clientId: string, pending: boolean) => {
+    setAddAsTaskPendingIds((current) => {
       const next = new Set(current);
       if (pending) {
         next.add(clientId);
@@ -1005,36 +1005,28 @@ export default function PromptSharePage() {
     setOpenDropdownPromptId(null);
   }, []);
 
-  const handleSavePromptToList = useCallback(
+  const handleAddPromptAsTask = useCallback(
     async (prompt: PromptRecord) => {
       const promptId = prompt.clientId;
       setOpenDropdownPromptId(null);
 
       if (!isLoggedIn) {
-        showToast("プロンプトを保存するにはログインが必要です。", { variant: "error" });
+        showToast("タスクとして追加するにはログインが必要です。", { variant: "error" });
         return;
       }
 
-      if (prompt.saved_to_list) {
-        showToast("このプロンプトはすでに保存したプロンプトに追加されています。", { variant: "info" });
-        return;
-      }
-
-      setSaveToListPending(promptId, true);
+      setAddAsTaskPending(promptId, true);
       try {
-        await savePromptToList(prompt);
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          saved_to_list: true
-        }));
+        await addPromptAsTask(prompt);
+        showToast("タスクとして追加しました。", { variant: "success" });
       } catch (error) {
-        console.error("プロンプト保存中にエラーが発生しました:", error);
-        showToast("保存したプロンプトへの追加中にエラーが発生しました。", { variant: "error" });
+        console.error("タスク追加中にエラーが発生しました:", error);
+        showToast("タスクとして追加中にエラーが発生しました。", { variant: "error" });
       } finally {
-        setSaveToListPending(promptId, false);
+        setAddAsTaskPending(promptId, false);
       }
     },
-    [isLoggedIn, setSaveToListPending, updatePromptRecord]
+    [isLoggedIn, setAddAsTaskPending]
   );
 
   const handleTogglePromptLike = useCallback(
@@ -1634,13 +1626,13 @@ export default function PromptSharePage() {
         likePendingIds={likePendingIds}
         bookmarkPendingIds={bookmarkPendingIds}
         actionEffectIds={actionEffectIds}
-        saveToListPendingIds={saveToListPendingIds}
+        addAsTaskPendingIds={addAsTaskPendingIds}
         onOpenDetail={openPromptDetailModal}
         onOpenComments={openPromptCommentsModal}
         onOpenShare={openPromptShareDialog}
         onToggleDropdown={togglePromptDropdown}
         onCloseDropdown={closePromptDropdown}
-        onSaveToList={handleSavePromptToList}
+        onAddAsTask={handleAddPromptAsTask}
         onToggleLike={handleTogglePromptLike}
         onToggleBookmark={handleTogglePromptBookmark}
       >
