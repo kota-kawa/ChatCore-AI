@@ -35,10 +35,11 @@
   overflow: hidden;
   transform-origin: 50% 38%;
   transform: translateZ(0);
-  will-change: opacity;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
   transition:
-    opacity 0.24s ease,
-    transform 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 0.42s ease;
 }
 

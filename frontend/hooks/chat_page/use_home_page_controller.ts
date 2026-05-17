@@ -310,9 +310,6 @@ export function useHomePageController() {
     if (activeElement instanceof HTMLElement) {
       activeElement.blur();
     }
-
-    document.body.classList.add("chat-view-active");
-    document.body.classList.remove("setup-view-active");
   }, []);
 
   const clearTrackedTimeouts = useCallback(() => {
@@ -521,12 +518,26 @@ export function useHomePageController() {
 
   useIsomorphicLayoutEffect(() => {
     const chatViewActive = pageViewState === "chat" || pageViewState === "launching";
-    document.body.classList.toggle("chat-view-active", chatViewActive);
     document.body.classList.toggle("setup-view-active", pageViewState === "setup");
 
-    return () => {
+    if (chatViewActive) {
+      document.body.classList.add("chat-view-active");
+      return;
+    }
+
+    if (!document.body.classList.contains("chat-view-active")) {
+      return;
+    }
+
+    // chat-view-active 切替は .chat-page-shell の positioning context を fixed ⇄ flow に
+    // 切り替えるため、即時に外すと #chat-container の退場トランジション中にレイアウトが
+    // ジャンプしてガタつく。退場アニメーション完了後にクラスを外して安定させる。
+    const timeoutId = window.setTimeout(() => {
       document.body.classList.remove("chat-view-active");
-      document.body.classList.remove("setup-view-active");
+    }, 480);
+
+    return () => {
+      window.clearTimeout(timeoutId);
     };
   }, [pageViewState]);
 
