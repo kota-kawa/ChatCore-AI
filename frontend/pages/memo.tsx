@@ -411,6 +411,16 @@ export default function MemoPage() {
   const memos = memoList.memos;
   const totalMemoCount = memoList.total;
 
+  const { pinnedMemos, otherMemos } = useMemo(() => {
+    const pinned: MemoSummary[] = [];
+    const other: MemoSummary[] = [];
+    for (const memo of memos) {
+      if (memo.is_pinned) pinned.push(memo);
+      else other.push(memo);
+    }
+    return { pinnedMemos: pinned, otherMemos: other };
+  }, [memos]);
+
   const shareUrl = (shareState?.share_url || "").trim();
   const shareSnsLinks = useMemo(() => {
     if (!shareUrl) return { x: "#", line: "#", facebook: "#" };
@@ -1342,78 +1352,81 @@ export default function MemoPage() {
                 <div className="memo-history__empty">条件に一致するメモがありません。</div>
               )}
 
-              {memos.length > 0 && (
-                <ul className="memo-history__list">
-                  {memos.map((memo) => {
-                    const memoId = String(memo.id);
-                    const isMenuOpen = openMenuMemoId === memoId;
-                    const isBusy = actionLoadingId === memoId;
-                    const isSelected = selectedIds.has(memoId);
-                    const isCopied = copiedMemoId === memoId;
-                    const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
+              {memos.length > 0 && (() => {
+                const renderMemoCard = (memo: MemoSummary) => {
+                  const memoId = String(memo.id);
+                  const isMenuOpen = openMenuMemoId === memoId;
+                  const isBusy = actionLoadingId === memoId;
+                  const isSelected = selectedIds.has(memoId);
+                  const isCopied = copiedMemoId === memoId;
+                  const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
+                  const accent = memo.collection_color || "";
+                  const cardStyle = accent ? ({ "--memo-card-accent": accent } as React.CSSProperties) : undefined;
 
-                    return (
-                      <li key={memoId}>
-                        <article className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}`}>
-                          {isBulkMode && (
-                            <div className="memo-item__checkbox-wrap">
-                              <input
-                                type="checkbox"
-                                className="memo-bulk-checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleSelectMemo(memoId)}
-                                aria-label={`${memo.title || "保存したメモ"}を選択`}
-                              />
-                            </div>
-                          )}
-
-                          <div className="memo-item__header">
-                            <button
-                              type="button"
-                              className="memo-item__open"
-                              onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
-                            >
-                              <div className="memo-item__heading">
-                                <h3 className="memo-item__title">{memo.title || "保存したメモ"}</h3>
-                                {displayDate && (
-                                  <time className="memo-item__date">
-                                    <i className="bi bi-clock" aria-hidden="true"></i>
-                                    {displayDate}
-                                  </time>
-                                )}
-                              </div>
-                            </button>
-                            <div className="memo-item__status-icons" aria-label="メモ状態">
-                              {memo.is_pinned && (
-                                <span className="memo-item__status-icon" aria-label="ピン留め中" data-tooltip="ピン留め中" data-tooltip-placement="top">
-                                  <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>
-                                </span>
-                              )}
-                              {memo.is_archived && (
-                                <span className="memo-item__archive-badge" aria-label="アーカイブ済み" data-tooltip="アーカイブ済み" data-tooltip-placement="top">
-                                  <i className="bi bi-archive-fill" aria-hidden="true"></i>
-                                </span>
-                              )}
-                              {memo.is_active && (
-                                <span className="memo-item__status-icon" aria-label="共有中" data-tooltip="共有中" data-tooltip-placement="top">
-                                  <i className="bi bi-link-45deg" aria-hidden="true"></i>
-                                </span>
-                              )}
-                            </div>
+                  return (
+                    <li key={memoId}>
+                      <article
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}`}
+                        style={cardStyle}
+                      >
+                        {isBulkMode && (
+                          <div className="memo-item__checkbox-wrap">
+                            <input
+                              type="checkbox"
+                              className="memo-bulk-checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectMemo(memoId)}
+                              aria-label={`${memo.title || "保存したメモ"}を選択`}
+                            />
                           </div>
+                        )}
 
+                        {!isBulkMode && (
                           <button
                             type="button"
-                            className="memo-item__open memo-item__open--content"
-                            onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
+                            className={`memo-item__pin${memo.is_pinned ? " is-pinned" : ""}`}
+                            onClick={() => { void handleTogglePin(memo); }}
+                            disabled={isBusy}
+                            aria-label={memo.is_pinned ? "ピン留めを解除" : "ピン留め"}
+                            aria-pressed={memo.is_pinned}
+                            data-tooltip={memo.is_pinned ? "ピン留めを解除" : "ピン留め"}
+                            data-tooltip-placement="left"
                           >
-                            {memo.collection_name && (
-                              <div className="memo-item__meta-row">
-                                <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
-                              </div>
-                            )}
-                            {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
+                            <i className={`bi ${memo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`} aria-hidden="true"></i>
                           </button>
+                        )}
+
+                        <button
+                          type="button"
+                          className="memo-item__open memo-item__open--content"
+                          onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
+                        >
+                          <h3 className="memo-item__title">{memo.title || "保存したメモ"}</h3>
+                          {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
+                        </button>
+
+                        <footer className="memo-item__footer">
+                          <div className="memo-item__meta">
+                            {memo.collection_name && (
+                              <CollectionBadge name={memo.collection_name} color={memo.collection_color || "#6b7280"} />
+                            )}
+                            {displayDate && (
+                              <time className="memo-item__date">
+                                <i className="bi bi-clock" aria-hidden="true"></i>
+                                {displayDate}
+                              </time>
+                            )}
+                            {memo.is_archived && (
+                              <span className="memo-item__archive-badge" aria-label="アーカイブ済み" data-tooltip="アーカイブ済み" data-tooltip-placement="top">
+                                <i className="bi bi-archive-fill" aria-hidden="true"></i>
+                              </span>
+                            )}
+                            {memo.is_active && (
+                              <span className="memo-item__status-icon" aria-label="共有中" data-tooltip="共有中" data-tooltip-placement="top">
+                                <i className="bi bi-link-45deg" aria-hidden="true"></i>
+                              </span>
+                            )}
+                          </div>
 
                           {!isBulkMode && (
                             <div className="memo-item__actions">
@@ -1427,6 +1440,17 @@ export default function MemoPage() {
                                 data-tooltip-placement="top"
                               >
                                 <i className={`bi ${isCopied ? "bi-check2" : "bi-files"}`}></i>
+                              </button>
+                              <button
+                                type="button"
+                                className="memo-item__action"
+                                onClick={(event) => { event.stopPropagation(); void handleToggleArchive(memo); }}
+                                disabled={isBusy}
+                                aria-label={memo.is_archived ? "アーカイブを解除" : "アーカイブ"}
+                                data-tooltip={memo.is_archived ? "アーカイブを解除" : "アーカイブ"}
+                                data-tooltip-placement="top"
+                              >
+                                <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
                               </button>
                               <div className="memo-item__menu-wrap">
                                 <button
@@ -1454,54 +1478,65 @@ export default function MemoPage() {
                                       maxHeight: menuPosition.maxHeight,
                                     }}
                                   >
-                                        <button
-                                          type="button"
-                                          className={`memo-item__dropdown-item${memo.is_pinned ? " is-active" : ""}`}
-                                          role="menuitem"
-                                          onClick={() => { void handleTogglePin(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
-                                        >
-                                          <i className={`bi ${memo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`}></i>
-                                          {memo.is_pinned ? "ピン留め解除" : "ピン留め"}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className={`memo-item__dropdown-item${memo.is_archived ? " is-active" : ""}`}
-                                          role="menuitem"
-                                          onClick={() => { void handleToggleArchive(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
-                                        >
-                                          <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
-                                          {memo.is_archived ? "アーカイブ解除" : "アーカイブ"}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="memo-item__dropdown-item"
-                                          role="menuitem"
-                                          onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
-                                        >
-                                          <i className="bi bi-share"></i>
-                                          共有設定
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="memo-item__dropdown-item memo-item__dropdown-item--danger"
-                                          role="menuitem"
-                                          onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
-                                        >
-                                          <i className="bi bi-trash3"></i>
-                                          削除
-                                        </button>
+                                    <button
+                                      type="button"
+                                      className="memo-item__dropdown-item"
+                                      role="menuitem"
+                                      onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
+                                    >
+                                      <i className="bi bi-share"></i>
+                                      共有設定
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="memo-item__dropdown-item memo-item__dropdown-item--danger"
+                                      role="menuitem"
+                                      onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
+                                    >
+                                      <i className="bi bi-trash3"></i>
+                                      削除
+                                    </button>
                                   </div>,
                                   document.body,
                                 )}
                               </div>
                             </div>
                           )}
-                        </article>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                        </footer>
+                      </article>
+                    </li>
+                  );
+                };
+
+                const showSectionLabels = pinnedMemos.length > 0 && otherMemos.length > 0;
+
+                return (
+                  <div className="memo-history__sections">
+                    {pinnedMemos.length > 0 && (
+                      <section className="memo-history__section">
+                        {showSectionLabels && (
+                          <h3 className="memo-history__section-label">
+                            <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>ピン留め
+                          </h3>
+                        )}
+                        <ul className="memo-history__list">
+                          {pinnedMemos.map(renderMemoCard)}
+                        </ul>
+                      </section>
+                    )}
+                    {otherMemos.length > 0 && (
+                      <section className="memo-history__section">
+                        {showSectionLabels && (
+                          <h3 className="memo-history__section-label">その他</h3>
+                        )}
+                        <ul className="memo-history__list">
+                          {otherMemos.map(renderMemoCard)}
+                        </ul>
+                      </section>
+                    )}
+                  </div>
+                );
+              })()}
             </section>
 
             {/* ── Compose panel ── */}
