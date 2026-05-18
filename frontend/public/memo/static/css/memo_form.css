@@ -4129,3 +4129,30 @@ body.memo-page {
   background: rgba(10, 12, 15, 0.68);
   backdrop-filter: blur(8px);
 }
+
+/* Uniform memo cards: keep organization badges, but stop color-coding card surfaces. */
+.memo-history__list > li:nth-child(n) .memo-item,
+.memo-item.has-accent,
+.memo-item.is-pinned,
+.memo-item.is-pinned.has-accent {
+  background: var(--memo-card-strong);
+  border-color: #dadce0;
+}
+
+.memo-item.has-accent::before {
+  display: none;
+  opacity: 0;
+}
+
+[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item,
+[data-theme="dark"] .memo-item.has-accent,
+[data-theme="dark"] .memo-item.is-pinned,
+[data-theme="dark"] .memo-item.is-pinned.has-accent {
+  background: var(--memo-card-strong);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .memo-item.has-accent::before {
+  display: none;
+  opacity: 0;
+}
