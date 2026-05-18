@@ -247,6 +247,28 @@ function applySectionProjection(memos: MemoSummary[], projection: string[] | nul
   return result;
 }
 
+function setMemoDragImage(event: DragEvent<HTMLElement>) {
+  const source = event.currentTarget;
+  const rect = source.getBoundingClientRect();
+  const preview = source.cloneNode(true) as HTMLElement;
+  preview.classList.add("memo-item--drag-preview");
+  preview.classList.remove("is-dragging");
+  preview.setAttribute("aria-hidden", "true");
+  preview.style.width = `${rect.width}px`;
+  preview.style.height = `${rect.height}px`;
+  preview.style.left = `${rect.left}px`;
+  preview.style.top = `${rect.top}px`;
+  document.body.appendChild(preview);
+
+  const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+  const offsetY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
+  event.dataTransfer.setDragImage(preview, offsetX, offsetY);
+
+  window.setTimeout(() => {
+    preview.remove();
+  }, 0);
+}
+
 const loadMemoList = async (url: string): Promise<MemoListState> => {
   const res = await fetch(url, { credentials: "same-origin" });
   const data: MemoListPayload = await res.json().catch(() => ({}));
@@ -1011,6 +1033,7 @@ export default function MemoPage() {
     setDragProjectedOrder(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", memoId);
+    setMemoDragImage(event);
   }, [canDragMemos]);
 
   const handleMemoSectionDragOver = useCallback((event: DragEvent<HTMLUListElement>, sectionMemos: MemoSummary[]) => {

@@ -3538,16 +3538,24 @@ body.memo-page {
 }
 
 .memo-item.is-dragging {
-  opacity: 0.32;
-  background: #fff !important;
-  border-style: dashed !important;
-  border-color: #bdc1c6 !important;
-  box-shadow: none !important;
+  opacity: 0.58;
+  border-style: dashed;
+  border-color: #9aa0a6 !important;
+  box-shadow:
+    0 0 0 2px rgba(95, 99, 104, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45) !important;
   transition: none !important;
 }
 
-.memo-item.is-dragging * {
-  visibility: hidden;
+.memo-item--drag-preview {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  pointer-events: none !important;
+  opacity: 0.94 !important;
+  box-shadow:
+    0 12px 28px rgba(60, 64, 67, 0.24),
+    0 4px 10px rgba(60, 64, 67, 0.18) !important;
+  transform: rotate(1deg);
 }
 
 .memo-item__open--content {
