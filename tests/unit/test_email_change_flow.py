@@ -4,6 +4,8 @@ import unittest
 from unittest.mock import patch
 
 from blueprints.chat.profile import (
+    EMAIL_CHANGE_STAGE_CURRENT,
+    EMAIL_CHANGE_STAGE_NEW,
     EMAIL_CHANGE_SESSION_KEY,
     confirm_email_change,
     request_email_change,
@@ -123,20 +125,24 @@ class RequestEmailChangeTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         state = session.get(EMAIL_CHANGE_SESSION_KEY)
+        self.assertEqual(state["stage"], EMAIL_CHANGE_STAGE_CURRENT)
         self.assertEqual(state["code"], "424242")
+        self.assertEqual(state["current_email"], "alice@example.com")
         self.assertEqual(state["new_email"], "new@example.com")
         self.assertEqual(state["issued_at"], 1000)
         self.assertEqual(state["attempts"], 0)
-        # The verification mail must be sent to the new address, not the old.
+        # The first verification mail must be sent to the current address.
         mock_send.assert_called_once()
         kwargs = mock_send.call_args.kwargs
-        self.assertEqual(kwargs["to_address"], "new@example.com")
+        self.assertEqual(kwargs["to_address"], "alice@example.com")
 
 
 class ConfirmEmailChangeTestCase(unittest.TestCase):
     def _session_with_state(self, **overrides):
         state = {
+            "stage": EMAIL_CHANGE_STAGE_NEW,
             "code": "424242",
+            "current_email": "alice@example.com",
             "new_email": "new@example.com",
             "issued_at": 1000,
             "attempts": 0,
@@ -188,6 +194,47 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 429)
         self.assertNotIn(EMAIL_CHANGE_SESSION_KEY, session)
+
+    def test_current_email_confirmation_sends_code_to_new_address(self):
+        session = self._session_with_state(stage=EMAIL_CHANGE_STAGE_CURRENT)
+        request = make_request(
+            "/api/user/email/confirm_change",
+            {"auth_code": "424242"},
+            session=session,
+        )
+        with (
+            patch("blueprints.chat.profile.time.time", return_value=1001),
+            patch(
+                "blueprints.chat.profile.generate_verification_code",
+                return_value="858585",
+            ),
+            patch(
+                "blueprints.chat.profile.consume_auth_email_send_limits",
+                return_value=(True, None),
+            ),
+            patch(
+                "blueprints.chat.profile.consume_auth_email_daily_quota",
+                return_value=(True, 49, 50),
+            ),
+            patch("blueprints.chat.profile.send_email") as mock_send,
+            patch(
+                "blueprints.chat.profile._commit_email_change",
+                return_value=True,
+            ) as mock_commit,
+        ):
+            response = asyncio.run(confirm_email_change(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["stage"], EMAIL_CHANGE_STAGE_NEW)
+        state = session[EMAIL_CHANGE_SESSION_KEY]
+        self.assertEqual(state["stage"], EMAIL_CHANGE_STAGE_NEW)
+        self.assertEqual(state["code"], "858585")
+        self.assertEqual(state["issued_at"], 1001)
+        self.assertEqual(state["attempts"], 0)
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs["to_address"], "new@example.com")
+        mock_commit.assert_not_called()
 
     def test_success_commits_change_and_updates_session_email(self):
         session = self._session_with_state()

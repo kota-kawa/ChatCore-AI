@@ -77,6 +77,8 @@ type ProfileSaveStatus = {
   message: string;
 };
 
+type EmailChangeStage = "idle" | "current_email" | "new_email";
+
 type EditPromptFormState = {
   id: string;
   title: string;
@@ -802,6 +804,11 @@ export default function UserSettingsPage() {
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+  const [emailChangeStage, setEmailChangeStage] = useState<EmailChangeStage>("idle");
+  const [emailChangeNewEmail, setEmailChangeNewEmail] = useState("");
+  const [emailChangeCode, setEmailChangeCode] = useState("");
+  const [emailChangeSubmitting, setEmailChangeSubmitting] = useState(false);
+  const [emailChangeStatus, setEmailChangeStatus] = useState<ProfileSaveStatus | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const profileSaveEffectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1136,6 +1143,125 @@ export default function UserSettingsPage() {
       setProfileSaving(false);
     }
   }, [avatarPreviewUrl, profileForm, selectedAvatarFile]);
+
+  const applyCommittedEmail = useCallback((email: string) => {
+    setProfileForm((prev) => {
+      const nextProfile = { ...prev, email };
+      if (llmProfileContextUsesGeneratedDefault) {
+        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+      }
+      return nextProfile;
+    });
+    setInitialProfileForm((prev) => {
+      const nextProfile = { ...prev, email };
+      if (initialLlmProfileContextUsesGeneratedDefault) {
+        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+      }
+      return nextProfile;
+    });
+  }, [initialLlmProfileContextUsesGeneratedDefault, llmProfileContextUsesGeneratedDefault]);
+
+  const handleRequestEmailChange = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextEmail = emailChangeNewEmail.trim();
+    if (!nextEmail) {
+      setEmailChangeStatus({ tone: "error", message: "新しいメールアドレスを入力してください。" });
+      return;
+    }
+
+    setEmailChangeSubmitting(true);
+    setEmailChangeStatus(null);
+    try {
+      await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/user/email/request_change",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ new_email: nextEmail })
+        },
+        { defaultMessage: "確認メールの送信に失敗しました。" }
+      );
+      setEmailChangeStage("current_email");
+      setEmailChangeCode("");
+      setEmailChangeStatus({
+        tone: "success",
+        message: "現在のメールアドレスに確認コードを送信しました。"
+      });
+    } catch (error) {
+      setEmailChangeStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : "確認メールの送信に失敗しました。"
+      });
+    } finally {
+      setEmailChangeSubmitting(false);
+    }
+  }, [emailChangeNewEmail]);
+
+  const handleConfirmEmailChange = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const authCode = emailChangeCode.trim();
+    if (!authCode) {
+      setEmailChangeStatus({ tone: "error", message: "確認コードを入力してください。" });
+      return;
+    }
+
+    setEmailChangeSubmitting(true);
+    setEmailChangeStatus(null);
+    try {
+      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+        "/api/user/email/confirm_change",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ auth_code: authCode })
+        },
+        { defaultMessage: "確認コードの検証に失敗しました。" }
+      );
+
+      const committedEmail = asString(payload.email);
+      if (committedEmail) {
+        applyCommittedEmail(committedEmail);
+        setEmailChangeNewEmail("");
+        setEmailChangeCode("");
+        setEmailChangeStage("idle");
+        setEmailChangeStatus({
+          tone: "success",
+          message: "メールアドレスを変更しました。"
+        });
+        return;
+      }
+
+      if (asString(payload.stage) === "new_email") {
+        setEmailChangeStage("new_email");
+        setEmailChangeCode("");
+        setEmailChangeStatus({
+          tone: "success",
+          message: "新しいメールアドレスに確認コードを送信しました。"
+        });
+        return;
+      }
+
+      setEmailChangeStatus({
+        tone: "success",
+        message: asString(payload.message) || "確認しました。"
+      });
+    } catch (error) {
+      setEmailChangeStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : "確認コードの検証に失敗しました。"
+      });
+    } finally {
+      setEmailChangeSubmitting(false);
+    }
+  }, [applyCommittedEmail, emailChangeCode]);
+
+  const handleCancelEmailChange = useCallback(() => {
+    setEmailChangeStage("idle");
+    setEmailChangeCode("");
+    setEmailChangeStatus(null);
+  }, []);
 
   const handleOpenPromptEdit = useCallback((prompt: PromptRecord) => {
     setEditPromptForm({
@@ -1512,8 +1638,11 @@ export default function UserSettingsPage() {
                       className="custom-form-control"
                       placeholder="example@domain.com"
                       value={profileForm.email}
-                      onChange={handleProfileInputChange}
+                      readOnly
                     />
+                    <p className="form-help-text">
+                      変更はセキュリティのメールアドレス変更から行います。
+                    </p>
                   </div>
 
                   <div className="form-group">
@@ -1658,6 +1787,104 @@ export default function UserSettingsPage() {
                 <h2>セキュリティ</h2>
 
                 <div className="security-stack">
+                  <div className="security-panel">
+                    <h3>メールアドレス変更</h3>
+                    <p className="security-panel__description">
+                      現在のメールアドレスで確認後、新しいメールアドレスにも確認コードを送信します。
+                    </p>
+                    <p className="email-change-current">
+                      現在: <strong>{profileForm.email || "未取得"}</strong>
+                    </p>
+
+                    {emailChangeStatus ? (
+                      <p
+                        className={`settings-inline-feedback settings-inline-feedback--${emailChangeStatus.tone}`}
+                        role={emailChangeStatus.tone === "error" ? "alert" : "status"}
+                        aria-live={emailChangeStatus.tone === "error" ? "assertive" : "polite"}
+                      >
+                        <i
+                          className={`settings-inline-feedback__icon bi ${emailChangeStatus.tone === "success" ? "bi-check-circle-fill" : "bi-exclamation-circle-fill"}`}
+                          aria-hidden="true"
+                        ></i>
+                        {emailChangeStatus.message}
+                      </p>
+                    ) : null}
+
+                    <form className="email-change-form" onSubmit={handleRequestEmailChange}>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="emailChangeNewEmail">
+                          新しいメールアドレス
+                        </label>
+                        <input
+                          type="email"
+                          id="emailChangeNewEmail"
+                          className="custom-form-control"
+                          placeholder="new@example.com"
+                          value={emailChangeNewEmail}
+                          onChange={(event) => {
+                            setEmailChangeNewEmail(event.target.value);
+                            setEmailChangeStatus(null);
+                          }}
+                          disabled={emailChangeSubmitting || emailChangeStage !== "idle"}
+                        />
+                      </div>
+                      {emailChangeStage === "idle" ? (
+                        <button
+                          type="submit"
+                          className="primary-button"
+                          disabled={emailChangeSubmitting}
+                        >
+                          現在のメールへ確認コードを送信
+                        </button>
+                      ) : null}
+                    </form>
+
+                    {emailChangeStage !== "idle" ? (
+                      <form className="email-change-form" onSubmit={handleConfirmEmailChange}>
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="emailChangeCode">
+                            {emailChangeStage === "current_email"
+                              ? "現在のメールに届いた確認コード"
+                              : "新しいメールに届いた確認コード"}
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            id="emailChangeCode"
+                            className="custom-form-control"
+                            placeholder="6桁の確認コード"
+                            value={emailChangeCode}
+                            onChange={(event) => {
+                              setEmailChangeCode(event.target.value);
+                              setEmailChangeStatus(null);
+                            }}
+                            disabled={emailChangeSubmitting}
+                          />
+                        </div>
+                        <div className="button-group">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={handleCancelEmailChange}
+                            disabled={emailChangeSubmitting}
+                          >
+                            中止
+                          </button>
+                          <button
+                            type="submit"
+                            className="primary-button"
+                            disabled={emailChangeSubmitting}
+                          >
+                            {emailChangeStage === "current_email"
+                              ? "現在のメールを確認"
+                              : "変更を完了"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </div>
+
                   <div className="security-panel">
                     <h3>Passkeys</h3>
                     <p id="passkeySupportStatus">{passkeySupportStatus}</p>

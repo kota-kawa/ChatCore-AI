@@ -1012,6 +1012,28 @@ body.sidebar-visible {
   background: #fff;
 }
 
+.security-panel__description {
+  margin: 0 0 0.75rem;
+  color: var(--settings-text-muted);
+  line-height: 1.6;
+}
+
+.email-change-current {
+  margin: 0 0 1rem;
+  color: var(--settings-text-muted);
+}
+
+.email-change-current strong {
+  color: var(--settings-text);
+  overflow-wrap: anywhere;
+}
+
+.email-change-form {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
 .security-panel--danger {
   border-color: rgba(220, 38, 38, 0.28);
   background: rgba(254, 242, 242, 0.72);

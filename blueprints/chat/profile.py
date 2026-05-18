@@ -38,6 +38,8 @@ from . import chat_bp
 EMAIL_CHANGE_CODE_TTL_SECONDS = 600
 EMAIL_CHANGE_CODE_MAX_ATTEMPTS = 5
 EMAIL_CHANGE_SESSION_KEY = "email_change"
+EMAIL_CHANGE_STAGE_CURRENT = "current_email"
+EMAIL_CHANGE_STAGE_NEW = "new_email"
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +294,42 @@ def _clear_email_change_session(session: dict) -> None:
     session.pop(EMAIL_CHANGE_SESSION_KEY, None)
 
 
+async def _send_email_change_code(
+    *,
+    request: Request,
+    to_email: str,
+    subject: str,
+    body_text: str,
+    auth_limit_service: AuthLimitService | None,
+    llm_daily_limit_service: LlmDailyLimitService | None,
+) -> str | None:
+    allowed, limit_error = consume_auth_email_send_limits(
+        request,
+        to_email,
+        service=auth_limit_service,
+    )
+    if not allowed:
+        return limit_error or '試行回数が多すぎます。時間をおいて再試行してください。'
+
+    can_send_email, _, daily_limit = await run_blocking(
+        consume_auth_email_daily_quota,
+        service=llm_daily_limit_service,
+    )
+    if not can_send_email:
+        return (
+            f'本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。'
+            '日付が変わってから再度お試しください。'
+        )
+
+    await run_blocking(
+        send_email,
+        to_address=to_email,
+        subject=subject,
+        body_text=body_text,
+    )
+    return None
+
+
 def _commit_email_change(user_id: int, new_email: str) -> bool:
     # Atomically rewrite users.email after the new address has been verified.
     # Returns False if some other account claimed the address between the
@@ -368,38 +406,11 @@ async def request_email_change(
             status_code=400,
         )
 
-    allowed, limit_error = consume_auth_email_send_limits(
-        request,
-        new_email,
-        service=auth_limit_service,
-    )
-    if not allowed:
-        return jsonify_rate_limited(
-            limit_error or '試行回数が多すぎます。時間をおいて再試行してください。',
-            retry_after=parse_retry_after_seconds(
-                limit_error,
-                default=DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-            status='fail',
-        )
-
-    can_send_email, _, daily_limit = await run_blocking(
-        consume_auth_email_daily_quota,
-        service=llm_daily_limit_service,
-    )
-    if not can_send_email:
-        return jsonify_rate_limited(
-            (
-                f'本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。'
-                '日付が変わってから再度お試しください。'
-            ),
-            retry_after=get_seconds_until_daily_reset(),
-            status='fail',
-        )
-
     code = generate_verification_code()
     request.session[EMAIL_CHANGE_SESSION_KEY] = {
+        'stage': EMAIL_CHANGE_STAGE_CURRENT,
         'code': code,
+        'current_email': current_email,
         'new_email': new_email,
         'issued_at': int(time.time()),
         'attempts': 0,
@@ -407,17 +418,38 @@ async def request_email_change(
 
     subject = 'AIチャットサービス: メールアドレス変更の確認'
     body_text = (
-        '以下の確認コードを設定画面に入力してメールアドレスを変更してください。\n\n'
+        'メールアドレス変更のリクエストを受け付けました。\n'
+        'まず現在のメールアドレスの確認が必要です。以下の確認コードを設定画面に入力してください。\n\n'
         f'確認コード: {code}\n\n'
+        f'変更先メールアドレス: {new_email}\n\n'
+        'この確認後、変更先メールアドレスにも確認コードを送信します。\n'
         '心当たりがない場合はこのメールを無視してください。'
     )
     try:
-        await run_blocking(
-            send_email,
-            to_address=new_email,
+        send_error = await _send_email_change_code(
+            request=request,
+            to_email=current_email,
             subject=subject,
             body_text=body_text,
+            auth_limit_service=auth_limit_service,
+            llm_daily_limit_service=llm_daily_limit_service,
         )
+        if send_error:
+            _clear_email_change_session(request.session)
+            if '本日の認証メール送信上限' in send_error:
+                return jsonify_rate_limited(
+                    send_error,
+                    retry_after=get_seconds_until_daily_reset(),
+                    status='fail',
+                )
+            return jsonify_rate_limited(
+                send_error,
+                retry_after=parse_retry_after_seconds(
+                    send_error,
+                    default=DEFAULT_RETRY_AFTER_SECONDS,
+                ),
+                status='fail',
+            )
         return jsonify({'status': 'success'})
     except Exception:
         _clear_email_change_session(request.session)
@@ -429,7 +461,11 @@ async def request_email_change(
 
 
 @chat_bp.post('/api/user/email/confirm_change', name='chat.confirm_email_change')
-async def confirm_email_change(request: Request):
+async def confirm_email_change(
+    request: Request,
+    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
+    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
+):
     if 'user_id' not in request.session:
         return jsonify({'error': 'ログインが必要です'}, status_code=401)
     user_id = request.session['user_id']
@@ -488,7 +524,76 @@ async def confirm_email_change(request: Request):
             status_code=400,
         )
 
+    stage = str(state.get('stage') or EMAIL_CHANGE_STAGE_NEW)
     new_email = state['new_email']
+    if stage == EMAIL_CHANGE_STAGE_CURRENT:
+        code = generate_verification_code()
+        state.update(
+            {
+                'stage': EMAIL_CHANGE_STAGE_NEW,
+                'code': code,
+                'issued_at': int(time.time()),
+                'attempts': 0,
+            }
+        )
+        request.session[EMAIL_CHANGE_SESSION_KEY] = state
+
+        subject = 'AIチャットサービス: メールアドレス変更の確認'
+        body_text = (
+            '変更先メールアドレスの確認が必要です。\n'
+            '以下の確認コードを設定画面に入力すると、メールアドレスの変更が完了します。\n\n'
+            f'確認コード: {code}\n\n'
+            '心当たりがない場合はこのメールを無視してください。'
+        )
+        try:
+            send_error = await _send_email_change_code(
+                request=request,
+                to_email=new_email,
+                subject=subject,
+                body_text=body_text,
+                auth_limit_service=auth_limit_service,
+                llm_daily_limit_service=llm_daily_limit_service,
+            )
+        except Exception:
+            _clear_email_change_session(request.session)
+            return log_and_internal_server_error(
+                logger,
+                'Failed to send new-address email-change verification code.',
+                status='fail',
+            )
+
+        if send_error:
+            _clear_email_change_session(request.session)
+            if '本日の認証メール送信上限' in send_error:
+                return jsonify_rate_limited(
+                    send_error,
+                    retry_after=get_seconds_until_daily_reset(),
+                    status='fail',
+                )
+            return jsonify_rate_limited(
+                send_error,
+                retry_after=parse_retry_after_seconds(
+                    send_error,
+                    default=DEFAULT_RETRY_AFTER_SECONDS,
+                ),
+                status='fail',
+            )
+
+        return jsonify(
+            {
+                'status': 'success',
+                'stage': EMAIL_CHANGE_STAGE_NEW,
+                'message': '変更先メールアドレスに確認コードを送信しました',
+            }
+        )
+
+    if stage != EMAIL_CHANGE_STAGE_NEW:
+        _clear_email_change_session(request.session)
+        return jsonify(
+            {'status': 'fail', 'error': 'メールアドレス変更の状態が不正です。最初からやり直してください'},
+            status_code=400,
+        )
+
     try:
         committed = await run_blocking(_commit_email_change, user_id, new_email)
     except Exception:
