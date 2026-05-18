@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent,
   type FormEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -78,6 +79,8 @@ type HttpError = Error & { status?: number };
 type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
+type MemoDropPosition = "before" | "after";
+type MemoReorderResult = { memos: MemoSummary[]; beforeId: string | null; afterId: string | null };
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -152,6 +155,57 @@ function getMemoActionMenuPosition(trigger: HTMLElement): MemoActionMenuPosition
     ? Math.min(rect.bottom + MEMO_ACTION_MENU_GAP, viewportHeight - MEMO_ACTION_MENU_VIEWPORT_MARGIN - availableHeight)
     : Math.max(MEMO_ACTION_MENU_VIEWPORT_MARGIN, rect.top - MEMO_ACTION_MENU_GAP - Math.min(MEMO_ACTION_MENU_ESTIMATED_HEIGHT, availableHeight));
   return { top, left, width, maxHeight: availableHeight };
+}
+
+function getMemoSectionKey(memo: MemoSummary) {
+  return `${memo.is_pinned ? "pinned" : "other"}:${memo.is_archived ? "archived" : "active"}`;
+}
+
+function findAdjacentMemo(list: MemoSummary[], startIndex: number, direction: -1 | 1, sectionKey: string) {
+  for (let index = startIndex; index >= 0 && index < list.length; index += direction) {
+    const memo = list[index];
+    if (memo && getMemoSectionKey(memo) === sectionKey) return memo;
+  }
+  return null;
+}
+
+function computeMemoReorder(
+  list: MemoSummary[],
+  draggedId: string,
+  targetId: string,
+  position: MemoDropPosition,
+): MemoReorderResult | null {
+  if (!draggedId || !targetId || draggedId === targetId) return null;
+  const draggedIndex = list.findIndex((memo) => String(memo.id) === draggedId);
+  const targetIndex = list.findIndex((memo) => String(memo.id) === targetId);
+  if (draggedIndex < 0 || targetIndex < 0) return null;
+
+  const draggedMemo = list[draggedIndex];
+  const targetMemo = list[targetIndex];
+  const sectionKey = getMemoSectionKey(draggedMemo);
+  if (getMemoSectionKey(targetMemo) !== sectionKey) return null;
+
+  const withoutDragged = list.filter((memo) => String(memo.id) !== draggedId);
+  const targetIndexAfterRemoval = withoutDragged.findIndex((memo) => String(memo.id) === targetId);
+  if (targetIndexAfterRemoval < 0) return null;
+
+  const nextMemos = [...withoutDragged];
+  const insertIndex = position === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+  nextMemos.splice(insertIndex, 0, draggedMemo);
+
+  const currentOrder = list.map((memo) => String(memo.id)).join("|");
+  const nextOrder = nextMemos.map((memo) => String(memo.id)).join("|");
+  if (currentOrder === nextOrder) return null;
+
+  const movedIndex = nextMemos.findIndex((memo) => String(memo.id) === draggedId);
+  const beforeMemo = findAdjacentMemo(nextMemos, movedIndex - 1, -1, sectionKey);
+  const afterMemo = findAdjacentMemo(nextMemos, movedIndex + 1, 1, sectionKey);
+
+  return {
+    memos: nextMemos,
+    beforeId: beforeMemo ? String(beforeMemo.id) : null,
+    afterId: afterMemo ? String(afterMemo.id) : null,
+  };
 }
 
 const loadMemoList = async (url: string): Promise<MemoListState> => {
@@ -330,7 +384,7 @@ export default function MemoPage() {
 
   // Filter/sort state
   const [query, setQuery] = useState("");
-  const [sortMode, setSortMode] = useState("recent");
+  const [sortMode, setSortMode] = useState("manual");
   const [archiveScope, setArchiveScope] = useState("active");
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
 
@@ -385,6 +439,10 @@ export default function MemoPage() {
   const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
   const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
+  const [draggedMemoId, setDraggedMemoId] = useState<string>("");
+  const [dragOverMemoId, setDragOverMemoId] = useState<string>("");
+  const [dragDropPosition, setDragDropPosition] = useState<MemoDropPosition | null>(null);
+  const [dragSaving, setDragSaving] = useState(false);
 
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -543,6 +601,13 @@ export default function MemoPage() {
     setFlashState({ type, text });
     setTimeout(() => setFlashState(null), 4000);
   }, []);
+
+  const canReorderCurrentView =
+    sortMode === "manual" &&
+    archiveScope === "active" &&
+    !query.trim() &&
+    !isBulkMode &&
+    !dragSaving;
 
   const handleFormChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -869,6 +934,100 @@ export default function MemoPage() {
     setOpenMenuMemoId(memoId);
   }, [openMenuMemoId]);
 
+  const clearMemoDragState = useCallback(() => {
+    setDraggedMemoId("");
+    setDragOverMemoId("");
+    setDragDropPosition(null);
+  }, []);
+
+  const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
+    if (!canReorderCurrentView) {
+      event.preventDefault();
+      return;
+    }
+    const memoId = String(memo.id);
+    setOpenMenuMemoId("");
+    setMenuPosition(null);
+    setDraggedMemoId(memoId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", memoId);
+  }, [canReorderCurrentView]);
+
+  const handleMemoDragOver = useCallback((event: DragEvent<HTMLElement>, targetMemo: MemoSummary) => {
+    if (!canReorderCurrentView || !draggedMemoId) return;
+    const targetId = String(targetMemo.id);
+    if (draggedMemoId === targetId) return;
+    const draggedMemo = memos.find((memo) => String(memo.id) === draggedMemoId);
+    if (!draggedMemo || getMemoSectionKey(draggedMemo) !== getMemoSectionKey(targetMemo)) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position: MemoDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setDragOverMemoId(targetId);
+    setDragDropPosition(position);
+  }, [canReorderCurrentView, draggedMemoId, memos]);
+
+  const handleMemoDragLeave = useCallback((memoId: string) => {
+    setDragOverMemoId((current) => (current === memoId ? "" : current));
+    setDragDropPosition((current) => (dragOverMemoId === memoId ? null : current));
+  }, [dragOverMemoId]);
+
+  const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>, targetMemo: MemoSummary) => {
+    event.preventDefault();
+    const targetId = String(targetMemo.id);
+    const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
+    const position = dragOverMemoId === targetId && dragDropPosition ? dragDropPosition : "before";
+    clearMemoDragState();
+
+    if (!canReorderCurrentView || !sourceId || sourceId === targetId) return;
+    const reorderResult = computeMemoReorder(memos, sourceId, targetId, position);
+    if (!reorderResult) return;
+
+    const memoId = Number(sourceId);
+    const beforeId = reorderResult.beforeId === null ? null : Number(reorderResult.beforeId);
+    const afterId = reorderResult.afterId === null ? null : Number(reorderResult.afterId);
+    if (!Number.isFinite(memoId) || (beforeId !== null && !Number.isFinite(beforeId)) || (afterId !== null && !Number.isFinite(afterId))) {
+      showFlash("error", "並べ替え対象のメモIDが不正です。");
+      return;
+    }
+
+    setDragSaving(true);
+    await mutate((current) => {
+      if (!current) return current;
+      const optimistic = computeMemoReorder(current.memos, sourceId, targetId, position);
+      return optimistic ? { ...current, memos: optimistic.memos } : current;
+    }, { revalidate: false });
+
+    try {
+      await fetchJsonOrThrow(
+        "/memo/api/reorder",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ memo_id: memoId, before_id: beforeId, after_id: afterId }),
+        },
+        { defaultMessage: "メモの並べ替えに失敗しました。" },
+      );
+      await mutate();
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "メモの並べ替えに失敗しました。");
+      await mutate();
+    } finally {
+      setDragSaving(false);
+    }
+  }, [
+    canReorderCurrentView,
+    clearMemoDragState,
+    dragDropPosition,
+    dragOverMemoId,
+    draggedMemoId,
+    memos,
+    mutate,
+    showFlash,
+  ]);
+
   // -----------------------------------------------------------------------
   // Bulk operations
   // -----------------------------------------------------------------------
@@ -1083,7 +1242,7 @@ export default function MemoPage() {
 
   const hasSelection = selectedIds.size > 0;
   const activeCollection = activeCollectionId !== null ? collections.find((c) => c.id === activeCollectionId) : null;
-  const hasActiveFilters = Boolean(query.trim()) || sortMode !== "recent" || archiveScope !== "active" || activeCollectionId !== null;
+  const hasActiveFilters = Boolean(query.trim()) || sortMode !== "manual" || archiveScope !== "active" || activeCollectionId !== null;
   const hasComposeDraft = Boolean(formState.ai_response.trim() || formState.title.trim());
   const composeIsExpanded = isComposeExpanded || hasComposeDraft;
 
@@ -1198,7 +1357,7 @@ export default function MemoPage() {
                 <button
                   type="button"
                   className="memo-toolbar__search-clear"
-                  onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("recent"); setActiveCollectionId(null); }}
+                  onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("manual"); setActiveCollectionId(null); }}
                   aria-label="検索と絞り込みをクリア"
                   data-tooltip="検索と絞り込みをクリア"
                   data-tooltip-placement="top"
@@ -1244,6 +1403,7 @@ export default function MemoPage() {
                   value={sortMode}
                   onChange={(v) => setSortMode(v)}
                   options={[
+                    { value: "manual", label: "手動順" },
                     { value: "recent", label: "新しい順" },
                     { value: "updated", label: "更新順" },
                     { value: "oldest", label: "古い順" },
@@ -1486,6 +1646,8 @@ export default function MemoPage() {
                   const isBusy = actionLoadingId === memoId;
                   const isSelected = selectedIds.has(memoId);
                   const isCopied = copiedMemoId === memoId;
+                  const isDropTarget = dragOverMemoId === memoId && dragDropPosition !== null;
+                  const canDragMemo = canReorderCurrentView && !isBusy;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
                   const accent = memo.collection_color || "";
                   const cardStyle = accent ? ({ "--memo-card-accent": accent } as React.CSSProperties) : undefined;
@@ -1493,8 +1655,15 @@ export default function MemoPage() {
                   return (
                     <li key={memoId}>
                       <article
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}`}
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}${isDropTarget ? ` is-drop-${dragDropPosition}` : ""}`}
                         style={cardStyle}
+                        draggable={canDragMemo}
+                        onDragStart={(event) => handleMemoDragStart(event, memo)}
+                        onDragOver={(event) => handleMemoDragOver(event, memo)}
+                        onDragLeave={() => handleMemoDragLeave(memoId)}
+                        onDrop={(event) => { void handleMemoDrop(event, memo); }}
+                        onDragEnd={clearMemoDragState}
+                        aria-grabbed={draggedMemoId === memoId}
                       >
                         {isBulkMode && (
                           <div className="memo-item__checkbox-wrap">

@@ -18,6 +18,7 @@ from blueprints.memo import (
     api_memo_share_revoke,
     api_pin_memo,
     api_recent_memos,
+    api_reorder_memo,
     api_share_memo,
     api_shared_memo,
     api_suggest_memo,
@@ -295,6 +296,25 @@ class MemoApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["affected"], 2)
         self.assertEqual(mock_bulk.call_args.args[:3], (7, "archive", [10, 11]))
+
+    def test_reorder_memo_passes_neighbor_payload(self):
+        request = make_request(
+            method="POST",
+            path="/memo/api/reorder",
+            json_body={"memo_id": 12, "before_id": 10, "after_id": 11},
+            session={"user_id": 7},
+        )
+        with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
+            "blueprints.memo._reorder_memo",
+            return_value={"id": 12, "title": "Moved"},
+        ) as mock_reorder:
+            response = asyncio.run(api_reorder_memo(request))
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertEqual(payload["memo"]["title"], "Moved")
+        self.assertEqual(mock_reorder.call_args.args[:2], (7, 12))
+        self.assertEqual(mock_reorder.call_args.kwargs["before_id"], 10)
+        self.assertEqual(mock_reorder.call_args.kwargs["after_id"], 11)
 
     def test_bulk_action_reports_actual_affected_rows(self):
         fake_cursor = FakeBulkCursor(owned_ids=[10, 11], rowcount=2)

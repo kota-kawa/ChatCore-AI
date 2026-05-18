@@ -287,6 +287,14 @@ class MemoBulkActionRequest(RequestPayloadModel):
     collection_id: int | None = None
 
 
+class MemoReorderRequest(RequestPayloadModel):
+    # メモカードのドラッグ並べ替え入力
+    # Input payload for drag-and-drop memo card reordering.
+    memo_id: int
+    before_id: int | None = None
+    after_id: int | None = None
+
+
 class MemoCollectionCreateRequest(RequestPayloadModel):
     # コレクション作成APIの入力
     # Input payload for memo collection creation.

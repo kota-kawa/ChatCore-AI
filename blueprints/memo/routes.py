@@ -20,6 +20,7 @@ from services.request_models import (
     MemoCollectionCreateRequest,
     MemoCollectionUpdateRequest,
     MemoCreateRequest,
+    MemoReorderRequest,
     MemoShareCreateRequest,
     MemoSuggestRequest,
     MemoToggleRequest,
@@ -56,7 +57,7 @@ async def api_recent_memos(
     q: str = "",
     date_from: str = "",
     date_to: str = "",
-    sort: str = "recent",
+    sort: str = "manual",
     include_archived: bool = False,
     only_archived: bool = False,
     pinned_first: bool = True,
@@ -196,6 +197,40 @@ async def api_bulk_memo(request: Request):
         return jsonify({"status": "success", **result})
     except Error:
         return log_and_internal_server_error(logger, "Bulk memo action failed.", status="fail")
+
+
+@memo_bp.post("/api/reorder", name="memo.api_reorder")
+async def api_reorder_memo(request: Request):
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+
+    payload, validation_error = validate_payload_model(
+        data,
+        MemoReorderRequest,
+        error_message="並べ替えのパラメータが不正です。",
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        memo = await run_blocking(
+            _memo_attr("_reorder_memo"),
+            user_id,
+            payload.memo_id,
+            before_id=payload.before_id,
+            after_id=payload.after_id,
+        )
+        return jsonify({"status": "success", "memo": memo})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Error:
+        return log_and_internal_server_error(logger, "Failed to reorder memo entry.", status="fail")
 
 
 @memo_bp.get("/api/export", name="memo.api_export")

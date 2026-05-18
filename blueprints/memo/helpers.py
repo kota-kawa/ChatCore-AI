@@ -60,6 +60,8 @@ def date_end(raw: str) -> datetime | None:
 
 
 def resolve_sort_order(sort: str) -> str:
+    if sort == "manual":
+        return "COALESCE(me.sort_order, EXTRACT(EPOCH FROM me.created_at)::numeric) DESC, me.created_at DESC"
     if sort == "oldest":
         return "me.created_at ASC"
     if sort == "updated":

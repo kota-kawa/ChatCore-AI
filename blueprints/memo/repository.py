@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import sys
 from typing import Any
 
@@ -116,7 +117,8 @@ def fetch_memo_summaries(
         order_by_parts: list[str] = []
         if pinned_first:
             order_by_parts.append("CASE WHEN me.pinned_at IS NULL THEN 1 ELSE 0 END ASC")
-            order_by_parts.append("me.pinned_at DESC")
+            if sort != "manual":
+                order_by_parts.append("me.pinned_at DESC")
         order_by_parts.append(resolve_sort_order(sort))
         order_sql = ", ".join(order_by_parts)
 
@@ -224,11 +226,14 @@ def insert_memo(
 
         cursor.execute(
             """
-            INSERT INTO memo_entries (user_id, ai_response, title, collection_id)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO memo_entries (user_id, ai_response, title, collection_id, sort_order)
+            VALUES (
+                %s, %s, %s, %s,
+                COALESCE((SELECT MAX(sort_order) FROM memo_entries WHERE user_id = %s), 0) + 1
+            )
             RETURNING id
             """,
-            (user_id, ai_response, resolved_title, validated_collection_id),
+            (user_id, ai_response, resolved_title, validated_collection_id, user_id),
         )
         connection.commit()
         row = cursor.fetchone()
@@ -336,11 +341,126 @@ def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, A
             """
             UPDATE memo_entries
             SET pinned_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END,
+                sort_order = CASE
+                    WHEN %s THEN COALESCE((
+                        SELECT MAX(sort_order)
+                        FROM memo_entries
+                        WHERE user_id = %s
+                          AND archived_at IS NULL
+                          AND pinned_at IS NOT NULL
+                    ), 0) + 1
+                    ELSE sort_order
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             RETURNING id
             """,
-            (enabled, memo_id, user_id),
+            (enabled, enabled, user_id, memo_id, user_id),
+        )
+        if not cursor.fetchone():
+            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+        connection.commit()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.close()
+
+    return fetch_memo_detail(user_id, memo_id)
+
+
+def _decimal_order(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value or 0))
+
+
+def reorder_memo(
+    user_id: int,
+    memo_id: int,
+    *,
+    before_id: int | None,
+    after_id: int | None,
+) -> dict[str, Any]:
+    if before_id == memo_id or after_id == memo_id:
+        raise ApiServiceError("並べ替え位置が不正です。", 400, status="fail")
+
+    ordered_ids = [memo_id]
+    for candidate in (before_id, after_id):
+        if candidate is not None and candidate not in ordered_ids:
+            ordered_ids.append(candidate)
+
+    connection = None
+    cursor = None
+    try:
+        connection = _get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        placeholders = ",".join(["%s"] * len(ordered_ids))
+        cursor.execute(
+            f"""
+            SELECT
+                id,
+                COALESCE(sort_order, EXTRACT(EPOCH FROM created_at)::numeric) AS sort_order,
+                pinned_at,
+                archived_at
+            FROM memo_entries
+            WHERE user_id = %s AND id IN ({placeholders})
+            """,
+            tuple([user_id, *ordered_ids]),
+        )
+        rows = {int(row["id"]): row for row in cursor.fetchall()}
+        dragged = rows.get(memo_id)
+        if dragged is None:
+            raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+
+        dragged_is_pinned = dragged.get("pinned_at") is not None
+        dragged_is_archived = dragged.get("archived_at") is not None
+
+        def neighbor_order(neighbor_id: int | None) -> Decimal | None:
+            if neighbor_id is None:
+                return None
+            neighbor = rows.get(neighbor_id)
+            if neighbor is None:
+                raise ApiServiceError("並べ替え先のメモが見つかりません。", 400, status="fail")
+            if (
+                (neighbor.get("pinned_at") is not None) != dragged_is_pinned
+                or (neighbor.get("archived_at") is not None) != dragged_is_archived
+            ):
+                raise ApiServiceError("ピン留めまたはアーカイブ状態が異なるメモの間には移動できません。", 400, status="fail")
+            return _decimal_order(neighbor.get("sort_order"))
+
+        before_order = neighbor_order(before_id)
+        after_order = neighbor_order(after_id)
+
+        if before_order is not None and after_order is not None:
+            new_order = (before_order + after_order) / Decimal("2")
+        elif before_order is not None:
+            new_order = before_order - Decimal("1")
+        elif after_order is not None:
+            new_order = after_order + Decimal("1")
+        else:
+            cursor.execute(
+                """
+                SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order
+                FROM memo_entries
+                WHERE user_id = %s
+                  AND (pinned_at IS NOT NULL) = %s
+                  AND (archived_at IS NOT NULL) = %s
+                """,
+                (user_id, dragged_is_pinned, dragged_is_archived),
+            )
+            next_row = cursor.fetchone() or {}
+            new_order = _decimal_order(next_row.get("next_order"))
+
+        cursor.execute(
+            """
+            UPDATE memo_entries
+            SET sort_order = %s
+            WHERE id = %s AND user_id = %s
+            RETURNING id
+            """,
+            (new_order, memo_id, user_id),
         )
         if not cursor.fetchone():
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)

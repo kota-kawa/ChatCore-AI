@@ -3319,6 +3319,7 @@ body.memo-page {
   background: #fff;
   padding: 0.8rem 0.95rem 0.55rem;
   box-shadow: none;
+  overflow: visible;
   transition: box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
@@ -3361,6 +3362,40 @@ body.memo-page {
   border-color: #fbbc04;
   background: #feefc3;
   box-shadow: 0 0 0 2px rgba(251, 188, 4, 0.35);
+}
+
+.memo-item.is-reorderable {
+  cursor: grab;
+}
+
+.memo-item.is-reorderable:active {
+  cursor: grabbing;
+}
+
+.memo-item.is-dragging {
+  opacity: 0.56;
+  transform: scale(0.985);
+}
+
+.memo-item.is-drop-before::after,
+.memo-item.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  height: 3px;
+  border-radius: 999px;
+  background: #fbbc04;
+  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.18);
+  z-index: 5;
+}
+
+.memo-item.is-drop-before::after {
+  top: -0.42rem;
+}
+
+.memo-item.is-drop-after::after {
+  bottom: -0.42rem;
 }
 
 .memo-item__open--content {
