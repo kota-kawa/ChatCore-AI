@@ -489,6 +489,7 @@ export default function MemoPage() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"markdown" | "json" | "csv">("markdown");
   const [exportScope, setExportScope] = useState<"all" | "selected">("all");
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set());
 
   // -----------------------------------------------------------------------
   // Data fetching
@@ -638,6 +639,15 @@ export default function MemoPage() {
       return next.size === prev.size ? prev : next;
     });
   }, [memos, isBulkMode]);
+
+  useEffect(() => {
+    if (!isExportModalOpen) return;
+    setExportSelectedIds((prev) => {
+      const memoIdSet = new Set(memos.map((m) => String(m.id)));
+      const next = new Set([...prev].filter((id) => memoIdSet.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [isExportModalOpen, memos]);
 
   // -----------------------------------------------------------------------
   // Helpers
@@ -1217,6 +1227,25 @@ export default function MemoPage() {
     setSelectedIds(new Set());
   }, []);
 
+  const toggleExportMemo = useCallback((memoId: string) => {
+    setExportSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(memoId)) next.delete(memoId);
+      else next.add(memoId);
+      return next;
+    });
+    setExportScope("selected");
+  }, []);
+
+  const selectAllExportMemos = useCallback(() => {
+    setExportSelectedIds(new Set(memos.map((memo) => String(memo.id))));
+    setExportScope("selected");
+  }, [memos]);
+
+  const clearExportSelection = useCallback(() => {
+    setExportSelectedIds(new Set());
+  }, []);
+
   const executeBulkAction = useCallback(async (action: BulkAction, extra?: { collectionId?: number | null }) => {
     if (selectedIds.size === 0) return;
     setBulkLoading(true);
@@ -1390,8 +1419,12 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const handleExport = useCallback(() => {
-    const ids = exportScope === "selected" && selectedIds.size > 0
-      ? Array.from(selectedIds).join(",")
+    if (exportScope === "selected" && exportSelectedIds.size === 0) {
+      showFlash("error", "エクスポートするメモを選択してください。");
+      return;
+    }
+    const ids = exportScope === "selected"
+      ? Array.from(exportSelectedIds).join(",")
       : "";
     const params = new URLSearchParams({ format: exportFormat });
     if (ids) params.set("ids", ids);
@@ -1402,13 +1435,17 @@ export default function MemoPage() {
     a.click();
     setIsExportModalOpen(false);
     showFlash("success", "エクスポートを開始しました。");
-  }, [exportFormat, exportScope, selectedIds, showFlash]);
+  }, [exportFormat, exportScope, exportSelectedIds, showFlash]);
 
   // -----------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------
 
   const hasSelection = selectedIds.size > 0;
+  const exportSelectedCount = exportSelectedIds.size;
+  const visibleExportIds = memos.map((memo) => String(memo.id));
+  const allVisibleExportSelected = visibleExportIds.length > 0 && visibleExportIds.every((id) => exportSelectedIds.has(id));
+  const canDownloadExport = exportScope === "all" || exportSelectedCount > 0;
   const activeCollection = activeCollectionId !== null ? collections.find((c) => c.id === activeCollectionId) : null;
   const hasActiveFilters = Boolean(query.trim()) || sortMode !== "manual" || archiveScope !== "active" || activeCollectionId !== null;
   const hasComposeDraft = Boolean(formState.ai_response.trim() || formState.title.trim());
@@ -2351,15 +2388,60 @@ export default function MemoPage() {
                     <input type="radio" name="export-scope" value="all" checked={exportScope === "all"} onChange={() => setExportScope("all")} className="sr-only" />
                     <i className="bi bi-collection"></i>すべてのメモ
                   </label>
-                  <label className={`memo-export-scope-option${exportScope === "selected" ? " is-active" : ""}${selectedIds.size === 0 ? " is-disabled" : ""}`}>
-                    <input type="radio" name="export-scope" value="selected" checked={exportScope === "selected"} onChange={() => setExportScope("selected")} disabled={selectedIds.size === 0} className="sr-only" />
+                  <label className={`memo-export-scope-option${exportScope === "selected" ? " is-active" : ""}${memos.length === 0 ? " is-disabled" : ""}`}>
+                    <input type="radio" name="export-scope" value="selected" checked={exportScope === "selected"} onChange={() => setExportScope("selected")} disabled={memos.length === 0} className="sr-only" />
                     <i className="bi bi-check2-square"></i>
-                    {selectedIds.size > 0 ? `選択中の${selectedIds.size}件` : "選択したメモ（未選択）"}
+                    {exportSelectedCount > 0 ? `選択中の${exportSelectedCount}件` : "メモを選択"}
                   </label>
                 </div>
               </div>
+              {exportScope === "selected" && (
+                <div className="memo-export-section memo-export-select">
+                  <div className="memo-export-select__header">
+                    <p className="memo-export-label">メモ</p>
+                    <div className="memo-export-select__actions">
+                      <button
+                        type="button"
+                        className="memo-export-select__action"
+                        onClick={allVisibleExportSelected ? clearExportSelection : selectAllExportMemos}
+                        disabled={memos.length === 0}
+                      >
+                        {allVisibleExportSelected ? "解除" : "すべて選択"}
+                      </button>
+                    </div>
+                  </div>
+                  {memos.length === 0 ? (
+                    <p className="memo-export-select__empty">表示中のメモがありません。</p>
+                  ) : (
+                    <ul className="memo-export-select__list">
+                      {memos.map((memo) => {
+                        const memoId = String(memo.id);
+                        const checked = exportSelectedIds.has(memoId);
+                        return (
+                          <li key={memoId}>
+                            <label className={`memo-export-select__item${checked ? " is-selected" : ""}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleExportMemo(memoId)}
+                              />
+                              <span className="memo-export-select__content">
+                                <span className="memo-export-select__title">{memo.title || "保存したメモ"}</span>
+                                <span className="memo-export-select__meta">
+                                  {formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || ""}
+                                  {memo.collection_name ? ` / ${memo.collection_name}` : ""}
+                                </span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
               <div className="memo-export-actions">
-                <button type="button" className="primary-button" onClick={handleExport}>
+                <button type="button" className="primary-button" onClick={handleExport} disabled={!canDownloadExport}>
                   <i className="bi bi-download"></i>ダウンロード
                 </button>
                 <button type="button" className="secondary-button" onClick={() => setIsExportModalOpen(false)}>キャンセル</button>
