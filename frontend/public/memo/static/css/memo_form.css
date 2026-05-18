@@ -1347,19 +1347,29 @@ textarea.memo-control {
 }
 
 /* ============================================================
-   Collection chips in toolbar
+   Collection filter in toolbar
    ============================================================ */
 .memo-toolbar__collections {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.42rem;
-  overflow-x: auto;
-  padding-bottom: 0.05rem;
-  scrollbar-width: none;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  overflow: visible;
 }
 
-.memo-toolbar__collections::-webkit-scrollbar {
-  display: none;
+.memo-toolbar__collections-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  color: #5f6368;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.memo-select--collection-filter {
+  width: min(18rem, 100%);
 }
 
 .memo-collection-chip {
@@ -3997,6 +4007,7 @@ body.memo-page {
 
 [data-theme="dark"] .memo-toolbar__search > i,
 [data-theme="dark"] .memo-sort-control > i,
+[data-theme="dark"] .memo-toolbar__collections-label i,
 [data-theme="dark"] .memo-select__chevron,
 [data-theme="dark"] .memo-select__check,
 [data-theme="dark"] .memo-panel__header h2 i,

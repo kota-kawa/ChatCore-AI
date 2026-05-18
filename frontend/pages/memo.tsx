@@ -81,7 +81,6 @@ type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 type MemoDropPosition = "before" | "after";
-type MemoCollectionDropTarget = number | "none" | "";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -502,7 +501,6 @@ export default function MemoPage() {
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
   const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
-  const [dragCollectionTarget, setDragCollectionTarget] = useState<MemoCollectionDropTarget>("");
   const [dragSaving, setDragSaving] = useState(false);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
@@ -684,11 +682,10 @@ export default function MemoPage() {
     archiveScope === "active" &&
     !isBulkMode &&
     !dragSaving &&
-    (collections.length > 0 || (sortMode === "manual" && !query.trim()));
-  const canReorderCurrentView =
-    canDragMemos &&
     sortMode === "manual" &&
     !query.trim();
+  const canReorderCurrentView =
+    canDragMemos;
 
   const handleFormChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -1018,7 +1015,6 @@ export default function MemoPage() {
   const clearMemoDragState = useCallback(() => {
     setDraggedMemoId("");
     setDragProjectedOrder(null);
-    setDragCollectionTarget("");
   }, []);
 
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
@@ -1117,90 +1113,6 @@ export default function MemoPage() {
     dragProjectedOrder,
     draggedMemoId,
     mutate,
-    showFlash,
-  ]);
-
-  const handleCollectionDragOver = useCallback((
-    event: DragEvent<HTMLElement>,
-    target: MemoCollectionDropTarget,
-  ) => {
-    if (!canDragMemos || !draggedMemoId || target === "") return;
-    const draggedMemo = memos.find((memo) => String(memo.id) === draggedMemoId);
-    if (!draggedMemo) return;
-    const targetCollectionId = target === "none" ? null : target;
-    if ((draggedMemo.collection_id ?? null) === targetCollectionId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDragCollectionTarget(target);
-  }, [canDragMemos, draggedMemoId, memos]);
-
-  const handleCollectionDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
-    const nextTarget = event.relatedTarget;
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    setDragCollectionTarget("");
-  }, []);
-
-  const handleCollectionDrop = useCallback(async (
-    event: DragEvent<HTMLElement>,
-    target: MemoCollectionDropTarget,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
-    if (!sourceId || target === "") {
-      clearMemoDragState();
-      return;
-    }
-
-    const targetCollectionId = target === "none" ? null : target;
-    const sourceMemo = memos.find((memo) => String(memo.id) === sourceId);
-    if (!sourceMemo || (sourceMemo.collection_id ?? null) === targetCollectionId) {
-      clearMemoDragState();
-      return;
-    }
-
-    const memoId = Number(sourceId);
-    if (!Number.isFinite(memoId)) {
-      showFlash("error", "移動対象のメモIDが不正です。");
-      clearMemoDragState();
-      return;
-    }
-
-    setDragSaving(true);
-    clearMemoDragState();
-    try {
-      const body: Record<string, unknown> =
-        targetCollectionId === null ? { clear_collection: true } : { collection_id: targetCollectionId };
-      await fetchJsonOrThrow(
-        `/memo/api/${memoId}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify(body),
-        },
-        { defaultMessage: "メモの移動に失敗しました。" },
-      );
-      showFlash("success", "メモを移動しました。");
-      if (selectedMemo?.id && String(selectedMemo.id) === sourceId) {
-        const refreshed = await loadMemoDetail(sourceId);
-        if (refreshed) setSelectedMemo(refreshed);
-      }
-      await Promise.all([mutate(), mutateCollections()]);
-    } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "メモの移動に失敗しました。");
-      await mutate();
-    } finally {
-      setDragSaving(false);
-    }
-  }, [
-    canDragMemos,
-    clearMemoDragState,
-    draggedMemoId,
-    memos,
-    mutate,
-    mutateCollections,
-    selectedMemo?.id,
     showFlash,
   ]);
 
@@ -1642,46 +1554,25 @@ export default function MemoPage() {
               </div>
             </div>
 
-            {/* Collection filter chips */}
+            {/* Collection filter */}
             {collections.length > 0 && (
               <div className="memo-toolbar__collections" aria-label="コレクション">
-                <button
-                  type="button"
-                  className={`memo-collection-chip${activeCollectionId === null ? " is-active" : ""}`}
-                  onClick={() => setActiveCollectionId(null)}
-                >
-                  <i className="bi bi-grid-3x3-gap" aria-hidden="true"></i>
-                  すべて
-                </button>
-                {draggedMemoId && (
-                  <button
-                    type="button"
-                    className={`memo-collection-chip memo-collection-chip--drop${dragCollectionTarget === "none" ? " is-drop-target" : ""}`}
-                    onClick={() => setActiveCollectionId(null)}
-                    onDragOver={(event) => handleCollectionDragOver(event, "none")}
-                    onDragLeave={handleCollectionDragLeave}
-                    onDrop={(event) => { void handleCollectionDrop(event, "none"); }}
-                  >
-                    <i className="bi bi-folder-x" aria-hidden="true"></i>
-                    未分類
-                  </button>
-                )}
-                {collections.map((col) => (
-                  <button
-                    type="button"
-                    key={col.id}
-                    className={`memo-collection-chip${activeCollectionId === col.id ? " is-active" : ""}${dragCollectionTarget === col.id ? " is-drop-target" : ""}`}
-                    style={{ "--badge-color": col.color } as React.CSSProperties}
-                    onClick={() => setActiveCollectionId((prev) => (prev === col.id ? null : col.id))}
-                    onDragOver={(event) => handleCollectionDragOver(event, col.id)}
-                    onDragLeave={handleCollectionDragLeave}
-                    onDrop={(event) => { void handleCollectionDrop(event, col.id); }}
-                  >
-                    <i className="bi bi-folder2" aria-hidden="true"></i>
-                    {col.name}
-                    <span className="memo-collection-chip__count">{col.memo_count}</span>
-                  </button>
-                ))}
+                <span className="memo-toolbar__collections-label">
+                  <i className="bi bi-folder2" aria-hidden="true"></i>
+                  コレクション
+                </span>
+                <MemoSelect
+                  className="memo-select--collection-filter"
+                  value={String(activeCollectionId ?? "")}
+                  onChange={(value) => setActiveCollectionId(value === "" ? null : Number(value))}
+                  options={[
+                    { value: "", label: "全コレクション" },
+                    ...collections.map((collection) => ({
+                      value: String(collection.id),
+                      label: `${collection.name} (${collection.memo_count})`,
+                    })),
+                  ]}
+                />
               </div>
             )}
 
