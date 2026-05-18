@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -80,7 +81,6 @@ type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 type MemoDropPosition = "before" | "after";
-type MemoReorderResult = { memos: MemoSummary[]; beforeId: string | null; afterId: string | null };
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -161,51 +161,49 @@ function getMemoSectionKey(memo: MemoSummary) {
   return `${memo.is_pinned ? "pinned" : "other"}:${memo.is_archived ? "archived" : "active"}`;
 }
 
-function findAdjacentMemo(list: MemoSummary[], startIndex: number, direction: -1 | 1, sectionKey: string) {
-  for (let index = startIndex; index >= 0 && index < list.length; index += direction) {
-    const memo = list[index];
-    if (memo && getMemoSectionKey(memo) === sectionKey) return memo;
-  }
-  return null;
-}
-
-function computeMemoReorder(
-  list: MemoSummary[],
+function computeProjectedSectionOrder(
+  memos: MemoSummary[],
   draggedId: string,
   targetId: string,
   position: MemoDropPosition,
-): MemoReorderResult | null {
+): string[] | null {
   if (!draggedId || !targetId || draggedId === targetId) return null;
-  const draggedIndex = list.findIndex((memo) => String(memo.id) === draggedId);
-  const targetIndex = list.findIndex((memo) => String(memo.id) === targetId);
-  if (draggedIndex < 0 || targetIndex < 0) return null;
-
-  const draggedMemo = list[draggedIndex];
-  const targetMemo = list[targetIndex];
+  const draggedMemo = memos.find((memo) => String(memo.id) === draggedId);
+  const targetMemo = memos.find((memo) => String(memo.id) === targetId);
+  if (!draggedMemo || !targetMemo) return null;
   const sectionKey = getMemoSectionKey(draggedMemo);
   if (getMemoSectionKey(targetMemo) !== sectionKey) return null;
 
-  const withoutDragged = list.filter((memo) => String(memo.id) !== draggedId);
-  const targetIndexAfterRemoval = withoutDragged.findIndex((memo) => String(memo.id) === targetId);
-  if (targetIndexAfterRemoval < 0) return null;
+  const section = memos.filter((memo) => getMemoSectionKey(memo) === sectionKey);
+  const without = section.filter((memo) => String(memo.id) !== draggedId);
+  const targetIdx = without.findIndex((memo) => String(memo.id) === targetId);
+  if (targetIdx < 0) return null;
+  const insertIdx = position === "before" ? targetIdx : targetIdx + 1;
+  const next = [...without];
+  next.splice(insertIdx, 0, draggedMemo);
+  return next.map((memo) => String(memo.id));
+}
 
-  const nextMemos = [...withoutDragged];
-  const insertIndex = position === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
-  nextMemos.splice(insertIndex, 0, draggedMemo);
-
-  const currentOrder = list.map((memo) => String(memo.id)).join("|");
-  const nextOrder = nextMemos.map((memo) => String(memo.id)).join("|");
-  if (currentOrder === nextOrder) return null;
-
-  const movedIndex = nextMemos.findIndex((memo) => String(memo.id) === draggedId);
-  const beforeMemo = findAdjacentMemo(nextMemos, movedIndex - 1, -1, sectionKey);
-  const afterMemo = findAdjacentMemo(nextMemos, movedIndex + 1, 1, sectionKey);
-
-  return {
-    memos: nextMemos,
-    beforeId: beforeMemo ? String(beforeMemo.id) : null,
-    afterId: afterMemo ? String(afterMemo.id) : null,
-  };
+function applySectionProjection(memos: MemoSummary[], projection: string[] | null): MemoSummary[] {
+  if (!projection || projection.length === 0) return memos;
+  const projectedSet = new Set(projection);
+  const idToMemo = new Map(memos.map((memo) => [String(memo.id), memo]));
+  const result: MemoSummary[] = [];
+  let projIdx = 0;
+  for (const memo of memos) {
+    if (projectedSet.has(String(memo.id))) {
+      while (projIdx < projection.length) {
+        const m = idToMemo.get(projection[projIdx++]);
+        if (m) {
+          result.push(m);
+          break;
+        }
+      }
+    } else {
+      result.push(memo);
+    }
+  }
+  return result;
 }
 
 const loadMemoList = async (url: string): Promise<MemoListState> => {
@@ -440,9 +438,10 @@ export default function MemoPage() {
   const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
-  const [dragOverMemoId, setDragOverMemoId] = useState<string>("");
-  const [dragDropPosition, setDragDropPosition] = useState<MemoDropPosition | null>(null);
+  const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
   const [dragSaving, setDragSaving] = useState(false);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
 
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -470,15 +469,20 @@ export default function MemoPage() {
   const memos = memoList.memos;
   const totalMemoCount = memoList.total;
 
+  const displayMemos = useMemo(
+    () => applySectionProjection(memos, dragProjectedOrder),
+    [memos, dragProjectedOrder],
+  );
+
   const { pinnedMemos, otherMemos } = useMemo(() => {
     const pinned: MemoSummary[] = [];
     const other: MemoSummary[] = [];
-    for (const memo of memos) {
+    for (const memo of displayMemos) {
       if (memo.is_pinned) pinned.push(memo);
       else other.push(memo);
     }
     return { pinnedMemos: pinned, otherMemos: other };
-  }, [memos]);
+  }, [displayMemos]);
 
   const shareUrl = (shareState?.share_url || "").trim();
   const shareSnsLinks = useMemo(() => {
@@ -936,8 +940,7 @@ export default function MemoPage() {
 
   const clearMemoDragState = useCallback(() => {
     setDraggedMemoId("");
-    setDragOverMemoId("");
-    setDragDropPosition(null);
+    setDragProjectedOrder(null);
   }, []);
 
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
@@ -949,6 +952,7 @@ export default function MemoPage() {
     setOpenMenuMemoId("");
     setMenuPosition(null);
     setDraggedMemoId(memoId);
+    setDragProjectedOrder(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", memoId);
   }, [canReorderCurrentView]);
@@ -964,40 +968,48 @@ export default function MemoPage() {
     event.dataTransfer.dropEffect = "move";
     const rect = event.currentTarget.getBoundingClientRect();
     const position: MemoDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-    setDragOverMemoId(targetId);
-    setDragDropPosition(position);
+    const nextOrder = computeProjectedSectionOrder(memos, draggedMemoId, targetId, position);
+    if (!nextOrder) return;
+    setDragProjectedOrder((prev) => {
+      if (prev && prev.length === nextOrder.length && prev.every((id, i) => id === nextOrder[i])) {
+        return prev;
+      }
+      return nextOrder;
+    });
   }, [canReorderCurrentView, draggedMemoId, memos]);
 
-  const handleMemoDragLeave = useCallback((memoId: string) => {
-    setDragOverMemoId((current) => (current === memoId ? "" : current));
-    setDragDropPosition((current) => (dragOverMemoId === memoId ? null : current));
-  }, [dragOverMemoId]);
-
-  const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>, targetMemo: MemoSummary) => {
+  const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
-    const targetId = String(targetMemo.id);
     const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
-    const position = dragOverMemoId === targetId && dragDropPosition ? dragDropPosition : "before";
-    clearMemoDragState();
+    const projection = dragProjectedOrder;
 
-    if (!canReorderCurrentView || !sourceId || sourceId === targetId) return;
-    const reorderResult = computeMemoReorder(memos, sourceId, targetId, position);
-    if (!reorderResult) return;
+    if (!canReorderCurrentView || !sourceId || !projection) {
+      clearMemoDragState();
+      return;
+    }
+
+    const movedIdx = projection.findIndex((id) => id === sourceId);
+    if (movedIdx < 0) {
+      clearMemoDragState();
+      return;
+    }
 
     const memoId = Number(sourceId);
-    const beforeId = reorderResult.beforeId === null ? null : Number(reorderResult.beforeId);
-    const afterId = reorderResult.afterId === null ? null : Number(reorderResult.afterId);
+    const beforeId = movedIdx > 0 ? Number(projection[movedIdx - 1]) : null;
+    const afterId = movedIdx < projection.length - 1 ? Number(projection[movedIdx + 1]) : null;
     if (!Number.isFinite(memoId) || (beforeId !== null && !Number.isFinite(beforeId)) || (afterId !== null && !Number.isFinite(afterId))) {
       showFlash("error", "並べ替え対象のメモIDが不正です。");
+      clearMemoDragState();
       return;
     }
 
     setDragSaving(true);
     await mutate((current) => {
       if (!current) return current;
-      const optimistic = computeMemoReorder(current.memos, sourceId, targetId, position);
-      return optimistic ? { ...current, memos: optimistic.memos } : current;
+      const next = applySectionProjection(current.memos, projection);
+      return { ...current, memos: next };
     }, { revalidate: false });
+    clearMemoDragState();
 
     try {
       await fetchJsonOrThrow(
@@ -1020,13 +1032,36 @@ export default function MemoPage() {
   }, [
     canReorderCurrentView,
     clearMemoDragState,
-    dragDropPosition,
-    dragOverMemoId,
+    dragProjectedOrder,
     draggedMemoId,
-    memos,
     mutate,
     showFlash,
   ]);
+
+  // FLIP: animate cards smoothly to their new positions after a reorder.
+  useLayoutEffect(() => {
+    const prevPositions = cardPositionsRef.current;
+    const nextPositions = new Map<string, DOMRect>();
+    cardRefs.current.forEach((el, id) => {
+      if (el && el.isConnected) nextPositions.set(id, el.getBoundingClientRect());
+    });
+    nextPositions.forEach((nextRect, id) => {
+      if (id === draggedMemoId) return;
+      const prevRect = prevPositions.get(id);
+      if (!prevRect) return;
+      const dx = prevRect.left - nextRect.left;
+      const dy = prevRect.top - nextRect.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      const el = cardRefs.current.get(id);
+      if (!el) return;
+      el.style.transition = "none";
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      void el.offsetWidth;
+      el.style.transition = "";
+      el.style.transform = "";
+    });
+    cardPositionsRef.current = nextPositions;
+  }, [displayMemos, draggedMemoId]);
 
   // -----------------------------------------------------------------------
   // Bulk operations
@@ -1646,7 +1681,6 @@ export default function MemoPage() {
                   const isBusy = actionLoadingId === memoId;
                   const isSelected = selectedIds.has(memoId);
                   const isCopied = copiedMemoId === memoId;
-                  const isDropTarget = dragOverMemoId === memoId && dragDropPosition !== null;
                   const canDragMemo = canReorderCurrentView && !isBusy;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
                   const accent = memo.collection_color || "";
@@ -1655,13 +1689,16 @@ export default function MemoPage() {
                   return (
                     <li key={memoId}>
                       <article
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}${isDropTarget ? ` is-drop-${dragDropPosition}` : ""}`}
+                        ref={(el) => {
+                          if (el) cardRefs.current.set(memoId, el);
+                          else cardRefs.current.delete(memoId);
+                        }}
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
                         style={cardStyle}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
                         onDragOver={(event) => handleMemoDragOver(event, memo)}
-                        onDragLeave={() => handleMemoDragLeave(memoId)}
-                        onDrop={(event) => { void handleMemoDrop(event, memo); }}
+                        onDrop={(event) => { void handleMemoDrop(event); }}
                         onDragEnd={clearMemoDragState}
                         aria-grabbed={draggedMemoId === memoId}
                       >
