@@ -1892,8 +1892,6 @@ export default function MemoPage() {
                   const isCopied = copiedMemoId === memoId;
                   const canDragMemo = canDragMemos && !isBusy;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
-                  const accent = memo.collection_color || "";
-                  const cardStyle = accent ? ({ "--memo-card-accent": accent } as React.CSSProperties) : undefined;
 
                   return (
                     <li key={memoId}>
@@ -1902,8 +1900,7 @@ export default function MemoPage() {
                           if (el) cardRefs.current.set(memoId, el);
                           else cardRefs.current.delete(memoId);
                         }}
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${accent ? " has-accent" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
-                        style={cardStyle}
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
                         onDragEnd={clearMemoDragState}
@@ -1959,11 +1956,6 @@ export default function MemoPage() {
                             {memo.is_archived && (
                               <span className="memo-item__archive-badge" aria-label="アーカイブ済み" data-tooltip="アーカイブ済み" data-tooltip-placement="top">
                                 <i className="bi bi-archive-fill" aria-hidden="true"></i>
-                              </span>
-                            )}
-                            {memo.is_active && (
-                              <span className="memo-item__status-icon" aria-label="共有中" data-tooltip="共有中" data-tooltip-placement="top">
-                                <i className="bi bi-link-45deg" aria-hidden="true"></i>
                               </span>
                             )}
                           </div>
