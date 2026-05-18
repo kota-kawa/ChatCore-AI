@@ -1403,6 +1403,16 @@ textarea.memo-control {
   border-color: transparent;
 }
 
+.memo-collection-chip.is-drop-target {
+  border-color: var(--badge-color, var(--memo-amber));
+  background: color-mix(in srgb, var(--badge-color, var(--memo-amber)) 18%, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--badge-color, var(--memo-amber)) 22%, transparent);
+}
+
+.memo-collection-chip--drop {
+  --badge-color: #6b7280;
+}
+
 .memo-collection-chip__count {
   font-size: 0.72rem;
   opacity: 0.82;
@@ -3070,6 +3080,12 @@ body.memo-page {
   border-color: var(--badge-color, #fbbc04);
 }
 
+.memo-collection-chip.is-drop-target {
+  border-color: var(--badge-color, #fbbc04);
+  background: color-mix(in srgb, var(--badge-color, #fbbc04) 22%, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--badge-color, #fbbc04) 24%, transparent);
+}
+
 .memo-flash {
   width: min(42rem, calc(100% - 2rem));
   margin: 1rem auto 0;
@@ -3295,6 +3311,12 @@ body.memo-page {
 
 .memo-history__list > li {
   margin: 0 0 0.85rem;
+}
+
+.memo-history__list.is-drop-ready {
+  outline: 2px dashed rgba(95, 99, 104, 0.22);
+  outline-offset: 0.35rem;
+  border-radius: 10px;
 }
 
 .memo-board--list .memo-history__list {
@@ -3682,6 +3704,12 @@ body.memo-page {
   background: rgba(251, 188, 4, 0.22);
   border-color: #fbbc04;
   color: #e8eaed;
+}
+
+[data-theme="dark"] .memo-collection-chip.is-drop-target {
+  background: rgba(251, 188, 4, 0.18);
+  border-color: var(--badge-color, #fbbc04);
+  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.2);
 }
 
 [data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:not(.has-accent) {

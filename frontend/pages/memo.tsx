@@ -81,6 +81,7 @@ type DetailSaveStatus = "idle" | "saving" | "saved" | "error";
 type BulkAction = "delete" | "archive" | "unarchive" | "pin" | "unpin" | "set_collection" | "clear_collection";
 type MemoActionMenuPosition = { top: number; left: number; width: number; maxHeight: number };
 type MemoDropPosition = "before" | "after";
+type MemoCollectionDropTarget = number | "none" | "";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -182,6 +183,46 @@ function computeProjectedSectionOrder(
   const next = [...without];
   next.splice(insertIdx, 0, draggedMemo);
   return next.map((memo) => String(memo.id));
+}
+
+function computeProjectedSectionOrderFromPoint(
+  memos: MemoSummary[],
+  sectionMemos: MemoSummary[],
+  draggedId: string,
+  clientX: number,
+  clientY: number,
+  cardRefs: Map<string, HTMLElement>,
+): string[] | null {
+  const draggedMemo = memos.find((memo) => String(memo.id) === draggedId);
+  if (!draggedMemo) return null;
+  const sectionKey = getMemoSectionKey(sectionMemos[0] || draggedMemo);
+  if (getMemoSectionKey(draggedMemo) !== sectionKey) return null;
+
+  const section = memos.filter((memo) => getMemoSectionKey(memo) === sectionKey);
+  const without = section.filter((memo) => String(memo.id) !== draggedId);
+  if (without.length === 0) return section.map((memo) => String(memo.id));
+
+  let bestMemo: MemoSummary | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const memo of without) {
+    const element = cardRefs.get(String(memo.id));
+    if (!element) continue;
+    const rect = element.getBoundingClientRect();
+    const dx = clientX < rect.left ? rect.left - clientX : clientX > rect.right ? clientX - rect.right : 0;
+    const dy = clientY < rect.top ? rect.top - clientY : clientY > rect.bottom ? clientY - rect.bottom : 0;
+    const distance = dx * dx + dy * dy;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestMemo = memo;
+    }
+  }
+  if (!bestMemo) return null;
+
+  const targetElement = cardRefs.get(String(bestMemo.id));
+  const targetRect = targetElement?.getBoundingClientRect();
+  const position: MemoDropPosition =
+    targetRect && clientY < targetRect.top + targetRect.height / 2 ? "before" : "after";
+  return computeProjectedSectionOrder(memos, draggedId, String(bestMemo.id), position);
 }
 
 function applySectionProjection(memos: MemoSummary[], projection: string[] | null): MemoSummary[] {
@@ -439,6 +480,7 @@ export default function MemoPage() {
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
   const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
+  const [dragCollectionTarget, setDragCollectionTarget] = useState<MemoCollectionDropTarget>("");
   const [dragSaving, setDragSaving] = useState(false);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
@@ -606,12 +648,15 @@ export default function MemoPage() {
     setTimeout(() => setFlashState(null), 4000);
   }, []);
 
-  const canReorderCurrentView =
-    sortMode === "manual" &&
+  const canDragMemos =
     archiveScope === "active" &&
-    !query.trim() &&
     !isBulkMode &&
-    !dragSaving;
+    !dragSaving &&
+    (collections.length > 0 || (sortMode === "manual" && !query.trim()));
+  const canReorderCurrentView =
+    canDragMemos &&
+    sortMode === "manual" &&
+    !query.trim();
 
   const handleFormChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -941,10 +986,11 @@ export default function MemoPage() {
   const clearMemoDragState = useCallback(() => {
     setDraggedMemoId("");
     setDragProjectedOrder(null);
+    setDragCollectionTarget("");
   }, []);
 
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
-    if (!canReorderCurrentView) {
+    if (!canDragMemos) {
       event.preventDefault();
       return;
     }
@@ -955,20 +1001,23 @@ export default function MemoPage() {
     setDragProjectedOrder(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", memoId);
-  }, [canReorderCurrentView]);
+  }, [canDragMemos]);
 
-  const handleMemoDragOver = useCallback((event: DragEvent<HTMLElement>, targetMemo: MemoSummary) => {
-    if (!canReorderCurrentView || !draggedMemoId) return;
-    const targetId = String(targetMemo.id);
-    if (draggedMemoId === targetId) return;
-    const draggedMemo = memos.find((memo) => String(memo.id) === draggedMemoId);
-    if (!draggedMemo || getMemoSectionKey(draggedMemo) !== getMemoSectionKey(targetMemo)) return;
+  const handleMemoSectionDragOver = useCallback((event: DragEvent<HTMLUListElement>, sectionMemos: MemoSummary[]) => {
+    if (!canReorderCurrentView || !draggedMemoId || sectionMemos.length === 0) return;
+    const draggedMemo = displayMemos.find((memo) => String(memo.id) === draggedMemoId);
+    if (!draggedMemo || getMemoSectionKey(draggedMemo) !== getMemoSectionKey(sectionMemos[0])) return;
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    const rect = event.currentTarget.getBoundingClientRect();
-    const position: MemoDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-    const nextOrder = computeProjectedSectionOrder(memos, draggedMemoId, targetId, position);
+    const nextOrder = computeProjectedSectionOrderFromPoint(
+      displayMemos,
+      sectionMemos,
+      draggedMemoId,
+      event.clientX,
+      event.clientY,
+      cardRefs.current,
+    );
     if (!nextOrder) return;
     setDragProjectedOrder((prev) => {
       if (prev && prev.length === nextOrder.length && prev.every((id, i) => id === nextOrder[i])) {
@@ -976,7 +1025,7 @@ export default function MemoPage() {
       }
       return nextOrder;
     });
-  }, [canReorderCurrentView, draggedMemoId, memos]);
+  }, [canReorderCurrentView, displayMemos, draggedMemoId]);
 
   const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -1035,6 +1084,90 @@ export default function MemoPage() {
     dragProjectedOrder,
     draggedMemoId,
     mutate,
+    showFlash,
+  ]);
+
+  const handleCollectionDragOver = useCallback((
+    event: DragEvent<HTMLElement>,
+    target: MemoCollectionDropTarget,
+  ) => {
+    if (!canDragMemos || !draggedMemoId || target === "") return;
+    const draggedMemo = memos.find((memo) => String(memo.id) === draggedMemoId);
+    if (!draggedMemo) return;
+    const targetCollectionId = target === "none" ? null : target;
+    if ((draggedMemo.collection_id ?? null) === targetCollectionId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragCollectionTarget(target);
+  }, [canDragMemos, draggedMemoId, memos]);
+
+  const handleCollectionDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDragCollectionTarget("");
+  }, []);
+
+  const handleCollectionDrop = useCallback(async (
+    event: DragEvent<HTMLElement>,
+    target: MemoCollectionDropTarget,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
+    if (!sourceId || target === "") {
+      clearMemoDragState();
+      return;
+    }
+
+    const targetCollectionId = target === "none" ? null : target;
+    const sourceMemo = memos.find((memo) => String(memo.id) === sourceId);
+    if (!sourceMemo || (sourceMemo.collection_id ?? null) === targetCollectionId) {
+      clearMemoDragState();
+      return;
+    }
+
+    const memoId = Number(sourceId);
+    if (!Number.isFinite(memoId)) {
+      showFlash("error", "移動対象のメモIDが不正です。");
+      clearMemoDragState();
+      return;
+    }
+
+    setDragSaving(true);
+    clearMemoDragState();
+    try {
+      const body: Record<string, unknown> =
+        targetCollectionId === null ? { clear_collection: true } : { collection_id: targetCollectionId };
+      await fetchJsonOrThrow(
+        `/memo/api/${memoId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(body),
+        },
+        { defaultMessage: "メモの移動に失敗しました。" },
+      );
+      showFlash("success", "メモを移動しました。");
+      if (selectedMemo?.id && String(selectedMemo.id) === sourceId) {
+        const refreshed = await loadMemoDetail(sourceId);
+        if (refreshed) setSelectedMemo(refreshed);
+      }
+      await Promise.all([mutate(), mutateCollections()]);
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "メモの移動に失敗しました。");
+      await mutate();
+    } finally {
+      setDragSaving(false);
+    }
+  }, [
+    canDragMemos,
+    clearMemoDragState,
+    draggedMemoId,
+    memos,
+    mutate,
+    mutateCollections,
+    selectedMemo?.id,
     showFlash,
   ]);
 
@@ -1460,13 +1593,29 @@ export default function MemoPage() {
                   <i className="bi bi-grid-3x3-gap" aria-hidden="true"></i>
                   すべて
                 </button>
+                {draggedMemoId && (
+                  <button
+                    type="button"
+                    className={`memo-collection-chip memo-collection-chip--drop${dragCollectionTarget === "none" ? " is-drop-target" : ""}`}
+                    onClick={() => setActiveCollectionId(null)}
+                    onDragOver={(event) => handleCollectionDragOver(event, "none")}
+                    onDragLeave={handleCollectionDragLeave}
+                    onDrop={(event) => { void handleCollectionDrop(event, "none"); }}
+                  >
+                    <i className="bi bi-folder-x" aria-hidden="true"></i>
+                    未分類
+                  </button>
+                )}
                 {collections.map((col) => (
                   <button
                     type="button"
                     key={col.id}
-                    className={`memo-collection-chip${activeCollectionId === col.id ? " is-active" : ""}`}
+                    className={`memo-collection-chip${activeCollectionId === col.id ? " is-active" : ""}${dragCollectionTarget === col.id ? " is-drop-target" : ""}`}
                     style={{ "--badge-color": col.color } as React.CSSProperties}
                     onClick={() => setActiveCollectionId((prev) => (prev === col.id ? null : col.id))}
+                    onDragOver={(event) => handleCollectionDragOver(event, col.id)}
+                    onDragLeave={handleCollectionDragLeave}
+                    onDrop={(event) => { void handleCollectionDrop(event, col.id); }}
                   >
                     <i className="bi bi-folder2" aria-hidden="true"></i>
                     {col.name}
@@ -1681,7 +1830,7 @@ export default function MemoPage() {
                   const isBusy = actionLoadingId === memoId;
                   const isSelected = selectedIds.has(memoId);
                   const isCopied = copiedMemoId === memoId;
-                  const canDragMemo = canReorderCurrentView && !isBusy;
+                  const canDragMemo = canDragMemos && !isBusy;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
                   const accent = memo.collection_color || "";
                   const cardStyle = accent ? ({ "--memo-card-accent": accent } as React.CSSProperties) : undefined;
@@ -1697,8 +1846,6 @@ export default function MemoPage() {
                         style={cardStyle}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
-                        onDragOver={(event) => handleMemoDragOver(event, memo)}
-                        onDrop={(event) => { void handleMemoDrop(event); }}
                         onDragEnd={clearMemoDragState}
                         aria-grabbed={draggedMemoId === memoId}
                       >
@@ -1852,7 +1999,11 @@ export default function MemoPage() {
                             <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>ピン留め
                           </h3>
                         )}
-                        <ul className="memo-history__list">
+                        <ul
+                          className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, pinnedMemos)}
+                          onDrop={(event) => { void handleMemoDrop(event); }}
+                        >
                           {pinnedMemos.map(renderMemoCard)}
                         </ul>
                       </section>
@@ -1862,7 +2013,11 @@ export default function MemoPage() {
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">その他</h3>
                         )}
-                        <ul className="memo-history__list">
+                        <ul
+                          className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}
+                          onDragOver={(event) => handleMemoSectionDragOver(event, otherMemos)}
+                          onDrop={(event) => { void handleMemoDrop(event); }}
+                        >
                           {otherMemos.map(renderMemoCard)}
                         </ul>
                       </section>
