@@ -334,8 +334,9 @@ export default function MemoPage() {
   const [archiveScope, setArchiveScope] = useState("active");
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
 
-  // Mobile tab
-  const [activeMobileTab, setActiveMobileTab] = useState<"list" | "compose">("list");
+  // Keep-style board state
+  const [isComposeExpanded, setIsComposeExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // Detail modal
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
@@ -587,8 +588,8 @@ export default function MemoPage() {
       );
       setFormState({ ai_response: "", title: "", collection_id: null });
       setPreviewMode(false);
+      setIsComposeExpanded(false);
       showFlash("success", "メモを保存しました。");
-      setActiveMobileTab("list");
       void router.replace("/memo?saved=1", undefined, { shallow: true });
       void mutate();
     } catch (error) {
@@ -1083,6 +1084,8 @@ export default function MemoPage() {
   const hasSelection = selectedIds.size > 0;
   const activeCollection = activeCollectionId !== null ? collections.find((c) => c.id === activeCollectionId) : null;
   const hasActiveFilters = Boolean(query.trim()) || sortMode !== "recent" || archiveScope !== "active" || activeCollectionId !== null;
+  const hasComposeDraft = Boolean(formState.ai_response.trim() || formState.title.trim());
+  const composeIsExpanded = isComposeExpanded || hasComposeDraft;
 
   return (
     <>
@@ -1115,14 +1118,30 @@ export default function MemoPage() {
           {/* ── Toolbar ── */}
           <header className="memo-toolbar memo-card">
             <div className="memo-toolbar__top-row">
-              <div className="memo-toolbar__title">
-                <h1>メモ</h1>
-                <span className="memo-toolbar__count">
-                  <i className="bi bi-journal-text" aria-hidden="true"></i>
-                  {totalMemoCount}件
+              <div className="memo-toolbar__brand">
+                <span className="memo-toolbar__app-mark" aria-hidden="true">
+                  <i className="bi bi-sticky"></i>
                 </span>
+                <div className="memo-toolbar__title">
+                  <h1>メモ</h1>
+                  <span className="memo-toolbar__count">
+                    <i className="bi bi-journal-text" aria-hidden="true"></i>
+                    {totalMemoCount}件
+                  </span>
+                </div>
               </div>
               <div className="memo-toolbar__actions">
+                <button
+                  type="button"
+                  className="memo-toolbar__icon-btn"
+                  onClick={() => setViewMode((current) => (current === "grid" ? "list" : "grid"))}
+                  aria-label={viewMode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え"}
+                  data-tooltip={viewMode === "grid" ? "リスト表示" : "グリッド表示"}
+                  data-tooltip-placement="bottom"
+                >
+                  <i className={`bi ${viewMode === "grid" ? "bi-view-list" : "bi-grid-3x3-gap"}`} aria-hidden="true"></i>
+                  <span className="sr-only">{viewMode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え"}</span>
+                </button>
                 <button
                   type="button"
                   className={`memo-toolbar__icon-btn${isBulkMode ? " is-active" : ""}`}
@@ -1324,15 +1343,123 @@ export default function MemoPage() {
             </div>
           )}
 
-          {/* Mobile tabs */}
-          <div className="memo-mobile-tabs" role="tablist" aria-label="メモ画面タブ">
-            <button type="button" role="tab" aria-selected={activeMobileTab === "list"} className={activeMobileTab === "list" ? "is-active" : ""} onClick={() => setActiveMobileTab("list")}>メモ一覧</button>
-            <button type="button" role="tab" aria-selected={activeMobileTab === "compose"} className={activeMobileTab === "compose" ? "is-active" : ""} onClick={() => setActiveMobileTab("compose")}>新規作成</button>
-          </div>
+          {/* ── Quick capture ── */}
+          <section className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
+            {!composeIsExpanded ? (
+              <button
+                type="button"
+                className="memo-quick-capture__collapsed"
+                onClick={() => setIsComposeExpanded(true)}
+                aria-label="新しいメモを作成"
+              >
+                <span>メモを入力...</span>
+                <span className="memo-quick-capture__shortcuts" aria-hidden="true">
+                  <i className="bi bi-check2-square"></i>
+                  <i className="bi bi-image"></i>
+                  <i className="bi bi-palette"></i>
+                </span>
+              </button>
+            ) : (
+              <form method="post" className="memo-form memo-form--quick" onSubmit={handleSubmitMemo}>
+                <div className="form-group">
+                  <label htmlFor="title" className="sr-only">タイトル</label>
+                  <input
+                    id="title"
+                    name="title"
+                    data-agent-id="memo.title"
+                    type="text"
+                    className="memo-control memo-quick-capture__title-input"
+                    value={formState.title}
+                    onChange={handleFormChange}
+                    maxLength={255}
+                    placeholder="タイトル"
+                    autoFocus={!hasComposeDraft}
+                  />
+                </div>
 
-          <div className={`memo-grid${activeMobileTab === "compose" ? " show-compose" : " show-list"}`}>
+                <div className="form-group">
+                  <div className="memo-response-header memo-quick-capture__response-header">
+                    <label htmlFor="ai_response" className="sr-only">本文</label>
+                    <div className="memo-response-tabs">
+                      <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
+                        <i className="bi bi-pencil" aria-hidden="true"></i>編集
+                      </button>
+                      <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
+                        <i className="bi bi-eye" aria-hidden="true"></i>プレビュー
+                      </button>
+                    </div>
+                  </div>
+                  {previewMode ? (
+                    <div className="memo-preview-pane">
+                      {formState.ai_response.trim()
+                        ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
+                        : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
+                    </div>
+                  ) : (
+                    <textarea
+                      id="ai_response"
+                      name="ai_response"
+                      data-agent-id="memo.ai-response"
+                      className="memo-control memo-control--response"
+                      value={formState.ai_response}
+                      onChange={handleFormChange}
+                      placeholder="メモを入力..."
+                      required
+                    />
+                  )}
+                </div>
+
+                <div className="memo-quick-capture__bottom-row">
+                  {collections.length > 0 && (
+                    <MemoSelect
+                      id="compose_collection"
+                      className="memo-select--quick"
+                      value={String(formState.collection_id ?? "")}
+                      onChange={(v) => setFormState((prev) => ({ ...prev, collection_id: v === "" ? null : Number(v) }))}
+                      options={[
+                        { value: "", label: "コレクションなし" },
+                        ...collections.map((c) => ({ value: String(c.id), label: c.name })),
+                      ]}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
+                    onClick={() => { void handleAiSuggest(); }}
+                    disabled={aiSuggesting || !formState.ai_response.trim()}
+                    data-tooltip="AIがタイトルを提案"
+                    data-tooltip-placement="top"
+                  >
+                    {aiSuggesting
+                      ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>提案中...</>
+                      : <><i className="bi bi-stars" aria-hidden="true"></i>AIタイトル</>}
+                  </button>
+                  <div className="memo-quick-capture__actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        setFormState({ ai_response: "", title: "", collection_id: null });
+                        setPreviewMode(false);
+                        setIsComposeExpanded(false);
+                      }}
+                      disabled={submitting}
+                    >
+                      閉じる
+                    </button>
+                    <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting}>
+                      <i className="bi bi-check2" aria-hidden="true"></i>
+                      完了
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </section>
+
+          <div className={`memo-board memo-board--${viewMode}`}>
             {/* ── Memo list ── */}
-            <section className="memo-card memo-history-panel">
+            <section className="memo-history-panel">
               <div className="memo-panel__header">
                 <div className="memo-panel__heading">
                   <h2><i className="bi bi-list-ul" aria-hidden="true"></i>メモ一覧</h2>
@@ -1539,101 +1666,6 @@ export default function MemoPage() {
               })()}
             </section>
 
-            {/* ── Compose panel ── */}
-            <section className="memo-card memo-compose-panel">
-              <div className="memo-panel__header">
-                <h2>新規メモ</h2>
-                <p>AI回答は必須、他は必要に応じて入力してください。</p>
-              </div>
-
-              <form method="post" className="memo-form" onSubmit={handleSubmitMemo}>
-                <div className="form-group">
-                  <div className="memo-response-header">
-                    <label htmlFor="ai_response">AIの回答</label>
-                    <div className="memo-response-tabs">
-                      <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
-                        <i className="bi bi-code-slash"></i>編集
-                      </button>
-                      <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
-                        <i className="bi bi-eye"></i>プレビュー
-                      </button>
-                    </div>
-                  </div>
-                  {previewMode ? (
-                    <div className="memo-preview-pane">
-                      {formState.ai_response.trim()
-                        ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
-                        : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
-                    </div>
-                  ) : (
-                    <textarea
-                      id="ai_response"
-                      name="ai_response"
-                      data-agent-id="memo.ai-response"
-                      className="memo-control memo-control--response"
-                      value={formState.ai_response}
-                      onChange={handleFormChange}
-                      placeholder="AIからの回答"
-                      required
-                    />
-                  )}
-                </div>
-
-                <div className="form-grid">
-                  <div className="form-group">
-                    <div className="memo-field-header">
-                      <label htmlFor="title">タイトル <span className="optional">(任意)</span></label>
-                      <button
-                        type="button"
-                        className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
-                        onClick={() => { void handleAiSuggest(); }}
-                        disabled={aiSuggesting || !formState.ai_response.trim()}
-                        data-tooltip="AIがタイトルを提案"
-                        data-tooltip-placement="top"
-                      >
-                        {aiSuggesting
-                          ? <><i className="bi bi-arrow-repeat memo-spin"></i>提案中…</>
-                          : <><i className="bi bi-stars"></i>AIタイトル提案</>}
-                      </button>
-                    </div>
-                    <input
-                      id="title"
-                      name="title"
-                      data-agent-id="memo.title"
-                      type="text"
-                      className="memo-control"
-                      value={formState.title}
-                      onChange={handleFormChange}
-                      maxLength={255}
-                      placeholder="空欄なら回答1行目を採用"
-                    />
-                  </div>
-                </div>
-
-                {collections.length > 0 && (
-                  <div className="form-group">
-                    <label htmlFor="compose_collection">コレクション <span className="optional">(任意)</span></label>
-                    <MemoSelect
-                      id="compose_collection"
-                      className="memo-select--full"
-                      value={String(formState.collection_id ?? "")}
-                      onChange={(v) => setFormState((prev) => ({ ...prev, collection_id: v === "" ? null : Number(v) }))}
-                      options={[
-                        { value: "", label: "コレクションなし" },
-                        ...collections.map((c) => ({ value: String(c.id), label: c.name })),
-                      ]}
-                    />
-                  </div>
-                )}
-
-                <div className="form-actions">
-                  <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting}>
-                    <i className="bi bi-save"></i>
-                    保存する
-                  </button>
-                </div>
-              </form>
-            </section>
           </div>
         </div>
 
