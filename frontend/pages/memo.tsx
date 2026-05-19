@@ -504,6 +504,7 @@ export default function MemoPage() {
   const [dragSaving, setDragSaving] = useState(false);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
+  const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -602,6 +603,14 @@ export default function MemoPage() {
     if (!router.isReady) return;
     if (router.query.saved === "1") setFlashState({ type: "success", text: "メモを保存しました。" });
   }, [router.isReady, router.query.saved]);
+
+  useEffect(() => {
+    const el = composeTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 520);
+    el.style.height = `${next}px`;
+  }, [formState.ai_response, previewMode, isComposeExpanded]);
 
   useEffect(() => {
     if (selectedMemo) return;
@@ -1695,10 +1704,12 @@ export default function MemoPage() {
                       id="ai_response"
                       name="ai_response"
                       data-agent-id="memo.ai-response"
+                      ref={composeTextareaRef}
                       className="memo-control memo-control--response"
                       value={formState.ai_response}
                       onChange={handleFormChange}
                       placeholder="メモを入力..."
+                      rows={1}
                       required
                     />
                   )}
