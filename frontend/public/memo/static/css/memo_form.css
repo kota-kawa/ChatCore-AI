@@ -3284,7 +3284,25 @@ body.memo-page {
   text-align: left;
   cursor: text;
   letter-spacing: 0.01em;
-  transition: color 160ms ease;
+  transition:
+    color 160ms ease,
+    transform 120ms ease;
+  animation: memo-quick-capture-collapsed-mount 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes memo-quick-capture-collapsed-mount {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.memo-quick-capture__collapsed:active {
+  transform: scale(0.995);
 }
 
 .memo-quick-capture__collapsed > span:first-child {
@@ -3328,17 +3346,25 @@ body.memo-page {
 .memo-form--quick {
   gap: 0;
   padding: 0.25rem 0 0;
-  animation: memo-quick-capture-expand 240ms cubic-bezier(0.2, 0, 0, 1);
+  overflow: hidden;
+  transform-origin: top center;
+  animation: memo-quick-capture-open 360ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-@keyframes memo-quick-capture-expand {
+@keyframes memo-quick-capture-open {
   from {
+    max-height: 46px;
     opacity: 0;
-    transform: translateY(-2px);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
   }
   to {
+    max-height: 640px;
     opacity: 1;
-    transform: translateY(0);
+    filter: blur(0);
   }
 }
 
@@ -3368,13 +3394,13 @@ body.memo-page {
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: 0.005em;
-  animation: memo-quick-capture-slide-down 260ms cubic-bezier(0.2, 0, 0, 1);
+  animation: memo-quick-capture-slide-down 320ms cubic-bezier(0.2, 0, 0, 1) 40ms both;
 }
 
 @keyframes memo-quick-capture-slide-down {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateY(-6px);
   }
   to {
     opacity: 1;
@@ -3395,7 +3421,8 @@ body.memo-page {
   line-height: 1.6;
   resize: none;
   overflow-y: auto;
-  transition: min-height 200ms cubic-bezier(0.2, 0, 0, 1);
+  transition: height 200ms cubic-bezier(0.2, 0, 0, 1);
+  animation: memo-quick-capture-fade-in 360ms cubic-bezier(0.2, 0, 0, 1) 60ms both;
 }
 
 .memo-form--quick textarea.memo-control--response::placeholder {
@@ -3405,12 +3432,12 @@ body.memo-page {
 .memo-quick-capture__response-header {
   padding: 0.1rem 0.6rem 0.1rem 0.85rem;
   justify-content: flex-end;
-  opacity: 0;
-  animation: memo-quick-capture-fade-in 320ms cubic-bezier(0.2, 0, 0, 1) 80ms forwards;
+  animation: memo-quick-capture-fade-in 320ms cubic-bezier(0.2, 0, 0, 1) 140ms both;
 }
 
 @keyframes memo-quick-capture-fade-in {
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .memo-form--quick .memo-preview-pane {
@@ -3426,13 +3453,13 @@ body.memo-page {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  animation: memo-quick-capture-slide-up 280ms cubic-bezier(0.2, 0, 0, 1);
+  animation: memo-quick-capture-slide-up 360ms cubic-bezier(0.2, 0, 0, 1) 100ms both;
 }
 
 @keyframes memo-quick-capture-slide-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -3515,6 +3542,7 @@ body.memo-page {
 
 @media (prefers-reduced-motion: reduce) {
   .memo-quick-capture,
+  .memo-quick-capture__collapsed,
   .memo-quick-capture__collapsed > span:first-child,
   .memo-quick-capture__shortcuts i,
   .primary-button,
@@ -3524,6 +3552,7 @@ body.memo-page {
     transition: none;
   }
   .memo-form--quick,
+  .memo-quick-capture__collapsed,
   .memo-quick-capture__title-input,
   .memo-quick-capture__response-header,
   .memo-quick-capture__bottom-row {
