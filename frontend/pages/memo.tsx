@@ -184,6 +184,13 @@ function computeProjectedSectionOrder(
   return next.map((memo) => String(memo.id));
 }
 
+type MemoSwapRect = { left: number; top: number; right: number; bottom: number };
+
+type SectionOrderProjection = {
+  order: string[];
+  lockRect: MemoSwapRect | null;
+};
+
 function computeProjectedSectionOrderFromPoint(
   memos: MemoSummary[],
   sectionMemos: MemoSummary[],
@@ -191,7 +198,7 @@ function computeProjectedSectionOrderFromPoint(
   clientX: number,
   clientY: number,
   cardRefs: Map<string, HTMLElement>,
-): string[] | null {
+): SectionOrderProjection | null {
   const draggedMemo = memos.find((memo) => String(memo.id) === draggedId);
   if (!draggedMemo) return null;
   const sectionKey = getMemoSectionKey(sectionMemos[0] || draggedMemo);
@@ -199,29 +206,69 @@ function computeProjectedSectionOrderFromPoint(
 
   const section = memos.filter((memo) => getMemoSectionKey(memo) === sectionKey);
   const without = section.filter((memo) => String(memo.id) !== draggedId);
-  if (without.length === 0) return section.map((memo) => String(memo.id));
+  if (without.length === 0) {
+    return { order: section.map((memo) => String(memo.id)), lockRect: null };
+  }
 
-  let bestMemo: MemoSummary | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
+  const sectionIds = section.map((memo) => String(memo.id));
+  const draggedIdx = sectionIds.indexOf(draggedId);
+
+  // Pick the card the cursor is directly over (rect hit). Fall back to the
+  // card whose center is closest, so dragging into a gap still picks a target.
+  let directHit: { memo: MemoSummary; rect: DOMRect } | null = null;
+  let nearest: { memo: MemoSummary; rect: DOMRect; distance: number } | null = null;
   for (const memo of without) {
     const element = cardRefs.get(String(memo.id));
     if (!element) continue;
     const rect = element.getBoundingClientRect();
-    const dx = clientX < rect.left ? rect.left - clientX : clientX > rect.right ? clientX - rect.right : 0;
-    const dy = clientY < rect.top ? rect.top - clientY : clientY > rect.bottom ? clientY - rect.bottom : 0;
+    if (rect.width === 0 || rect.height === 0) continue;
+    const inside =
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom;
+    if (inside && !directHit) {
+      directHit = { memo, rect };
+    }
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
     const distance = dx * dx + dy * dy;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestMemo = memo;
+    if (!nearest || distance < nearest.distance) {
+      nearest = { memo, rect, distance };
     }
   }
-  if (!bestMemo) return null;
 
-  const targetElement = cardRefs.get(String(bestMemo.id));
-  const targetRect = targetElement?.getBoundingClientRect();
-  const position: MemoDropPosition =
-    targetRect && clientY < targetRect.top + targetRect.height / 2 ? "before" : "after";
-  return computeProjectedSectionOrder(memos, draggedId, String(bestMemo.id), position);
+  const chosen = directHit ?? nearest;
+  if (!chosen) return null;
+
+  const targetIdx = sectionIds.indexOf(String(chosen.memo.id));
+
+  // Direct hit: place the dragged card at the target's current slot (asymmetric swap).
+  // Gap fallback: use the cursor's Y midpoint against the target rect.
+  let position: MemoDropPosition;
+  if (directHit) {
+    position = draggedIdx >= 0 && draggedIdx < targetIdx ? "after" : "before";
+  } else {
+    const cy = chosen.rect.top + chosen.rect.height / 2;
+    position = clientY < cy ? "before" : "after";
+  }
+
+  const order = computeProjectedSectionOrder(memos, draggedId, String(chosen.memo.id), position);
+  if (!order) return null;
+
+  return {
+    order,
+    lockRect: directHit
+      ? {
+          left: directHit.rect.left,
+          top: directHit.rect.top,
+          right: directHit.rect.right,
+          bottom: directHit.rect.bottom,
+        }
+      : null,
+  };
 }
 
 function applySectionProjection(memos: MemoSummary[], projection: string[] | null): MemoSummary[] {
@@ -504,6 +551,7 @@ export default function MemoPage() {
   const [dragSaving, setDragSaving] = useState(false);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
+  const dragSwapLockRef = useRef<MemoSwapRect | null>(null);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Export modal
@@ -1024,6 +1072,7 @@ export default function MemoPage() {
   const clearMemoDragState = useCallback(() => {
     setDraggedMemoId("");
     setDragProjectedOrder(null);
+    dragSwapLockRef.current = null;
   }, []);
 
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
@@ -1036,6 +1085,7 @@ export default function MemoPage() {
     setMenuPosition(null);
     setDraggedMemoId(memoId);
     setDragProjectedOrder(null);
+    dragSwapLockRef.current = null;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", memoId);
     setMemoDragImage(event);
@@ -1048,7 +1098,23 @@ export default function MemoPage() {
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    const nextOrder = computeProjectedSectionOrderFromPoint(
+
+    // After a swap, dragged occupies the target's old slot. Lock that rect so
+    // micro-jitter inside the same slot doesn't oscillate the projection.
+    const lock = dragSwapLockRef.current;
+    if (lock) {
+      if (
+        event.clientX >= lock.left &&
+        event.clientX <= lock.right &&
+        event.clientY >= lock.top &&
+        event.clientY <= lock.bottom
+      ) {
+        return;
+      }
+      dragSwapLockRef.current = null;
+    }
+
+    const result = computeProjectedSectionOrderFromPoint(
       displayMemos,
       sectionMemos,
       draggedMemoId,
@@ -1056,12 +1122,15 @@ export default function MemoPage() {
       event.clientY,
       cardRefs.current,
     );
-    if (!nextOrder) return;
+    if (!result) return;
     setDragProjectedOrder((prev) => {
-      if (prev && prev.length === nextOrder.length && prev.every((id, i) => id === nextOrder[i])) {
+      if (prev && prev.length === result.order.length && prev.every((id, i) => id === result.order[i])) {
         return prev;
       }
-      return nextOrder;
+      if (result.lockRect) {
+        dragSwapLockRef.current = result.lockRect;
+      }
+      return result.order;
     });
   }, [canReorderCurrentView, displayMemos, draggedMemoId]);
 
