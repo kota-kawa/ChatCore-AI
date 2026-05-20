@@ -18,9 +18,9 @@ type ConstellationPhaseTiming = {
 
 const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, ConstellationPhaseTiming> = {
   preparing: {
-    stepMs: THINKING_CONSTELLATION_STEP_MS,
-    linkDelayMs: 160,
-    nodeDelayMs: 180,
+    stepMs: Math.round(THINKING_CONSTELLATION_STEP_MS * 1.12),
+    linkDelayMs: 190,
+    nodeDelayMs: 150,
   },
   "web-search": {
     stepMs: Math.max(1300, Math.round(THINKING_CONSTELLATION_STEP_MS * 0.72)),
@@ -28,9 +28,9 @@ const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, ConstellationPhase
     nodeDelayMs: 120,
   },
   generating: {
-    stepMs: Math.round(THINKING_CONSTELLATION_STEP_MS * 1.12),
-    linkDelayMs: 190,
-    nodeDelayMs: 150,
+    stepMs: THINKING_CONSTELLATION_STEP_MS,
+    linkDelayMs: 160,
+    nodeDelayMs: 180,
   },
 };
 
@@ -79,9 +79,9 @@ const WEB_SEARCH_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
-const GENERATING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
+const PREPARING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
-    name: "生成コア",
+    name: "準備コア",
     nodes: [
       { x: 50, y: 50, size: 1.08 },
       { x: 50, y: 20, size: 0.82 },
@@ -95,7 +95,7 @@ const GENERATING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
     links: [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [2, 7], [3, 7]],
   },
   {
-    name: "生成分岐",
+    name: "準備分岐",
     nodes: [
       { x: 18, y: 54, size: 0.88 },
       { x: 34, y: 42, size: 0.96 },
@@ -109,7 +109,7 @@ const GENERATING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
     links: [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [5, 6], [2, 7], [1, 7]],
   },
   {
-    name: "生成ヘリックス",
+    name: "準備ヘリックス",
     nodes: [
       { x: 24, y: 28, size: 0.82 },
       { x: 24, y: 72, size: 0.82 },
@@ -126,8 +126,8 @@ const GENERATING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
 
 function resolveConstellationVariants(phase: ChatGenerationPhase) {
   if (phase === "web-search") return WEB_SEARCH_CONSTELLATION_VARIANTS;
-  if (phase === "generating") return GENERATING_CONSTELLATION_VARIANTS;
-  return THINKING_CONSTELLATION_VARIANTS;
+  if (phase === "generating") return THINKING_CONSTELLATION_VARIANTS;
+  return PREPARING_CONSTELLATION_VARIANTS;
 }
 
 function resolveConstellationIndex(timestamp: number, stepMs: number, variantCount: number) {

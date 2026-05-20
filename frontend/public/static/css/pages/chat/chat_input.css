@@ -521,7 +521,7 @@
   --constellation-node-duration: 1.65s;
 }
 
-.thinking-message[data-generation-phase="generating"] {
+.thinking-message[data-generation-phase="preparing"] {
   --constellation-stage-animation: constellationGenerateStagePulse;
   --constellation-stage-duration: 4.2s;
   --constellation-nebula-animation: constellationGenerateNebulaBloom;
