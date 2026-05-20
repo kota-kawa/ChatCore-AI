@@ -140,6 +140,7 @@ class WebSearchResult:
     query: str
     searched_at: str
     sources: tuple[WebSearchSource, ...]
+    freshness: str = ""
 
     @property
     def has_sources(self) -> bool:
@@ -170,6 +171,10 @@ def _web_search_enabled() -> bool:
         "no",
         "off",
     }
+
+
+def is_web_search_enabled() -> bool:
+    return _web_search_enabled()
 
 
 def _get_positive_int_env(name: str, default: int, *, minimum: int = 1, maximum: int = 100) -> int:
@@ -657,7 +662,12 @@ def _extract_grounding_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
-def _parse_brave_context_response(payload: dict[str, Any], query: str) -> WebSearchResult:
+def _parse_brave_context_response(
+    payload: dict[str, Any],
+    query: str,
+    *,
+    freshness: str = "",
+) -> WebSearchResult:
     raw_sources = payload.get("sources")
     sources_metadata: dict[str, dict[str, Any]] = {}
     if isinstance(raw_sources, dict):
@@ -710,6 +720,7 @@ def _parse_brave_context_response(payload: dict[str, Any], query: str) -> WebSea
         query=query,
         searched_at=datetime.now(timezone.utc).isoformat(),
         sources=tuple(sources),
+        freshness=freshness,
     )
 
 
@@ -775,9 +786,38 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
     if not isinstance(payload, dict):
         raise ValueError("Unexpected Brave Search response.")
 
-    result = _parse_brave_context_response(payload, normalized_query)
+    result = _parse_brave_context_response(payload, normalized_query, freshness=freshness)
     _set_cached_search(key, result)
     return result
+
+
+def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResult | None:
+    combined_sources: list[WebSearchSource] = []
+    seen_urls: set[str] = set()
+    queries: list[str] = []
+    searched_at = ""
+
+    for result in results:
+        query = result.query.strip()
+        if query and query not in queries:
+            queries.append(query)
+        if result.searched_at:
+            searched_at = result.searched_at
+        for source in result.sources:
+            url = source.url.strip()
+            if not url or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            combined_sources.append(source)
+
+    if not combined_sources:
+        return None
+
+    return WebSearchResult(
+        query=" / ".join(queries[:5]),
+        searched_at=searched_at or datetime.now(timezone.utc).isoformat(),
+        sources=tuple(combined_sources),
+    )
 
 
 def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] | None:
@@ -903,7 +943,7 @@ def get_web_search_tool_definition() -> dict[str, Any]:
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Brave Searchを使用してリアルタイムのWeb情報を検索します。最新のニュース、天気、株価、事実確認などに使用してください。",
+            "description": "Brave Searchを使用してリアルタイムのWeb情報を検索します。検索結果を確認して情報が足りない場合は、別の検索条件で再度呼び出してください。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -918,6 +958,7 @@ def get_web_search_tool_definition() -> dict[str, Any]:
                     },
                 },
                 "required": ["query"],
+                "additionalProperties": False,
             },
         },
     }

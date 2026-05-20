@@ -430,6 +430,48 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(web_search.build_web_search_sources_markdown(empty_result), "")
 
+    def test_combine_web_search_results_deduplicates_sources_by_url(self):
+        first = web_search.WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Title A",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+        second = web_search.WebSearchResult(
+            query="Python release",
+            searched_at="2026-04-30T00:01:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Duplicate A",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                ),
+                web_search.WebSearchSource(
+                    url="https://example.com/b",
+                    title="Title B",
+                    hostname="example.com",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        combined = web_search.combine_web_search_results([first, second])
+
+        self.assertIsNotNone(combined)
+        self.assertEqual(combined.query, "Python news / Python release")
+        self.assertEqual(combined.searched_at, "2026-04-30T00:01:00+00:00")
+        self.assertEqual([source.url for source in combined.sources], ["https://example.com/a", "https://example.com/b"])
+
 
 if __name__ == "__main__":
     unittest.main()

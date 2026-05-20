@@ -396,6 +396,45 @@ class LlmServiceTestCase(unittest.TestCase):
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
+    def test_get_openai_response_stream_with_tool_history_uses_chat_completions(self):
+        mock_openai = MagicMock()
+        mock_stream = _MockStream(_mock_stream_chunk("final"))
+        mock_openai.chat.completions.create.return_value = mock_stream
+
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {
+                            "name": "web_search",
+                            "arguments": '{"query":"OpenAI news"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "name": "web_search",
+                "content": '{"status":"completed"}',
+            },
+        ]
+
+        with patch.object(llm, "openai_client", mock_openai):
+            response = list(llm.get_openai_response_stream(messages, llm.GPT_5_MINI_MODEL))
+
+        self.assertEqual(response, ["final"])
+        mock_openai.chat.completions.create.assert_called_once()
+        chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
+        self.assertNotIn("tools", chat_kwargs)
+        self.assertNotIn("tool_choice", chat_kwargs)
+        mock_openai.responses.stream.assert_not_called()
+        self.assertTrue(mock_stream.closed)
+
     def test_get_llm_response_stream_routes_to_openai(self):
         with patch.object(
             llm,

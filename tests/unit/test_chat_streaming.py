@@ -392,6 +392,233 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__count">1件</span>', persisted_messages[0])
         self.assertTrue(persisted_messages[0].startswith("回答本文\n\n<details"))
 
+    def test_background_generation_job_can_search_again_after_reviewing_results(self):
+        persisted_messages = []
+        stream_call_count = 0
+        search_results = {
+            "Python latest news": WebSearchResult(
+                query="Python latest news",
+                searched_at="2026-04-30T00:00:00+00:00",
+                sources=(
+                    WebSearchSource(
+                        url="https://example.com/python",
+                        title="Python News",
+                        hostname="example.com",
+                        age="2026-04-30",
+                        snippets=("Python update",),
+                    ),
+                ),
+            ),
+            "Python release details": WebSearchResult(
+                query="Python release details",
+                searched_at="2026-04-30T00:01:00+00:00",
+                sources=(
+                    WebSearchSource(
+                        url="https://example.com/release",
+                        title="Python Release",
+                        hostname="example.com",
+                        age="2026-04-30",
+                        snippets=("Release detail",),
+                    ),
+                ),
+            ),
+        }
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count == 1:
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "Python latest news"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            if stream_call_count == 2:
+                yield json.dumps(
+                    [
+                        {
+                            "id": "call-2",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "Python release details"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            self.assertIsNotNone(tools)
+            yield "検索結果を踏まえた回答"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "Pythonの最新情報を詳しく"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                side_effect=lambda query, freshness="": search_results[query],
+            ) as mock_search,
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新情報を詳しく"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(stream_call_count, 3)
+        self.assertEqual(
+            [call.args[0] for call in mock_search.call_args_list],
+            ["Python latest news", "Python release details"],
+        )
+        self.assertIn("検索結果を踏まえた回答", body)
+        self.assertIn("https://example.com/python", persisted_messages[0])
+        self.assertIn("https://example.com/release", persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">2件</span>', persisted_messages[0])
+
+    def test_background_generation_job_reuses_duplicate_search_results(self):
+        persisted_messages = []
+        stream_call_count = 0
+        search_result = WebSearchResult(
+            query="OpenAI news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/openai",
+                    title="OpenAI News",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=("OpenAI update",),
+                ),
+            ),
+        )
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            nonlocal stream_call_count
+            stream_call_count += 1
+            if stream_call_count <= 2:
+                yield json.dumps(
+                    [
+                        {
+                            "id": f"call-{stream_call_count}",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": "OpenAI news"}),
+                            },
+                        }
+                    ]
+                )
+                return
+            yield "回答"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "OpenAIニュース"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch(
+                "services.chat_generation.search_brave_llm_context",
+                return_value=search_result,
+            ) as mock_search,
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "OpenAIニュース"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(stream_call_count, 3)
+        mock_search.assert_called_once_with("OpenAI news", freshness="")
+        self.assertIn('"cached": true', body)
+        self.assertIn('<span class="web-search-sources__count">1件</span>', persisted_messages[0])
+
+    def test_background_generation_job_stops_tool_loop_at_max_steps(self):
+        persisted_messages = []
+        stream_tools: list[bool] = []
+        search_index = 0
+
+        def stream_side_effect(_messages, _model, *, tools=None):
+            stream_tools.append(bool(tools))
+            if tools:
+                query = f"loop search {len(stream_tools)}"
+                yield json.dumps(
+                    [
+                        {
+                            "id": f"call-{len(stream_tools)}",
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": json.dumps({"query": query}),
+                            },
+                        }
+                    ]
+                )
+                return
+            yield "上限内で回答"
+
+        def search_side_effect(query, freshness=""):
+            nonlocal search_index
+            search_index += 1
+            return WebSearchResult(
+                query=query,
+                searched_at=f"2026-04-30T00:0{search_index}:00+00:00",
+                sources=(
+                    WebSearchSource(
+                        url=f"https://example.com/{search_index}",
+                        title=f"Source {search_index}",
+                        hostname="example.com",
+                        age="2026-04-30",
+                        snippets=(query,),
+                    ),
+                ),
+            )
+
+        with (
+            patch.dict("services.chat_generation.os.environ", {"CHAT_AGENT_MAX_STEPS": "10"}, clear=False),
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "調べ続けて"}],
+                ),
+            ),
+            patch("services.chat_generation.get_llm_response_stream", side_effect=stream_side_effect),
+            patch("services.chat_generation.search_brave_llm_context", side_effect=search_side_effect) as mock_search,
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "調べ続けて"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(mock_search.call_count, 4)
+        self.assertEqual(stream_tools, [True, True, True, True, False])
+        self.assertIn("上限内で回答", body)
+        self.assertIn('<span class="web-search-sources__count">4件</span>', persisted_messages[0])
+
     def test_background_generation_job_reports_response_generation_status(self):
         with (
             patch(

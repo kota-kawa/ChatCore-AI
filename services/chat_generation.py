@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import os
 import threading
 import time
 import uuid
@@ -25,9 +26,13 @@ from .llm import (
 )
 from .web_search import (
     build_web_search_sources_markdown,
+    combine_web_search_results,
     get_web_search_tool_definition,
+    is_web_search_enabled,
     maybe_augment_messages_with_web_search,
     search_brave_llm_context,
+    WebSearchQuotaExceeded,
+    WebSearchResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,10 +40,98 @@ logger = logging.getLogger(__name__)
 JOB_RETENTION_SECONDS = 300
 DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
+DEFAULT_CHAT_AGENT_MAX_STEPS = 10
+CHAT_AGENT_MAX_STEPS_LIMIT = 10
 _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
+
+
+def _get_chat_agent_max_steps() -> int:
+    raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
+    if raw is None:
+        return DEFAULT_CHAT_AGENT_MAX_STEPS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_CHAT_AGENT_MAX_STEPS
+    return min(max(value, 1), CHAT_AGENT_MAX_STEPS_LIMIT)
+
+
+def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
+    stripped = chunk.strip()
+    if not stripped.startswith("[") or '"function"' not in stripped:
+        return None
+    try:
+        loaded = json.loads(stripped)
+    except Exception:
+        return None
+    if not isinstance(loaded, list):
+        return None
+    tool_calls: list[dict[str, Any]] = []
+    for item in loaded:
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function")
+        if not isinstance(function, dict):
+            continue
+        if not function.get("name"):
+            continue
+        tool_calls.append(item)
+    return tool_calls or None
+
+
+def _normalized_search_key(query: Any, freshness: Any = "") -> tuple[str, str]:
+    normalized_query = " ".join(str(query or "").split())
+    normalized_freshness = str(freshness or "").strip()
+    return (normalized_query.casefold(), normalized_freshness)
+
+
+def _normalize_tool_call(tool_call: dict[str, Any], *, step: int, index: int) -> dict[str, Any]:
+    normalized = dict(tool_call)
+    function = dict(normalized.get("function") or {})
+    normalized["function"] = function
+    normalized["type"] = normalized.get("type") or "function"
+    normalized["id"] = str(normalized.get("id") or f"call-{step}-{index}")
+    function["name"] = str(function.get("name") or "")
+    function["arguments"] = str(function.get("arguments") or "{}")
+    return normalized
+
+
+def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | str) -> dict[str, Any]:
+    if not isinstance(content, str):
+        content = json.dumps(content, ensure_ascii=False)
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call.get("id"),
+        "name": tool_call.get("function", {}).get("name", ""),
+        "content": content,
+    }
+
+
+def _web_search_result_tool_payload(
+    result: WebSearchResult,
+    *,
+    cached: bool = False,
+) -> dict[str, Any]:
+    return {
+        "status": "completed",
+        "cached": cached,
+        "query": result.query,
+        "searched_at": result.searched_at,
+        "source_count": len(result.sources),
+        "sources": [
+            {
+                "url": source.url,
+                "title": source.title,
+                "hostname": source.hostname,
+                "age": source.age,
+                "snippets": list(source.snippets),
+            }
+            for source in result.sources
+        ],
+    }
 
 
 class ChatGenerationAlreadyRunningError(RuntimeError):
@@ -65,7 +158,7 @@ class ChatGenerationJob:
     def __init__(
         self,
         *,
-        conversation_messages: list[dict[str, str]],
+        conversation_messages: list[dict[str, Any]],
         model: str,
         persist_response: Callable[[str], dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
@@ -191,126 +284,238 @@ class ChatGenerationJob:
 
     def _run(self) -> None:
         chunks: list[str] = []
-        web_search_result = None
+        web_search_results: list[WebSearchResult] = []
+        web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
         current_messages = [dict(m) for m in self._conversation_messages]
-        last_web_search_failed = False
-        
+        suppress_next_generation_started = False
+        max_steps = _get_chat_agent_max_steps()
+        step_count = 0
+
         try:
-            # 1. 積極的な先行検索 (Proactive augmentation)
-            # ユーザーが明示的に求めている場合や、プランナーが確信している場合に実行
             augmentation = maybe_augment_messages_with_web_search(
                 current_messages,
                 self._model,
                 publish_event=self._publish,
             )
             current_messages = augmentation.messages
-            web_search_result = augmentation.result
-            last_web_search_failed = augmentation.status == "failed"
-            
+            if augmentation.result is not None:
+                web_search_results.append(augmentation.result)
+                web_search_results_by_key[
+                    _normalized_search_key(
+                        augmentation.result.query,
+                        augmentation.result.freshness,
+                    )
+                ] = augmentation.result
+                step_count += 1
+            elif augmentation.status in {"failed", "no_sources"}:
+                step_count += 1
+            suppress_next_generation_started = augmentation.status == "failed"
+
             if self._cancelled:
                 return
 
-            # 2. 生成ループ (Tool calling loop)
-            # 最大 2 回までのツール呼び出しを許可（無限ループ防止）
-            for loop_index in range(2):
+            web_search_tool = get_web_search_tool_definition()
+
+            while step_count < max_steps:
                 if self._cancelled:
                     return
 
-                tools = [get_web_search_tool_definition()]
-                tool_calls_buffer = []
-                if not last_web_search_failed:
-                    self._publish("response_generation_started", {})
-                last_web_search_failed = False
-                
-                # ストリーム実行
+                remaining_steps = max_steps - step_count
+                allow_tools = remaining_steps >= 3 and is_web_search_enabled()
+                tools = [web_search_tool] if allow_tools else None
+                llm_step = step_count + 1
+
+                if not suppress_next_generation_started:
+                    self._publish(
+                        "response_generation_started",
+                        {"step": llm_step, "max_steps": max_steps},
+                    )
+                suppress_next_generation_started = False
+                step_count += 1
+
+                tool_calls_buffer: list[dict[str, Any]] = []
                 for chunk in get_llm_response_stream(current_messages, self._model, tools=tools):
                     if self._cancelled:
                         return
                     if not chunk:
                         continue
-                    
-                    # ツール呼び出しの判定 (JSON 形式の配列として yield される)
-                    if chunk.startswith("[") and '"function"' in chunk:
-                        try:
-                            parsed_tool_calls = json.loads(chunk)
-                            if isinstance(parsed_tool_calls, list):
-                                tool_calls_buffer.extend(parsed_tool_calls)
-                                continue
-                        except Exception:
-                            pass
-                    
-                    # 通常のテキスト
+
+                    parsed_tool_calls = _parse_tool_calls_chunk(chunk) if allow_tools else None
+                    if parsed_tool_calls is not None:
+                        tool_calls_buffer.extend(parsed_tool_calls)
+                        continue
+
                     chunks.append(chunk)
                     self._publish("chunk", {"text": chunk})
 
                 if not tool_calls_buffer:
-                    # ツール呼び出しがなければ終了
                     break
 
-                # ツール呼び出しの実行
-                # 現在は web_search のみをサポート
+                normalized_tool_calls = [
+                    _normalize_tool_call(tool_call, step=llm_step, index=index)
+                    for index, tool_call in enumerate(tool_calls_buffer, start=1)
+                ]
                 assistant_tool_call_msg = {
                     "role": "assistant",
                     "content": None,
-                    "tool_calls": tool_calls_buffer
+                    "tool_calls": normalized_tool_calls,
                 }
                 current_messages.append(assistant_tool_call_msg)
 
-                for tc in tool_calls_buffer:
+                for tc in normalized_tool_calls:
                     func_name = tc.get("function", {}).get("name")
-                    if func_name == "web_search":
-                        args_raw = tc.get("function", {}).get("arguments", "{}")
-                        try:
-                            args = json.loads(args_raw)
-                        except Exception:
-                            args = {}
-                        
-                        query = args.get("query")
-                        if not query:
-                            # クエリがない場合はスキップ
-                            continue
-
-                        # Web検索の実行
-                        self._publish("web_search_started", {"query": query, "reason": "Model-requested search"})
-                        try:
-                            res = search_brave_llm_context(query, freshness=args.get("freshness", ""))
-                            web_search_result = res # 最新の結果を保持
-                            last_web_search_failed = False
-                            self._publish("web_search_completed", {
-                                "query": res.query,
-                                "source_count": len(res.sources)
-                            })
-                            
-                            # ツール結果をメッセージに追加
-                            tool_result_content = json.dumps([
+                    if func_name != "web_search":
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
                                 {
-                                    "url": s.url,
-                                    "title": s.title,
-                                    "snippets": s.snippets
-                                }
-                                for s in res.sources
-                            ], ensure_ascii=False)
-                            
-                            current_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc.get("id"),
-                                "name": func_name,
-                                "content": tool_result_content
-                            })
-                        except Exception:
-                            logger.exception("Brave search via tool call failed.")
-                            last_web_search_failed = True
-                            self._publish("web_search_failed", {"query": query, "message": "検索に失敗しました。"})
-                            current_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc.get("id"),
-                                "name": func_name,
-                                "content": "検索エラーが発生しました。"
-                            })
+                                    "status": "unsupported_tool",
+                                    "message": f"Unsupported tool: {func_name}",
+                                },
+                            )
+                        )
+                        continue
 
-                # ツール結果を踏まえて再生成（ループの次のイテレーションへ）
-                # テキストチャンクをクリアして新しく生成し直す
-                # (既存のチャンクがある場合は、それに続く形になるが、ツール呼び出し時は通常 content は空)
+                    args_raw = tc.get("function", {}).get("arguments", "{}")
+                    try:
+                        args = json.loads(args_raw)
+                    except Exception:
+                        args = {}
+                    if not isinstance(args, dict):
+                        args = {}
+
+                    query = args.get("query")
+                    freshness = args.get("freshness", "")
+                    if not query:
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                {
+                                    "status": "invalid_arguments",
+                                    "message": "Search query is empty.",
+                                },
+                            )
+                        )
+                        continue
+
+                    if max_steps - step_count <= 1:
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                {
+                                    "status": "step_limit_reached",
+                                    "message": (
+                                        "The web search step limit has been reached. "
+                                        "Answer using the information already available."
+                                    ),
+                                },
+                            )
+                        )
+                        continue
+
+                    step_count += 1
+                    query_text = str(query)
+                    freshness_text = str(freshness or "")
+                    search_key = _normalized_search_key(query_text, freshness_text)
+                    cached_result = web_search_results_by_key.get(search_key)
+
+                    self._publish(
+                        "web_search_started",
+                        {
+                            "query": query_text,
+                            "reason": "Model-requested search",
+                            "step": step_count,
+                            "max_steps": max_steps,
+                            "cached": cached_result is not None,
+                        },
+                    )
+                    if cached_result is not None:
+                        self._publish(
+                            "web_search_completed",
+                            {
+                                "query": cached_result.query,
+                                "source_count": len(cached_result.sources),
+                                "step": step_count,
+                                "max_steps": max_steps,
+                                "cached": True,
+                            },
+                        )
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                _web_search_result_tool_payload(cached_result, cached=True),
+                            )
+                        )
+                        continue
+
+                    try:
+                        result = search_brave_llm_context(query_text, freshness=freshness_text)
+                        web_search_results_by_key[search_key] = result
+                        if result.has_sources:
+                            web_search_results.append(result)
+                        self._publish(
+                            "web_search_completed",
+                            {
+                                "query": result.query,
+                                "source_count": len(result.sources),
+                                "step": step_count,
+                                "max_steps": max_steps,
+                                "cached": False,
+                            },
+                        )
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                _web_search_result_tool_payload(result),
+                            )
+                        )
+                    except WebSearchQuotaExceeded as exc:
+                        message = (
+                            f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
+                            "検索なしで回答を続けます。"
+                        )
+                        suppress_next_generation_started = True
+                        self._publish(
+                            "web_search_failed",
+                            {
+                                "query": query_text,
+                                "message": message,
+                                "retry_after_seconds": exc.retry_after_seconds,
+                                "step": step_count,
+                                "max_steps": max_steps,
+                            },
+                        )
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                {
+                                    "status": "quota_exceeded",
+                                    "message": message,
+                                    "retry_after_seconds": exc.retry_after_seconds,
+                                },
+                            )
+                        )
+                    except Exception:
+                        logger.exception("Brave search via tool call failed.")
+                        suppress_next_generation_started = True
+                        self._publish(
+                            "web_search_failed",
+                            {
+                                "query": query_text,
+                                "message": "Web検索に失敗しました。検索なしで回答を続けます。",
+                                "step": step_count,
+                                "max_steps": max_steps,
+                            },
+                        )
+                        current_messages.append(
+                            _tool_result_message(
+                                tc,
+                                {
+                                    "status": "failed",
+                                    "message": "Web search failed.",
+                                },
+                            )
+                        )
 
         except LlmConfigurationError as exc:
             if self._cancelled:
@@ -378,7 +583,8 @@ class ChatGenerationJob:
             return
 
         bot_reply = "".join(chunks)
-        sources_block = build_web_search_sources_markdown(web_search_result)
+        combined_web_search_result = combine_web_search_results(web_search_results)
+        sources_block = build_web_search_sources_markdown(combined_web_search_result)
         if sources_block:
             separator = "" if not bot_reply or bot_reply.endswith("\n\n") else (
                 "\n" if bot_reply.endswith("\n") else "\n\n"
@@ -770,7 +976,7 @@ return 0
         self,
         job_key: str,
         *,
-        conversation_messages: list[dict[str, str]],
+        conversation_messages: list[dict[str, Any]],
         model: str,
         persist_response: Callable[[str], dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
@@ -915,7 +1121,7 @@ def iter_generation_events(
 def start_generation_job(
     job_key: str,
     *,
-    conversation_messages: list[dict[str, str]],
+    conversation_messages: list[dict[str, Any]],
     model: str,
     persist_response: Callable[[str], dict[str, Any] | None],
     on_finished: Callable[[], None] | None = None,

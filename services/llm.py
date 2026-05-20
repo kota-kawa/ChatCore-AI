@@ -129,7 +129,7 @@ openai_client = (
     else None
 )
 logger = logging.getLogger(__name__)
-ConversationMessages = list[dict[str, str]]
+ConversationMessages = list[dict[str, Any]]
 
 
 class LlmServiceError(RuntimeError):
@@ -305,6 +305,16 @@ def _chat_completion_tool_kwargs(
         "tools": tools,
         "tool_choice": "auto",
     }
+
+
+def _conversation_has_tool_history(conversation_messages: ConversationMessages) -> bool:
+    for message in conversation_messages:
+        role = str(message.get("role", ""))
+        if role == "tool":
+            return True
+        if message.get("tool_calls"):
+            return True
+    return False
 
 
 def _redact_sensitive_text(value: str) -> str:
@@ -614,9 +624,8 @@ def get_openai_response(
         _sanitize_conversation_messages(conversation_messages)
     )
     try:
-        # OpenAI Responses API supports tools in a different way or might need chat.completions
-        # For simplicity and consistency, if tools are provided, we use chat.completions
-        if tools:
+        # Tool-call conversations use Chat Completions-compatible message shapes.
+        if tools or _conversation_has_tool_history(sanitized_messages):
             request_kwargs: dict[str, Any] = {
                 "model": model_name,
                 "messages": sanitized_messages,
@@ -671,8 +680,8 @@ def get_openai_response_stream(
         _sanitize_conversation_messages(conversation_messages)
     )
     try:
-        if tools:
-            # Use chat.completions for tool support
+        if tools or _conversation_has_tool_history(sanitized_messages):
+            # Use chat.completions for tool support and tool-result followups.
             yield from _get_openai_compatible_response_stream(
                 client=openai_client,
                 conversation_messages=sanitized_messages,
