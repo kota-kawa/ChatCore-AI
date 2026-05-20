@@ -96,11 +96,17 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
 }
 
 .prompt-crawl-summary {
-  border: 1px solid var(--ps-border);
-  border-radius: 8px;
-  background: var(--ps-surface);
-  padding: 1rem;
-  box-shadow: var(--ps-shadow-soft);
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .prompt-crawl-summary h2 {
