@@ -519,6 +519,9 @@
   --constellation-link-duration: 1.45s;
   --constellation-node-animation: constellationSearchNodePing;
   --constellation-node-duration: 1.65s;
+  --constellation-body-link-transition: 180ms linear;
+  --constellation-body-node-transition: 190ms cubic-bezier(0.2, 0.82, 0.2, 1);
+  --constellation-body-opacity-transition: 120ms ease;
 }
 
 .thinking-message[data-generation-phase="generating"] {
@@ -533,6 +536,9 @@
   --constellation-link-duration: 2.05s;
   --constellation-node-animation: constellationGenerateNodeBeat;
   --constellation-node-duration: 1.9s;
+  --constellation-body-link-transition: 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  --constellation-body-node-transition: 680ms cubic-bezier(0.22, 1, 0.36, 1);
+  --constellation-body-opacity-transition: 240ms ease;
 }
 
 .constellation-loader {
@@ -639,21 +645,21 @@
 
 .constellation-loader.is-ready .constellation-loader__link {
   transition:
-    left 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease,
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+    left var(--constellation-body-link-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    top var(--constellation-body-link-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    width var(--constellation-body-link-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity var(--constellation-body-opacity-transition, 220ms ease),
+    transform var(--constellation-body-link-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .constellation-loader.is-ready .constellation-loader__node {
   transition:
-    left 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease,
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+    left var(--constellation-body-node-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    top var(--constellation-body-node-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    width var(--constellation-body-node-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    height var(--constellation-body-node-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity var(--constellation-body-opacity-transition, 220ms ease),
+    transform var(--constellation-body-node-transition, 760ms cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 @keyframes constellationPanelDrift {
