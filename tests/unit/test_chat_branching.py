@@ -10,6 +10,7 @@ class FakeCursor:
         self.store = store
         self._result_one = None
         self._result_all = []
+        self.rowcount = 0
         self.closed = False
 
     def execute(self, query, params=None):
@@ -17,6 +18,7 @@ class FakeCursor:
         params = params or ()
         self._result_one = None
         self._result_all = []
+        self.rowcount = 0
 
         if normalized.startswith("INSERT INTO chat_history"):
             chat_room_id, message, sender, file_names_json, parent_id = params
@@ -40,6 +42,15 @@ class FakeCursor:
         if normalized.startswith("UPDATE chat_rooms SET active_root_id"):
             active_root_id, room_id = params
             self.store["rooms"].setdefault(room_id, {})["active_root_id"] = active_root_id
+            self.rowcount = 1
+            return
+
+        if normalized.startswith("UPDATE chat_rooms SET title"):
+            new_title, room_id, *allowed_titles = params
+            room = self.store["rooms"].get(room_id)
+            if room and room.get("title") in allowed_titles:
+                room["title"] = new_title
+                self.rowcount = 1
             return
 
         if normalized.startswith("UPDATE chat_history SET active_child_id"):
@@ -47,6 +58,7 @@ class FakeCursor:
             for row in self.store["history"]:
                 if row["id"] == target_id and row["chat_room_id"] == room_id:
                     row["active_child_id"] = active_child_id
+                    self.rowcount = 1
             return
 
         if normalized.startswith("SELECT id, message, sender, parent_id, active_child_id"):
@@ -116,7 +128,11 @@ class FakeConnection:
 
 class ChatBranchingTestCase(unittest.TestCase):
     def setUp(self):
-        self.store = {"seq": 1, "history": [], "rooms": {"room-1": {"active_root_id": None}}}
+        self.store = {
+            "seq": 1,
+            "history": [],
+            "rooms": {"room-1": {"active_root_id": None, "title": "新規チャット"}},
+        }
         self.repo = ChatRepository(
             connection_getter=lambda: FakeConnection(self.store),
             retryable_error_checker=lambda exc: False,
@@ -139,6 +155,23 @@ class ChatBranchingTestCase(unittest.TestCase):
         for node in path:
             self.assertEqual(node["version_count"], 1)
             self.assertEqual(node["version_index"], 1)
+
+    def test_conditional_room_rename_preserves_manual_title(self):
+        updated = self.repo.rename_room_if_current_title_in(
+            "room-1",
+            "AIタイトル",
+            ["新規チャット"],
+        )
+        self.assertTrue(updated)
+        self.assertEqual(self.store["rooms"]["room-1"]["title"], "AIタイトル")
+
+        updated_again = self.repo.rename_room_if_current_title_in(
+            "room-1",
+            "別タイトル",
+            ["新規チャット"],
+        )
+        self.assertFalse(updated_again)
+        self.assertEqual(self.store["rooms"]["room-1"]["title"], "AIタイトル")
 
     def test_regenerate_creates_switchable_assistant_versions(self):
         u1 = self._save("hi", "user")

@@ -259,6 +259,47 @@ class ChatRepository:
 
         raise RuntimeError("Failed to rename chat room after retry attempts.")
 
+    def rename_room_if_current_title_in(
+        self,
+        room_id: str,
+        new_title: str,
+        allowed_current_titles: list[str],
+    ) -> bool:
+        normalized_titles = [title for title in dict.fromkeys(allowed_current_titles) if title]
+        if not normalized_titles:
+            return False
+
+        title_placeholders = ", ".join(["%s"] * len(normalized_titles))
+        query = f"""
+            UPDATE chat_rooms
+               SET title = %s
+             WHERE id = %s
+               AND title IN ({title_placeholders})
+        """
+        params = (new_title, room_id, *normalized_titles)
+
+        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+            with self._connection_getter() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(query, params)
+                    updated = cursor.rowcount > 0
+                    conn.commit()
+                    return updated
+                except Error as exc:
+                    self._rollback(conn)
+                    if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                        self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                        continue
+                    raise
+                except BaseException:
+                    self._rollback(conn)
+                    raise
+                finally:
+                    cursor.close()
+
+        raise RuntimeError("Failed to conditionally rename chat room after retry attempts.")
+
     # ----- Branching helpers -------------------------------------------------
 
     def _load_room_tree(

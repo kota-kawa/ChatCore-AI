@@ -398,6 +398,7 @@ export function useHomePageRoomActions({
 
         void loadChatRooms();
         await generationPromise;
+        void loadChatRooms();
       } catch (error) {
         setPageViewState("setup");
         setLaunchingTaskName(null);
@@ -461,6 +462,7 @@ export function useHomePageRoomActions({
 
       void loadChatRooms();
       await generationPromise;
+      void loadChatRooms();
     } catch (error) {
       setPageViewState("setup");
       setMessages([]);

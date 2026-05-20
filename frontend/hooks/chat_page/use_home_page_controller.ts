@@ -283,6 +283,7 @@ export function useHomePageController() {
     pendingAutoScrollRef,
     prependScrollRestoreRef,
     streamLastEventIdByRoomRef,
+    setChatRooms,
     setCurrentRoomId,
     setCurrentRoomMode,
     setHistoryHasMore,

@@ -58,6 +58,18 @@ def rename_chat_room_in_db(room_id: str, new_title: str) -> None:
     return _get_chat_repository().rename_room(room_id, new_title)
 
 
+def rename_chat_room_if_current_title_in(
+    room_id: str,
+    new_title: str,
+    allowed_current_titles: list[str],
+) -> bool:
+    return _get_chat_repository().rename_room_if_current_title_in(
+        room_id,
+        new_title,
+        allowed_current_titles,
+    )
+
+
 def get_chat_room_messages(chat_room_id: str) -> list[dict[str, str]]:
     return _get_chat_repository().get_room_messages_for_llm(chat_room_id)
 

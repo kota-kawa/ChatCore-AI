@@ -33,6 +33,7 @@ import type {
   AttachedFile,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
+  ChatRoom,
   ChatRoomMode,
   UiChatMessage,
 } from "../../lib/chat_page/types";
@@ -82,6 +83,7 @@ type UseHomePageGenerationActionsParams = {
   pendingAutoScrollRef: MutableRefObject<boolean>;
   prependScrollRestoreRef: MutableRefObject<{ prevScrollHeight: number; prevScrollTop: number } | null>;
   streamLastEventIdByRoomRef: MutableRefObject<Map<string, number>>;
+  setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
   setCurrentRoomId: Dispatch<SetStateAction<string | null>>;
   setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
@@ -105,6 +107,7 @@ export function useHomePageGenerationActions({
   pendingAutoScrollRef,
   prependScrollRestoreRef,
   streamLastEventIdByRoomRef,
+  setChatRooms,
   setCurrentRoomId,
   setCurrentRoomMode,
   setHistoryHasMore,
@@ -257,6 +260,23 @@ export function useHomePageGenerationActions({
       }));
     notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized));
   }, [notifyStoredHistoryWriteIssue]);
+
+  const applyRoomTitleUpdate = useCallback((roomId: string, title: unknown) => {
+    if (typeof title !== "string") return;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+
+    setChatRooms((previous) =>
+      previous.map((room) =>
+        room.id === roomId
+          ? {
+              ...room,
+              title: normalizedTitle,
+            }
+          : room,
+      ),
+    );
+  }, [setChatRooms]);
 
   const loadLocalChatHistory = useCallback(
     (roomId: string) => {
@@ -504,6 +524,7 @@ export function useHomePageGenerationActions({
         if (parsed.event === "done") {
           streamState.completed = true;
           const responseText = typeof parsed.data.response === "string" ? parsed.data.response : streamedText;
+          applyRoomTitleUpdate(roomId, parsed.data.room_title);
           finalizeStreamingMessage(responseText, true);
           streamLastEventIdByRoomRef.current.delete(roomId);
           return;
@@ -614,6 +635,7 @@ export function useHomePageGenerationActions({
     },
     [
       appendAssistantErrorMessage,
+      applyRoomTitleUpdate,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       removeThinkingMessages,
@@ -1007,6 +1029,7 @@ export function useHomePageGenerationActions({
 
         if (response.ok && data.response && isGenerationActive(generation)) {
           notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
+          applyRoomTitleUpdate(roomId, data.roomTitle);
         }
         clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
@@ -1033,6 +1056,7 @@ export function useHomePageGenerationActions({
     [
       acquireGeneration,
       appendAssistantErrorMessage,
+      applyRoomTitleUpdate,
       consumeStreamingChatResponse,
       currentRoomMode,
       isGenerationActive,

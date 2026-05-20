@@ -329,6 +329,23 @@ class ChatStreamingTestCase(unittest.TestCase):
             [("sid-1", "default", "assistant", "こんにちは")],
         )
 
+    def test_background_generation_job_includes_persist_metadata_in_done_event(self):
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            return_value=iter(["hello"]),
+        ):
+            job = start_generation_job(
+                "user:1:room-title",
+                conversation_messages=[{"role": "user", "content": "hello"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda _response: {"room_title": "Short title"},
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: done", body)
+        self.assertIn('"room_title": "Short title"', body)
+
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
         persisted_messages = []
         search_result = WebSearchResult(
@@ -566,6 +583,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_room_summary", return_value={}),
             patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
             patch("blueprints.chat.messages.rebuild_room_summary"),
+            patch("services.chat_use_case.maybe_auto_title_chat_room", return_value=None),
             patch(
                 "blueprints.chat.messages.consume_llm_daily_quota",
                 return_value=(True, 1, 300),

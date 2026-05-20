@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeChatResponsePayload,
   normalizeChatHistoryMessages,
   normalizeChatHistoryPagination,
   normalizeChatRoom,
@@ -56,5 +57,18 @@ test("normalizeChatHistoryPagination validates numeric boundaries", () => {
   assert.deepEqual(normalized, {
     hasMore: true,
     nextBeforeId: null,
+  });
+});
+
+test("normalizeChatResponsePayload keeps generated room title", () => {
+  const normalized = normalizeChatResponsePayload({
+    response: "answer",
+    room_title: "Thread title",
+  });
+
+  assert.deepEqual(normalized, {
+    response: "answer",
+    error: undefined,
+    roomTitle: "Thread title",
   });
 });

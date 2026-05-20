@@ -28,6 +28,10 @@ from services.web_search import (
     build_web_search_sources_markdown,
     maybe_augment_messages_with_web_search,
 )
+from services.chat_title import (
+    build_initial_title_candidates,
+    maybe_auto_title_chat_room,
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,7 @@ class ChatPostUseCaseDependencies:
     get_room_summary: Callable[..., Any]
     list_room_memory_facts: Callable[..., Any]
     remember_facts_from_message: Callable[..., Any]
+    rename_chat_room_if_current_title_in: Callable[..., Any]
     build_context_messages: Callable[..., Any]
     build_base_system_prompt: Callable[..., Any]
     build_generation_key: Callable[..., Any]
@@ -137,6 +142,7 @@ class ChatPostUseCase:
         room_mode = "temporary"
         user_id = session.get("user_id")
         saved_user_message_id: int | None = None
+        should_auto_title_room = False
         formatted_user_message = html.escape(user_message).replace("\n", "<br>")
 
         if "user_id" in session:
@@ -187,6 +193,7 @@ class ChatPostUseCase:
                 attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
                 # New turns extend the active branch: parent is the current branch tip.
                 parent_message_id = await run_blocking(deps.get_active_leaf_id, chat_room_id)
+                should_auto_title_room = parent_message_id is None
                 saved_user_message_id = await run_blocking(
                     deps.save_message_to_db,
                     chat_room_id,
@@ -332,10 +339,28 @@ class ChatPostUseCase:
             on_finished = None
             if user_id is not None and room_mode == "normal":
 
-                def persist_response(response: str) -> None:
+                title_candidates = build_initial_title_candidates(
+                    user_message,
+                    task_launch_request=active_task_request,
+                )
+
+                def persist_response(response: str) -> dict[str, Any] | None:
                     deps.save_message_to_db(
                         chat_room_id, response, "assistant", None, saved_user_message_id
                     )
+                    if not should_auto_title_room:
+                        return None
+                    generated_title = maybe_auto_title_chat_room(
+                        chat_room_id=chat_room_id,
+                        user_message=user_message,
+                        assistant_response=response,
+                        model=model,
+                        allowed_current_titles=title_candidates,
+                        conditional_rename=deps.rename_chat_room_if_current_title_in,
+                    )
+                    if generated_title:
+                        return {"room_title": generated_title}
+                    return None
 
                 def on_finished() -> None:
                     try:
@@ -447,6 +472,7 @@ class ChatPostUseCase:
             bot_reply = f"{bot_reply}{separator}{sources_block}"
 
         saved_assistant_message_id: int | None = None
+        generated_room_title: str | None = None
         if user_id is not None and room_mode == "normal":
             saved_assistant_message_id = await run_blocking(
                 deps.save_message_to_db,
@@ -456,6 +482,20 @@ class ChatPostUseCase:
                 None,
                 saved_user_message_id,
             )
+            if should_auto_title_room:
+                title_candidates = build_initial_title_candidates(
+                    user_message,
+                    task_launch_request=active_task_request,
+                )
+                generated_room_title = await run_blocking(
+                    maybe_auto_title_chat_room,
+                    chat_room_id=chat_room_id,
+                    user_message=user_message,
+                    assistant_response=bot_reply,
+                    model=model,
+                    allowed_current_titles=title_candidates,
+                    conditional_rename=deps.rename_chat_room_if_current_title_in,
+                )
         else:
             sid = sid or deps.get_session_id(session)
             await run_blocking(
@@ -480,4 +520,7 @@ class ChatPostUseCase:
                     chat_room_id,
                 )
 
-        return deps.jsonify({"response": bot_reply})
+        response_payload = {"response": bot_reply}
+        if generated_room_title:
+            response_payload["room_title"] = generated_room_title
+        return deps.jsonify(response_payload)

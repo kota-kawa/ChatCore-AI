@@ -19,6 +19,7 @@ from services.chat_service import (
     get_chat_room_messages,
     get_active_path,
     get_active_leaf_id,
+    rename_chat_room_if_current_title_in,
     switch_chat_branch,
     validate_room_owner,
 )
@@ -714,6 +715,7 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             get_room_summary=get_room_summary,
             list_room_memory_facts=list_room_memory_facts,
             remember_facts_from_message=remember_facts_from_message,
+            rename_chat_room_if_current_title_in=rename_chat_room_if_current_title_in,
             build_context_messages=build_context_messages,
             build_base_system_prompt=_build_base_system_prompt,
             build_generation_key=build_generation_key,

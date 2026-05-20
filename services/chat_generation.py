@@ -67,7 +67,7 @@ class ChatGenerationJob:
         *,
         conversation_messages: list[dict[str, str]],
         model: str,
-        persist_response: Callable[[str], None],
+        persist_response: Callable[[str], dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
@@ -389,7 +389,7 @@ class ChatGenerationJob:
         self.response = bot_reply
 
         try:
-            self._persist_response(bot_reply)
+            persist_metadata = self._persist_response(bot_reply)
         except Exception:
             logger.exception("Failed to persist background chat response.")
             error_message = "応答は生成されましたが、履歴保存に失敗しました。"
@@ -400,7 +400,10 @@ class ChatGenerationJob:
             )
             return
 
-        self._publish("done", {"response": bot_reply}, done=True)
+        done_payload: dict[str, Any] = {"response": bot_reply}
+        if isinstance(persist_metadata, dict):
+            done_payload.update(persist_metadata)
+        self._publish("done", done_payload, done=True)
 
 
 def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: str | None = None) -> str:
@@ -769,7 +772,7 @@ return 0
         *,
         conversation_messages: list[dict[str, str]],
         model: str,
-        persist_response: Callable[[str], None],
+        persist_response: Callable[[str], dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
     ) -> ChatGenerationJob:
@@ -914,7 +917,7 @@ def start_generation_job(
     *,
     conversation_messages: list[dict[str, str]],
     model: str,
-    persist_response: Callable[[str], None],
+    persist_response: Callable[[str], dict[str, Any] | None],
     on_finished: Callable[[], None] | None = None,
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,

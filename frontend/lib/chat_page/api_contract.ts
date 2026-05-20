@@ -1,6 +1,7 @@
 import type {
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
+  ChatResponsePayload,
   ChatRoom,
   ChatRoomMode,
   GenerationStatusPayload,
@@ -121,11 +122,12 @@ export function normalizeGenerationStatusPayload(rawPayload: unknown): Generatio
   };
 }
 
-export function normalizeChatResponsePayload(rawPayload: unknown): { response?: string; error?: string } {
+export function normalizeChatResponsePayload(rawPayload: unknown): ChatResponsePayload {
   const payload = asRecord(rawPayload);
   return {
     response: optionalString(payload.response),
     error: optionalString(payload.error),
+    roomTitle: optionalString(payload.room_title),
   };
 }
 

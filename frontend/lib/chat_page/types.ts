@@ -79,6 +79,12 @@ export type GenerationStatusPayload = {
   has_replayable_job?: boolean;
 };
 
+export type ChatResponsePayload = {
+  response?: string;
+  error?: string;
+  roomTitle?: string;
+};
+
 export type StreamParsedEvent = {
   event: string;
   id?: number;
