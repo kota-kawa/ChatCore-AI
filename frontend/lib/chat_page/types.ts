@@ -116,6 +116,14 @@ export type StoredHistoryEntry = {
   sender: string;
 };
 
+export type StoredGenerationState = {
+  roomId: string;
+  roomMode: ChatRoomMode;
+  lastEventId: number;
+  streamedText: string;
+  updatedAt: number;
+};
+
 export type ModelOption = {
   value: string;
   label: string;

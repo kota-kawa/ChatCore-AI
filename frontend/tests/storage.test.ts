@@ -3,7 +3,11 @@ import test from "node:test";
 
 import {
   appendStoredHistory,
+  clearStoredGenerationState,
+  readActiveStoredGenerationState,
+  readStoredGenerationState,
   readStoredHistory,
+  writeStoredGenerationState,
   writeStoredHistory,
 } from "../lib/chat_page/storage";
 import type { StoredHistoryEntry } from "../lib/chat_page/types";
@@ -97,4 +101,43 @@ test("appendStoredHistory reports an unpersisted quota failure", () => {
   assert.equal(result.reason, "quota_exceeded");
   assert.equal(result.retainedEntries, 0);
   assert.equal(result.droppedEntries, 1);
+});
+
+test("stored generation state can be restored as the active generation", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  const stored = writeStoredGenerationState({
+    roomId: "room-stream",
+    roomMode: "temporary",
+    lastEventId: 12,
+    streamedText: "途中まで",
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(stored, true);
+  const restored = readStoredGenerationState("room-stream");
+  assert.equal(restored?.roomId, "room-stream");
+  assert.equal(restored?.roomMode, "temporary");
+  assert.equal(restored?.lastEventId, 12);
+  assert.equal(restored?.streamedText, "途中まで");
+  assert.equal(typeof restored?.updatedAt, "number");
+  assert.equal(readActiveStoredGenerationState()?.roomId, "room-stream");
+});
+
+test("clearing stored generation state removes active generation pointer", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  writeStoredGenerationState({
+    roomId: "room-clear",
+    roomMode: "normal",
+    lastEventId: 2,
+    streamedText: "hello",
+    updatedAt: Date.now(),
+  });
+  clearStoredGenerationState("room-clear");
+
+  assert.equal(readStoredGenerationState("room-clear"), null);
+  assert.equal(readActiveStoredGenerationState(), null);
 });

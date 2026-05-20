@@ -45,7 +45,13 @@ type UseHomePageRoomActionsParams = {
   editAndRegenerateMessage: (newMessage: string, trailingUserCount: number, model: string, roomId: string) => Promise<void>;
   attachedFiles: AttachedFile[];
   setAttachedFiles: Dispatch<SetStateAction<AttachedFile[]>>;
-  generateResponse: (message: string, model: string, roomId: string, attachedFiles?: AttachedFile[]) => Promise<void>;
+  generateResponse: (
+    message: string,
+    model: string,
+    roomId: string,
+    attachedFiles?: AttachedFile[],
+    roomMode?: ChatRoomMode,
+  ) => Promise<void>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   switchBranch: (messageId: number, roomId: string) => Promise<void>;
   isGenerating: boolean;
@@ -386,7 +392,7 @@ export function useHomePageRoomActions({
         removeStoredHistory(roomId);
         const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
         setAttachedFiles([]);
-        const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend);
+        const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
         setPageViewState("chat");
         setLaunchingTaskName(null);
 
@@ -450,7 +456,7 @@ export function useHomePageRoomActions({
       removeStoredHistory(roomId);
       const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
       setAttachedFiles([]);
-      const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend);
+      const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
       setPageViewState("chat");
 
       void loadChatRooms();

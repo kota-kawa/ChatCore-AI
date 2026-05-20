@@ -1,9 +1,15 @@
 import { CACHE_TTL_MS, STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
-import type { ChatSender, StoredHistoryEntry } from "./types";
+import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
+
+const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
 
 function getStoredHistoryKey(roomId: string) {
   return `chatHistory_${roomId}`;
+}
+
+function getStoredGenerationKey(roomId: string) {
+  return `chatGeneration_${roomId}`;
 }
 
 function isQuotaExceededError(error: unknown) {
@@ -124,6 +130,110 @@ export function removeStoredHistory(roomId: string) {
     localStorage.removeItem(getStoredHistoryKey(roomId));
   } catch {
     // ignore localStorage failures
+  }
+}
+
+function normalizeStoredGenerationState(raw: unknown): StoredGenerationState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as {
+    roomId?: unknown;
+    roomMode?: unknown;
+    lastEventId?: unknown;
+    streamedText?: unknown;
+    updatedAt?: unknown;
+  };
+
+  if (typeof record.roomId !== "string" || !record.roomId.trim()) return null;
+  const roomMode: ChatRoomMode = record.roomMode === "temporary" ? "temporary" : "normal";
+  const lastEventId =
+    typeof record.lastEventId === "number" && Number.isFinite(record.lastEventId) && record.lastEventId > 0
+      ? Math.floor(record.lastEventId)
+      : 0;
+  const streamedText = typeof record.streamedText === "string" ? record.streamedText : "";
+  const updatedAt =
+    typeof record.updatedAt === "number" && Number.isFinite(record.updatedAt) ? record.updatedAt : 0;
+
+  if (Date.now() - updatedAt > GENERATION_STATE_TTL_MS) return null;
+
+  return {
+    roomId: record.roomId,
+    roomMode,
+    lastEventId,
+    streamedText,
+    updatedAt,
+  };
+}
+
+export function readStoredGenerationState(roomId: string): StoredGenerationState | null {
+  try {
+    const raw = localStorage.getItem(getStoredGenerationKey(roomId));
+    const parsed = raw ? parseJsonText(raw) : null;
+    const normalized = normalizeStoredGenerationState(parsed);
+    if (!normalized || normalized.roomId !== roomId) {
+      if (raw) localStorage.removeItem(getStoredGenerationKey(roomId));
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredGenerationState(state: StoredGenerationState): boolean {
+  const normalized = normalizeStoredGenerationState({
+    ...state,
+    updatedAt: Date.now(),
+  });
+  if (!normalized) return false;
+
+  try {
+    const serialized = JSON.stringify(normalized);
+    localStorage.setItem(getStoredGenerationKey(normalized.roomId), serialized);
+    localStorage.setItem(STORAGE_KEYS.activeChatGeneration, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function updateStoredGenerationState(
+  roomId: string,
+  updates: Partial<Pick<StoredGenerationState, "lastEventId" | "streamedText">>,
+): boolean {
+  const existing = readStoredGenerationState(roomId);
+  if (!existing) return false;
+
+  return writeStoredGenerationState({
+    ...existing,
+    ...updates,
+  });
+}
+
+export function clearStoredGenerationState(roomId: string) {
+  try {
+    localStorage.removeItem(getStoredGenerationKey(roomId));
+    const active = normalizeStoredGenerationState(
+      parseJsonText(localStorage.getItem(STORAGE_KEYS.activeChatGeneration) || "null"),
+    );
+    if (!active || active.roomId === roomId) {
+      localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
+    }
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+export function readActiveStoredGenerationState(): StoredGenerationState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.activeChatGeneration);
+    const active = normalizeStoredGenerationState(raw ? parseJsonText(raw) : null);
+    if (!active) {
+      if (raw) localStorage.removeItem(STORAGE_KEYS.activeChatGeneration);
+      return null;
+    }
+    return readStoredGenerationState(active.roomId);
+  } catch {
+    return null;
   }
 }
 

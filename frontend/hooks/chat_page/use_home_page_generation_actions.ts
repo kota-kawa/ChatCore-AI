@@ -16,12 +16,16 @@ import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
   appendStoredHistory,
+  clearStoredGenerationState,
   normalizeHistorySender,
   normalizeStoredSender,
   prependStoredHistory,
+  readStoredGenerationState,
   readStoredHistory,
   removeStoredHistory,
   toStoredSender,
+  updateStoredGenerationState,
+  writeStoredGenerationState,
   writeStoredHistory,
   type StoredHistoryWriteResult,
 } from "../../lib/chat_page/storage";
@@ -68,6 +72,7 @@ type UseHomePageGenerationActionsParams = {
   abortControllerRef: MutableRefObject<AbortController | null>;
   chatMessagesRef: RefObject<HTMLDivElement>;
   currentRoomIdRef: MutableRefObject<string | null>;
+  currentRoomMode: ChatRoomMode;
   generationGuardRef: MutableRefObject<GenerationGuard | null>;
   historyHasMore: boolean;
   historyNextBeforeId: number | null;
@@ -90,6 +95,7 @@ export function useHomePageGenerationActions({
   abortControllerRef,
   chatMessagesRef,
   currentRoomIdRef,
+  currentRoomMode,
   generationGuardRef,
   historyHasMore,
   historyNextBeforeId,
@@ -307,8 +313,16 @@ export function useHomePageGenerationActions({
       const { roomId } = generation;
 
       const decoder = new TextDecoder();
+      const storedGeneration = readStoredGenerationState(roomId);
+      if (storedGeneration && storedGeneration.lastEventId > 0) {
+        const rememberedLastEventId = streamLastEventIdByRoomRef.current.get(roomId) ?? 0;
+        if (storedGeneration.lastEventId > rememberedLastEventId) {
+          streamLastEventIdByRoomRef.current.set(roomId, storedGeneration.lastEventId);
+        }
+      }
+
       let streamingMessageId: string | null = null;
-      let streamedText = "";
+      let streamedText = storedGeneration?.streamedText ?? "";
 
       const ensureStreamingMessage = () => {
         if (streamingMessageId) return streamingMessageId;
@@ -322,7 +336,7 @@ export function useHomePageGenerationActions({
             {
               id: newId,
               sender: "assistant",
-              text: "",
+              text: streamedText,
               streaming: true,
             },
           ];
@@ -368,6 +382,7 @@ export function useHomePageGenerationActions({
           if (persist && finalText && isGenerationActive(generation)) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
           }
+          clearStoredGenerationState(roomId);
           scheduleAutoScrollIfNeeded(true);
           return;
         }
@@ -388,6 +403,7 @@ export function useHomePageGenerationActions({
         if (persist && finalText && isGenerationActive(generation)) {
           notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
         }
+        clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
       };
 
@@ -399,6 +415,10 @@ export function useHomePageGenerationActions({
         }
         appendAssistantErrorMessage(roomId, message);
       };
+
+      if (streamedText) {
+        ensureStreamingMessage();
+      }
 
       const openReconnectStream = async () => {
         const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
@@ -423,12 +443,16 @@ export function useHomePageGenerationActions({
         if (!isGenerationActive(generation)) return;
 
         if (!rememberStreamEventId(streamLastEventIdByRoomRef.current, roomId, parsed.id)) return;
+        if (typeof parsed.id === "number" && parsed.id > 0) {
+          updateStoredGenerationState(roomId, { lastEventId: parsed.id });
+        }
 
         if (parsed.event === "chunk") {
           const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
           if (!text) return;
           const streamId = ensureStreamingMessage();
           streamedText += text;
+          updateStoredGenerationState(roomId, { streamedText });
 
           setMessages((previous) => {
             if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -488,6 +512,7 @@ export function useHomePageGenerationActions({
         if (parsed.event === "aborted") {
           streamState.completed = true;
           finalizeStreamingMessage(streamedText, false);
+          clearStoredGenerationState(roomId);
           return;
         }
 
@@ -615,6 +640,13 @@ export function useHomePageGenerationActions({
       });
 
       const headers: Record<string, string> = {};
+      const storedGeneration = readStoredGenerationState(roomId);
+      if (storedGeneration && storedGeneration.lastEventId > 0) {
+        const rememberedLastEventId = streamLastEventIdByRoomRef.current.get(roomId) ?? 0;
+        if (storedGeneration.lastEventId > rememberedLastEventId) {
+          streamLastEventIdByRoomRef.current.set(roomId, storedGeneration.lastEventId);
+        }
+      }
       const lastEventId = streamLastEventIdByRoomRef.current.get(roomId);
       if (typeof lastEventId === "number" && lastEventId > 0) {
         headers["Last-Event-ID"] = String(lastEventId);
@@ -722,6 +754,7 @@ export function useHomePageGenerationActions({
 
         if (isLatestChatTurnAnswered(uiMessages)) {
           streamLastEventIdByRoomRef.current.delete(roomId);
+          clearStoredGenerationState(roomId);
           commitHistoryMessages(uiMessages);
           return;
         }
@@ -738,6 +771,7 @@ export function useHomePageGenerationActions({
           return;
         }
 
+        clearStoredGenerationState(roomId);
         commitHistoryMessages(uiMessages);
       } catch (error) {
         console.error("履歴取得失敗:", error);
@@ -879,7 +913,13 @@ export function useHomePageGenerationActions({
   }, []);
 
   const generateResponse = useCallback(
-    async (message: string, model: string, roomId: string, attachedFiles?: AttachedFile[]) => {
+    async (
+      message: string,
+      model: string,
+      roomId: string,
+      attachedFiles?: AttachedFile[],
+      roomMode: ChatRoomMode = currentRoomMode,
+    ) => {
       const generation = acquireGeneration(roomId);
       if (!generation) return;
 
@@ -901,6 +941,13 @@ export function useHomePageGenerationActions({
       });
       notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: message, sender: "user" }));
       streamLastEventIdByRoomRef.current.set(roomId, 0);
+      writeStoredGenerationState({
+        roomId,
+        roomMode,
+        lastEventId: 0,
+        streamedText: "",
+        updatedAt: Date.now(),
+      });
       scheduleAutoScrollIfNeeded(true);
 
       try {
@@ -961,6 +1008,7 @@ export function useHomePageGenerationActions({
         if (response.ok && data.response && isGenerationActive(generation)) {
           notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
         }
+        clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -975,6 +1023,7 @@ export function useHomePageGenerationActions({
 
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (isGenerationActive(generation)) {
+          clearStoredGenerationState(roomId);
           appendAssistantErrorMessage(roomId, errorMessage);
         }
       } finally {
@@ -985,6 +1034,7 @@ export function useHomePageGenerationActions({
       acquireGeneration,
       appendAssistantErrorMessage,
       consumeStreamingChatResponse,
+      currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       refreshActivePath,
@@ -1053,6 +1103,13 @@ export function useHomePageGenerationActions({
       });
       notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: newMessage, sender: "user" }));
       streamLastEventIdByRoomRef.current.set(roomId, 0);
+      writeStoredGenerationState({
+        roomId,
+        roomMode: currentRoomMode,
+        lastEventId: 0,
+        streamedText: "",
+        updatedAt: Date.now(),
+      });
       scheduleAutoScrollIfNeeded(true);
 
       try {
@@ -1089,6 +1146,7 @@ export function useHomePageGenerationActions({
             },
           ];
         });
+        clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -1102,6 +1160,7 @@ export function useHomePageGenerationActions({
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (isGenerationActive(generation)) {
+          clearStoredGenerationState(roomId);
           appendAssistantErrorMessage(roomId, errorMessage);
         }
       } finally {
@@ -1112,6 +1171,7 @@ export function useHomePageGenerationActions({
       acquireGeneration,
       appendAssistantErrorMessage,
       consumeStreamingChatResponse,
+      currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       refreshActivePath,
@@ -1163,6 +1223,13 @@ export function useHomePageGenerationActions({
         ];
       });
       streamLastEventIdByRoomRef.current.set(roomId, 0);
+      writeStoredGenerationState({
+        roomId,
+        roomMode: currentRoomMode,
+        lastEventId: 0,
+        streamedText: "",
+        updatedAt: Date.now(),
+      });
       scheduleAutoScrollIfNeeded(true);
 
       try {
@@ -1194,6 +1261,7 @@ export function useHomePageGenerationActions({
             },
           ];
         });
+        clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -1207,6 +1275,7 @@ export function useHomePageGenerationActions({
         }
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (isGenerationActive(generation)) {
+          clearStoredGenerationState(roomId);
           appendAssistantErrorMessage(roomId, errorMessage);
         }
       } finally {
@@ -1217,6 +1286,7 @@ export function useHomePageGenerationActions({
       acquireGeneration,
       appendAssistantErrorMessage,
       consumeStreamingChatResponse,
+      currentRoomMode,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
       refreshActivePath,

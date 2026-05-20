@@ -25,6 +25,7 @@ import {
 import {
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
+  readActiveStoredGenerationState,
   readCachedAuthState,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
@@ -272,6 +273,7 @@ export function useHomePageController() {
     abortControllerRef,
     chatMessagesRef,
     currentRoomIdRef,
+    currentRoomMode,
     generationGuardRef,
     historyHasMore,
     historyNextBeforeId,
@@ -744,6 +746,17 @@ export function useHomePageController() {
 
   useEffect(() => {
     try {
+      const activeGeneration = readActiveStoredGenerationState();
+      if (activeGeneration) {
+        setCurrentRoomId(activeGeneration.roomId);
+        currentRoomIdRef.current = activeGeneration.roomId;
+        setCurrentRoomMode(activeGeneration.roomMode);
+        setPageViewState("chat");
+        loadLocalChatHistory(activeGeneration.roomId);
+        void loadChatHistory(activeGeneration.roomId, true);
+        return;
+      }
+
       const storedRoomId = localStorage.getItem(STORAGE_KEYS.currentChatRoomId);
       if (storedRoomId) {
         setCurrentRoomId(storedRoomId);
@@ -752,7 +765,7 @@ export function useHomePageController() {
     } catch {
       // ignore localStorage failures
     }
-  }, []);
+  }, [loadChatHistory, loadLocalChatHistory, setCurrentRoomMode, setPageViewState]);
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {

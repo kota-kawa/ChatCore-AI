@@ -2,6 +2,7 @@ const SHORT_CACHE_TTL_MS = 30_000;
 
 export const STORAGE_KEYS = {
   currentChatRoomId: "currentChatRoomId",
+  activeChatGeneration: "chatcore.chat.activeGeneration",
   authStateCache: "chatcore.auth.loggedIn",
   authStateCachedAt: "chatcore.auth.cachedAt",
   tasksCachePrefix: "chatcore.tasks.v2.",
