@@ -20,6 +20,12 @@ function xmlEscape(value: string) {
     .replace(/'/g, "&apos;");
 }
 
+export const PUBLIC_SITEMAP_ROUTES = [
+  { path: "/", changefreq: "daily", priority: "1.0" },
+  { path: "/prompt_share", changefreq: "daily", priority: "0.9" },
+  { path: "/memo", changefreq: "weekly", priority: "0.8" }
+] as const;
+
 function resolveOrigin(context: Parameters<GetServerSideProps>[0]) {
   const configuredOrigin =
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -38,17 +44,11 @@ function resolveOrigin(context: Parameters<GetServerSideProps>[0]) {
   return host ? `${proto}://${host}` : "";
 }
 
-export const getServerSideProps: GetServerSideProps = async (context) => {
-  const origin = resolveOrigin(context);
-  const lastmod = new Date().toISOString();
-  const publicRoutes = [
-    { path: "/", changefreq: "daily", priority: "1.0" },
-    { path: "/prompt_share", changefreq: "daily", priority: "0.9" }
-  ];
-
-  const urls = publicRoutes
+export function buildSitemapXml(origin: string, lastmod: string) {
+  const normalizedOrigin = origin.replace(/\/+$/, "");
+  const urls = PUBLIC_SITEMAP_ROUTES
     .map(({ path, changefreq, priority }) => {
-      const loc = origin ? `${origin}${path}` : path;
+      const loc = normalizedOrigin ? `${normalizedOrigin}${path}` : path;
       return [
         "  <url>",
         `    <loc>${xmlEscape(loc)}</loc>`,
@@ -60,13 +60,19 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     })
     .join("\n");
 
-  const body = [
+  return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     urls,
     "</urlset>",
     ""
   ].join("\n");
+}
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const origin = resolveOrigin(context);
+  const lastmod = new Date().toISOString();
+  const body = buildSitemapXml(origin, lastmod);
 
   context.res.setHeader("Content-Type", "application/xml; charset=utf-8");
   context.res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");

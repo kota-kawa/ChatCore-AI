@@ -22,6 +22,7 @@ import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/messag
 import { setLoggedInState } from "../scripts/core/app_state";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
 import { showConfirmModal } from "../scripts/core/alert_modal";
+import { absoluteUrl } from "../lib/seo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +94,21 @@ const MEMO_ACTION_MENU_GAP = 6;
 const MEMO_ACTION_MENU_VIEWPORT_MARGIN = 8;
 const MEMO_SHARE_TITLE = "Chat Core 共有メモ";
 const MEMO_SHARE_TEXT = "このメモを共有しました。";
+const memoPageDescription =
+  "Chat CoreでAIとのやり取りや作業メモを保存し、検索・整理・共有できるノート画面です。";
+const memoStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "Chat Core メモ",
+  url: absoluteUrl("/memo"),
+  description: memoPageDescription,
+  inLanguage: "ja",
+  isPartOf: {
+    "@type": "WebSite",
+    name: "Chat Core",
+    url: absoluteUrl("/")
+  }
+};
 const DETAIL_AUTOSAVE_DELAY_MS = 900;
 const EXPORT_FORMATS = [
   { value: "markdown", label: "Markdown (.md)", icon: "bi-markdown" },
@@ -1468,9 +1484,9 @@ export default function MemoPage() {
     <>
       <SeoHead
         title="メモを保存 | Chat Core"
-        description="Chat CoreでAIとのやり取りや作業メモを保存し、検索・整理・共有できるページです。"
+        description={memoPageDescription}
         canonicalPath="/memo"
-        noindex
+        structuredData={memoStructuredData}
       >
         <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
       </SeoHead>
