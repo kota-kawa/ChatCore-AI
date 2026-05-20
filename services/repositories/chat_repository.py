@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
@@ -39,21 +40,41 @@ class ChatRepository:
         message: str,
         sender: str,
         attached_file_names: list[str] | None = None,
+        parent_id: int | None = None,
     ) -> int | None:
+        """Insert a message and make it the active branch tip.
+
+        When ``parent_id`` is given, the new message becomes a child of that
+        message and the parent's ``active_child_id`` is repointed at it (creating
+        or switching a branch). When ``parent_id`` is ``None`` the new message
+        becomes the active root of the room.
+        """
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
                 try:
                     query = """
-                        INSERT INTO chat_history (chat_room_id, message, sender, attached_file_names)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO chat_history (chat_room_id, message, sender, attached_file_names, parent_id)
+                        VALUES (%s, %s, %s, %s, %s)
                         RETURNING id
                     """
-                    cursor.execute(query, (chat_room_id, message, sender, file_names_json))
+                    cursor.execute(query, (chat_room_id, message, sender, file_names_json, parent_id))
                     row = cursor.fetchone()
+                    new_id = row[0] if row else None
+                    if new_id is not None:
+                        if parent_id is None:
+                            cursor.execute(
+                                "UPDATE chat_rooms SET active_root_id = %s WHERE id = %s",
+                                (new_id, chat_room_id),
+                            )
+                        else:
+                            cursor.execute(
+                                "UPDATE chat_history SET active_child_id = %s WHERE id = %s AND chat_room_id = %s",
+                                (new_id, parent_id, chat_room_id),
+                            )
                     conn.commit()
-                    return row[0] if row else None
+                    return new_id
                 except Error as exc:
                     self._rollback(conn)
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
@@ -238,19 +259,189 @@ class ChatRepository:
 
         raise RuntimeError("Failed to rename chat room after retry attempts.")
 
+    # ----- Branching helpers -------------------------------------------------
+
+    def _load_room_tree(
+        self, cursor: Any, chat_room_id: str
+    ) -> tuple[dict[int, dict[str, Any]], int | None]:
+        """Load every message of a room plus the room's active root pointer."""
+        cursor.execute(
+            """
+            SELECT id, message, sender, parent_id, active_child_id, timestamp, attached_file_names
+              FROM chat_history
+             WHERE chat_room_id = %s
+             ORDER BY id ASC
+            """,
+            (chat_room_id,),
+        )
+        nodes: dict[int, dict[str, Any]] = {}
+        for (message_id, message, sender, parent_id, active_child_id, ts, file_names_json) in cursor.fetchall():
+            nodes[message_id] = {
+                "id": message_id,
+                "message": message,
+                "sender": sender,
+                "parent_id": parent_id,
+                "active_child_id": active_child_id,
+                "timestamp": ts,
+                "attached_file_names": file_names_json,
+            }
+
+        cursor.execute("SELECT active_root_id FROM chat_rooms WHERE id = %s", (chat_room_id,))
+        room_row = cursor.fetchone()
+        active_root_id = room_row[0] if room_row else None
+        return nodes, active_root_id
+
+    @staticmethod
+    def _children_by_parent(nodes: dict[int, dict[str, Any]]) -> dict[int | None, list[int]]:
+        children: dict[int | None, list[int]] = defaultdict(list)
+        for node in nodes.values():
+            children[node["parent_id"]].append(node["id"])
+        for sibling_ids in children.values():
+            sibling_ids.sort()
+        return children
+
+    def _walk_active_path(
+        self,
+        nodes: dict[int, dict[str, Any]],
+        active_root_id: int | None,
+        children: dict[int | None, list[int]],
+    ) -> list[dict[str, Any]]:
+        """Follow active_child pointers from the active root down to a leaf."""
+        root_siblings = children.get(None, [])
+        current = active_root_id if active_root_id in nodes else (root_siblings[-1] if root_siblings else None)
+
+        path: list[dict[str, Any]] = []
+        visited: set[int] = set()
+        while current is not None and current in nodes and current not in visited:
+            visited.add(current)
+            node = nodes[current]
+            path.append(node)
+            nxt = node["active_child_id"]
+            if nxt is None or nxt not in nodes:
+                child_ids = children.get(current, [])
+                nxt = child_ids[-1] if child_ids else None
+            current = nxt
+        return path
+
+    def _decode_file_names(self, file_names_json: Any) -> list[str] | None:
+        if not file_names_json:
+            return None
+        try:
+            parsed = json.loads(file_names_json)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if isinstance(parsed, list):
+            names = [str(n) for n in parsed if isinstance(n, str)]
+            return names or None
+        return None
+
+    def _serialize_path_node(
+        self,
+        node: dict[str, Any],
+        children: dict[int | None, list[int]],
+        *,
+        include_files: bool = True,
+    ) -> dict[str, Any]:
+        sibling_ids = children.get(node["parent_id"], [])
+        try:
+            version_index = sibling_ids.index(node["id"]) + 1
+        except ValueError:
+            version_index = 1
+        entry: dict[str, Any] = {
+            "id": node["id"],
+            "message": node["message"],
+            "sender": node["sender"],
+            "timestamp": serialize_datetime_iso(node["timestamp"]),
+            "version_index": version_index,
+            "version_count": len(sibling_ids) or 1,
+            "sibling_ids": list(sibling_ids),
+        }
+        if include_files:
+            file_names = self._decode_file_names(node["attached_file_names"])
+            if file_names:
+                entry["attached_file_names"] = file_names
+        return entry
+
+    def get_active_path(self, chat_room_id: str) -> list[dict[str, Any]]:
+        """Return the active branch as serialized messages with version metadata."""
+        with self._connection_getter() as conn:
+            cursor = conn.cursor()
+            try:
+                nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
+                return [self._serialize_path_node(node, children) for node in path]
+            finally:
+                cursor.close()
+
+    def get_active_leaf_id(self, chat_room_id: str) -> int | None:
+        """Return the id of the last message on the active branch (None if empty)."""
+        with self._connection_getter() as conn:
+            cursor = conn.cursor()
+            try:
+                nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
+                return path[-1]["id"] if path else None
+            finally:
+                cursor.close()
+
+    def switch_branch(self, chat_room_id: str, target_id: int) -> list[dict[str, Any]]:
+        """Make ``target_id`` the active sibling and return the new active path."""
+        for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
+            with self._connection_getter() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT parent_id FROM chat_history WHERE id = %s AND chat_room_id = %s",
+                        (target_id, chat_room_id),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        raise ResourceNotFoundError(ERROR_CHAT_ROOM_NOT_FOUND)
+                    parent_id = row[0]
+                    if parent_id is None:
+                        cursor.execute(
+                            "UPDATE chat_rooms SET active_root_id = %s WHERE id = %s",
+                            (target_id, chat_room_id),
+                        )
+                    else:
+                        cursor.execute(
+                            "UPDATE chat_history SET active_child_id = %s WHERE id = %s AND chat_room_id = %s",
+                            (target_id, parent_id, chat_room_id),
+                        )
+                    conn.commit()
+
+                    nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                    children = self._children_by_parent(nodes)
+                    path = self._walk_active_path(nodes, active_root_id, children)
+                    return [self._serialize_path_node(node, children) for node in path]
+                except (ResourceNotFoundError, ForbiddenOperationError):
+                    raise
+                except Error as exc:
+                    self._rollback(conn)
+                    if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
+                        self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
+                        continue
+                    raise
+                except BaseException:
+                    self._rollback(conn)
+                    raise
+                finally:
+                    cursor.close()
+        raise RuntimeError("Failed to switch chat branch after retry attempts.")
+
     def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, str]]:
         with self._connection_getter() as conn:
             cursor = conn.cursor()
-            messages = []
             try:
-                query = (
-                    "SELECT message, sender FROM chat_history WHERE chat_room_id = %s ORDER BY id ASC"
-                )
-                cursor.execute(query, (chat_room_id,))
-                rows = cursor.fetchall()
-                for (message, sender) in rows:
-                    role = "user" if sender == "user" else "assistant"
-                    messages.append({"role": role, "content": message})
+                nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
+                messages = []
+                for node in path:
+                    role = "user" if node["sender"] == "user" else "assistant"
+                    messages.append({"role": role, "content": node["message"]})
                 return messages
             finally:
                 cursor.close()
@@ -347,23 +538,16 @@ class ChatRepository:
                     raise ResourceNotFoundError(ERROR_SHARED_LINK_NOT_FOUND)
 
                 room_id, title, created_at = room_row
-                cursor.execute(
-                    """
-                    SELECT message, sender, timestamp
-                      FROM chat_history
-                     WHERE chat_room_id = %s
-                     ORDER BY id ASC
-                    """,
-                    (room_id,),
-                )
-                rows = cursor.fetchall()
+                nodes, active_root_id = self._load_room_tree(cursor, room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
                 messages = []
-                for (message, sender, timestamp) in rows:
+                for node in path:
                     messages.append(
                         {
-                            "message": message,
-                            "sender": sender,
-                            "timestamp": serialize_datetime_iso(timestamp),
+                            "message": node["message"],
+                            "sender": node["sender"],
+                            "timestamp": serialize_datetime_iso(node["timestamp"]),
                         }
                     )
 
@@ -424,47 +608,24 @@ class ChatRepository:
         limit: int,
         before_message_id: int | None = None,
     ) -> dict[str, Any]:
+        # History renders the active branch (not every stored message), paginated
+        # newest-first by walking back along the active path.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
-                query = """
-                    SELECT id, message, sender, timestamp, attached_file_names
-                    FROM (
-                        SELECT id, message, sender, timestamp, attached_file_names
-                        FROM chat_history
-                        WHERE chat_room_id = %s
-                          AND (%s IS NULL OR id < %s)
-                        ORDER BY id DESC
-                        LIMIT %s
-                    ) recent_history
-                    ORDER BY id ASC
-                """
-                cursor.execute(query, (chat_room_id, before_message_id, before_message_id, limit + 1))
-                rows = cursor.fetchall()
-                has_more = len(rows) > limit
-                if has_more:
-                    rows = rows[1:]
+                nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
 
-                messages = []
-                for (message_id, msg, sender, ts, file_names_json) in rows:
-                    file_names: list[str] | None = None
-                    if file_names_json:
-                        try:
-                            parsed = json.loads(file_names_json)
-                            if isinstance(parsed, list):
-                                file_names = [str(n) for n in parsed if isinstance(n, str)]
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-                    entry: dict[str, Any] = {
-                        "id": message_id,
-                        "message": msg,
-                        "sender": sender,
-                        "timestamp": serialize_datetime_iso(ts),
-                    }
-                    if file_names:
-                        entry["attached_file_names"] = file_names
-                    messages.append(entry)
+                if before_message_id is not None:
+                    path = [node for node in path if node["id"] < before_message_id]
 
+                has_more = len(path) > limit
+                page_nodes = path[-limit:] if limit > 0 else []
+
+                messages = [
+                    self._serialize_path_node(node, children) for node in page_nodes
+                ]
                 next_before_id = messages[0]["id"] if has_more and messages else None
                 return {
                     "messages": messages,

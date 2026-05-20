@@ -27,6 +27,7 @@ import {
 } from "../../lib/chat_page/storage";
 import type {
   AttachedFile,
+  ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatRoomMode,
   UiChatMessage,
@@ -48,6 +49,19 @@ function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
+}
+
+// Map server-side branch metadata onto a UI message so the branch navigator
+// (‹ n/m ›) can render and switch between versions of a message.
+function toBranchFields(entry: ChatHistoryMessagePayload): Partial<UiChatMessage> {
+  const fields: Partial<UiChatMessage> = {};
+  if (typeof entry.id === "number") fields.serverId = entry.id;
+  if (typeof entry.version_index === "number") fields.versionIndex = entry.version_index;
+  if (typeof entry.version_count === "number") fields.versionCount = entry.version_count;
+  if (Array.isArray(entry.sibling_ids) && entry.sibling_ids.length > 0) {
+    fields.siblingIds = entry.sibling_ids;
+  }
+  return fields;
 }
 
 type UseHomePageGenerationActionsParams = {
@@ -658,6 +672,7 @@ export function useHomePageGenerationActions({
             sender: normalizeHistorySender(entry.sender),
             text: typeof entry.message === "string" ? entry.message : "",
             ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+            ...toBranchFields(entry),
           }));
 
         const syncLoadedHistoryState = () => {
@@ -759,6 +774,7 @@ export function useHomePageGenerationActions({
         sender: normalizeHistorySender(entry.sender),
         text: typeof entry.message === "string" ? entry.message : "",
         ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+        ...toBranchFields(entry),
       }));
 
       setMessages((previous) => prependUiChatMessagesWithinLimit(uiMessages, previous));
@@ -780,6 +796,73 @@ export function useHomePageGenerationActions({
       setIsLoadingOlder(false);
     }
   }, [fetchChatHistoryPage, historyHasMore, historyNextBeforeId, isLoadingOlder, notifyStoredHistoryWriteIssue]);
+
+  const mapHistoryEntriesToUi = useCallback(
+    (entries: ChatHistoryMessagePayload[], idPrefix: string): UiChatMessage[] =>
+      entries.map((entry) => ({
+        id: nextMessageId(idPrefix, messageSeqRef),
+        sender: normalizeHistorySender(entry.sender),
+        text: typeof entry.message === "string" ? entry.message : "",
+        ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
+        ...toBranchFields(entry),
+      })),
+    [messageSeqRef],
+  );
+
+  // Reload the active branch from the server so version indicators (‹ n/m ›)
+  // reflect freshly-created branches after an edit or regeneration.
+  const refreshActivePath = useCallback(
+    async (roomId: string) => {
+      try {
+        const loaded = await fetchChatHistoryPage(roomId);
+        if (currentRoomIdRef.current !== roomId) return;
+        const uiMessages = mapHistoryEntriesToUi(loaded.messages, "history");
+        prependScrollRestoreRef.current = null;
+        setHistoryHasMore(loaded.pagination.hasMore);
+        setHistoryNextBeforeId(loaded.pagination.nextBeforeId);
+        setMessages(uiMessages);
+        saveUiMessagesToLocalStorage(roomId, uiMessages);
+        scheduleAutoScrollIfNeeded();
+      } catch {
+        // Keep the optimistic messages if the refresh fails.
+      }
+    },
+    [fetchChatHistoryPage, mapHistoryEntriesToUi, saveUiMessagesToLocalStorage, scheduleAutoScrollIfNeeded],
+  );
+
+  // Switch the active branch to the requested sibling version and render the
+  // resulting conversation path returned by the server.
+  const switchBranch = useCallback(
+    async (messageId: number, roomId: string) => {
+      try {
+        const response = await fetch("/api/chat_switch_branch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ chat_room_id: roomId, message_id: messageId }),
+        });
+        const rawPayload = await readJsonBodySafe(response);
+        if (!response.ok) {
+          showToast(
+            extractApiErrorMessage(rawPayload, "分岐の切り替えに失敗しました。", response.status),
+            { variant: "error" },
+          );
+          return;
+        }
+        if (currentRoomIdRef.current !== roomId) return;
+        const payload = normalizeChatHistoryPayload(rawPayload);
+        const uiMessages = mapHistoryEntriesToUi(payload.messages, "branch");
+        prependScrollRestoreRef.current = null;
+        setHistoryHasMore(false);
+        setHistoryNextBeforeId(null);
+        setMessages(uiMessages);
+        saveUiMessagesToLocalStorage(roomId, uiMessages);
+      } catch {
+        showToast("分岐の切り替えに失敗しました。", { variant: "error" });
+      }
+    },
+    [mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
+  );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
     const response = await fetch("/api/new_chat_room", {
@@ -904,6 +987,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
       scheduleAutoScrollIfNeeded,
@@ -988,6 +1072,7 @@ export function useHomePageGenerationActions({
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
           await consumeStreamingChatResponse(response, generation);
+          void refreshActivePath(roomId);
           return;
         }
 
@@ -1029,6 +1114,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
       scheduleAutoScrollIfNeeded,
@@ -1091,6 +1177,7 @@ export function useHomePageGenerationActions({
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
           await consumeStreamingChatResponse(response, generation);
+          void refreshActivePath(roomId);
           return;
         }
 
@@ -1132,6 +1219,7 @@ export function useHomePageGenerationActions({
       consumeStreamingChatResponse,
       isGenerationActive,
       notifyStoredHistoryWriteIssue,
+      refreshActivePath,
       releaseGeneration,
       removeThinkingMessages,
       scheduleAutoScrollIfNeeded,
@@ -1152,6 +1240,7 @@ export function useHomePageGenerationActions({
     generateResponse,
     editAndRegenerateMessage,
     regenerateLastResponse,
+    switchBranch,
     stopGeneration,
     removeStoredHistory,
   };

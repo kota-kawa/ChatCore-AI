@@ -47,6 +47,7 @@ type UseHomePageRoomActionsParams = {
   setAttachedFiles: Dispatch<SetStateAction<AttachedFile[]>>;
   generateResponse: (message: string, model: string, roomId: string, attachedFiles?: AttachedFile[]) => Promise<void>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
+  switchBranch: (messageId: number, roomId: string) => Promise<void>;
   isGenerating: boolean;
   isTaskOrderEditing: boolean;
   loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<void>;
@@ -96,6 +97,7 @@ export function useHomePageRoomActions({
   fetchChatRooms,
   generateResponse,
   regenerateLastResponse,
+  switchBranch,
   isGenerating,
   isTaskOrderEditing,
   loadChatHistory,
@@ -517,6 +519,16 @@ export function useHomePageRoomActions({
     [editAndRegenerateMessage, isGenerating, selectedModel],
   );
 
+  const handleSwitchBranch = useCallback(
+    (messageId: number) => {
+      if (isGenerating) return;
+      const roomId = currentRoomIdRef.current;
+      if (!roomId) return;
+      void switchBranch(messageId, roomId);
+    },
+    [isGenerating, switchBranch],
+  );
+
   const handleChatInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
@@ -638,6 +650,7 @@ export function useHomePageRoomActions({
     handleSendMessage,
     handleRegenerateMessage,
     handleEditAndRegenerateMessage,
+    handleSwitchBranch,
     handleChatInputKeyDown,
     handleDeleteRoom,
     handleBulkDeleteRooms,

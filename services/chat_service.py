@@ -19,8 +19,23 @@ def save_message_to_db(
     message: str,
     sender: str,
     attached_file_names: list[str] | None = None,
+    parent_id: int | None = None,
 ) -> int | None:
-    return _get_chat_repository().save_message(chat_room_id, message, sender, attached_file_names)
+    return _get_chat_repository().save_message(
+        chat_room_id, message, sender, attached_file_names, parent_id
+    )
+
+
+def get_active_path(chat_room_id: str) -> list[dict[str, Any]]:
+    return _get_chat_repository().get_active_path(chat_room_id)
+
+
+def get_active_leaf_id(chat_room_id: str) -> int | None:
+    return _get_chat_repository().get_active_leaf_id(chat_room_id)
+
+
+def switch_chat_branch(chat_room_id: str, target_id: int) -> list[dict[str, Any]]:
+    return _get_chat_repository().switch_branch(chat_room_id, target_id)
 
 
 def create_chat_room_in_db(room_id: str, user_id: int, title: str, mode: str = "normal") -> None:

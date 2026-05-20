@@ -48,6 +48,7 @@ class ChatPostUseCaseDependencies:
     get_temporary_user_store_key: Callable[[int], str]
     ephemeral_store: Any
     save_message_to_db: Callable[..., Any]
+    get_active_leaf_id: Callable[..., Any]
     get_chat_room_messages: Callable[..., Any]
     normalize_messages_for_llm: Callable[..., Any]
     find_latest_task_launch_request: Callable[..., Any]
@@ -184,12 +185,15 @@ class ChatPostUseCase:
                 )
             else:
                 attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
+                # New turns extend the active branch: parent is the current branch tip.
+                parent_message_id = await run_blocking(deps.get_active_leaf_id, chat_room_id)
                 saved_user_message_id = await run_blocking(
                     deps.save_message_to_db,
                     chat_room_id,
                     formatted_user_message,
                     "user",
                     attached_file_name_list,
+                    parent_message_id,
                 )
                 all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
         else:
@@ -329,7 +333,9 @@ class ChatPostUseCase:
             if user_id is not None and room_mode == "normal":
 
                 def persist_response(response: str) -> None:
-                    deps.save_message_to_db(chat_room_id, response, "assistant")
+                    deps.save_message_to_db(
+                        chat_room_id, response, "assistant", None, saved_user_message_id
+                    )
 
                 def on_finished() -> None:
                     try:
@@ -447,6 +453,8 @@ class ChatPostUseCase:
                 chat_room_id,
                 bot_reply,
                 "assistant",
+                None,
+                saved_user_message_id,
             )
         else:
             sid = sid or deps.get_session_id(session)

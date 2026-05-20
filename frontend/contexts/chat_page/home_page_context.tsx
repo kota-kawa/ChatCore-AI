@@ -95,6 +95,7 @@ type HomePageChatContextValue = Pick<
   | "handleSendMessage"
   | "handleRegenerateMessage"
   | "handleEditAndRegenerateMessage"
+  | "handleSwitchBranch"
 >;
 
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
@@ -249,6 +250,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       handleSendMessage: controller.handleSendMessage,
       handleRegenerateMessage: controller.handleRegenerateMessage,
       handleEditAndRegenerateMessage: controller.handleEditAndRegenerateMessage,
+      handleSwitchBranch: controller.handleSwitchBranch,
     }),
     [
       controller.handleAccessChat,
@@ -289,6 +291,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.handleSendMessage,
       controller.handleRegenerateMessage,
       controller.handleEditAndRegenerateMessage,
+      controller.handleSwitchBranch,
     ],
   );
 

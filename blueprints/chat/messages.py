@@ -15,10 +15,11 @@ from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
-    delete_last_assistant_message_from_db,
-    truncate_chat_room_for_edit,
     save_message_to_db,
     get_chat_room_messages,
+    get_active_path,
+    get_active_leaf_id,
+    switch_chat_branch,
     validate_room_owner,
 )
 from services.chat_context import build_context_messages
@@ -702,6 +703,7 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             get_temporary_user_store_key=get_temporary_user_store_key,
             ephemeral_store=ephemeral_store,
             save_message_to_db=save_message_to_db,
+            get_active_leaf_id=get_active_leaf_id,
             get_chat_room_messages=get_chat_room_messages,
             normalize_messages_for_llm=_normalize_messages_for_llm,
             find_latest_task_launch_request=_find_latest_task_launch_request,
@@ -790,6 +792,9 @@ async def chat_regenerate(
     sid = None
     room_mode = "temporary"
     user_id = session.get("user_id")
+    # For DB-backed rooms, regeneration adds a sibling assistant answer (a new
+    # branch) under the same user message instead of deleting the old answer.
+    assistant_parent_id: int | None = None
 
     if "user_id" in session:
         try:
@@ -811,8 +816,13 @@ async def chat_regenerate(
             await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            await run_blocking(delete_last_assistant_message_from_db, chat_room_id)
+            path = await run_blocking(get_active_path, chat_room_id)
+            if path and path[-1]["sender"] == "assistant" and len(path) >= 2:
+                assistant_parent_id = path[-2]["id"]
             all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
+            # Exclude the existing answer from the context so it is regenerated.
+            if all_messages and all_messages[-1]["role"] == "assistant":
+                all_messages = all_messages[:-1]
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -883,7 +893,7 @@ async def chat_regenerate(
         on_finished = None
         if user_id is not None and room_mode == "normal":
             def persist_response(response: str) -> None:
-                save_message_to_db(chat_room_id, response, "assistant")
+                save_message_to_db(chat_room_id, response, "assistant", None, assistant_parent_id)
 
             def on_finished() -> None:
                 try:
@@ -930,7 +940,7 @@ async def chat_regenerate(
         return jsonify({"error": str(exc)}, status_code=500)
 
     if user_id is not None and room_mode == "normal":
-        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
+        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant", None, assistant_parent_id)
     elif sid is not None:
         await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
 
@@ -979,6 +989,9 @@ async def chat_edit_and_regenerate(
     room_mode = "temporary"
     user_id = session.get("user_id")
     formatted_user_message = html.escape(new_message).replace("\n", "<br>")
+    # For DB-backed rooms, editing forks a new user message as a sibling branch
+    # (the original message and its answers are preserved and remain switchable).
+    assistant_parent_id: int | None = None
 
     if "user_id" in session:
         try:
@@ -1014,9 +1027,29 @@ async def chat_edit_and_regenerate(
             )
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            await run_blocking(truncate_chat_room_for_edit, chat_room_id, trailing_user_count)
-            await run_blocking(save_message_to_db, chat_room_id, formatted_user_message, "user")
-            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
+            path = await run_blocking(get_active_path, chat_room_id)
+            user_positions = [i for i, node in enumerate(path) if node["sender"] == "user"]
+            if len(user_positions) <= trailing_user_count:
+                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+            target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
+            edit_parent_id = path[target_pos - 1]["id"] if target_pos > 0 else None
+            assistant_parent_id = await run_blocking(
+                save_message_to_db,
+                chat_room_id,
+                formatted_user_message,
+                "user",
+                None,
+                edit_parent_id,
+            )
+            # Context = branch ancestors up to the edited point, then the new message.
+            all_messages = [
+                {
+                    "role": "user" if node["sender"] == "user" else "assistant",
+                    "content": node["message"],
+                }
+                for node in path[:target_pos]
+            ]
+            all_messages.append({"role": "user", "content": formatted_user_message})
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -1099,7 +1132,7 @@ async def chat_edit_and_regenerate(
         on_finished = None
         if user_id is not None and room_mode == "normal":
             def persist_response(response: str) -> None:
-                save_message_to_db(chat_room_id, response, "assistant")
+                save_message_to_db(chat_room_id, response, "assistant", None, assistant_parent_id)
 
             def on_finished() -> None:
                 try:
@@ -1146,11 +1179,76 @@ async def chat_edit_and_regenerate(
         return jsonify({"error": str(exc)}, status_code=500)
 
     if user_id is not None and room_mode == "normal":
-        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant")
+        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant", None, assistant_parent_id)
     elif sid is not None:
         await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
 
     return jsonify({"response": bot_reply})
+
+
+@chat_bp.post("/api/chat_switch_branch", name="chat.chat_switch_branch")
+async def chat_switch_branch(request: Request):
+    # Switch the active branch (a regenerated answer or an edited message version)
+    # for a DB-backed chat room and return the resulting active conversation path.
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    chat_room_id_raw = data.get("chat_room_id")
+    message_id_raw = data.get("message_id")
+
+    if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
+        return jsonify({"error": "chat_room_id is required"}, status_code=400)
+    chat_room_id = chat_room_id_raw.strip()
+
+    if not isinstance(message_id_raw, int) or message_id_raw < 1:
+        return jsonify({"error": "message_id must be a positive integer"}, status_code=400)
+    message_id = message_id_raw
+
+    session = request.session
+    user_id = session.get("user_id")
+
+    if user_id is None:
+        return jsonify({"error": "分岐の切り替えはログイン後のチャットでのみ利用できます"}, status_code=400)
+
+    try:
+        room_mode, _sid, legacy_response = await run_blocking(
+            _resolve_authenticated_room_target,
+            chat_room_id,
+            user_id,
+            "他ユーザーのチャットルームは操作できません",
+        )
+        if legacy_response is not None:
+            return legacy_response
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to validate chat room ownership before branch switch.",
+        )
+
+    if room_mode != "normal":
+        return jsonify(
+            {"error": "一時チャットでは分岐の切り替えは利用できません"},
+            status_code=400,
+        )
+
+    generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=None)
+    if has_active_generation(generation_key, service=get_chat_generation_service(request)):
+        return jsonify(
+            {"error": "このチャットルームでは回答を生成中です。完了までお待ちください。"},
+            status_code=409,
+        )
+
+    try:
+        messages = await run_blocking(switch_chat_branch, chat_room_id, message_id)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    except Exception:
+        return log_and_internal_server_error(logger, "Failed to switch chat branch.")
+
+    return jsonify({"messages": messages})
 
 
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")

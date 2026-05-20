@@ -35,6 +35,14 @@ export type UiChatMessage = {
   streaming?: boolean;
   error?: boolean;
   attachedFileNames?: string[];
+  /** Server-side chat_history id; present for persisted (DB-backed) messages. */
+  serverId?: number;
+  /** 1-based position of this version among its sibling branches. */
+  versionIndex?: number;
+  /** Total number of sibling branches at this point (>1 means it is switchable). */
+  versionCount?: number;
+  /** Ordered server ids of all sibling branches, used to switch versions. */
+  siblingIds?: number[];
 };
 
 export type ChatHistoryMessagePayload = {
@@ -43,6 +51,9 @@ export type ChatHistoryMessagePayload = {
   sender?: string;
   timestamp?: string;
   attached_file_names?: string[];
+  version_index?: number;
+  version_count?: number;
+  sibling_ids?: number[];
 };
 
 export type ChatHistoryPaginationPayload = {

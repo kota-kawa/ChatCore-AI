@@ -505,10 +505,15 @@ class ChatStreamingTestCase(unittest.TestCase):
         generation_finished = threading.Event()
         session = {"user_id": 42}
 
-        def save_message(room_id, message, sender, attached_file_names=None):
+        def save_message(room_id, message, sender, attached_file_names=None, parent_id=None):
             stored_messages.append((room_id, message, sender))
             if sender == "assistant":
                 generation_finished.set()
+            return len(stored_messages)
+
+        def active_leaf_id(room_id):
+            room_messages = [m for m in stored_messages if m[0] == room_id]
+            return len(room_messages) or None
 
         def get_messages(room_id):
             return [
@@ -554,6 +559,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
             patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
             patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
+            patch("blueprints.chat.messages.get_active_leaf_id", side_effect=active_leaf_id),
             patch("blueprints.chat.messages.get_chat_room_messages", side_effect=get_messages),
             patch("blueprints.chat.messages._fetch_chat_history", side_effect=fetch_history),
             patch("blueprints.chat.messages.get_user_by_id", return_value={}),

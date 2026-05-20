@@ -72,12 +72,19 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
       Array.isArray(rawFileNames) && rawFileNames.length > 0
         ? (rawFileNames.filter((n) => typeof n === "string") as string[])
         : undefined;
+    const rawSiblingIds = record.sibling_ids;
+    const sibling_ids = Array.isArray(rawSiblingIds)
+      ? (rawSiblingIds.filter((value) => typeof value === "number") as number[])
+      : undefined;
     return {
       id: asPositiveNumber(record.id) ?? undefined,
       message: optionalString(record.message),
       sender: optionalString(record.sender),
       timestamp: optionalString(record.timestamp),
       ...(attached_file_names ? { attached_file_names } : {}),
+      ...(asPositiveNumber(record.version_index) ? { version_index: asPositiveNumber(record.version_index)! } : {}),
+      ...(asPositiveNumber(record.version_count) ? { version_count: asPositiveNumber(record.version_count)! } : {}),
+      ...(sibling_ids && sibling_ids.length > 0 ? { sibling_ids } : {}),
     };
   });
 }

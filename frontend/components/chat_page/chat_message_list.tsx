@@ -16,6 +16,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import type { UiChatMessage } from "../../lib/chat_page/types";
 import { BotMessageHtml } from "./bot_message_html";
+import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
@@ -125,6 +126,7 @@ type ChatMessageRowProps = {
   onEditStart: (messageId: string) => void;
   onEditCancel: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
+  onSwitchBranch: (messageId: number) => void;
 };
 
 type ChatMessageRowComponentProps = ChatMessageRowProps & {
@@ -148,6 +150,7 @@ function ChatMessageRow({
   onEditStart,
   onEditCancel,
   onEditAndRegenerate,
+  onSwitchBranch,
   rows,
   style,
 }: ChatMessageRowComponentProps) {
@@ -234,6 +237,11 @@ function ChatMessageRow({
             </div>
           ) : (
             <div className="message-actions">
+              <BranchNavigator
+                message={message}
+                disabled={isGenerating}
+                onSwitchBranch={onSwitchBranch}
+              />
               <EditActionButton
                 onEdit={() => {
                   onEditStart(message.id);
@@ -266,6 +274,13 @@ function ChatMessageRow({
         </div>
         {!message.streaming && (
           <div className="message-actions">
+            {!message.error && (
+              <BranchNavigator
+                message={message}
+                disabled={isGenerating}
+                onSwitchBranch={onSwitchBranch}
+              />
+            )}
             <CopyActionButton
               getText={() => {
                 return message.text;
@@ -305,6 +320,7 @@ type ChatMessageListProps = {
   messages: UiChatMessage[];
   onRegenerate: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
+  onSwitchBranch: (messageId: number) => void;
 };
 
 function ChatMessageListComponent({
@@ -321,6 +337,7 @@ function ChatMessageListComponent({
   messages,
   onRegenerate,
   onEditAndRegenerate,
+  onSwitchBranch,
 }: ChatMessageListProps) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
@@ -391,6 +408,7 @@ function ChatMessageListComponent({
       onEditStart: handleEditStart,
       onEditCancel: handleEditCancel,
       onEditAndRegenerate,
+      onSwitchBranch,
     }),
     [
       rows,
@@ -402,6 +420,7 @@ function ChatMessageListComponent({
       handleEditStart,
       handleEditCancel,
       onEditAndRegenerate,
+      onSwitchBranch,
     ],
   );
 
