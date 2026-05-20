@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import React, { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { PromptCard, type PromptRecord } from "./prompt_card";
 import type { PromptCategory, PromptFeedback, PromptTypeFilter, PromptTypeFilterOption } from "./prompt_share_page_types";
@@ -162,6 +162,19 @@ export function PromptSharePageLayout({
       </header>
 
       <main>
+        <section className="prompt-crawl-summary" aria-labelledby="prompt-crawl-summary-title">
+          <h2 id="prompt-crawl-summary-title">公開プロンプトライブラリ</h2>
+          <p>
+            Chat Coreのプロンプト共有では、文章作成、調査、画像生成、SKILLなどの日本語AIプロンプトをカテゴリ別に探せます。
+            気になるプロンプトは詳細を確認し、コメントや共有リンクから使い方の文脈も追えます。
+          </p>
+          <ul>
+            {categories.slice(0, 6).map((category) => (
+              <li key={category.value}>{category.label}</li>
+            ))}
+          </ul>
+        </section>
+
         <section className="categories" aria-labelledby="categories-title">
           <div className="section-header section-header--compact">
             <h2 id="categories-title">カテゴリ</h2>

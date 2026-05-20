@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent
 } from "react";
+import type { GetServerSideProps } from "next";
 
 import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
@@ -48,6 +49,7 @@ import {
 import type {
   PromptCommentData,
   PromptData,
+  PromptFeedResponse,
   PromptPagination,
   PromptType
 } from "../../scripts/prompt_share/types";
@@ -94,7 +96,47 @@ const promptShareStructuredData = {
   }
 };
 
-export default function PromptSharePage() {
+type PromptSharePageProps = {
+  initialPrompts?: PromptData[];
+};
+
+const INITIAL_PROMPT_LIMIT = 18;
+
+function getBackendOrigin() {
+  return (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
+}
+
+export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = async () => {
+  try {
+    const response = await fetch(`${getBackendOrigin()}/prompt_share/api/prompts`, {
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+    if (!response.ok) {
+      return { props: { initialPrompts: [] } };
+    }
+
+    const data = await response.json() as PromptFeedResponse;
+    const initialPrompts = Array.isArray(data.prompts)
+      ? data.prompts.slice(0, INITIAL_PROMPT_LIMIT).map(normalizePromptData)
+      : [];
+
+    return { props: { initialPrompts } };
+  } catch (error) {
+    console.error("Failed to load prompt share SSR prompts:", error);
+    return { props: { initialPrompts: [] } };
+  }
+};
+
+export default function PromptSharePage({ initialPrompts = [] }: PromptSharePageProps) {
+  const initialPromptRecords = useMemo<PromptRecord[]>(() => {
+    return initialPrompts.map((item, index) => ({
+      ...normalizePromptData(item),
+      clientId: `prompt-initial-${String(item.id ?? index)}`,
+      liked: Boolean(item.liked)
+    }));
+  }, [initialPrompts]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authUiReady, setAuthUiReady] = useState(false);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
@@ -105,9 +147,13 @@ export default function PromptSharePage() {
   const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
   const [selectedPromptTypeFilter, setSelectedPromptTypeFilter] = useState<PromptTypeFilter>("all");
 
-  const [prompts, setPrompts] = useState<PromptRecord[]>([]);
-  const [isPromptsLoading, setIsPromptsLoading] = useState(true);
-  const [promptCountMeta, setPromptCountMeta] = useState("公開プロンプトを読み込み中...");
+  const [prompts, setPrompts] = useState<PromptRecord[]>(initialPromptRecords);
+  const [isPromptsLoading, setIsPromptsLoading] = useState(initialPromptRecords.length === 0);
+  const [promptCountMeta, setPromptCountMeta] = useState(
+    initialPromptRecords.length > 0
+      ? `全てのプロンプト: ${initialPromptRecords.length}件`
+      : "公開プロンプトを読み込み中..."
+  );
   const [promptFeedback, setPromptFeedback] = useState<PromptFeedback | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [searchPagination, setSearchPagination] = useState<PromptPagination | null>(null);
@@ -155,8 +201,8 @@ export default function PromptSharePage() {
     variant: "info"
   });
 
-  const nextPromptClientIdRef = useRef(0);
-  const promptsRef = useRef<PromptRecord[]>([]);
+  const nextPromptClientIdRef = useRef(initialPromptRecords.length);
+  const promptsRef = useRef<PromptRecord[]>(initialPromptRecords);
   const selectedCategoryRef = useRef("all");
   const selectedPromptTypeFilterRef = useRef<PromptTypeFilter>("all");
   const hasAutoFilledAuthorRef = useRef(false);
