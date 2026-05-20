@@ -430,6 +430,49 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(web_search.build_web_search_sources_markdown(empty_result), "")
 
+    def test_build_web_search_trace_markdown_returns_steps_and_sources(self):
+        result = web_search.WebSearchResult(
+            query="Python news",
+            searched_at="2026-04-30T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Title A",
+                    hostname="example.com",
+                    age="2026-04-30",
+                    snippets=(),
+                ),
+            ),
+        )
+
+        block = web_search.build_web_search_trace_markdown(
+            result,
+            steps=[
+                {"title": "検索が必要か判断", "detail": "最新情報が必要な可能性を確認しました。"},
+                {"title": "Web検索: Python news", "detail": "1件の候補を取得しました。"},
+            ],
+        )
+
+        self.assertIn('<details class="web-search-sources web-search-sources--trace">', block)
+        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', block)
+        self.assertIn('<span class="web-search-sources__count">2ステップ / 1件</span>', block)
+        self.assertIn('<ol class="web-search-sources__steps">', block)
+        self.assertIn('<span class="web-search-sources__title">検索が必要か判断</span>', block)
+        self.assertIn('<div class="web-search-sources__section-title">参照したWebサイト</div>', block)
+        self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
+
+    def test_build_web_search_trace_markdown_escapes_steps(self):
+        block = web_search.build_web_search_trace_markdown(
+            None,
+            steps=[
+                {"title": "<b>Unsafe</b>", "detail": "<script>alert(1)</script>"},
+            ],
+        )
+
+        self.assertIn("&lt;b&gt;Unsafe&lt;/b&gt;", block)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", block)
+        self.assertNotIn("<b>Unsafe</b>", block)
+
     def test_combine_web_search_results_deduplicates_sources_by_url(self):
         first = web_search.WebSearchResult(
             query="Python news",

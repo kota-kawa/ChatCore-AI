@@ -6,8 +6,8 @@ import { sanitizeClassAttributeValue } from "../scripts/core/html";
 test("sanitizeClassAttributeValue preserves web search source UI classes", () => {
   assert.equal(
     sanitizeClassAttributeValue(
-      "web-search-sources web-search-sources__summary web-search-sources__link unsafe-class"
+      "web-search-sources web-search-sources--trace web-search-sources__summary web-search-sources__link unsafe-class"
     ),
-    "web-search-sources web-search-sources__summary web-search-sources__link"
+    "web-search-sources web-search-sources--trace web-search-sources__summary web-search-sources__link"
   );
 });

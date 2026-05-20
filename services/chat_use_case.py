@@ -25,7 +25,7 @@ from services.llm import (
 from services.request_models import ChatMessageRequest
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
-    build_web_search_sources_markdown,
+    build_web_search_trace_markdown,
     maybe_augment_messages_with_web_search,
 )
 from services.chat_title import (
@@ -464,12 +464,35 @@ class ChatPostUseCase:
                 status_code=502,
             )
 
-        sources_block = build_web_search_sources_markdown(augmentation.result)
-        if sources_block:
-            separator = "" if not bot_reply or bot_reply.endswith("\n\n") else (
-                "\n" if bot_reply.endswith("\n") else "\n\n"
+        web_search_trace_steps: list[dict[str, str]] = []
+        if augmentation.result is not None:
+            web_search_trace_steps.extend(
+                [
+                    {
+                        "title": "検索が必要か判断",
+                        "detail": "最新情報が必要な可能性を確認しました。",
+                    },
+                    {
+                        "title": f"Web検索: {augmentation.result.query}",
+                        "detail": f"{len(augmentation.result.sources)}件の候補を取得しました。",
+                    },
+                    {
+                        "title": "検索結果を確認",
+                        "detail": "取得した情報を回答用の文脈に追加しました。",
+                    },
+                    {
+                        "title": "回答を作成",
+                        "detail": "検索結果と会話文脈を統合して回答しました。",
+                    },
+                ]
             )
-            bot_reply = f"{bot_reply}{separator}{sources_block}"
+        trace_block = build_web_search_trace_markdown(
+            augmentation.result,
+            steps=web_search_trace_steps,
+        )
+        if trace_block:
+            separator = "" if not bot_reply else "\n\n"
+            bot_reply = f"{trace_block}{separator}{bot_reply}"
 
         saved_assistant_message_id: int | None = None
         generated_room_title: str | None = None

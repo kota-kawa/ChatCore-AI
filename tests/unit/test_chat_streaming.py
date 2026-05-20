@@ -386,11 +386,14 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIn("回答本文", body)
         self.assertIn('\\"web-search-sources__summary\\"', body)
-        self.assertIn('\\"web-search-sources__count\\">1件', body)
+        self.assertIn('\\"web-search-sources__label\\">回答までのステップ', body)
+        self.assertIn('\\"web-search-sources__count\\">4ステップ / 1件', body)
         self.assertIn("https://example.com/python", persisted_messages[0])
+        self.assertTrue(persisted_messages[0].startswith('<details class="web-search-sources web-search-sources--trace">'))
         self.assertIn('<summary class="web-search-sources__summary">', persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">1件</span>', persisted_messages[0])
-        self.assertTrue(persisted_messages[0].startswith("回答本文\n\n<details"))
+        self.assertIn('<span class="web-search-sources__label">回答までのステップ</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">4ステップ / 1件</span>', persisted_messages[0])
+        self.assertIn("回答本文", persisted_messages[0])
 
     def test_background_generation_job_can_search_again_after_reviewing_results(self):
         persisted_messages = []
@@ -488,7 +491,9 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("検索結果を踏まえた回答", body)
         self.assertIn("https://example.com/python", persisted_messages[0])
         self.assertIn("https://example.com/release", persisted_messages[0])
-        self.assertIn('<span class="web-search-sources__count">2件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__title">Web検索: Python latest news</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__title">追加検索: Python release details</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">5ステップ / 2件</span>', persisted_messages[0])
 
     def test_background_generation_job_reuses_duplicate_search_results(self):
         persisted_messages = []
@@ -551,7 +556,8 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(stream_call_count, 3)
         mock_search.assert_called_once_with("OpenAI news", freshness="")
         self.assertIn('"cached": true', body)
-        self.assertIn('<span class="web-search-sources__count">1件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__title">検索結果を再利用: OpenAI news</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">5ステップ / 1件</span>', persisted_messages[0])
 
     def test_background_generation_job_stops_tool_loop_at_max_steps(self):
         persisted_messages = []
@@ -617,7 +623,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(mock_search.call_count, 4)
         self.assertEqual(stream_tools, [True, True, True, True, False])
         self.assertIn("上限内で回答", body)
-        self.assertIn('<span class="web-search-sources__count">4件</span>', persisted_messages[0])
+        self.assertIn('<span class="web-search-sources__count">9ステップ / 4件</span>', persisted_messages[0])
 
     def test_background_generation_job_reports_response_generation_status(self):
         with (

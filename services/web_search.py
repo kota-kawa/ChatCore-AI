@@ -885,10 +885,9 @@ def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]
     ]
 
 
-def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
-    if result is None or not result.has_sources:
-        return ""
-
+def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
+    if result is None:
+        return []
     sources_lines: list[str] = []
     for source in result.sources:
         url = source.url.strip()
@@ -917,6 +916,13 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
         )
 
     if not sources_lines:
+        return []
+    return sources_lines
+
+
+def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
+    sources_lines = _build_web_search_source_lines(result)
+    if not sources_lines:
         return ""
 
     return "\n".join(
@@ -933,6 +939,82 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
             '<ul class="web-search-sources__list">',
             *sources_lines,
             "</ul>",
+            "</details>",
+        ]
+    )
+
+
+def build_web_search_trace_markdown(
+    result: WebSearchResult | None,
+    *,
+    steps: list[dict[str, Any]] | None = None,
+) -> str:
+    sources_lines = _build_web_search_source_lines(result)
+    normalized_steps: list[tuple[str, str]] = []
+    for step in steps or []:
+        if not isinstance(step, dict):
+            continue
+        title = _normalize_text(step.get("title", ""), max_chars=180)
+        detail = _normalize_text(step.get("detail", ""), max_chars=260)
+        if title:
+            normalized_steps.append((title, detail))
+
+    if not normalized_steps and not sources_lines:
+        return ""
+
+    summary_count_parts: list[str] = []
+    if normalized_steps:
+        summary_count_parts.append(f"{len(normalized_steps)}ステップ")
+    if sources_lines:
+        summary_count_parts.append(f"{len(sources_lines)}件")
+    summary_count = " / ".join(summary_count_parts)
+
+    body_lines: list[str] = [
+        '<div class="web-search-sources__list">',
+    ]
+    if normalized_steps:
+        body_lines.append('<ol class="web-search-sources__steps">')
+        for index, (title, detail) in enumerate(normalized_steps, start=1):
+            detail_line = (
+                f'<span class="web-search-sources__hostname">{escape(detail)}</span>'
+                if detail
+                else ""
+            )
+            body_lines.append(
+                (
+                    '<li class="web-search-sources__step">'
+                    f'<span class="web-search-sources__index">{index}</span>'
+                    '<span class="web-search-sources__content">'
+                    f'<span class="web-search-sources__title">{escape(title)}</span>'
+                    f"{detail_line}"
+                    "</span>"
+                    "</li>"
+                )
+            )
+        body_lines.append("</ol>")
+    if sources_lines:
+        body_lines.extend(
+            [
+                '<div class="web-search-sources__section-title">参照したWebサイト</div>',
+                '<ul class="web-search-sources__links">',
+                *sources_lines,
+                "</ul>",
+            ]
+        )
+    body_lines.append("</div>")
+
+    return "\n".join(
+        [
+            '<details class="web-search-sources web-search-sources--trace">',
+            '<summary class="web-search-sources__summary">',
+            '<span class="web-search-sources__summary-main">',
+            '<span class="web-search-sources__summary-icon"></span>',
+            '<span class="web-search-sources__label">回答までのステップ</span>',
+            "</span>",
+            f'<span class="web-search-sources__count">{escape(summary_count)}</span>',
+            '<span class="web-search-sources__chevron"></span>',
+            "</summary>",
+            *body_lines,
             "</details>",
         ]
     )

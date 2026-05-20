@@ -25,7 +25,7 @@ from .llm import (
     is_retryable_llm_error,
 )
 from .web_search import (
-    build_web_search_sources_markdown,
+    build_web_search_trace_markdown,
     combine_web_search_results,
     get_web_search_tool_definition,
     is_web_search_enabled,
@@ -286,6 +286,7 @@ class ChatGenerationJob:
         chunks: list[str] = []
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
+        web_search_trace_steps: list[dict[str, str]] = []
         current_messages = [dict(m) for m in self._conversation_messages]
         suppress_next_generation_started = False
         max_steps = _get_chat_agent_max_steps()
@@ -299,6 +300,22 @@ class ChatGenerationJob:
             )
             current_messages = augmentation.messages
             if augmentation.result is not None:
+                web_search_trace_steps.extend(
+                    [
+                        {
+                            "title": "検索が必要か判断",
+                            "detail": "最新情報が必要な可能性を確認しました。",
+                        },
+                        {
+                            "title": f"Web検索: {augmentation.result.query}",
+                            "detail": f"{len(augmentation.result.sources)}件の候補を取得しました。",
+                        },
+                        {
+                            "title": "検索結果を確認",
+                            "detail": "取得した情報を回答用の文脈に追加しました。",
+                        },
+                    ]
+                )
                 web_search_results.append(augmentation.result)
                 web_search_results_by_key[
                     _normalized_search_key(
@@ -309,6 +326,12 @@ class ChatGenerationJob:
                 step_count += 1
             elif augmentation.status in {"failed", "no_sources"}:
                 step_count += 1
+                web_search_trace_steps.append(
+                    {
+                        "title": "Web検索を試行",
+                        "detail": "検索結果を回答に使える形では取得できませんでした。",
+                    }
+                )
             suppress_next_generation_started = augmentation.status == "failed"
 
             if self._cancelled:
@@ -430,6 +453,18 @@ class ChatGenerationJob:
                         },
                     )
                     if cached_result is not None:
+                        web_search_trace_steps.extend(
+                            [
+                                {
+                                    "title": f"検索結果を再利用: {cached_result.query}",
+                                    "detail": "同じ検索条件の結果を再利用しました。",
+                                },
+                                {
+                                    "title": "検索結果を確認",
+                                    "detail": "再利用した情報で不足がないか確認しました。",
+                                },
+                            ]
+                        )
                         self._publish(
                             "web_search_completed",
                             {
@@ -451,6 +486,19 @@ class ChatGenerationJob:
                     try:
                         result = search_brave_llm_context(query_text, freshness=freshness_text)
                         web_search_results_by_key[search_key] = result
+                        search_step_title = "追加検索" if web_search_results else "Web検索"
+                        web_search_trace_steps.extend(
+                            [
+                                {
+                                    "title": f"{search_step_title}: {result.query}",
+                                    "detail": f"{len(result.sources)}件の候補を取得しました。",
+                                },
+                                {
+                                    "title": "検索結果を確認",
+                                    "detail": "取得した情報で回答に足りるか確認しました。",
+                                },
+                            ]
+                        )
                         if result.has_sources:
                             web_search_results.append(result)
                         self._publish(
@@ -473,6 +521,12 @@ class ChatGenerationJob:
                         message = (
                             f"Web検索の月間上限（全体 {exc.limit} 回）に達しました。"
                             "検索なしで回答を続けます。"
+                        )
+                        web_search_trace_steps.append(
+                            {
+                                "title": f"Web検索を試行: {query_text}",
+                                "detail": "月間上限に達したため検索結果を取得できませんでした。",
+                            }
                         )
                         suppress_next_generation_started = True
                         self._publish(
@@ -497,6 +551,12 @@ class ChatGenerationJob:
                         )
                     except Exception:
                         logger.exception("Brave search via tool call failed.")
+                        web_search_trace_steps.append(
+                            {
+                                "title": f"Web検索を試行: {query_text}",
+                                "detail": "検索リクエストに失敗したため、取得済み情報で回答を続けました。",
+                            }
+                        )
                         suppress_next_generation_started = True
                         self._publish(
                             "web_search_failed",
@@ -584,14 +644,20 @@ class ChatGenerationJob:
 
         bot_reply = "".join(chunks)
         combined_web_search_result = combine_web_search_results(web_search_results)
-        sources_block = build_web_search_sources_markdown(combined_web_search_result)
-        if sources_block:
-            separator = "" if not bot_reply or bot_reply.endswith("\n\n") else (
-                "\n" if bot_reply.endswith("\n") else "\n\n"
+        if web_search_trace_steps or combined_web_search_result is not None:
+            web_search_trace_steps.append(
+                {
+                    "title": "回答を作成",
+                    "detail": "検索結果と会話文脈を統合して回答しました。",
+                }
             )
-            sources_chunk = f"{separator}{sources_block}"
-            bot_reply = f"{bot_reply}{sources_chunk}"
-            self._publish("chunk", {"text": sources_chunk})
+        trace_block = build_web_search_trace_markdown(
+            combined_web_search_result,
+            steps=web_search_trace_steps,
+        )
+        if trace_block:
+            separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
+            bot_reply = f"{trace_block}{separator}{bot_reply}"
         self.response = bot_reply
 
         try:
