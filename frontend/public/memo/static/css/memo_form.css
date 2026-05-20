@@ -4221,9 +4221,9 @@ body.memo-page {
 
 /* Final dark-mode polish: keep the memo page readable without the harsh black/yellow contrast. */
 [data-theme="dark"] body.memo-page {
-  --memo-amber: #2dd4bf;
-  --memo-amber-strong: #0f766e;
-  --memo-amber-soft: rgba(45, 212, 191, 0.14);
+  --memo-amber: #fbbc04;
+  --memo-amber-strong: #f9ab00;
+  --memo-amber-soft: rgba(251, 188, 4, 0.16);
   --memo-border: rgba(148, 163, 184, 0.22);
   --memo-text: #f3f6f8;
   --memo-text-muted: #a8b3c2;
@@ -4236,7 +4236,7 @@ body.memo-page {
 
 [data-theme="dark"] .memo-page-shell {
   background:
-    radial-gradient(circle at 12% 0%, rgba(45, 212, 191, 0.08), transparent 28rem),
+    radial-gradient(circle at 12% 0%, rgba(251, 188, 4, 0.08), transparent 28rem),
     linear-gradient(180deg, #121417 0%, #171a1f 48%, #15171b 100%);
 }
 
@@ -4291,8 +4291,8 @@ body.memo-page {
 [data-theme="dark"] .memo-export-format-option.is-active,
 [data-theme="dark"] .memo-export-scope-option.is-active {
   border-color: transparent;
-  background: linear-gradient(135deg, #2dd4bf 0%, #0f766e 100%);
-  color: #06201d;
+  background: linear-gradient(135deg, #fbbc04 0%, #f9ab00 100%);
+  color: #3a2a00;
 }
 
 [data-theme="dark"] .memo-toolbar__title h1,
@@ -4324,7 +4324,7 @@ body.memo-page {
 
 [data-theme="dark"] .memo-crawl-summary__eyebrow,
 [data-theme="dark"] .memo-crawl-summary__list i {
-  color: #5eead4;
+  color: #fcd34d;
 }
 
 [data-theme="dark"] .memo-toolbar__search,
@@ -4349,9 +4349,9 @@ body.memo-page {
 [data-theme="dark"] .memo-toolbar__search:focus-within,
 [data-theme="dark"] .memo-control:focus,
 [data-theme="dark"] .memo-select.is-open .memo-select__trigger {
-  border-color: rgba(45, 212, 191, 0.56);
+  border-color: rgba(251, 188, 4, 0.56);
   background: #272d36;
-  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12);
+  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.12);
 }
 
 [data-theme="dark"] .memo-toolbar__search > i,
@@ -4361,7 +4361,7 @@ body.memo-page {
 [data-theme="dark"] .memo-select__check,
 [data-theme="dark"] .memo-panel__header h2 i,
 [data-theme="dark"] .memo-history__section-label i {
-  color: #5eead4;
+  color: #fcd34d;
 }
 
 [data-theme="dark"] .memo-toolbar__icon-btn:hover,
@@ -4371,7 +4371,7 @@ body.memo-page {
 [data-theme="dark"] .memo-response-tab:hover:not(:disabled),
 [data-theme="dark"] .memo-export-select__action:hover:not(:disabled),
 [data-theme="dark"] .secondary-button:hover:not(:disabled) {
-  border-color: rgba(45, 212, 191, 0.38);
+  border-color: rgba(251, 188, 4, 0.38);
   background: #2b323b;
   color: #f3f6f8;
 }
@@ -4382,7 +4382,7 @@ body.memo-page {
 }
 
 [data-theme="dark"] .memo-item:hover {
-  border-color: rgba(45, 212, 191, 0.32);
+  border-color: rgba(251, 188, 4, 0.32);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
 }
 
@@ -4424,9 +4424,9 @@ body.memo-page {
 [data-theme="dark"] .memo-export-modal__close:hover,
 [data-theme="dark"] .memo-modal__icon-btn:hover:not(:disabled),
 [data-theme="dark"] .memo-modal__edit-btn:hover:not(:disabled) {
-  border-color: rgba(45, 212, 191, 0.36);
-  background: rgba(45, 212, 191, 0.12);
-  color: #a7fff3;
+  border-color: rgba(251, 188, 4, 0.36);
+  background: rgba(251, 188, 4, 0.12);
+  color: #ffe9a8;
 }
 
 [data-theme="dark"] .memo-item__pin.is-pinned,
@@ -4449,7 +4449,7 @@ body.memo-page {
 [data-theme="dark"] .memo-item__dropdown-item.is-active,
 [data-theme="dark"] .memo-export-select__item:hover,
 [data-theme="dark"] .memo-export-select__item.is-selected {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(251, 188, 4, 0.12);
   color: #f3f6f8;
 }
 
