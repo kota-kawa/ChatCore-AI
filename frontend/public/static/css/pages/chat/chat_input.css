@@ -505,6 +505,36 @@
   --constellation-node-halo: rgba(123, 241, 188, 0.48);
 }
 
+.thinking-message[data-generation-phase="web-search"] {
+  --constellation-stage-animation: constellationSearchStageSweep;
+  --constellation-stage-duration: 2.7s;
+  --constellation-stage-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --constellation-nebula-animation: constellationSearchNebulaSweep;
+  --constellation-nebula-duration: 2.35s;
+  --constellation-nebula-easing: cubic-bezier(0.4, 0, 0.2, 1);
+  --constellation-comet-animation: constellationSearchCometSweep;
+  --constellation-comet-duration: 2.15s;
+  --constellation-comet-easing: cubic-bezier(0.24, 0.08, 0.18, 1);
+  --constellation-link-animation: constellationSearchLinkSweep;
+  --constellation-link-duration: 1.45s;
+  --constellation-node-animation: constellationSearchNodePing;
+  --constellation-node-duration: 1.65s;
+}
+
+.thinking-message[data-generation-phase="generating"] {
+  --constellation-stage-animation: constellationGenerateStagePulse;
+  --constellation-stage-duration: 4.2s;
+  --constellation-nebula-animation: constellationGenerateNebulaBloom;
+  --constellation-nebula-duration: 3.6s;
+  --constellation-comet-animation: constellationGenerateCometOrbit;
+  --constellation-comet-duration: 5.2s;
+  --constellation-comet-easing: cubic-bezier(0.37, 0, 0.2, 1);
+  --constellation-link-animation: constellationGenerateLinkPulse;
+  --constellation-link-duration: 2.05s;
+  --constellation-node-animation: constellationGenerateNodeBeat;
+  --constellation-node-duration: 1.9s;
+}
+
 .constellation-loader {
   position: relative;
   isolation: isolate;
@@ -522,7 +552,7 @@
     inset 0 1px 0 rgba(233, 255, 242, 0.08),
     0 0 0 1px rgba(45, 212, 191, 0.08),
     0 14px 28px rgba(0, 0, 0, 0.28);
-  animation: constellationStageDrift 6.4s ease-in-out infinite;
+  animation: var(--constellation-stage-animation, constellationStageDrift) var(--constellation-stage-duration, 6.4s) var(--constellation-stage-easing, ease-in-out) infinite;
 }
 
 .constellation-loader::before {
@@ -536,7 +566,7 @@
     linear-gradient(126deg, transparent 14%, var(--constellation-nebula-sheen) 46%, transparent 72%);
   opacity: 0.94;
   filter: blur(10px);
-  animation: constellationNebulaDrift 7.2s ease-in-out infinite;
+  animation: var(--constellation-nebula-animation, constellationNebulaDrift) var(--constellation-nebula-duration, 7.2s) var(--constellation-nebula-easing, ease-in-out) infinite;
 }
 
 .constellation-loader::after {
@@ -551,7 +581,7 @@
     radial-gradient(circle, var(--constellation-comet-core) 0%, var(--constellation-comet-mid) 28%, var(--constellation-comet-trail) 62%, transparent 72%);
   box-shadow: -0.8rem 0 1.4rem var(--constellation-comet-shadow);
   filter: blur(1px);
-  animation: constellationComet 4.4s cubic-bezier(0.26, 0.08, 0.2, 1) infinite;
+  animation: var(--constellation-comet-animation, constellationComet) var(--constellation-comet-duration, 4.4s) var(--constellation-comet-easing, cubic-bezier(0.26, 0.08, 0.2, 1)) infinite;
 }
 
 .constellation-loader__link,
@@ -578,7 +608,7 @@
   inset: 0;
   background: linear-gradient(90deg, transparent 0%, rgba(247, 255, 250, 0.92) 50%, transparent 100%);
   opacity: 0.48;
-  animation: constellationLinkShimmer 2.6s ease-in-out infinite;
+  animation: var(--constellation-link-animation, constellationLinkShimmer) var(--constellation-link-duration, 2.6s) var(--constellation-link-easing, ease-in-out) infinite;
   animation-delay: var(--link-delay, 0s);
 }
 
@@ -603,7 +633,7 @@
   border-radius: inherit;
   background: radial-gradient(circle, var(--constellation-node-halo), transparent 72%);
   opacity: 0;
-  animation: constellationNodeHalo 2.8s ease-in-out infinite;
+  animation: var(--constellation-node-animation, constellationNodeHalo) var(--constellation-node-duration, 2.8s) var(--constellation-node-easing, ease-in-out) infinite;
   animation-delay: var(--node-delay, 0s);
 }
 
@@ -695,6 +725,156 @@
   }
   50% {
     opacity: 0.72;
+  }
+}
+
+@keyframes constellationSearchStageSweep {
+  0%,
+  100% {
+    transform: translate3d(-0.12rem, 0, 0) rotate(-0.28deg) scale(1.006);
+  }
+  38% {
+    transform: translate3d(0.16rem, -0.04rem, 0) rotate(0.42deg) scale(1.024);
+  }
+  68% {
+    transform: translate3d(-0.02rem, 0.04rem, 0) rotate(-0.12deg) scale(1.012);
+  }
+}
+
+@keyframes constellationSearchNebulaSweep {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: translate3d(-8%, 3%, 0) scaleX(0.86) scaleY(0.96);
+  }
+  45% {
+    opacity: 1;
+    transform: translate3d(11%, -4%, 0) scaleX(1.18) scaleY(1.06);
+  }
+}
+
+@keyframes constellationSearchCometSweep {
+  0% {
+    opacity: 0;
+    transform: translate3d(-42%, 82%, 0) scale(0.46);
+  }
+  16% {
+    opacity: 0.92;
+  }
+  54% {
+    opacity: 1;
+    transform: translate3d(340%, 4%, 0) scale(0.76);
+  }
+  84% {
+    opacity: 0.72;
+    transform: translate3d(560%, 66%, 0) scale(0.58);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(720%, 18%, 0) scale(0.66);
+  }
+}
+
+@keyframes constellationSearchLinkSweep {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: translateX(-18%) scaleX(0.72);
+  }
+  46% {
+    opacity: 0.86;
+    transform: translateX(10%) scaleX(1);
+  }
+}
+
+@keyframes constellationSearchNodePing {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.58);
+  }
+  26% {
+    opacity: 0.92;
+    transform: scale(1.08);
+  }
+  52% {
+    opacity: 0.22;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes constellationGenerateStagePulse {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-0.26deg) scale(1);
+  }
+  32% {
+    transform: translate3d(0, -0.05rem, 0) rotate(0.18deg) scale(1.026);
+  }
+  62% {
+    transform: translate3d(0, 0.03rem, 0) rotate(-0.08deg) scale(1.01);
+  }
+}
+
+@keyframes constellationGenerateNebulaBloom {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translate3d(-3%, 2%, 0) scale(0.9);
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(3%, -3%, 0) scale(1.18);
+  }
+}
+
+@keyframes constellationGenerateCometOrbit {
+  0% {
+    opacity: 0;
+    transform: translate3d(18%, 132%, 0) scale(0.5);
+  }
+  18% {
+    opacity: 0.88;
+  }
+  48% {
+    opacity: 1;
+    transform: translate3d(302%, 2%, 0) scale(0.82);
+  }
+  78% {
+    opacity: 0.78;
+    transform: translate3d(560%, 104%, 0) scale(0.66);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(660%, 36%, 0) scale(0.56);
+  }
+}
+
+@keyframes constellationGenerateLinkPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    filter: brightness(1);
+  }
+  42% {
+    opacity: 0.86;
+    filter: brightness(1.45);
+  }
+}
+
+@keyframes constellationGenerateNodeBeat {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.74);
+  }
+  34% {
+    opacity: 0.92;
+    transform: scale(1.2);
+  }
+  64% {
+    opacity: 0.32;
+    transform: scale(0.94);
   }
 }
 

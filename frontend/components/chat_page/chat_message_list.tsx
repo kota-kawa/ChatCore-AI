@@ -188,11 +188,18 @@ function ChatMessageRow({
   const { message } = row;
   if (message.sender === "thinking") {
     const statusText = message.text.trim() || "AIが応答を準備しています";
+    const generationPhase = message.generationPhase ?? "preparing";
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper bot-message-wrapper thinking-message-wrapper">
-          <div className="thinking-message" role="status" aria-live="polite" aria-label={statusText}>
-            <ThinkingConstellation />
+          <div
+            className="thinking-message"
+            data-generation-phase={generationPhase}
+            role="status"
+            aria-live="polite"
+            aria-label={statusText}
+          >
+            <ThinkingConstellation phase={generationPhase} />
             <span className="thinking-message__status">{statusText}</span>
           </div>
         </div>

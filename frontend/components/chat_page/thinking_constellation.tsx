@@ -7,14 +7,34 @@ import {
   THINKING_CONSTELLATION_STEP_MS,
   THINKING_CONSTELLATION_VARIANTS,
 } from "../../lib/chat_page/constants";
+import type { ChatGenerationPhase } from "../../lib/chat_page/types";
 
-function resolveConstellationIndex(timestamp: number) {
+const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, { stepMs: number; linkDelayMs: number; nodeDelayMs: number }> = {
+  preparing: {
+    stepMs: THINKING_CONSTELLATION_STEP_MS,
+    linkDelayMs: 160,
+    nodeDelayMs: 180,
+  },
+  "web-search": {
+    stepMs: Math.max(1200, Math.round(THINKING_CONSTELLATION_STEP_MS * 0.68)),
+    linkDelayMs: 92,
+    nodeDelayMs: 104,
+  },
+  generating: {
+    stepMs: Math.round(THINKING_CONSTELLATION_STEP_MS * 1.18),
+    linkDelayMs: 210,
+    nodeDelayMs: 132,
+  },
+};
+
+function resolveConstellationIndex(timestamp: number, stepMs: number) {
   if (THINKING_CONSTELLATION_VARIANTS.length === 0) return 0;
-  return Math.floor(timestamp / THINKING_CONSTELLATION_STEP_MS) % THINKING_CONSTELLATION_VARIANTS.length;
+  return Math.floor(timestamp / stepMs) % THINKING_CONSTELLATION_VARIANTS.length;
 }
 
-export function ThinkingConstellation() {
+export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGenerationPhase }) {
   const [constellationIndex, setConstellationIndex] = useState(0);
+  const phaseTiming = CONSTELLATION_PHASE_TIMING[phase] ?? CONSTELLATION_PHASE_TIMING.preparing;
 
   useEffect(() => {
     if (THINKING_CONSTELLATION_VARIANTS.length <= 1) return;
@@ -23,10 +43,10 @@ export function ThinkingConstellation() {
 
     const syncConstellation = () => {
       const now = Date.now();
-      setConstellationIndex(resolveConstellationIndex(now));
+      setConstellationIndex(resolveConstellationIndex(now, phaseTiming.stepMs));
 
-      const elapsedInStep = now % THINKING_CONSTELLATION_STEP_MS;
-      const delay = Math.max(48, THINKING_CONSTELLATION_STEP_MS - elapsedInStep + 18);
+      const elapsedInStep = now % phaseTiming.stepMs;
+      const delay = Math.max(48, phaseTiming.stepMs - elapsedInStep + 18);
       timerId = setTimeout(syncConstellation, delay);
     };
 
@@ -37,7 +57,7 @@ export function ThinkingConstellation() {
         clearTimeout(timerId);
       }
     };
-  }, []);
+  }, [phaseTiming.stepMs]);
 
   const currentConstellation = THINKING_CONSTELLATION_VARIANTS[constellationIndex] ?? THINKING_CONSTELLATION_VARIANTS[0];
   if (!currentConstellation) return null;
@@ -58,7 +78,7 @@ export function ThinkingConstellation() {
             width: "0px",
             opacity: 0,
             transform: "translateY(-50%) rotate(0deg)",
-            ["--link-delay" as string]: `${index * -0.16}s`,
+            ["--link-delay" as string]: `${(index * -phaseTiming.linkDelayMs) / 1000}s`,
           }}
         ></span>
       );
@@ -79,7 +99,7 @@ export function ThinkingConstellation() {
             width: "0px",
             opacity: 0,
             transform: "translateY(-50%) rotate(0deg)",
-            ["--link-delay" as string]: `${index * -0.16}s`,
+            ["--link-delay" as string]: `${(index * -phaseTiming.linkDelayMs) / 1000}s`,
           }}
         ></span>
       );
@@ -100,7 +120,7 @@ export function ThinkingConstellation() {
           width: `${length}px`,
           opacity: 1,
           transform: `translateY(-50%) rotate(${angle}deg)`,
-          ["--link-delay" as string]: `${index * -0.16}s`,
+          ["--link-delay" as string]: `${(index * -phaseTiming.linkDelayMs) / 1000}s`,
         }}
       ></span>
     );
@@ -120,7 +140,7 @@ export function ThinkingConstellation() {
             height: "0px",
             opacity: 0,
             transform: "translate(-50%, -50%) scale(0.32)",
-            ["--node-delay" as string]: `${index * -0.18}s`,
+            ["--node-delay" as string]: `${(index * -phaseTiming.nodeDelayMs) / 1000}s`,
           }}
         ></span>
       );
@@ -137,7 +157,7 @@ export function ThinkingConstellation() {
           height: `${baseNodeSize * (node.size ?? 1)}px`,
           opacity: 1,
           transform: "translate(-50%, -50%) scale(1)",
-          ["--node-delay" as string]: `${index * -0.18}s`,
+          ["--node-delay" as string]: `${(index * -phaseTiming.nodeDelayMs) / 1000}s`,
         }}
       ></span>
     );
@@ -147,6 +167,7 @@ export function ThinkingConstellation() {
     <div
       className="constellation-loader thinking-message__constellation is-ready"
       data-constellation-name={currentConstellation.name}
+      data-generation-phase={phase}
       aria-hidden="true"
     >
       {links}

@@ -18,6 +18,7 @@ export type ChatRoom = {
 };
 
 export type ChatSender = "user" | "assistant" | "thinking";
+export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 
 export type AttachedFile = {
   id: string;
@@ -32,6 +33,7 @@ export type UiChatMessage = {
   id: string;
   sender: ChatSender;
   text: string;
+  generationPhase?: ChatGenerationPhase;
   streaming?: boolean;
   error?: boolean;
   attachedFileNames?: string[];

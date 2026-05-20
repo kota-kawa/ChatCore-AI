@@ -31,6 +31,7 @@ import {
 } from "../../lib/chat_page/storage";
 import type {
   AttachedFile,
+  ChatGenerationPhase,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatRoom,
@@ -365,7 +366,7 @@ export function useHomePageGenerationActions({
         return newId;
       };
 
-      const updateThinkingStatus = (statusText: string) => {
+      const updateThinkingStatus = (statusText: string, generationPhase: ChatGenerationPhase = "preparing") => {
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return previous.map((message) => {
@@ -373,6 +374,7 @@ export function useHomePageGenerationActions({
             return {
               ...message,
               text: statusText,
+              generationPhase,
             };
           });
         });
@@ -490,34 +492,34 @@ export function useHomePageGenerationActions({
         }
 
         if (parsed.event === "web_search_planning_started") {
-          updateThinkingStatus("検索が必要か判断しています");
+          updateThinkingStatus("検索が必要か判断しています", "web-search");
           return;
         }
 
         if (parsed.event === "web_search_started") {
-          updateThinkingStatus("関連情報を取得しています");
+          updateThinkingStatus("関連情報を取得しています", "web-search");
           return;
         }
 
         if (parsed.event === "web_search_completed") {
-          updateThinkingStatus("検索結果を読み込んでいます");
+          updateThinkingStatus("検索結果を読み込んでいます", "web-search");
           return;
         }
 
         if (parsed.event === "web_search_failed") {
           const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
           if (message.includes("APIキー") || message.includes("設定")) {
-            updateThinkingStatus("検索設定を確認できませんでした。回答を作成しています");
+            updateThinkingStatus("検索設定を確認できませんでした。回答を作成しています", "generating");
           } else if (message.includes("上限")) {
-            updateThinkingStatus("Web検索の上限に達しました。回答を作成しています");
+            updateThinkingStatus("Web検索の上限に達しました。回答を作成しています", "generating");
           } else {
-            updateThinkingStatus("Web検索に失敗しました。回答を作成しています");
+            updateThinkingStatus("Web検索に失敗しました。回答を作成しています", "generating");
           }
           return;
         }
 
         if (parsed.event === "response_generation_started") {
-          updateThinkingStatus("回答を作成しています");
+          updateThinkingStatus("回答を作成しています", "generating");
           return;
         }
 
@@ -657,6 +659,7 @@ export function useHomePageGenerationActions({
             id: thinkingId,
             sender: "thinking",
             text: "AIが応答を準備しています",
+            generationPhase: "preparing",
           },
         ];
       });
@@ -955,6 +958,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
         text: "AIが応答を準備しています",
+        generationPhase: "preparing",
       };
 
       setMessages((previous) => {
@@ -1119,6 +1123,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
         text: "AIが応答を準備しています",
+        generationPhase: "preparing",
       };
 
       setMessages((previous) => {
@@ -1243,6 +1248,7 @@ export function useHomePageGenerationActions({
             id: thinkingId,
             sender: "thinking",
             text: "AIが応答を準備しています",
+            generationPhase: "preparing",
           },
         ];
       });
