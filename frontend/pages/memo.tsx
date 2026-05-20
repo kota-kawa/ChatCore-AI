@@ -545,6 +545,9 @@ export default function MemoPage() {
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
+  // Toolbar search/filter section (collapsible on mobile)
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
   // Detail modal
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1539,7 +1542,7 @@ export default function MemoPage() {
 
         <div className="memo-container">
           {/* ── Toolbar ── */}
-          <header className="memo-toolbar memo-card">
+          <header className={`memo-toolbar memo-card${isFiltersOpen ? " is-filters-open" : ""}`}>
             <div className="memo-toolbar__top-row">
               <div className="memo-toolbar__brand">
                 <span className="memo-toolbar__app-mark" aria-hidden="true">
@@ -1554,6 +1557,19 @@ export default function MemoPage() {
                 </div>
               </div>
               <div className="memo-toolbar__actions">
+                <button
+                  type="button"
+                  className={`memo-toolbar__icon-btn memo-toolbar__filter-toggle${isFiltersOpen ? " is-active" : ""}${hasActiveFilters ? " has-active-filters" : ""}`}
+                  onClick={() => setIsFiltersOpen((open) => !open)}
+                  aria-expanded={isFiltersOpen}
+                  aria-controls="memo-toolbar-filters"
+                  aria-label={isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込みを開く"}
+                  data-tooltip={isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込み"}
+                  data-tooltip-placement="bottom"
+                >
+                  <i className={`bi ${isFiltersOpen ? "bi-chevron-up" : "bi-sliders2"}`} aria-hidden="true"></i>
+                  <span className="sr-only">{isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込みを開く"}</span>
+                </button>
                 <button
                   type="button"
                   className="memo-toolbar__icon-btn"
@@ -1601,6 +1617,7 @@ export default function MemoPage() {
               </div>
             </div>
 
+            <div className="memo-toolbar__collapsible" id="memo-toolbar-filters">
             <div className="memo-toolbar__search">
               <label htmlFor="memo-search" className="sr-only">メモを検索</label>
               <i className="bi bi-search" aria-hidden="true"></i>
@@ -1699,6 +1716,7 @@ export default function MemoPage() {
                 />
               </div>
             )}
+            </div>
 
           </header>
 

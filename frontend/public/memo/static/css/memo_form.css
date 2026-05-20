@@ -3222,6 +3222,29 @@ body.memo-page {
   border-color: transparent;
 }
 
+/* Collapsible search/filter region: flows into the toolbar grid on desktop. */
+.memo-toolbar__collapsible {
+  display: contents;
+}
+
+/* The collapse toggle is only used on narrow screens. */
+.memo-toolbar__filter-toggle {
+  display: none;
+  position: relative;
+}
+
+.memo-toolbar__filter-toggle.has-active-filters::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fbbc04;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.96);
+}
+
 .memo-toolbar__search {
   grid-area: search;
   min-height: 48px;
@@ -3999,6 +4022,29 @@ body.memo-page {
 
   .memo-toolbar__filters {
     grid-template-columns: 1fr;
+  }
+
+  /* Collapse the search/filter/collection region behind a toggle to free
+     up vertical space on small screens. */
+  .memo-toolbar__filter-toggle {
+    display: inline-flex;
+  }
+
+  .memo-toolbar.memo-card:not(.is-filters-open) .memo-toolbar__collapsible {
+    display: none;
+  }
+
+  .memo-toolbar.memo-card.is-filters-open {
+    grid-template-areas:
+      "brand actions"
+      "search search"
+      "filters filters"
+      "collections collections";
+  }
+
+  .memo-toolbar.memo-card:not(.is-filters-open) {
+    grid-template-areas: "brand actions";
+    row-gap: 0;
   }
 
   .memo-quick-capture {
