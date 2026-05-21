@@ -57,6 +57,11 @@ chat-action-menu {
   padding: 0 var(--space-6, 1.5rem);
 }
 
+.chat-message-row[data-web-search-overflow-active="true"] {
+  position: relative;
+  z-index: 4;
+}
+
 .chat-message-row--first {
   padding-top: var(--space-6, 1.5rem);
 }
@@ -263,6 +268,10 @@ chat-action-menu {
   margin-bottom: 1rem;
   max-width: min(85%, var(--chat-readable-width, 800px));
   isolation: isolate;
+}
+
+.message-wrapper[data-web-search-overflow-active="true"] {
+  z-index: 4;
 }
 
 .message-wrapper--streaming {
@@ -650,7 +659,8 @@ chat-action-menu {
 
 .bot-message .web-search-sources {
   margin-top: 1rem;
-  overflow: hidden;
+  position: relative;
+  overflow: visible;
   border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: var(--radius-sm, 8px);
   background: rgba(255, 255, 255, 0.82);
@@ -674,6 +684,7 @@ chat-action-menu {
   color: var(--text-dark, #1a1a1a);
   font-weight: 600;
   list-style: none;
+  border-radius: var(--radius-sm, 8px);
   transition:
     background var(--transition-fast, 0.15s ease),
     color var(--transition-fast, 0.15s ease);
@@ -693,6 +704,7 @@ chat-action-menu {
 
 .bot-message .web-search-sources[open] > .web-search-sources__summary {
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: var(--radius-sm, 8px) var(--radius-sm, 8px) 0 0;
   background: rgba(15, 118, 110, 0.06);
 }
 
@@ -816,12 +828,19 @@ chat-action-menu {
 .bot-message .web-search-sources__step--has-sources {
   display: block;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .bot-message .web-search-sources__step-details,
 .bot-message .web-search-sources__source-details {
+  position: relative;
   min-width: 0;
+}
+
+.bot-message .web-search-sources__step-details[open],
+.bot-message .web-search-sources__source-details[open] {
+  z-index: 3;
 }
 
 .bot-message .web-search-sources__step-summary,
@@ -866,6 +885,8 @@ chat-action-menu {
 }
 
 .bot-message .web-search-sources__step-body {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 0.45rem;
   padding: 0 0.68rem 0.68rem;

@@ -28,6 +28,22 @@ function resetWebSearchSourcesListStyles(list: HTMLElement) {
   list.style.transform = "";
 }
 
+function setWebSearchOverflowState(sourceDetails: HTMLElement) {
+  const row = sourceDetails.closest<HTMLElement>(".chat-message-row");
+  const wrapper = sourceDetails.closest<HTMLElement>(".message-wrapper");
+  const selector = "details.web-search-sources__step-details[open], details.web-search-sources__source-details[open]";
+  const hasOpenSourceDetails = Boolean(row?.querySelector(selector));
+
+  [row, wrapper].forEach((element) => {
+    if (!element) return;
+    if (hasOpenSourceDetails) {
+      element.dataset.webSearchOverflowActive = "true";
+      return;
+    }
+    delete element.dataset.webSearchOverflowActive;
+  });
+}
+
 function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   const activeAnimation = activeWebSearchSourceAnimations.get(details);
   if (!activeAnimation) return;
@@ -175,6 +191,27 @@ function bindWebSearchSourcesAccordions(container: HTMLElement) {
       if (list) resetWebSearchSourcesListStyles(list);
     });
   });
+
+  container
+    .querySelectorAll<HTMLDetailsElement>(
+      "details.web-search-sources__step-details, details.web-search-sources__source-details"
+    )
+    .forEach((details) => {
+      const handleToggle = () => {
+        setWebSearchOverflowState(details);
+        if (details.open) scheduleWebSearchSourcesReveal(details);
+      };
+
+      details.addEventListener("toggle", handleToggle);
+      setWebSearchOverflowState(details);
+      cleanupCallbacks.push(() => {
+        details.removeEventListener("toggle", handleToggle);
+        const row = details.closest<HTMLElement>(".chat-message-row");
+        const wrapper = details.closest<HTMLElement>(".message-wrapper");
+        if (row) delete row.dataset.webSearchOverflowActive;
+        if (wrapper) delete wrapper.dataset.webSearchOverflowActive;
+      });
+    });
 
   return () => {
     cleanupCallbacks.forEach((cleanup) => {
