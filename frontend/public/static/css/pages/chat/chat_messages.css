@@ -934,7 +934,7 @@ chat-action-menu {
 
 .bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
 .bot-message .web-search-sources[data-web-search-sources-state="closing"] .web-search-sources__list {
-  will-change: height, opacity, transform;
+  will-change: height, opacity;
 }
 
 .bot-message .web-search-sources__item {

@@ -93,15 +93,6 @@ function scheduleWebSearchSourcesReveal(details: HTMLDetailsElement) {
 
   window.requestAnimationFrame(() => {
     revealWebSearchSources(details);
-    window.requestAnimationFrame(() => {
-      revealWebSearchSources(details);
-    });
-  });
-
-  [WEB_SEARCH_SOURCES_ANIMATION_MS + 40, WEB_SEARCH_SOURCES_ANIMATION_MS + 180].forEach((delay) => {
-    window.setTimeout(() => {
-      revealWebSearchSources(details);
-    }, delay);
   });
 }
 
@@ -116,46 +107,33 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     return;
   }
 
-  const currentHeight = list.getBoundingClientRect().height;
+  const startHeight = list.getBoundingClientRect().height;
   cancelWebSearchSourcesAnimation(details);
 
-  let startHeight = currentHeight;
   let endHeight = 0;
-
   if (shouldOpen) {
+    // Open the element so the content lays out, then measure its natural height.
+    // The list keeps `overflow: hidden`, so this stays invisible until we animate.
+    list.style.overflow = "hidden";
     details.open = true;
-    list.style.height = "auto";
     endHeight = list.scrollHeight;
-    startHeight = currentHeight > 0 ? currentHeight : 0;
-    scheduleWebSearchSourcesReveal(details);
   } else {
-    startHeight = currentHeight || list.scrollHeight;
+    list.style.overflow = "hidden";
   }
 
   details.dataset.webSearchSourcesState = shouldOpen ? "opening" : "closing";
-  list.style.overflow = "hidden";
-  list.style.height = `${startHeight}px`;
-  list.style.opacity = shouldOpen ? (startHeight > 0 ? "1" : "0") : "1";
-  list.style.transform = shouldOpen && startHeight === 0 ? "translateY(-6px)" : "translateY(0)";
-  void list.offsetHeight;
 
+  // Drive everything through the Web Animations API so the keyframes are applied
+  // on the compositor's schedule instead of forcing a synchronous reflow.
   const animation = list.animate(
     [
-      {
-        height: `${startHeight}px`,
-        opacity: shouldOpen || startHeight > 0 ? 1 : 0,
-        transform: shouldOpen && startHeight === 0 ? "translateY(-6px)" : "translateY(0)"
-      },
-      {
-        height: `${endHeight}px`,
-        opacity: shouldOpen ? 1 : 0,
-        transform: shouldOpen ? "translateY(0)" : "translateY(-6px)"
-      }
+      { height: `${startHeight}px`, opacity: shouldOpen && startHeight === 0 ? 0 : 1 },
+      { height: `${endHeight}px`, opacity: shouldOpen ? 1 : 0 }
     ],
     {
       duration: WEB_SEARCH_SOURCES_ANIMATION_MS,
       easing: WEB_SEARCH_SOURCES_ANIMATION_EASING,
-      fill: "forwards"
+      fill: "both"
     }
   );
 
@@ -166,6 +144,8 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
     resetWebSearchSourcesListStyles(list);
+    // Only nudge the scroll position once the panel has reached its final size,
+    // so the reveal no longer fights the height animation mid-flight.
     if (shouldOpen) scheduleWebSearchSourcesReveal(details);
   };
 }
