@@ -944,6 +944,39 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
     )
 
 
+def _is_source_reveal_step(title: str) -> bool:
+    return title.startswith(("Web検索:", "追加検索:", "検索結果を再利用:"))
+
+
+def _build_trace_source_body(sources_lines: list[str]) -> list[str]:
+    return [
+        '<div class="web-search-sources__section-title">参照したWebサイト</div>',
+        '<ul class="web-search-sources__links">',
+        *sources_lines,
+        "</ul>",
+    ]
+
+
+def _build_trace_source_fallback_details(
+    result: WebSearchResult | None,
+    sources_lines: list[str],
+) -> list[str]:
+    query = (result.query if result is not None else "").strip()
+    summary_title = f"Web検索: {query}" if query else "Web検索結果"
+    return [
+        '<details class="web-search-sources__source-details">',
+        '<summary class="web-search-sources__source-summary">',
+        f'<span class="web-search-sources__title">{escape(summary_title)}</span>',
+        f'<span class="web-search-sources__count">{len(sources_lines)}件</span>',
+        '<span class="web-search-sources__step-chevron"></span>',
+        "</summary>",
+        '<div class="web-search-sources__step-body">',
+        *_build_trace_source_body(sources_lines),
+        "</div>",
+        "</details>",
+    ]
+
+
 def build_web_search_trace_markdown(
     result: WebSearchResult | None,
     *,
@@ -972,6 +1005,7 @@ def build_web_search_trace_markdown(
     body_lines: list[str] = [
         '<div class="web-search-sources__list">',
     ]
+    sources_rendered = False
     if normalized_steps:
         body_lines.append('<ol class="web-search-sources__steps">')
         for index, (title, detail) in enumerate(normalized_steps, start=1):
@@ -980,27 +1014,42 @@ def build_web_search_trace_markdown(
                 if detail
                 else ""
             )
-            body_lines.append(
-                (
-                    '<li class="web-search-sources__step">'
-                    f'<span class="web-search-sources__index">{index}</span>'
-                    '<span class="web-search-sources__content">'
-                    f'<span class="web-search-sources__title">{escape(title)}</span>'
-                    f"{detail_line}"
-                    "</span>"
-                    "</li>"
+            if sources_lines and not sources_rendered and _is_source_reveal_step(title):
+                body_lines.append(
+                    (
+                        '<li class="web-search-sources__step web-search-sources__step--has-sources">'
+                        '<details class="web-search-sources__step-details">'
+                        '<summary class="web-search-sources__step-summary">'
+                        f'<span class="web-search-sources__index">{index}</span>'
+                        '<span class="web-search-sources__content">'
+                        f'<span class="web-search-sources__title">{escape(title)}</span>'
+                        f"{detail_line}"
+                        "</span>"
+                        '<span class="web-search-sources__step-chevron"></span>'
+                        "</summary>"
+                        '<div class="web-search-sources__step-body">'
+                        + "".join(_build_trace_source_body(sources_lines))
+                        + "</div>"
+                        "</details>"
+                        "</li>"
+                    )
                 )
-            )
+                sources_rendered = True
+            else:
+                body_lines.append(
+                    (
+                        '<li class="web-search-sources__step">'
+                        f'<span class="web-search-sources__index">{index}</span>'
+                        '<span class="web-search-sources__content">'
+                        f'<span class="web-search-sources__title">{escape(title)}</span>'
+                        f"{detail_line}"
+                        "</span>"
+                        "</li>"
+                    )
+                )
         body_lines.append("</ol>")
-    if sources_lines:
-        body_lines.extend(
-            [
-                '<div class="web-search-sources__section-title">参照したWebサイト</div>',
-                '<ul class="web-search-sources__links">',
-                *sources_lines,
-                "</ul>",
-            ]
-        )
+    if sources_lines and not sources_rendered:
+        body_lines.extend(_build_trace_source_fallback_details(result, sources_lines))
     body_lines.append("</div>")
 
     return "\n".join(

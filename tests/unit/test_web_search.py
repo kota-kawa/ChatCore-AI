@@ -458,8 +458,11 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__count">2ステップ / 1件</span>', block)
         self.assertIn('<ol class="web-search-sources__steps">', block)
         self.assertIn('<span class="web-search-sources__title">検索が必要か判断</span>', block)
+        self.assertIn('<details class="web-search-sources__step-details">', block)
+        self.assertIn('<summary class="web-search-sources__step-summary">', block)
         self.assertIn('<div class="web-search-sources__section-title">参照したWebサイト</div>', block)
         self.assertIn('<a class="web-search-sources__link" href="https://example.com/a" target="_blank">', block)
+        self.assertNotIn('<details class="web-search-sources__step-details" open', block)
 
     def test_build_web_search_trace_markdown_escapes_steps(self):
         block = web_search.build_web_search_trace_markdown(
