@@ -1282,7 +1282,7 @@ export function MiniChat() {
           disabled={!messages.length || isGenerating}
           aria-label="会話をクリア"
         >
-          <i className="bi bi-trash3"></i>
+          <i className="bi bi-arrow-counterclockwise"></i>
         </button>
       </form>
     </div>
