@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useRouter } from "next/router";
+import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
 
 import {
   buildAiAgentHttpError,
@@ -7,7 +8,9 @@ import {
   cssEscape,
   isActionStep,
   isSafeInternalPath,
+  isUnexpectedAuthRedirect,
   isVisibleElement,
+  pathnamesMatch,
   readSseStream,
   type ActionPlan,
   type ActionStep,
@@ -27,6 +30,24 @@ type ExecutionProgress = {
 type PendingActionState = {
   steps: ActionStep[];
   expectedPath?: string;
+};
+
+type NavigationOutcome = {
+  ok: boolean;
+  message?: string;
+  /** true when the move stayed in-place (Next router) and the agent is still mounted. */
+  clientSide: boolean;
+  needsReplan?: boolean;
+};
+
+type NavigateInternal = (path: string) => Promise<NavigationOutcome>;
+
+type UnloadContext = { remaining: ActionStep[]; expectedPath?: string } | null;
+
+type ExecuteOptions = {
+  navigateInternal: NavigateInternal;
+  setUnloadContext: (context: UnloadContext) => void;
+  onStepProgress?: (stepIndex: number, status: "current" | "complete") => void;
 };
 
 const QUICK_PROMPTS = [
@@ -49,6 +70,19 @@ const MAX_SEND_MESSAGES = 20;
 const MAX_DOM_LENGTH = 12_000;
 const MAX_INPUT_LENGTH = 4_000;
 const RESUME_READY_TIMEOUT_MS = 12_000;
+
+// Internal pages served by Next.js that can be reached with an in-place router push
+// (auth pages are intentionally excluded so the agent never silently unmounts mid-plan).
+const CLIENT_NAVIGABLE_ROUTES = new Set([
+  "/",
+  "/prompt_share",
+  "/prompt_share/manage",
+  "/memo",
+  "/settings",
+]);
+
+const AUTH_REDIRECT_MESSAGE = "ログインが必要なため、ログイン画面を開きました。ログイン後にもう一度お試しください。";
+const NAVIGATION_NOT_READY_MESSAGE = "移動先ページの表示を確認できませんでした。";
 
 function isPersistedMessage(value: unknown): value is Message {
   if (!value || typeof value !== "object") return false;
@@ -96,6 +130,20 @@ function readStoredExecutedIds(messages: Message[]): string[] {
 
 function wait(ms = 180) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 16);
+    }
+  });
+}
+
+function isClientNavigableRoute(pathname: string): boolean {
+  return CLIENT_NAVIGABLE_ROUTES.has(pathname);
 }
 
 async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepExecutionResult> {
@@ -220,29 +268,53 @@ async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_T
   return { ok: false, message: `${selectors[0]} の表示を確認できませんでした。` };
 }
 
-async function waitForPagePath(expectedPath: string | undefined, timeoutMs = RESUME_READY_TIMEOUT_MS) {
-  if (!expectedPath || typeof window === "undefined") return true;
+async function waitForPagePath(
+  expectedPath: string | undefined,
+  timeoutMs = RESUME_READY_TIMEOUT_MS,
+): Promise<StepExecutionResult> {
+  if (!expectedPath || typeof window === "undefined") return { ok: true };
   const expectedPathname = getInternalPathname(expectedPath);
-  if (!expectedPathname) return false;
+  if (!expectedPathname) return { ok: false, message: NAVIGATION_NOT_READY_MESSAGE, needsReplan: false };
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
-    if (window.location.pathname === expectedPathname) return true;
+    if (isUnexpectedAuthRedirect(expectedPath, window.location.pathname)) {
+      return { ok: false, message: AUTH_REDIRECT_MESSAGE, needsReplan: false };
+    }
+    if (pathnamesMatch(expectedPathname, window.location.pathname)) return { ok: true };
     await wait(100);
   }
-  return window.location.pathname === expectedPathname;
+  if (isUnexpectedAuthRedirect(expectedPath, window.location.pathname)) {
+    return { ok: false, message: AUTH_REDIRECT_MESSAGE, needsReplan: false };
+  }
+  return pathnamesMatch(expectedPathname, window.location.pathname)
+    ? { ok: true }
+    : { ok: false, message: NAVIGATION_NOT_READY_MESSAGE, needsReplan: false };
+}
+
+// After a client-side router push, confirm the URL settled on the destination (or an
+// auth gate) before letting follow-up steps run against the new page.
+async function waitForRouteSettled(expectedPath: string): Promise<StepExecutionResult> {
+  const outcome = await waitForPagePath(expectedPath);
+  if (!outcome.ok) return outcome;
+  await nextFrame();
+  await nextFrame();
+  return { ok: true };
 }
 
 async function waitForPendingResumeReady(state: PendingActionState): Promise<StepExecutionResult> {
   const pathReady = await waitForPagePath(state.expectedPath);
-  if (!pathReady) {
-    return { ok: false, message: "移動先ページの表示を確認できませんでした。" };
-  }
+  if (!pathReady.ok) return pathReady;
   if (document.readyState === "loading") {
     await new Promise<void>((resolve) => {
       document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
     });
   }
-  return waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS);
+  // Let React commit and run effects on the freshly loaded page before probing the DOM.
+  await nextFrame();
+  const ready = await waitForAnyElement(getStepReadySelectors(state.steps[0]), RESUME_READY_TIMEOUT_MS);
+  // The page loaded but the planned target is absent: the plan was built blind against
+  // this destination, so re-observe and re-plan rather than failing outright.
+  return ready.ok ? ready : { ...ready, needsReplan: true };
 }
 
 function getArg(args: Record<string, unknown> | undefined, key: string) {
@@ -323,13 +395,7 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
   const command = step.command || "";
   const args = step.args || {};
 
-  if (command === "navigation.openPage") {
-    const path = getArg(args, "path");
-    if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。" };
-    if (path === window.location.pathname) return { ok: true };
-    window.location.href = path;
-    return { ok: true };
-  }
+  // navigation.openPage is handled by the unified navigation branch in executeActionStep.
 
   if (command === "chat.fillSetupMessage") {
     return setInputValue("[data-agent-id='chat.setup-message']", getArg(args, "text"));
@@ -436,73 +502,127 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
   if (step.action === "focus" && step.selector) {
     return { ok: document.activeElement === getElement(step.selector), message: `${step.selector} のフォーカスを確認できませんでした。` };
   }
-  if ((step.action === "click" || step.action === "scroll") && step.selector) {
-    return { ok: Boolean(getElement(step.selector)), message: `${step.selector} が見つかりませんでした。` };
-  }
+  // A click's effect (navigation, removal, async UI) isn't generically observable, and the
+  // target legitimately disappears when it triggers a navigation. The element's presence and
+  // enabled state were already confirmed before clicking, so treat the click as done.
   return { ok: true };
 }
 
-async function executeActionStep(step: ActionStep): Promise<StepExecutionResult> {
-  if ((step.risk === "medium" || step.risk === "high") && !await showConfirmModal("この操作は送信や保存を行う可能性があります。実行しますか？")) {
-    return { ok: false, message: "ユーザー確認で操作を中止しました。" };
-  }
+async function executeNavigation(
+  step: ActionStep,
+  navigateInternal: NavigateInternal,
+): Promise<StepExecutionResult> {
+  const path = getStepNavigationPath(step);
+  if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。", needsReplan: false };
+  // Already on the destination: nothing to navigate, let following steps run in place.
+  if (pathnamesMatch(getInternalPathname(path), window.location.pathname)) return { ok: true };
+  const outcome = await navigateInternal(path);
+  if (!outcome.ok) return { ok: false, message: outcome.message, needsReplan: outcome.needsReplan };
+  return {
+    ok: true,
+    navigation: outcome.clientSide ? "client" : "hard",
+    navigatedTo: getInternalPathname(path),
+  };
+}
 
-  let result: StepExecutionResult;
+function performActionStep(step: ActionStep): StepExecutionResult | Promise<StepExecutionResult> {
   if (step.action === "app_action") {
-    const ready = await waitForAnyElement(getAppActionReadySelectors(step), RESUME_READY_TIMEOUT_MS);
-    if (!ready.ok) return ready;
-    result = executeAppAction(step);
-  } else if (step.action === "navigate") {
-    const path = step.path;
-    if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。" };
-    if (path === window.location.pathname) return { ok: true };
-    window.location.href = path;
-    return { ok: true };
-  } else if (step.action === "input") {
+    return executeAppAction(step);
+  }
+  if (step.action === "input") {
     if (!step.selector) return { ok: false, message: "入力先が指定されていません。" };
-    await waitForElement(step.selector, 5000);
-    result = setInputValue(step.selector, step.value ?? "");
-  } else if (step.action === "select") {
+    return setInputValue(step.selector, step.value ?? "");
+  }
+  if (step.action === "select") {
     if (!step.selector) return { ok: false, message: "選択先が指定されていません。" };
-    await waitForElement(step.selector, 5000);
-    result = setSelectValue(step.selector, step.value ?? "");
-  } else if (step.action === "check") {
+    return setSelectValue(step.selector, step.value ?? "");
+  }
+  if (step.action === "check") {
     if (!step.selector) return { ok: false, message: "チェック対象が指定されていません。" };
-    await waitForElement(step.selector, 5000);
-    result = setCheckedValue(step.selector, step.checked ?? true);
-  } else if (step.action === "wait") {
+    return setCheckedValue(step.selector, step.checked ?? true);
+  }
+  if (step.action === "wait") {
     const timeoutMs = Math.max(0, Math.min(step.timeout_ms ?? 1200, 5000));
-    result = step.selector ? await waitForElement(step.selector, timeoutMs) : { ok: true };
-    if (!step.selector && timeoutMs > 0) await wait(timeoutMs);
-  } else if (step.action === "click") {
+    if (step.selector) return waitForElement(step.selector, timeoutMs);
+    return (async () => {
+      if (timeoutMs > 0) await wait(timeoutMs);
+      return { ok: true } as StepExecutionResult;
+    })();
+  }
+  if (step.action === "click") {
     if (!step.selector) return { ok: false, message: "クリック先が指定されていません。" };
-    await waitForElement(step.selector, 5000);
-    result = clickElement(step.selector);
-  } else if (step.action === "focus") {
+    return clickElement(step.selector);
+  }
+  if (step.action === "focus") {
     if (!step.selector) return { ok: false, message: "フォーカス先が指定されていません。" };
     const el = getElement(step.selector);
     if (!el) return { ok: false, message: `${step.selector} が見つかりませんでした。` };
     el.focus();
-    result = { ok: true };
-  } else {
-    if (!step.selector) return { ok: false, message: "スクロール先が指定されていません。" };
-    result = scrollElement(step.selector);
+    return { ok: true };
+  }
+  if (!step.selector) return { ok: false, message: "スクロール先が指定されていません。" };
+  return scrollElement(step.selector);
+}
+
+// Wait for the step's target to be present before acting. Navigation/wait manage their own timing.
+async function waitForStepTarget(step: ActionStep): Promise<StepExecutionResult> {
+  if (step.action === "app_action") {
+    return waitForAnyElement(getAppActionReadySelectors(step), RESUME_READY_TIMEOUT_MS);
+  }
+  if (step.selector && step.action !== "wait" && step.action !== "scroll" && step.action !== "focus") {
+    await waitForElement(step.selector, 5000);
+  }
+  return { ok: true };
+}
+
+async function executeActionStep(
+  step: ActionStep,
+  navigateInternal: NavigateInternal,
+): Promise<StepExecutionResult> {
+  if ((step.risk === "medium" || step.risk === "high") && !await showConfirmModal("この操作は送信や保存を行う可能性があります。実行しますか？")) {
+    return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
   }
 
-  if (!result.ok) return result;
-  return verifyStep(step);
+  if (step.action === "navigate" || (step.action === "app_action" && step.command === "navigation.openPage")) {
+    return executeNavigation(step, navigateInternal);
+  }
+
+  // Wait once for the target to exist; if it never appears, retrying won't help.
+  const ready = await waitForStepTarget(step);
+  if (!ready.ok) return ready;
+
+  // Clicks and typed actions can briefly land before the target's React handlers are
+  // bound (notably right after a navigation), so retry the perform+verify cycle once.
+  const maxAttempts = step.action === "wait" ? 1 : 2;
+  let lastResult: StepExecutionResult = { ok: false, message: "操作を実行できませんでした。" };
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) await wait(280);
+    const result = await performActionStep(step);
+    if (!result.ok) {
+      lastResult = result;
+      continue;
+    }
+    const verified = await verifyStep(step);
+    if (verified.ok) return { ok: true };
+    lastResult = verified;
+  }
+  return lastResult;
 }
 
 async function executeActionSteps(
   steps: ActionStep[],
-  onStepProgress?: (stepIndex: number, status: "current" | "complete") => void,
+  options: ExecuteOptions,
 ): Promise<StepExecutionResult> {
+  const { navigateInternal, setUnloadContext, onStepProgress } = options;
   for (const [stepIndex, step] of steps.entries()) {
     const remaining = steps.slice(stepIndex + 1);
     const navigationPath = getStepNavigationPath(step);
     const navigationPathname = getInternalPathname(navigationPath);
-    const willNavigate = Boolean(navigationPathname) && navigationPathname !== window.location.pathname;
+    const willNavigate = Boolean(navigationPathname) && !pathnamesMatch(navigationPathname, window.location.pathname);
 
+    // Persist the continuation before any step runs: an explicit navigation reloads the
+    // page, and an undetected click may unload it. The beforeunload net reads this context.
+    setUnloadContext(remaining.length ? { remaining, expectedPath: navigationPathname || undefined } : null);
     if (willNavigate && remaining.length) {
       writePendingActionSteps(remaining, navigationPath);
     } else if (!remaining.length) {
@@ -510,19 +630,26 @@ async function executeActionSteps(
     }
 
     onStepProgress?.(stepIndex, "current");
-    const result = await executeActionStep(step);
+    const result = await executeActionStep(step, navigateInternal);
     if (!result.ok) {
+      setUnloadContext(null);
       clearPendingActionSteps();
       return { ...result, failedStepIndex: stepIndex };
     }
 
-    if (willNavigate && remaining.length) {
+    // A full document reload is imminent; remaining steps are already persisted for resume.
+    if (result.navigation === "hard" && remaining.length) {
       return { ok: true, pendingNavigation: true };
+    }
+    // In-place navigation kept us mounted: drop the resume snapshot and keep executing here.
+    if (result.navigation === "client") {
+      clearPendingActionSteps();
     }
 
     onStepProgress?.(stepIndex, "complete");
   }
 
+  setUnloadContext(null);
   clearPendingActionSteps();
   return { ok: true };
 }
@@ -542,6 +669,7 @@ const ACTION_LABELS: Record<ActionStep["action"], string> = {
 const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
 
 export function MiniChat() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -555,7 +683,50 @@ export function MiniChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<Message[]>([]);
+  const unloadContextRef = useRef<UnloadContext>(null);
+  const routerRef = useRef(router);
   const trimmedInput = input.trim();
+
+  // Keep router ref current so the stable navigateInternal callback always pushes via the
+  // latest router instance.
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+
+  // Safety net: if an undetected click (e.g. a plain link or form submit) tears the page
+  // down mid-execution, persist the remaining steps so they resume after the reload.
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const context = unloadContextRef.current;
+      if (context && context.remaining.length) {
+        writePendingActionSteps(context.remaining, context.expectedPath);
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  const navigateInternal = useCallback<NavigateInternal>(async (path) => {
+    if (!isSafeInternalPath(path)) {
+      return { ok: false, message: "移動先パスが不正です。", clientSide: false, needsReplan: false };
+    }
+    const targetPathname = getInternalPathname(path);
+    if (targetPathname && isClientNavigableRoute(targetPathname)) {
+      try {
+        await routerRef.current.push(path);
+        const settled = await waitForRouteSettled(path);
+        return { ok: settled.ok, message: settled.message, clientSide: true, needsReplan: settled.needsReplan };
+      } catch {
+        // Client navigation failed; fall back to a full document load below.
+      }
+    }
+    window.location.href = path;
+    return { ok: true, clientSide: false };
+  }, []);
+
+  const setUnloadContext = useCallback((context: UnloadContext) => {
+    unloadContextRef.current = context;
+  }, []);
   const currentProgressText = statusText ?? progressSteps[progressSteps.length - 1] ?? null;
 
   // Keep ref in sync for stale-closure-safe access in async handlers
@@ -697,6 +868,62 @@ export function MiniChat() {
     }
   };
 
+  // Re-observe the current page and ask the model for a fresh, executable plan. Used both
+  // when a step fails mid-flight and when post-navigation targets can't be found.
+  const replanAfterFailure = async (failureText: string, failedStepIndex?: number) => {
+    const failedStepText = typeof failedStepIndex === "number"
+      ? `失敗ステップ: ${failedStepIndex + 1}`
+      : "";
+    const replanPrompt = [
+      "前回の操作計画は実行中に失敗しました。",
+      failedStepText,
+      `失敗理由: ${failureText}`,
+      "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
+    ].filter(Boolean).join("\n");
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsGenerating(true);
+    setStatusText("画面を再確認しています...");
+    setProgressSteps(["画面を再確認しています..."]);
+
+    try {
+      const replanMessage = await requestAiAgentMessage(
+        [
+          ...messagesRef.current,
+          { id: createAiAgentMessageId(), sender: "user", text: replanPrompt },
+        ],
+        controller.signal,
+      );
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createAiAgentMessageId(),
+          sender: "assistant",
+          text: `操作を途中で停止しました。${failureText}`,
+        },
+        replanMessage,
+      ]);
+    } catch (replanError) {
+      if (!(replanError instanceof DOMException && replanError.name === "AbortError")) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: createAiAgentMessageId(),
+            sender: "assistant",
+            text: replanError instanceof Error ? replanError.message : "操作の再計画に失敗しました。",
+            isError: true,
+          },
+        ]);
+      }
+    } finally {
+      abortControllerRef.current = null;
+      setIsGenerating(false);
+      setStatusText(null);
+      setProgressSteps([]);
+    }
+  };
+
   const handleExecuteActions = async (steps: ActionStep[], messageId: string) => {
     setExecutingMessageId(messageId);
     setExecutionProgress({
@@ -705,27 +932,31 @@ export function MiniChat() {
       completedStepIndexes: [],
     });
     try {
-      const result = await executeActionSteps(steps, (stepIndex, status) => {
-        setExecutionProgress((current) => {
-          if (!current || current.messageId !== messageId) {
+      const result = await executeActionSteps(steps, {
+        navigateInternal,
+        setUnloadContext,
+        onStepProgress: (stepIndex, status) => {
+          setExecutionProgress((current) => {
+            if (!current || current.messageId !== messageId) {
+              return {
+                messageId,
+                currentStepIndex: status === "current" ? stepIndex : null,
+                completedStepIndexes: status === "complete" ? [stepIndex] : [],
+              };
+            }
+            const completed = new Set(current.completedStepIndexes);
+            if (status === "complete") completed.add(stepIndex);
             return {
               messageId,
-              currentStepIndex: status === "current" ? stepIndex : null,
-              completedStepIndexes: status === "complete" ? [stepIndex] : [],
+              currentStepIndex: status === "current"
+                ? stepIndex
+                : current.currentStepIndex === stepIndex
+                  ? null
+                  : current.currentStepIndex,
+              completedStepIndexes: Array.from(completed).sort((a, b) => a - b),
             };
-          }
-          const completed = new Set(current.completedStepIndexes);
-          if (status === "complete") completed.add(stepIndex);
-          return {
-            messageId,
-            currentStepIndex: status === "current"
-              ? stepIndex
-              : current.currentStepIndex === stepIndex
-                ? null
-                : current.currentStepIndex,
-            completedStepIndexes: Array.from(completed).sort((a, b) => a - b),
-          };
-        });
+          });
+        },
       });
       if (result.ok) {
         setExecutedSet((prev) => new Set([...prev, messageId]));
@@ -733,59 +964,19 @@ export function MiniChat() {
           const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current), messageId]));
           writeSessionJson(EXECUTED_STORAGE_KEY, merged);
         }
+      } else if (result.needsReplan === false) {
+        // A terminal, self-explanatory stop (e.g. login required): just inform the user.
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: createAiAgentMessageId(),
+            sender: "assistant",
+            text: result.message || "操作を完了できませんでした。",
+            isError: true,
+          },
+        ]);
       } else {
-        const failureText = result.message || "画面状態を確認できませんでした。";
-        const failedStepText = typeof result.failedStepIndex === "number"
-          ? `失敗ステップ: ${result.failedStepIndex + 1}`
-          : "";
-        const replanPrompt = [
-          "前回の操作計画は実行中に失敗しました。",
-          failedStepText,
-          `失敗理由: ${failureText}`,
-          "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
-        ].filter(Boolean).join("\n");
-
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-        setIsGenerating(true);
-        setStatusText("画面を再確認しています...");
-        setProgressSteps(["画面を再確認しています..."]);
-
-        try {
-          const replanMessage = await requestAiAgentMessage(
-            [
-              ...messagesRef.current,
-              { id: createAiAgentMessageId(), sender: "user", text: replanPrompt },
-            ],
-            controller.signal,
-          );
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: createAiAgentMessageId(),
-              sender: "assistant",
-              text: `操作を途中で停止しました。${failureText}`,
-            },
-            replanMessage,
-          ]);
-        } catch (replanError) {
-          if (!(replanError instanceof DOMException && replanError.name === "AbortError")) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: createAiAgentMessageId(),
-                sender: "assistant",
-                text: replanError instanceof Error ? replanError.message : "操作の再計画に失敗しました。",
-                isError: true,
-              },
-            ]);
-          }
-        } finally {
-          abortControllerRef.current = null;
-          setIsGenerating(false);
-          setStatusText(null);
-          setProgressSteps([]);
-        }
+        await replanAfterFailure(result.message || "画面状態を確認できませんでした。", result.failedStepIndex);
       }
     } catch (error) {
       setMessages((prev) => [
@@ -798,6 +989,7 @@ export function MiniChat() {
         },
       ]);
     } finally {
+      setUnloadContext(null);
       setExecutingMessageId(null);
       setExecutionProgress(null);
     }
@@ -821,15 +1013,20 @@ export function MiniChat() {
         const ready = await waitForPendingResumeReady(pendingActionState);
         if (!ready.ok) {
           clearPendingActionSteps();
-          setMessages((current) => [
-            ...current,
-            {
-              id: createAiAgentMessageId(),
-              sender: "assistant",
-              text: ready.message || "移動後のページ準備を確認できませんでした。",
-              isError: true,
-            },
-          ]);
+          if (ready.needsReplan) {
+            // The destination loaded but the blind-planned targets aren't there: re-observe.
+            void replanAfterFailure(ready.message || "移動後のページ準備を確認できませんでした。");
+          } else {
+            setMessages((current) => [
+              ...current,
+              {
+                id: createAiAgentMessageId(),
+                sender: "assistant",
+                text: ready.message || "移動後のページ準備を確認できませんでした。",
+                isError: true,
+              },
+            ]);
+          }
           return;
         }
         void handleExecuteActions(pendingSteps, pendingMessageId);

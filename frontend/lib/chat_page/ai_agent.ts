@@ -49,7 +49,17 @@ export type StepExecutionResult = {
   ok: boolean;
   message?: string;
   failedStepIndex?: number;
+  /** A full page reload was triggered; remaining steps were persisted for resume. */
   pendingNavigation?: boolean;
+  /**
+   * Set when a step navigated. "client" means an in-place (Next router) navigation
+   * that kept the agent mounted; "hard" means a full document reload is imminent.
+   */
+  navigation?: "client" | "hard";
+  /** The destination pathname is now ready for the next step to act on. */
+  navigatedTo?: string;
+  /** The destination DOM no longer matches the plan; a fresh re-plan is needed. */
+  needsReplan?: boolean;
 };
 
 type ErrorPayload = {
@@ -88,6 +98,45 @@ export function isSafeInternalPath(path: string | undefined): path is string {
   if (!path || !path.startsWith("/") || path.startsWith("//")) return false;
   if (/[\u0000-\u001f]/.test(path)) return false;
   return !/^\/[a-z][a-z0-9+.-]*:/i.test(path);
+}
+
+/** Collapse a pathname to a comparable form: lower-cased, query/hash stripped, no trailing slash. */
+export function normalizePathname(pathname: string | undefined): string {
+  if (!pathname) return "";
+  const withoutQuery = pathname.split(/[?#]/, 1)[0];
+  const lowered = withoutQuery.toLowerCase();
+  if (lowered.length > 1 && lowered.endsWith("/")) {
+    return lowered.replace(/\/+$/, "") || "/";
+  }
+  return lowered;
+}
+
+/**
+ * Two internal pathnames refer to the same destination if they normalize equal,
+ * or one is a path-segment prefix of the other (handles redirects that append a
+ * sub-route, e.g. /settings -> /settings/profile).
+ */
+export function pathnamesMatch(expected: string | undefined, actual: string | undefined): boolean {
+  const a = normalizePathname(expected);
+  const b = normalizePathname(actual);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  if (shorter === "/") return false;
+  return longer.startsWith(`${shorter}/`);
+}
+
+const AUTH_PATHNAMES = new Set(["/login", "/register"]);
+
+/** True when navigation landed on an auth gate it was not asked to open. */
+export function isUnexpectedAuthRedirect(
+  expectedPath: string | undefined,
+  actualPathname: string | undefined,
+): boolean {
+  const actual = normalizePathname(actualPathname);
+  if (!AUTH_PATHNAMES.has(actual)) return false;
+  const expected = normalizePathname(expectedPath);
+  return !AUTH_PATHNAMES.has(expected);
 }
 
 function buildElementSelector(element: Element): string | null {

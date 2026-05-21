@@ -64,7 +64,8 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("select", messages[0]["content"])
         self.assertIn("check", messages[0]["content"])
         self.assertIn("wait", messages[0]["content"])
-        self.assertIn("navigate の後に続きの steps", messages[0]["content"])
+        self.assertIn("移動先ページの要素は見えていない", messages[0]["content"])
+        self.assertIn("移動後に続ける操作", messages[0]["content"])
         self.assertIn("description には変数名", messages[0]["content"])
         self.assertIn("画面上の言葉に言い換える", messages[0]["content"])
 
