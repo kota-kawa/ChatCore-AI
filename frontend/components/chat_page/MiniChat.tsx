@@ -7,6 +7,8 @@ import {
   createAiAgentMessageId,
   cssEscape,
   isActionStep,
+  isAllowedNavigationPath,
+  isDestructiveActionLabel,
   isSafeInternalPath,
   isUnexpectedAuthRedirect,
   isVisibleElement,
@@ -514,6 +516,9 @@ async function executeNavigation(
 ): Promise<StepExecutionResult> {
   const path = getStepNavigationPath(step);
   if (!isSafeInternalPath(path)) return { ok: false, message: "移動先パスが不正です。", needsReplan: false };
+  if (!isAllowedNavigationPath(path)) {
+    return { ok: false, message: "この遷移は許可されていません。", needsReplan: false };
+  }
   // Already on the destination: nothing to navigate, let following steps run in place.
   if (pathnamesMatch(getInternalPathname(path), window.location.pathname)) return { ok: true };
   const outcome = await navigateInternal(path);
@@ -575,14 +580,28 @@ async function waitForStepTarget(step: ActionStep): Promise<StepExecutionResult>
   return { ok: true };
 }
 
+// A click is treated as destructive when it submits a form or its visible label/attributes
+// read as an irreversible action, so we confirm it even if the model rated it low risk.
+function isDestructiveStep(step: ActionStep): boolean {
+  if (step.action !== "click" || !step.selector) return false;
+  const el = getElement(step.selector);
+  if (!el) return false;
+  if (el instanceof HTMLButtonElement && el.type === "submit") return true;
+  if (el instanceof HTMLInputElement && (el.type === "submit" || el.type === "image")) return true;
+  const haystack = [
+    el.getAttribute("aria-label"),
+    el.textContent,
+    el.getAttribute("title"),
+    el.getAttribute("name"),
+    el.getAttribute("value"),
+  ].filter(Boolean).join(" ");
+  return isDestructiveActionLabel(haystack);
+}
+
 async function executeActionStep(
   step: ActionStep,
   navigateInternal: NavigateInternal,
 ): Promise<StepExecutionResult> {
-  if ((step.risk === "medium" || step.risk === "high") && !await showConfirmModal("この操作は送信や保存を行う可能性があります。実行しますか？")) {
-    return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
-  }
-
   if (step.action === "navigate" || (step.action === "app_action" && step.command === "navigation.openPage")) {
     return executeNavigation(step, navigateInternal);
   }
@@ -590,6 +609,13 @@ async function executeActionStep(
   // Wait once for the target to exist; if it never appears, retrying won't help.
   const ready = await waitForStepTarget(step);
   if (!ready.ok) return ready;
+
+  // Confirm before any state-changing action. Risk is honoured, but destructive controls
+  // are also caught here so a low-risk label cannot silently submit/delete/log out.
+  const needsConfirmation = step.risk === "medium" || step.risk === "high" || isDestructiveStep(step);
+  if (needsConfirmation && !await showConfirmModal("この操作は送信・保存・削除など取り消せない可能性があります。実行してよろしいですか？")) {
+    return { ok: false, message: "ユーザー確認で操作を中止しました。", needsReplan: false };
+  }
 
   // Clicks and typed actions can briefly land before the target's React handlers are
   // bound (notably right after a navigation), so retry the perform+verify cycle once.
@@ -707,8 +733,8 @@ export function MiniChat() {
   }, []);
 
   const navigateInternal = useCallback<NavigateInternal>(async (path) => {
-    if (!isSafeInternalPath(path)) {
-      return { ok: false, message: "移動先パスが不正です。", clientSide: false, needsReplan: false };
+    if (!isSafeInternalPath(path) || !isAllowedNavigationPath(path)) {
+      return { ok: false, message: "この遷移は許可されていません。", clientSide: false, needsReplan: false };
     }
     const targetPathname = getInternalPathname(path);
     if (targetPathname && isClientNavigableRoute(targetPathname)) {

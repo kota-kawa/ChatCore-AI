@@ -126,6 +126,47 @@ export function pathnamesMatch(expected: string | undefined, actual: string | un
   return longer.startsWith(`${shorter}/`);
 }
 
+// The only destinations the agent is allowed to navigate to: real, side-effect-free app
+// pages from the capability catalog. This blocks navigation to mutating GET endpoints
+// (e.g. /logout, /google-login) and anything outside the app.
+export const NAVIGABLE_APP_ROUTES = [
+  "/",
+  "/prompt_share",
+  "/prompt_share/manage",
+  "/memo",
+  "/settings",
+  "/login",
+];
+
+export function isAllowedNavigationPath(path: string | undefined): boolean {
+  if (!isSafeInternalPath(path)) return false;
+  const target = normalizePathname(path);
+  if (!target) return false;
+  return NAVIGABLE_APP_ROUTES.some((route) => pathnamesMatch(route, target));
+}
+
+// Words that signal an irreversible / state-changing control. Used to force a confirmation
+// before clicking such a control even when the model labelled the step low risk.
+const DESTRUCTIVE_INTENT_PATTERN =
+  /(削除|消去|破棄|取り消|退会|解約|購入|支払|決済|送信|投稿|保存|登録|ログアウト|サインアウト|delete|remove|destroy|discard|purchase|checkout|\bbuy\b|\bpay\b|submit|publish|sign[\s-]*out|log[\s-]*out)/i;
+
+export function isDestructiveActionLabel(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return DESTRUCTIVE_INTENT_PATTERN.test(text);
+}
+
+const SENSITIVE_AUTOCOMPLETE_PATTERN =
+  /(password|current-password|new-password|one-time-code|cc-number|cc-csc|cc-exp|cc-name)/i;
+const SENSITIVE_NAME_PATTERN = /(pass(word)?|secret|token|otp|cvv|card[\s_-]?number)/i;
+
+/** Inputs whose value must never be sent to the LLM (passwords, hidden fields, payment data). */
+export function isSensitiveValueElement(element: Element): boolean {
+  if (!(element instanceof HTMLInputElement)) return false;
+  if (element.type === "password" || element.type === "hidden") return true;
+  if (SENSITIVE_AUTOCOMPLETE_PATTERN.test(element.getAttribute("autocomplete") || "")) return true;
+  return SENSITIVE_NAME_PATTERN.test(element.getAttribute("name") || "");
+}
+
 const AUTH_PATHNAMES = new Set(["/login", "/register"]);
 
 /** True when navigation landed on an auth gate it was not asked to open. */
@@ -187,13 +228,15 @@ export function collectVisiblePageDom() {
     const disabled = "disabled" in element && typeof element.disabled === "boolean"
       ? element.disabled
       : undefined;
+    const sensitive = isSensitiveValueElement(element);
     summaries.push({
       selector,
       tag: element.tagName.toLowerCase(),
       text: truncateForContext(element.textContent),
       ariaLabel: truncateForContext(element.getAttribute("aria-label")),
       placeholder: truncateForContext(input?.placeholder),
-      value: truncateForContext(input?.value ?? select?.value, 60),
+      // Never transmit secrets/PII held in password, hidden, or payment fields.
+      value: sensitive ? undefined : truncateForContext(input?.value ?? select?.value, 60),
       inputType: element instanceof HTMLInputElement ? element.type : undefined,
       checked: element instanceof HTMLInputElement && /^(checkbox|radio)$/.test(element.type)
         ? element.checked
