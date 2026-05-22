@@ -4514,6 +4514,19 @@ body.memo-page {
   backdrop-filter: blur(8px);
 }
 
+[data-theme="dark"] .memo-history-panel,
+[data-theme="dark"] .memo-history__sections,
+[data-theme="dark"] .memo-history__list {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .memo-history__empty {
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Uniform memo cards: keep organization badges, but stop color-coding card surfaces. */
 .memo-history__list > li:nth-child(n) .memo-item,
 .memo-item.has-accent,
@@ -4532,7 +4545,7 @@ body.memo-page {
 [data-theme="dark"] .memo-item.has-accent,
 [data-theme="dark"] .memo-item.is-pinned,
 [data-theme="dark"] .memo-item.is-pinned.has-accent {
-  background: var(--memo-card);
+  background: transparent;
   border-color: var(--memo-border);
   color: var(--memo-text);
   box-shadow: none;
@@ -4542,6 +4555,11 @@ body.memo-page {
 [data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:focus-within {
   border-color: rgba(148, 163, 184, 0.32);
   box-shadow: none;
+}
+
+[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item.is-selected {
+  background: rgba(251, 188, 4, 0.14);
+  border-color: rgba(251, 188, 4, 0.42);
 }
 
 [data-theme="dark"] .memo-item.has-accent::before {
