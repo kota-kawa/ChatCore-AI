@@ -1556,7 +1556,7 @@ export default function MemoPage() {
                   </span>
                 </div>
               </div>
-              <div className="memo-toolbar__actions">
+              <div className="memo-toolbar__actions" role="toolbar" aria-label="メモ操作">
                 <button
                   type="button"
                   className={`memo-toolbar__icon-btn memo-toolbar__filter-toggle${isFiltersOpen ? " is-active" : ""}${hasActiveFilters ? " has-active-filters" : ""}`}
@@ -1583,36 +1583,36 @@ export default function MemoPage() {
                 </button>
                 <button
                   type="button"
-                  className={`memo-toolbar__icon-btn${isBulkMode ? " is-active" : ""}`}
+                  className={`memo-toolbar__icon-btn memo-toolbar__action-btn${isBulkMode ? " is-active" : ""}`}
                   onClick={() => { if (isBulkMode) exitBulkMode(); else setIsBulkMode(true); }}
                   aria-label={isBulkMode ? "一括選択を終了" : "一括操作モード"}
                   data-tooltip={isBulkMode ? "一括選択を終了" : "一括操作モード"}
                   data-tooltip-placement="bottom"
                 >
                   <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`} aria-hidden="true"></i>
-                  <span className="sr-only">{isBulkMode ? "一括選択を終了" : "一括操作モード"}</span>
+                  <span className="memo-toolbar__action-label">{isBulkMode ? "選択終了" : "一括操作"}</span>
                 </button>
                 <button
                   type="button"
-                  className="memo-toolbar__icon-btn"
+                  className="memo-toolbar__icon-btn memo-toolbar__action-btn"
                   onClick={() => setIsCollectionPanelOpen(true)}
                   aria-label="コレクション管理"
                   data-tooltip="コレクション管理"
                   data-tooltip-placement="bottom"
                 >
                   <i className="bi bi-folder2-open" aria-hidden="true"></i>
-                  <span className="sr-only">コレクション管理</span>
+                  <span className="memo-toolbar__action-label">コレクション</span>
                 </button>
                 <button
                   type="button"
-                  className="memo-toolbar__icon-btn"
+                  className="memo-toolbar__icon-btn memo-toolbar__action-btn"
                   onClick={() => setIsExportModalOpen(true)}
                   aria-label="エクスポート"
                   data-tooltip="エクスポート"
                   data-tooltip-placement="bottom"
                 >
                   <i className="bi bi-download" aria-hidden="true"></i>
-                  <span className="sr-only">エクスポート</span>
+                  <span className="memo-toolbar__action-label">エクスポート</span>
                 </button>
               </div>
             </div>
@@ -1649,49 +1649,55 @@ export default function MemoPage() {
             </div>
 
             <div className="memo-toolbar__filters">
-              <div className="memo-filter-chips" role="group" aria-label="表示範囲">
-                <button
-                  type="button"
-                  className={`memo-filter-chip${archiveScope === "active" ? " is-active" : ""}`}
-                  onClick={() => setArchiveScope("active")}
-                  aria-pressed={archiveScope === "active"}
-                >
-                  <i className="bi bi-inbox" aria-hidden="true"></i>
-                  通常
-                </button>
-                <button
-                  type="button"
-                  className={`memo-filter-chip${archiveScope === "all" ? " is-active" : ""}`}
-                  onClick={() => setArchiveScope("all")}
-                  aria-pressed={archiveScope === "all"}
-                >
-                  <i className="bi bi-collection" aria-hidden="true"></i>
-                  すべて
-                </button>
-                <button
-                  type="button"
-                  className={`memo-filter-chip${archiveScope === "archived" ? " is-active" : ""}`}
-                  onClick={() => setArchiveScope("archived")}
-                  aria-pressed={archiveScope === "archived"}
-                >
-                  <i className="bi bi-archive" aria-hidden="true"></i>
-                  アーカイブ
-                </button>
+              <div className="memo-filter-group">
+                <span className="memo-filter-group__label">表示</span>
+                <div className="memo-filter-chips" role="group" aria-label="表示範囲">
+                  <button
+                    type="button"
+                    className={`memo-filter-chip${archiveScope === "active" ? " is-active" : ""}`}
+                    onClick={() => setArchiveScope("active")}
+                    aria-pressed={archiveScope === "active"}
+                  >
+                    <i className="bi bi-inbox" aria-hidden="true"></i>
+                    通常
+                  </button>
+                  <button
+                    type="button"
+                    className={`memo-filter-chip${archiveScope === "all" ? " is-active" : ""}`}
+                    onClick={() => setArchiveScope("all")}
+                    aria-pressed={archiveScope === "all"}
+                  >
+                    <i className="bi bi-collection" aria-hidden="true"></i>
+                    すべて
+                  </button>
+                  <button
+                    type="button"
+                    className={`memo-filter-chip${archiveScope === "archived" ? " is-active" : ""}`}
+                    onClick={() => setArchiveScope("archived")}
+                    aria-pressed={archiveScope === "archived"}
+                  >
+                    <i className="bi bi-archive" aria-hidden="true"></i>
+                    アーカイブ
+                  </button>
+                </div>
               </div>
               <div className="memo-sort-control">
-                <i className="bi bi-sort-down" aria-hidden="true"></i>
-                <MemoSelect
-                  value={sortMode}
-                  onChange={(v) => setSortMode(v)}
-                  options={[
-                    { value: "manual", label: "手動順" },
-                    { value: "recent", label: "新しい順" },
-                    { value: "updated", label: "更新順" },
-                    { value: "oldest", label: "古い順" },
-                    { value: "title", label: "タイトル順" },
-                    { value: "semantic", label: "AI類似検索" },
-                  ]}
-                />
+                <span className="memo-sort-control__label">並び順</span>
+                <div className="memo-sort-control__select">
+                  <i className="bi bi-sort-down" aria-hidden="true"></i>
+                  <MemoSelect
+                    value={sortMode}
+                    onChange={(v) => setSortMode(v)}
+                    options={[
+                      { value: "manual", label: "手動順" },
+                      { value: "recent", label: "新しい順" },
+                      { value: "updated", label: "更新順" },
+                      { value: "oldest", label: "古い順" },
+                      { value: "title", label: "タイトル順" },
+                      { value: "semantic", label: "AI類似検索" },
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
