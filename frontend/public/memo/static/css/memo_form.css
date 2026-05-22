@@ -4485,8 +4485,16 @@ body.memo-page {
 [data-theme="dark"] .memo-item.has-accent,
 [data-theme="dark"] .memo-item.is-pinned,
 [data-theme="dark"] .memo-item.is-pinned.has-accent {
-  background: var(--memo-card-strong);
-  border-color: rgba(148, 163, 184, 0.2);
+  background: var(--memo-card);
+  border-color: var(--memo-border);
+  color: var(--memo-text);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:hover,
+[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:focus-within {
+  border-color: rgba(148, 163, 184, 0.32);
+  box-shadow: none;
 }
 
 [data-theme="dark"] .memo-item.has-accent::before {
