@@ -78,10 +78,6 @@ function UserMessageEditForm({
 
   return (
     <div className="user-message-edit-form">
-      <div className="user-message-edit-header">
-        <i className="bi bi-pencil-square" aria-hidden="true"></i>
-        編集中
-      </div>
       <textarea
         ref={textareaRef}
         className="user-message-edit-textarea"
@@ -91,7 +87,6 @@ function UserMessageEditForm({
         onKeyDown={handleKeyDown}
       />
       <div className="user-message-edit-actions">
-        <span className="user-message-edit-hint">Enter で再生成 · Shift+Enter で改行</span>
         <button type="button" className="user-message-edit-cancel" onClick={onCancel}>
           <i className="bi bi-x-lg" aria-hidden="true"></i>
           キャンセル
