@@ -794,6 +794,13 @@ chat-action-menu {
   transform: rotate(180deg);
 }
 
+.bot-message
+  .web-search-sources[data-web-search-sources-state="closing"]
+  > .web-search-sources__summary
+  > .web-search-sources__chevron {
+  transform: rotate(0deg);
+}
+
 .bot-message .web-search-sources__list {
   display: grid;
   gap: 0.45rem;
@@ -934,7 +941,8 @@ chat-action-menu {
 
 .bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
 .bot-message .web-search-sources[data-web-search-sources-state="closing"] .web-search-sources__list {
-  will-change: height, opacity;
+  contain: layout paint;
+  will-change: height, opacity, transform;
 }
 
 .bot-message .web-search-sources__item {

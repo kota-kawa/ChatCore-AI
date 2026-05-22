@@ -4,7 +4,7 @@ import { formatLLMOutput } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-const WEB_SEARCH_SOURCES_ANIMATION_MS = 240;
+const WEB_SEARCH_SOURCES_ANIMATION_MS = 170;
 const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animation>();
 const WEB_SEARCH_SOURCES_REVEAL_PADDING = 16;
@@ -18,7 +18,10 @@ function prefersReducedMotion() {
 }
 
 function getWebSearchSourcesList(details: HTMLDetailsElement) {
-  return details.querySelector<HTMLElement>(".web-search-sources__list");
+  return Array.from(details.children).find(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && child.classList.contains("web-search-sources__list")
+  );
 }
 
 function resetWebSearchSourcesListStyles(list: HTMLElement) {
@@ -107,28 +110,41 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
     return;
   }
 
-  const startHeight = list.getBoundingClientRect().height;
+  const startHeight = details.open ? list.getBoundingClientRect().height : 0;
   cancelWebSearchSourcesAnimation(details);
 
-  let endHeight = 0;
+  list.style.height = `${startHeight}px`;
+  list.style.overflow = "hidden";
+  list.style.opacity = shouldOpen || startHeight > 0 ? "1" : "0";
+  list.style.transform = "translateY(0)";
+
   if (shouldOpen) {
-    // Open the element so the content lays out, then measure its natural height.
-    // The list keeps `overflow: hidden`, so this stays invisible until we animate.
-    list.style.overflow = "hidden";
     details.open = true;
-    endHeight = list.scrollHeight;
-  } else {
-    list.style.overflow = "hidden";
   }
 
+  const endHeight = shouldOpen ? list.scrollHeight : 0;
   details.dataset.webSearchSourcesState = shouldOpen ? "opening" : "closing";
 
-  // Drive everything through the Web Animations API so the keyframes are applied
-  // on the compositor's schedule instead of forcing a synchronous reflow.
+  if (Math.abs(endHeight - startHeight) < 1) {
+    details.open = shouldOpen;
+    delete details.dataset.webSearchSourcesState;
+    resetWebSearchSourcesListStyles(list);
+    if (shouldOpen) scheduleWebSearchSourcesReveal(details);
+    return;
+  }
+
   const animation = list.animate(
     [
-      { height: `${startHeight}px`, opacity: shouldOpen && startHeight === 0 ? 0 : 1 },
-      { height: `${endHeight}px`, opacity: shouldOpen ? 1 : 0 }
+      {
+        height: `${startHeight}px`,
+        opacity: shouldOpen && startHeight < 1 ? 0 : 1,
+        transform: shouldOpen && startHeight < 1 ? "translateY(-4px)" : "translateY(0)"
+      },
+      {
+        height: `${endHeight}px`,
+        opacity: shouldOpen ? 1 : 0,
+        transform: shouldOpen ? "translateY(0)" : "translateY(-3px)"
+      }
     ],
     {
       duration: WEB_SEARCH_SOURCES_ANIMATION_MS,
