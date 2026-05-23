@@ -1035,23 +1035,56 @@ body.sidebar-visible {
 }
 
 .security-panel--danger {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
   border-color: rgba(220, 38, 38, 0.28);
   background: rgba(254, 242, 242, 0.72);
 }
 
+.account-delete-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.account-delete-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .account-delete-copy {
-  margin: 0 0 1rem;
+  margin: 0;
   color: var(--settings-text-muted);
-  line-height: 1.6;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .account-delete-confirmation {
   display: grid;
-  gap: 0.45rem;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
 }
 
-.account-delete-actions {
-  margin-top: 1.25rem;
+.account-delete-field .form-label {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.account-delete-field .custom-form-control {
+  padding: 0.7rem 0.85rem;
+}
+
+.account-delete-confirmation .danger-button {
+  min-height: 42px;
+  padding: 0.7rem 1.1rem;
+  white-space: nowrap;
+}
+
+.security-panel--danger .settings-inline-feedback {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.9rem;
 }
 .passkey-list {
   display: grid;
@@ -1766,6 +1799,9 @@ body.settings-page,
   }
   .primary-button, .secondary-button, .danger-button {
     width: 100%;
+  }
+  .account-delete-confirmation {
+    grid-template-columns: 1fr;
   }
 }
 

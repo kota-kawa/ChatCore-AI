@@ -6,9 +6,9 @@ import { sanitizeClassAttributeValue } from "../scripts/core/html";
 const ALLOWED_TAGS = new Set([
   "p", "br", "strong", "em", "code", "pre", "ul", "ol", "li",
   "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "hr",
-  "table", "thead", "tbody", "tr", "th", "td", "a", "img",
+  "table", "thead", "tbody", "tr", "th", "td", "a", "img", "input",
 ]);
-const ALLOWED_ATTRS = new Set(["href", "src", "alt", "title", "class", "target"]);
+const ALLOWED_ATTRS = new Set(["href", "src", "alt", "title", "class", "target", "type", "checked", "disabled"]);
 const SAFE_URI_PATTERN = /^(?:(?:https?|mailto|tel):|\/(?!\/)|#|\.{1,2}\/|[^:/?#]+(?:[/?#]|$))/i;
 const MARKDOWN_HTML_CACHE_LIMIT = 120;
 const markdownHtmlCache = new Map<string, string>();
@@ -40,6 +40,14 @@ function normalizeSanitizedHtml(html: string): string {
   Array.from(template.content.querySelectorAll("a")).forEach((node) => {
     node.setAttribute("target", "_blank");
     node.setAttribute("rel", "noopener noreferrer");
+  });
+
+  Array.from(template.content.querySelectorAll("input")).forEach((node) => {
+    if (node.getAttribute("type") !== "checkbox") {
+      node.remove();
+      return;
+    }
+    node.setAttribute("disabled", "");
   });
 
   return template.innerHTML;

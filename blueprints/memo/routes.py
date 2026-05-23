@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from werkzeug.utils import secure_filename
 
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
@@ -33,6 +36,7 @@ from services.web import (
     jsonify,
     jsonify_service_error,
     log_and_internal_server_error,
+    BASE_DIR,
     redirect_to_frontend,
     require_json_dict,
     validate_payload_model,
@@ -43,10 +47,59 @@ from .helpers import user_id_from_session
 
 memo_bp = APIRouter(prefix="/memo", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger("blueprints.memo")
+MEMO_IMAGE_UPLOAD_DIR = os.path.join(BASE_DIR, "frontend", "public", "static", "uploads", "memo")
+MEMO_IMAGE_URL_PREFIX = "/static/uploads/memo"
+MEMO_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+MEMO_IMAGE_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _memo_attr(name: str) -> Any:
     return getattr(sys.modules["blueprints.memo"], name)
+
+
+def _save_memo_image(upload_file: Any, user_id: int) -> str:
+    filename = secure_filename(getattr(upload_file, "filename", "") or "")
+    if not filename:
+        raise ApiServiceError("画像ファイル名が不正です。", 400, status="fail")
+
+    extension = os.path.splitext(filename)[1].lower()
+    if extension not in MEMO_IMAGE_ALLOWED_EXTENSIONS:
+        raise ApiServiceError("画像は PNG / JPG / WebP / GIF のいずれかを指定してください。", 400, status="fail")
+
+    content_type = str(getattr(upload_file, "content_type", "") or "").lower()
+    if content_type and not content_type.startswith("image/"):
+        raise ApiServiceError("画像ファイルのみアップロードできます。", 400, status="fail")
+
+    os.makedirs(MEMO_IMAGE_UPLOAD_DIR, exist_ok=True)
+    stored_filename = f"user_{user_id}_{uuid4().hex}{extension}"
+    filepath = os.path.join(MEMO_IMAGE_UPLOAD_DIR, stored_filename)
+    file_obj = upload_file.file
+    total_size = 0
+
+    try:
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
+        with open(filepath, "wb") as out_f:
+            while True:
+                chunk = file_obj.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MEMO_IMAGE_MAX_BYTES:
+                    raise ApiServiceError("画像サイズは5MB以下にしてください。", 400, status="fail")
+                out_f.write(chunk)
+    except Exception:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        raise
+    finally:
+        if hasattr(file_obj, "seek"):
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
+
+    return f"{MEMO_IMAGE_URL_PREFIX}/{stored_filename}"
 
 
 @memo_bp.get("/api/recent", name="memo.api_recent")
@@ -129,6 +182,8 @@ async def api_create_memo(request: Request):
             payload.ai_response,
             resolved_title,
             payload.collection_id,
+            payload.background_color,
+            payload.image_url,
         )
         flash(request, "メモを保存しました。", "success")
         if memo_id:
@@ -136,6 +191,26 @@ async def api_create_memo(request: Request):
         return jsonify({"status": "success", "memo_id": memo_id})
     except Error:
         return log_and_internal_server_error(logger, "Failed to create memo entry.", status="fail")
+
+
+@memo_bp.post("/api/upload-image", name="memo.api_upload_image")
+async def api_upload_memo_image(request: Request):
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+
+    form = await request.form()
+    image_candidate = form.get("image")
+    if not getattr(image_candidate, "filename", ""):
+        return jsonify({"status": "fail", "error": "画像ファイルを選択してください。"}, status_code=400)
+
+    try:
+        image_url = await run_blocking(_save_memo_image, image_candidate, user_id)
+        return jsonify({"status": "success", "image_url": image_url})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, "Failed to upload memo image.", status="fail")
 
 
 @memo_bp.post("/api/suggest", name="memo.api_suggest")
@@ -464,6 +539,10 @@ async def api_update_memo(request: Request, memo_id: int):
         and payload.ai_response is None
         and payload.collection_id is None
         and not payload.clear_collection
+        and payload.background_color is None
+        and not payload.clear_background_color
+        and payload.image_url is None
+        and not payload.clear_image
     ):
         return jsonify({"status": "fail", "error": "更新する項目を指定してください。"}, status_code=400)
 
@@ -476,6 +555,10 @@ async def api_update_memo(request: Request, memo_id: int):
             ai_response=payload.ai_response,
             collection_id=payload.collection_id,
             clear_collection=payload.clear_collection,
+            background_color=payload.background_color,
+            clear_background_color=payload.clear_background_color,
+            image_url=payload.image_url,
+            clear_image=payload.clear_image,
         )
         if payload.ai_response is not None or payload.title is not None:
             _memo_attr("_schedule_embedding")(

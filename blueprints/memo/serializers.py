@@ -56,6 +56,8 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
         "collection_id": memo.get("collection_id"),
         "collection_name": memo.get("collection_name"),
         "collection_color": memo.get("collection_color"),
+        "background_color": memo.get("background_color"),
+        "image_url": memo.get("image_url"),
         **share_meta,
     }
 
@@ -75,6 +77,8 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         "collection_id": memo.get("collection_id"),
         "collection_name": memo.get("collection_name"),
         "collection_color": memo.get("collection_color"),
+        "background_color": memo.get("background_color"),
+        "image_url": memo.get("image_url"),
         **share_meta,
     }
 

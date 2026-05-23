@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 1b1b58d2834dc8b2effd247a291e6be5b4a7e3a8b947aa46d9ebfd09ddfa797c
+// Schema fingerprint: 3412d4b964fad17d621cd55c1fea2ae9476928e1b1ff925cb8a5ac6cc18d5f6c
 
 import { z } from "zod";
 
@@ -62,13 +62,13 @@ export type PromptListEntryCreateRequest = z.infer<typeof PromptListEntryCreateR
 export const PromptUpdateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().min(1), "content": z.string().min(1), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type PromptUpdateRequest = z.infer<typeof PromptUpdateRequestSchema>;
 
-export const MemoCreateRequestSchema = z.object({ "ai_response": z.string().min(1), "title": z.string().default(""), "collection_id": z.union([z.number().int(), z.null()]).default(null) });
+export const MemoCreateRequestSchema = z.object({ "ai_response": z.string().default(""), "title": z.string().default(""), "collection_id": z.union([z.number().int(), z.null()]).default(null), "background_color": z.union([z.string().regex(new RegExp("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")).max(20), z.null()]).default(null), "image_url": z.union([z.string().regex(new RegExp("^/static/uploads/memo/[A-Za-z0-9_.-]+$")).max(255), z.null()]).default(null) });
 export type MemoCreateRequest = z.infer<typeof MemoCreateRequestSchema>;
 
 export const ShareMemoRequestSchema = z.object({ "memo_id": z.number().int() });
 export type ShareMemoRequest = z.infer<typeof ShareMemoRequestSchema>;
 
-export const MemoUpdateRequestSchema = z.object({ "title": z.union([z.string(), z.null()]).default(null), "ai_response": z.union([z.string(), z.null()]).default(null), "collection_id": z.union([z.number().int(), z.null()]).default(null), "clear_collection": z.boolean().default(false) });
+export const MemoUpdateRequestSchema = z.object({ "title": z.union([z.string(), z.null()]).default(null), "ai_response": z.union([z.string(), z.null()]).default(null), "collection_id": z.union([z.number().int(), z.null()]).default(null), "clear_collection": z.boolean().default(false), "background_color": z.union([z.string().regex(new RegExp("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")).max(20), z.null()]).default(null), "clear_background_color": z.boolean().default(false), "image_url": z.union([z.string().regex(new RegExp("^/static/uploads/memo/[A-Za-z0-9_.-]+$")).max(255), z.null()]).default(null), "clear_image": z.boolean().default(false) });
 export type MemoUpdateRequest = z.infer<typeof MemoUpdateRequestSchema>;
 
 export const MemoToggleRequestSchema = z.object({ "enabled": z.boolean().default(true) });
