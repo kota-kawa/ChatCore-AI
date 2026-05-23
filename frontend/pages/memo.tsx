@@ -561,11 +561,6 @@ export default function MemoPage() {
   const [detailSaveError, setDetailSaveError] = useState("");
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailSaveSequenceRef = useRef(0);
-  const detailEditSnapshotRef = useRef({
-    title: "",
-    collectionId: null as number | null,
-    aiResponse: "",
-  });
 
   const [actionLoadingId, setActionLoadingId] = useState<string>("");
 
@@ -724,14 +719,6 @@ export default function MemoPage() {
     setDetailSaveStatus("idle");
     setDetailSaveError("");
   }, [selectedMemo]);
-
-  useEffect(() => {
-    detailEditSnapshotRef.current = {
-      title: detailEditTitle,
-      collectionId: detailEditCollectionId,
-      aiResponse: detailEditAiResponse,
-    };
-  }, [detailEditAiResponse, detailEditCollectionId, detailEditTitle]);
 
   useEffect(() => {
     if (!openMenuMemoId) return;
@@ -966,17 +953,17 @@ export default function MemoPage() {
       );
       if (requestId === detailSaveSequenceRef.current) {
         if (payload.memo) {
-          setSelectedMemo(payload.memo);
-          const current = detailEditSnapshotRef.current;
-          const fieldsStillMatchSavedSnapshot =
-            current.title === snapshot.title &&
-            current.collectionId === snapshot.collectionId &&
-            current.aiResponse === snapshot.aiResponse;
-          if (fieldsStillMatchSavedSnapshot) {
-            setDetailEditTitle(payload.memo.title || "");
-            setDetailEditCollectionId(payload.memo.collection_id ?? null);
-            setDetailEditAiResponse(payload.memo.ai_response || "");
-          }
+          // Keep the exact text the user submitted as the saved baseline
+          // instead of the server's normalized response. This prevents the
+          // autosave from rewriting what the user is actively editing (for
+          // example, a leading blank line they just added), so the editor
+          // only ever changes in response to the user's own input.
+          setSelectedMemo({
+            ...payload.memo,
+            title: snapshot.title,
+            ai_response: snapshot.aiResponse,
+            collection_id: snapshot.collectionId,
+          });
         }
         setDetailSaveStatus("saved");
         setDetailSaveError("");
