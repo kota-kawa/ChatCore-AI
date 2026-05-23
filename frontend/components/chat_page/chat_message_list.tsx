@@ -15,6 +15,7 @@ import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window"
 import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import type { UiChatMessage } from "../../lib/chat_page/types";
+import { stripWebSearchSourcesHtml } from "../../scripts/chat/message_utils";
 import { BotMessageHtml } from "./bot_message_html";
 import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
@@ -291,7 +292,7 @@ function ChatMessageRow({
             {!message.error && (
               <MemoSaveActionButton
                 getText={() => {
-                  return message.text;
+                  return stripWebSearchSourcesHtml(message.text);
                 }}
               />
             )}

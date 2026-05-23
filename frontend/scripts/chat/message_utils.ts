@@ -351,6 +351,26 @@ function scrollMessageToTop(_element?: HTMLElement) {
   scrollMessageToBottom();
 }
 
+/**
+ * Web 検索結果は <details class="web-search-sources …">…</details> という
+ * HTML ブロックとして回答本文へ差し込まれる。メモにはタイトルと本文だけを
+ * 残したいので、これらのブロック（ネストした details も含む）を取り除く。
+ */
+function stripWebSearchSourcesHtml(text: string): string {
+  if (!text.includes("web-search-sources")) return text;
+  // ネストした details を含まない最も内側のブロックから順に除去し、
+  // 変化がなくなるまで繰り返すことで外側のブロックも安全に取り除く。
+  const block =
+    /<details\b[^>]*class\s*=\s*(["'])[^"']*web-search-sources[^"']*\1[^>]*>(?:(?!<\/?details\b)[\s\S])*?<\/details>/gi;
+  let current = text;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(block, "");
+  } while (current !== previous);
+  return current.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export {
   sanitizeMessageHtml,
   renderSanitizedHTML,
@@ -360,5 +380,6 @@ export {
   scrollMessageToTop,
   copyTextToClipboard,
   createCopyBtn,
-  createMemoSaveBtn
+  createMemoSaveBtn,
+  stripWebSearchSourcesHtml
 };
