@@ -38,6 +38,7 @@ const DEFAULT_ALLOWED_MESSAGE_TAGS = [
   "li",
   "blockquote",
   "img",
+  "input",
   "h1",
   "h2",
   "h3",
@@ -93,6 +94,14 @@ function normalizeSanitizedHtml(html: string) {
     node.setAttribute("rel", "noopener noreferrer");
   });
 
+  Array.from(template.content.querySelectorAll("input")).forEach((node) => {
+    if (node.getAttribute("type") !== "checkbox") {
+      node.remove();
+      return;
+    }
+    node.setAttribute("disabled", "");
+  });
+
   return template.innerHTML;
 }
 
@@ -118,7 +127,7 @@ function sanitizeMessageHtml(dirtyHtml: string, options: SanitizeMessageHtmlOpti
     typeof purifier.sanitize === "function"
       ? purifier.sanitize(dirtyHtml, {
           ALLOWED_TAGS: allowedTags,
-          ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class"],
+          ALLOWED_ATTR: ["href", "src", "alt", "title", "target", "class", "type", "checked", "disabled"],
           ALLOWED_URI_REGEXP: SAFE_URI_PATTERN,
           ALLOW_DATA_ATTR: false
         })

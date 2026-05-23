@@ -248,9 +248,17 @@ class PromptUpdateRequest(RequestPayloadModel):
 class MemoCreateRequest(RequestPayloadModel):
     # メモ保存APIの入力
     # Input payload for memo creation API.
-    ai_response: NonEmptyStr
+    ai_response: str = ""
     title: str = ""
     collection_id: int | None = None
+    background_color: str | None = Field(default=None, max_length=20, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    image_url: str | None = Field(default=None, max_length=255, pattern=r"^/static/uploads/memo/[A-Za-z0-9_.-]+$")
+
+    @model_validator(mode="after")
+    def _require_content_or_image(self) -> "MemoCreateRequest":
+        if not self.ai_response.strip() and not self.image_url:
+            raise ValueError("AIの回答を入力してください。")
+        return self
 
 
 class ShareMemoRequest(RequestPayloadModel):
@@ -262,6 +270,10 @@ class MemoUpdateRequest(RequestPayloadModel):
     ai_response: str | None = None
     collection_id: int | None = Field(default=None)
     clear_collection: bool = False
+    background_color: str | None = Field(default=None, max_length=20, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    clear_background_color: bool = False
+    image_url: str | None = Field(default=None, max_length=255, pattern=r"^/static/uploads/memo/[A-Za-z0-9_.-]+$")
+    clear_image: bool = False
 
 
 class MemoToggleRequest(RequestPayloadModel):

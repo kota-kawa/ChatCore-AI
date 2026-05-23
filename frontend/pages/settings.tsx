@@ -98,7 +98,7 @@ type PasskeyRecord = {
 };
 
 const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
-const ACCOUNT_DELETE_CONFIRMATION_TEXT = "アカウント削除";
+const ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT";
 
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
@@ -1952,34 +1952,31 @@ export default function UserSettingsPage() {
                   </div>
 
                   <div className="security-panel security-panel--danger">
-                    <h3>アカウント削除</h3>
-                    <p className="account-delete-copy">
-                      アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。
-                    </p>
-                    <div className="account-delete-confirmation">
-                      <label className="form-label" htmlFor="accountDeleteConfirmation">
-                        確認のため「{ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力
-                      </label>
-                      <input
-                        type="text"
-                        id="accountDeleteConfirmation"
-                        className="custom-form-control"
-                        value={accountDeleteConfirmation}
-                        onChange={(event) => {
-                          setAccountDeleteConfirmation(event.target.value);
-                          setAccountDeleteError(null);
-                        }}
-                        disabled={accountDeleting}
-                        autoComplete="off"
-                      />
-                    </div>
-                    {accountDeleteError ? (
-                      <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
-                        <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
-                        {accountDeleteError}
+                    <div className="account-delete-header">
+                      <h3>アカウント削除</h3>
+                      <p className="account-delete-copy">
+                        アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。
                       </p>
-                    ) : null}
-                    <div className="button-group account-delete-actions">
+                    </div>
+                    <div className="account-delete-confirmation">
+                      <div className="account-delete-field">
+                        <label className="form-label" htmlFor="accountDeleteConfirmation">
+                          確認:「{ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力
+                        </label>
+                        <input
+                          type="text"
+                          id="accountDeleteConfirmation"
+                          className="custom-form-control"
+                          value={accountDeleteConfirmation}
+                          onChange={(event) => {
+                            setAccountDeleteConfirmation(event.target.value);
+                            setAccountDeleteError(null);
+                          }}
+                          disabled={accountDeleting}
+                          autoComplete="off"
+                          placeholder={ACCOUNT_DELETE_CONFIRMATION_TEXT}
+                        />
+                      </div>
                       <button
                         type="button"
                         className="danger-button"
@@ -1994,6 +1991,12 @@ export default function UserSettingsPage() {
                         {accountDeleting ? "削除中..." : "アカウントを削除"}
                       </button>
                     </div>
+                    {accountDeleteError ? (
+                      <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
+                        <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+                        {accountDeleteError}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>

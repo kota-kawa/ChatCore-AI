@@ -55,6 +55,8 @@ type MemoSummary = {
   collection_id?: number | null;
   collection_name?: string | null;
   collection_color?: string | null;
+  background_color?: string | null;
+  image_url?: string | null;
 };
 
 type MemoDetail = MemoSummary & {
@@ -115,6 +117,17 @@ const EXPORT_FORMATS = [
   { value: "json", label: "JSON (.json)", icon: "bi-filetype-json" },
   { value: "csv", label: "CSV (.csv)", icon: "bi-filetype-csv" },
 ] as const;
+const MEMO_COLOR_OPTIONS = [
+  { value: "", label: "標準", color: "#ffffff" },
+  { value: "#fff8b8", label: "レモン", color: "#fff8b8" },
+  { value: "#fce8e6", label: "コーラル", color: "#fce8e6" },
+  { value: "#fef3c7", label: "アンバー", color: "#fef3c7" },
+  { value: "#dcfce7", label: "ミント", color: "#dcfce7" },
+  { value: "#dbeafe", label: "ブルー", color: "#dbeafe" },
+  { value: "#ede9fe", label: "ラベンダー", color: "#ede9fe" },
+  { value: "#fce7f3", label: "ローズ", color: "#fce7f3" },
+] as const;
+const MEMO_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
 export function MemoCrawlSummary() {
   const features = [
@@ -528,11 +541,14 @@ export default function MemoPage() {
     ai_response: "",
     title: "",
     collection_id: null as number | null,
+    background_color: null as string | null,
+    image_url: null as string | null,
   });
   const [previewMode, setPreviewMode] = useState(false);
   const [flashState, setFlashState] = useState<FlashState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Filter/sort state
@@ -544,6 +560,7 @@ export default function MemoPage() {
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [isComposePaletteOpen, setIsComposePaletteOpen] = useState(false);
 
   // Toolbar search/filter section (collapsible on mobile)
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -557,6 +574,8 @@ export default function MemoPage() {
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
   const [detailEditAiResponse, setDetailEditAiResponse] = useState("");
+  const [detailEditBackgroundColor, setDetailEditBackgroundColor] = useState<string | null>(null);
+  const [detailEditImageUrl, setDetailEditImageUrl] = useState<string | null>(null);
   const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
   const [detailSaveError, setDetailSaveError] = useState("");
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -597,6 +616,7 @@ export default function MemoPage() {
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
   const dragSwapLockRef = useRef<MemoSwapRect | null>(null);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   // Export modal
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -716,6 +736,8 @@ export default function MemoPage() {
     setDetailEditTitle("");
     setDetailEditCollectionId(null);
     setDetailEditAiResponse("");
+    setDetailEditBackgroundColor(null);
+    setDetailEditImageUrl(null);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
   }, [selectedMemo]);
@@ -809,7 +831,7 @@ export default function MemoPage() {
   const handleSubmitMemo = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFlashState(null);
-    if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を入力してください。"); return; }
+    if (!formState.ai_response.trim() && !formState.image_url) { showFlash("error", "本文または画像を追加してください。"); return; }
     setSubmitting(true);
     try {
       await fetchJsonOrThrow(
@@ -822,9 +844,10 @@ export default function MemoPage() {
         },
         { defaultMessage: "メモの保存に失敗しました。" },
       );
-      setFormState({ ai_response: "", title: "", collection_id: null });
+      setFormState({ ai_response: "", title: "", collection_id: null, background_color: null, image_url: null });
       setPreviewMode(false);
       setIsComposeExpanded(false);
+      setIsComposePaletteOpen(false);
       showFlash("success", "メモを保存しました。");
       void router.replace("/memo?saved=1", undefined, { shallow: true });
       void mutate();
@@ -861,6 +884,91 @@ export default function MemoPage() {
     }
   }, [formState.ai_response, showFlash]);
 
+  const focusComposeTextarea = useCallback(() => {
+    window.setTimeout(() => {
+      composeTextareaRef.current?.focus();
+    }, 0);
+  }, []);
+
+  const openTextComposer = useCallback(() => {
+    setPreviewMode(false);
+    setIsComposeExpanded(true);
+    setIsComposePaletteOpen(false);
+    focusComposeTextarea();
+  }, [focusComposeTextarea]);
+
+  const openChecklistComposer = useCallback(() => {
+    setPreviewMode(false);
+    setIsComposeExpanded(true);
+    setIsComposePaletteOpen(false);
+    setFormState((prev) => {
+      const current = prev.ai_response;
+      const nextChecklistLine = "- [ ] ";
+      return {
+        ...prev,
+        title: prev.title || "チェックリスト",
+        ai_response: current.trim()
+          ? `${current.replace(/\s*$/u, "")}\n${nextChecklistLine}`
+          : nextChecklistLine,
+      };
+    });
+    focusComposeTextarea();
+  }, [focusComposeTextarea]);
+
+  const openImagePicker = useCallback(() => {
+    setPreviewMode(false);
+    setIsComposeExpanded(true);
+    setIsComposePaletteOpen(false);
+    window.setTimeout(() => {
+      imageInputRef.current?.click();
+    }, 0);
+  }, []);
+
+  const handleImageInputChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showFlash("error", "画像ファイルを選択してください。");
+      return;
+    }
+    if (file.size > MEMO_IMAGE_MAX_BYTES) {
+      showFlash("error", "画像サイズは5MB以下にしてください。");
+      return;
+    }
+
+    setPreviewMode(false);
+    setIsComposeExpanded(true);
+    setIsComposePaletteOpen(false);
+    setImageUploading(true);
+    try {
+      const uploadData = new FormData();
+      uploadData.append("image", file);
+      const { payload } = await fetchJsonOrThrow<{ image_url?: string }>(
+        "/memo/api/upload-image",
+        { method: "POST", credentials: "same-origin", body: uploadData },
+        { defaultMessage: "画像のアップロードに失敗しました。" },
+      );
+      if (!payload.image_url) throw new Error("画像URLを取得できませんでした。");
+      setFormState((prev) => ({
+        ...prev,
+        title: prev.title || file.name.replace(/\.[^.]+$/u, "") || "画像メモ",
+        image_url: payload.image_url || null,
+      }));
+      showFlash("success", "画像を追加しました。");
+    } catch (error) {
+      showFlash("error", error instanceof Error ? error.message : "画像のアップロードに失敗しました。");
+    } finally {
+      setImageUploading(false);
+    }
+  }, [showFlash]);
+
+  const openComposePalette = useCallback(() => {
+    setPreviewMode(false);
+    setIsComposeExpanded(true);
+    setIsComposePaletteOpen((open) => !open);
+  }, []);
+
   // -----------------------------------------------------------------------
   // Memo detail
   // -----------------------------------------------------------------------
@@ -870,11 +978,15 @@ export default function MemoPage() {
     return (
       detailEditTitle !== (selectedMemo.title || "") ||
       detailEditCollectionId !== (selectedMemo.collection_id ?? null) ||
-      detailEditAiResponse !== (selectedMemo.ai_response || "")
+      detailEditAiResponse !== (selectedMemo.ai_response || "") ||
+      detailEditBackgroundColor !== (selectedMemo.background_color ?? null) ||
+      detailEditImageUrl !== (selectedMemo.image_url ?? null)
     );
   }, [
     detailEditAiResponse,
+    detailEditBackgroundColor,
     detailEditCollectionId,
+    detailEditImageUrl,
     detailEditTitle,
     selectedMemo,
   ]);
@@ -903,6 +1015,8 @@ export default function MemoPage() {
       setDetailEditTitle(memo.title || "");
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
+      setDetailEditBackgroundColor(memo.background_color ?? null);
+      setDetailEditImageUrl(memo.image_url ?? null);
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
     } catch (error) {
@@ -914,15 +1028,17 @@ export default function MemoPage() {
 
   const saveDetailEdit = useCallback(async () => {
     if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
-    if (!detailEditAiResponse.trim()) {
+    if (!detailEditAiResponse.trim() && !detailEditImageUrl) {
       setDetailSaveStatus("error");
-      setDetailSaveError("AIの回答を入力してください。");
+      setDetailSaveError("本文または画像を追加してください。");
       return false;
     }
     const snapshot = {
       title: detailEditTitle,
       collectionId: detailEditCollectionId,
       aiResponse: detailEditAiResponse,
+      backgroundColor: detailEditBackgroundColor,
+      imageUrl: detailEditImageUrl,
     };
     const requestId = ++detailSaveSequenceRef.current;
     setDetailSaveStatus("saving");
@@ -932,6 +1048,18 @@ export default function MemoPage() {
         title: snapshot.title,
         ai_response: snapshot.aiResponse,
       };
+
+      if (snapshot.backgroundColor) {
+        body.background_color = snapshot.backgroundColor;
+      } else {
+        body.clear_background_color = true;
+      }
+
+      if (snapshot.imageUrl) {
+        body.image_url = snapshot.imageUrl;
+      } else {
+        body.clear_image = true;
+      }
 
       if (collections.length > 0) {
         if (snapshot.collectionId !== null) {
@@ -963,6 +1091,8 @@ export default function MemoPage() {
             title: snapshot.title,
             ai_response: snapshot.aiResponse,
             collection_id: snapshot.collectionId,
+            background_color: snapshot.backgroundColor,
+            image_url: snapshot.imageUrl,
           });
         }
         setDetailSaveStatus("saved");
@@ -980,7 +1110,9 @@ export default function MemoPage() {
   }, [
     collections.length,
     detailEditAiResponse,
+    detailEditBackgroundColor,
     detailEditCollectionId,
+    detailEditImageUrl,
     detailEditTitle,
     detailHasUnsavedChanges,
     mutate,
@@ -989,19 +1121,19 @@ export default function MemoPage() {
 
   const closeMemoDetail = useCallback(async () => {
     clearDetailAutoSaveTimer();
-    if (detailHasUnsavedChanges && detailEditAiResponse.trim()) {
+    if (detailHasUnsavedChanges) {
       const saved = await saveDetailEdit();
       if (!saved) return;
     }
     setSelectedMemo(null);
-  }, [clearDetailAutoSaveTimer, detailEditAiResponse, detailHasUnsavedChanges, saveDetailEdit]);
+  }, [clearDetailAutoSaveTimer, detailEditAiResponse, detailEditImageUrl, detailHasUnsavedChanges, saveDetailEdit]);
 
   useEffect(() => {
     clearDetailAutoSaveTimer();
     if (!selectedMemo || !detailHasUnsavedChanges) return;
-    if (!detailEditAiResponse.trim()) {
+    if (!detailEditAiResponse.trim() && !detailEditImageUrl) {
       setDetailSaveStatus("error");
-      setDetailSaveError("AIの回答を入力してください。");
+      setDetailSaveError("本文または画像を追加してください。");
       return;
     }
 
@@ -1015,6 +1147,7 @@ export default function MemoPage() {
   }, [
     clearDetailAutoSaveTimer,
     detailEditAiResponse,
+    detailEditImageUrl,
     detailHasUnsavedChanges,
     saveDetailEdit,
     selectedMemo,
@@ -1497,7 +1630,12 @@ export default function MemoPage() {
   const canDownloadExport = exportScope === "all" || exportSelectedCount > 0;
   const activeCollection = activeCollectionId !== null ? collections.find((c) => c.id === activeCollectionId) : null;
   const hasActiveFilters = Boolean(query.trim()) || sortMode !== "manual" || archiveScope !== "active" || activeCollectionId !== null;
-  const hasComposeDraft = Boolean(formState.ai_response.trim() || formState.title.trim());
+  const hasComposeDraft = Boolean(
+    formState.ai_response.trim() ||
+    formState.title.trim() ||
+    formState.image_url ||
+    formState.background_color,
+  );
   const composeIsExpanded = isComposeExpanded || hasComposeDraft;
 
   return (
@@ -1778,21 +1916,65 @@ export default function MemoPage() {
           {/* ── Quick capture ── */}
           <section className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
             {!composeIsExpanded ? (
-              <button
-                type="button"
-                className="memo-quick-capture__collapsed"
-                onClick={() => setIsComposeExpanded(true)}
-                aria-label="新しいメモを作成"
-              >
-                <span>メモを入力...</span>
-                <span className="memo-quick-capture__shortcuts" aria-hidden="true">
-                  <i className="bi bi-check2-square"></i>
-                  <i className="bi bi-image"></i>
-                  <i className="bi bi-palette"></i>
-                </span>
-              </button>
+              <div className="memo-quick-capture__collapsed" aria-label="新しいメモを作成">
+                <button
+                  type="button"
+                  className="memo-quick-capture__text-button"
+                  onClick={openTextComposer}
+                  aria-label="テキストメモを作成"
+                >
+                  <span>メモを入力...</span>
+                </button>
+                <div className="memo-quick-capture__shortcuts" role="toolbar" aria-label="新しいメモの種類">
+                  <button
+                    type="button"
+                    className="memo-quick-capture__shortcut-btn"
+                    onClick={openChecklistComposer}
+                    aria-label="チェックリストを作成"
+                    data-tooltip="チェックリスト"
+                    data-tooltip-placement="top"
+                  >
+                    <i className="bi bi-check2-square" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    type="button"
+                    className="memo-quick-capture__shortcut-btn"
+                    onClick={openImagePicker}
+                    aria-label="画像をアップロード"
+                    data-tooltip="画像をアップロード"
+                    data-tooltip-placement="top"
+                    disabled={imageUploading}
+                  >
+                    <i className={`bi ${imageUploading ? "bi-arrow-repeat memo-spin" : "bi-image"}`} aria-hidden="true"></i>
+                  </button>
+                  <button
+                    type="button"
+                    className="memo-quick-capture__shortcut-btn"
+                    onClick={openComposePalette}
+                    aria-label="色を選択"
+                    data-tooltip="色を選択"
+                    data-tooltip-placement="top"
+                  >
+                    <i className="bi bi-palette" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
             ) : (
-              <form method="post" className="memo-form memo-form--quick" onSubmit={handleSubmitMemo}>
+              <form
+                method="post"
+                className="memo-form memo-form--quick"
+                onSubmit={handleSubmitMemo}
+                style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
+              >
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  className="sr-only"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={handleImageInputChange}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
                 <div className="form-group">
                   <label htmlFor="title" className="sr-only">タイトル</label>
                   <input
@@ -1808,6 +1990,22 @@ export default function MemoPage() {
                     autoFocus={!hasComposeDraft}
                   />
                 </div>
+
+                {formState.image_url && (
+                  <figure className="memo-compose-image-preview">
+                    <img src={formState.image_url} alt="追加した画像のプレビュー" />
+                    <button
+                      type="button"
+                      className="memo-compose-image-preview__remove"
+                      onClick={() => setFormState((prev) => ({ ...prev, image_url: null }))}
+                      aria-label="画像を削除"
+                      data-tooltip="画像を削除"
+                      data-tooltip-placement="left"
+                    >
+                      <i className="bi bi-x-lg" aria-hidden="true"></i>
+                    </button>
+                  </figure>
+                )}
 
                 <div className="form-group">
                   <div className="memo-response-header memo-quick-capture__response-header">
@@ -1838,7 +2036,7 @@ export default function MemoPage() {
                       onChange={handleFormChange}
                       placeholder="メモを入力..."
                       rows={1}
-                      required
+                      required={!formState.image_url}
                     />
                   )}
                 </div>
@@ -1868,14 +2066,61 @@ export default function MemoPage() {
                       ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>提案中...</>
                       : <><i className="bi bi-stars" aria-hidden="true"></i>AIタイトル</>}
                   </button>
+                  <button
+                    type="button"
+                    className={`memo-compose-image-btn${imageUploading ? " is-loading" : ""}`}
+                    onClick={openImagePicker}
+                    disabled={imageUploading}
+                    data-tooltip="画像をアップロード"
+                    data-tooltip-placement="top"
+                    aria-label="画像をアップロード"
+                  >
+                    <i className={`bi ${imageUploading ? "bi-arrow-repeat memo-spin" : "bi-image"}`} aria-hidden="true"></i>
+                    <span>{imageUploading ? "アップロード中..." : "画像"}</span>
+                  </button>
+                  <div className="memo-compose-palette">
+                    <button
+                      type="button"
+                      className={`memo-compose-palette__trigger${isComposePaletteOpen ? " is-active" : ""}`}
+                      onClick={openComposePalette}
+                      aria-label="色を選択"
+                      aria-expanded={isComposePaletteOpen}
+                      data-tooltip="色を選択"
+                      data-tooltip-placement="top"
+                    >
+                      <i className="bi bi-palette" aria-hidden="true"></i>
+                    </button>
+                    {isComposePaletteOpen && (
+                      <div className="memo-compose-palette__menu" role="listbox" aria-label="メモの背景色">
+                        {MEMO_COLOR_OPTIONS.map((option) => (
+                          <button
+                            key={option.label}
+                            type="button"
+                            className={`memo-compose-palette__option${(formState.background_color || "") === option.value ? " is-active" : ""}`}
+                            style={{ "--palette-color": option.color } as React.CSSProperties}
+                            onClick={() => {
+                              setFormState((prev) => ({ ...prev, background_color: option.value || null }));
+                              setIsComposePaletteOpen(false);
+                            }}
+                            role="option"
+                            aria-selected={(formState.background_color || "") === option.value}
+                          >
+                            <span className={`memo-compose-palette__swatch${option.value ? "" : " memo-compose-palette__swatch--empty"}`}></span>
+                            <span>{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="memo-quick-capture__actions">
                     <button
                       type="button"
                       className="secondary-button"
                       onClick={() => {
-                        setFormState({ ai_response: "", title: "", collection_id: null });
+                        setFormState({ ai_response: "", title: "", collection_id: null, background_color: null, image_url: null });
                         setPreviewMode(false);
                         setIsComposeExpanded(false);
+                        setIsComposePaletteOpen(false);
                       }}
                       disabled={submitting}
                     >
@@ -1930,7 +2175,8 @@ export default function MemoPage() {
                           if (el) cardRefs.current.set(memoId, el);
                           else cardRefs.current.delete(memoId);
                         }}
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
+                        style={memo.background_color ? { "--memo-card-accent": memo.background_color } as React.CSSProperties : undefined}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
                         onDragEnd={clearMemoDragState}
@@ -1968,6 +2214,9 @@ export default function MemoPage() {
                           className="memo-item__open memo-item__open--content"
                           onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
                         >
+                          {memo.image_url && (
+                            <img className="memo-item__image" src={memo.image_url} alt="" loading="lazy" />
+                          )}
                           <h3 className="memo-item__title">{memo.title || "保存したメモ"}</h3>
                           {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
                         </button>
@@ -2154,7 +2403,10 @@ export default function MemoPage() {
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
             {!detailLoading && selectedMemo && (
               <div className="memo-modal__body memo-modal__body--edit">
-                <section className="memo-modal__section memo-modal__section--full memo-modal__edit-form">
+                <section
+                  className="memo-modal__section memo-modal__section--full memo-modal__edit-form"
+                  style={detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } as React.CSSProperties : undefined}
+                >
                   <div className="memo-modal__edit-fields">
                     {detailMetaOpen && (
                       <div id="memo-detail-meta-panel" className="memo-modal__meta-panel">
@@ -2185,10 +2437,46 @@ export default function MemoPage() {
                             />
                           </div>
                         )}
+                        <div className="memo-modal__edit-field">
+                          <span className="memo-modal__field-label">背景色</span>
+                          <div className="memo-modal__color-grid" role="listbox" aria-label="メモの背景色">
+                            {MEMO_COLOR_OPTIONS.map((option) => (
+                              <button
+                                key={option.label}
+                                type="button"
+                                className={`memo-modal__color-option${(detailEditBackgroundColor || "") === option.value ? " is-active" : ""}`}
+                                style={{ "--palette-color": option.color } as React.CSSProperties}
+                                onClick={() => setDetailEditBackgroundColor(option.value || null)}
+                                role="option"
+                                aria-selected={(detailEditBackgroundColor || "") === option.value}
+                                aria-label={option.label}
+                                data-tooltip={option.label}
+                                data-tooltip-placement="top"
+                              >
+                                <span></span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
+                    {detailEditImageUrl && (
+                      <figure className="memo-modal__image-preview">
+                        <img src={detailEditImageUrl} alt="メモ画像" />
+                        <button
+                          type="button"
+                          className="memo-compose-image-preview__remove"
+                          onClick={() => setDetailEditImageUrl(null)}
+                          aria-label="画像を削除"
+                          data-tooltip="画像を削除"
+                          data-tooltip-placement="left"
+                        >
+                          <i className="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                      </figure>
+                    )}
                     <div className="memo-modal__response-header">
-                      <label htmlFor="memo-detail-ai-response">AIの回答</label>
+                      <label htmlFor="memo-detail-ai-response">本文</label>
                       <div className="memo-response-tabs">
                         <button
                           type="button"
@@ -2219,8 +2507,8 @@ export default function MemoPage() {
                         className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
                         value={detailEditAiResponse}
                         onChange={(event) => setDetailEditAiResponse(event.target.value)}
-                        placeholder="AIからの回答"
-                        required
+                        placeholder="メモを入力..."
+                        required={!detailEditImageUrl}
                       />
                     )}
                   </div>

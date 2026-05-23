@@ -40,6 +40,29 @@ class RequestModelsTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _validate(MemoCreateRequest, {"ai_response": "   "})
 
+    def test_memo_create_accepts_image_only_payload(self):
+        payload = _validate(
+            MemoCreateRequest,
+            {
+                "ai_response": "",
+                "title": "画像メモ",
+                "image_url": "/static/uploads/memo/sample.webp",
+                "background_color": "#fff8b8",
+            },
+        )
+        self.assertEqual(payload.image_url, "/static/uploads/memo/sample.webp")
+        self.assertEqual(payload.background_color, "#fff8b8")
+
+    def test_memo_create_rejects_invalid_background_color(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                MemoCreateRequest,
+                {
+                    "ai_response": "body",
+                    "background_color": "url(javascript:alert(1))",
+                },
+            )
+
     def test_prompt_create_rejects_blank_title(self):
         with self.assertRaises(ValidationError):
             _validate(

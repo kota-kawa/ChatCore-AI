@@ -160,18 +160,26 @@ class MemoApiTestCase(unittest.TestCase):
     def test_create_memo_success(self):
         request = make_request(
             method="POST",
-            json_body={"ai_response": "ok", "title": ""},
+            json_body={
+                "ai_response": "ok",
+                "title": "",
+                "background_color": "#fff8b8",
+                "image_url": "/static/uploads/memo/sample.webp",
+            },
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
             "blueprints.memo._insert_memo", return_value=42
-        ), patch("blueprints.memo._schedule_embedding"):
+        ) as mock_insert, patch("blueprints.memo._schedule_embedding"):
             response = asyncio.run(api_create_memo(request))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode())
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo_id"], 42)
+        self.assertEqual(mock_insert.call_args.args[:4], (7, "ok", "ok", None))
+        self.assertEqual(mock_insert.call_args.args[4], "#fff8b8")
+        self.assertEqual(mock_insert.call_args.args[5], "/static/uploads/memo/sample.webp")
 
     def test_memo_detail_returns_payload(self):
         request = make_request(path="/memo/api/10", session={"user_id": 7})
@@ -218,7 +226,11 @@ class MemoApiTestCase(unittest.TestCase):
         request = make_request(
             method="PATCH",
             path="/memo/api/10",
-            json_body={"ai_response": "updated answer"},
+            json_body={
+                "ai_response": "updated answer",
+                "background_color": "#dbeafe",
+                "image_url": "/static/uploads/memo/updated.webp",
+            },
             session={"user_id": 7},
         )
         with patch("blueprints.memo.routes.run_blocking", new=run_blocking_inline), patch(
@@ -231,6 +243,8 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["memo"]["ai_response"], "updated answer")
         self.assertEqual(mock_update.call_args.kwargs["ai_response"], "updated answer")
+        self.assertEqual(mock_update.call_args.kwargs["background_color"], "#dbeafe")
+        self.assertEqual(mock_update.call_args.kwargs["image_url"], "/static/uploads/memo/updated.webp")
 
     def test_delete_memo_success(self):
         request = make_request(method="DELETE", path="/memo/api/10", session={"user_id": 7})

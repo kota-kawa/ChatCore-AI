@@ -8,6 +8,8 @@ type SharedMemo = {
   title?: string;
   created_at?: string | null;
   ai_response?: string;
+  background_color?: string | null;
+  image_url?: string | null;
 };
 
 type SharedMemoPayload = {
@@ -124,14 +126,18 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         {payload.error && <div className="shared-memo-state shared-memo-state--error">{payload.error}</div>}
 
         {!payload.error && memo && (
-          <article className="shared-memo-shell">
+          <article
+            className="shared-memo-shell"
+            style={memo.background_color ? { "--shared-memo-color": memo.background_color } as React.CSSProperties : undefined}
+          >
             <header className="shared-memo-header">
               <h1>{title}</h1>
               {memo.created_at ? <p>保存日時: {formatDateTime(memo.created_at) || memo.created_at}</p> : null}
             </header>
 
             <section className="shared-memo-section">
-              <h2>AIの回答</h2>
+              {memo.image_url ? <img className="shared-memo-image" src={memo.image_url} alt="" /> : null}
+              <h2>本文</h2>
               <MarkdownContent text={memo.ai_response || ""} className="md-content" />
             </section>
           </article>
