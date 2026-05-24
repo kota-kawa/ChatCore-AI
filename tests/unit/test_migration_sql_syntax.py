@@ -4,6 +4,7 @@ These tests catch PostgreSQL-incompatible SQL patterns that are syntactically
 valid Python strings but fail at runtime when the DB executes them.
 """
 
+import ast
 import re
 import unittest
 from pathlib import Path
@@ -27,6 +28,67 @@ def _all_migration_sql_blocks():
             sql = m.group(1) if m.group(1) is not None else m.group(2)
             results.append((p.name, sql))
     return results
+
+
+def _read_revision_value(node):
+    if isinstance(node, ast.Assign):
+        names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        value = node.value
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        names = [node.target.id]
+        value = node.value
+    else:
+        return None, None
+
+    if "revision" in names or "down_revision" in names:
+        return names, ast.literal_eval(value)
+
+    return None, None
+
+
+def _migration_revision_graph():
+    revisions = {}
+    down_revisions = {}
+
+    for path in sorted(MIGRATIONS_DIR.glob("*.py")):
+        values = {}
+        for node in ast.parse(path.read_text()).body:
+            names, value = _read_revision_value(node)
+            if not names:
+                continue
+            for name in names:
+                if name in {"revision", "down_revision"}:
+                    values[name] = value
+
+        revision = values.get("revision")
+        revisions[revision] = path.name
+        down_revisions[revision] = values.get("down_revision")
+
+    children = {revision: [] for revision in revisions}
+    for revision, down_revision in down_revisions.items():
+        parents = (
+            down_revision
+            if isinstance(down_revision, (list, tuple))
+            else (down_revision,)
+        )
+        for parent in parents:
+            if parent in children:
+                children[parent].append(revision)
+
+    return revisions, down_revisions, children
+
+
+class MigrationRevisionGraphTest(unittest.TestCase):
+    def test_migrations_have_single_head(self):
+        revisions, down_revisions, children = _migration_revision_graph()
+        heads = sorted(revision for revision, child_revisions in children.items() if not child_revisions)
+
+        self.assertEqual(
+            len(heads),
+            1,
+            "Alembic must have a single head so `alembic upgrade head` works in CD. "
+            f"Heads: {[(revision, revisions[revision], down_revisions[revision]) for revision in heads]}",
+        )
 
 
 class MigrationTriggerCaseExpressionTest(unittest.TestCase):
