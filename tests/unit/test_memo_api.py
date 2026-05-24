@@ -164,7 +164,6 @@ class MemoApiTestCase(unittest.TestCase):
                 "ai_response": "ok",
                 "title": "",
                 "background_color": "#fff8b8",
-                "image_url": "/static/uploads/memo/sample.webp",
             },
             session={"user_id": 7},
         )
@@ -179,7 +178,6 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["memo_id"], 42)
         self.assertEqual(mock_insert.call_args.args[:4], (7, "ok", "ok", None))
         self.assertEqual(mock_insert.call_args.args[4], "#fff8b8")
-        self.assertEqual(mock_insert.call_args.args[5], "/static/uploads/memo/sample.webp")
 
     def test_memo_detail_returns_payload(self):
         request = make_request(path="/memo/api/10", session={"user_id": 7})
@@ -229,7 +227,6 @@ class MemoApiTestCase(unittest.TestCase):
             json_body={
                 "ai_response": "updated answer",
                 "background_color": "#dbeafe",
-                "image_url": "/static/uploads/memo/updated.webp",
             },
             session={"user_id": 7},
         )
@@ -244,7 +241,6 @@ class MemoApiTestCase(unittest.TestCase):
         self.assertEqual(payload["memo"]["ai_response"], "updated answer")
         self.assertEqual(mock_update.call_args.kwargs["ai_response"], "updated answer")
         self.assertEqual(mock_update.call_args.kwargs["background_color"], "#dbeafe")
-        self.assertEqual(mock_update.call_args.kwargs["image_url"], "/static/uploads/memo/updated.webp")
 
     def test_delete_memo_success(self):
         request = make_request(method="DELETE", path="/memo/api/10", session={"user_id": 7})

@@ -9,7 +9,6 @@ type SharedMemo = {
   created_at?: string | null;
   ai_response?: string;
   background_color?: string | null;
-  image_url?: string | null;
 };
 
 type SharedMemoPayload = {
@@ -136,7 +135,6 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
             </header>
 
             <section className="shared-memo-section">
-              {memo.image_url ? <img className="shared-memo-image" src={memo.image_url} alt="" /> : null}
               <h2>本文</h2>
               <MarkdownContent text={memo.ai_response || ""} className="md-content" />
             </section>

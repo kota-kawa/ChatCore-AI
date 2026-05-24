@@ -220,8 +220,7 @@ def get_shared_memo_payload(token: str) -> dict[str, Any]:
                     me.title,
                     me.created_at,
                     me.ai_response,
-                    me.background_color,
-                    me.image_url
+                    me.background_color
                 FROM shared_memo_entries sme
                 JOIN memo_entries me ON me.id = sme.memo_entry_id
                 WHERE sme.share_token = %s
@@ -243,7 +242,6 @@ def get_shared_memo_payload(token: str) -> dict[str, Any]:
                     "created_at": serialize_datetime_iso(created_at),
                     "ai_response": row.get("ai_response") or "",
                     "background_color": row.get("background_color"),
-                    "image_url": row.get("image_url"),
                 }
             }
         finally:

@@ -62,16 +62,6 @@ body {
   padding: 1.3rem 1.4rem;
 }
 
-.shared-memo-image {
-  display: block;
-  width: 100%;
-  max-height: 460px;
-  margin: 0 0 1rem;
-  border-radius: 18px;
-  object-fit: cover;
-  background: rgba(74, 43, 9, 0.08);
-}
-
 .shared-memo-section h2 {
   margin: 0;
   font-size: 1rem;

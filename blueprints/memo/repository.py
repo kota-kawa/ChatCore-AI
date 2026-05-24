@@ -96,7 +96,6 @@ def fetch_memo_summaries(
                     LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                     me.collection_id,
                     me.background_color,
-                    me.image_url,
                     mc.name AS collection_name,
                     mc.color AS collection_color,
                     sme.share_token, sme.expires_at, sme.revoked_at
@@ -136,7 +135,6 @@ def fetch_memo_summaries(
                 LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                 me.collection_id,
                 me.background_color,
-                me.image_url,
                 mc.name AS collection_name,
                 mc.color AS collection_color,
                 sme.share_token, sme.expires_at, sme.revoked_at
@@ -174,7 +172,6 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
                 me.created_at, me.updated_at, me.archived_at, me.pinned_at,
                 me.collection_id,
                 me.background_color,
-                me.image_url,
                 mc.name AS collection_name,
                 mc.color AS collection_color,
                 sme.share_token, sme.expires_at, sme.revoked_at
@@ -211,7 +208,6 @@ def insert_memo(
     resolved_title: str,
     collection_id: int | None,
     background_color: str | None = None,
-    image_url: str | None = None,
 ) -> int | None:
     connection = None
     cursor = None
@@ -236,10 +232,10 @@ def insert_memo(
             """
             INSERT INTO memo_entries (
                 user_id, ai_response, title, collection_id,
-                background_color, image_url, sort_order
+                background_color, sort_order
             )
             VALUES (
-                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
                 COALESCE((SELECT MAX(sort_order) FROM memo_entries WHERE user_id = %s), 0) + 1
             )
             RETURNING id
@@ -250,7 +246,6 @@ def insert_memo(
                 resolved_title,
                 validated_collection_id,
                 background_color,
-                image_url,
                 user_id,
             ),
         )
@@ -274,8 +269,6 @@ def update_memo(
     clear_collection: bool,
     background_color: str | None = None,
     clear_background_color: bool = False,
-    image_url: str | None = None,
-    clear_image: bool = False,
 ) -> dict[str, Any]:
     connection = None
     cursor = None
@@ -284,7 +277,7 @@ def update_memo(
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT title, ai_response, collection_id, background_color, image_url
+            SELECT title, ai_response, collection_id, background_color
             FROM memo_entries
             WHERE id = %s AND user_id = %s
             LIMIT 1
@@ -295,16 +288,10 @@ def update_memo(
         if not existing:
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
 
-        resolved_image_url = existing.get("image_url")
-        if clear_image:
-            resolved_image_url = None
-        elif image_url is not None:
-            resolved_image_url = image_url
-
         resolved_ai_response = existing.get("ai_response") or ""
         if ai_response is not None:
             resolved_ai_response = ai_response
-        if not str(resolved_ai_response).strip() and not resolved_image_url:
+        if not str(resolved_ai_response).strip():
             raise ApiServiceError("AIの回答を入力してください。", 400, status="fail")
 
         resolved_title = existing.get("title") or ""
@@ -332,7 +319,6 @@ def update_memo(
             SET title = %s, ai_response = %s,
                 collection_id = %s,
                 background_color = %s,
-                image_url = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             """,
@@ -341,7 +327,6 @@ def update_memo(
                 resolved_ai_response,
                 resolved_collection,
                 resolved_background_color,
-                resolved_image_url,
                 memo_id,
                 user_id,
             ),
