@@ -3262,6 +3262,7 @@ body.memo-page {
   justify-content: flex-end;
   gap: 0.32rem;
   min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .memo-toolbar__icon-btn {
