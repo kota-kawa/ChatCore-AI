@@ -2276,20 +2276,18 @@ textarea.memo-control {
   flex: 1 1 auto;
   min-height: 0;
   resize: none;
+  padding: 0.3rem 0;
+}
+
+/* Three-class specificity (0,0,3,0) beats theme-scoped [attr]+class (0,0,2,0) */
+.memo-modal__edit-fields .memo-control.memo-modal__edit-textarea--response,
+.memo-modal__edit-fields .memo-control.memo-modal__edit-textarea--response:focus,
+.memo-modal__edit-fields .memo-control.memo-modal__edit-textarea--response:focus-visible {
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: 0.3rem 0;
   box-shadow: none;
   outline: none;
-}
-
-.memo-modal__edit-textarea--response:focus,
-.memo-modal__edit-textarea--response:focus-visible {
-  border: none;
-  box-shadow: none;
-  outline: none;
-  background: transparent;
 }
 
 .memo-modal__preview-pane {
