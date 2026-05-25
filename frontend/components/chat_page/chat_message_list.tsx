@@ -477,46 +477,47 @@ function ChatMessageListComponent({
 
     scrollListToEnd();
 
-    if (typeof window === "undefined") return;
+    // 内容がビューポートに収まりスクロール補正が起こり得ない場合（新規チャット
+    // 起動のプレースホルダや短いチャットなど）は、アンカリングのガタつきが
+    // 発生しないため paint 前にそのまま表示する。opacity:0 のベールを描画しない
+    // ことで「一覧が一瞬消えてまた表示される」挙動を避ける。
+    const listElement = chatMessagesRef.current;
+    const needsBottomAnchoring =
+      !!listElement && listElement.scrollHeight - listElement.clientHeight > 1;
+    if (!needsBottomAnchoring || typeof window === "undefined") {
+      setIsInitialContentRevealed(true);
+      return;
+    }
 
     const animationFrameIds: number[] = [];
-    const timeoutIds: number[] = [];
 
-    const scheduleFrame = () => {
-      animationFrameIds.push(window.requestAnimationFrame(scrollListToEnd));
+    // 動的行高の計測が数フレームにまたがるため、末尾アンカリングを 3 連続フレームで
+    // 再調整し、計測が落ち着いた次フレームでフェードイン表示する。wall-clock の
+    // setTimeout ではなく requestAnimationFrame に紐づけることで、遷移時の重い
+    // 再レンダリング中でも復帰が遅れて「空白のまま」見えてしまうのを防ぐ。
+    const revealAfterSettle = () => {
+      scrollListToEnd();
+      setIsInitialContentRevealed(true);
     };
 
-    // 3 連続フレームで再調整（動的行高の計測完了をまたぐ）。
-    scheduleFrame();
     animationFrameIds.push(
       window.requestAnimationFrame(() => {
         scrollListToEnd();
-        scheduleFrame();
         animationFrameIds.push(
           window.requestAnimationFrame(() => {
             scrollListToEnd();
-            scheduleFrame();
+            animationFrameIds.push(window.requestAnimationFrame(revealAfterSettle));
           }),
         );
       }),
-    );
-    // 末尾アンカリングの最終再調整。これが終わったら一覧を見せる。
-    timeoutIds.push(
-      window.setTimeout(() => {
-        scrollListToEnd();
-        setIsInitialContentRevealed(true);
-      }, 80),
     );
 
     return () => {
       animationFrameIds.forEach((frameId) => {
         window.cancelAnimationFrame(frameId);
       });
-      timeoutIds.forEach((timeoutId) => {
-        window.clearTimeout(timeoutId);
-      });
     };
-  }, [rows, scrollListToEnd]);
+  }, [chatMessagesRef, rows, scrollListToEnd]);
 
   useIsomorphicLayoutEffect(() => {
     if (!shouldRevealThinking) return;
