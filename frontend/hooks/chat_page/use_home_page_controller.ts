@@ -259,6 +259,10 @@ export function useHomePageController() {
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
   const localStorageWarningShownRef = useRef(false);
   const loadingMoreChatRoomsRef = useRef(false);
+  // Tracks whether the user has scrolled past the first sidebar page. Once true,
+  // background revalidation of the first page must not rewind the pagination
+  // cursor (see the cachedChatRoomsPage effect below).
+  const hasLoadedMoreChatRoomsRef = useRef(false);
   const generationGuardRef = useRef<GenerationGuard | null>(null);
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
@@ -341,6 +345,7 @@ export function useHomePageController() {
     setIsLoadingMoreChatRooms(true);
     try {
       const page = await fetchChatRoomsPage(buildChatRoomsPageUrl(offset));
+      hasLoadedMoreChatRoomsRef.current = true;
       setChatRooms((previous) => mergeUniqueChatRooms(previous, page.rooms));
       setChatRoomsHasMore(page.pagination.hasMore);
       setChatRoomsNextOffset(page.pagination.nextOffset);
@@ -775,12 +780,18 @@ export function useHomePageController() {
   useEffect(() => {
     if (!cachedChatRoomsPage) return;
     const nextRooms = cachedChatRoomsPage.rooms;
-    setChatRooms((previous) => {
-      if (previous.length <= CHAT_ROOMS_PAGE_SIZE) return nextRooms;
-      return mergeUniqueChatRooms(nextRooms, previous);
-    });
-    setChatRoomsHasMore(cachedChatRoomsPage.pagination.hasMore);
-    setChatRoomsNextOffset(cachedChatRoomsPage.pagination.nextOffset);
+    const hasPaginated = hasLoadedMoreChatRoomsRef.current;
+    setChatRooms((previous) =>
+      hasPaginated ? mergeUniqueChatRooms(nextRooms, previous) : nextRooms,
+    );
+    // A background revalidation of the first page (focus, room mutations, etc.)
+    // must not rewind the cursor once the user has scrolled to additional pages,
+    // otherwise the next scroll re-fetches already-visible rooms and the list
+    // appears stuck. Only adopt the first page's cursor while still on page one.
+    if (!hasPaginated) {
+      setChatRoomsHasMore(cachedChatRoomsPage.pagination.hasMore);
+      setChatRoomsNextOffset(cachedChatRoomsPage.pagination.nextOffset);
+    }
 
     const activeRoomId = currentRoomIdRef.current;
     if (!activeRoomId) return;
@@ -806,6 +817,7 @@ export function useHomePageController() {
       setChatRoomsHasMore(false);
       setChatRoomsNextOffset(null);
       loadingMoreChatRoomsRef.current = false;
+      hasLoadedMoreChatRoomsRef.current = false;
       setIsLoadingMoreChatRooms(false);
       setCurrentRoomMode("normal");
     }
