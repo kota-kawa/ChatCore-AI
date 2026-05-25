@@ -1596,191 +1596,140 @@ export default function MemoPage() {
 
         <user-icon id="userIcon" style={{ display: isLoggedIn ? "" : "none" }}></user-icon>
 
-        <div className="memo-container">
-          {/* ── Toolbar ── */}
-          <header className={`memo-toolbar memo-card${isFiltersOpen ? " is-filters-open" : ""}`}>
-            <div className="memo-toolbar__top-row">
-              <div className="memo-toolbar__brand">
-                <span className="memo-toolbar__app-mark" aria-hidden="true">
-                  <i className="bi bi-sticky"></i>
-                </span>
-                <div className="memo-toolbar__title">
-                  <h1>メモ</h1>
-                  <span className="memo-toolbar__count">
-                    <i className="bi bi-journal-text" aria-hidden="true"></i>
-                    {totalMemoCount}件
-                  </span>
-                </div>
-              </div>
-              <div className="memo-toolbar__actions" role="toolbar" aria-label="メモ操作">
-                <button
-                  type="button"
-                  className={`memo-toolbar__icon-btn memo-toolbar__filter-toggle${isFiltersOpen ? " is-active" : ""}${hasActiveFilters ? " has-active-filters" : ""}`}
-                  onClick={() => setIsFiltersOpen((open) => !open)}
-                  aria-expanded={isFiltersOpen}
-                  aria-controls="memo-toolbar-filters"
-                  aria-label={isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込みを開く"}
-                  data-tooltip={isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込み"}
-                  data-tooltip-placement="bottom"
-                >
-                  <i className={`bi ${isFiltersOpen ? "bi-chevron-up" : "bi-sliders2"}`} aria-hidden="true"></i>
-                  <span className="sr-only">{isFiltersOpen ? "検索と絞り込みを閉じる" : "検索と絞り込みを開く"}</span>
-                </button>
-                <button
-                  type="button"
-                  className="memo-toolbar__icon-btn"
-                  onClick={() => setViewMode((current) => (current === "grid" ? "list" : "grid"))}
-                  aria-label={viewMode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え"}
-                  data-tooltip={viewMode === "grid" ? "リスト表示" : "グリッド表示"}
-                  data-tooltip-placement="bottom"
-                >
-                  <i className={`bi ${viewMode === "grid" ? "bi-view-list" : "bi-grid-3x3-gap"}`} aria-hidden="true"></i>
-                  <span className="sr-only">{viewMode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え"}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`memo-toolbar__icon-btn memo-toolbar__action-btn${isBulkMode ? " is-active" : ""}`}
-                  onClick={() => { if (isBulkMode) exitBulkMode(); else setIsBulkMode(true); }}
-                  aria-label={isBulkMode ? "一括選択を終了" : "一括操作モード"}
-                  data-tooltip={isBulkMode ? "一括選択を終了" : "一括操作モード"}
-                  data-tooltip-placement="bottom"
-                >
-                  <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`} aria-hidden="true"></i>
-                  <span className="memo-toolbar__action-label">{isBulkMode ? "選択終了" : "一括操作"}</span>
-                </button>
-                <button
-                  type="button"
-                  className="memo-toolbar__icon-btn memo-toolbar__action-btn"
-                  onClick={() => setIsCollectionPanelOpen(true)}
-                  aria-label="コレクション管理"
-                  data-tooltip="コレクション管理"
-                  data-tooltip-placement="bottom"
-                >
-                  <i className="bi bi-folder2-open" aria-hidden="true"></i>
-                  <span className="memo-toolbar__action-label">コレクション</span>
-                </button>
-                <button
-                  type="button"
-                  className="memo-toolbar__icon-btn memo-toolbar__action-btn"
-                  onClick={() => setIsExportModalOpen(true)}
-                  aria-label="エクスポート"
-                  data-tooltip="エクスポート"
-                  data-tooltip-placement="bottom"
-                >
-                  <i className="bi bi-download" aria-hidden="true"></i>
-                  <span className="memo-toolbar__action-label">エクスポート</span>
-                </button>
-              </div>
-            </div>
+        <div className="memo-layout">
+          <aside className="memo-sidebar">
+            <nav className="memo-sidebar-nav">
+              <button
+                type="button"
+                className={`memo-sidebar-nav__item${activeCollectionId === null && archiveScope === "active" ? " is-active" : ""}`}
+                onClick={() => { setActiveCollectionId(null); setArchiveScope("active"); }}
+              >
+                <i className="bi bi-lightning-charge"></i>
+                <span>すべてのメモ</span>
+              </button>
+              <button
+                type="button"
+                className={`memo-sidebar-nav__item${archiveScope === "archived" ? " is-active" : ""}`}
+                onClick={() => { setActiveCollectionId(null); setArchiveScope("archived"); }}
+              >
+                <i className="bi bi-archive"></i>
+                <span>アーカイブ</span>
+              </button>
+            </nav>
 
-            <div className="memo-toolbar__collapsible" id="memo-toolbar-filters">
-            <div className="memo-toolbar__search">
-              <label htmlFor="memo-search" className="sr-only">メモを検索</label>
-              <i className="bi bi-search" aria-hidden="true"></i>
-              <input
-                id="memo-search"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="タイトル・タグ・本文から検索"
-              />
-              {sortMode === "semantic" && (
-                <span className="memo-search__badge" data-tooltip="AI類似検索" data-tooltip-placement="top">
-                  <i className="bi bi-stars" aria-hidden="true"></i>
-                  AI
-                </span>
-              )}
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  className="memo-toolbar__search-clear"
-                  onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("manual"); setActiveCollectionId(null); }}
-                  aria-label="検索と絞り込みをクリア"
-                  data-tooltip="検索と絞り込みをクリア"
-                  data-tooltip-placement="top"
-                >
-                  <i className="bi bi-x-lg" aria-hidden="true"></i>
-                </button>
-              )}
-            </div>
-
-            <div className="memo-toolbar__filters">
-              <div className="memo-filter-group">
-                <span className="memo-filter-group__label">表示</span>
-                <div className="memo-filter-chips" role="group" aria-label="表示範囲">
-                  <button
-                    type="button"
-                    className={`memo-filter-chip${archiveScope === "active" ? " is-active" : ""}`}
-                    onClick={() => setArchiveScope("active")}
-                    aria-pressed={archiveScope === "active"}
-                  >
-                    <i className="bi bi-inbox" aria-hidden="true"></i>
-                    通常
-                  </button>
-                  <button
-                    type="button"
-                    className={`memo-filter-chip${archiveScope === "all" ? " is-active" : ""}`}
-                    onClick={() => setArchiveScope("all")}
-                    aria-pressed={archiveScope === "all"}
-                  >
-                    <i className="bi bi-collection" aria-hidden="true"></i>
-                    すべて
-                  </button>
-                  <button
-                    type="button"
-                    className={`memo-filter-chip${archiveScope === "archived" ? " is-active" : ""}`}
-                    onClick={() => setArchiveScope("archived")}
-                    aria-pressed={archiveScope === "archived"}
-                  >
-                    <i className="bi bi-archive" aria-hidden="true"></i>
-                    アーカイブ
-                  </button>
-                </div>
-              </div>
-              <div className="memo-sort-control">
-                <span className="memo-sort-control__label">並び順</span>
-                <div className="memo-sort-control__select">
-                  <i className="bi bi-sort-down" aria-hidden="true"></i>
-                  <MemoSelect
-                    value={sortMode}
-                    onChange={(v) => setSortMode(v)}
-                    options={[
-                      { value: "manual", label: "手動順" },
-                      { value: "recent", label: "新しい順" },
-                      { value: "updated", label: "更新順" },
-                      { value: "oldest", label: "古い順" },
-                      { value: "title", label: "タイトル順" },
-                      { value: "semantic", label: "AI類似検索" },
-                    ]}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Collection filter */}
-            {collections.length > 0 && (
-              <div className="memo-toolbar__collections" aria-label="コレクション">
-                <span className="memo-toolbar__collections-label">
-                  <i className="bi bi-folder2" aria-hidden="true"></i>
-                  コレクション
-                </span>
+            <section className="memo-sidebar-section">
+              <h3 className="memo-sidebar-section__title">並び順</h3>
+              <div className="memo-sidebar-sort">
                 <MemoSelect
-                  className="memo-select--collection-filter"
-                  value={String(activeCollectionId ?? "")}
-                  onChange={(value) => setActiveCollectionId(value === "" ? null : Number(value))}
+                  value={sortMode}
+                  onChange={(v) => setSortMode(v)}
                   options={[
-                    { value: "", label: "全コレクション" },
-                    ...collections.map((collection) => ({
-                      value: String(collection.id),
-                      label: `${collection.name} (${collection.memo_count})`,
-                    })),
+                    { value: "manual", label: "手動順" },
+                    { value: "recent", label: "新しい順" },
+                    { value: "updated", label: "更新順" },
+                    { value: "oldest", label: "古い順" },
+                    { value: "title", label: "タイトル順" },
+                    { value: "semantic", label: "AI類似検索" },
                   ]}
                 />
               </div>
-            )}
-            </div>
+            </section>
 
-          </header>
+            <section className="memo-sidebar-section">
+              <h3 className="memo-sidebar-section__title">コレクション</h3>
+              <div className="memo-sidebar-collection-list">
+                {collections.map((col) => (
+                  <button
+                    key={col.id}
+                    type="button"
+                    className={`memo-sidebar-collection-item${activeCollectionId === col.id ? " is-active" : ""}`}
+                    onClick={() => setActiveCollectionId(col.id)}
+                  >
+                    <span className="memo-sidebar-collection-dot" style={{ background: col.color }}></span>
+                    <span>{col.name}</span>
+                    <span className="memo-sidebar-collection-count">{col.memo_count}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="memo-sidebar-manage-btn"
+                onClick={() => setIsCollectionPanelOpen(true)}
+              >
+                <i className="bi bi-folder-plus"></i>
+                整理・新規作成
+              </button>
+            </section>
+          </aside>
+
+          <div className="memo-container">
+            {/* ── Toolbar ── */}
+            <header className="memo-toolbar memo-card">
+              <div className="memo-toolbar__top-row">
+                <div className="memo-toolbar__brand">
+                  <div className="memo-toolbar__title">
+                    <h1>{activeCollection ? activeCollection.name : archiveScope === "archived" ? "アーカイブ" : "メモ"}</h1>
+                    <span className="memo-toolbar__count">
+                      {totalMemoCount}件
+                    </span>
+                  </div>
+                </div>
+                <div className="memo-toolbar__actions" role="toolbar" aria-label="メモ操作">
+                  <div className="memo-toolbar__search">
+                    <label htmlFor="memo-search" className="sr-only">メモを検索</label>
+                    <i className="bi bi-search" aria-hidden="true"></i>
+                    <input
+                      id="memo-search"
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="検索..."
+                    />
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        className="memo-toolbar__search-clear"
+                        onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("manual"); setActiveCollectionId(null); }}
+                        aria-label="クリア"
+                      >
+                        <i className="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="memo-toolbar__icon-btn"
+                    onClick={() => setViewMode((current) => (current === "grid" ? "list" : "grid"))}
+                    aria-label={viewMode === "grid" ? "リスト表示" : "グリッド表示"}
+                    data-tooltip={viewMode === "grid" ? "リスト表示" : "グリッド表示"}
+                    data-tooltip-placement="bottom"
+                  >
+                    <i className={`bi ${viewMode === "grid" ? "bi-view-list" : "bi-grid-3x3-gap"}`} aria-hidden="true"></i>
+                  </button>
+                  <button
+                    type="button"
+                    className={`memo-toolbar__icon-btn${isBulkMode ? " is-active" : ""}`}
+                    onClick={() => { if (isBulkMode) exitBulkMode(); else setIsBulkMode(true); }}
+                    aria-label="一括操作"
+                    data-tooltip="一括操作"
+                    data-tooltip-placement="bottom"
+                  >
+                    <i className={`bi ${isBulkMode ? "bi-check2-square" : "bi-ui-checks"}`} aria-hidden="true"></i>
+                  </button>
+                  <button
+                    type="button"
+                    className="memo-toolbar__icon-btn"
+                    onClick={() => setIsExportModalOpen(true)}
+                    aria-label="エクスポート"
+                    data-tooltip="エクスポート"
+                    data-tooltip-placement="bottom"
+                  >
+                    <i className="bi bi-download" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+            </header>
 
           {flashState && (
             <div className={`memo-flash memo-flash--${flashState.type}`} role="alert">
@@ -2237,11 +2186,11 @@ export default function MemoPage() {
                 );
               })()}
             </section>
-
           </div>
         </div>
+      </div>
 
-        {/* ── Memo detail modal ── */}
+      {/* ── Memo detail modal ── */}
         <div className={`memo-modal${selectedMemo ? " is-visible" : ""}`} aria-hidden={selectedMemo ? "false" : "true"}>
           <div className="memo-modal__overlay" onClick={() => { void closeMemoDetail(); }}></div>
           <div className="memo-modal__content" role="dialog" aria-modal="true" aria-labelledby="memoModalTitle">
