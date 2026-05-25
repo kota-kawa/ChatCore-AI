@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   buildTaskOrderForPersistence,
   isLatestChatTurnAnswered,
+  mergeUniqueChatRooms,
+  removeChatRoomsById,
+  updateChatRoomTitle,
 } from "../lib/chat_page/home_page_controller_utils";
 
 test("buildTaskOrderForPersistence excludes default tasks and empty names", () => {
@@ -78,4 +81,53 @@ test("isLatestChatTurnAnswered ignores thinking placeholders", () => {
     ]),
     false,
   );
+});
+
+test("mergeUniqueChatRooms appends only unseen rooms", () => {
+  const merged = mergeUniqueChatRooms(
+    [
+      { id: "room-1", title: "Room 1", mode: "normal" },
+      { id: "room-2", title: "Room 2", mode: "normal" },
+    ],
+    [
+      { id: "room-2", title: "Duplicate", mode: "normal" },
+      { id: "room-3", title: "Room 3", mode: "normal" },
+    ],
+  );
+
+  assert.deepEqual(
+    merged.map((room) => room.id),
+    ["room-1", "room-2", "room-3"],
+  );
+  assert.equal(merged[1]?.title, "Room 2");
+});
+
+test("removeChatRoomsById removes deleted room ids", () => {
+  const rooms = removeChatRoomsById(
+    [
+      { id: "room-1", title: "Room 1", mode: "normal" },
+      { id: "room-2", title: "Room 2", mode: "normal" },
+      { id: "room-3", title: "Room 3", mode: "normal" },
+    ],
+    ["room-1", "room-3"],
+  );
+
+  assert.deepEqual(
+    rooms.map((room) => room.id),
+    ["room-2"],
+  );
+});
+
+test("updateChatRoomTitle trims and updates only the matching room", () => {
+  const rooms = updateChatRoomTitle(
+    [
+      { id: "room-1", title: "Room 1", mode: "normal" },
+      { id: "room-2", title: "Room 2", mode: "normal" },
+    ],
+    "room-2",
+    "  Renamed  ",
+  );
+
+  assert.equal(rooms[0]?.title, "Room 1");
+  assert.equal(rooms[1]?.title, "Renamed");
 });

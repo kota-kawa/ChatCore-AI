@@ -6,6 +6,9 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_created_at
     ON chat_rooms (user_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_created_at_id
+    ON chat_rooms (user_id, created_at DESC, id DESC);
+
 CREATE INDEX IF NOT EXISTS idx_chat_history_room_id_id
     ON chat_history (chat_room_id, id);
 

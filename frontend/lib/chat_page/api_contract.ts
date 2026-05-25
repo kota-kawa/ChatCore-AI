@@ -30,12 +30,6 @@ function asPositiveNumber(value: unknown): number | null {
   return value;
 }
 
-function asNonNegativeNumber(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  if (value < 0) return null;
-  return value;
-}
-
 function asBoolean(value: unknown): boolean {
   return value === true;
 }
@@ -68,7 +62,7 @@ export function normalizeChatRoomsPagination(rawPagination: unknown): ChatRoomsP
   const pagination = asRecord(rawPagination);
   return {
     hasMore: pagination.has_more === true,
-    nextOffset: asNonNegativeNumber(pagination.next_offset),
+    nextCursor: optionalString(pagination.next_cursor) ?? null,
   };
 }
 

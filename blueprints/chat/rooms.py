@@ -1,4 +1,8 @@
+import base64
+import binascii
+import json
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import Depends, Request
@@ -68,16 +72,6 @@ def _resolve_auth_limit_service(
     return get_auth_limit_service(request)
 
 
-def _parse_non_negative_int(value: str | None, default: int) -> int:
-    if value is None:
-        return default
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return max(0, parsed)
-
-
 def _parse_positive_int(value: str | None, default: int, maximum: int) -> int:
     if value is None:
         return default
@@ -88,44 +82,75 @@ def _parse_positive_int(value: str | None, default: int, maximum: int) -> int:
     return min(max(1, parsed), maximum)
 
 
-def _resolve_room_list_pagination(request: Request) -> tuple[int | None, int]:
-    if "limit" not in request.query_params:
-        return None, 0
+def _resolve_room_list_pagination(request: Request) -> tuple[int, tuple[datetime, str] | None]:
     limit = _parse_positive_int(
         request.query_params.get("limit"),
         CHAT_ROOMS_DEFAULT_PAGE_SIZE,
         CHAT_ROOMS_MAX_PAGE_SIZE,
     )
-    offset = _parse_non_negative_int(request.query_params.get("offset"), 0)
-    return limit, offset
+    cursor = _decode_room_list_cursor(request.query_params.get("cursor"))
+    return limit, cursor
+
+
+def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
+    if not value:
+        return None
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        payload = json.loads(decoded)
+        created_at = payload.get("created_at")
+        room_id = payload.get("id")
+        if not isinstance(created_at, str) or not isinstance(room_id, str) or not room_id:
+            raise ValueError
+        normalized_created_at = created_at.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized_created_at), room_id
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        raise ApiServiceError("invalid cursor", 400)
+
+
+def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
+    created_at = room.get("created_at")
+    room_id = room.get("id")
+    if not isinstance(created_at, str) or not isinstance(room_id, str) or not room_id:
+        return None
+    payload = json.dumps(
+        {"created_at": created_at, "id": room_id},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
 
 
 def _fetch_persisted_user_rooms(
     user_id: int,
     *,
     limit: int | None = None,
-    offset: int = 0,
+    cursor: tuple[datetime, str] | None = None,
 ) -> list[dict[str, Any]]:
     # 永続保存されたチャットルーム一覧のみを取得する
     # Fetch only persisted chat rooms ordered by newest first.
     conn = None
-    cursor = None
+    db_cursor = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        db_cursor = conn.cursor()
         query = """
             SELECT id, title, COALESCE(mode, 'normal'), created_at
             FROM chat_rooms
             WHERE user_id = %s
               AND COALESCE(mode, 'normal') <> 'temporary'
-            ORDER BY created_at DESC
         """
         params: list[Any] = [user_id]
+        if cursor is not None:
+            query = f"{query} AND (created_at, id) < (%s, %s)"
+            params.extend([cursor[0], cursor[1]])
+        query = f"{query} ORDER BY created_at DESC, id DESC"
         if limit is not None:
-            query = f"{query} LIMIT %s OFFSET %s"
-            params.extend([limit, offset])
-        cursor.execute(query, tuple(params))
-        rows = cursor.fetchall()
+            query = f"{query} LIMIT %s"
+            params.append(limit)
+        db_cursor.execute(query, tuple(params))
+        rows = db_cursor.fetchall()
         rooms = []
         for (room_id, title, mode, created_at) in rows:
             rooms.append(
@@ -138,8 +163,8 @@ def _fetch_persisted_user_rooms(
             )
         return rooms
     finally:
-        if cursor is not None:
-            cursor.close()
+        if db_cursor is not None:
+            db_cursor.close()
         if conn is not None:
             conn.close()
 
@@ -363,29 +388,28 @@ async def get_chat_rooms(request: Request):
         # ログインユーザー：DBから取得
         # Authenticated users read room list from DB.
         user_id = session["user_id"]
-        limit, offset = _resolve_room_list_pagination(request)
-        fetch_limit = limit + 1 if limit is not None else None
+        try:
+            limit, cursor = _resolve_room_list_pagination(request)
+        except ApiServiceError as exc:
+            return jsonify_service_error(exc)
+        fetch_limit = limit + 1
         try:
             persisted_rooms = await run_blocking(
                 _fetch_persisted_user_rooms,
                 user_id,
                 limit=fetch_limit,
-                offset=offset,
+                cursor=cursor,
             )
-            has_more = False
-            next_offset = None
-            if limit is not None:
-                has_more = len(persisted_rooms) > limit
-                persisted_rooms = persisted_rooms[:limit]
-                next_offset = offset + limit if has_more else None
+            has_more = len(persisted_rooms) > limit
+            persisted_rooms = persisted_rooms[:limit]
+            next_cursor = _encode_room_list_cursor(persisted_rooms[-1]) if has_more and persisted_rooms else None
             return jsonify(
                 {
                     "rooms": persisted_rooms,
                     "pagination": {
                         "limit": limit,
-                        "offset": offset,
                         "has_more": has_more,
-                        "next_offset": next_offset,
+                        "next_cursor": next_cursor,
                     },
                 }
             )
@@ -401,10 +425,9 @@ async def get_chat_rooms(request: Request):
             {
                 "rooms": [],
                 "pagination": {
-                    "limit": None,
-                    "offset": 0,
+                    "limit": CHAT_ROOMS_DEFAULT_PAGE_SIZE,
                     "has_more": False,
-                    "next_offset": None,
+                    "next_cursor": None,
                 },
             }
         )

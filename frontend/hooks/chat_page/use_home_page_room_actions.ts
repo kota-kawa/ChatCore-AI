@@ -9,6 +9,10 @@ import {
 import type { KeyedMutator } from "swr";
 
 import { CHAT_ROOMS_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
+import {
+  removeChatRoomsById,
+  updateChatRoomTitle,
+} from "../../lib/chat_page/home_page_controller_utils";
 import type { AttachedFile, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
@@ -72,7 +76,7 @@ type UseHomePageRoomActionsParams = {
   setChatInput: Dispatch<SetStateAction<string>>;
   setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
   setChatRoomsHasMore: Dispatch<SetStateAction<boolean>>;
-  setChatRoomsNextOffset: Dispatch<SetStateAction<number | null>>;
+  setChatRoomsNextCursor: Dispatch<SetStateAction<string | null>>;
   setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
   setIsBulkDeletingRooms: Dispatch<SetStateAction<boolean>>;
@@ -88,6 +92,7 @@ type UseHomePageRoomActionsParams = {
   setSetupInfo: Dispatch<SetStateAction<string>>;
   setShareStatus: (status: ShareStatus) => void;
   setShareUrl: Dispatch<SetStateAction<string>>;
+  resetChatRoomsPaginationWindow: () => void;
 };
 
 export function useHomePageRoomActions({
@@ -124,7 +129,7 @@ export function useHomePageRoomActions({
   setChatInput,
   setChatRooms,
   setChatRoomsHasMore,
-  setChatRoomsNextOffset,
+  setChatRoomsNextCursor,
   setCurrentRoomMode,
   setHistoryHasMore,
   setIsBulkDeletingRooms,
@@ -140,13 +145,13 @@ export function useHomePageRoomActions({
   setSetupInfo,
   setShareStatus,
   setShareUrl,
+  resetChatRoomsPaginationWindow,
 }: UseHomePageRoomActionsParams) {
   const accessChatInProgressRef = useRef(false);
 
-  const buildChatRoomsPageUrl = useCallback((offset = 0) => {
+  const buildChatRoomsPageUrl = useCallback(() => {
     const params = new URLSearchParams({
       limit: String(CHAT_ROOMS_PAGE_SIZE),
-      offset: String(offset),
     });
     return `/api/get_chat_rooms?${params.toString()}`;
   }, []);
@@ -196,16 +201,17 @@ export function useHomePageRoomActions({
 
   const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
+      resetChatRoomsPaginationWindow();
       const page = loggedIn
         ? (await mutateChatRooms()) ?? {
             rooms: cachedChatRooms ?? [],
-            pagination: { hasMore: false, nextOffset: null },
+            pagination: { hasMore: false, nextCursor: null },
           }
-        : await fetchChatRoomsPage(buildChatRoomsPageUrl(0));
+        : await fetchChatRoomsPage(buildChatRoomsPageUrl());
       const rooms = page.rooms;
       setChatRooms(rooms);
       setChatRoomsHasMore(page.pagination.hasMore);
-      setChatRoomsNextOffset(page.pagination.nextOffset);
+      setChatRoomsNextCursor(page.pagination.nextCursor);
 
       const activeRoomId = currentRoomIdRef.current;
       if (activeRoomId) {
@@ -226,9 +232,10 @@ export function useHomePageRoomActions({
     fetchChatRoomsPage,
     loggedIn,
     mutateChatRooms,
+    resetChatRoomsPaginationWindow,
     setChatRooms,
     setChatRoomsHasMore,
-    setChatRoomsNextOffset,
+    setChatRoomsNextCursor,
     setCurrentRoomMode,
   ]);
 
@@ -251,10 +258,6 @@ export function useHomePageRoomActions({
       };
 
       setChatRooms((previous) => upsert(previous));
-      setChatRoomsHasMore((previous) => previous || chatRooms.length >= CHAT_ROOMS_PAGE_SIZE);
-      setChatRoomsNextOffset((previous) => (
-        typeof previous === "number" ? previous : CHAT_ROOMS_PAGE_SIZE
-      ));
       void mutateChatRooms(
         (previous) => {
           const previousRooms = previous?.rooms ?? cachedChatRooms ?? chatRooms;
@@ -262,13 +265,14 @@ export function useHomePageRoomActions({
           return {
             rooms: nextRooms,
             pagination: {
-              hasMore: previous?.pagination.hasMore === true || chatRooms.length >= CHAT_ROOMS_PAGE_SIZE,
-              nextOffset: previous?.pagination.nextOffset ?? CHAT_ROOMS_PAGE_SIZE,
+              hasMore: previous?.pagination.hasMore === true,
+              nextCursor: previous?.pagination.nextCursor ?? null,
             },
           };
         },
         { revalidate: false },
       );
+      void mutateChatRooms();
     },
     [
       cachedChatRooms,
@@ -276,8 +280,6 @@ export function useHomePageRoomActions({
       loggedIn,
       mutateChatRooms,
       setChatRooms,
-      setChatRoomsHasMore,
-      setChatRoomsNextOffset,
     ],
   );
 
@@ -664,12 +666,13 @@ export function useHomePageRoomActions({
         }
 
         setOpenRoomActionsFor(null);
-        void loadChatRooms();
+        setChatRooms((previous) => removeChatRoomsById(previous, [roomId]));
+        void mutateChatRooms();
       } catch (error) {
         showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [clearCurrentRoomAfterDelete, currentRoomIdRef, loadChatRooms, setOpenRoomActionsFor],
+    [clearCurrentRoomAfterDelete, currentRoomIdRef, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
   const handleBulkDeleteRooms = useCallback(async () => {
@@ -698,7 +701,8 @@ export function useHomePageRoomActions({
       }
 
       cancelRoomSelection();
-      void loadChatRooms();
+      setChatRooms((previous) => removeChatRoomsById(previous, roomIds));
+      void mutateChatRooms();
       showToast(`${roomIds.length}件のチャットを削除しました。`, { variant: "success" });
     } catch (error) {
       showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
@@ -709,8 +713,9 @@ export function useHomePageRoomActions({
     cancelRoomSelection,
     clearCurrentRoomAfterDelete,
     currentRoomIdRef,
-    loadChatRooms,
+    mutateChatRooms,
     selectedRoomIds,
+    setChatRooms,
     setIsBulkDeletingRooms,
   ]);
 
@@ -733,12 +738,13 @@ export function useHomePageRoomActions({
         }
 
         setOpenRoomActionsFor(null);
-        void loadChatRooms();
+        setChatRooms((previous) => updateChatRoomTitle(previous, roomId, nextTitle));
+        void mutateChatRooms();
       } catch (error) {
         showToast(`名前変更失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [loadChatRooms],
+    [mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
   return {
