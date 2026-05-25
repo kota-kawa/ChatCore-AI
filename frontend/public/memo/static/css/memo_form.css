@@ -2177,7 +2177,7 @@ textarea.memo-control {
   flex: 1 1 auto;
   min-height: 0;
   gap: 0;
-  background: var(--memo-detail-color, transparent);
+  background: transparent;
 }
 
 .memo-modal__edit-fields {
