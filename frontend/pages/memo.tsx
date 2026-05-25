@@ -2319,7 +2319,6 @@ export default function MemoPage() {
                       </div>
                     )}
                     <div className="memo-modal__response-header">
-                      <label htmlFor="memo-detail-ai-response">本文</label>
                       <div className="memo-response-tabs">
                         <button
                           type="button"
