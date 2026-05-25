@@ -3690,7 +3690,7 @@ body.memo-page {
 .memo-toolbar.memo-card {
   position: sticky;
   top: 0.4rem;
-  z-index: 80;
+  z-index: 60;
   width: min(72rem, calc(100% - 2rem));
   margin: 0 auto;
   border-width: 1px;
