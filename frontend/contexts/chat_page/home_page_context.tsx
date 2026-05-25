@@ -98,9 +98,18 @@ type HomePageChatContextValue = Pick<
   | "handleSwitchBranch"
 >;
 
+type HomePageSetupChatContextValue = Pick<
+  HomePageControllerState,
+  | "handleAccessChat"
+  | "handleSetupSendMessage"
+  | "attachedFiles"
+  | "setAttachedFiles"
+>;
+
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
 const HomePageTaskContext = createContext<HomePageTaskContextValue | null>(null);
 const HomePageChatContext = createContext<HomePageChatContextValue | null>(null);
+const HomePageSetupChatContext = createContext<HomePageSetupChatContextValue | null>(null);
 
 type HomePageContextProviderProps = {
   controller: HomePageControllerState;
@@ -295,10 +304,27 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     ],
   );
 
+  const setupChatValue = useMemo<HomePageSetupChatContextValue>(
+    () => ({
+      handleAccessChat: controller.handleAccessChat,
+      handleSetupSendMessage: controller.handleSetupSendMessage,
+      attachedFiles: controller.attachedFiles,
+      setAttachedFiles: controller.setAttachedFiles,
+    }),
+    [
+      controller.handleAccessChat,
+      controller.handleSetupSendMessage,
+      controller.attachedFiles,
+      controller.setAttachedFiles,
+    ],
+  );
+
   return (
     <HomePageUiContext.Provider value={uiValue}>
       <HomePageTaskContext.Provider value={taskValue}>
-        <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+        <HomePageSetupChatContext.Provider value={setupChatValue}>
+          <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+        </HomePageSetupChatContext.Provider>
       </HomePageTaskContext.Provider>
     </HomePageUiContext.Provider>
   );
@@ -322,4 +348,8 @@ export function useHomePageTaskContext() {
 
 export function useHomePageChatContext() {
   return useRequiredContext(HomePageChatContext, "HomePageChatContext");
+}
+
+export function useHomePageSetupChatContext() {
+  return useRequiredContext(HomePageSetupChatContext, "HomePageSetupChatContext");
 }

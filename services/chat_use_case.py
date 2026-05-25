@@ -202,7 +202,13 @@ class ChatPostUseCase:
                     attached_file_name_list,
                     parent_message_id,
                 )
-                all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
+                if should_auto_title_room:
+                    all_messages = [{"role": "user", "content": formatted_user_message}]
+                else:
+                    all_messages = await run_blocking(
+                        deps.get_chat_room_messages,
+                        chat_room_id,
+                    )
         else:
             await run_blocking(
                 deps.ephemeral_store.append_message,
@@ -261,15 +267,16 @@ class ChatPostUseCase:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
 
         if user_id is not None and room_mode == "normal":
-            try:
-                summary_payload = await run_blocking(deps.get_room_summary, chat_room_id)
-                room_summary = str((summary_payload or {}).get("summary") or "")
-            except Exception:
-                deps.logger.warning("Failed to load room summary; proceeding without it.")
-            try:
-                memory_facts = await run_blocking(deps.list_room_memory_facts, chat_room_id)
-            except Exception:
-                deps.logger.warning("Failed to load memory facts; proceeding without them.")
+            if not should_auto_title_room:
+                try:
+                    summary_payload = await run_blocking(deps.get_room_summary, chat_room_id)
+                    room_summary = str((summary_payload or {}).get("summary") or "")
+                except Exception:
+                    deps.logger.warning("Failed to load room summary; proceeding without it.")
+                try:
+                    memory_facts = await run_blocking(deps.list_room_memory_facts, chat_room_id)
+                except Exception:
+                    deps.logger.warning("Failed to load memory facts; proceeding without them.")
             if saved_user_message_id is not None:
                 try:
                     remembered_facts = await run_blocking(

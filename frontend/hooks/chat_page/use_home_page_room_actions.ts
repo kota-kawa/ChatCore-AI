@@ -51,7 +51,7 @@ type UseHomePageRoomActionsParams = {
     roomId: string,
     attachedFiles?: AttachedFile[],
     roomMode?: ChatRoomMode,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   regenerateLastResponse: (model: string, roomId: string) => Promise<void>;
   switchBranch: (messageId: number, roomId: string) => Promise<void>;
   isGenerating: boolean;
@@ -203,6 +203,29 @@ export function useHomePageRoomActions({
       return cachedChatRooms ?? [];
     }
   }, [cachedChatRooms, loggedIn, mutateChatRooms]);
+
+  const upsertCreatedChatRoom = useCallback(
+    (roomId: string, title: string, mode: ChatRoomMode) => {
+      if (!loggedIn || mode !== "normal") return;
+
+      const createdRoom: ChatRoom = {
+        id: roomId,
+        title: title.trim() || "新規チャット",
+        createdAt: new Date().toISOString(),
+        mode,
+      };
+      const upsert = (rooms: ChatRoom[] = []) => [
+        createdRoom,
+        ...rooms.filter((room) => room.id !== roomId),
+      ];
+
+      setChatRooms((previous) => upsert(previous));
+      void mutateChatRooms((previous) => upsert(previous ?? cachedChatRooms ?? chatRooms), {
+        revalidate: false,
+      });
+    },
+    [cachedChatRooms, chatRooms, loggedIn, mutateChatRooms, setChatRooms],
+  );
 
   const switchChatRoom = useCallback(
     (roomId: string, roomMode?: ChatRoomMode, options?: { forceReload?: boolean }) => {
@@ -389,6 +412,7 @@ export function useHomePageRoomActions({
           setLaunchingTaskName(null);
           return;
         }
+        upsertCreatedChatRoom(roomId, roomTitle, roomMode);
         removeStoredHistory(roomId);
         const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
         setAttachedFiles([]);
@@ -396,9 +420,10 @@ export function useHomePageRoomActions({
         setPageViewState("chat");
         setLaunchingTaskName(null);
 
-        void loadChatRooms();
-        await generationPromise;
-        void loadChatRooms();
+        const completed = await generationPromise;
+        if (!completed && loggedIn && roomMode === "normal") {
+          void loadChatRooms();
+        }
       } catch (error) {
         setPageViewState("setup");
         setLaunchingTaskName(null);
@@ -419,6 +444,7 @@ export function useHomePageRoomActions({
       generateResponse,
       isTaskOrderEditing,
       loadChatRooms,
+      loggedIn,
       persistCurrentRoomId,
       prepareChatViewTransition,
       resetLaunchingRoomState,
@@ -428,6 +454,7 @@ export function useHomePageRoomActions({
       setPageViewState,
       setupInfo,
       temporaryModeEnabled,
+      upsertCreatedChatRoom,
     ],
   );
 
@@ -454,15 +481,17 @@ export function useHomePageRoomActions({
       if (currentRoomIdRef.current !== roomId) {
         return;
       }
+      upsertCreatedChatRoom(roomId, roomTitle, roomMode);
       removeStoredHistory(roomId);
       const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
       setAttachedFiles([]);
       const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
       setPageViewState("chat");
 
-      void loadChatRooms();
-      await generationPromise;
-      void loadChatRooms();
+      const completed = await generationPromise;
+      if (!completed && loggedIn && roomMode === "normal") {
+        void loadChatRooms();
+      }
     } catch (error) {
       setPageViewState("setup");
       setMessages([]);
@@ -479,6 +508,7 @@ export function useHomePageRoomActions({
     createNewChatRoom,
     generateResponse,
     loadChatRooms,
+    loggedIn,
     persistCurrentRoomId,
     prepareChatViewTransition,
     resetLaunchingRoomState,
@@ -486,6 +516,7 @@ export function useHomePageRoomActions({
     setPageViewState,
     setupInfo,
     temporaryModeEnabled,
+    upsertCreatedChatRoom,
   ]);
 
   const handleSendMessage = useCallback(() => {

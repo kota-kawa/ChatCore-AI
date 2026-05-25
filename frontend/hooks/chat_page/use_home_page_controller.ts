@@ -489,7 +489,9 @@ export function useHomePageController() {
   );
 
   useEffect(() => {
-    void import("../../scripts/core/csrf");
+    void import("../../scripts/core/csrf").then(({ primeCsrfToken }) => {
+      void primeCsrfToken();
+    });
     void import("../../scripts/components/popup_menu");
     void import("../../scripts/components/chat/popup_menu");
     void import("../../scripts/components/user_icon");
