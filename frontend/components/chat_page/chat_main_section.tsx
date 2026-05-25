@@ -421,7 +421,7 @@ function ChatMainSectionComponent() {
           </button>
 
           <ChatMessageList
-            key={`${currentRoomId || "no-room"}:${chatMessageListResetKey}`}
+            key={`chat-message-list:${chatMessageListResetKey}`}
             chatMessagesRef={chatMessagesRef}
             currentRoomId={currentRoomId}
             setupInfo={setupInfo}

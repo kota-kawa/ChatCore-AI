@@ -428,7 +428,11 @@ export function useHomePageRoomActions({
   }, [cancelRoomSelection, persistCurrentRoomId, showSetupForm]);
 
   const resetLaunchingRoomState = useCallback((roomId: string, roomMode: ChatRoomMode) => {
-    resetChatMessageList();
+    // 新規チャット起動では履歴アンカリングが不要なので、ChatMessageList を
+    // remount させない（resetChatMessageList を呼ばない）。remount すると
+    // 初回アンカリングの opacity:0 ベールが再点灯し、起動時に一覧領域が一瞬
+    // 消えて見える原因になる。既存ルームへの切替時のみ switchChatRoom 側で
+    // remount する。
     persistCurrentRoomId(roomId, roomMode);
     setCurrentRoomMode(roomMode);
     setMessages([]);
@@ -442,7 +446,7 @@ export function useHomePageRoomActions({
     closeOverlaySidebar();
     prepareChatViewTransition();
     setPageViewState("launching");
-  }, [closeOverlaySidebar, persistCurrentRoomId, prepareChatViewTransition, resetChatMessageList, setPageViewState]);
+  }, [closeOverlaySidebar, persistCurrentRoomId, prepareChatViewTransition, setPageViewState]);
 
   const handleTaskCardLaunch = useCallback(
     async (task: NormalizedTask) => {

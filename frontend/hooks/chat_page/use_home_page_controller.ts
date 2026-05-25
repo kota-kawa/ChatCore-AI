@@ -837,6 +837,9 @@ export function useHomePageController() {
         currentRoomIdRef.current = activeGeneration.roomId;
         setCurrentRoomMode(activeGeneration.roomMode);
         setPageViewState("chat");
+        // 復元時はローカル履歴を末尾アンカリングしたいので、一覧を新規マウントさせる。
+        // key は currentRoomId に依存しなくなったため、ここで明示的に reset する。
+        setChatMessageListResetKey((previous) => previous + 1);
         loadLocalChatHistory(activeGeneration.roomId);
         void loadChatHistory(activeGeneration.roomId, true);
         return;
@@ -850,7 +853,7 @@ export function useHomePageController() {
     } catch {
       // ignore localStorage failures
     }
-  }, [loadChatHistory, loadLocalChatHistory, setCurrentRoomMode, setPageViewState]);
+  }, [loadChatHistory, loadLocalChatHistory, setChatMessageListResetKey, setCurrentRoomMode, setPageViewState]);
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
