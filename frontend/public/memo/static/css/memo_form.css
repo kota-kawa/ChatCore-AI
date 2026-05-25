@@ -3319,9 +3319,26 @@ textarea.memo-control {
     gap: 0.55rem;
   }
 
+  /* Give the memo body as much horizontal room as possible on phones:
+     shrink the outer gutter and the inner header/body padding. */
+  .memo-modal {
+    padding: 0.35rem;
+  }
+
   .memo-modal__content {
-    height: calc(100dvh - 1.6rem);
-    max-height: calc(100dvh - 1.6rem);
+    height: calc(100dvh - 0.7rem);
+    max-height: calc(100dvh - 0.7rem);
+    border-radius: 14px;
+  }
+
+  .memo-modal__header {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+
+  .memo-modal__body {
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
   }
 
   .memo-modal__header-actions {
