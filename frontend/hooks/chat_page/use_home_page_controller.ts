@@ -19,6 +19,7 @@ import { useHomePageGenerationActions } from "./use_home_page_generation_actions
 import { useHomePageRoomActions } from "./use_home_page_room_actions";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
+import { CHAT_ROOMS_PAGE_SIZE } from "../../lib/chat_page/constants";
 import {
   normalizeChatRoomsPayload,
 } from "../../lib/chat_page/api_contract";
@@ -35,6 +36,7 @@ import {
 } from "../../lib/chat_page/generation_guard";
 import type {
   ChatRoom,
+  ChatRoomsPage,
   PromptAssistController,
 } from "../../lib/chat_page/types";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
@@ -58,7 +60,26 @@ function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
 }
 
-const fetchChatRooms = async (url: string): Promise<ChatRoom[]> => {
+const buildChatRoomsPageUrl = (offset = 0): string => {
+  const params = new URLSearchParams({
+    limit: String(CHAT_ROOMS_PAGE_SIZE),
+    offset: String(offset),
+  });
+  return `/api/get_chat_rooms?${params.toString()}`;
+};
+
+const mergeUniqueChatRooms = (primary: ChatRoom[], secondary: ChatRoom[]): ChatRoom[] => {
+  const seen = new Set<string>();
+  const merged: ChatRoom[] = [];
+  [...primary, ...secondary].forEach((room) => {
+    if (seen.has(room.id)) return;
+    seen.add(room.id);
+    merged.push(room);
+  });
+  return merged;
+};
+
+const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
   const response = await fetch(url, { credentials: "same-origin" });
   const rawPayload = await readJsonBodySafe(response);
   const payload = normalizeChatRoomsPayload(rawPayload);
@@ -67,7 +88,7 @@ const fetchChatRooms = async (url: string): Promise<ChatRoom[]> => {
     throw new Error(extractApiErrorMessage(rawPayload, "ルーム一覧取得に失敗しました。", response.status));
   }
 
-  return payload.rooms;
+  return payload;
 };
 
 export function useHomePageController() {
@@ -149,6 +170,12 @@ export function useHomePageController() {
   const {
     chatRooms,
     setChatRooms,
+    chatRoomsHasMore,
+    setChatRoomsHasMore,
+    chatRoomsNextOffset,
+    setChatRoomsNextOffset,
+    isLoadingMoreChatRooms,
+    setIsLoadingMoreChatRooms,
     currentRoomId,
     setCurrentRoomId,
     currentRoomMode,
@@ -231,6 +258,7 @@ export function useHomePageController() {
   const draggingTaskIndexRef = useRef<number | null>(null);
   const trackedTimeoutIdsRef = useRef<Set<number>>(new Set());
   const localStorageWarningShownRef = useRef(false);
+  const loadingMoreChatRoomsRef = useRef(false);
   const generationGuardRef = useRef<GenerationGuard | null>(null);
   if (!generationGuardRef.current) {
     generationGuardRef.current = createGenerationGuard();
@@ -293,15 +321,45 @@ export function useHomePageController() {
     setMessages,
   });
   const hasCurrentRoom = Boolean(currentRoomId);
-  const { data: cachedChatRooms, mutate: mutateChatRooms } = useSWR<ChatRoom[]>(
-    loggedIn ? "/api/get_chat_rooms" : null,
-    fetchChatRooms,
+  const { data: cachedChatRoomsPage, mutate: mutateChatRooms } = useSWR<ChatRoomsPage>(
+    loggedIn ? buildChatRoomsPageUrl(0) : null,
+    fetchChatRoomsPage,
     {
       revalidateOnFocus: true,
       dedupingInterval: 5000,
       keepPreviousData: true,
     },
   );
+  const cachedChatRooms = cachedChatRoomsPage?.rooms;
+
+  const loadMoreChatRooms = useCallback(async () => {
+    if (!loggedIn || !chatRoomsHasMore || isLoadingMoreChatRooms || loadingMoreChatRoomsRef.current) return;
+    const offset = chatRoomsNextOffset;
+    if (typeof offset !== "number") return;
+
+    loadingMoreChatRoomsRef.current = true;
+    setIsLoadingMoreChatRooms(true);
+    try {
+      const page = await fetchChatRoomsPage(buildChatRoomsPageUrl(offset));
+      setChatRooms((previous) => mergeUniqueChatRooms(previous, page.rooms));
+      setChatRoomsHasMore(page.pagination.hasMore);
+      setChatRoomsNextOffset(page.pagination.nextOffset);
+    } catch (error) {
+      console.error("ルーム一覧追加取得失敗:", error);
+    } finally {
+      loadingMoreChatRoomsRef.current = false;
+      setIsLoadingMoreChatRooms(false);
+    }
+  }, [
+    chatRoomsHasMore,
+    chatRoomsNextOffset,
+    isLoadingMoreChatRooms,
+    loggedIn,
+    setChatRooms,
+    setChatRoomsHasMore,
+    setChatRoomsNextOffset,
+    setIsLoadingMoreChatRooms,
+  ]);
 
   const closeOverlaySidebar = useCallback(() => {
     if (isOverlaySidebarViewport()) {
@@ -362,7 +420,7 @@ export function useHomePageController() {
     createNewChatRoom,
     currentRoomIdRef,
     editAndRegenerateMessage,
-    fetchChatRooms,
+    fetchChatRoomsPage,
     generateResponse,
     regenerateLastResponse,
     switchBranch,
@@ -384,6 +442,8 @@ export function useHomePageController() {
     selectedRoomIds,
     setChatInput,
     setChatRooms,
+    setChatRoomsHasMore,
+    setChatRoomsNextOffset,
     setCurrentRoomMode,
     setHistoryHasMore,
     setIsBulkDeletingRooms,
@@ -489,7 +549,9 @@ export function useHomePageController() {
   );
 
   useEffect(() => {
-    void import("../../scripts/core/csrf");
+    void import("../../scripts/core/csrf").then(({ primeCsrfToken }) => {
+      void primeCsrfToken();
+    });
     void import("../../scripts/components/popup_menu");
     void import("../../scripts/components/chat/popup_menu");
     void import("../../scripts/components/user_icon");
@@ -711,17 +773,23 @@ export function useHomePageController() {
   }, [loggedIn]);
 
   useEffect(() => {
-    if (!cachedChatRooms) return;
-    setChatRooms(cachedChatRooms);
+    if (!cachedChatRoomsPage) return;
+    const nextRooms = cachedChatRoomsPage.rooms;
+    setChatRooms((previous) => {
+      if (previous.length <= CHAT_ROOMS_PAGE_SIZE) return nextRooms;
+      return mergeUniqueChatRooms(nextRooms, previous);
+    });
+    setChatRoomsHasMore(cachedChatRoomsPage.pagination.hasMore);
+    setChatRoomsNextOffset(cachedChatRoomsPage.pagination.nextOffset);
 
     const activeRoomId = currentRoomIdRef.current;
     if (!activeRoomId) return;
 
-    const activeRoom = cachedChatRooms.find((room) => room.id === activeRoomId);
+    const activeRoom = nextRooms.find((room) => room.id === activeRoomId);
     if (activeRoom) {
       setCurrentRoomMode(activeRoom.mode);
     }
-  }, [cachedChatRooms]);
+  }, [cachedChatRoomsPage, setChatRooms, setChatRoomsHasMore, setChatRoomsNextOffset, setCurrentRoomMode]);
 
   useEffect(() => {
     if (!authResolved) return;
@@ -735,9 +803,13 @@ export function useHomePageController() {
     void refreshTasks(true);
     if (!loggedIn) {
       setChatRooms([]);
+      setChatRoomsHasMore(false);
+      setChatRoomsNextOffset(null);
+      loadingMoreChatRoomsRef.current = false;
+      setIsLoadingMoreChatRooms(false);
       setCurrentRoomMode("normal");
     }
-  }, [authResolved, loggedIn, refreshTasks]);
+  }, [authResolved, loggedIn, refreshTasks, setChatRoomsHasMore, setChatRoomsNextOffset, setIsLoadingMoreChatRooms]);
 
   useEffect(() => {
     if (tasks.length <= taskCollapseLimit) {
@@ -984,6 +1056,8 @@ export function useHomePageController() {
     hasCurrentRoom,
     sidebarOpen,
     chatRooms,
+    chatRoomsHasMore,
+    isLoadingMoreChatRooms,
     currentRoomId,
     currentRoomMode,
     openRoomActionsFor,
@@ -1014,6 +1088,7 @@ export function useHomePageController() {
     toggleRoomSelection,
     cancelRoomSelection,
     setSidebarOpen,
+    loadMoreChatRooms,
     loadOlderChatHistory,
     setChatInput,
     handleChatInputKeyDown,

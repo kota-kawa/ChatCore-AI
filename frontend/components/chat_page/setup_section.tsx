@@ -18,7 +18,11 @@ import {
   readSelectedChatAttachments,
 } from "../../lib/chat_page/file_attachments";
 import type { NormalizedTask } from "../../lib/chat_page/types";
-import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
+import {
+  useHomePageSetupChatContext,
+  useHomePageTaskContext,
+  useHomePageUiContext,
+} from "../../contexts/chat_page/home_page_context";
 
 const POINTER_DRAG_START_THRESHOLD_PX = 8;
 
@@ -102,11 +106,6 @@ const TaskCard = memo(function TaskCard({
         className={`prompt-card ${isEditing ? "editable" : ""}`.trim()}
         data-launching={isLaunching ? "true" : "false"}
         data-task={task.name}
-        data-prompt_template={task.prompt_template}
-        data-response_rules={task.response_rules}
-        data-output_skeleton={task.output_skeleton}
-        data-input_examples={task.input_examples}
-        data-output_examples={task.output_examples}
         data-is_default={task.is_default ? "true" : "false"}
         onClick={() => {
           if (isEditing) return;
@@ -221,7 +220,7 @@ function SetupSectionComponent() {
     handleSetupSendMessage,
     attachedFiles,
     setAttachedFiles,
-  } = useHomePageChatContext();
+  } = useHomePageSetupChatContext();
   const isSetupInfoWithinLimit = setupInfo.length <= MAX_SETUP_INFO_LENGTH;
   const canSendSetupMessage = setupInfo.trim().length > 0 && isSetupInfoWithinLimit && !isChatLaunching;
   const selectedModelIndex = Math.max(

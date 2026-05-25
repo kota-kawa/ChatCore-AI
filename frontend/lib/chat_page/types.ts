@@ -17,6 +17,17 @@ export type ChatRoom = {
   mode: ChatRoomMode;
 };
 
+export type ChatRoomsPagination = {
+  hasMore: boolean;
+  nextOffset: number | null;
+};
+
+export type ChatRoomsPage = {
+  rooms: ChatRoom[];
+  pagination: ChatRoomsPagination;
+  error?: string;
+};
+
 export type ChatSender = "user" | "assistant" | "thinking";
 export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 

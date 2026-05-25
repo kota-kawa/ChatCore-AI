@@ -4,6 +4,8 @@ import type {
   ChatResponsePayload,
   ChatRoom,
   ChatRoomMode,
+  ChatRoomsPage,
+  ChatRoomsPagination,
   GenerationStatusPayload,
 } from "./types";
 
@@ -25,6 +27,12 @@ function optionalString(value: unknown): string | undefined {
 function asPositiveNumber(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   if (value < 1) return null;
+  return value;
+}
+
+function asNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 0) return null;
   return value;
 }
 
@@ -56,10 +64,19 @@ export function normalizeChatRooms(rawRooms: unknown): ChatRoom[] {
     .filter((room): room is ChatRoom => room !== null);
 }
 
-export function normalizeChatRoomsPayload(rawPayload: unknown): { rooms: ChatRoom[]; error?: string } {
+export function normalizeChatRoomsPagination(rawPagination: unknown): ChatRoomsPagination {
+  const pagination = asRecord(rawPagination);
+  return {
+    hasMore: pagination.has_more === true,
+    nextOffset: asNonNegativeNumber(pagination.next_offset),
+  };
+}
+
+export function normalizeChatRoomsPayload(rawPayload: unknown): ChatRoomsPage {
   const payload = asRecord(rawPayload);
   return {
     rooms: normalizeChatRooms(payload.rooms),
+    pagination: normalizeChatRoomsPagination(payload.pagination),
     error: optionalString(payload.error),
   };
 }

@@ -14,6 +14,7 @@ export const MAX_CHAT_MESSAGE_LENGTH = 30000;
 export const MAX_SETUP_INFO_LENGTH = 30000;
 export const MAX_RENDERED_CHAT_MESSAGES = 1000;
 export const DEFAULT_MODEL = "openai/gpt-oss-120b";
+export const CHAT_ROOMS_PAGE_SIZE = 20;
 export const CHAT_HISTORY_PAGE_SIZE = toPositiveInteger(chatHistoryPageSizeDefault, 50);
 export const STICKY_SCROLL_BOTTOM_THRESHOLD_PX = 72;
 export const THINKING_CONSTELLATION_BASE_WIDTH = 208;

@@ -330,7 +330,7 @@ export function useHomePageGenerationActions({
   }, []);
 
   const consumeStreamingChatResponse = useCallback(
-    async (response: Response, generation: ActiveGeneration) => {
+    async (response: Response, generation: ActiveGeneration): Promise<boolean> => {
       const { roomId } = generation;
 
       const decoder = new TextDecoder();
@@ -599,10 +599,14 @@ export function useHomePageGenerationActions({
       let activeResponse = response;
       for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
         const result = await readStreamResponse(activeResponse);
-        if (!isGenerationActive(generation)) return;
+        if (!isGenerationActive(generation)) return false;
 
-        if (result === "completed" || result === "aborted" || result === "inactive") {
-          return;
+        if (result === "completed") {
+          return true;
+        }
+
+        if (result === "aborted" || result === "inactive") {
+          return false;
         }
 
         if (typeof result === "object" && result.status === "error") {
@@ -611,7 +615,7 @@ export function useHomePageGenerationActions({
               ? `${result.message} ここまでの応答を保存しました。`
               : result.message,
           );
-          return;
+          return false;
         }
 
         const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
@@ -621,19 +625,20 @@ export function useHomePageGenerationActions({
               ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
               : "ストリームが途中で終了しました。",
           );
-          return;
+          return false;
         }
 
         await waitForDuration(reconnectDelay);
-        if (!isGenerationActive(generation)) return;
+        if (!isGenerationActive(generation)) return false;
 
         const reconnectResponse = await openReconnectStream();
         if (!reconnectResponse) {
           persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
-          return;
+          return false;
         }
         activeResponse = reconnectResponse;
       }
+      return false;
     },
     [
       appendAssistantErrorMessage,
@@ -648,7 +653,7 @@ export function useHomePageGenerationActions({
   const connectToGenerationStream = useCallback(
     async (roomId: string) => {
       const generation = acquireGeneration(roomId);
-      if (!generation) return;
+      if (!generation) return false;
 
       const thinkingId = nextMessageId("thinking", messageSeqRef);
       setMessages((previous) => {
@@ -944,9 +949,9 @@ export function useHomePageGenerationActions({
       roomId: string,
       attachedFiles?: AttachedFile[],
       roomMode: ChatRoomMode = currentRoomMode,
-    ) => {
+    ): Promise<boolean> => {
       const generation = acquireGeneration(roomId);
-      if (!generation) return;
+      if (!generation) return false;
 
       const userMessage: UiChatMessage = {
         id: nextMessageId("user", messageSeqRef),
@@ -998,8 +1003,7 @@ export function useHomePageGenerationActions({
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
-          await consumeStreamingChatResponse(response, generation);
-          return;
+          return await consumeStreamingChatResponse(response, generation);
         }
 
         const rawPayload = await readJsonBodySafe(response);
@@ -1037,6 +1041,7 @@ export function useHomePageGenerationActions({
         }
         clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
+        return response.ok && Boolean(data.response);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           if (isGenerationActive(generation)) {
@@ -1045,7 +1050,7 @@ export function useHomePageGenerationActions({
               return removeThinkingMessages(previous);
             });
           }
-          return;
+          return false;
         }
 
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1053,6 +1058,7 @@ export function useHomePageGenerationActions({
           clearStoredGenerationState(roomId);
           appendAssistantErrorMessage(roomId, errorMessage);
         }
+        return false;
       } finally {
         releaseGeneration(generation);
       }

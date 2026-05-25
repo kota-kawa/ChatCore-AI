@@ -31,6 +31,8 @@ function ChatMainSectionComponent() {
     hasCurrentRoom,
     sidebarOpen,
     chatRooms,
+    chatRoomsHasMore,
+    isLoadingMoreChatRooms,
     currentRoomId,
     currentRoomMode,
     openRoomActionsFor,
@@ -58,6 +60,7 @@ function ChatMainSectionComponent() {
     toggleRoomSelection,
     cancelRoomSelection,
     setSidebarOpen,
+    loadMoreChatRooms,
     loadOlderChatHistory,
     setChatInput,
     handleChatInputKeyDown,
@@ -125,6 +128,17 @@ function ChatMainSectionComponent() {
     }
     switchChatRoom(roomId, roomMode);
   };
+
+  const handleSidebarScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (!chatRoomsHasMore || isLoadingMoreChatRooms) return;
+      const target = event.currentTarget;
+      const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
+      if (remaining > 160) return;
+      void loadMoreChatRooms();
+    },
+    [chatRoomsHasMore, isLoadingMoreChatRooms, loadMoreChatRooms],
+  );
 
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -240,6 +254,7 @@ function ChatMainSectionComponent() {
           className={`sidebar ${sidebarOpen ? "open" : ""}`.trim()}
           id="chat-room-sidebar"
           aria-hidden={sidebarOpen ? "false" : "true"}
+          onScroll={handleSidebarScroll}
         >
           {isRoomSelectionMode ? (
             <div className="room-selection-bar" aria-live="polite">
@@ -278,7 +293,7 @@ function ChatMainSectionComponent() {
             </button>
           )}
 
-          <div id="chat-room-list">
+          <div id="chat-room-list" aria-busy={isLoadingMoreChatRooms ? "true" : "false"}>
             {chatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
               const roomTitle = room.title || "新規チャット";

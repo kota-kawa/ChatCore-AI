@@ -62,6 +62,8 @@ type HomePageChatContextValue = Pick<
   | "hasCurrentRoom"
   | "sidebarOpen"
   | "chatRooms"
+  | "chatRoomsHasMore"
+  | "isLoadingMoreChatRooms"
   | "currentRoomId"
   | "currentRoomMode"
   | "openRoomActionsFor"
@@ -87,6 +89,7 @@ type HomePageChatContextValue = Pick<
   | "toggleRoomSelection"
   | "cancelRoomSelection"
   | "setSidebarOpen"
+  | "loadMoreChatRooms"
   | "loadOlderChatHistory"
   | "setChatInput"
   | "attachedFiles"
@@ -98,9 +101,18 @@ type HomePageChatContextValue = Pick<
   | "handleSwitchBranch"
 >;
 
+type HomePageSetupChatContextValue = Pick<
+  HomePageControllerState,
+  | "handleAccessChat"
+  | "handleSetupSendMessage"
+  | "attachedFiles"
+  | "setAttachedFiles"
+>;
+
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
 const HomePageTaskContext = createContext<HomePageTaskContextValue | null>(null);
 const HomePageChatContext = createContext<HomePageChatContextValue | null>(null);
+const HomePageSetupChatContext = createContext<HomePageSetupChatContextValue | null>(null);
 
 type HomePageContextProviderProps = {
   controller: HomePageControllerState;
@@ -217,6 +229,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       hasCurrentRoom: controller.hasCurrentRoom,
       sidebarOpen: controller.sidebarOpen,
       chatRooms: controller.chatRooms,
+      chatRoomsHasMore: controller.chatRoomsHasMore,
+      isLoadingMoreChatRooms: controller.isLoadingMoreChatRooms,
       currentRoomId: controller.currentRoomId,
       currentRoomMode: controller.currentRoomMode,
       openRoomActionsFor: controller.openRoomActionsFor,
@@ -242,6 +256,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       toggleRoomSelection: controller.toggleRoomSelection,
       cancelRoomSelection: controller.cancelRoomSelection,
       setSidebarOpen: controller.setSidebarOpen,
+      loadMoreChatRooms: controller.loadMoreChatRooms,
       loadOlderChatHistory: controller.loadOlderChatHistory,
       setChatInput: controller.setChatInput,
       attachedFiles: controller.attachedFiles,
@@ -258,6 +273,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.hasCurrentRoom,
       controller.sidebarOpen,
       controller.chatRooms,
+      controller.chatRoomsHasMore,
+      controller.isLoadingMoreChatRooms,
       controller.currentRoomId,
       controller.currentRoomMode,
       controller.openRoomActionsFor,
@@ -283,6 +300,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.toggleRoomSelection,
       controller.cancelRoomSelection,
       controller.setSidebarOpen,
+      controller.loadMoreChatRooms,
       controller.loadOlderChatHistory,
       controller.setChatInput,
       controller.attachedFiles,
@@ -295,10 +313,27 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     ],
   );
 
+  const setupChatValue = useMemo<HomePageSetupChatContextValue>(
+    () => ({
+      handleAccessChat: controller.handleAccessChat,
+      handleSetupSendMessage: controller.handleSetupSendMessage,
+      attachedFiles: controller.attachedFiles,
+      setAttachedFiles: controller.setAttachedFiles,
+    }),
+    [
+      controller.handleAccessChat,
+      controller.handleSetupSendMessage,
+      controller.attachedFiles,
+      controller.setAttachedFiles,
+    ],
+  );
+
   return (
     <HomePageUiContext.Provider value={uiValue}>
       <HomePageTaskContext.Provider value={taskValue}>
-        <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+        <HomePageSetupChatContext.Provider value={setupChatValue}>
+          <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+        </HomePageSetupChatContext.Provider>
       </HomePageTaskContext.Provider>
     </HomePageUiContext.Provider>
   );
@@ -322,4 +357,8 @@ export function useHomePageTaskContext() {
 
 export function useHomePageChatContext() {
   return useRequiredContext(HomePageChatContext, "HomePageChatContext");
+}
+
+export function useHomePageSetupChatContext() {
+  return useRequiredContext(HomePageSetupChatContext, "HomePageSetupChatContext");
 }

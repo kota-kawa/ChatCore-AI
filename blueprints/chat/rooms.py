@@ -55,6 +55,9 @@ from . import (
 
 logger = logging.getLogger(__name__)
 
+CHAT_ROOMS_DEFAULT_PAGE_SIZE = 20
+CHAT_ROOMS_MAX_PAGE_SIZE = 100
+
 
 def _resolve_auth_limit_service(
     request: Request,
@@ -65,7 +68,44 @@ def _resolve_auth_limit_service(
     return get_auth_limit_service(request)
 
 
-def _fetch_persisted_user_rooms(user_id: int) -> list[dict[str, Any]]:
+def _parse_non_negative_int(value: str | None, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0, parsed)
+
+
+def _parse_positive_int(value: str | None, default: int, maximum: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(1, parsed), maximum)
+
+
+def _resolve_room_list_pagination(request: Request) -> tuple[int | None, int]:
+    if "limit" not in request.query_params:
+        return None, 0
+    limit = _parse_positive_int(
+        request.query_params.get("limit"),
+        CHAT_ROOMS_DEFAULT_PAGE_SIZE,
+        CHAT_ROOMS_MAX_PAGE_SIZE,
+    )
+    offset = _parse_non_negative_int(request.query_params.get("offset"), 0)
+    return limit, offset
+
+
+def _fetch_persisted_user_rooms(
+    user_id: int,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     # 永続保存されたチャットルーム一覧のみを取得する
     # Fetch only persisted chat rooms ordered by newest first.
     conn = None
@@ -80,7 +120,11 @@ def _fetch_persisted_user_rooms(user_id: int) -> list[dict[str, Any]]:
               AND COALESCE(mode, 'normal') <> 'temporary'
             ORDER BY created_at DESC
         """
-        cursor.execute(query, (user_id,))
+        params: list[Any] = [user_id]
+        if limit is not None:
+            query = f"{query} LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+        cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
         rooms = []
         for (room_id, title, mode, created_at) in rows:
@@ -319,9 +363,32 @@ async def get_chat_rooms(request: Request):
         # ログインユーザー：DBから取得
         # Authenticated users read room list from DB.
         user_id = session["user_id"]
+        limit, offset = _resolve_room_list_pagination(request)
+        fetch_limit = limit + 1 if limit is not None else None
         try:
-            persisted_rooms = await run_blocking(_fetch_persisted_user_rooms, user_id)
-            return jsonify({"rooms": persisted_rooms})
+            persisted_rooms = await run_blocking(
+                _fetch_persisted_user_rooms,
+                user_id,
+                limit=fetch_limit,
+                offset=offset,
+            )
+            has_more = False
+            next_offset = None
+            if limit is not None:
+                has_more = len(persisted_rooms) > limit
+                persisted_rooms = persisted_rooms[:limit]
+                next_offset = offset + limit if has_more else None
+            return jsonify(
+                {
+                    "rooms": persisted_rooms,
+                    "pagination": {
+                        "limit": limit,
+                        "offset": offset,
+                        "has_more": has_more,
+                        "next_offset": next_offset,
+                    },
+                }
+            )
         except Exception:
             return log_and_internal_server_error(
                 logger,
@@ -330,7 +397,17 @@ async def get_chat_rooms(request: Request):
     else:
         # 非ログインユーザーにはサイドバー上でチャットルーム一覧は表示しない
         # Do not show sidebar room list for guests.
-        return jsonify({"rooms": []})
+        return jsonify(
+            {
+                "rooms": [],
+                "pagination": {
+                    "limit": None,
+                    "offset": 0,
+                    "has_more": False,
+                    "next_offset": None,
+                },
+            }
+        )
 
 
 @chat_bp.post("/api/delete_chat_room", name="chat.delete_chat_room")
