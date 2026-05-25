@@ -16,14 +16,18 @@
   flex-direction: column;
   min-height: 0;
   opacity: 0;
-  transform: translate3d(0, 32px, 0) scale(0.96);
+  /* Rises up from below and out of 3D depth (perspective lives on
+     .chat-page-stage), so the chat panel feels like it surfaces toward
+     the viewer rather than blinking into place. */
+  transform: translate3d(0, 44px, -120px) scale(0.94) rotateX(-6deg);
+  transform-origin: 50% 100%;
   pointer-events: none;
   backface-visibility: hidden;
   will-change: opacity, transform;
   transition:
-    opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (min-width: 577px) {
@@ -49,10 +53,55 @@
   pointer-events: auto;
 }
 
+/* Staggered reveal of the chat panel's contents as it surfaces. The header
+   eases down from the top while the conversation area rises up, layering the
+   entrance instead of revealing everything in a single beat. Both the
+   "launching" and "chat" states share identical declarations so the animation
+   begins as the panel appears and continues seamlessly across the state flip
+   without restarting (and therefore without a flash). */
+#chat-container[data-view="launching"] .chat-header,
+#chat-container[data-view="chat"] .chat-header {
+  animation: chat-enter-fade-down 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+#chat-container[data-view="launching"] .chat-area,
+#chat-container[data-view="chat"] .chat-area {
+  animation: chat-enter-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+
+@keyframes chat-enter-fade-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes chat-enter-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #chat-container,
   #setup-container {
     transition: opacity 0.01ms linear !important;
+    animation: none !important;
+  }
+
+  #chat-container .chat-header,
+  #chat-container .chat-area {
     animation: none !important;
   }
 }
