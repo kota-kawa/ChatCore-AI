@@ -592,6 +592,7 @@ export default function MemoPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
 
   // Collections sidebar
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isCollectionPanelOpen, setIsCollectionPanelOpen] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionColor, setNewCollectionColor] = useState("#6b7280");
@@ -1596,8 +1597,21 @@ export default function MemoPage() {
 
         <user-icon id="userIcon" style={{ display: isLoggedIn ? "" : "none" }}></user-icon>
 
-        <div className="memo-layout">
+        <div className={`memo-layout${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
           <aside className="memo-sidebar">
+            <header className="memo-sidebar-header">
+              <span className="memo-sidebar-title">Notebook</span>
+              <button
+                type="button"
+                className="memo-sidebar-toggle"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                data-tooltip={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
+                data-tooltip-placement="right"
+              >
+                <i className={`bi ${isSidebarCollapsed ? "bi-layout-sidebar" : "bi-layout-sidebar-inset"}`}></i>
+              </button>
+            </header>
+
             <nav className="memo-sidebar-nav">
               <button
                 type="button"
