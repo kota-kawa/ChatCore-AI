@@ -73,6 +73,8 @@ function ChatMainSectionComponent() {
 
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const chatRoomsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
   const selectedRoomCount = selectedRoomIds.size;
   const hasSelectedRooms = selectedRoomCount > 0;
@@ -140,6 +142,29 @@ function ChatMainSectionComponent() {
     },
     [chatRoomsHasMore, isLoadingMoreChatRooms, loadMoreChatRooms],
   );
+
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    const sentinel = chatRoomsLoadMoreRef.current;
+    if (!sidebar || !sentinel || !chatRoomsHasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        void loadMoreChatRooms();
+      },
+      {
+        root: sidebar,
+        rootMargin: "160px 0px",
+        threshold: 0,
+      },
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [chatRooms.length, chatRoomsHasMore, loadMoreChatRooms]);
 
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
@@ -252,6 +277,7 @@ function ChatMainSectionComponent() {
 
       <div className={`chat-main ${sidebarOpen ? "chat-main--sidebar-open" : "chat-main--sidebar-closed"}`.trim()}>
         <div
+          ref={sidebarRef}
           className={`sidebar ${sidebarOpen ? "open" : ""}`.trim()}
           id="chat-room-sidebar"
           aria-hidden={sidebarOpen ? "false" : "true"}
@@ -406,6 +432,7 @@ function ChatMainSectionComponent() {
                 <InlineLoading label="読み込み中" />
               </div>
             )}
+            <div ref={chatRoomsLoadMoreRef} className="chat-room-list__sentinel" aria-hidden="true" />
           </div>
         </div>
 

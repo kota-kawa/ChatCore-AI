@@ -1,10 +1,11 @@
 import asyncio
 import json
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from blueprints.chat.messages import chat
-from blueprints.chat.rooms import get_chat_rooms, new_chat_room
+from blueprints.chat.rooms import _encode_room_list_cursor, _fetch_persisted_user_rooms, get_chat_rooms, new_chat_room
 from starlette.responses import StreamingResponse
 from tests.helpers.request_helpers import build_request
 
@@ -53,11 +54,11 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual([room["id"] for room in payload["rooms"]], ["room-normal"])
 
-    def test_get_chat_rooms_paginates_persisted_rooms(self):
+    def test_get_chat_rooms_paginates_persisted_rooms_with_cursor(self):
         request = build_request(
             method="GET",
             path="/api/get_chat_rooms",
-            query_string=b"limit=20&offset=20",
+            query_string=b"limit=20",
             session={"user_id": 7},
         )
 
@@ -79,8 +80,85 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(len(payload["rooms"]), 20)
         self.assertTrue(payload["pagination"]["has_more"])
-        self.assertEqual(payload["pagination"]["next_offset"], 40)
-        fetch_rooms.assert_called_once_with(7, limit=21, offset=20)
+        self.assertIsInstance(payload["pagination"]["next_cursor"], str)
+        self.assertNotIn("next_offset", payload["pagination"])
+        fetch_rooms.assert_called_once_with(7, limit=21, cursor=None)
+
+    def test_get_chat_rooms_passes_decoded_cursor_to_fetch(self):
+        cursor = _encode_room_list_cursor(
+            {"id": "room-20", "created_at": "2026-04-20T10:00:00"}
+        )
+        request = build_request(
+            method="GET",
+            path="/api/get_chat_rooms",
+            query_string=f"limit=20&cursor={cursor}".encode("utf-8"),
+            session={"user_id": 7},
+        )
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=[]) as fetch_rooms:
+                response = asyncio.run(get_chat_rooms(request))
+
+        self.assertEqual(response.status_code, 200)
+        fetch_rooms.assert_called_once_with(
+            7,
+            limit=21,
+            cursor=(datetime(2026, 4, 20, 10, 0, 0), "room-20"),
+        )
+
+    def test_get_chat_rooms_rejects_invalid_cursor(self):
+        request = build_request(
+            method="GET",
+            path="/api/get_chat_rooms",
+            query_string=b"limit=20&cursor=invalid",
+            session={"user_id": 7},
+        )
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms._fetch_persisted_user_rooms") as fetch_rooms:
+                response = asyncio.run(get_chat_rooms(request))
+
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "invalid cursor")
+        fetch_rooms.assert_not_called()
+
+    def test_fetch_persisted_user_rooms_uses_stable_keyset_query(self):
+        class Cursor:
+            def __init__(self):
+                self.query = ""
+                self.params = ()
+
+            def execute(self, query, params):
+                self.query = query
+                self.params = params
+
+            def fetchall(self):
+                return [("room-21", "Room 21", "normal", datetime(2026, 4, 19, 10, 0, 0))]
+
+            def close(self):
+                pass
+
+        class Connection:
+            def __init__(self):
+                self.cursor_instance = Cursor()
+
+            def cursor(self):
+                return self.cursor_instance
+
+            def close(self):
+                pass
+
+        connection = Connection()
+        cursor_value = (datetime(2026, 4, 20, 10, 0, 0), "room-20")
+
+        with patch("blueprints.chat.rooms.get_db_connection", return_value=connection):
+            rooms = _fetch_persisted_user_rooms(7, limit=21, cursor=cursor_value)
+
+        self.assertEqual([room["id"] for room in rooms], ["room-21"])
+        self.assertIn("AND (created_at, id) < (%s, %s)", connection.cursor_instance.query)
+        self.assertIn("ORDER BY created_at DESC, id DESC", connection.cursor_instance.query)
+        self.assertEqual(connection.cursor_instance.params, (7, cursor_value[0], "room-20", 21))
 
     def test_chat_uses_ephemeral_store_for_authenticated_temporary_room(self):
         request = build_request(

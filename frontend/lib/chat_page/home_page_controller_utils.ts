@@ -1,4 +1,4 @@
-import type { NormalizedTask, UiChatMessage } from "./types";
+import type { ChatRoom, NormalizedTask, UiChatMessage } from "./types";
 
 export function buildTaskOrderForPersistence(tasks: NormalizedTask[]) {
   return tasks
@@ -27,4 +27,34 @@ export function isLatestChatTurnAnswered(messages: Pick<UiChatMessage, "sender">
   }
 
   return latestAssistantIndex > latestUserIndex;
+}
+
+export function mergeUniqueChatRooms(primary: ChatRoom[], secondary: ChatRoom[]): ChatRoom[] {
+  const seen = new Set<string>();
+  const merged: ChatRoom[] = [];
+  [...primary, ...secondary].forEach((room) => {
+    if (seen.has(room.id)) return;
+    seen.add(room.id);
+    merged.push(room);
+  });
+  return merged;
+}
+
+export function removeChatRoomsById(rooms: ChatRoom[], roomIds: Iterable<string>): ChatRoom[] {
+  const removed = new Set(roomIds);
+  if (removed.size === 0) return rooms;
+  return rooms.filter((room) => !removed.has(room.id));
+}
+
+export function updateChatRoomTitle(rooms: ChatRoom[], roomId: string, title: string): ChatRoom[] {
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) return rooms;
+  return rooms.map((room) =>
+    room.id === roomId
+      ? {
+          ...room,
+          title: normalizedTitle,
+        }
+      : room,
+  );
 }

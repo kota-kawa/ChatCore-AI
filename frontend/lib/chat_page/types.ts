@@ -19,7 +19,7 @@ export type ChatRoom = {
 
 export type ChatRoomsPagination = {
   hasMore: boolean;
-  nextOffset: number | null;
+  nextCursor: string | null;
 };
 
 export type ChatRoomsPage = {

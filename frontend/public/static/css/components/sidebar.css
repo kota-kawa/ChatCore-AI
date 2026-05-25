@@ -21,6 +21,11 @@
   padding: 0.6rem 0 0.4rem;
 }
 
+.chat-room-list__sentinel {
+  width: 100%;
+  min-height: 1px;
+}
+
 /* ルームカード */
 .chat-room-card {
   background: transparent;

@@ -42,14 +42,14 @@ test("normalizeChatRoomsPayload keeps room pagination", () => {
     rooms: [{ id: "room-1", title: "Room 1", mode: "normal" }],
     pagination: {
       has_more: true,
-      next_offset: 20,
+      next_cursor: "cursor-20",
     },
   });
 
   assert.equal(normalized.rooms.length, 1);
   assert.deepEqual(normalized.pagination, {
     hasMore: true,
-    nextOffset: 20,
+    nextCursor: "cursor-20",
   });
 });
 
