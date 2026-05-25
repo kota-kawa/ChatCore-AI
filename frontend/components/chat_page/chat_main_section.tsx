@@ -516,6 +516,7 @@ function ChatMainSectionComponent() {
                 }}
               >
                 <i className={`bi ${isGenerating ? "bi-stop-fill" : "bi-send"}`}></i>
+                <div className="send-btn-spinner"></div>
               </button>
             </div>
             {chatInput.length > 0 && (
