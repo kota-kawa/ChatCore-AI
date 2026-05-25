@@ -22,6 +22,26 @@ import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } 
 
 const POINTER_DRAG_START_THRESHOLD_PX = 8;
 
+type TaskCardProps = {
+  task: NormalizedTask;
+  index: number;
+  taskDomKey: string;
+  isEditing: boolean;
+  isDragging: boolean;
+  isLaunching: boolean;
+  setTaskWrapperRef: (taskDomKey: string, node: HTMLDivElement | null) => void;
+  onTaskPointerDown: (
+    event: ReactPointerEvent<HTMLDivElement>,
+    index: number,
+    taskDomKey: string,
+  ) => void;
+  onFinishPointerDrag: () => void;
+  onLaunch: (task: NormalizedTask) => void | Promise<void>;
+  onDelete: (taskName: string) => void | Promise<void>;
+  onEdit: (task: NormalizedTask) => void;
+  onShowDetail: (task: NormalizedTask) => void;
+};
+
 function TemporaryChatIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -50,6 +70,108 @@ function TemporaryChatCheckIcon() {
     </svg>
   );
 }
+
+const TaskCard = memo(function TaskCard({
+  task,
+  index,
+  taskDomKey,
+  isEditing,
+  isDragging,
+  isLaunching,
+  setTaskWrapperRef,
+  onTaskPointerDown,
+  onFinishPointerDrag,
+  onLaunch,
+  onDelete,
+  onEdit,
+  onShowDetail,
+}: TaskCardProps) {
+  return (
+    <div
+      ref={(node) => {
+        setTaskWrapperRef(taskDomKey, node);
+      }}
+      className={`task-wrapper ${isEditing ? "editable" : ""} ${isDragging ? "dragging" : ""}`.trim()}
+      data-task-index={index}
+      data-task-dom-key={taskDomKey}
+      onPointerDown={(event) => {
+        onTaskPointerDown(event, index, taskDomKey);
+      }}
+    >
+      <div
+        className={`prompt-card ${isEditing ? "editable" : ""}`.trim()}
+        data-launching={isLaunching ? "true" : "false"}
+        data-task={task.name}
+        data-prompt_template={task.prompt_template}
+        data-response_rules={task.response_rules}
+        data-output_skeleton={task.output_skeleton}
+        data-input_examples={task.input_examples}
+        data-output_examples={task.output_examples}
+        data-is_default={task.is_default ? "true" : "false"}
+        onClick={() => {
+          if (isEditing) return;
+          void onLaunch(task);
+        }}
+      >
+        {isEditing && (
+          <>
+            <div className="task-card-action-container task-card-action-container--delete">
+              <button
+                type="button"
+                className="card-delete-btn"
+                data-tooltip="このタスクを削除"
+                data-tooltip-placement="top"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onFinishPointerDrag();
+                  void onDelete(task.name);
+                }}
+              >
+                <i className="bi bi-trash"></i>
+              </button>
+            </div>
+
+            <div className="task-card-action-container task-card-action-container--edit">
+              <button
+                type="button"
+                className="card-edit-btn"
+                data-tooltip="このタスクを編集"
+                data-tooltip-placement="top"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onFinishPointerDrag();
+                  onEdit(task);
+                }}
+              >
+                <i className="bi bi-pencil"></i>
+              </button>
+            </div>
+          </>
+        )}
+
+        <div className="header-container">
+          <div className="task-header">{task.name}</div>
+          <button
+            type="button"
+            className="task-detail-toggle"
+            aria-label={`${task.name}の詳細を表示`}
+            data-tooltip="タスクの詳細を表示"
+            data-tooltip-placement="top"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onFinishPointerDrag();
+              onShowDetail(task);
+            }}
+          >
+            <i className="bi bi-caret-down"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+TaskCard.displayName = "TaskCard";
 
 function SetupSectionComponent() {
   const {
@@ -957,91 +1079,22 @@ function SetupSectionComponent() {
           {(isTaskOrderEditing ? tasks : tasks.slice(0, taskCollapseLimit)).map((task, index) => {
             const taskDomKey = getTaskDomKey(task);
             return (
-              <div
+              <TaskCard
                 key={taskDomKey}
-                ref={(node) => {
-                  setTaskWrapperRef(taskDomKey, node);
-                }}
-                className={`task-wrapper ${isTaskOrderEditing ? "editable" : ""} ${
-                  draggingTaskIndex === index ? "dragging" : ""
-                }`.trim()}
-                data-task-index={index}
-                data-task-dom-key={taskDomKey}
-                onPointerDown={(event) => {
-                  handleTaskPointerDown(event, index, taskDomKey);
-                }}
-              >
-                <div
-                  className={`prompt-card ${isTaskOrderEditing ? "editable" : ""}`.trim()}
-                  data-launching={launchingTaskName === task.name ? "true" : "false"}
-                  data-task={task.name}
-                  data-prompt_template={task.prompt_template}
-                  data-response_rules={task.response_rules}
-                  data-output_skeleton={task.output_skeleton}
-                  data-input_examples={task.input_examples}
-                  data-output_examples={task.output_examples}
-                  data-is_default={task.is_default ? "true" : "false"}
-                  onClick={() => {
-                    if (isTaskOrderEditing) return;
-                    void handleTaskCardLaunch(task);
-                  }}
-                >
-                  {isTaskOrderEditing && (
-                    <>
-                      <div className="task-card-action-container task-card-action-container--delete">
-                        <button
-                          type="button"
-                          className="card-delete-btn"
-                          data-tooltip="このタスクを削除"
-                          data-tooltip-placement="top"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            finishPointerDrag();
-                            void handleTaskDelete(task.name);
-                          }}
-                        >
-                          <i className="bi bi-trash"></i>
-                        </button>
-                      </div>
-
-                      <div className="task-card-action-container task-card-action-container--edit">
-                        <button
-                          type="button"
-                          className="card-edit-btn"
-                          data-tooltip="このタスクを編集"
-                          data-tooltip-placement="top"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            finishPointerDrag();
-                            openTaskEditModal(task);
-                          }}
-                        >
-                          <i className="bi bi-pencil"></i>
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="header-container">
-                    <div className="task-header">{task.name}</div>
-                    <button
-                      type="button"
-                      className="task-detail-toggle"
-                      aria-label={`${task.name}の詳細を表示`}
-                      data-tooltip="タスクの詳細を表示"
-                      data-tooltip-placement="top"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        finishPointerDrag();
-                        setTaskDetail(task);
-                      }}
-                    >
-                      <i className="bi bi-caret-down"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
+                task={task}
+                index={index}
+                taskDomKey={taskDomKey}
+                isEditing={isTaskOrderEditing}
+                isDragging={draggingTaskIndex === index}
+                isLaunching={launchingTaskName === task.name}
+                setTaskWrapperRef={setTaskWrapperRef}
+                onTaskPointerDown={handleTaskPointerDown}
+                onFinishPointerDrag={finishPointerDrag}
+                onLaunch={handleTaskCardLaunch}
+                onDelete={handleTaskDelete}
+                onEdit={openTaskEditModal}
+                onShowDetail={setTaskDetail}
+              />
             );
           })}
 
@@ -1052,54 +1105,22 @@ function SetupSectionComponent() {
                   const index = taskCollapseLimit + offsetIndex;
                   const taskDomKey = getTaskDomKey(task);
                   return (
-                    <div
+                    <TaskCard
                       key={taskDomKey}
-                      ref={(node) => {
-                        setTaskWrapperRef(taskDomKey, node);
-                      }}
-                      className={`task-wrapper ${
-                        draggingTaskIndex === index ? "dragging" : ""
-                      }`.trim()}
-                      data-task-index={index}
-                      data-task-dom-key={taskDomKey}
-                      onPointerDown={(event) => {
-                        handleTaskPointerDown(event, index, taskDomKey);
-                      }}
-                    >
-                      <div
-                        className="prompt-card"
-                        data-launching={launchingTaskName === task.name ? "true" : "false"}
-                        data-task={task.name}
-                        data-prompt_template={task.prompt_template}
-                        data-response_rules={task.response_rules}
-                        data-output_skeleton={task.output_skeleton}
-                        data-input_examples={task.input_examples}
-                        data-output_examples={task.output_examples}
-                        data-is_default={task.is_default ? "true" : "false"}
-                        onClick={() => {
-                          void handleTaskCardLaunch(task);
-                        }}
-                      >
-                        <div className="header-container">
-                          <div className="task-header">{task.name}</div>
-                          <button
-                            type="button"
-                            className="task-detail-toggle"
-                            aria-label={`${task.name}の詳細を表示`}
-                            data-tooltip="タスクの詳細を表示"
-                            data-tooltip-placement="top"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              finishPointerDrag();
-                              setTaskDetail(task);
-                            }}
-                          >
-                            <i className="bi bi-caret-down"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                      task={task}
+                      index={index}
+                      taskDomKey={taskDomKey}
+                      isEditing={false}
+                      isDragging={draggingTaskIndex === index}
+                      isLaunching={launchingTaskName === task.name}
+                      setTaskWrapperRef={setTaskWrapperRef}
+                      onTaskPointerDown={handleTaskPointerDown}
+                      onFinishPointerDrag={finishPointerDrag}
+                      onLaunch={handleTaskCardLaunch}
+                      onDelete={handleTaskDelete}
+                      onEdit={openTaskEditModal}
+                      onShowDetail={setTaskDetail}
+                    />
                   );
                 })}
               </div>
