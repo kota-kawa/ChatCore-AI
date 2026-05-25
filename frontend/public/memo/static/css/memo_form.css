@@ -1,17 +1,17 @@
 body.memo-page {
-  --memo-amber: #0f766e;
-  --memo-amber-strong: #155e75;
-  --memo-amber-soft: rgba(15, 118, 110, 0.12);
-  --memo-border: rgba(21, 94, 117, 0.15);
-  --memo-text: #182421;
-  --memo-text-muted: #66756f;
+  --memo-amber: #d97706;
+  --memo-amber-strong: #b45309;
+  --memo-amber-soft: rgba(217, 119, 6, 0.12);
+  --memo-border: rgba(217, 119, 6, 0.15);
+  --memo-text: #1c1009;
+  --memo-text-muted: #78716c;
   --memo-card: rgba(255, 255, 255, 0.92);
   --memo-card-strong: rgba(255, 255, 255, 0.98);
   --memo-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
   margin: 0;
   min-height: 100vh;
   color: var(--memo-text);
-  background: #f6f9f8;
+  background: #fffbf5;
   font-family: var(--font-app-sans), "Segoe UI", sans-serif;
 }
 
@@ -23,7 +23,7 @@ body.memo-page.modal-open {
   min-height: 100vh;
   position: relative;
   padding: 1rem;
-  background: linear-gradient(180deg, #f8fbfa 0%, #eef6f4 46%, #f7f7fb 100%);
+  background: linear-gradient(180deg, #fffdf7 0%, #fef9ec 46%, #fffff5 100%);
   display: flex;
   flex-direction: column;
 }
@@ -50,7 +50,7 @@ body.memo-page.modal-open {
   overflow: hidden;
   transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(15, 118, 110, 0.11);
+  border: 1px solid rgba(217, 119, 6, 0.18);
   border-radius: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 6px 20px rgba(0, 0, 0, 0.06);
 }
@@ -71,7 +71,7 @@ body.memo-page.modal-open {
   justify-content: space-between;
   padding: 0.875rem 0.75rem 0.75rem;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(15, 118, 110, 0.08);
+  border-bottom: 1px solid rgba(217, 119, 6, 0.1);
 }
 
 .memo-sidebar-brand {
@@ -86,21 +86,21 @@ body.memo-page.modal-open {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #0f766e 0%, #155e75 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   color: #fff;
   font-size: 0.78rem;
-  box-shadow: 0 2px 6px rgba(15, 118, 110, 0.28);
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.32);
 }
 
 .memo-sidebar-title {
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #1a3230;
+  color: #7c2d12;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -124,8 +124,8 @@ body.memo-page.modal-open {
 }
 
 .memo-sidebar-toggle:hover {
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
 }
 
 /* ---- Scrollable inner content ---- */
@@ -184,13 +184,13 @@ body.memo-page.modal-open {
 }
 
 .memo-sidebar-nav__item:hover {
-  background: rgba(15, 118, 110, 0.07);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.07);
+  color: #d97706;
 }
 
 .memo-sidebar-nav__item.is-active {
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
   font-weight: 600;
 }
 
@@ -203,7 +203,7 @@ body.memo-page.modal-open {
   width: 3px;
   height: 55%;
   border-radius: 0 3px 3px 0;
-  background: #0f766e;
+  background: #d97706;
 }
 
 .memo-sidebar-nav__item i {
@@ -225,7 +225,7 @@ body.memo-page.modal-open {
 
 .memo-sidebar-divider {
   height: 1px;
-  background: rgba(15, 118, 110, 0.07);
+  background: rgba(217, 119, 6, 0.1);
   margin: 0.625rem 0.75rem;
   flex-shrink: 0;
 }
@@ -299,13 +299,13 @@ body.memo-page.modal-open {
 }
 
 .memo-sidebar-collection-item:hover {
-  background: rgba(15, 118, 110, 0.07);
+  background: rgba(217, 119, 6, 0.07);
   color: #374151;
 }
 
 .memo-sidebar-collection-item.is-active {
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
   font-weight: 600;
 }
 
@@ -344,8 +344,8 @@ body.memo-page.modal-open {
 }
 
 .memo-sidebar-collection-item.is-active .memo-sidebar-collection-count {
-  background: rgba(15, 118, 110, 0.15);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.15);
+  color: #d97706;
 }
 
 .memo-sidebar-collection-empty {
@@ -374,8 +374,8 @@ body.memo-page.modal-open {
 }
 
 .memo-sidebar-manage-btn:hover {
-  background: rgba(15, 118, 110, 0.07);
-  color: #0f766e;
+  background: rgba(217, 119, 6, 0.07);
+  color: #d97706;
 }
 
 .memo-sidebar-manage-btn i {
@@ -606,8 +606,8 @@ body.memo-page.modal-open {
 }
 
 .memo-toolbar__search:focus-within {
-  border-color: rgba(15, 118, 110, 0.42);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+  border-color: rgba(217, 119, 6, 0.42);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
   background: #fff;
 }
 
@@ -864,7 +864,7 @@ body.memo-page.modal-open {
 }
 
 .memo-item:hover {
-  border-color: rgba(15, 118, 110, 0.2);
+  border-color: rgba(217, 119, 6, 0.2);
   transform: translateY(-2px);
   box-shadow:
     0 12px 24px -8px rgba(15, 23, 42, 0.12),
@@ -1082,7 +1082,7 @@ body.memo-page.modal-open {
 }
 
 .memo-item__action.is-copied {
-  background: rgba(15, 118, 110, 0.14);
+  background: rgba(217, 119, 6, 0.14);
   color: #b45309;
 }
 
@@ -1426,8 +1426,8 @@ textarea.memo-control {
 
 .memo-modal__autosave-status--saving {
   color: #b45309;
-  border-color: rgba(15, 118, 110, 0.28);
-  background: rgba(15, 118, 110, 0.1);
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(217, 119, 6, 0.1);
 }
 
 .memo-modal__autosave-status--saved {
@@ -1528,7 +1528,7 @@ textarea.memo-control {
 .memo-modal__body,
 .memo-collection-modal__body {
   scrollbar-width: thin;
-  scrollbar-color: rgba(15, 118, 110, 0.38) transparent;
+  scrollbar-color: rgba(217, 119, 6, 0.38) transparent;
 }
 
 .memo-modal__body::-webkit-scrollbar,
@@ -1547,8 +1547,8 @@ textarea.memo-control {
 .memo-collection-modal__body::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
-    rgba(15, 118, 110, 0.52) 0%,
-    rgba(21, 94, 117, 0.52) 100%
+    rgba(217, 119, 6, 0.52) 0%,
+    rgba(180, 83, 9, 0.52) 100%
   );
   border-radius: 999px;
   border: 1.5px solid rgba(255, 251, 235, 0.72);
@@ -1559,8 +1559,8 @@ textarea.memo-control {
 .memo-collection-modal__body::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
-    rgba(15, 118, 110, 0.74) 0%,
-    rgba(21, 94, 117, 0.74) 100%
+    rgba(217, 119, 6, 0.74) 0%,
+    rgba(180, 83, 9, 0.74) 100%
   );
 }
 
@@ -2842,13 +2842,13 @@ textarea.memo-control {
 }
 
 .memo-select__trigger:hover:not(:disabled) {
-  border-color: rgba(15, 118, 110, 0.45);
+  border-color: rgba(217, 119, 6, 0.45);
   background: rgba(255, 255, 255, 1);
 }
 
 .memo-select.is-open .memo-select__trigger {
   border-color: var(--memo-amber);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.12);
 }
 
 .memo-select.is-disabled .memo-select__trigger {
@@ -2889,11 +2889,11 @@ textarea.memo-control {
   padding: 0.38rem;
   list-style: none;
   background: rgba(255, 251, 240, 0.98);
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid rgba(217, 119, 6, 0.18);
   border-radius: 14px;
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.16),
-    0 4px 10px rgba(15, 118, 110, 0.08);
+    0 4px 10px rgba(217, 119, 6, 0.08);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   animation: memo-select-drop 0.14s ease;
@@ -2919,13 +2919,13 @@ textarea.memo-control {
 }
 
 .memo-select__option:hover {
-  background: rgba(15, 118, 110, 0.09);
-  color: #0c5e58;
+  background: rgba(217, 119, 6, 0.09);
+  color: #92400e;
 }
 
 .memo-select__option.is-selected {
-  background: rgba(15, 118, 110, 0.11);
-  color: #0c5e58;
+  background: rgba(217, 119, 6, 0.11);
+  color: #92400e;
   font-weight: 700;
 }
 
@@ -3001,8 +3001,8 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-sidebar-toggle:hover {
-  background: rgba(15, 118, 110, 0.18);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-sidebar-nav__item {
@@ -3010,13 +3010,13 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-sidebar-nav__item:hover {
-  background: rgba(15, 118, 110, 0.14);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-sidebar-nav__item.is-active {
-  background: rgba(15, 118, 110, 0.18);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-sidebar-divider {
@@ -3032,13 +3032,13 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-sidebar-collection-item:hover {
-  background: rgba(15, 118, 110, 0.12);
+  background: rgba(245, 158, 11, 0.12);
   color: #cbd5e1;
 }
 
 [data-theme="dark"] .memo-sidebar-collection-item.is-active {
-  background: rgba(15, 118, 110, 0.18);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-sidebar-collection-count {
@@ -3047,8 +3047,8 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-sidebar-collection-item.is-active .memo-sidebar-collection-count {
-  background: rgba(15, 118, 110, 0.22);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-sidebar-collection-empty {
@@ -3060,8 +3060,8 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-sidebar-manage-btn:hover {
-  background: rgba(15, 118, 110, 0.12);
-  color: #5eead4;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
 }
 
 [data-theme="dark"] .memo-collection-modal__content,
@@ -3725,7 +3725,7 @@ body.memo-page {
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #0f766e 0%, #155e75 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -3802,9 +3802,9 @@ body.memo-page {
 }
 
 .memo-toolbar__icon-btn.is-active {
-  background: rgba(15, 118, 110, 0.12);
+  background: rgba(217, 119, 6, 0.12);
   color: #b45309;
-  border-color: rgba(15, 118, 110, 0.28);
+  border-color: rgba(217, 119, 6, 0.28);
 }
 
 /* Collapsible search/filter region: flows into the toolbar grid on desktop. */
@@ -3912,9 +3912,9 @@ body.memo-page {
 .memo-filter-chip.is-active,
 .memo-collection-chip.is-active,
 .memo-response-tab.is-active {
-  background: rgba(15, 118, 110, 0.1);
+  background: rgba(217, 119, 6, 0.1);
   color: #b45309;
-  border-color: rgba(15, 118, 110, 0.34);
+  border-color: rgba(217, 119, 6, 0.34);
 }
 
 .memo-sort-control__select {
