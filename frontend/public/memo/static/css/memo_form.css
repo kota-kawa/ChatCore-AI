@@ -1478,10 +1478,10 @@ textarea.memo-control {
 }
 
 .memo-modal__section {
-  border: 1px solid rgba(191, 122, 23, 0.15);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0.9rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .memo-modal__section h4 {
@@ -2176,8 +2176,8 @@ textarea.memo-control {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 0.7rem;
-  background: var(--memo-detail-color, rgba(255, 255, 255, 0.9));
+  gap: 0;
+  background: var(--memo-detail-color, transparent);
 }
 
 .memo-modal__edit-fields {
@@ -2185,7 +2185,7 @@ textarea.memo-control {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 0.5rem;
+  gap: 0;
 }
 
 .memo-modal__meta-panel {
@@ -2193,6 +2193,7 @@ textarea.memo-control {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.64);
   padding: 0.68rem;
+  margin-bottom: 0.7rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -2260,8 +2261,9 @@ textarea.memo-control {
 .memo-modal__response-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.5rem;
+  padding-bottom: 0.4rem;
 }
 
 .memo-modal__edit-textarea {
@@ -2274,12 +2276,30 @@ textarea.memo-control {
   flex: 1 1 auto;
   min-height: 0;
   resize: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.3rem 0;
+  box-shadow: none;
+  outline: none;
+}
+
+.memo-modal__edit-textarea--response:focus,
+.memo-modal__edit-textarea--response:focus-visible {
+  border: none;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
 }
 
 .memo-modal__preview-pane {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.3rem 0;
 }
 
 .memo-modal__edit-actions {
@@ -3533,10 +3553,13 @@ textarea.memo-control {
 }
 
 [data-theme="dark"] .memo-modal__content,
-[data-theme="dark"] .memo-share-modal__content,
-[data-theme="dark"] .memo-modal__section,
-[data-theme="dark"] .memo-modal__meta-panel {
+[data-theme="dark"] .memo-share-modal__content {
   background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] .memo-modal__meta-panel {
+  background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.18);
 }
 
@@ -4749,7 +4772,6 @@ body.memo-page {
   color: #5f6368;
 }
 
-.memo-modal__section,
 .memo-modal__meta-panel,
 .memo-collection-create,
 .memo-collection-item {
@@ -5038,7 +5060,6 @@ body.memo-page {
 [data-theme="dark"] .memo-share-modal__content,
 [data-theme="dark"] .memo-collection-modal__content,
 [data-theme="dark"] .memo-export-modal__content,
-[data-theme="dark"] .memo-modal__section,
 [data-theme="dark"] .memo-modal__meta-panel,
 [data-theme="dark"] .memo-collection-create,
 [data-theme="dark"] .memo-collection-item,
@@ -5105,7 +5126,6 @@ body.memo-page {
 [data-theme="dark"] .memo-share-modal__content,
 [data-theme="dark"] .memo-collection-modal__content,
 [data-theme="dark"] .memo-export-modal__content,
-[data-theme="dark"] .memo-modal__section,
 [data-theme="dark"] .memo-modal__meta-panel,
 [data-theme="dark"] .memo-collection-create,
 [data-theme="dark"] .memo-collection-item,
