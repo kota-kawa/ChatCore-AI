@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
+import { InlineLoading } from "../ui/inline_loading";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
@@ -400,6 +401,11 @@ function ChatMainSectionComponent() {
                 </div>
               );
             })}
+            {isLoadingMoreChatRooms && (
+              <div className="chat-room-list__loading" role="status" aria-live="polite">
+                <InlineLoading label="読み込み中" />
+              </div>
+            )}
           </div>
         </div>
 
