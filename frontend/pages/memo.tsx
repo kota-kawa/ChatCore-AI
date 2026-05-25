@@ -2263,7 +2263,6 @@ export default function MemoPage() {
               <div className="memo-modal__body memo-modal__body--edit">
                 <section
                   className="memo-modal__section memo-modal__section--full memo-modal__edit-form"
-                  style={detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } as React.CSSProperties : undefined}
                 >
                   <div className="memo-modal__edit-fields">
                     {detailMetaOpen && (
