@@ -7,6 +7,7 @@ import {
   normalizeChatHistoryPagination,
   normalizeChatRoom,
   normalizeChatRooms,
+  normalizeChatRoomsPayload,
 } from "../lib/chat_page/api_contract";
 
 test("normalizeChatRoom normalizes incomplete payloads", () => {
@@ -34,6 +35,22 @@ test("normalizeChatRooms drops invalid room entries", () => {
 
   assert.equal(normalized.length, 1);
   assert.equal(normalized[0]?.id, "room-1");
+});
+
+test("normalizeChatRoomsPayload keeps room pagination", () => {
+  const normalized = normalizeChatRoomsPayload({
+    rooms: [{ id: "room-1", title: "Room 1", mode: "normal" }],
+    pagination: {
+      has_more: true,
+      next_offset: 20,
+    },
+  });
+
+  assert.equal(normalized.rooms.length, 1);
+  assert.deepEqual(normalized.pagination, {
+    hasMore: true,
+    nextOffset: 20,
+  });
 });
 
 test("normalizeChatHistoryMessages keeps known fields only", () => {

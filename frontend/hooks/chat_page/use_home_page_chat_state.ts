@@ -5,6 +5,9 @@ import type { AttachedFile, ChatRoom, ChatRoomMode, UiChatMessage } from "../../
 
 export function useHomePageChatState() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [chatRoomsHasMore, setChatRoomsHasMore] = useState(false);
+  const [chatRoomsNextOffset, setChatRoomsNextOffset] = useState<number | null>(null);
+  const [isLoadingMoreChatRooms, setIsLoadingMoreChatRooms] = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [currentRoomMode, setCurrentRoomMode] = useState<ChatRoomMode>("normal");
   const [messages, setRawMessages] = useState<UiChatMessage[]>([]);
@@ -41,6 +44,12 @@ export function useHomePageChatState() {
   return {
     chatRooms,
     setChatRooms,
+    chatRoomsHasMore,
+    setChatRoomsHasMore,
+    chatRoomsNextOffset,
+    setChatRoomsNextOffset,
+    isLoadingMoreChatRooms,
+    setIsLoadingMoreChatRooms,
     currentRoomId,
     setCurrentRoomId,
     currentRoomMode,

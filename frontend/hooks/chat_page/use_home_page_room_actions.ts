@@ -8,8 +8,8 @@ import {
 } from "react";
 import type { KeyedMutator } from "swr";
 
-import { MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
-import type { AttachedFile, ChatRoom, ChatRoomMode, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
+import { CHAT_ROOMS_PAGE_SIZE, MAX_CHAT_MESSAGE_LENGTH, MAX_SETUP_INFO_LENGTH } from "../../lib/chat_page/constants";
+import type { AttachedFile, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import {
@@ -19,7 +19,6 @@ import {
 import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
-
 function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
@@ -41,7 +40,7 @@ type UseHomePageRoomActionsParams = {
   closeShareModal: () => void;
   createNewChatRoom: (roomId: string, title: string, mode: ChatRoomMode) => Promise<void>;
   currentRoomIdRef: MutableRefObject<string | null>;
-  fetchChatRooms: (url: string) => Promise<ChatRoom[]>;
+  fetchChatRoomsPage: (url: string) => Promise<ChatRoomsPage>;
   editAndRegenerateMessage: (newMessage: string, trailingUserCount: number, model: string, roomId: string) => Promise<void>;
   attachedFiles: AttachedFile[];
   setAttachedFiles: Dispatch<SetStateAction<AttachedFile[]>>;
@@ -59,7 +58,7 @@ type UseHomePageRoomActionsParams = {
   loadChatHistory: (roomId: string, shouldCheckGeneration?: boolean) => Promise<void>;
   loadLocalChatHistory: (roomId: string) => void;
   loggedIn: boolean;
-  mutateChatRooms: KeyedMutator<ChatRoom[]>;
+  mutateChatRooms: KeyedMutator<ChatRoomsPage>;
   pageViewState: PageViewState;
   persistCurrentRoomId: (roomId: string | null, mode?: ChatRoomMode) => void;
   prepareChatViewTransition: () => void;
@@ -72,6 +71,8 @@ type UseHomePageRoomActionsParams = {
   selectedRoomIds: Set<string>;
   setChatInput: Dispatch<SetStateAction<string>>;
   setChatRooms: Dispatch<SetStateAction<ChatRoom[]>>;
+  setChatRoomsHasMore: Dispatch<SetStateAction<boolean>>;
+  setChatRoomsNextOffset: Dispatch<SetStateAction<number | null>>;
   setCurrentRoomMode: Dispatch<SetStateAction<ChatRoomMode>>;
   setHistoryHasMore: Dispatch<SetStateAction<boolean>>;
   setIsBulkDeletingRooms: Dispatch<SetStateAction<boolean>>;
@@ -100,7 +101,7 @@ export function useHomePageRoomActions({
   createNewChatRoom,
   currentRoomIdRef,
   editAndRegenerateMessage,
-  fetchChatRooms,
+  fetchChatRoomsPage,
   generateResponse,
   regenerateLastResponse,
   switchBranch,
@@ -122,6 +123,8 @@ export function useHomePageRoomActions({
   selectedRoomIds,
   setChatInput,
   setChatRooms,
+  setChatRoomsHasMore,
+  setChatRoomsNextOffset,
   setCurrentRoomMode,
   setHistoryHasMore,
   setIsBulkDeletingRooms,
@@ -139,6 +142,14 @@ export function useHomePageRoomActions({
   setShareUrl,
 }: UseHomePageRoomActionsParams) {
   const accessChatInProgressRef = useRef(false);
+
+  const buildChatRoomsPageUrl = useCallback((offset = 0) => {
+    const params = new URLSearchParams({
+      limit: String(CHAT_ROOMS_PAGE_SIZE),
+      offset: String(offset),
+    });
+    return `/api/get_chat_rooms?${params.toString()}`;
+  }, []);
 
   const resetChatMessageList = useCallback(() => {
     setChatMessageListResetKey((previous) => previous + 1);
@@ -185,10 +196,16 @@ export function useHomePageRoomActions({
 
   const loadChatRooms = useCallback(async (): Promise<ChatRoom[]> => {
     try {
-      const rooms = loggedIn
-        ? (await mutateChatRooms()) ?? cachedChatRooms ?? []
-        : await fetchChatRooms("/api/get_chat_rooms");
+      const page = loggedIn
+        ? (await mutateChatRooms()) ?? {
+            rooms: cachedChatRooms ?? [],
+            pagination: { hasMore: false, nextOffset: null },
+          }
+        : await fetchChatRoomsPage(buildChatRoomsPageUrl(0));
+      const rooms = page.rooms;
       setChatRooms(rooms);
+      setChatRoomsHasMore(page.pagination.hasMore);
+      setChatRoomsNextOffset(page.pagination.nextOffset);
 
       const activeRoomId = currentRoomIdRef.current;
       if (activeRoomId) {
@@ -202,7 +219,18 @@ export function useHomePageRoomActions({
       console.error("ルーム一覧取得失敗:", error);
       return cachedChatRooms ?? [];
     }
-  }, [cachedChatRooms, loggedIn, mutateChatRooms]);
+  }, [
+    buildChatRoomsPageUrl,
+    cachedChatRooms,
+    currentRoomIdRef,
+    fetchChatRoomsPage,
+    loggedIn,
+    mutateChatRooms,
+    setChatRooms,
+    setChatRoomsHasMore,
+    setChatRoomsNextOffset,
+    setCurrentRoomMode,
+  ]);
 
   const upsertCreatedChatRoom = useCallback(
     (roomId: string, title: string, mode: ChatRoomMode) => {
@@ -214,17 +242,43 @@ export function useHomePageRoomActions({
         createdAt: new Date().toISOString(),
         mode,
       };
-      const upsert = (rooms: ChatRoom[] = []) => [
-        createdRoom,
-        ...rooms.filter((room) => room.id !== roomId),
-      ];
+      const upsert = (rooms: ChatRoom[] = [], maxLength?: number) => {
+        const nextRooms = [
+          createdRoom,
+          ...rooms.filter((room) => room.id !== roomId),
+        ];
+        return typeof maxLength === "number" ? nextRooms.slice(0, maxLength) : nextRooms;
+      };
 
       setChatRooms((previous) => upsert(previous));
-      void mutateChatRooms((previous) => upsert(previous ?? cachedChatRooms ?? chatRooms), {
-        revalidate: false,
-      });
+      setChatRoomsHasMore((previous) => previous || chatRooms.length >= CHAT_ROOMS_PAGE_SIZE);
+      setChatRoomsNextOffset((previous) => (
+        typeof previous === "number" ? previous : CHAT_ROOMS_PAGE_SIZE
+      ));
+      void mutateChatRooms(
+        (previous) => {
+          const previousRooms = previous?.rooms ?? cachedChatRooms ?? chatRooms;
+          const nextRooms = upsert(previousRooms, CHAT_ROOMS_PAGE_SIZE);
+          return {
+            rooms: nextRooms,
+            pagination: {
+              hasMore: previous?.pagination.hasMore === true || chatRooms.length >= CHAT_ROOMS_PAGE_SIZE,
+              nextOffset: previous?.pagination.nextOffset ?? CHAT_ROOMS_PAGE_SIZE,
+            },
+          };
+        },
+        { revalidate: false },
+      );
     },
-    [cachedChatRooms, chatRooms, loggedIn, mutateChatRooms, setChatRooms],
+    [
+      cachedChatRooms,
+      chatRooms,
+      loggedIn,
+      mutateChatRooms,
+      setChatRooms,
+      setChatRoomsHasMore,
+      setChatRoomsNextOffset,
+    ],
   );
 
   const switchChatRoom = useCallback(
@@ -285,7 +339,7 @@ export function useHomePageRoomActions({
     try {
       const activeRoomId = currentRoomIdRef.current;
       const preferredLoadedRoom =
-        (activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) : null) ?? chatRooms[0] ?? null;
+        activeRoomId ? chatRooms.find((room) => room.id === activeRoomId) ?? null : chatRooms[0] ?? null;
 
       if (preferredLoadedRoom) {
         switchChatRoom(preferredLoadedRoom.id, preferredLoadedRoom.mode, { forceReload: true });
@@ -310,10 +364,15 @@ export function useHomePageRoomActions({
       try {
         const rooms = await loadChatRooms();
         const preferredFetchedRoom =
-          (activeRoomId ? rooms.find((room) => room.id === activeRoomId) : null) ?? rooms[0] ?? null;
+          activeRoomId ? rooms.find((room) => room.id === activeRoomId) ?? null : rooms[0] ?? null;
 
         if (preferredFetchedRoom) {
           switchChatRoom(preferredFetchedRoom.id, preferredFetchedRoom.mode, { forceReload: true });
+          return;
+        }
+
+        if (activeRoomId) {
+          switchChatRoom(activeRoomId, "normal", { forceReload: true });
           return;
         }
 

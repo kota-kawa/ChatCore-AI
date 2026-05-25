@@ -62,6 +62,8 @@ type HomePageChatContextValue = Pick<
   | "hasCurrentRoom"
   | "sidebarOpen"
   | "chatRooms"
+  | "chatRoomsHasMore"
+  | "isLoadingMoreChatRooms"
   | "currentRoomId"
   | "currentRoomMode"
   | "openRoomActionsFor"
@@ -87,6 +89,7 @@ type HomePageChatContextValue = Pick<
   | "toggleRoomSelection"
   | "cancelRoomSelection"
   | "setSidebarOpen"
+  | "loadMoreChatRooms"
   | "loadOlderChatHistory"
   | "setChatInput"
   | "attachedFiles"
@@ -226,6 +229,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       hasCurrentRoom: controller.hasCurrentRoom,
       sidebarOpen: controller.sidebarOpen,
       chatRooms: controller.chatRooms,
+      chatRoomsHasMore: controller.chatRoomsHasMore,
+      isLoadingMoreChatRooms: controller.isLoadingMoreChatRooms,
       currentRoomId: controller.currentRoomId,
       currentRoomMode: controller.currentRoomMode,
       openRoomActionsFor: controller.openRoomActionsFor,
@@ -251,6 +256,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       toggleRoomSelection: controller.toggleRoomSelection,
       cancelRoomSelection: controller.cancelRoomSelection,
       setSidebarOpen: controller.setSidebarOpen,
+      loadMoreChatRooms: controller.loadMoreChatRooms,
       loadOlderChatHistory: controller.loadOlderChatHistory,
       setChatInput: controller.setChatInput,
       attachedFiles: controller.attachedFiles,
@@ -267,6 +273,8 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.hasCurrentRoom,
       controller.sidebarOpen,
       controller.chatRooms,
+      controller.chatRoomsHasMore,
+      controller.isLoadingMoreChatRooms,
       controller.currentRoomId,
       controller.currentRoomMode,
       controller.openRoomActionsFor,
@@ -292,6 +300,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.toggleRoomSelection,
       controller.cancelRoomSelection,
       controller.setSidebarOpen,
+      controller.loadMoreChatRooms,
       controller.loadOlderChatHistory,
       controller.setChatInput,
       controller.attachedFiles,

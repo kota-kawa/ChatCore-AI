@@ -53,6 +53,35 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual([room["id"] for room in payload["rooms"]], ["room-normal"])
 
+    def test_get_chat_rooms_paginates_persisted_rooms(self):
+        request = build_request(
+            method="GET",
+            path="/api/get_chat_rooms",
+            query_string=b"limit=20&offset=20",
+            session={"user_id": 7},
+        )
+
+        persisted_rooms = [
+            {
+                "id": f"room-{index}",
+                "title": f"Room {index}",
+                "mode": "normal",
+                "created_at": "2026-04-20T10:00:00+09:00",
+            }
+            for index in range(21)
+        ]
+
+        with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
+            with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=persisted_rooms) as fetch_rooms:
+                response = asyncio.run(get_chat_rooms(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(len(payload["rooms"]), 20)
+        self.assertTrue(payload["pagination"]["has_more"])
+        self.assertEqual(payload["pagination"]["next_offset"], 40)
+        fetch_rooms.assert_called_once_with(7, limit=21, offset=20)
+
     def test_chat_uses_ephemeral_store_for_authenticated_temporary_room(self):
         request = build_request(
             method="POST",
