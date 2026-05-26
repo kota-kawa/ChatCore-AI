@@ -4850,6 +4850,16 @@ body.memo-page {
   background: #fff;
 }
 
+/* Keep the toolbar action buttons clear of the fixed top-right user/login
+   icon. Below ~1280px the toolbar spans nearly the full viewport width, so the
+   right-aligned buttons (and the stacked action row on mobile) would otherwise
+   sit underneath the floating icon. Reserve room equal to its footprint. */
+@media (max-width: 1280px) {
+  .memo-toolbar__actions {
+    margin-right: 3.6rem;
+  }
+}
+
 @media (max-width: 1024px) {
   .memo-toolbar.memo-card {
     width: min(58rem, calc(100% - 2rem));
