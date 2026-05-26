@@ -1591,7 +1591,7 @@ export default function MemoPage() {
             position: "fixed",
             top: 10,
             right: 10,
-            zIndex: "var(--z-floating-controls)",
+            zIndex: "var(--z-floating-controls, 65)",
           }}
         >
           <button type="button" id="login-btn" className="auth-btn" onClick={() => { window.location.href = "/login"; }}>

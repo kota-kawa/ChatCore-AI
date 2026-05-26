@@ -475,7 +475,53 @@ body.memo-page.modal-open {
   }
 }
 
+/* The memo page does not load the global buttons.css (base.css import chain),
+   so replicate the shared #auth-buttons styling here to match the home and
+   prompt-share screens: a green floating pill in the top-right corner. */
+#auth-buttons .auth-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.5rem 1.05rem;
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--primary-color, #19c37d);
+  color: var(--text-light, #ffffff);
+  cursor: pointer;
+}
 
+#auth-buttons .auth-btn i {
+  font-size: 1.8rem;
+  color: #0a2f1f;
+}
+
+#auth-buttons .auth-btn span {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #0a2f1f;
+}
+
+#auth-buttons .auth-btn:hover {
+  background: var(--primary-hover, #15a86b);
+}
+
+@media (max-width: 768px) {
+  #auth-buttons .auth-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  #auth-buttons .auth-btn span {
+    display: none;
+  }
+}
 
 .memo-card {
   border: 1px solid var(--memo-border);
