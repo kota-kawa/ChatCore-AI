@@ -3196,6 +3196,7 @@ textarea.memo-control {
   .memo-toolbar__actions {
     width: auto;
     margin-left: auto;
+    margin-right: 55px;
   }
 
   .memo-toolbar__icon-btn {
