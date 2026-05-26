@@ -475,18 +475,7 @@ body.memo-page.modal-open {
   }
 }
 
-.memo-page-shell #auth-buttons .auth-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  border: 1px solid rgba(255, 251, 235, 0.92);
-  border-radius: 999px;
-  padding: 0.5rem 0.98rem;
-  color: #fffaf1;
-  background: linear-gradient(135deg, var(--memo-amber) 0%, var(--memo-amber-strong) 100%);
-  box-shadow: 0 10px 20px rgba(217, 119, 6, 0.28);
-  cursor: pointer;
-}
+
 
 .memo-card {
   border: 1px solid var(--memo-border);
@@ -3196,7 +3185,6 @@ textarea.memo-control {
   .memo-toolbar__actions {
     width: auto;
     margin-left: auto;
-    margin-right: 55px;
   }
 
   .memo-toolbar__icon-btn {
@@ -4877,6 +4865,7 @@ body.memo-page {
 
   .memo-toolbar__actions {
     gap: 0.2rem;
+    margin-right: 3.8rem;
   }
 
   .memo-toolbar__search {

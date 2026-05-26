@@ -1941,7 +1941,7 @@ chat-action-menu {
   }
 
   .bot-message-wrapper .message-actions {
-    justify-content: flex-end;
+    justify-content: center;
   }
 
   .scroll-to-bottom-btn {
