@@ -659,7 +659,7 @@
 
   .header-right {
     gap: 0.35rem;
-    margin-right: calc(3rem + env(safe-area-inset-right, 0px));
+    margin-right: calc(3.8rem + env(safe-area-inset-right, 0px));
   }
 
   .chat-header-model-trigger {

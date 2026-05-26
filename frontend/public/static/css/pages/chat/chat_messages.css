@@ -1940,6 +1940,10 @@ chat-action-menu {
     gap: 0.3rem;
   }
 
+  .bot-message-wrapper .message-actions {
+    justify-content: flex-end;
+  }
+
   .scroll-to-bottom-btn {
     bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
     width: 2.5rem;
