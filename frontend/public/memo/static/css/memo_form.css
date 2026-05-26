@@ -475,7 +475,53 @@ body.memo-page.modal-open {
   }
 }
 
+/* The memo page does not load the global buttons.css (base.css import chain),
+   so replicate the shared #auth-buttons styling here to match the home and
+   prompt-share screens: a green floating pill in the top-right corner. */
+#auth-buttons .auth-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.5rem 1.05rem;
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--primary-color, #19c37d);
+  color: var(--text-light, #ffffff);
+  cursor: pointer;
+}
 
+#auth-buttons .auth-btn i {
+  font-size: 1.8rem;
+  color: #0a2f1f;
+}
+
+#auth-buttons .auth-btn span {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #0a2f1f;
+}
+
+#auth-buttons .auth-btn:hover {
+  background: var(--primary-hover, #15a86b);
+}
+
+@media (max-width: 768px) {
+  #auth-buttons .auth-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  #auth-buttons .auth-btn span {
+    display: none;
+  }
+}
 
 .memo-card {
   border: 1px solid var(--memo-border);
@@ -4802,6 +4848,16 @@ body.memo-page {
   border-color: #dadce0;
   border-radius: 8px;
   background: #fff;
+}
+
+/* Keep the toolbar action buttons clear of the fixed top-right user/login
+   icon. Below ~1280px the toolbar spans nearly the full viewport width, so the
+   right-aligned buttons (and the stacked action row on mobile) would otherwise
+   sit underneath the floating icon. Reserve room equal to its footprint. */
+@media (max-width: 1280px) {
+  .memo-toolbar__actions {
+    margin-right: 3.6rem;
+  }
 }
 
 @media (max-width: 1024px) {
