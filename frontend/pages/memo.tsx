@@ -1586,8 +1586,13 @@ export default function MemoPage() {
 
         <div
           id="auth-buttons"
-          className="memo-auth-bar"
-          style={{ display: isLoggedIn ? "none" : "" }}
+          style={{
+            display: isLoggedIn ? "none" : "",
+            position: "fixed",
+            top: 10,
+            right: 10,
+            zIndex: "var(--z-floating-controls)",
+          }}
         >
           <button type="button" id="login-btn" className="auth-btn" onClick={() => { window.location.href = "/login"; }}>
             <i className="bi bi-person-circle"></i>
@@ -1595,7 +1600,7 @@ export default function MemoPage() {
           </button>
         </div>
 
-        <user-icon id="userIcon" style={{ display: isLoggedIn ? "" : "none" }}></user-icon>
+        <user-icon id="userIcon" style={isLoggedIn ? undefined : { display: "none" }}></user-icon>
 
         <div className={`memo-layout${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
           <aside className="memo-sidebar">
