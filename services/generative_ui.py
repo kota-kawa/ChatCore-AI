@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from html import escape as escape_html
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -18,6 +19,10 @@ GENERIC_JSON_BLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 FENCED_BLOCK_RE = re.compile(r"```[\s\S]*?```", re.IGNORECASE)
+SOURCE_CODE_BLOCK_RE = re.compile(
+    r"```(?P<lang>html|css|js|javascript)\s*(?P<code>[\s\S]*?)```",
+    re.IGNORECASE,
+)
 
 MAX_ARTIFACTS_PER_MESSAGE = 3
 MAX_ARTIFACT_HTML_CHARS = 12000
@@ -68,6 +73,16 @@ _ARTIFACT_SOURCE_KEY_RE = re.compile(
 )
 _ARTIFACT_CONTEXT_KEY_RE = re.compile(
     r'"(?:artifact|version|title|name|label|height|description|summary|caption)"\s*:',
+    re.IGNORECASE,
+)
+_ARTIFACT_INTENT_RE = re.compile(
+    r"(chatcore-artifact|generative ui|生成UI|artifact|"
+    r"可視化|図解|インフォグラフィック|ダッシュボード|チャート|グラフ|"
+    r"タイムライン|フローチャート|比較表|カードビュー)",
+    re.IGNORECASE,
+)
+_DISPLAY_ONLY_INTENT_RE = re.compile(
+    r"(表示します|表示しました|作成します|作成しました|用意しました|以下に示します)",
     re.IGNORECASE,
 )
 _JS_BANNED_TOKEN_RE = re.compile(
@@ -181,6 +196,14 @@ def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]
 
     html = html[: max(0, len(html) - overflow)]
     return html, css, js
+
+
+def _ensure_artifact_has_body(html: str, js: str) -> str:
+    if html.strip():
+        return html
+    if "getElementById('app')" in js or 'getElementById("app")' in js:
+        return '<div id="app"></div>'
+    return '<div id="app" class="chatcore-generated-root"></div>'
 
 
 def _strip_json_comments(source: str) -> str:
@@ -298,6 +321,22 @@ def _looks_like_artifact_json(source: str) -> bool:
     return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
 
 
+def _infer_artifact_title(text: str) -> str:
+    cleaned = FENCED_BLOCK_RE.sub("", text).strip()
+    for line in cleaned.splitlines():
+        line = line.strip(" #:-\t")
+        if line:
+            return line[:60]
+    return "生成UI"
+
+
+def _has_artifact_intent(text: str) -> bool:
+    stripped = FENCED_BLOCK_RE.sub("", text).strip()
+    if _ARTIFACT_INTENT_RE.search(stripped):
+        return True
+    return len(stripped) <= 180 and bool(_DISPLAY_ONLY_INTENT_RE.search(stripped))
+
+
 def _find_balanced_object_end(source: str, start: int) -> int | None:
     depth = 0
     in_string = False
@@ -356,6 +395,51 @@ def _find_raw_artifact_candidates(
     return candidates
 
 
+def _extract_source_code_artifact_candidates(
+    text: str,
+    occupied_spans: list[tuple[int, int]],
+) -> list[_ArtifactCandidate]:
+    blocks: list[tuple[str, str, tuple[int, int]]] = []
+    for match in SOURCE_CODE_BLOCK_RE.finditer(text):
+        span = match.span()
+        if _span_overlaps_any(span, occupied_spans):
+            continue
+        blocks.append((match.group("lang").lower(), match.group("code").strip(), span))
+
+    if not blocks:
+        return []
+
+    html_parts: list[str] = []
+    css_parts: list[str] = []
+    js_parts: list[str] = []
+    spans: list[tuple[int, int]] = []
+    for lang, code, span in blocks:
+        if not code:
+            continue
+        spans.append(span)
+        if lang == "html":
+            html_parts.append(code)
+        elif lang == "css":
+            css_parts.append(code)
+        else:
+            js_parts.append(code)
+
+    if not (html_parts or js_parts):
+        return []
+
+    payload = {
+        "version": 1,
+        "title": _infer_artifact_title(text),
+        "description": "HTML/CSS/JavaScriptコードブロックから生成したUIです。",
+        "height": 420,
+        "html": "\n".join(html_parts),
+        "css": "\n".join(css_parts),
+        "js": "\n".join(js_parts),
+    }
+    span = (min(start for start, _ in spans), max(end for _, end in spans))
+    return [_ArtifactCandidate(raw_json=json.dumps(payload, ensure_ascii=False), span=span)]
+
+
 def _extract_artifact_candidates(text: str) -> list[_ArtifactCandidate]:
     candidates: list[_ArtifactCandidate] = []
     occupied_spans: list[tuple[int, int]] = []
@@ -375,6 +459,10 @@ def _extract_artifact_candidates(text: str) -> list[_ArtifactCandidate]:
         candidate = _ArtifactCandidate(raw_json=raw_json, span=span)
         candidates.append(candidate)
         occupied_spans.append(candidate.span)
+
+    source_candidates = _extract_source_code_artifact_candidates(text, occupied_spans)
+    candidates.extend(source_candidates)
+    occupied_spans.extend(candidate.span for candidate in source_candidates)
 
     fenced_spans = [match.span() for match in FENCED_BLOCK_RE.finditer(text)]
     candidates.extend(_find_raw_artifact_candidates(text, [*fenced_spans, *occupied_spans]))
@@ -579,6 +667,7 @@ def _prepare_artifact_payload(payload: Any) -> Any:
         css = "\n".join(part for part in [css, *embedded_css] if part)
     if embedded_js:
         js = "\n".join(part for part in [js, *embedded_js] if part)
+    html = _ensure_artifact_has_body(html, js)
     html, css, js = _trim_artifact_sources(html, css, js)
 
     title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
@@ -646,10 +735,50 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
     return json.dumps(normalized, ensure_ascii=False)
 
 
+def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]:
+    title = _infer_artifact_title(visible_text or raw_text)
+    source_text = (visible_text or raw_text or "生成UIを表示するための内容を補完しました。").strip()
+    if len(source_text) > 900:
+        source_text = f"{source_text[:900].rstrip()}..."
+    paragraphs = [
+        f"<p>{escape_html(line.strip())}</p>"
+        for line in source_text.splitlines()
+        if line.strip()
+    ]
+    if not paragraphs:
+        paragraphs = ["<p>生成UIを表示するための内容を補完しました。</p>"]
+    payload = {
+        "version": 1,
+        "title": title,
+        "description": "モデル出力から安全なfallback UIを生成しました。",
+        "height": 280,
+        "html": (
+            '<section class="fallback-ui">'
+            '<div class="fallback-ui__badge">Generated UI</div>'
+            '<div class="fallback-ui__content">'
+            f"{''.join(paragraphs)}"
+            "</div>"
+            "</section>"
+        ),
+        "css": (
+            ".fallback-ui{min-height:220px;padding:20px;border:1px solid #d1d5db;"
+            "border-radius:8px;background:linear-gradient(135deg,#f8fafc,#eef2ff);color:#111827;"
+            "display:flex;flex-direction:column;gap:14px;justify-content:center;}"
+            ".fallback-ui__badge{width:max-content;padding:4px 10px;border-radius:999px;"
+            "background:#111827;color:#fff;font-size:12px;font-weight:700;letter-spacing:.04em;}"
+            ".fallback-ui__content{display:grid;gap:8px;font-size:15px;line-height:1.65;}"
+            ".fallback-ui__content p{margin:0;}"
+        ),
+        "js": "",
+    }
+    return validate_artifact_payload(payload)
+
+
 def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResponse:
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
     candidates = _extract_artifact_candidates(text)
-    if not candidates:
+    has_intent = _has_artifact_intent(text)
+    if not candidates and not has_intent:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
     artifacts: list[dict[str, Any]] = []
@@ -665,6 +794,16 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
 
     if not artifacts:
         fallback_text = visible_text or "生成UIの作成に失敗しました。通常のテキストで再試行してください。"
+        if candidates or has_intent:
+            fallback_artifact = _build_fallback_artifact(fallback_text, text)
+            return NormalizedGenerativeResponse(
+                text=fallback_text,
+                parts=[
+                    {"type": "text", "text": fallback_text},
+                    {"type": "sandbox_artifact", "artifact": fallback_artifact},
+                ],
+                validation_errors=validation_errors,
+            )
         return NormalizedGenerativeResponse(
             text=fallback_text,
             parts=None,

@@ -39,3 +39,14 @@ test("buildSandboxArtifactSrcDoc includes restrictive CSP and escapes script end
   assert.doesNotMatch(srcDoc, /document\.body\.dataset\.value = '<\/script>';$/);
   assert.match(srcDoc, /<\\\/script>/);
 });
+
+test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    html: "",
+    js: "",
+  });
+
+  assert.match(srcDoc, /chatcore-empty-artifact/);
+  assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
+});

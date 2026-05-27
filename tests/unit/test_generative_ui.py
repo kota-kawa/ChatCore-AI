@@ -70,6 +70,41 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertIsNotNone(normalized.parts)
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
 
+    def test_normalize_response_extracts_split_source_code_blocks(self):
+        raw = """表示します。
+
+```html
+<div id="app"></div>
+```
+
+```css
+#app{padding:12px;background:#eef2ff;}
+```
+
+```js
+document.getElementById('app').textContent = 'ready';
+```
+"""
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertIn('<div id="app"></div>', artifact["html"])
+        self.assertIn("#app{padding", artifact["css"])
+        self.assertIn("textContent", artifact["js"])
+
+    def test_normalize_response_creates_fallback_for_short_display_intent(self):
+        normalized = normalize_response_with_artifacts("表示します。")
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["title"], "表示します。")
+        self.assertIn("fallback-ui", artifact["html"])
+
     def test_normalize_response_accepts_line_continuation_jsonish_artifact(self):
         raw = r'''表示します。
 
@@ -157,7 +192,7 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIn("#app{color:red;}", normalized["css"])
         self.assertIn("textContent='ok'", normalized["js"])
 
-    def test_normalize_response_hides_validation_failure_note_from_user_text(self):
+    def test_normalize_response_uses_fallback_when_artifact_validation_fails(self):
         raw = (
             "短い説明です。\n\n"
             "```chatcore-artifact\n"
@@ -168,9 +203,20 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         normalized = normalize_response_with_artifacts(raw)
 
         self.assertEqual(normalized.text, "短い説明です。")
-        self.assertIsNone(normalized.parts)
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+        self.assertIn("fallback-ui", normalized.parts[1]["artifact"]["html"])
         self.assertNotIn("安全検証", normalized.text)
         self.assertTrue(normalized.validation_errors)
+
+    def test_validate_artifact_adds_default_app_root_for_empty_html(self):
+        artifact = dict(VALID_ARTIFACT)
+        artifact["html"] = ""
+        artifact["js"] = "document.getElementById('app').textContent = 'ready';"
+
+        normalized = validate_artifact_payload(artifact)
+
+        self.assertIn('id="app"', normalized["html"])
 
     def test_decode_message_parts_drops_invalid_artifacts(self):
         parts = [
