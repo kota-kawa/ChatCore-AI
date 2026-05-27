@@ -44,9 +44,75 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertEqual(normalized.text, "通常の回答です。")
         self.assertIsNone(normalized.parts)
 
+    def test_normalize_response_extracts_bare_json_artifact(self):
+        raw = (
+            "表示します。\n\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+
+    def test_normalize_response_extracts_generic_json_fence_artifact(self):
+        raw = (
+            "表示します。\n\n"
+            "```json\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
+
+    def test_normalize_response_accepts_line_continuation_jsonish_artifact(self):
+        raw = r'''表示します。
+
+{
+  "version":1,
+  "title":"Queue と Worker の流れ",
+  "description":"Producer → Queue → Worker → Result のプロセスを可視化",
+  "height":380,
+  "html":"<div id='app' style='font-family:sans-serif;padding:10px;'></div>",
+  "css":"#container{display:flex;flex-direction:column;align-items:center;gap:12px;}\
+.box{padding:10px 20px;background:#f0f4ff;border:1px solid #3366ff;border-radius:6px;cursor:pointer;transition:background .2s;}\
+#info{margin-top:16px;padding:8px 12px;background:#fafafa;border:1px solid #ddd;border-radius:4px;min-height:40px;}",
+  "js":"const steps=[\
+  {label:'Producer（タスク生成）',desc:'ユーザー操作や別サービスがタスクを作成し、キューへ送信します。'},\
+  {label:'Queue（待機列）',desc:'FIFO でタスクを保持します。'},\
+  {label:'Worker（処理実行）',desc:'Worker がタスクを取り出して処理します。'}\
+];\
+const app=document.getElementById('app');\
+const container=document.createElement('div');container.id='container';app.appendChild(container);\
+steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.textContent=s.label;b.dataset.idx=i;container.appendChild(b);});"
+}'''
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["title"], "Queue と Worker の流れ")
+        self.assertIn(".box", artifact["css"])
+        self.assertIn("const steps", artifact["js"])
+        self.assertIn("style='font-family:sans-serif;padding:10px;'", artifact["html"])
+
     def test_validate_artifact_rejects_network_javascript(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["js"] = "fetch('https://example.com')"
+
+        with self.assertRaises(GenerativeUiValidationError):
+            validate_artifact_payload(artifact)
+
+    def test_validate_artifact_rejects_worker_constructor(self):
+        artifact = dict(VALID_ARTIFACT)
+        artifact["js"] = "new Worker('data:,')"
 
         with self.assertRaises(GenerativeUiValidationError):
             validate_artifact_payload(artifact)

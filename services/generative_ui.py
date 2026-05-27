@@ -13,6 +13,11 @@ ARTIFACT_BLOCK_RE = re.compile(
     r"(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
 )
+GENERIC_JSON_BLOCK_RE = re.compile(
+    r"```json\s*(?P<json>\{[\s\S]*?\})\s*```",
+    re.IGNORECASE,
+)
+FENCED_BLOCK_RE = re.compile(r"```[\s\S]*?```", re.IGNORECASE)
 
 MAX_ARTIFACTS_PER_MESSAGE = 3
 MAX_ARTIFACT_HTML_CHARS = 12000
@@ -57,10 +62,18 @@ _NAV_ATTR_RE = re.compile(
 )
 _CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(?P<value>[^'\"\)]+)\1\s*\)", re.IGNORECASE)
 _CSS_IMPORT_RE = re.compile(r"@import\b[^;]*(?:;|$)", re.IGNORECASE)
+_ARTIFACT_SOURCE_KEY_RE = re.compile(
+    r'"(?P<key>html|markup|body|content|css|style|styles|js|javascript|script)"\s*:',
+    re.IGNORECASE,
+)
+_ARTIFACT_CONTEXT_KEY_RE = re.compile(
+    r'"(?:artifact|version|title|name|label|height|description|summary|caption)"\s*:',
+    re.IGNORECASE,
+)
 _JS_BANNED_TOKEN_RE = re.compile(
-    r"(\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|"
-    r"\bnavigator\s*\.\s*sendBeacon\b|\bWorker\b|\bSharedWorker\b|"
-    r"\bServiceWorker\b|\bimportScripts\b|\bimport\s*\(|\beval\s*\(|"
+    r"(\bfetch\s*\(|\bXMLHttpRequest\s*\(|\bWebSocket\s*\(|\bEventSource\s*\(|"
+    r"\bnavigator\s*\.\s*sendBeacon\b|\b(?:Worker|SharedWorker)\s*\(|"
+    r"\bnavigator\s*\.\s*serviceWorker\b|\bimportScripts\b|\bimport\s*\(|\beval\s*\(|"
     r"\bFunction\s*\(|\bdocument\s*\.\s*cookie\b|\blocalStorage\b|"
     r"\bsessionStorage\b|\bindexedDB\b|\bcaches\b|"
     r"\bdocument\s*\.\s*(?:write|writeln)\s*\(|"
@@ -74,6 +87,12 @@ _JS_BANNED_TOKEN_RE = re.compile(
 )
 class GenerativeUiValidationError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class _ArtifactCandidate:
+    raw_json: str
+    span: tuple[int, int]
 
 
 class GenerativeUiArtifactV1(BaseModel):
@@ -209,12 +228,172 @@ def _remove_trailing_json_commas(source: str) -> str:
     return re.sub(r",(\s*[}\]])", r"\1", source)
 
 
+def _remove_json_line_continuations(source: str) -> str:
+    return re.sub(r"\\[ \t]*(?:\r\n|\r|\n)[ \t]*", "", source)
+
+
+def _escape_json_string_newlines(source: str) -> str:
+    output: list[str] = []
+    in_string = False
+    escaped = False
+    index = 0
+    while index < len(source):
+        char = source[index]
+        if in_string:
+            if escaped:
+                output.append(char)
+                escaped = False
+            elif char == "\\":
+                output.append(char)
+                escaped = True
+            elif char == '"':
+                output.append(char)
+                in_string = False
+            elif char == "\r":
+                output.append("\\n")
+                if index + 1 < len(source) and source[index + 1] == "\n":
+                    index += 1
+            elif char == "\n":
+                output.append("\\n")
+            else:
+                output.append(char)
+            index += 1
+            continue
+
+        output.append(char)
+        if char == '"':
+            in_string = True
+            escaped = False
+        index += 1
+    return "".join(output)
+
+
+def _normalize_jsonish_source(source: str) -> str:
+    return _remove_trailing_json_commas(
+        _strip_json_comments(
+            _escape_json_string_newlines(
+                _remove_json_line_continuations(source)
+            )
+        )
+    )
+
+
 def _loads_artifact_json(raw_json: str) -> Any:
     try:
         return json.loads(raw_json)
     except json.JSONDecodeError:
-        cleaned = _remove_trailing_json_commas(_strip_json_comments(raw_json))
-        return json.loads(cleaned)
+        return json.loads(_normalize_jsonish_source(raw_json))
+
+
+def _spans_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
+    return left[0] < right[1] and right[0] < left[1]
+
+
+def _span_overlaps_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    return any(_spans_overlap(span, existing) for existing in spans)
+
+
+def _looks_like_artifact_json(source: str) -> bool:
+    source_keys = {match.group("key").lower() for match in _ARTIFACT_SOURCE_KEY_RE.finditer(source)}
+    return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
+
+
+def _find_balanced_object_end(source: str, start: int) -> int | None:
+    depth = 0
+    in_string = False
+    quote = ""
+    escaped = False
+    index = start
+    while index < len(source):
+        char = source[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                in_string = False
+            index += 1
+            continue
+
+        if char in {"'", '"'}:
+            in_string = True
+            quote = char
+            index += 1
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
+    return None
+
+
+def _find_raw_artifact_candidates(
+    text: str,
+    excluded_spans: list[tuple[int, int]],
+) -> list[_ArtifactCandidate]:
+    candidates: list[_ArtifactCandidate] = []
+    index = 0
+    while index < len(text):
+        start = text.find("{", index)
+        if start == -1:
+            break
+        if _span_overlaps_any((start, start + 1), excluded_spans):
+            index = start + 1
+            continue
+        end = _find_balanced_object_end(text, start)
+        if end is None:
+            break
+        span = (start, end)
+        if not _span_overlaps_any(span, excluded_spans):
+            raw_json = text[start:end]
+            if _looks_like_artifact_json(raw_json):
+                candidates.append(_ArtifactCandidate(raw_json=raw_json, span=span))
+        index = end
+    return candidates
+
+
+def _extract_artifact_candidates(text: str) -> list[_ArtifactCandidate]:
+    candidates: list[_ArtifactCandidate] = []
+    occupied_spans: list[tuple[int, int]] = []
+
+    for match in ARTIFACT_BLOCK_RE.finditer(text):
+        candidate = _ArtifactCandidate(raw_json=match.group("json"), span=match.span())
+        candidates.append(candidate)
+        occupied_spans.append(candidate.span)
+
+    for match in GENERIC_JSON_BLOCK_RE.finditer(text):
+        span = match.span()
+        if _span_overlaps_any(span, occupied_spans):
+            continue
+        raw_json = match.group("json")
+        if not _looks_like_artifact_json(raw_json):
+            continue
+        candidate = _ArtifactCandidate(raw_json=raw_json, span=span)
+        candidates.append(candidate)
+        occupied_spans.append(candidate.span)
+
+    fenced_spans = [match.span() for match in FENCED_BLOCK_RE.finditer(text)]
+    candidates.extend(_find_raw_artifact_candidates(text, [*fenced_spans, *occupied_spans]))
+    return sorted(candidates, key=lambda candidate: candidate.span)
+
+
+def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> str:
+    if not candidates:
+        return text.strip()
+    pieces: list[str] = []
+    cursor = 0
+    for candidate in sorted(candidates, key=lambda item: item.span):
+        start, end = candidate.span
+        if start < cursor:
+            continue
+        pieces.append(text[cursor:start])
+        cursor = end
+    pieces.append(text[cursor:])
+    return "".join(pieces).strip()
 
 
 def _first_present(payload: dict[str, Any], *keys: str) -> Any:
@@ -235,8 +414,76 @@ def _sanitize_script_end(value: str) -> str:
     return re.sub(r"</\s*script", r"<\\/script", value, flags=re.IGNORECASE)
 
 
+def _strip_javascript_literals_and_comments(value: str) -> str:
+    output: list[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        next_char = value[index + 1] if index + 1 < len(value) else ""
+
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < len(value) and value[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < len(value) and not (value[index] == "*" and value[index + 1] == "/"):
+                index += 1
+            index += 2
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            output.append(quote)
+            index += 1
+            escaped = False
+            while index < len(value):
+                current = value[index]
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == quote:
+                    output.append(quote)
+                    index += 1
+                    break
+                elif current in "\r\n":
+                    output.append(current)
+                    index += 1
+                    break
+                index += 1
+            continue
+        if char == "`":
+            output.append("`")
+            index += 1
+            while index < len(value):
+                current = value[index]
+                next_current = value[index + 1] if index + 1 < len(value) else ""
+                if current == "\\":
+                    index += 2
+                    continue
+                if current == "`":
+                    output.append("`")
+                    index += 1
+                    break
+                if current == "$" and next_current == "{":
+                    end = _find_balanced_object_end(value, index + 1)
+                    if end is not None:
+                        output.append(value[index:end])
+                        index = end
+                        continue
+                if current in "\r\n":
+                    output.append(current)
+                index += 1
+            continue
+
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
 def _validate_javascript_safety(value: str) -> None:
-    if _JS_BANNED_TOKEN_RE.search(value):
+    if _JS_BANNED_TOKEN_RE.search(_strip_javascript_literals_and_comments(value)):
         raise ValueError("JavaScript uses an API that is not allowed in sandbox artifacts.")
 
 
@@ -401,21 +648,20 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
 
 def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResponse:
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    matches = list(ARTIFACT_BLOCK_RE.finditer(text))
-    if not matches:
+    candidates = _extract_artifact_candidates(text)
+    if not candidates:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
     artifacts: list[dict[str, Any]] = []
     validation_errors: list[str] = []
-    for match in matches[:MAX_ARTIFACTS_PER_MESSAGE]:
-        raw_json = match.group("json")
+    for candidate in candidates[:MAX_ARTIFACTS_PER_MESSAGE]:
         try:
-            payload = _loads_artifact_json(raw_json)
+            payload = _loads_artifact_json(candidate.raw_json)
             artifacts.append(validate_artifact_payload(payload))
         except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
             validation_errors.append(str(exc))
 
-    visible_text = ARTIFACT_BLOCK_RE.sub("", text).strip()
+    visible_text = _remove_candidate_spans(text, candidates)
 
     if not artifacts:
         fallback_text = visible_text or "生成UIの作成に失敗しました。通常のテキストで再試行してください。"
