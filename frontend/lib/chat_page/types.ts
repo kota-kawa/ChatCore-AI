@@ -41,9 +41,16 @@ export type GenerativeUiArtifactV1 = {
   js: string;
 };
 
+export type InteractiveButtonsV1 = {
+  type: "yes_no" | "multiple_choice";
+  question: string;
+  options?: string[];
+};
+
 export type ChatMessagePart =
   | { type: "text"; text: string }
-  | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 };
+  | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 }
+  | { type: "interactive_buttons"; buttons: InteractiveButtonsV1 };
 
 export type AttachedFile = {
   id: string;

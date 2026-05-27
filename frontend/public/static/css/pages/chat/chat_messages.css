@@ -2097,3 +2097,62 @@ chat-action-menu {
     --constellation-height: 4.65rem;
   }
 }
+
+/* Interactive Buttons */
+.interactive-buttons-container {
+  margin-top: var(--space-4, 1rem);
+  padding: var(--space-4, 1rem);
+  background: var(--surface-secondary, #f8fafc);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+.interactive-buttons-question {
+  font-weight: 500;
+  color: var(--text-primary, #0f172a);
+  font-size: 0.95rem;
+}
+
+.interactive-buttons-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+}
+
+.interactive-button {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.interactive-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.interactive-button.primary {
+  background: var(--primary-main, #0f766e);
+  color: white;
+}
+
+.interactive-button.primary:hover:not(:disabled) {
+  background: var(--primary-hover, #115e59);
+}
+
+.interactive-button.secondary {
+  background: var(--surface-primary, #fff);
+  color: var(--text-secondary, #475569);
+  border-color: var(--border-base, #cbd5e1);
+}
+
+.interactive-button.secondary:hover:not(:disabled) {
+  background: var(--surface-hover, #f1f5f9);
+  color: var(--text-primary, #0f172a);
+}

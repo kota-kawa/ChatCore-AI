@@ -584,7 +584,7 @@ export function useHomePageRoomActions({
     upsertCreatedChatRoom,
   ]);
 
-  const handleSendMessage = useCallback(() => {
+  const handleSendMessage = useCallback((overrideMessage?: string) => {
     if (isGenerating) {
       void stopGeneration();
       return;
@@ -593,13 +593,15 @@ export function useHomePageRoomActions({
     const roomId = currentRoomIdRef.current;
     if (!roomId) return;
 
-    const message = chatInput.trim();
+    const message = (overrideMessage !== undefined ? overrideMessage : chatInput).trim();
     if (!message) return;
 
     if (message.length > MAX_CHAT_MESSAGE_LENGTH) return;
 
     const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
-    setChatInput("");
+    if (overrideMessage === undefined) {
+      setChatInput("");
+    }
     setAttachedFiles([]);
     void generateResponse(message, selectedModel, roomId, filesToSend);
   }, [attachedFiles, chatInput, generateResponse, isGenerating, selectedModel, setAttachedFiles, stopGeneration]);
