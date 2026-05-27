@@ -833,7 +833,30 @@ chat-action-menu {
   list-style: none;
 }
 
+/* ステップ一覧は縦のタイムライン表現にして「回答までの流れ」を視認しやすくする */
+.bot-message .web-search-sources__steps {
+  position: relative;
+}
+
+.bot-message .web-search-sources__steps::before {
+  content: "";
+  position: absolute;
+  top: 1.45rem;
+  bottom: 1.45rem;
+  left: 1.46rem;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 118, 110, 0.32),
+    rgba(15, 118, 110, 0.14)
+  );
+  pointer-events: none;
+}
+
 .bot-message .web-search-sources__step {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -841,9 +864,10 @@ chat-action-menu {
   min-width: 0;
   padding: 0.62rem 0.68rem;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: var(--radius-sm, 8px);
-  background: rgba(248, 250, 252, 0.62);
+  border-radius: var(--radius-sm, 10px);
+  background: #ffffff;
   color: var(--text-dark, #1a1a1a);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .bot-message .web-search-sources__step--has-sources {
@@ -851,6 +875,7 @@ chat-action-menu {
   padding: 0;
   overflow: visible;
   position: relative;
+  z-index: 1;
 }
 
 .bot-message .web-search-sources__step-details,
@@ -883,7 +908,7 @@ chat-action-menu {
   grid-template-columns: minmax(0, 1fr) auto auto;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: var(--radius-sm, 8px);
-  background: rgba(248, 250, 252, 0.62);
+  background: #ffffff;
   color: var(--text-dark, #1a1a1a);
 }
 
@@ -991,17 +1016,21 @@ chat-action-menu {
 }
 
 .bot-message .web-search-sources__index {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.55rem;
   height: 1.55rem;
-  border-radius: var(--radius-s, 6px);
-  background: var(--surface-primary, #ffffff);
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
   color: var(--primary-dark, #134e4a);
   font-size: var(--text-xs, 0.8125rem);
   font-weight: 700;
-  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.2);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    inset 0 0 0 1px rgba(15, 118, 110, 0.28);
 }
 
 .bot-message .web-search-sources__content {
@@ -1577,10 +1606,19 @@ chat-action-menu {
   color: rgba(248, 250, 252, 0.92);
 }
 
+[data-theme="dark"] .bot-message .web-search-sources__steps::before {
+  background: linear-gradient(
+    180deg,
+    rgba(45, 212, 191, 0.36),
+    rgba(45, 212, 191, 0.12)
+  );
+}
+
 [data-theme="dark"] .bot-message .web-search-sources__step {
   border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(30, 41, 59, 0.48);
+  background: #1e293b;
   color: rgba(248, 250, 252, 0.9);
+  box-shadow: 0 1px 2px rgba(2, 6, 23, 0.4);
 }
 
 [data-theme="dark"] .bot-message .web-search-sources__source-summary {
@@ -1623,9 +1661,11 @@ chat-action-menu {
 }
 
 [data-theme="dark"] .bot-message .web-search-sources__index {
-  background: rgba(15, 23, 42, 0.82);
+  background: rgba(15, 118, 110, 0.18);
   color: rgba(94, 234, 212, 0.96);
-  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.26);
+  box-shadow:
+    0 0 0 3px #1e293b,
+    inset 0 0 0 1px rgba(45, 212, 191, 0.32);
 }
 
 [data-theme="dark"] .bot-message .web-search-sources__hostname {
