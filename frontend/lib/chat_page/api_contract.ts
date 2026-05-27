@@ -8,6 +8,7 @@ import type {
   ChatRoomsPage,
   ChatRoomsPagination,
   GenerativeUiArtifactV1,
+  InteractiveButtonsV1,
   GenerationStatusPayload,
 } from "./types";
 
@@ -62,6 +63,27 @@ function normalizeArtifact(raw: unknown): GenerativeUiArtifactV1 | null {
   };
 }
 
+function normalizeInteractiveButtons(rawButtons: unknown): InteractiveButtonsV1 | undefined {
+  const record = asRecord(rawButtons);
+  const type = optionalString(record.type);
+  if (type !== "yes_no" && type !== "multiple_choice") return undefined;
+
+  const question = optionalString(record.question);
+  if (!question) return undefined;
+
+  const rawOptions = record.options;
+  const options =
+    Array.isArray(rawOptions)
+      ? (rawOptions.filter((o) => typeof o === "string").map((o) => o as string))
+      : undefined;
+
+  return {
+    type,
+    question,
+    ...(options && options.length > 0 ? { options } : {}),
+  };
+}
+
 function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined {
   if (!Array.isArray(rawParts)) return undefined;
   const parts: ChatMessagePart[] = [];
@@ -75,6 +97,12 @@ function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined
     if (part.type === "sandbox_artifact") {
       const artifact = normalizeArtifact(part.artifact);
       if (artifact) parts.push({ type: "sandbox_artifact", artifact });
+      return;
+    }
+    if (part.type === "interactive_buttons") {
+      const buttons = normalizeInteractiveButtons(part.buttons);
+      if (buttons) parts.push({ type: "interactive_buttons", buttons });
+      return;
     }
   });
   return parts.length > 0 ? parts : undefined;
