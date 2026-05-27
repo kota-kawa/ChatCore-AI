@@ -412,8 +412,12 @@ function hideTypingIndicator() {
 /* LLM 出力の Markdown を HTML に変換 */
 function formatLLMOutput(text: string) {
   const normalized = normalizeLLMTextForDisplay(text);
+  // ensureMarkedParser() は markedParser を同期的に設定するため、初回呼び出しでも
+  // フォールバック（HTML をエスケープしてしまう）に落ちないよう初期化後に再判定する。
+  if (!markedParser && !markdownEnhancementDisabled) {
+    void ensureMarkedParser();
+  }
   if (!markedParser) {
-    if (!markdownEnhancementDisabled) void ensureMarkedParser();
     return formatMarkdownFallback(normalized);
   }
 
