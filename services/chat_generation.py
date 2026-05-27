@@ -137,6 +137,20 @@ def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | st
     }
 
 
+def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | None:
+    # 検索結果から重要なページ本文を取得できた場合に、回答ステップとして可視化する
+    # Surface a trace step when full page text was successfully read from result URLs.
+    if result is None:
+        return None
+    read_count = sum(1 for source in result.sources if source.page_text)
+    if not read_count:
+        return None
+    return {
+        "title": "重要なページを精読",
+        "detail": f"{read_count}件のページ本文を取得して回答に反映しました。",
+    }
+
+
 def _web_search_result_tool_payload(
     result: WebSearchResult,
     *,
@@ -155,6 +169,7 @@ def _web_search_result_tool_payload(
                 "hostname": source.hostname,
                 "age": source.age,
                 "snippets": list(source.snippets),
+                **({"page_text": source.page_text} if source.page_text else {}),
             }
             for source in result.sources
         ],
@@ -398,6 +413,9 @@ class ChatGenerationJob:
                         },
                     ]
                 )
+                page_read_step = _page_read_trace_step(augmentation.result)
+                if page_read_step is not None:
+                    web_search_trace_steps.append(page_read_step)
                 web_search_results.append(augmentation.result)
                 web_search_results_by_key[
                     _normalized_search_key(
@@ -581,6 +599,9 @@ class ChatGenerationJob:
                                 },
                             ]
                         )
+                        page_read_step = _page_read_trace_step(result)
+                        if page_read_step is not None:
+                            web_search_trace_steps.append(page_read_step)
                         if result.has_sources:
                             web_search_results.append(result)
                         self._publish(
