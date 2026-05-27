@@ -40,10 +40,17 @@ function applySetupViewportFit() {
   const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
   const availableHeight = Math.max(0, viewportHeight - shellPaddingTop - shellPaddingBottom);
 
-  if (setupContainer.getBoundingClientRect().height <= availableHeight + 1) return;
+  // Measure the untransformed layout height via offsetHeight rather than
+  // getBoundingClientRect(). While returning from the chat view to the setup
+  // view, the card is still mid-transition (3D scale/translate + blur driven by
+  // the data-view animation), so getBoundingClientRect() would report the
+  // visually scaled-down height and make the density decision flicker. The
+  // offsetHeight reflects the stable layout box and is unaffected by transforms,
+  // so the correct fit class is chosen on the first pass.
+  if (setupContainer.offsetHeight <= availableHeight + 1) return;
 
   setupContainer.classList.add(SETUP_FIT_COMPACT_CLASS);
-  if (setupContainer.getBoundingClientRect().height <= availableHeight + 1) return;
+  if (setupContainer.offsetHeight <= availableHeight + 1) return;
 
   setupContainer.classList.add(SETUP_FIT_TIGHT_CLASS);
 }
