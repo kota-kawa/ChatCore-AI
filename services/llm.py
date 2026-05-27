@@ -40,6 +40,19 @@ def _get_positive_int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _get_non_negative_int_env(name: str, default: int) -> int:
+    # 0以上の整数を採用し、無効値は既定値へ戻す（再試行回数などで0を許容する）
+    # Accept zero or positive integers (e.g. retry counts) and fallback on invalid values.
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
 def _get_gemini_api_key() -> str:
     return os.environ.get("GEMINI_API_KEY", "") or os.environ.get("Gemini_API_KEY", "")
 
@@ -56,7 +69,9 @@ OPENAI_DEFAULT_MODEL = (
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
-LLM_MAX_RETRIES = 1
+# 一時的な接続失敗を吸収するため既定の再試行回数を増やす（環境変数で調整可能）
+# Retry transient connection failures by default; configurable via env var.
+LLM_MAX_RETRIES = _get_non_negative_int_env("LLM_MAX_RETRIES", 2)
 
 REDACTED_SENSITIVE_VALUE = "[REDACTED-SENSITIVE]"
 OPENAI_MARKDOWN_REENABLE_PREFIX = "Formatting re-enabled"

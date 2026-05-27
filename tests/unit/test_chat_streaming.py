@@ -24,7 +24,7 @@ from services.chat_generation import (
     has_active_generation,
     start_generation_job,
 )
-from services.llm import LlmConfigurationError
+from services.llm import LlmConfigurationError, LlmTimeoutError
 from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearchSource
 from tests.helpers.request_helpers import build_request
 
@@ -698,6 +698,58 @@ class ChatStreamingTestCase(unittest.TestCase):
 
         self.assertIn("event: error", body)
         self.assertIn("OPENAI_API_KEY が未設定です。", body)
+
+    def test_background_generation_job_retries_transient_error_before_output(self):
+        attempts = {"count": 0}
+
+        def flaky_stream(*_args, **_kwargs):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise LlmTimeoutError("provider timed out")
+            yield from ["こん", "にちは"]
+
+        with patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0):
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=flaky_stream,
+            ):
+                job = start_generation_job(
+                    "guest:sid-1:default",
+                    conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(attempts["count"], 2)
+        self.assertNotIn("event: error", body)
+        self.assertIn("event: done", body)
+        self.assertIn('"response": "こんにちは"', body)
+
+    def test_background_generation_job_does_not_retry_after_chunk_emitted(self):
+        attempts = {"count": 0}
+
+        def flaky_stream(*_args, **_kwargs):
+            attempts["count"] += 1
+            yield "partial"
+            raise LlmTimeoutError("provider timed out mid-stream")
+
+        with patch("services.chat_generation._llm_stream_retry_delay", return_value=0.0):
+            with patch(
+                "services.chat_generation.get_llm_response_stream",
+                side_effect=flaky_stream,
+            ):
+                job = start_generation_job(
+                    "guest:sid-1:default",
+                    conversation_messages=[{"role": "user", "content": "hi"}],
+                    model="openai/gpt-oss-120b",
+                    persist_response=lambda _: None,
+                )
+                body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        # Already-emitted output must not trigger a retry that would duplicate it.
+        self.assertEqual(attempts["count"], 1)
+        self.assertIn("event: error", body)
 
     def test_has_active_generation_is_false_after_job_completion(self):
         release_generation = threading.Event()
