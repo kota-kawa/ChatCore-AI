@@ -259,6 +259,7 @@ export function useHomePageGenerationActions({
       .map((message) => ({
         text: message.text,
         sender: toStoredSender(message.sender),
+        ...(message.parts?.length ? { parts: message.parts } : {}),
       }));
     notifyStoredHistoryWriteIssue(writeStoredHistory(roomId, normalized));
   }, [notifyStoredHistoryWriteIssue]);
@@ -287,6 +288,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("local", messageSeqRef),
         sender: normalizeStoredSender(entry.sender),
         text: entry.text,
+        ...(entry.parts?.length ? { parts: entry.parts } : {}),
       }));
 
       prependScrollRestoreRef.current = null;
@@ -409,7 +411,11 @@ export function useHomePageGenerationActions({
             });
           }
           if (persist && finalText && isGenerationActive(generation)) {
-            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
+              text: finalText,
+              sender: "bot",
+              ...(hasParts ? { parts } : {}),
+            }));
           }
           clearStoredGenerationState(roomId);
           scheduleAutoScrollIfNeeded(true);
@@ -431,7 +437,11 @@ export function useHomePageGenerationActions({
         });
 
         if (persist && finalText && isGenerationActive(generation)) {
-          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: finalText, sender: "bot" }));
+          notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
+            text: finalText,
+            sender: "bot",
+            ...(hasParts ? { parts } : {}),
+          }));
         }
         clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
@@ -742,6 +752,7 @@ export function useHomePageGenerationActions({
             id: nextMessageId("history", messageSeqRef),
             sender: normalizeHistorySender(entry.sender),
             text: typeof entry.message === "string" ? entry.message : "",
+            ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
             ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
             ...toBranchFields(entry),
           }));

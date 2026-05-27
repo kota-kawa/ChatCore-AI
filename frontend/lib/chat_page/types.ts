@@ -157,6 +157,7 @@ export type TaskEditFormState = {
 export type StoredHistoryEntry = {
   text: string;
   sender: string;
+  parts?: ChatMessagePart[];
 };
 
 export type StoredGenerationState = {
