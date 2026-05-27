@@ -20,6 +20,7 @@ from .llm import (
     LlmAuthenticationError,
     LlmConfigurationError,
     LlmRateLimitError,
+    LlmRetryableProviderError,
     LlmServiceError,
     get_llm_response_stream,
     is_retryable_llm_error,
@@ -42,6 +43,11 @@ DEFAULT_ACTIVE_JOB_LOCK_TTL_SECONDS = 900
 DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS = 60
 DEFAULT_CHAT_AGENT_MAX_STEPS = 10
 CHAT_AGENT_MAX_STEPS_LIMIT = 10
+# 出力開始前の一時的なプロバイダ障害を再試行する回数と待機時間
+# Retry budget and backoff for transient provider failures before any output is emitted.
+DEFAULT_LLM_STREAM_MAX_RETRIES = 2
+LLM_STREAM_RETRY_BASE_DELAY_SECONDS = 0.5
+LLM_STREAM_RETRY_MAX_DELAY_SECONDS = 8.0
 _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
@@ -57,6 +63,27 @@ def _get_chat_agent_max_steps() -> int:
     except (TypeError, ValueError):
         return DEFAULT_CHAT_AGENT_MAX_STEPS
     return min(max(value, 1), CHAT_AGENT_MAX_STEPS_LIMIT)
+
+
+def _get_llm_stream_max_retries() -> int:
+    raw = os.environ.get("LLM_STREAM_MAX_RETRIES")
+    if raw is None:
+        return DEFAULT_LLM_STREAM_MAX_RETRIES
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_LLM_STREAM_MAX_RETRIES
+    return max(value, 0)
+
+
+def _llm_stream_retry_delay(exc: BaseException, attempt: int) -> float:
+    # サーバー指定のretry_afterを優先し、なければ指数バックオフ（上限あり）を用いる
+    # Prefer server-provided retry_after, otherwise use capped exponential backoff.
+    retry_after = getattr(exc, "retry_after_seconds", None)
+    if isinstance(retry_after, int) and retry_after > 0:
+        return min(float(retry_after), LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
+    delay = LLM_STREAM_RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
+    return min(delay, LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
 
 
 def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
@@ -282,6 +309,61 @@ class ChatGenerationJob:
         except Exception:
             logger.exception("Failed to run chat generation error callback.")
 
+    def _sleep_with_cancel(self, delay: float) -> bool:
+        # キャンセルを監視しつつ待機し、キャンセルされた場合は True を返す
+        # Sleep while watching for cancellation; return True if cancelled.
+        deadline = time.monotonic() + max(delay, 0.0)
+        while time.monotonic() < deadline:
+            if self._cancelled:
+                return True
+            time.sleep(min(0.1, max(deadline - time.monotonic(), 0.0)))
+        return self._cancelled
+
+    def _iter_llm_stream_with_retry(
+        self,
+        current_messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+    ) -> Iterator[str]:
+        # 出力開始前の一時的なプロバイダ障害のみ再試行し、内部エラー表示を抑制する。
+        # 一度でもチャンクを送出した後は重複出力を避けるため再試行しない。
+        # Retry transient provider failures only before any chunk is emitted, so brief
+        # upstream blips do not surface as an internal error. Never retry once a chunk has
+        # been emitted, to avoid duplicated or garbled output.
+        max_retries = _get_llm_stream_max_retries()
+        attempt = 0
+        while True:
+            emitted = False
+            try:
+                for chunk in get_llm_response_stream(
+                    current_messages, self._model, tools=tools
+                ):
+                    emitted = True
+                    yield chunk
+                return
+            except LlmRetryableProviderError as exc:
+                # レート制限はサーバー指定の待機を尊重するため別ハンドラに委ねる
+                # Rate limits are handled separately to honor server-provided backoff.
+                if (
+                    emitted
+                    or isinstance(exc, LlmRateLimitError)
+                    or attempt >= max_retries
+                    or self._cancelled
+                ):
+                    raise
+                delay = _llm_stream_retry_delay(exc, attempt)
+                attempt += 1
+                logger.warning(
+                    "Retrying LLM stream after transient error "
+                    "(attempt %s/%s, model=%s, delay=%.2fs): %s",
+                    attempt,
+                    max_retries,
+                    self._model,
+                    delay,
+                    exc.__class__.__name__,
+                )
+                if self._sleep_with_cancel(delay):
+                    raise
+
     def _run(self) -> None:
         chunks: list[str] = []
         web_search_results: list[WebSearchResult] = []
@@ -357,7 +439,7 @@ class ChatGenerationJob:
                 step_count += 1
 
                 tool_calls_buffer: list[dict[str, Any]] = []
-                for chunk in get_llm_response_stream(current_messages, self._model, tools=tools):
+                for chunk in self._iter_llm_stream_with_retry(current_messages, tools=tools):
                     if self._cancelled:
                         return
                     if not chunk:
