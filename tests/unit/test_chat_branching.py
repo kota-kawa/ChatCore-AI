@@ -21,7 +21,7 @@ class FakeCursor:
         self.rowcount = 0
 
         if normalized.startswith("INSERT INTO chat_history"):
-            chat_room_id, message, sender, file_names_json, parent_id = params
+            chat_room_id, message, sender, file_names_json, parent_id, message_parts_json = params
             new_id = self.store["seq"]
             self.store["seq"] += 1
             self.store["history"].append(
@@ -34,6 +34,7 @@ class FakeCursor:
                     "active_child_id": None,
                     "timestamp": None,
                     "attached_file_names": file_names_json,
+                    "message_parts": message_parts_json,
                 }
             )
             self._result_one = (new_id,)
@@ -74,6 +75,7 @@ class FakeCursor:
                     r["active_child_id"],
                     r["timestamp"],
                     r["attached_file_names"],
+                    r.get("message_parts"),
                 )
                 for r in rows
             ]

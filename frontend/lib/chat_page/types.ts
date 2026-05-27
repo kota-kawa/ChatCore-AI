@@ -31,6 +31,20 @@ export type ChatRoomsPage = {
 export type ChatSender = "user" | "assistant" | "thinking";
 export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 
+export type GenerativeUiArtifactV1 = {
+  version: 1;
+  title: string;
+  description?: string;
+  height?: number;
+  html: string;
+  css: string;
+  js: string;
+};
+
+export type ChatMessagePart =
+  | { type: "text"; text: string }
+  | { type: "sandbox_artifact"; artifact: GenerativeUiArtifactV1 };
+
 export type AttachedFile = {
   id: string;
   name: string;
@@ -44,6 +58,7 @@ export type UiChatMessage = {
   id: string;
   sender: ChatSender;
   text: string;
+  parts?: ChatMessagePart[];
   generationPhase?: ChatGenerationPhase;
   streaming?: boolean;
   error?: boolean;
@@ -61,6 +76,7 @@ export type UiChatMessage = {
 export type ChatHistoryMessagePayload = {
   id?: number;
   message?: string;
+  message_parts?: ChatMessagePart[];
   sender?: string;
   timestamp?: string;
   attached_file_names?: string[];
@@ -94,6 +110,7 @@ export type GenerationStatusPayload = {
 
 export type ChatResponsePayload = {
   response?: string;
+  parts?: ChatMessagePart[];
   error?: string;
   roomTitle?: string;
 };

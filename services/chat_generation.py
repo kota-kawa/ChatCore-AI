@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import json
 import os
+import inspect
 import threading
 import time
 import uuid
@@ -15,6 +16,7 @@ from fastapi import Request
 
 from .background_executor import submit_background_task
 from services.cache import get_redis_client
+from services.generative_ui import normalize_response_with_artifacts
 
 from .llm import (
     LlmAuthenticationError,
@@ -202,7 +204,7 @@ class ChatGenerationJob:
         *,
         conversation_messages: list[dict[str, Any]],
         model: str,
-        persist_response: Callable[[str], dict[str, Any] | None],
+        persist_response: Callable[..., dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
@@ -224,6 +226,27 @@ class ChatGenerationJob:
         self.started_at = time.monotonic()
         self.finished_at: float | None = None
         self.is_done = False
+
+    def _persist_generated_response(
+        self,
+        response: str,
+        message_parts: list[dict[str, Any]] | None,
+    ) -> dict[str, Any] | None:
+        try:
+            signature = inspect.signature(self._persist_response)
+            accepts_message_parts = (
+                "message_parts" in signature.parameters
+                or any(
+                    parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    for parameter in signature.parameters.values()
+                )
+            )
+        except (TypeError, ValueError):
+            accepts_message_parts = False
+
+        if accepts_message_parts:
+            return self._persist_response(response, message_parts=message_parts)
+        return self._persist_response(response)
 
     def start(self) -> None:
         if self._future is not None:
@@ -761,10 +784,18 @@ class ChatGenerationJob:
         if trace_block:
             separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
             bot_reply = f"{trace_block}{separator}{bot_reply}"
+        normalized_response = normalize_response_with_artifacts(bot_reply)
+        if normalized_response.validation_errors:
+            logger.warning(
+                "One or more generated UI artifacts failed validation and were omitted.",
+                extra={"validation_errors": normalized_response.validation_errors},
+            )
+        bot_reply = normalized_response.text
+        message_parts = normalized_response.parts
         self.response = bot_reply
 
         try:
-            persist_metadata = self._persist_response(bot_reply)
+            persist_metadata = self._persist_generated_response(bot_reply, message_parts)
         except Exception:
             logger.exception("Failed to persist background chat response.")
             error_message = "応答は生成されましたが、履歴保存に失敗しました。"
@@ -776,6 +807,8 @@ class ChatGenerationJob:
             return
 
         done_payload: dict[str, Any] = {"response": bot_reply}
+        if message_parts:
+            done_payload["parts"] = message_parts
         if isinstance(persist_metadata, dict):
             done_payload.update(persist_metadata)
         self._publish("done", done_payload, done=True)
@@ -1147,7 +1180,7 @@ return 0
         *,
         conversation_messages: list[dict[str, Any]],
         model: str,
-        persist_response: Callable[[str], dict[str, Any] | None],
+        persist_response: Callable[..., dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
     ) -> ChatGenerationJob:
@@ -1292,7 +1325,7 @@ def start_generation_job(
     *,
     conversation_messages: list[dict[str, Any]],
     model: str,
-    persist_response: Callable[[str], dict[str, Any] | None],
+    persist_response: Callable[..., dict[str, Any] | None],
     on_finished: Callable[[], None] | None = None,
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,

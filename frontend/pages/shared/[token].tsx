@@ -1,10 +1,13 @@
 import type { GetServerSideProps } from "next";
+import { SandboxArtifactFrame } from "../../components/chat_page/sandbox_artifact_frame";
 import MarkdownContent from "../../components/MarkdownContent";
 import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
+import type { ChatMessagePart } from "../../lib/chat_page/types";
 
 type SharedMessage = {
   message: string;
+  message_parts?: ChatMessagePart[];
   sender: "user" | "assistant" | string;
   timestamp?: string;
 };
@@ -178,12 +181,33 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
               {messages.map((message, index) => {
                 const normalizedSender = message.sender === "user" ? "user" : "assistant";
                 const decoded = decodeStoredMessage(message.message || "");
+                const parts = Array.isArray(message.message_parts) ? message.message_parts : [];
                 return (
                   <article
                     key={`${normalizedSender}-${index}-${message.timestamp || ""}`}
                     className={`shared-chat-message shared-chat-message--${normalizedSender}`}
                   >
-                    {normalizedSender === "assistant" ? (
+                    {normalizedSender === "assistant" && parts.length > 0 ? (
+                      <div className="shared-chat-message__parts">
+                        {parts.map((part, partIndex) => {
+                          if (part.type === "text") {
+                            return (
+                              <MarkdownContent
+                                key={`text-${partIndex}`}
+                                text={part.text}
+                                className="md-content"
+                              />
+                            );
+                          }
+                          return (
+                            <SandboxArtifactFrame
+                              key={`artifact-${partIndex}`}
+                              artifact={part.artifact}
+                            />
+                          );
+                        })}
+                      </div>
+                    ) : normalizedSender === "assistant" ? (
                       <MarkdownContent text={decoded} className="md-content" />
                     ) : (
                       decoded

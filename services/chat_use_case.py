@@ -16,6 +16,7 @@ from services.attached_files import (
 )
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
+from services.generative_ui import normalize_response_with_artifacts
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
@@ -351,9 +352,22 @@ class ChatPostUseCase:
                     task_launch_request=active_task_request,
                 )
 
-                def persist_response(response: str) -> dict[str, Any] | None:
+                def persist_response(
+                    response: str,
+                    *,
+                    message_parts: list[dict[str, Any]] | None = None,
+                ) -> dict[str, Any] | None:
+                    save_args = [
+                        chat_room_id,
+                        response,
+                        "assistant",
+                        None,
+                        saved_user_message_id,
+                    ]
+                    if message_parts:
+                        save_args.append(message_parts)
                     deps.save_message_to_db(
-                        chat_room_id, response, "assistant", None, saved_user_message_id
+                        *save_args,
                     )
                     if not should_auto_title_room:
                         return None
@@ -501,16 +515,30 @@ class ChatPostUseCase:
             separator = "" if not bot_reply else "\n\n"
             bot_reply = f"{trace_block}{separator}{bot_reply}"
 
+        normalized_response = normalize_response_with_artifacts(bot_reply)
+        if normalized_response.validation_errors:
+            deps.logger.warning(
+                "One or more generated UI artifacts failed validation and were omitted.",
+                extra={"validation_errors": normalized_response.validation_errors},
+            )
+        bot_reply = normalized_response.text
+        message_parts = normalized_response.parts
+
         saved_assistant_message_id: int | None = None
         generated_room_title: str | None = None
         if user_id is not None and room_mode == "normal":
-            saved_assistant_message_id = await run_blocking(
-                deps.save_message_to_db,
+            save_args = [
                 chat_room_id,
                 bot_reply,
                 "assistant",
                 None,
                 saved_user_message_id,
+            ]
+            if message_parts:
+                save_args.append(message_parts)
+            saved_assistant_message_id = await run_blocking(
+                deps.save_message_to_db,
+                *save_args,
             )
             if should_auto_title_room:
                 title_candidates = build_initial_title_candidates(
@@ -528,12 +556,12 @@ class ChatPostUseCase:
                 )
         else:
             sid = sid or deps.get_session_id(session)
+            append_args = [sid, chat_room_id, "assistant", bot_reply]
+            if message_parts:
+                append_args.append(message_parts)
             await run_blocking(
                 deps.ephemeral_store.append_message,
-                sid,
-                chat_room_id,
-                "assistant",
-                bot_reply,
+                *append_args,
             )
 
         if (
@@ -551,6 +579,8 @@ class ChatPostUseCase:
                 )
 
         response_payload = {"response": bot_reply}
+        if message_parts:
+            response_payload["parts"] = message_parts
         if generated_room_title:
             response_payload["room_title"] = generated_room_title
         return deps.jsonify(response_payload)

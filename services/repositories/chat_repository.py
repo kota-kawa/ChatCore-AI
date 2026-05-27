@@ -11,6 +11,7 @@ from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from services.error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
+from services.generative_ui import decode_message_parts, encode_message_parts
 
 UNIQUE_VIOLATION_PGCODE = "23505"
 DB_WRITE_MAX_ATTEMPTS = 3
@@ -41,6 +42,7 @@ class ChatRepository:
         sender: str,
         attached_file_names: list[str] | None = None,
         parent_id: int | None = None,
+        message_parts: list[dict[str, Any]] | None = None,
     ) -> int | None:
         """Insert a message and make it the active branch tip.
 
@@ -50,16 +52,34 @@ class ChatRepository:
         becomes the active root of the room.
         """
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
+        message_parts_json = encode_message_parts(message_parts)
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
                 try:
                     query = """
-                        INSERT INTO chat_history (chat_room_id, message, sender, attached_file_names, parent_id)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO chat_history (
+                            chat_room_id,
+                            message,
+                            sender,
+                            attached_file_names,
+                            parent_id,
+                            message_parts
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """
-                    cursor.execute(query, (chat_room_id, message, sender, file_names_json, parent_id))
+                    cursor.execute(
+                        query,
+                        (
+                            chat_room_id,
+                            message,
+                            sender,
+                            file_names_json,
+                            parent_id,
+                            message_parts_json,
+                        ),
+                    )
                     row = cursor.fetchone()
                     new_id = row[0] if row else None
                     if new_id is not None:
@@ -308,7 +328,7 @@ class ChatRepository:
         """Load every message of a room plus the room's active root pointer."""
         cursor.execute(
             """
-            SELECT id, message, sender, parent_id, active_child_id, timestamp, attached_file_names
+            SELECT id, message, sender, parent_id, active_child_id, timestamp, attached_file_names, message_parts
               FROM chat_history
              WHERE chat_room_id = %s
              ORDER BY id ASC
@@ -316,7 +336,16 @@ class ChatRepository:
             (chat_room_id,),
         )
         nodes: dict[int, dict[str, Any]] = {}
-        for (message_id, message, sender, parent_id, active_child_id, ts, file_names_json) in cursor.fetchall():
+        for (
+            message_id,
+            message,
+            sender,
+            parent_id,
+            active_child_id,
+            ts,
+            file_names_json,
+            message_parts_json,
+        ) in cursor.fetchall():
             nodes[message_id] = {
                 "id": message_id,
                 "message": message,
@@ -325,6 +354,7 @@ class ChatRepository:
                 "active_child_id": active_child_id,
                 "timestamp": ts,
                 "attached_file_names": file_names_json,
+                "message_parts": message_parts_json,
             }
 
         cursor.execute("SELECT active_root_id FROM chat_rooms WHERE id = %s", (chat_room_id,))
@@ -401,6 +431,9 @@ class ChatRepository:
             file_names = self._decode_file_names(node["attached_file_names"])
             if file_names:
                 entry["attached_file_names"] = file_names
+        message_parts = decode_message_parts(node.get("message_parts"))
+        if message_parts:
+            entry["message_parts"] = message_parts
         return entry
 
     def get_active_path(self, chat_room_id: str) -> list[dict[str, Any]]:
@@ -584,13 +617,15 @@ class ChatRepository:
                 path = self._walk_active_path(nodes, active_root_id, children)
                 messages = []
                 for node in path:
-                    messages.append(
-                        {
-                            "message": node["message"],
-                            "sender": node["sender"],
-                            "timestamp": serialize_datetime_iso(node["timestamp"]),
-                        }
-                    )
+                    entry = {
+                        "message": node["message"],
+                        "sender": node["sender"],
+                        "timestamp": serialize_datetime_iso(node["timestamp"]),
+                    }
+                    message_parts = decode_message_parts(node.get("message_parts"))
+                    if message_parts:
+                        entry["message_parts"] = message_parts
+                    messages.append(entry)
 
                 return {
                     "room": {
