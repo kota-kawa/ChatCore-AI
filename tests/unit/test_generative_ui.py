@@ -51,12 +51,60 @@ class GenerativeUiTestCase(unittest.TestCase):
         with self.assertRaises(GenerativeUiValidationError):
             validate_artifact_payload(artifact)
 
-    def test_validate_artifact_rejects_html_event_handlers(self):
+    def test_validate_artifact_allows_safe_html_event_handlers(self):
         artifact = dict(VALID_ARTIFACT)
-        artifact["html"] = '<button onclick="alert(1)">Click</button>'
+        artifact["html"] = '<button id="b" onclick="this.textContent = \'Done\'">Click</button>'
 
-        with self.assertRaises(GenerativeUiValidationError):
-            validate_artifact_payload(artifact)
+        normalized = validate_artifact_payload(artifact)
+
+        self.assertIn("onclick", normalized["html"])
+
+    def test_validate_artifact_removes_unsafe_html_event_handlers(self):
+        artifact = dict(VALID_ARTIFACT)
+        artifact["html"] = '<button onclick="parent.postMessage({type: \'x\'}, \'*\')">Click</button>'
+
+        normalized = validate_artifact_payload(artifact)
+
+        self.assertNotIn("onclick", normalized["html"].lower())
+        self.assertIn("Click", normalized["html"])
+
+    def test_validate_artifact_allows_style_top_assignment(self):
+        artifact = dict(VALID_ARTIFACT)
+        artifact["js"] = "document.getElementById('app').style.top = '8px';"
+
+        normalized = validate_artifact_payload(artifact)
+
+        self.assertIn("style.top", normalized["js"])
+
+    def test_validate_artifact_accepts_common_aliases_and_embedded_code(self):
+        artifact = {
+            "name": "Alias UI",
+            "body": "<style>#app{color:red;}</style><div id=\"app\"></div><script>document.getElementById('app').textContent='ok';</script>",
+            "height": "1200px",
+        }
+
+        normalized = validate_artifact_payload(artifact)
+
+        self.assertEqual(normalized["title"], "Alias UI")
+        self.assertEqual(normalized["height"], 900)
+        self.assertNotIn("<script", normalized["html"].lower())
+        self.assertIn("#app{color:red;}", normalized["css"])
+        self.assertIn("textContent='ok'", normalized["js"])
+
+    def test_normalize_response_hides_validation_failure_note_from_user_text(self):
+        raw = (
+            "短い説明です。\n\n"
+            "```chatcore-artifact\n"
+            '{"version":1,"title":"Bad","html":"<div></div>","css":"","js":"fetch(\'https://example.com\')"}\n'
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "短い説明です。")
+        self.assertIsNone(normalized.parts)
+        self.assertNotIn("安全検証", normalized.text)
+        self.assertTrue(normalized.validation_errors)
 
     def test_decode_message_parts_drops_invalid_artifacts(self):
         parts = [

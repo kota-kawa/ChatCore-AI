@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 
 ARTIFACT_BLOCK_RE = re.compile(
-    r"```(?:chatcore-artifact|generative-ui|generative_ui|ui_artifact)\s*(?P<json>\{[\s\S]*?\})\s*```",
+    r"```(?:chatcore-artifact|generative-ui|generative_ui|ui_artifact)(?:\s+json)?\s*"
+    r"(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
 )
 
@@ -22,37 +23,64 @@ MIN_ARTIFACT_HEIGHT = 160
 MAX_ARTIFACT_HEIGHT = 900
 
 _BANNED_HTML_TAG_RE = re.compile(
-    r"<\s*/?\s*(script|iframe|object|embed|link|meta|base|form)\b",
+    r"<\s*/?\s*(script|iframe|object|embed|link|meta|base)\b",
     re.IGNORECASE,
 )
-_BANNED_EVENT_ATTR_RE = re.compile(r"\son[a-z0-9_-]+\s*=", re.IGNORECASE)
-_BANNED_NAV_ATTR_RE = re.compile(
-    r"\b(?:src|href|action|formaction|poster|data|xlink:href)\s*=\s*(['\"]?)\s*"
-    r"(?:https?:|//|wss?:|ftp:|file:|mailto:|tel:|javascript:)",
+_SCRIPT_TAG_RE = re.compile(
+    r"<\s*script\b[^>]*>(?P<body>[\s\S]*?)<\s*/\s*script\s*>",
+    re.IGNORECASE,
+)
+_STYLE_TAG_RE = re.compile(
+    r"<\s*style\b[^>]*>(?P<body>[\s\S]*?)<\s*/\s*style\s*>",
+    re.IGNORECASE,
+)
+_BLOCKED_ELEMENT_RE = re.compile(
+    r"<\s*(script|iframe|object|embed)\b[^>]*>[\s\S]*?<\s*/\s*\1\s*>",
+    re.IGNORECASE,
+)
+_BLOCKED_TAG_RE = re.compile(
+    r"<\s*/?\s*(script|iframe|object|embed|link|meta|base)\b[^>]*>",
+    re.IGNORECASE,
+)
+_EVENT_ATTR_RE = re.compile(
+    r"\s(?P<name>on[a-z0-9_-]+)\s*=\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+)",
+    re.IGNORECASE,
+)
+_STYLE_ATTR_RE = re.compile(
+    r"\s(?P<name>style)\s*=\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+)",
+    re.IGNORECASE,
+)
+_NAV_ATTR_RE = re.compile(
+    r"\s(?P<name>src|href|action|formaction|poster|data|xlink:href|srcset)\s*="
+    r"\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+)",
     re.IGNORECASE,
 )
 _CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(?P<value>[^'\"\)]+)\1\s*\)", re.IGNORECASE)
+_CSS_IMPORT_RE = re.compile(r"@import\b[^;]*(?:;|$)", re.IGNORECASE)
 _JS_BANNED_TOKEN_RE = re.compile(
     r"(\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|"
     r"\bnavigator\s*\.\s*sendBeacon\b|\bWorker\b|\bSharedWorker\b|"
     r"\bServiceWorker\b|\bimportScripts\b|\bimport\s*\(|\beval\s*\(|"
     r"\bFunction\s*\(|\bdocument\s*\.\s*cookie\b|\blocalStorage\b|"
-    r"\bsessionStorage\b|\bindexedDB\b|\bpostMessage\b|\bparent\b|"
-    r"\btop\b|\bopener\b)",
+    r"\bsessionStorage\b|\bindexedDB\b|\bcaches\b|"
+    r"\bdocument\s*\.\s*(?:write|writeln)\s*\(|"
+    r"\bset(?:Timeout|Interval)\s*\(\s*['\"]|"
+    r"\b(?:window|globalThis|self)\s*\.\s*(?:parent|top|opener)\b|"
+    r"(?<![\w$])(?:parent|top|opener)\s*\.|"
+    r"\bpostMessage\s*\(|"
+    r"\b(?:window|document)\s*\.\s*location\b|"
+    r"(?<![\w$])location\s*(?:=|\.|\[))",
     re.IGNORECASE,
 )
-_JS_NETWORK_URL_RE = re.compile(r"(?:https?:|//|wss?:|ftp:|file:|mailto:|tel:)", re.IGNORECASE)
-
-
 class GenerativeUiValidationError(ValueError):
     pass
 
 
 class GenerativeUiArtifactV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
-    version: Literal[1]
-    title: str = Field(min_length=1, max_length=120)
+    version: Literal[1] = 1
+    title: str = Field(default="生成UI", min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     height: int | None = Field(default=None, ge=MIN_ARTIFACT_HEIGHT, le=MAX_ARTIFACT_HEIGHT)
     html: str = Field(default="", max_length=MAX_ARTIFACT_HTML_CHARS)
@@ -62,43 +90,22 @@ class GenerativeUiArtifactV1(BaseModel):
     @field_validator("html")
     @classmethod
     def _validate_html(cls, value: str) -> str:
-        if _BANNED_HTML_TAG_RE.search(value):
+        sanitized = _sanitize_html(value)
+        if _BANNED_HTML_TAG_RE.search(sanitized):
             raise ValueError("HTML contains a forbidden tag.")
-        if _BANNED_EVENT_ATTR_RE.search(value):
-            raise ValueError("HTML event handler attributes are not allowed.")
-        if _BANNED_NAV_ATTR_RE.search(value):
-            raise ValueError("External or executable URLs are not allowed in HTML attributes.")
-        return value
+        return sanitized
 
     @field_validator("css")
     @classmethod
     def _validate_css(cls, value: str) -> str:
-        lowered = value.lower()
-        if "@import" in lowered:
-            raise ValueError("CSS imports are not allowed.")
-        if "</style" in lowered:
-            raise ValueError("CSS cannot close the sandbox style element.")
-        for match in _CSS_URL_RE.finditer(value):
-            url = match.group("value").strip()
-            if not (
-                url.startswith("data:")
-                or url.startswith("blob:")
-                or url.startswith("#")
-            ):
-                raise ValueError("CSS URLs must be data:, blob:, or local fragment URLs.")
-        return value
+        return _sanitize_css(value)
 
     @field_validator("js")
     @classmethod
     def _validate_js(cls, value: str) -> str:
-        lowered = value.lower()
-        if "</script" in lowered:
-            raise ValueError("JavaScript cannot close the sandbox script element.")
-        if _JS_BANNED_TOKEN_RE.search(value):
-            raise ValueError("JavaScript uses an API that is not allowed in sandbox artifacts.")
-        if _JS_NETWORK_URL_RE.search(value):
-            raise ValueError("Network URLs are not allowed in sandbox JavaScript.")
-        return value
+        sanitized = _sanitize_script_end(value)
+        _validate_javascript_safety(sanitized)
+        return sanitized
 
     @model_validator(mode="after")
     def _validate_total_size(self) -> "GenerativeUiArtifactV1":
@@ -114,10 +121,241 @@ class NormalizedGenerativeResponse:
     validation_errors: list[str]
 
 
+def _coerce_string(value: Any) -> str:
+    if value is None:
+        return ""
+    return value if isinstance(value, str) else str(value)
+
+
+def _coerce_height(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        match = re.search(r"\d+", value)
+        if not match:
+            return None
+        value = int(match.group(0))
+    if isinstance(value, (int, float)):
+        return min(max(int(value), MIN_ARTIFACT_HEIGHT), MAX_ARTIFACT_HEIGHT)
+    return None
+
+
+def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]:
+    html = html[:MAX_ARTIFACT_HTML_CHARS]
+    css = css[:MAX_ARTIFACT_CSS_CHARS]
+    js = js[:MAX_ARTIFACT_JS_CHARS]
+    overflow = len(html) + len(css) + len(js) - MAX_ARTIFACT_TOTAL_CHARS
+    if overflow <= 0:
+        return html, css, js
+
+    js_trim = min(len(js), overflow)
+    js = js[: len(js) - js_trim]
+    overflow -= js_trim
+    if overflow <= 0:
+        return html, css, js
+
+    css_trim = min(len(css), overflow)
+    css = css[: len(css) - css_trim]
+    overflow -= css_trim
+    if overflow <= 0:
+        return html, css, js
+
+    html = html[: max(0, len(html) - overflow)]
+    return html, css, js
+
+
+def _strip_json_comments(source: str) -> str:
+    output: list[str] = []
+    in_string = False
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(source):
+        char = source[index]
+        next_char = source[index + 1] if index + 1 < len(source) else ""
+        if in_string:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                in_string = False
+            index += 1
+            continue
+        if char in ("'", '"'):
+            in_string = True
+            quote = char
+            output.append(char)
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < len(source) and source[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < len(source) and not (source[index] == "*" and source[index + 1] == "/"):
+                index += 1
+            index += 2
+            continue
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
+def _remove_trailing_json_commas(source: str) -> str:
+    return re.sub(r",(\s*[}\]])", r"\1", source)
+
+
+def _loads_artifact_json(raw_json: str) -> Any:
+    try:
+        return json.loads(raw_json)
+    except json.JSONDecodeError:
+        cleaned = _remove_trailing_json_commas(_strip_json_comments(raw_json))
+        return json.loads(cleaned)
+
+
+def _first_present(payload: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in payload:
+            return payload[key]
+    return None
+
+
+def _strip_attribute_quotes(raw_value: str) -> str:
+    value = raw_value.strip()
+    if len(value) >= 2 and value[0] in {"'", '"'} and value[-1] == value[0]:
+        return value[1:-1]
+    return value
+
+
+def _sanitize_script_end(value: str) -> str:
+    return re.sub(r"</\s*script", r"<\\/script", value, flags=re.IGNORECASE)
+
+
+def _validate_javascript_safety(value: str) -> None:
+    if _JS_BANNED_TOKEN_RE.search(value):
+        raise ValueError("JavaScript uses an API that is not allowed in sandbox artifacts.")
+
+
+def _is_safe_javascript_fragment(value: str) -> bool:
+    try:
+        _validate_javascript_safety(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_safe_resource_url(value: str) -> bool:
+    url = value.strip()
+    if not url:
+        return True
+    return (
+        url.startswith("data:")
+        or url.startswith("blob:")
+        or url.startswith("#")
+    )
+
+
+def _sanitize_css(value: str) -> str:
+    sanitized = _coerce_string(value)
+    sanitized = re.sub(r"</\s*style", r"<\\/style", sanitized, flags=re.IGNORECASE)
+    sanitized = _CSS_IMPORT_RE.sub("", sanitized)
+
+    def replace_url(match: re.Match[str]) -> str:
+        url = match.group("value").strip()
+        if url.startswith("data:") or url.startswith("blob:") or url.startswith("#"):
+            return match.group(0)
+        return "url(\"data:,\")"
+
+    return _CSS_URL_RE.sub(replace_url, sanitized)
+
+
+def _sanitize_html(value: str) -> str:
+    sanitized = _coerce_string(value)
+    sanitized = _BLOCKED_ELEMENT_RE.sub("", sanitized)
+    sanitized = _BLOCKED_TAG_RE.sub("", sanitized)
+
+    def replace_event_attr(match: re.Match[str]) -> str:
+        handler = _strip_attribute_quotes(match.group("value"))
+        return match.group(0) if _is_safe_javascript_fragment(handler) else ""
+
+    def replace_style_attr(match: re.Match[str]) -> str:
+        style = _strip_attribute_quotes(match.group("value"))
+        return match.group(0) if _sanitize_css(style) == style else ""
+
+    def replace_nav_attr(match: re.Match[str]) -> str:
+        name = match.group("name")
+        value = _strip_attribute_quotes(match.group("value"))
+        if _is_safe_resource_url(value):
+            return match.group(0)
+        if name.lower() in {"href", "xlink:href"}:
+            return f' {name}="#"'
+        return ""
+
+    sanitized = _EVENT_ATTR_RE.sub(replace_event_attr, sanitized)
+    sanitized = _STYLE_ATTR_RE.sub(replace_style_attr, sanitized)
+    sanitized = _NAV_ATTR_RE.sub(replace_nav_attr, sanitized)
+    return sanitized
+
+
+def _prepare_artifact_payload(payload: Any) -> Any:
+    if isinstance(payload, list):
+        payload = next((item for item in payload if isinstance(item, dict)), payload)
+    if not isinstance(payload, dict):
+        return payload
+    if isinstance(payload.get("artifact"), dict) and not any(
+        key in payload for key in ("html", "markup", "body", "content")
+    ):
+        payload = payload["artifact"]
+
+    html = _coerce_string(_first_present(payload, "html", "markup", "body", "content"))
+    css = _coerce_string(_first_present(payload, "css", "style", "styles"))
+    js = _coerce_string(_first_present(payload, "js", "javascript", "script"))
+
+    embedded_css: list[str] = []
+    embedded_js: list[str] = []
+
+    def extract_style(match: re.Match[str]) -> str:
+        embedded_css.append(match.group("body"))
+        return ""
+
+    def extract_script(match: re.Match[str]) -> str:
+        embedded_js.append(match.group("body"))
+        return ""
+
+    html = _STYLE_TAG_RE.sub(extract_style, html)
+    html = _SCRIPT_TAG_RE.sub(extract_script, html)
+    if embedded_css:
+        css = "\n".join(part for part in [css, *embedded_css] if part)
+    if embedded_js:
+        js = "\n".join(part for part in [js, *embedded_js] if part)
+    html, css, js = _trim_artifact_sources(html, css, js)
+
+    title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
+    description = _coerce_string(_first_present(payload, "description", "summary", "caption")).strip()
+    prepared = {
+        "version": 1,
+        "title": title[:120],
+        "description": description[:500] if description else None,
+        "height": _coerce_height(payload.get("height")),
+        "html": html,
+        "css": css,
+        "js": js,
+    }
+    if prepared["description"] is None:
+        prepared.pop("description")
+    return prepared
+
+
 def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     try:
-        artifact = GenerativeUiArtifactV1.model_validate(payload)
+        artifact = GenerativeUiArtifactV1.model_validate(_prepare_artifact_payload(payload))
     except ValidationError as exc:
+        raise GenerativeUiValidationError(str(exc)) from exc
+    except ValueError as exc:
         raise GenerativeUiValidationError(str(exc)) from exc
     return artifact.model_dump(exclude_none=True)
 
@@ -172,7 +410,7 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
     for match in matches[:MAX_ARTIFACTS_PER_MESSAGE]:
         raw_json = match.group("json")
         try:
-            payload = json.loads(raw_json)
+            payload = _loads_artifact_json(raw_json)
             artifacts.append(validate_artifact_payload(payload))
         except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
             validation_errors.append(str(exc))
@@ -181,8 +419,6 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
 
     if not artifacts:
         fallback_text = visible_text or "生成UIの作成に失敗しました。通常のテキストで再試行してください。"
-        if validation_errors and visible_text:
-            fallback_text = f"{fallback_text}\n\n（生成UIは安全検証に失敗したため表示しませんでした。）"
         return NormalizedGenerativeResponse(
             text=fallback_text,
             parts=None,
