@@ -14,6 +14,11 @@ ARTIFACT_BLOCK_RE = re.compile(
     r"(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
 )
+INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
+    r"```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
+    r"(?P<json>\{[\s\S]*?\})\s*```",
+    re.IGNORECASE,
+)
 GENERIC_JSON_BLOCK_RE = re.compile(
     r"```json\s*(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
@@ -108,6 +113,21 @@ class GenerativeUiValidationError(ValueError):
 class _ArtifactCandidate:
     raw_json: str
     span: tuple[int, int]
+
+
+class InteractiveButtonsV1(BaseModel):
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+    type: Literal["yes_no", "multiple_choice"]
+    question: str = Field(min_length=1, max_length=500)
+    options: list[str] | None = Field(default=None, max_length=10)
+
+    @model_validator(mode="after")
+    def _validate_options(self) -> "InteractiveButtonsV1":
+        if self.type == "multiple_choice" and not self.options:
+            raise ValueError("options is required for multiple_choice")
+        if self.options:
+            self.options = [opt for opt in self.options if opt.strip()]
+        return self
 
 
 class GenerativeUiArtifactV1(BaseModel):
@@ -696,6 +716,16 @@ def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     return artifact.model_dump(exclude_none=True)
 
 
+def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
+    try:
+        buttons = InteractiveButtonsV1.model_validate(payload)
+    except ValidationError as exc:
+        raise GenerativeUiValidationError(str(exc)) from exc
+    except ValueError as exc:
+        raise GenerativeUiValidationError(str(exc)) from exc
+    return buttons.model_dump(exclude_none=True)
+
+
 def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     if not raw_parts:
         return None
@@ -721,6 +751,14 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
             except GenerativeUiValidationError:
                 continue
             parts.append({"type": "sandbox_artifact", "artifact": artifact})
+            continue
+        if part_type == "interactive_buttons":
+            try:
+                buttons = validate_interactive_buttons_payload(part.get("buttons"))
+            except GenerativeUiValidationError:
+                continue
+            parts.append({"type": "interactive_buttons", "buttons": buttons})
+            continue
     return parts or None
 
 
@@ -777,11 +815,17 @@ def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]
 def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResponse:
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
     candidates = _extract_artifact_candidates(text)
+    
+    button_candidates: list[_ArtifactCandidate] = []
+    for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
+        button_candidates.append(_ArtifactCandidate(raw_json=match.group("json"), span=match.span()))
+        
     has_intent = _has_artifact_intent(text)
-    if not candidates and not has_intent:
+    if not candidates and not button_candidates and not has_intent:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
     artifacts: list[dict[str, Any]] = []
+    buttons_list: list[dict[str, Any]] = []
     validation_errors: list[str] = []
     for candidate in candidates[:MAX_ARTIFACTS_PER_MESSAGE]:
         try:
@@ -790,10 +834,18 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
         except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
             validation_errors.append(str(exc))
 
-    visible_text = _remove_candidate_spans(text, candidates)
+    for candidate in button_candidates[:MAX_ARTIFACTS_PER_MESSAGE]:
+        try:
+            payload = _loads_artifact_json(candidate.raw_json)
+            buttons_list.append(validate_interactive_buttons_payload(payload))
+        except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
+            validation_errors.append(str(exc))
 
-    if not artifacts:
-        fallback_text = visible_text or "生成UIの作成に失敗しました。通常のテキストで再試行してください。"
+    all_candidates = sorted(candidates + button_candidates, key=lambda c: c.span)
+    visible_text = _remove_candidate_spans(text, all_candidates)
+
+    if not artifacts and not buttons_list:
+        fallback_text = visible_text or "UIの作成に失敗しました。通常のテキストで再試行してください。"
         if candidates or has_intent:
             fallback_artifact = _build_fallback_artifact(fallback_text, text)
             return NormalizedGenerativeResponse(
@@ -811,10 +863,11 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
         )
 
     if not visible_text:
-        visible_text = "生成UIを作成しました。"
+        visible_text = "生成UIを作成しました。" if artifacts else "ボタンを選択してください。"
 
     parts: list[dict[str, Any]] = [{"type": "text", "text": visible_text}]
     parts.extend({"type": "sandbox_artifact", "artifact": artifact} for artifact in artifacts)
+    parts.extend({"type": "interactive_buttons", "buttons": button} for button in buttons_list)
     return NormalizedGenerativeResponse(
         text=visible_text,
         parts=parts,

@@ -199,12 +199,23 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
                               />
                             );
                           }
-                          return (
-                            <SandboxArtifactFrame
-                              key={`artifact-${partIndex}`}
-                              artifact={part.artifact}
-                            />
-                          );
+                          if (part.type === "sandbox_artifact") {
+                            return (
+                              <SandboxArtifactFrame
+                                key={`artifact-${partIndex}`}
+                                artifact={part.artifact}
+                              />
+                            );
+                          }
+                          if (part.type === "interactive_buttons") {
+                            return (
+                              <div key={`buttons-${partIndex}`} style={{ marginTop: "1rem", opacity: 0.7 }}>
+                                <strong>{part.buttons.question}</strong>
+                                <div style={{ fontSize: "0.85rem", color: "#666" }}>(対話型ボタンは共有画面では動作しません)</div>
+                              </div>
+                            );
+                          }
+                          return null;
                         })}
                       </div>
                     ) : normalizedSender === "assistant" ? (
