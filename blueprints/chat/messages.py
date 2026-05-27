@@ -194,6 +194,8 @@ BASE_SYSTEM_PROMPT = """
 - Artifactは隔離されたsandbox iframeで実行されます。HTML/CSS/JavaScriptは描画とローカル操作だけに使い、フォーム送信や外部通信は行わないでください。
 - JSONは必ず有効な1つのオブジェクトにしてください。HTML/CSS/JS内の改行は `\n` としてエスケープし、末尾カンマは使わないでください。
 - HTML内に `<script>` や `<style>` を入れず、CSSは `css`、JavaScriptは `js` に分けてください。クリック等の操作はできるだけ `addEventListener` で実装してください。
+- Artifact JSONは必ず ```chatcore-artifact の fenced block に入れてください。裸のJSONや通常の ```json block だけで出力しないでください。
+- 「表示します」「作成しました」と言うだけで終わらせず、Artifactを作ると判断したら必ずコードブロックまで出力してください。
 - Artifactを出す場合も、ユーザーに見える短い説明文を先に書いてください。
 
 ```chatcore-artifact
