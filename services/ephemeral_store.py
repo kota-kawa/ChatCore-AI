@@ -198,14 +198,24 @@ class EphemeralChatStore:
         room["title"] = new_title
         return self._save_room(sid, room_id, room)
 
-    def append_message(self, sid: str, room_id: str, role: str, content: str) -> bool:
+    def append_message(
+        self,
+        sid: str,
+        room_id: str,
+        role: str,
+        content: str,
+        message_parts: list[dict] | None = None,
+    ) -> bool:
         # 指定ルームへメッセージを追記して永続化する
         # Append a message to the room and persist updated state.
         room = self.get_room(sid, room_id)
         if not room:
             return False
         messages = room.get("messages") or []
-        messages.append({"role": role, "content": content})
+        entry = {"role": role, "content": content}
+        if message_parts:
+            entry["message_parts"] = message_parts
+        messages.append(entry)
         room["messages"] = messages
         return self._save_room(sid, room_id, room)
 

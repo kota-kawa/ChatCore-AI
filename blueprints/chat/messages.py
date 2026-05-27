@@ -24,6 +24,7 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.chat_context import build_context_messages
+from services.generative_ui import normalize_response_with_artifacts
 from services.chat_state import (
     get_room_summary,
     list_room_memory_facts,
@@ -185,6 +186,16 @@ BASE_SYSTEM_PROMPT = """
 - メール文、返信文、テンプレート文など、ユーザーがそのまま貼り付けて使う完成文は、説明部分と分けてコードブロックで示してください。
 - 冗長な前置き、不要な見出し、装飾目的だけの Markdown は使わないでください。
 - 必要なら根拠、判断材料、手順は簡潔に示してください。長い内部思考の逐語的な開示は不要です。
+
+## Generative UI
+- 図解、インフォグラフィック、簡単な操作付きビジュアル、比較ビューなどが回答理解に役立つ場合のみ、通常の文章に加えて chatcore-artifact コードブロックを1つ出力できます。
+- 特定のLLM専用機能には依存せず、以下のJSON形式だけを使ってください。React、外部ライブラリ、外部URL、画像URL、fetch、WebSocket、localStorage、Cookie、親画面アクセスは使えません。
+- Artifactは隔離されたsandbox iframeで実行されます。HTML/CSS/JavaScriptは描画とローカル操作だけに使い、フォーム送信や外部通信は行わないでください。
+- Artifactを出す場合も、ユーザーに見える短い説明文を先に書いてください。
+
+```chatcore-artifact
+{"version":1,"title":"短いタイトル","description":"任意の説明","height":420,"html":"<div id=\"app\"></div>","css":"body{margin:0;font-family:sans-serif;}","js":"document.getElementById('app').textContent='Hello';"}
+```
 
 ## 誠実さ
 - 確信がない情報には「確認をお勧めします」と添えてください。知らないことは「わかりません」と正直に伝えてください。
@@ -663,6 +674,7 @@ def _paginate_ephemeral_chat_history(
         {
             "id": index + 1,
             "message": row.get("content", ""),
+            **({"message_parts": row.get("message_parts")} if row.get("message_parts") else {}),
             "sender": row.get("role", ""),
             "timestamp": "",
         }
@@ -895,8 +907,15 @@ async def chat_regenerate(
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
-            def persist_response(response: str) -> None:
-                save_message_to_db(chat_room_id, response, "assistant", None, assistant_parent_id)
+            def persist_response(
+                response: str,
+                *,
+                message_parts: list[dict[str, Any]] | None = None,
+            ) -> None:
+                save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
+                if message_parts:
+                    save_args.append(message_parts)
+                save_message_to_db(*save_args)
 
             def on_finished() -> None:
                 try:
@@ -942,12 +961,42 @@ async def chat_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    if user_id is not None and room_mode == "normal":
-        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant", None, assistant_parent_id)
-    elif sid is not None:
-        await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
+    normalized_response = normalize_response_with_artifacts(bot_reply)
+    if normalized_response.validation_errors:
+        logger.warning(
+            "One or more generated UI artifacts failed validation and were omitted.",
+            extra={"validation_errors": normalized_response.validation_errors},
+        )
+    bot_reply = normalized_response.text
+    message_parts = normalized_response.parts
 
-    return jsonify({"response": bot_reply})
+    if user_id is not None and room_mode == "normal":
+        save_args = [
+            chat_room_id,
+            bot_reply,
+            "assistant",
+            None,
+            assistant_parent_id,
+        ]
+        if message_parts:
+            save_args.append(message_parts)
+        await run_blocking(
+            save_message_to_db,
+            *save_args,
+        )
+    elif sid is not None:
+        append_args = [sid, chat_room_id, "assistant", bot_reply]
+        if message_parts:
+            append_args.append(message_parts)
+        await run_blocking(
+            ephemeral_store.append_message,
+            *append_args,
+        )
+
+    response_payload = {"response": bot_reply}
+    if message_parts:
+        response_payload["parts"] = message_parts
+    return jsonify(response_payload)
 
 
 @chat_bp.post("/api/chat_edit_and_regenerate", name="chat.chat_edit_and_regenerate")
@@ -1134,8 +1183,15 @@ async def chat_edit_and_regenerate(
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
-            def persist_response(response: str) -> None:
-                save_message_to_db(chat_room_id, response, "assistant", None, assistant_parent_id)
+            def persist_response(
+                response: str,
+                *,
+                message_parts: list[dict[str, Any]] | None = None,
+            ) -> None:
+                save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
+                if message_parts:
+                    save_args.append(message_parts)
+                save_message_to_db(*save_args)
 
             def on_finished() -> None:
                 try:
@@ -1181,12 +1237,42 @@ async def chat_edit_and_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    if user_id is not None and room_mode == "normal":
-        await run_blocking(save_message_to_db, chat_room_id, bot_reply, "assistant", None, assistant_parent_id)
-    elif sid is not None:
-        await run_blocking(ephemeral_store.append_message, sid, chat_room_id, "assistant", bot_reply)
+    normalized_response = normalize_response_with_artifacts(bot_reply)
+    if normalized_response.validation_errors:
+        logger.warning(
+            "One or more generated UI artifacts failed validation and were omitted.",
+            extra={"validation_errors": normalized_response.validation_errors},
+        )
+    bot_reply = normalized_response.text
+    message_parts = normalized_response.parts
 
-    return jsonify({"response": bot_reply})
+    if user_id is not None and room_mode == "normal":
+        save_args = [
+            chat_room_id,
+            bot_reply,
+            "assistant",
+            None,
+            assistant_parent_id,
+        ]
+        if message_parts:
+            save_args.append(message_parts)
+        await run_blocking(
+            save_message_to_db,
+            *save_args,
+        )
+    elif sid is not None:
+        append_args = [sid, chat_room_id, "assistant", bot_reply]
+        if message_parts:
+            append_args.append(message_parts)
+        await run_blocking(
+            ephemeral_store.append_message,
+            *append_args,
+        )
+
+    response_payload = {"response": bot_reply}
+    if message_parts:
+        response_payload["parts"] = message_parts
+    return jsonify(response_payload)
 
 
 @chat_bp.post("/api/chat_switch_branch", name="chat.chat_switch_branch")

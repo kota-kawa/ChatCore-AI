@@ -20,9 +20,10 @@ def save_message_to_db(
     sender: str,
     attached_file_names: list[str] | None = None,
     parent_id: int | None = None,
+    message_parts: list[dict[str, Any]] | None = None,
 ) -> int | None:
     return _get_chat_repository().save_message(
-        chat_room_id, message, sender, attached_file_names, parent_id
+        chat_room_id, message, sender, attached_file_names, parent_id, message_parts
     )
 
 

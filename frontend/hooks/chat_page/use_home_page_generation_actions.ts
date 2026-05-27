@@ -34,6 +34,7 @@ import type {
   ChatGenerationPhase,
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
+  ChatMessagePart,
   ChatRoom,
   ChatRoomMode,
   UiChatMessage,
@@ -381,9 +382,14 @@ export function useHomePageGenerationActions({
         scheduleAutoScrollIfNeeded();
       };
 
-      const finalizeStreamingMessage = (finalText: string, persist = true) => {
+      const finalizeStreamingMessage = (
+        finalText: string,
+        persist = true,
+        parts?: ChatMessagePart[],
+      ) => {
+        const hasParts = Array.isArray(parts) && parts.length > 0;
         if (!streamingMessageId) {
-          if (finalText) {
+          if (finalText || hasParts) {
             setMessages((previous) => {
               if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
               return [
@@ -392,6 +398,7 @@ export function useHomePageGenerationActions({
                   id: nextMessageId("assistant", messageSeqRef),
                   sender: "assistant",
                   text: finalText,
+                  ...(hasParts ? { parts } : {}),
                 },
               ];
             });
@@ -417,6 +424,7 @@ export function useHomePageGenerationActions({
             return {
               ...message,
               text: finalText || message.text,
+              ...(hasParts ? { parts } : {}),
               streaming: false,
             };
           });
@@ -525,9 +533,10 @@ export function useHomePageGenerationActions({
 
         if (parsed.event === "done") {
           streamState.completed = true;
-          const responseText = typeof parsed.data.response === "string" ? parsed.data.response : streamedText;
+          const donePayload = normalizeChatResponsePayload(parsed.data);
+          const responseText = donePayload.response ?? streamedText;
           applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          finalizeStreamingMessage(responseText, true);
+          finalizeStreamingMessage(responseText, true, donePayload.parts);
           streamLastEventIdByRoomRef.current.delete(roomId);
           return;
         }
@@ -837,6 +846,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId("history-older", messageSeqRef),
         sender: normalizeHistorySender(entry.sender),
         text: typeof entry.message === "string" ? entry.message : "",
+        ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
         ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
         ...toBranchFields(entry),
       }));
@@ -867,6 +877,7 @@ export function useHomePageGenerationActions({
         id: nextMessageId(idPrefix, messageSeqRef),
         sender: normalizeHistorySender(entry.sender),
         text: typeof entry.message === "string" ? entry.message : "",
+        ...(entry.message_parts?.length ? { parts: entry.message_parts } : {}),
         ...(entry.attached_file_names?.length ? { attachedFileNames: entry.attached_file_names } : {}),
         ...toBranchFields(entry),
       })),
@@ -1013,13 +1024,14 @@ export function useHomePageGenerationActions({
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           const trimmed = removeThinkingMessages(previous);
 
-          if (response.ok && data.response) {
+          if (response.ok && (data.response || data.parts?.length)) {
             return [
               ...trimmed,
               {
                 id: nextMessageId("assistant", messageSeqRef),
                 sender: "assistant",
-                text: data.response,
+                text: data.response ?? "",
+                ...(data.parts?.length ? { parts: data.parts } : {}),
               },
             ];
           }
@@ -1041,7 +1053,7 @@ export function useHomePageGenerationActions({
         }
         clearStoredGenerationState(roomId);
         scheduleAutoScrollIfNeeded(true);
-        return response.ok && Boolean(data.response);
+        return response.ok && Boolean(data.response || data.parts?.length);
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
           if (isGenerationActive(generation)) {
@@ -1169,6 +1181,29 @@ export function useHomePageGenerationActions({
         }
 
         const rawPayload = await readJsonBodySafe(response);
+        const data = normalizeChatResponsePayload(rawPayload);
+        if (response.ok && (data.response || data.parts?.length)) {
+          setMessages((previous) => {
+            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+            return [
+              ...removeThinkingMessages(previous),
+              {
+                id: nextMessageId("assistant", messageSeqRef),
+                sender: "assistant",
+                text: data.response ?? "",
+                ...(data.parts?.length ? { parts: data.parts } : {}),
+              },
+            ];
+          });
+          if (data.response) {
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
+          }
+          clearStoredGenerationState(roomId);
+          scheduleAutoScrollIfNeeded(true);
+          void refreshActivePath(roomId);
+          return;
+        }
+
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return [
@@ -1285,6 +1320,29 @@ export function useHomePageGenerationActions({
         }
 
         const rawPayload = await readJsonBodySafe(response);
+        const data = normalizeChatResponsePayload(rawPayload);
+        if (response.ok && (data.response || data.parts?.length)) {
+          setMessages((previous) => {
+            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+            return [
+              ...removeThinkingMessages(previous),
+              {
+                id: nextMessageId("assistant", messageSeqRef),
+                sender: "assistant",
+                text: data.response ?? "",
+                ...(data.parts?.length ? { parts: data.parts } : {}),
+              },
+            ];
+          });
+          if (data.response) {
+            notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, { text: data.response, sender: "bot" }));
+          }
+          clearStoredGenerationState(roomId);
+          scheduleAutoScrollIfNeeded(true);
+          void refreshActivePath(roomId);
+          return;
+        }
+
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
           return [

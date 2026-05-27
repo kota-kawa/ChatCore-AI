@@ -16,7 +16,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
 import type { UiChatMessage } from "../../lib/chat_page/types";
 import { stripWebSearchSourcesHtml } from "../../scripts/chat/message_utils";
-import { BotMessageHtml } from "./bot_message_html";
+import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
@@ -273,7 +273,7 @@ function ChatMessageRow({
         className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
       >
         <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
-          <BotMessageHtml text={message.text} />
+          <BotMessageParts fallbackText={message.text} parts={message.parts} />
         </div>
         {!message.streaming && (
           <div className="message-actions">

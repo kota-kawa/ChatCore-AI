@@ -89,3 +89,34 @@ test("normalizeChatResponsePayload keeps generated room title", () => {
     roomTitle: "Thread title",
   });
 });
+
+test("normalizers keep valid sandbox artifact parts", () => {
+  const artifact = {
+    version: 1,
+    title: "Diagram",
+    description: "Interactive view",
+    height: 360,
+    html: "<div></div>",
+    css: "body{margin:0}",
+    js: "document.body.textContent = 'ok';",
+  };
+
+  const history = normalizeChatHistoryMessages([
+    {
+      id: 6,
+      message: "answer",
+      sender: "assistant",
+      message_parts: [
+        { type: "text", text: "answer" },
+        { type: "sandbox_artifact", artifact },
+      ],
+    },
+  ]);
+  assert.equal(history[0]?.message_parts?.[1]?.type, "sandbox_artifact");
+
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [{ type: "sandbox_artifact", artifact }],
+  });
+  assert.equal(response.parts?.[0]?.type, "sandbox_artifact");
+});

@@ -2,10 +2,12 @@ import type {
   ChatHistoryMessagePayload,
   ChatHistoryPagination,
   ChatResponsePayload,
+  ChatMessagePart,
   ChatRoom,
   ChatRoomMode,
   ChatRoomsPage,
   ChatRoomsPagination,
+  GenerativeUiArtifactV1,
   GenerationStatusPayload,
 } from "./types";
 
@@ -32,6 +34,50 @@ function asPositiveNumber(value: unknown): number | null {
 
 function asBoolean(value: unknown): boolean {
   return value === true;
+}
+
+function normalizeArtifact(raw: unknown): GenerativeUiArtifactV1 | null {
+  const record = asRecord(raw);
+  if (record.version !== 1) return null;
+  const title = optionalString(record.title);
+  const html = optionalString(record.html);
+  const css = optionalString(record.css);
+  const js = optionalString(record.js);
+  if (!title || html === undefined || css === undefined || js === undefined) return null;
+
+  const description = optionalString(record.description);
+  const height =
+    typeof record.height === "number" && Number.isFinite(record.height)
+      ? Math.min(Math.max(Math.round(record.height), 160), 900)
+      : undefined;
+
+  return {
+    version: 1,
+    title,
+    ...(description ? { description } : {}),
+    ...(height ? { height } : {}),
+    html,
+    css,
+    js,
+  };
+}
+
+function normalizeMessageParts(rawParts: unknown): ChatMessagePart[] | undefined {
+  if (!Array.isArray(rawParts)) return undefined;
+  const parts: ChatMessagePart[] = [];
+  rawParts.forEach((rawPart) => {
+    const part = asRecord(rawPart);
+    if (part.type === "text") {
+      const text = optionalString(part.text);
+      if (text !== undefined) parts.push({ type: "text", text });
+      return;
+    }
+    if (part.type === "sandbox_artifact") {
+      const artifact = normalizeArtifact(part.artifact);
+      if (artifact) parts.push({ type: "sandbox_artifact", artifact });
+    }
+  });
+  return parts.length > 0 ? parts : undefined;
 }
 
 export function normalizeChatRoom(raw: unknown): ChatRoom | null {
@@ -88,11 +134,13 @@ export function normalizeChatHistoryMessages(rawMessages: unknown): ChatHistoryM
     const sibling_ids = Array.isArray(rawSiblingIds)
       ? (rawSiblingIds.filter((value) => typeof value === "number") as number[])
       : undefined;
+    const message_parts = normalizeMessageParts(record.message_parts);
     return {
       id: asPositiveNumber(record.id) ?? undefined,
       message: optionalString(record.message),
       sender: optionalString(record.sender),
       timestamp: optionalString(record.timestamp),
+      ...(message_parts ? { message_parts } : {}),
       ...(attached_file_names ? { attached_file_names } : {}),
       ...(asPositiveNumber(record.version_index) ? { version_index: asPositiveNumber(record.version_index)! } : {}),
       ...(asPositiveNumber(record.version_count) ? { version_count: asPositiveNumber(record.version_count)! } : {}),
@@ -135,8 +183,10 @@ export function normalizeGenerationStatusPayload(rawPayload: unknown): Generatio
 
 export function normalizeChatResponsePayload(rawPayload: unknown): ChatResponsePayload {
   const payload = asRecord(rawPayload);
+  const parts = normalizeMessageParts(payload.parts);
   return {
     response: optionalString(payload.response),
+    ...(parts ? { parts } : {}),
     error: optionalString(payload.error),
     roomTitle: optionalString(payload.room_title),
   };
