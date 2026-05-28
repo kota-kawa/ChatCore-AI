@@ -481,6 +481,7 @@ export function useHomePageRoomActions({
         removeStoredHistory(roomId);
         const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
         setAttachedFiles([]);
+        setSetupInfo("");
         const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
         setPageViewState("chat");
         setLaunchingTaskName(null);
@@ -517,6 +518,7 @@ export function useHomePageRoomActions({
       setAttachedFiles,
       setLaunchingTaskName,
       setPageViewState,
+      setSetupInfo,
       setupInfo,
       temporaryModeEnabled,
       upsertCreatedChatRoom,
@@ -550,6 +552,7 @@ export function useHomePageRoomActions({
       removeStoredHistory(roomId);
       const filesToSend = attachedFiles.length > 0 ? [...attachedFiles] : undefined;
       setAttachedFiles([]);
+      setSetupInfo("");
       const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
       setPageViewState("chat");
 
@@ -579,6 +582,7 @@ export function useHomePageRoomActions({
     resetLaunchingRoomState,
     selectedModel,
     setPageViewState,
+    setSetupInfo,
     setupInfo,
     temporaryModeEnabled,
     upsertCreatedChatRoom,
