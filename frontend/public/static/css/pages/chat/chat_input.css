@@ -592,7 +592,7 @@
     inset 0 1px 0 rgba(233, 255, 242, 0.08),
     0 0 0 1px rgba(45, 212, 191, 0.08),
     0 14px 28px rgba(0, 0, 0, 0.28);
-  animation: var(--constellation-stage-animation, constellationStageDrift) var(--constellation-stage-duration, 6.4s) var(--constellation-stage-easing, ease-in-out) infinite;
+  /* 入れ物(パネル)自体の揺れアニメーションは無効化。ノード/リンク/星雲/彗星の動きは維持する。 */
 }
 
 .constellation-loader::before {
