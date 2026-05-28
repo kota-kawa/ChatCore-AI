@@ -491,6 +491,22 @@ class ChatGenerationJob:
                         tool_calls_buffer.extend(parsed_tool_calls)
                         continue
 
+                    if not chunks:
+                        combined_web_search_result = combine_web_search_results(web_search_results)
+                        if web_search_trace_steps or combined_web_search_result is not None:
+                            web_search_trace_steps.append(
+                                {
+                                    "title": "回答を作成",
+                                    "detail": "検索結果と会話文脈を統合して回答しました。",
+                                }
+                            )
+                        trace_block = build_web_search_trace_markdown(
+                            combined_web_search_result,
+                            steps=web_search_trace_steps,
+                        )
+                        if trace_block:
+                            chunk = f"{trace_block}\n\n{chunk}"
+
                     chunks.append(chunk)
                     self._publish("chunk", {"text": chunk})
 
@@ -769,21 +785,22 @@ class ChatGenerationJob:
             return
 
         bot_reply = "".join(chunks)
-        combined_web_search_result = combine_web_search_results(web_search_results)
-        if web_search_trace_steps or combined_web_search_result is not None:
-            web_search_trace_steps.append(
-                {
-                    "title": "回答を作成",
-                    "detail": "検索結果と会話文脈を統合して回答しました。",
-                }
+        if not chunks:
+            combined_web_search_result = combine_web_search_results(web_search_results)
+            if web_search_trace_steps or combined_web_search_result is not None:
+                web_search_trace_steps.append(
+                    {
+                        "title": "回答を作成",
+                        "detail": "検索結果と会話文脈を統合して回答しました。",
+                    }
+                )
+            trace_block = build_web_search_trace_markdown(
+                combined_web_search_result,
+                steps=web_search_trace_steps,
             )
-        trace_block = build_web_search_trace_markdown(
-            combined_web_search_result,
-            steps=web_search_trace_steps,
-        )
-        if trace_block:
-            separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
-            bot_reply = f"{trace_block}{separator}{bot_reply}"
+            if trace_block:
+                separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
+                bot_reply = f"{trace_block}{separator}{bot_reply}"
         normalized_response = normalize_response_with_artifacts(bot_reply)
         if normalized_response.validation_errors:
             logger.warning(
