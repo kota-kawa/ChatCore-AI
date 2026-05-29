@@ -573,6 +573,7 @@ export default function MemoPage() {
   const [detailEditBackgroundColor, setDetailEditBackgroundColor] = useState<string | null>(null);
   const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
   const [detailSaveError, setDetailSaveError] = useState("");
+  const [detailCopied, setDetailCopied] = useState(false);
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailSaveSequenceRef = useRef(0);
 
@@ -605,6 +606,7 @@ export default function MemoPage() {
   const [openMenuMemoId, setOpenMenuMemoId] = useState<string>("");
   const [menuPosition, setMenuPosition] = useState<MemoActionMenuPosition | null>(null);
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
+  const [copyingMemoId, setCopyingMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
   const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
   const [dragSaving, setDragSaving] = useState(false);
@@ -1149,17 +1151,31 @@ export default function MemoPage() {
     });
   }, [mutate, selectedMemo?.id, showFlash, withActionLoading]);
 
-  const copyMemoExcerpt = useCallback(async (memo: MemoSummary) => {
-    const content = `${memo.title || "保存したメモ"}\n\n${parseMemoText(memo.excerpt)}`;
+  const copyMemoFullText = useCallback(async (memo: MemoSummary) => {
+    const memoId = String(memo.id);
+    setCopyingMemoId(memoId);
     try {
+      const detail = await loadMemoDetail(memo.id);
+      const fullText = detail?.ai_response || memo.excerpt || "";
+      const content = `${detail?.title || memo.title || "保存したメモ"}\n\n${parseMemoText(fullText)}`;
       await copyTextToClipboard(content.trim());
-      const memoId = String(memo.id);
       setCopiedMemoId(memoId);
       setTimeout(() => {
         setCopiedMemoId((current) => (current === memoId ? "" : current));
       }, 1400);
     } catch (error) { showFlash("error", error instanceof Error ? error.message : "コピーに失敗しました。"); }
+    finally { setCopyingMemoId(""); }
   }, [showFlash]);
+
+  const copyDetailFullText = useCallback(async () => {
+    const fullText = detailEditAiResponse || selectedMemo?.ai_response || "";
+    const content = `${detailEditTitle || selectedMemo?.title || "保存したメモ"}\n\n${parseMemoText(fullText)}`;
+    try {
+      await copyTextToClipboard(content.trim());
+      setDetailCopied(true);
+      setTimeout(() => setDetailCopied(false), 1400);
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コピーに失敗しました。"); }
+  }, [detailEditAiResponse, detailEditTitle, selectedMemo?.ai_response, selectedMemo?.title, showFlash]);
 
   const toggleMemoActionMenu = useCallback((memoId: string, trigger: HTMLElement) => {
     if (openMenuMemoId === memoId) {
@@ -2031,6 +2047,7 @@ export default function MemoPage() {
                   const isBusy = actionLoadingId === memoId;
                   const isSelected = selectedIds.has(memoId);
                   const isCopied = copiedMemoId === memoId;
+                  const isCopying = copyingMemoId === memoId;
                   const canDragMemo = canDragMemos && !isBusy;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
 
@@ -2107,13 +2124,13 @@ export default function MemoPage() {
                               <button
                                 type="button"
                                 className={`memo-item__action${isCopied ? " is-copied" : ""}`}
-                                onClick={() => { void copyMemoExcerpt(memo); }}
-                                disabled={isBusy}
-                                aria-label={isCopied ? "コピーしました" : "要約をコピー"}
-                                data-tooltip={isCopied ? "コピーしました" : "要約をコピー"}
+                                onClick={() => { void copyMemoFullText(memo); }}
+                                disabled={isBusy || isCopying}
+                                aria-label={isCopied ? "コピーしました" : "全文をコピー"}
+                                data-tooltip={isCopied ? "コピーしました" : "全文をコピー"}
                                 data-tooltip-placement="top"
                               >
-                                <i className={`bi ${isCopied ? "bi-check2" : "bi-files"}`}></i>
+                                <i className={`bi ${isCopied ? "bi-check2" : isCopying ? "bi-arrow-repeat memo-spin" : "bi-files"}`}></i>
                               </button>
                               <button
                                 type="button"
@@ -2239,6 +2256,16 @@ export default function MemoPage() {
                 </div>
                 {selectedMemo && (
                   <div className="memo-modal__header-actions">
+                    <button
+                      type="button"
+                      className={`memo-modal__icon-btn${detailCopied ? " is-copied" : ""}`}
+                      onClick={() => { void copyDetailFullText(); }}
+                      aria-label={detailCopied ? "コピーしました" : "全文をコピー"}
+                      data-tooltip={detailCopied ? "コピーしました" : "全文をコピー"}
+                      data-tooltip-placement="bottom"
+                    >
+                      <i className={`bi ${detailCopied ? "bi-check2" : "bi-files"}`} aria-hidden="true"></i>
+                    </button>
                     <button
                       type="button"
                       className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
