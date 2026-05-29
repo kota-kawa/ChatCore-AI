@@ -838,6 +838,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   gap: 1rem;
   overflow-y: auto;
   min-height: 0; /* flex子要素が縮小できるよう */
+  position: relative;
+  z-index: 1;
 }
 
 .task-detail-modal-header {
@@ -919,9 +921,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   line-height: var(--leading-relaxed, 1.6);
   color: #111827;
   word-break: break-word;
-}
   max-height: 220px;
-  overflow: auto;
+  overflow-y: auto;
 }
 
 .task-detail-section-body-compact {
@@ -1296,6 +1297,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   .task-detail-section-body {
     font-size: var(--text-md, 1rem);
     max-height: 185px;
+    overflow-y: auto;
   }
 }
 
