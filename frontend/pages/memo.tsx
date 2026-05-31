@@ -2410,8 +2410,11 @@ export default function MemoPage() {
                 {isMemoAgentOpen && (
                   <aside className="memo-modal__agent-panel" aria-label="このメモについてAIに質問">
                     <div className="memo-modal__agent-header">
-                      <div>
-                        <span>Memo Agent</span>
+                      <div className="memo-modal__agent-header-info">
+                        <span className="memo-modal__agent-label">
+                          <i className="bi bi-stars" aria-hidden="true"></i>
+                          Memo Agent
+                        </span>
                         <strong>このメモについて質問</strong>
                       </div>
                       <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label="メモチャットを閉じる">
@@ -2425,7 +2428,7 @@ export default function MemoPage() {
                       quickPrompts={MEMO_AGENT_QUICK_PROMPTS}
                       placeholderTitle="メモ専用エージェント"
                       placeholderDescription="このメモの内容を参照して、要約、質問、整理を会話できます。"
-                      inputPlaceholder="このメモについて質問する"
+                      inputPlaceholder="このメモについて質問する..."
                       enableActions={false}
                     />
                   </aside>
