@@ -1413,6 +1413,11 @@ textarea.memo-control {
   min-width: 0;
 }
 
+.memo-modal__title-block {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
 .memo-modal__title-row h3 {
   display: -webkit-box;
   overflow: hidden;
@@ -1420,13 +1425,63 @@ textarea.memo-control {
   -webkit-line-clamp: 2;
 }
 
+.memo-modal__title-input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #4a2b09;
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 0.18rem 0.35rem;
+  margin: -0.18rem -0.35rem 0;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.memo-modal__title-input:hover,
+.memo-modal__title-input:focus,
+.memo-modal__title-input:focus-visible {
+  border-color: rgba(217, 119, 6, 0.24);
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
+}
+
 .memo-modal__header-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.45rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   min-width: 0;
+}
+
+.memo-select--detail-collection {
+  width: 12rem;
+  max-width: 100%;
+}
+
+.memo-select--detail-collection .memo-select__trigger {
+  min-height: 34px;
+  border-radius: 10px;
+  padding: 0.34rem 0.58rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.memo-modal__color-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  min-height: 34px;
+  padding: 0.12rem;
+  border: 1px solid rgba(191, 122, 23, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 .memo-modal__icon-btn {
@@ -2285,6 +2340,13 @@ textarea.memo-control {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.memo-modal__color-option--compact {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-width: 1px;
 }
 
 .memo-modal__color-option span {
@@ -3384,6 +3446,20 @@ textarea.memo-control {
   .memo-modal__header-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .memo-select--detail-collection {
+    width: min(100%, 14rem);
+  }
+
+  .memo-modal__color-strip {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .memo-modal__color-strip::-webkit-scrollbar {
+    display: none;
   }
 
   .memo-modal__edit-btn {
@@ -5406,6 +5482,23 @@ body.memo-page {
 [data-theme="dark"] .memo-compose-palette__option.is-active {
   background: #2b323b;
   color: #f3f6f8;
+}
+
+[data-theme="dark"] .memo-modal__title-input {
+  color: var(--memo-text);
+}
+
+[data-theme="dark"] .memo-modal__title-input:hover,
+[data-theme="dark"] .memo-modal__title-input:focus,
+[data-theme="dark"] .memo-modal__title-input:focus-visible {
+  border-color: rgba(251, 188, 4, 0.34);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(251, 188, 4, 0.12);
+}
+
+[data-theme="dark"] .memo-modal__color-strip {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(35, 40, 48, 0.72);
 }
 
 [data-theme="dark"] .memo-compose-palette__swatch--empty {
