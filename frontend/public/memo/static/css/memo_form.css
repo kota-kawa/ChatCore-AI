@@ -2275,13 +2275,115 @@ textarea.memo-control {
   overflow: hidden;
 }
 
+.memo-modal__body--with-agent {
+  flex-direction: row;
+  gap: 0.9rem;
+}
+
 .memo-modal__edit-form {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   gap: 0;
   background: transparent;
+}
+
+.memo-modal__agent-toggle {
+  color: #1d4ed8;
+}
+
+.memo-modal__agent-toggle.is-active {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: rgba(59, 130, 246, 0.12);
+  color: #1e40af;
+}
+
+.memo-modal__agent-panel {
+  flex: 0 0 min(360px, 42%);
+  min-width: 300px;
+  min-height: 0;
+  border: 1px solid rgba(191, 122, 23, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 18px 40px rgba(41, 24, 6, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.memo-modal__agent-header {
+  flex: 0 0 auto;
+  min-height: 52px;
+  padding: 0.72rem 0.78rem;
+  border-bottom: 1px solid rgba(191, 122, 23, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.memo-modal__agent-header span {
+  display: block;
+  margin-bottom: 0.12rem;
+  color: #8f5a17;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.memo-modal__agent-header strong {
+  display: block;
+  color: #4a2b09;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.memo-modal__agent-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border: 1px solid rgba(191, 122, 23, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #7b4b13;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.memo-modal__agent-panel .mini-chat-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.memo-modal__agent-panel .mini-chat-messages {
+  min-height: 0;
+  padding: 0.72rem;
+}
+
+.memo-modal__agent-panel .mini-chat-placeholder {
+  padding: 1rem 0.8rem;
+}
+
+.memo-modal__agent-panel .mini-chat-suggestions {
+  gap: 0.38rem;
+}
+
+.memo-modal__agent-panel .mini-chat-suggestion {
+  padding: 0.42rem 0.58rem;
+  font-size: 0.78rem;
+}
+
+.memo-modal__agent-panel .mini-chat-input-area {
+  padding: 0.7rem;
 }
 
 .memo-modal__edit-fields {
@@ -3448,6 +3550,22 @@ textarea.memo-control {
     padding-right: 0.55rem;
   }
 
+  .memo-modal__body--with-agent {
+    flex-direction: column;
+    gap: 0.7rem;
+    overflow-y: auto;
+  }
+
+  .memo-modal__body--with-agent .memo-modal__edit-form {
+    min-height: 52vh;
+  }
+
+  .memo-modal__agent-panel {
+    flex: 0 0 min(70vh, 420px);
+    min-width: 0;
+    width: 100%;
+  }
+
   .memo-modal__header-actions {
     width: 100%;
     justify-content: flex-start;
@@ -3632,6 +3750,37 @@ textarea.memo-control {
   color: #fca5a5;
   border-color: rgba(248, 113, 113, 0.34);
   background: rgba(127, 29, 29, 0.28);
+}
+
+[data-theme="dark"] .memo-modal__agent-panel {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="dark"] .memo-modal__agent-header {
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] .memo-modal__agent-header span {
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .memo-modal__agent-header strong {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .memo-modal__agent-close,
+[data-theme="dark"] .memo-modal__agent-toggle {
+  background: rgba(35, 40, 48, 0.86);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #d7dee8;
+}
+
+[data-theme="dark"] .memo-modal__agent-toggle.is-active {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
 }
 
 [data-theme="dark"] .memo-share-modal__close:hover,

@@ -16,6 +16,7 @@ import useSWR from "swr";
 
 import "../scripts/core/csrf";
 import { InlineLoading } from "../components/ui/inline_loading";
+import { MiniChat } from "../components/chat_page/MiniChat";
 import { formatDateTime } from "../lib/datetime";
 import { formatLLMOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
@@ -126,6 +127,11 @@ const MEMO_COLOR_OPTIONS = [
   { value: "#ede9fe", label: "ラベンダー", color: "#ede9fe" },
   { value: "#fce7f3", label: "ローズ", color: "#fce7f3" },
 ] as const;
+const MEMO_AGENT_QUICK_PROMPTS = [
+  "このメモを要約して",
+  "重要なポイントを箇条書きにして",
+  "このメモについて質問に答えて"
+];
 
 export function MemoCrawlSummary() {
   const features = [
@@ -573,6 +579,7 @@ export default function MemoPage() {
   const [detailSaveStatus, setDetailSaveStatus] = useState<DetailSaveStatus>("idle");
   const [detailSaveError, setDetailSaveError] = useState("");
   const [detailCopied, setDetailCopied] = useState(false);
+  const [isMemoAgentOpen, setIsMemoAgentOpen] = useState(false);
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailSaveSequenceRef = useRef(0);
 
@@ -947,6 +954,7 @@ export default function MemoPage() {
     setDetailPreviewMode(true);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
+    setIsMemoAgentOpen(false);
     if (detailAutoSaveTimerRef.current) {
       clearTimeout(detailAutoSaveTimerRef.current);
       detailAutoSaveTimerRef.current = null;
@@ -1058,8 +1066,18 @@ export default function MemoPage() {
       const saved = await saveDetailEdit();
       if (!saved) return;
     }
+    setIsMemoAgentOpen(false);
     setSelectedMemo(null);
   }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit]);
+
+  const openMemoAgent = useCallback(async () => {
+    if (!selectedMemo?.id) return;
+    if (detailHasUnsavedChanges) {
+      const saved = await saveDetailEdit();
+      if (!saved) return;
+    }
+    setIsMemoAgentOpen(true);
+  }, [detailHasUnsavedChanges, saveDetailEdit, selectedMemo?.id]);
 
   useEffect(() => {
     clearDetailAutoSaveTimer();
@@ -1096,6 +1114,10 @@ export default function MemoPage() {
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); };
   }, [closeMemoDetail, isShareModalOpen, selectedMemo, isCollectionPanelOpen, isExportModalOpen]);
+
+  useEffect(() => {
+    if (!selectedMemo) setIsMemoAgentOpen(false);
+  }, [selectedMemo]);
 
   // -----------------------------------------------------------------------
   // Pin / Archive / Delete
@@ -2312,6 +2334,23 @@ export default function MemoPage() {
                     >
                       <i className={`bi ${detailCopied ? "bi-check2" : "bi-files"}`} aria-hidden="true"></i>
                     </button>
+                    <button
+                      type="button"
+                      className={`memo-modal__icon-btn memo-modal__agent-toggle${isMemoAgentOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        if (isMemoAgentOpen) {
+                          setIsMemoAgentOpen(false);
+                        } else {
+                          void openMemoAgent();
+                        }
+                      }}
+                      aria-label={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問"}
+                      aria-expanded={isMemoAgentOpen}
+                      data-tooltip={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問"}
+                      data-tooltip-placement="bottom"
+                    >
+                      <i className="bi bi-robot" aria-hidden="true"></i>
+                    </button>
                     <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
                       {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
                       {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
@@ -2326,7 +2365,7 @@ export default function MemoPage() {
             {detailLoading && <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>}
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
             {!detailLoading && selectedMemo && (
-              <div className="memo-modal__body memo-modal__body--edit">
+              <div className={`memo-modal__body memo-modal__body--edit${isMemoAgentOpen ? " memo-modal__body--with-agent" : ""}`}>
                 <section
                   className="memo-modal__section memo-modal__section--full memo-modal__edit-form"
                 >
@@ -2368,6 +2407,29 @@ export default function MemoPage() {
                     )}
                   </div>
                 </section>
+                {isMemoAgentOpen && (
+                  <aside className="memo-modal__agent-panel" aria-label="このメモについてAIに質問">
+                    <div className="memo-modal__agent-header">
+                      <div>
+                        <span>Memo Agent</span>
+                        <strong>このメモについて質問</strong>
+                      </div>
+                      <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label="メモチャットを閉じる">
+                        <i className="bi bi-x-lg" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                    <MiniChat
+                      key={`memo-agent-${selectedMemo.id}`}
+                      memoId={selectedMemo.id}
+                      storageScope={`memoAgent.${selectedMemo.id}`}
+                      quickPrompts={MEMO_AGENT_QUICK_PROMPTS}
+                      placeholderTitle="メモ専用エージェント"
+                      placeholderDescription="このメモの内容を参照して、要約、質問、整理を会話できます。"
+                      inputPlaceholder="このメモについて質問する"
+                      enableActions={false}
+                    />
+                  </aside>
+                )}
               </div>
             )}
           </div>
