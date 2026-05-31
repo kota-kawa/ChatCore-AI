@@ -18,7 +18,7 @@ import "../scripts/core/csrf";
 import { InlineLoading } from "../components/ui/inline_loading";
 import { MiniChat } from "../components/chat_page/MiniChat";
 import { formatDateTime } from "../lib/datetime";
-import { formatLLMOutput } from "../scripts/chat/chat_ui";
+import { formatLLMOutput, formatMemoOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
 import { setLoggedInState } from "../scripts/core/app_state";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
@@ -417,7 +417,7 @@ function MemoMarkdown({ text, className }: { text: string; className?: string })
   const containerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!containerRef.current) return;
-    renderSanitizedHTML(containerRef.current, formatLLMOutput(text || ""));
+    renderSanitizedHTML(containerRef.current, formatMemoOutput(text || ""));
   }, [text]);
   return <div ref={containerRef} className={className}></div>;
 }

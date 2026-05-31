@@ -15,11 +15,13 @@ type MarkedParseOptions = {
 };
 
 let markedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
+let memoMarkedParser: ((markdown: string, options?: MarkedParseOptions) => string | Promise<string>) | null = null;
 let markdownEnhancementDisabled = false;
 const CODE_COPY_BUTTON_SELECTOR = ".code-block-copy-btn";
 const MARKED_HTML_CACHE_LIMIT = 160;
 const botMarkdownHtmlCache = new Map<string, string>();
 const userMarkdownHtmlCache = new Map<string, string>();
+const memoMarkdownHtmlCache = new Map<string, string>();
 
 function rememberMarkdownHtml(cache: Map<string, string>, key: string, value: string) {
   cache.set(key, value);
@@ -380,6 +382,37 @@ function ensureMarkedParser() {
     const marked = new Marked();
     marked.use({ renderer });
     markedParser = marked.parse.bind(marked);
+
+    const memoRenderer = {
+      code(token: unknown) {
+        const { text, lang } = readMarkedCodeToken(token);
+        const language = lang.split(" ")[0] || "plaintext";
+
+        let highlighted = text;
+        try {
+          if (hljs.getLanguage(language)) {
+            highlighted = hljs.highlight(text, { language }).value;
+          } else {
+            highlighted = hljs.highlightAuto(text).value;
+          }
+        } catch (error) {
+          console.error("Highlight error:", error);
+          highlighted = escapeHtml(text);
+        }
+
+        return `
+          <div class="memo-code-block-container">
+            <div class="memo-code-block-header">
+              <span class="memo-code-block-lang">${language}</span>
+            </div>
+            <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+          </div>`;
+      }
+    };
+
+    const memoMarked = new Marked();
+    memoMarked.use({ renderer: memoRenderer });
+    memoMarkedParser = memoMarked.parse.bind(memoMarked);
   } catch (error) {
     markdownEnhancementDisabled = true;
     console.warn("Failed to initialize markdown enhancement. Falling back to lightweight formatter.", error);
@@ -431,6 +464,29 @@ function formatLLMOutput(text: string) {
   });
   const html = typeof parsed === "string" ? parsed : normalized;
   rememberMarkdownHtml(botMarkdownHtmlCache, normalized, html);
+  return html;
+}
+
+/* メモ用の LLM 出力 Markdown を HTML に変換 */
+function formatMemoOutput(text: string) {
+  const normalized = normalizeLLMTextForDisplay(text);
+  if (!memoMarkedParser && !markdownEnhancementDisabled) {
+    void ensureMarkedParser();
+  }
+  if (!memoMarkedParser) {
+    return formatMarkdownFallback(normalized);
+  }
+
+  const cached = memoMarkdownHtmlCache.get(normalized);
+  if (cached !== undefined) return cached;
+
+  const parsed = memoMarkedParser(normalized, {
+    async: false,
+    gfm: true,
+    breaks: true
+  });
+  const html = typeof parsed === "string" ? parsed : normalized;
+  rememberMarkdownHtml(memoMarkdownHtmlCache, normalized, html);
   return html;
 }
 
@@ -541,6 +597,7 @@ export {
   showTypingIndicator,
   hideTypingIndicator,
   formatLLMOutput,
+  formatMemoOutput,
   formatUserInputForDisplay,
   closeSidebar
 };

@@ -1626,6 +1626,36 @@ textarea.memo-control {
   word-break: break-all;
 }
 
+.memo-code-block-container {
+  margin: 0.85rem 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fdfbf7;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+.memo-code-block-header {
+  background: rgba(217, 119, 6, 0.06);
+  padding: 0.35rem 0.85rem;
+  color: #8f5a17;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.1);
+}
+
+.memo-code-block-container pre {
+  margin: 0;
+  padding: 0.85rem;
+  background: transparent;
+  color: #24292e;
+}
+
+.memo-code-block-container code {
+  word-break: normal;
+}
+
 /* ============================================================
    Modal scrollbar – matches memo page amber/teal palette
    ============================================================ */
