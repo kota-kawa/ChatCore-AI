@@ -566,7 +566,6 @@ export default function MemoPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailPreviewMode, setDetailPreviewMode] = useState(true);
-  const [detailMetaOpen, setDetailMetaOpen] = useState(false);
   const [detailEditTitle, setDetailEditTitle] = useState("");
   const [detailEditCollectionId, setDetailEditCollectionId] = useState<number | null>(null);
   const [detailEditAiResponse, setDetailEditAiResponse] = useState("");
@@ -729,7 +728,6 @@ export default function MemoPage() {
     }
     detailSaveSequenceRef.current += 1;
     setDetailPreviewMode(true);
-    setDetailMetaOpen(false);
     setDetailEditTitle("");
     setDetailEditCollectionId(null);
     setDetailEditAiResponse("");
@@ -947,7 +945,6 @@ export default function MemoPage() {
     setDetailError("");
     setDetailLoading(true);
     setDetailPreviewMode(true);
-    setDetailMetaOpen(false);
     setDetailSaveStatus("idle");
     setDetailSaveError("");
     if (detailAutoSaveTimerRef.current) {
@@ -2250,12 +2247,55 @@ export default function MemoPage() {
             </button>
             <header className="memo-modal__header">
               <div className="memo-modal__title-row">
-                <div>
-                  <h3 id="memoModalTitle">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</h3>
+                <div className="memo-modal__title-block">
+                  <span id="memoModalTitle" className="sr-only">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</span>
+                  {detailPreviewMode ? (
+                    <h3 aria-hidden="true">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</h3>
+                  ) : (
+                    <input
+                      type="text"
+                      className="memo-modal__title-input"
+                      value={detailEditTitle}
+                      onChange={(event) => setDetailEditTitle(event.target.value)}
+                      placeholder="空欄なら回答1行目を採用"
+                      maxLength={255}
+                      aria-label="タイトル"
+                    />
+                  )}
                   <p className="memo-modal__date">{formatDateTime(selectedMemo?.updated_at || selectedMemo?.created_at) || selectedMemo?.created_at || ""}</p>
                 </div>
                 {selectedMemo && (
                   <div className="memo-modal__header-actions">
+                    {collections.length > 0 && (
+                      <MemoSelect
+                        id="memo-detail-collection"
+                        className="memo-select--detail-collection"
+                        value={String(detailEditCollectionId ?? "")}
+                        onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
+                        options={[
+                          { value: "", label: "コレクションなし" },
+                          ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
+                        ]}
+                      />
+                    )}
+                    <div className="memo-modal__color-strip" role="listbox" aria-label="メモの背景色">
+                      {MEMO_COLOR_OPTIONS.map((option) => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          className={`memo-modal__color-option memo-modal__color-option--compact${(detailEditBackgroundColor || "") === option.value ? " is-active" : ""}`}
+                          style={{ "--palette-color": option.color } as React.CSSProperties}
+                          onClick={() => setDetailEditBackgroundColor(option.value || null)}
+                          role="option"
+                          aria-selected={(detailEditBackgroundColor || "") === option.value}
+                          aria-label={option.label}
+                          data-tooltip={option.label}
+                          data-tooltip-placement="bottom"
+                        >
+                          <span></span>
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       className={`memo-modal__icon-btn${detailCopied ? " is-copied" : ""}`}
@@ -2265,18 +2305,6 @@ export default function MemoPage() {
                       data-tooltip-placement="bottom"
                     >
                       <i className={`bi ${detailCopied ? "bi-check2" : "bi-files"}`} aria-hidden="true"></i>
-                    </button>
-                    <button
-                      type="button"
-                      className={`memo-modal__icon-btn${detailMetaOpen ? " is-active" : ""}`}
-                      onClick={() => setDetailMetaOpen((value) => !value)}
-                      aria-label="タイトル・コレクションを編集"
-                      aria-expanded={detailMetaOpen}
-                      aria-controls="memo-detail-meta-panel"
-                      data-tooltip="タイトル・コレクション"
-                      data-tooltip-placement="bottom"
-                    >
-                      <i className="bi bi-sliders" aria-hidden="true"></i>
                     </button>
                     <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
                       {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
@@ -2297,58 +2325,6 @@ export default function MemoPage() {
                   className="memo-modal__section memo-modal__section--full memo-modal__edit-form"
                 >
                   <div className="memo-modal__edit-fields">
-                    {detailMetaOpen && (
-                      <div id="memo-detail-meta-panel" className="memo-modal__meta-panel">
-                        <div className="memo-modal__edit-field">
-                          <label htmlFor="memo-detail-title">タイトル</label>
-                          <input
-                            id="memo-detail-title"
-                            type="text"
-                            className="memo-control"
-                            value={detailEditTitle}
-                            onChange={(event) => setDetailEditTitle(event.target.value)}
-                            placeholder="空欄なら回答1行目を採用"
-                            maxLength={255}
-                          />
-                        </div>
-                        {collections.length > 0 && (
-                          <div className="memo-modal__edit-field">
-                            <label htmlFor="memo-detail-collection">コレクション</label>
-                            <MemoSelect
-                              id="memo-detail-collection"
-                              className="memo-select--full"
-                              value={String(detailEditCollectionId ?? "")}
-                              onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
-                              options={[
-                                { value: "", label: "コレクションなし" },
-                                ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
-                              ]}
-                            />
-                          </div>
-                        )}
-                        <div className="memo-modal__edit-field">
-                          <span className="memo-modal__field-label">背景色</span>
-                          <div className="memo-modal__color-grid" role="listbox" aria-label="メモの背景色">
-                            {MEMO_COLOR_OPTIONS.map((option) => (
-                              <button
-                                key={option.label}
-                                type="button"
-                                className={`memo-modal__color-option${(detailEditBackgroundColor || "") === option.value ? " is-active" : ""}`}
-                                style={{ "--palette-color": option.color } as React.CSSProperties}
-                                onClick={() => setDetailEditBackgroundColor(option.value || null)}
-                                role="option"
-                                aria-selected={(detailEditBackgroundColor || "") === option.value}
-                                aria-label={option.label}
-                                data-tooltip={option.label}
-                                data-tooltip-placement="top"
-                              >
-                                <span></span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                     <div className="memo-modal__response-header">
                       <div className="memo-response-tabs">
                         <button
