@@ -1428,11 +1428,13 @@ textarea.memo-control {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  min-height: calc(1.15rem * 1.3 * 2);
 }
 
 .memo-modal__title-input {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 34px;
+  height: calc(1.15rem * 1.3 * 2 + 0.36rem + 2px);
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -1444,6 +1446,7 @@ textarea.memo-control {
   padding: 0.18rem 0.35rem;
   margin: -0.18rem -0.35rem 0;
   outline: none;
+  text-overflow: ellipsis;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -2307,7 +2310,7 @@ textarea.memo-control {
 
 .memo-modal__body--with-agent {
   flex-direction: row;
-  gap: 0.9rem;
+  gap: 1rem;
 }
 
 .memo-modal__edit-form {
@@ -2331,13 +2334,16 @@ textarea.memo-control {
 }
 
 .memo-modal__agent-panel {
-  flex: 0 0 min(360px, 42%);
-  min-width: 300px;
+  flex: 0 0 clamp(340px, 38%, 430px);
+  min-width: 320px;
   min-height: 0;
   border: 1px solid rgba(191, 122, 23, 0.18);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 18px 40px rgba(41, 24, 6, 0.12);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.9) 0%, rgba(255, 255, 255, 0.82) 100%);
+  box-shadow:
+    0 18px 40px rgba(41, 24, 6, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2345,20 +2351,21 @@ textarea.memo-control {
 
 .memo-modal__agent-header {
   flex: 0 0 auto;
-  min-height: 52px;
-  padding: 0.68rem 0.78rem;
+  min-height: 58px;
+  padding: 0.78rem 0.9rem;
   border-bottom: 1px solid rgba(191, 122, 23, 0.14);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.7rem;
-  background: rgba(255, 251, 235, 0.72);
+  background:
+    linear-gradient(135deg, rgba(254, 243, 199, 0.9) 0%, rgba(255, 251, 235, 0.7) 100%);
 }
 
 .memo-modal__agent-header-info {
   display: flex;
   flex-direction: column;
-  gap: 0.08rem;
+  gap: 0.12rem;
   min-width: 0;
 }
 
@@ -2369,7 +2376,7 @@ textarea.memo-control {
   color: #b45309;
   font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -2380,17 +2387,20 @@ textarea.memo-control {
 .memo-modal__agent-header strong {
   display: block;
   color: #3a1a00;
-  font-size: 0.9rem;
+  font-size: 0.94rem;
   font-weight: 700;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .memo-modal__agent-close {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
   border: 1px solid rgba(191, 122, 23, 0.22);
-  border-radius: 999px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.88);
   color: #78350f;
   display: inline-flex;
@@ -2416,15 +2426,21 @@ textarea.memo-control {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .memo-modal__agent-panel .mini-chat-messages {
   min-height: 0;
-  padding: 0.72rem;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.76rem;
+  overflow-y: auto;
 }
 
 .memo-modal__agent-panel .mini-chat-placeholder {
-  padding: 1rem 0.8rem;
+  padding: 1.15rem 0.85rem;
 }
 
 .memo-modal__agent-panel .mini-chat-suggestions {
@@ -2437,9 +2453,12 @@ textarea.memo-control {
 }
 
 .memo-modal__agent-panel .mini-chat-input-area {
-  padding: 0.7rem;
+  padding: 0.75rem 0.8rem 0.8rem;
   border-top: 1px solid rgba(191, 122, 23, 0.13);
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* ── Memo Agent panel: mini-chat message layout ── */
@@ -2454,7 +2473,10 @@ textarea.memo-control {
 
 .memo-modal__agent-panel .mini-chat-placeholder {
   color: #a16207;
-  gap: 0.62rem;
+  gap: 0.68rem;
+  justify-content: center;
+  min-height: 100%;
+  text-align: center;
 }
 
 .memo-modal__agent-panel .mini-chat-robot-icon {
@@ -2480,7 +2502,7 @@ textarea.memo-control {
   color: #7c4a0a;
   font-size: 0.82rem;
   line-height: 1.65;
-  max-width: 240px;
+  max-width: 270px;
   margin: 0;
 }
 
@@ -2489,6 +2511,7 @@ textarea.memo-control {
   display: grid;
   gap: 0.42rem;
   margin-top: 0.28rem;
+  max-width: 290px;
 }
 
 .memo-modal__agent-panel .mini-chat-suggestion {
@@ -2521,9 +2544,9 @@ textarea.memo-control {
 .memo-modal__agent-panel .mini-chat-message {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  gap: 0.48rem;
+  gap: 0.5rem;
   align-items: end;
-  max-width: 94%;
+  max-width: 96%;
 }
 
 .memo-modal__agent-panel .mini-chat-message--user {
@@ -2567,7 +2590,7 @@ textarea.memo-control {
   min-width: 0;
   width: fit-content;
   max-width: 100%;
-  padding: 0.58rem 0.72rem;
+  padding: 0.64rem 0.76rem;
   border: 1px solid rgba(191, 122, 23, 0.16);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.92);
@@ -2806,13 +2829,13 @@ textarea.memo-control {
 .memo-modal__agent-panel .mini-chat-input-wrapper {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
+  min-height: 42px;
   display: flex;
   align-items: center;
   gap: 0.38rem;
-  padding: 0.18rem 0.2rem 0.18rem 0.68rem;
+  padding: 0.2rem 0.22rem 0.2rem 0.72rem;
   border: 1px solid rgba(191, 122, 23, 0.26);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 253, 247, 0.96);
   transition:
     background 0.16s ease,
@@ -2844,8 +2867,8 @@ textarea.memo-control {
 .memo-modal__agent-panel .mini-chat-send-btn,
 .memo-modal__agent-panel .mini-chat-action-btn,
 .memo-modal__agent-panel .mini-chat-stop-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   border-radius: 9px;
@@ -4209,6 +4232,23 @@ textarea.memo-control {
   }
 }
 
+@media (max-width: 1120px) {
+  .memo-modal__body--with-agent {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .memo-modal__body--with-agent .memo-modal__edit-form {
+    min-height: min(52vh, 480px);
+  }
+
+  .memo-modal__agent-panel {
+    flex: 0 0 min(46vh, 390px);
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 @media (max-width: 768px) {
   .memo-page-shell {
     padding: 0.8rem;
@@ -4524,13 +4564,17 @@ textarea.memo-control {
 
 [data-theme="dark"] .memo-modal__agent-panel {
   border-color: rgba(148, 163, 184, 0.22);
-  background: rgba(15, 23, 42, 0.72);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.84) 0%, rgba(17, 24, 39, 0.78) 100%);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 [data-theme="dark"] .memo-modal__agent-header {
   border-bottom-color: rgba(148, 163, 184, 0.18);
-  background: rgba(15, 23, 42, 0.6);
+  background:
+    linear-gradient(135deg, rgba(30, 41, 59, 0.82) 0%, rgba(15, 23, 42, 0.62) 100%);
 }
 
 [data-theme="dark"] .memo-modal__agent-label {
@@ -6608,8 +6652,16 @@ body.memo-page {
 [data-theme="dark"] .memo-item.has-accent .memo-item__excerpt,
 [data-theme="dark"] .memo-item.has-accent .memo-item__date,
 [data-theme="dark"] .memo-modal__content.has-accent .memo-modal__header h3,
-[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__date {
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__date,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__title-input,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__edit-textarea--response,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-preview-content {
   color: #202124;
+}
+
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__edit-textarea--response::placeholder,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-preview-empty {
+  color: rgba(32, 33, 36, 0.66);
 }
 
 [data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:hover,

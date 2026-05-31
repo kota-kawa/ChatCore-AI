@@ -54,6 +54,7 @@ type MiniChatProps = {
   placeholderDescription?: string;
   inputPlaceholder?: string;
   enableActions?: boolean;
+  persistConversation?: boolean;
 };
 
 type ExecuteOptions = {
@@ -162,6 +163,18 @@ function readStoredExecutedIds(messages: Message[], storageKeys: MessageStorageK
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
     .map((index) => messages[index]?.id)
     .filter((value): value is string => typeof value === "string");
+}
+
+function clearStoredConversation(storageKeys: MessageStorageKeys) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(storageKeys.messages);
+    window.sessionStorage.removeItem(storageKeys.timestamp);
+    window.sessionStorage.removeItem(storageKeys.executed);
+    window.sessionStorage.removeItem(storageKeys.legacyExecuted);
+  } catch {
+    // ignore storage failures
+  }
 }
 
 function wait(ms = 180) {
@@ -736,6 +749,7 @@ export function MiniChat({
   placeholderDescription = "画面の使い方、次の操作、入力内容の整理を短い会話で進められます。",
   inputPlaceholder = "この画面でやりたいことを相談する",
   enableActions = true,
+  persistConversation = true,
 }: MiniChatProps = {}) {
   const router = useRouter();
   const storageKeys = useMemo(() => getMessageStorageKeys(storageScope), [storageScope]);
@@ -1035,7 +1049,7 @@ export function MiniChat({
       });
       if (result.ok) {
         setExecutedSet((prev) => new Set([...prev, messageId]));
-        if (result.pendingNavigation) {
+        if (persistConversation && result.pendingNavigation) {
           const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current, storageKeys), messageId]));
           writeSessionJson(storageKeys.executed, merged);
         }
@@ -1071,6 +1085,14 @@ export function MiniChat({
   };
 
   useEffect(() => {
+    if (!persistConversation) {
+      clearStoredConversation(storageKeys);
+      setMessages([]);
+      setExecutedSet(new Set());
+      setHydrated(true);
+      return undefined;
+    }
+
     const storedMessages = readStoredMessages(storageKeys);
     const storedExecuted = readStoredExecutedIds(storedMessages, storageKeys);
     if (storedMessages.length) setMessages(storedMessages);
@@ -1125,21 +1147,21 @@ export function MiniChat({
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [enableActions, storageKeys]);
+  }, [enableActions, persistConversation, storageKeys]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !persistConversation) return;
     writeSessionJson(
       storageKeys.messages,
       messages.map(({ id, sender, text, actionPlan, isError }) => ({ id, sender, text, actionPlan, isError })),
     );
     writeSessionJson(storageKeys.timestamp, messages.length > 0 ? Date.now() : 0);
-  }, [hydrated, messages, storageKeys]);
+  }, [hydrated, messages, persistConversation, storageKeys]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !persistConversation) return;
     writeSessionJson(storageKeys.executed, Array.from(executedSet));
-  }, [hydrated, executedSet, storageKeys]);
+  }, [hydrated, executedSet, persistConversation, storageKeys]);
 
   useEffect(() => {
     if (scrollRef.current) {
