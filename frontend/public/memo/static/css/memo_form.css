@@ -2431,6 +2431,7 @@ textarea.memo-control {
 }
 
 .memo-modal__agent-panel .mini-chat-messages {
+  flex: 1 1 auto;
   min-height: 0;
   padding: 0.9rem;
   display: flex;
@@ -2453,9 +2454,14 @@ textarea.memo-control {
 }
 
 .memo-modal__agent-panel .mini-chat-input-area {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  flex: 0 0 auto;
   padding: 0.75rem 0.8rem 0.8rem;
   border-top: 1px solid rgba(191, 122, 23, 0.13);
   background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 -10px 22px rgba(41, 24, 6, 0.06);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -3116,6 +3122,7 @@ textarea.memo-control {
 [data-theme="dark"] .memo-modal__agent-panel .mini-chat-input-area {
   border-top-color: rgba(148, 163, 184, 0.16);
   background: rgba(15, 23, 42, 0.82);
+  box-shadow: 0 -10px 22px rgba(0, 0, 0, 0.24);
 }
 
 [data-theme="dark"] .memo-modal__agent-panel .mini-chat-input-wrapper {
