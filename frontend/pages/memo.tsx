@@ -2447,6 +2447,7 @@ export default function MemoPage() {
                       placeholderDescription="このメモの内容を参照して、要約、質問、整理を会話できます。"
                       inputPlaceholder="このメモについて質問する..."
                       enableActions={false}
+                      persistConversation={false}
                     />
                   </aside>
                 )}
