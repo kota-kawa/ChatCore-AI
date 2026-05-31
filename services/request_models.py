@@ -183,6 +183,7 @@ class AiAgentRequest(RequestPayloadModel):
     messages: list[AiAgentMessage] = Field(min_length=1, max_length=20)
     current_page: str | None = Field(default=None, max_length=256)
     current_dom: str | None = Field(default=None, max_length=12000)
+    memo_id: int | None = Field(default=None, ge=1)
 
 
 class SharedPromptCreateRequest(RequestPayloadModel):

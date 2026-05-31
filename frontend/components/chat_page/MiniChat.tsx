@@ -1,5 +1,5 @@
 import { useRouter } from "next/router";
-import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type FormEvent } from "react";
 
 import {
   buildAiAgentHttpError,
@@ -46,6 +46,16 @@ type NavigateInternal = (path: string) => Promise<NavigationOutcome>;
 
 type UnloadContext = { remaining: ActionStep[]; expectedPath?: string } | null;
 
+type MiniChatProps = {
+  memoId?: number | string | null;
+  storageScope?: string;
+  quickPrompts?: string[];
+  placeholderTitle?: string;
+  placeholderDescription?: string;
+  inputPlaceholder?: string;
+  enableActions?: boolean;
+};
+
 type ExecuteOptions = {
   navigateInternal: NavigateInternal;
   setUnloadContext: (context: UnloadContext) => void;
@@ -65,6 +75,13 @@ const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
 const MESSAGES_TIMESTAMP_KEY = "globalAiAgent.messagesTimestamp";
 const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIds";
 const LEGACY_EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
+
+type MessageStorageKeys = {
+  messages: string;
+  timestamp: string;
+  executed: string;
+  legacyExecuted: string;
+};
 
 const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const PENDING_ACTION_EXPIRY_MS = 10 * 60 * 1000;
@@ -97,15 +114,32 @@ function isPersistedMessage(value: unknown): value is Message {
   );
 }
 
-function readStoredMessages(): Message[] {
-  const timestamp = readSessionJson<number>(MESSAGES_TIMESTAMP_KEY, 0);
+function getMessageStorageKeys(storageScope?: string): MessageStorageKeys {
+  if (!storageScope) {
+    return {
+      messages: MESSAGES_STORAGE_KEY,
+      timestamp: MESSAGES_TIMESTAMP_KEY,
+      executed: EXECUTED_STORAGE_KEY,
+      legacyExecuted: LEGACY_EXECUTED_STORAGE_KEY,
+    };
+  }
+  return {
+    messages: `${storageScope}.messages`,
+    timestamp: `${storageScope}.messagesTimestamp`,
+    executed: `${storageScope}.executedMessageIds`,
+    legacyExecuted: `${storageScope}.executedMessageIndexes`,
+  };
+}
+
+function readStoredMessages(storageKeys: MessageStorageKeys): Message[] {
+  const timestamp = readSessionJson<number>(storageKeys.timestamp, 0);
   if (timestamp > 0 && Date.now() - timestamp > SESSION_EXPIRY_MS) {
-    writeSessionJson(MESSAGES_STORAGE_KEY, []);
-    writeSessionJson(EXECUTED_STORAGE_KEY, []);
-    writeSessionJson(MESSAGES_TIMESTAMP_KEY, 0);
+    writeSessionJson(storageKeys.messages, []);
+    writeSessionJson(storageKeys.executed, []);
+    writeSessionJson(storageKeys.timestamp, 0);
     return [];
   }
-  const raw = readSessionJson<unknown>(MESSAGES_STORAGE_KEY, []);
+  const raw = readSessionJson<unknown>(storageKeys.messages, []);
   if (!Array.isArray(raw)) return [];
   return raw.filter(isPersistedMessage).map((message) => ({
     id: message.id || createAiAgentMessageId(),
@@ -116,13 +150,13 @@ function readStoredMessages(): Message[] {
   }));
 }
 
-function readStoredExecutedIds(messages: Message[]): string[] {
-  const raw = readSessionJson<unknown>(EXECUTED_STORAGE_KEY, []);
+function readStoredExecutedIds(messages: Message[], storageKeys: MessageStorageKeys): string[] {
+  const raw = readSessionJson<unknown>(storageKeys.executed, []);
   if (Array.isArray(raw)) {
     return raw.filter((value): value is string => typeof value === "string");
   }
 
-  const legacyRaw = readSessionJson<unknown>(LEGACY_EXECUTED_STORAGE_KEY, []);
+  const legacyRaw = readSessionJson<unknown>(storageKeys.legacyExecuted, []);
   if (!Array.isArray(legacyRaw)) return [];
   return legacyRaw
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
@@ -694,8 +728,22 @@ const ACTION_LABELS: Record<ActionStep["action"], string> = {
 
 const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
 
-export function MiniChat() {
+export function MiniChat({
+  memoId = null,
+  storageScope,
+  quickPrompts = QUICK_PROMPTS,
+  placeholderTitle = "操作支援エージェント",
+  placeholderDescription = "画面の使い方、次の操作、入力内容の整理を短い会話で進められます。",
+  inputPlaceholder = "この画面でやりたいことを相談する",
+  enableActions = true,
+}: MiniChatProps = {}) {
   const router = useRouter();
+  const storageKeys = useMemo(() => getMessageStorageKeys(storageScope), [storageScope]);
+  const numericMemoId = useMemo(() => {
+    if (memoId === null || memoId === undefined || memoId === "") return null;
+    const parsed = Number(memoId);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }, [memoId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -778,7 +826,8 @@ export function MiniChat() {
       body: JSON.stringify({
         messages: nextMessages.slice(-MAX_SEND_MESSAGES).map((m) => ({ role: m.sender, content: m.text })),
         current_page: typeof window !== "undefined" ? window.location.pathname : null,
-        current_dom: collectVisiblePageDom().slice(0, MAX_DOM_LENGTH),
+        current_dom: enableActions ? collectVisiblePageDom().slice(0, MAX_DOM_LENGTH) : "",
+        ...(numericMemoId ? { memo_id: numericMemoId } : {}),
       }),
     });
 
@@ -798,7 +847,7 @@ export function MiniChat() {
         break;
       } else if (event.type === "action_plan") {
         assistantText = event.description;
-        actionPlan = { description: event.description, steps: event.steps };
+        actionPlan = enableActions ? { description: event.description, steps: event.steps } : undefined;
         break;
       } else if (event.type === "error") {
         assistantText = event.message;
@@ -987,8 +1036,8 @@ export function MiniChat() {
       if (result.ok) {
         setExecutedSet((prev) => new Set([...prev, messageId]));
         if (result.pendingNavigation) {
-          const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current), messageId]));
-          writeSessionJson(EXECUTED_STORAGE_KEY, merged);
+          const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current, storageKeys), messageId]));
+          writeSessionJson(storageKeys.executed, merged);
         }
       } else if (result.needsReplan === false) {
         // A terminal, self-explanatory stop (e.g. login required): just inform the user.
@@ -1022,11 +1071,13 @@ export function MiniChat() {
   };
 
   useEffect(() => {
-    const storedMessages = readStoredMessages();
-    const storedExecuted = readStoredExecutedIds(storedMessages);
+    const storedMessages = readStoredMessages(storageKeys);
+    const storedExecuted = readStoredExecutedIds(storedMessages, storageKeys);
     if (storedMessages.length) setMessages(storedMessages);
     if (storedExecuted.length) setExecutedSet(new Set(storedExecuted));
     setHydrated(true);
+
+    if (!enableActions) return undefined;
 
     const pendingActionState = readPendingActionState();
     const pendingSteps = pendingActionState.steps;
@@ -1074,21 +1125,21 @@ export function MiniChat() {
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, []);
+  }, [enableActions, storageKeys]);
 
   useEffect(() => {
     if (!hydrated) return;
     writeSessionJson(
-      MESSAGES_STORAGE_KEY,
+      storageKeys.messages,
       messages.map(({ id, sender, text, actionPlan, isError }) => ({ id, sender, text, actionPlan, isError })),
     );
-    writeSessionJson(MESSAGES_TIMESTAMP_KEY, messages.length > 0 ? Date.now() : 0);
-  }, [hydrated, messages]);
+    writeSessionJson(storageKeys.timestamp, messages.length > 0 ? Date.now() : 0);
+  }, [hydrated, messages, storageKeys]);
 
   useEffect(() => {
     if (!hydrated) return;
-    writeSessionJson(EXECUTED_STORAGE_KEY, Array.from(executedSet));
-  }, [hydrated, executedSet]);
+    writeSessionJson(storageKeys.executed, Array.from(executedSet));
+  }, [hydrated, executedSet, storageKeys]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -1104,10 +1155,10 @@ export function MiniChat() {
             <span className="mini-chat-robot-icon" aria-hidden="true">
               <i className="bi bi-stars"></i>
             </span>
-            <strong>操作支援エージェント</strong>
-            <p>画面の使い方、次の操作、入力内容の整理を短い会話で進められます。</p>
+            <strong>{placeholderTitle}</strong>
+            <p>{placeholderDescription}</p>
             <div className="mini-chat-suggestions" aria-label="入力候補">
-              {QUICK_PROMPTS.map((prompt) => (
+              {quickPrompts.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"
@@ -1131,7 +1182,7 @@ export function MiniChat() {
               ) : (
                 <div className="mini-chat-text">{msg.text}</div>
               )}
-              {msg.actionPlan && (
+              {enableActions && msg.actionPlan && (
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
                     {msg.actionPlan.steps.map((step, si) => (
@@ -1247,7 +1298,7 @@ export function MiniChat() {
             className="mini-chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="この画面でやりたいことを相談する"
+            placeholder={inputPlaceholder}
             aria-label="AIサポートへのメッセージ"
             maxLength={MAX_INPUT_LENGTH}
             disabled={isGenerating}
