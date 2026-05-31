@@ -549,6 +549,7 @@ export default function MemoPage() {
   });
   const [previewMode, setPreviewMode] = useState(false);
   const [flashState, setFlashState] = useState<FlashState | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -689,6 +690,10 @@ export default function MemoPage() {
     return () => {
       document.body.classList.remove("memo-page");
       document.body.classList.remove("modal-open");
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -716,8 +721,17 @@ export default function MemoPage() {
 
   useEffect(() => {
     if (!router.isReady) return;
-    if (router.query.saved === "1") setFlashState({ type: "success", text: "メモを保存しました。" });
-  }, [router.isReady, router.query.saved]);
+    if (router.query.saved !== "1") return;
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setFlashState({ type: "success", text: "メモを保存しました。" });
+    flashTimerRef.current = setTimeout(() => {
+      setFlashState(null);
+      flashTimerRef.current = null;
+    }, 4000);
+    const nextQuery = { ...router.query };
+    delete nextQuery.saved;
+    void router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
+  }, [router, router.isReady, router.pathname, router.query]);
 
   useEffect(() => {
     const el = composeTextareaRef.current;
@@ -790,8 +804,12 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const showFlash = useCallback((type: "success" | "error", text: string) => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     setFlashState({ type, text });
-    setTimeout(() => setFlashState(null), 4000);
+    flashTimerRef.current = setTimeout(() => {
+      setFlashState(null);
+      flashTimerRef.current = null;
+    }, 4000);
   }, []);
 
   const canDragMemos =
@@ -850,14 +868,13 @@ export default function MemoPage() {
       setIsComposeExpanded(false);
       setIsComposePaletteOpen(false);
       showFlash("success", "メモを保存しました。");
-      void router.replace("/memo?saved=1", undefined, { shallow: true });
       void mutate();
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "メモの保存に失敗しました。");
     } finally {
       setSubmitting(false);
     }
-  }, [formState, mutate, router, showFlash]);
+  }, [formState, mutate, showFlash]);
 
   const handleAiSuggest = useCallback(async () => {
     if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を先に入力してください。"); return; }

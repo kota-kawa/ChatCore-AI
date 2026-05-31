@@ -6608,8 +6608,16 @@ body.memo-page {
 [data-theme="dark"] .memo-item.has-accent .memo-item__excerpt,
 [data-theme="dark"] .memo-item.has-accent .memo-item__date,
 [data-theme="dark"] .memo-modal__content.has-accent .memo-modal__header h3,
-[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__date {
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__date,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__title-input,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__edit-textarea--response,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-preview-content {
   color: #202124;
+}
+
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__edit-textarea--response::placeholder,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-preview-empty {
+  color: rgba(32, 33, 36, 0.66);
 }
 
 [data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:hover,
