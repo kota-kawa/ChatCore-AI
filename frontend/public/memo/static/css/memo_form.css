@@ -1326,6 +1326,11 @@ textarea.memo-control {
   flex-direction: column;
 }
 
+.memo-modal__content.has-accent {
+  background: var(--memo-detail-color);
+  border-color: color-mix(in srgb, var(--memo-detail-color) 70%, rgba(217, 119, 6, 0.2));
+}
+
 .memo-share-modal__content {
   width: min(92%, 620px);
   height: auto;
@@ -4722,8 +4727,8 @@ body.memo-page {
 }
 
 .memo-item.has-accent {
-  background: var(--memo-card-strong);
-  border-color: #dadce0;
+  background: var(--memo-card-accent);
+  border-color: color-mix(in srgb, var(--memo-card-accent) 70%, #dadce0);
 }
 
 .memo-item::before {
@@ -4744,7 +4749,7 @@ body.memo-page {
 }
 
 .memo-item.is-pinned.has-accent {
-  background: var(--memo-card-strong);
+  background: var(--memo-card-accent);
 }
 
 .memo-item.is-selected {
@@ -5639,28 +5644,41 @@ body.memo-page {
   box-shadow: none;
 }
 
-/* Uniform memo cards: keep organization badges, but stop color-coding card surfaces. */
-.memo-history__list > li:nth-child(n) .memo-item,
-.memo-item.has-accent,
-.memo-item.is-pinned,
-.memo-item.is-pinned.has-accent {
+/* Keep uncolored cards uniform while allowing saved memo colors to own the surface. */
+.memo-history__list > li:nth-child(n) .memo-item:not(.has-accent),
+.memo-item.is-pinned:not(.has-accent) {
   background: var(--memo-card-strong);
   border-color: #dadce0;
 }
 
-.memo-item.has-accent::before {
-  display: none;
-  opacity: 0;
+.memo-item.has-accent,
+.memo-item.is-pinned.has-accent {
+  background: var(--memo-card-accent);
+  border-color: color-mix(in srgb, var(--memo-card-accent) 70%, #dadce0);
 }
 
-[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item,
-[data-theme="dark"] .memo-item.has-accent,
-[data-theme="dark"] .memo-item.is-pinned,
-[data-theme="dark"] .memo-item.is-pinned.has-accent {
+[data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:not(.has-accent),
+[data-theme="dark"] .memo-item.is-pinned:not(.has-accent) {
   background: transparent;
   border-color: var(--memo-border);
   color: var(--memo-text);
   box-shadow: none;
+}
+
+[data-theme="dark"] .memo-item.has-accent,
+[data-theme="dark"] .memo-item.is-pinned.has-accent,
+[data-theme="dark"] .memo-modal__content.has-accent {
+  background: var(--memo-card-accent, var(--memo-detail-color));
+  border-color: color-mix(in srgb, var(--memo-card-accent, var(--memo-detail-color)) 70%, var(--memo-border));
+  color: #202124;
+}
+
+[data-theme="dark"] .memo-item.has-accent .memo-item__title,
+[data-theme="dark"] .memo-item.has-accent .memo-item__excerpt,
+[data-theme="dark"] .memo-item.has-accent .memo-item__date,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__header h3,
+[data-theme="dark"] .memo-modal__content.has-accent .memo-modal__date {
+  color: #202124;
 }
 
 [data-theme="dark"] .memo-history__list > li:nth-child(n) .memo-item:hover,

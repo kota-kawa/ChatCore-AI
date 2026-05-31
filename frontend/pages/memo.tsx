@@ -2241,7 +2241,13 @@ export default function MemoPage() {
       {/* ── Memo detail modal ── */}
         <div className={`memo-modal${selectedMemo ? " is-visible" : ""}`} aria-hidden={selectedMemo ? "false" : "true"}>
           <div className="memo-modal__overlay" onClick={() => { void closeMemoDetail(); }}></div>
-          <div className="memo-modal__content" role="dialog" aria-modal="true" aria-labelledby="memoModalTitle">
+          <div
+            className={`memo-modal__content${detailEditBackgroundColor ? " has-accent" : ""}`}
+            style={detailEditBackgroundColor ? { "--memo-detail-color": detailEditBackgroundColor } as React.CSSProperties : undefined}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="memoModalTitle"
+          >
             <button type="button" className="memo-modal__close" aria-label="閉じる" onClick={() => { void closeMemoDetail(); }}>
               <i className="bi bi-x-lg"></i>
             </button>
