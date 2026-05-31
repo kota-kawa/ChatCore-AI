@@ -1428,11 +1428,13 @@ textarea.memo-control {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  min-height: calc(1.15rem * 1.3 * 2);
 }
 
 .memo-modal__title-input {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 34px;
+  height: calc(1.15rem * 1.3 * 2 + 0.36rem + 2px);
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -1444,6 +1446,7 @@ textarea.memo-control {
   padding: 0.18rem 0.35rem;
   margin: -0.18rem -0.35rem 0;
   outline: none;
+  text-overflow: ellipsis;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
