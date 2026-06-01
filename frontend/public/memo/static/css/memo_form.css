@@ -4277,9 +4277,19 @@ textarea.memo-control {
     overflow-y: auto;
   }
 
+  /* Keep the selection area from collapsing inside the scrollable, flex-column
+     modal body. Without an explicit flex-shrink:0 the list (overflow:auto, so
+     its automatic min-size is 0) gets squeezed to near-zero height the moment
+     it is added, breaking the layout. Pin a stable, scrollable height instead. */
+  .memo-export-select {
+    flex: 0 0 auto;
+  }
+
   .memo-export-select__list {
-    height: clamp(320px, 46dvh, 420px);
-    max-height: none;
+    flex: 0 0 auto;
+    height: auto;
+    min-height: clamp(220px, 40dvh, 320px);
+    max-height: clamp(280px, 52dvh, 440px);
   }
 }
 
