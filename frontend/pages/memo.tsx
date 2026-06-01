@@ -112,6 +112,7 @@ const memoStructuredData = {
   }
 };
 const DETAIL_AUTOSAVE_DELAY_MS = 900;
+const MEMO_DETAIL_CLOSE_ANIMATION_MS = 240;
 const EXPORT_FORMATS = [
   { value: "markdown", label: "Markdown (.md)", icon: "bi-markdown" },
   { value: "json", label: "JSON (.json)", icon: "bi-filetype-json" },
@@ -570,6 +571,7 @@ export default function MemoPage() {
 
   // Detail modal
   const [selectedMemo, setSelectedMemo] = useState<MemoDetail | null>(null);
+  const [isMemoDetailClosing, setIsMemoDetailClosing] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailPreviewMode, setDetailPreviewMode] = useState(true);
@@ -582,6 +584,7 @@ export default function MemoPage() {
   const [detailCopied, setDetailCopied] = useState(false);
   const [isMemoAgentOpen, setIsMemoAgentOpen] = useState(false);
   const detailAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const memoDetailCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const detailSaveSequenceRef = useRef(0);
 
   const [actionLoadingId, setActionLoadingId] = useState<string>("");
@@ -693,6 +696,10 @@ export default function MemoPage() {
       if (flashTimerRef.current) {
         clearTimeout(flashTimerRef.current);
         flashTimerRef.current = null;
+      }
+      if (memoDetailCloseTimerRef.current) {
+        clearTimeout(memoDetailCloseTimerRef.current);
+        memoDetailCloseTimerRef.current = null;
       }
     };
   }, []);
@@ -965,7 +972,27 @@ export default function MemoPage() {
     detailAutoSaveTimerRef.current = null;
   }, []);
 
+  const cancelMemoDetailCloseAnimation = useCallback(() => {
+    if (!memoDetailCloseTimerRef.current) return;
+    clearTimeout(memoDetailCloseTimerRef.current);
+    memoDetailCloseTimerRef.current = null;
+  }, []);
+
+  const startMemoDetailCloseAnimation = useCallback(() => {
+    if (memoDetailCloseTimerRef.current) return;
+    clearDetailAutoSaveTimer();
+    setIsMemoAgentOpen(false);
+    setIsMemoDetailClosing(true);
+    memoDetailCloseTimerRef.current = setTimeout(() => {
+      memoDetailCloseTimerRef.current = null;
+      setSelectedMemo(null);
+      setIsMemoDetailClosing(false);
+    }, MEMO_DETAIL_CLOSE_ANIMATION_MS);
+  }, [clearDetailAutoSaveTimer]);
+
   const openMemoDetail = useCallback(async (memoId: string | number) => {
+    cancelMemoDetailCloseAnimation();
+    setIsMemoDetailClosing(false);
     setDetailError("");
     setDetailLoading(true);
     setDetailPreviewMode(true);
@@ -991,7 +1018,7 @@ export default function MemoPage() {
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [cancelMemoDetailCloseAnimation]);
 
   const saveDetailEdit = useCallback(async () => {
     if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
@@ -1078,14 +1105,14 @@ export default function MemoPage() {
   ]);
 
   const closeMemoDetail = useCallback(async () => {
+    if (memoDetailCloseTimerRef.current) return;
     clearDetailAutoSaveTimer();
     if (detailHasUnsavedChanges) {
       const saved = await saveDetailEdit();
       if (!saved) return;
     }
-    setIsMemoAgentOpen(false);
-    setSelectedMemo(null);
-  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit]);
+    startMemoDetailCloseAnimation();
+  }, [clearDetailAutoSaveTimer, detailHasUnsavedChanges, saveDetailEdit, startMemoDetailCloseAnimation]);
 
   const openMemoAgent = useCallback(async () => {
     if (!selectedMemo?.id) return;
@@ -1181,11 +1208,11 @@ export default function MemoPage() {
           { defaultMessage: "メモの削除に失敗しました。" },
         );
         showFlash("success", "メモを削除しました。");
-        if (selectedMemo?.id && String(selectedMemo.id) === String(memo.id)) setSelectedMemo(null);
+        if (selectedMemo?.id && String(selectedMemo.id) === String(memo.id)) startMemoDetailCloseAnimation();
         await mutate();
       } catch (error) { showFlash("error", error instanceof Error ? error.message : "メモの削除に失敗しました。"); }
     });
-  }, [mutate, selectedMemo?.id, showFlash, withActionLoading]);
+  }, [mutate, selectedMemo?.id, showFlash, startMemoDetailCloseAnimation, withActionLoading]);
 
   const copyMemoFullText = useCallback(async (memo: MemoSummary) => {
     const memoId = String(memo.id);
@@ -2278,7 +2305,10 @@ export default function MemoPage() {
       </div>
 
       {/* ── Memo detail modal ── */}
-        <div className={`memo-modal${selectedMemo ? " is-visible" : ""}`} aria-hidden={selectedMemo ? "false" : "true"}>
+        <div
+          className={`memo-modal${selectedMemo && !isMemoDetailClosing ? " is-visible" : ""}${isMemoDetailClosing ? " is-closing" : ""}`}
+          aria-hidden={selectedMemo && !isMemoDetailClosing ? "false" : "true"}
+        >
           <div className="memo-modal__overlay" onClick={() => { void closeMemoDetail(); }}></div>
           <div
             className={`memo-modal__content${detailEditBackgroundColor ? " has-accent" : ""}`}
