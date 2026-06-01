@@ -60,7 +60,7 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
     if "chatcore-artifact" not in raw_text and "chatcore-buttons" not in raw_text:
         return None
 
-    normalized_response = normalize_response_with_artifacts(raw_text)
+    normalized_response = normalize_response_with_artifacts(raw_text, allow_fallback=False)
     if normalized_response.validation_errors or not normalized_response.parts:
         return None
 
@@ -829,7 +829,10 @@ class ChatGenerationJob:
             if trace_block:
                 separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
                 bot_reply = f"{trace_block}{separator}{bot_reply}"
-        normalized_response = normalize_response_with_artifacts(bot_reply)
+        normalized_response = normalize_response_with_artifacts(
+            bot_reply,
+            recover_truncated=True,
+        )
         if normalized_response.validation_errors:
             logger.warning(
                 "One or more generated UI artifacts failed validation and were omitted.",

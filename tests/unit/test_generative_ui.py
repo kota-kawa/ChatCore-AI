@@ -218,6 +218,67 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIn('id="app"', normalized["html"])
 
+    def test_recovers_truncated_artifact_cut_off_inside_string(self):
+        raw = (
+            "ツリーを表示します。\n\n"
+            "```chatcore-artifact\n"
+            '{"version":1,"title":"中央省庁ツリー","description":"主要省庁","height":520,'
+            "\"html\":\"<div id='app'><ul class='tree'><li>"
+            "<button class='tog'>復興庁</button><ul class='sub'><li>"
+        )
+
+        normalized = normalize_response_with_artifacts(raw, recover_truncated=True)
+
+        self.assertEqual(normalized.text, "ツリーを表示します。")
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["title"], "中央省庁ツリー")
+        self.assertIn("復興庁", artifact["html"])
+        self.assertNotIn("fallback-ui", artifact["html"])
+        # The broken JSON must never leak into the visible text.
+        self.assertNotIn("chatcore-artifact", normalized.text)
+        self.assertNotIn('"version"', normalized.text)
+
+    def test_recovers_complete_artifact_missing_closing_fence(self):
+        raw = (
+            "表示します。\n\n"
+            "```chatcore-artifact\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+        )
+
+        normalized = normalize_response_with_artifacts(raw, recover_truncated=True)
+
+        self.assertEqual(normalized.text, "表示します。")
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
+        self.assertNotIn("chatcore-artifact", normalized.text)
+
+    def test_unrepairable_truncation_strips_broken_block_from_text(self):
+        raw = (
+            "ツリーを表示します。\n\n"
+            "```chatcore-artifact\n"
+            '{"version":1,"title'
+        )
+
+        normalized = normalize_response_with_artifacts(raw, recover_truncated=True)
+
+        # Falls back, but never dumps the broken JSON / fence into the UI text.
+        self.assertNotIn("chatcore-artifact", normalized.text)
+        self.assertNotIn('"version"', normalized.text)
+        self.assertEqual(normalized.text, "ツリーを表示します。")
+
+    def test_streaming_pass_does_not_synthesize_fallback(self):
+        raw = (
+            "ツリーを表示します。\n\n"
+            "```chatcore-artifact\n"
+            '{"version":1,"title":"中央省庁ツリー","html":"<div id=\'app\'>'
+        )
+
+        normalized = normalize_response_with_artifacts(raw, allow_fallback=False)
+
+        self.assertIsNone(normalized.parts)
+
     def test_decode_message_parts_drops_invalid_artifacts(self):
         parts = [
             {"type": "text", "text": "hello"},

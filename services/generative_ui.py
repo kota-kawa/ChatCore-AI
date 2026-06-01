@@ -14,6 +14,10 @@ ARTIFACT_BLOCK_RE = re.compile(
     r"(?P<json>\{[\s\S]*?\})\s*```",
     re.IGNORECASE,
 )
+ARTIFACT_OPEN_FENCE_RE = re.compile(
+    r"```(?:chatcore-artifact|generative-ui|generative_ui|ui_artifact)(?:\s+json)?[^\S\n]*\n?",
+    re.IGNORECASE,
+)
 INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
     r"(?P<json>\{[\s\S]*?\})\s*```",
@@ -460,7 +464,131 @@ def _extract_source_code_artifact_candidates(
     return [_ArtifactCandidate(raw_json=json.dumps(payload, ensure_ascii=False), span=span)]
 
 
-def _extract_artifact_candidates(text: str) -> list[_ArtifactCandidate]:
+def _drop_trailing_json_token(source: str) -> str:
+    # 末尾の不完全なトークン（文字列・数値・リテラル）を1つ取り除く。
+    # Drop one trailing JSON token (string / number / literal) so a truncated
+    # remainder can be closed into a valid object.
+    match = re.search(
+        r'(?:"(?:[^"\\]|\\.)*"|[-+0-9.eE]+|true|false|null)\s*$',
+        source,
+    )
+    if match:
+        return source[: match.start()].rstrip()
+    return source[:-1].rstrip()
+
+
+def _repair_truncated_json(source: str) -> str | None:
+    # 出力が途中で打ち切られたJSONオブジェクトを最大限復元する。開いた文字列・括弧を
+    # 閉じ、末尾の不完全なトークンや区切り文字を削ってから検証する。
+    # Best-effort completion of a JSON object whose output was cut off mid-stream.
+    start = source.find("{")
+    if start == -1:
+        return None
+
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    quote = ""
+    for char in source[start:]:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                in_string = False
+            continue
+        if char in {"'", '"'}:
+            in_string = True
+            quote = char
+        elif char == "{":
+            stack.append("}")
+        elif char == "[":
+            stack.append("]")
+        elif char in {"}", "]"}:
+            if stack:
+                stack.pop()
+
+    if not stack and not in_string:
+        # Already balanced; the caller's balanced-object path handles this.
+        return None
+
+    candidate = source[start:]
+    if in_string:
+        if escaped:
+            candidate = candidate[:-1]
+        candidate += quote
+
+    closers = "".join(reversed(stack))
+    # 復元は通常1〜2回で成立する。病的な入力での O(n^2) を避けるため試行回数を制限する。
+    # Repair usually succeeds in 1-2 passes; cap attempts to bound worst-case cost.
+    for _ in range(64):
+        trimmed = candidate.rstrip()
+        if not trimmed:
+            return None
+        last = trimmed[-1]
+        if last == ",":
+            candidate = trimmed[:-1]
+            continue
+        if last == ":":
+            without_colon = trimmed[:-1].rstrip()
+            without_key = re.sub(r'"(?:[^"\\]|\\.)*"\s*$', "", without_colon)
+            if without_key == without_colon:
+                return None
+            candidate = without_key
+            continue
+        closed = trimmed + closers
+        try:
+            json.loads(_normalize_jsonish_source(closed))
+        except json.JSONDecodeError:
+            shortened = _drop_trailing_json_token(trimmed)
+            if shortened == trimmed:
+                return None
+            candidate = shortened
+            continue
+        return closed
+    return None
+
+
+def _extract_truncated_artifact_candidates(
+    text: str,
+    occupied_spans: list[tuple[int, int]],
+) -> list[_ArtifactCandidate]:
+    # 閉じフェンスが無いartifactブロック（出力打ち切りや ``` 抜け）を検出する。
+    # 復元できれば部分的なUIを描画し、できなくてもspanを記録して壊れたJSONが
+    # fallback UIにそのまま流れ込むのを防ぐ。
+    # Detect artifact fences that were never closed (truncated output or a missing
+    # ```). Recover a partial UI when possible; otherwise still record the span so
+    # the broken JSON is stripped from the visible text instead of being dumped.
+    candidates: list[_ArtifactCandidate] = []
+    for match in ARTIFACT_OPEN_FENCE_RE.finditer(text):
+        fence_start = match.start()
+        content_start = match.end()
+        if _span_overlaps_any((fence_start, content_start), occupied_spans):
+            continue
+        if text.find("```", content_start) != -1:
+            # A closing fence exists; the standard extractors handle this block.
+            continue
+        brace_start = text.find("{", content_start)
+        if brace_start == -1:
+            continue
+        balanced_end = _find_balanced_object_end(text, brace_start)
+        if balanced_end is not None:
+            raw_json = text[brace_start:balanced_end]
+            span = (fence_start, balanced_end)
+        else:
+            repaired = _repair_truncated_json(text[brace_start:])
+            raw_json = repaired if repaired is not None else ""
+            span = (fence_start, len(text))
+        candidates.append(_ArtifactCandidate(raw_json=raw_json, span=span))
+    return candidates
+
+
+def _extract_artifact_candidates(
+    text: str,
+    *,
+    recover_truncated: bool = False,
+) -> list[_ArtifactCandidate]:
     candidates: list[_ArtifactCandidate] = []
     occupied_spans: list[tuple[int, int]] = []
 
@@ -483,6 +611,11 @@ def _extract_artifact_candidates(text: str) -> list[_ArtifactCandidate]:
     source_candidates = _extract_source_code_artifact_candidates(text, occupied_spans)
     candidates.extend(source_candidates)
     occupied_spans.extend(candidate.span for candidate in source_candidates)
+
+    if recover_truncated:
+        truncated_candidates = _extract_truncated_artifact_candidates(text, occupied_spans)
+        candidates.extend(truncated_candidates)
+        occupied_spans.extend(candidate.span for candidate in truncated_candidates)
 
     fenced_spans = [match.span() for match in FENCED_BLOCK_RE.finditer(text)]
     candidates.extend(_find_raw_artifact_candidates(text, [*fenced_spans, *occupied_spans]))
@@ -812,9 +945,14 @@ def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]
     return validate_artifact_payload(payload)
 
 
-def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResponse:
+def normalize_response_with_artifacts(
+    raw_text: str,
+    *,
+    recover_truncated: bool = False,
+    allow_fallback: bool = True,
+) -> NormalizedGenerativeResponse:
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    candidates = _extract_artifact_candidates(text)
+    candidates = _extract_artifact_candidates(text, recover_truncated=recover_truncated)
     
     button_candidates: list[_ArtifactCandidate] = []
     for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
@@ -845,6 +983,14 @@ def normalize_response_with_artifacts(raw_text: str) -> NormalizedGenerativeResp
     visible_text = _remove_candidate_spans(text, all_candidates)
 
     if not artifacts and not buttons_list:
+        if not allow_fallback:
+            # ストリーミング中はfallbackを生成せず、確定した本物のArtifactだけを描画する。
+            # During streaming, never synthesize a fallback; wait for a real artifact.
+            return NormalizedGenerativeResponse(
+                text=text,
+                parts=None,
+                validation_errors=validation_errors,
+            )
         fallback_text = visible_text or "UIの作成に失敗しました。通常のテキストで再試行してください。"
         if candidates or has_intent:
             fallback_artifact = _build_fallback_artifact(fallback_text, text)

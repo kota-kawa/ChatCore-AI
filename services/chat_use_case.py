@@ -515,7 +515,10 @@ class ChatPostUseCase:
             separator = "" if not bot_reply else "\n\n"
             bot_reply = f"{trace_block}{separator}{bot_reply}"
 
-        normalized_response = normalize_response_with_artifacts(bot_reply)
+        normalized_response = normalize_response_with_artifacts(
+            bot_reply,
+            recover_truncated=True,
+        )
         if normalized_response.validation_errors:
             deps.logger.warning(
                 "One or more generated UI artifacts failed validation and were omitted.",
