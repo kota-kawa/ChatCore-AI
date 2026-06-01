@@ -5813,13 +5813,49 @@ body.memo-page {
 }
 
 .memo-item.is-dragging {
-  opacity: 0.58;
+  opacity: 0.4;
   border-style: dashed;
   border-color: #9aa0a6 !important;
   box-shadow:
     0 0 0 2px rgba(95, 99, 104, 0.08),
     inset 0 0 0 1px rgba(255, 255, 255, 0.45) !important;
-  transition: none !important;
+  transition: opacity 0.16s ease;
+}
+
+/* Insertion indicator: a crisp accent bar showing exactly where the dragged
+   card will land. The list is not reflowed during the drag, so this is the only
+   thing that moves — keeping the board calm and the target unambiguous. */
+.memo-item.is-drop-before,
+.memo-item.is-drop-after {
+  position: relative;
+}
+
+.memo-item.is-drop-before::after,
+.memo-item.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: -0.18rem;
+  right: -0.18rem;
+  height: 3px;
+  border-radius: 999px;
+  background: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.18);
+  pointer-events: none;
+  z-index: 3;
+  animation: memo-drop-bar-in 0.12s ease;
+}
+
+.memo-item.is-drop-before::after {
+  top: -0.5rem;
+}
+
+.memo-item.is-drop-after::after {
+  bottom: -0.5rem;
+}
+
+@keyframes memo-drop-bar-in {
+  from { opacity: 0; transform: scaleX(0.85); }
+  to { opacity: 1; transform: scaleX(1); }
 }
 
 .memo-item--drag-preview {
