@@ -248,37 +248,30 @@ function computeProjectedSectionOrder(
   return next.map((memo) => String(memo.id));
 }
 
-type MemoSwapRect = { left: number; top: number; right: number; bottom: number };
+type MemoDropIndicator = { targetId: string; position: MemoDropPosition };
 
-type SectionOrderProjection = {
-  order: string[];
-  lockRect: MemoSwapRect | null;
-};
-
-function computeProjectedSectionOrderFromPoint(
+// Resolve where a drop would land from the pointer position. Crucially this is
+// only read for a *visual indicator* — the list is NOT reordered mid-drag — so
+// the cards stay still and `getBoundingClientRect()` returns stable geometry,
+// eliminating the column-rebalance / hit-test oscillation that made cards jump.
+function computeDropIndicatorFromPoint(
   memos: MemoSummary[],
   sectionMemos: MemoSummary[],
   draggedId: string,
   clientX: number,
   clientY: number,
   cardRefs: Map<string, HTMLElement>,
-): SectionOrderProjection | null {
+): MemoDropIndicator | null {
   const draggedMemo = memos.find((memo) => String(memo.id) === draggedId);
   if (!draggedMemo) return null;
   const sectionKey = getMemoSectionKey(sectionMemos[0] || draggedMemo);
   if (getMemoSectionKey(draggedMemo) !== sectionKey) return null;
 
-  const section = memos.filter((memo) => getMemoSectionKey(memo) === sectionKey);
-  const without = section.filter((memo) => String(memo.id) !== draggedId);
-  if (without.length === 0) {
-    return { order: section.map((memo) => String(memo.id)), lockRect: null };
-  }
+  const without = sectionMemos.filter((memo) => String(memo.id) !== draggedId);
+  if (without.length === 0) return null;
 
-  const sectionIds = section.map((memo) => String(memo.id));
-  const draggedIdx = sectionIds.indexOf(draggedId);
-
-  // Pick the card the cursor is directly over (rect hit). Fall back to the
-  // card whose center is closest, so dragging into a gap still picks a target.
+  // Card the cursor is directly over wins; otherwise fall back to the card whose
+  // center is closest so dragging into a column gap still resolves a target.
   let directHit: { memo: MemoSummary; rect: DOMRect } | null = null;
   let nearest: { memo: MemoSummary; rect: DOMRect; distance: number } | null = null;
   for (const memo of without) {
@@ -307,32 +300,11 @@ function computeProjectedSectionOrderFromPoint(
   const chosen = directHit ?? nearest;
   if (!chosen) return null;
 
-  const targetIdx = sectionIds.indexOf(String(chosen.memo.id));
-
-  // Direct hit: place the dragged card at the target's current slot (asymmetric swap).
-  // Gap fallback: use the cursor's Y midpoint against the target rect.
-  let position: MemoDropPosition;
-  if (directHit) {
-    position = draggedIdx >= 0 && draggedIdx < targetIdx ? "after" : "before";
-  } else {
-    const cy = chosen.rect.top + chosen.rect.height / 2;
-    position = clientY < cy ? "before" : "after";
-  }
-
-  const order = computeProjectedSectionOrder(memos, draggedId, String(chosen.memo.id), position);
-  if (!order) return null;
-
-  return {
-    order,
-    lockRect: directHit
-      ? {
-          left: directHit.rect.left,
-          top: directHit.rect.top,
-          right: directHit.rect.right,
-          bottom: directHit.rect.bottom,
-        }
-      : null,
-  };
+  // Drop before the target when the pointer sits in its upper half, after when in
+  // the lower half — natural for both single-column and masonry column layouts.
+  const cy = chosen.rect.top + chosen.rect.height / 2;
+  const position: MemoDropPosition = clientY < cy ? "before" : "after";
+  return { targetId: String(chosen.memo.id), position };
 }
 
 function applySectionProjection(memos: MemoSummary[], projection: string[] | null): MemoSummary[] {
@@ -618,11 +590,10 @@ export default function MemoPage() {
   const [copiedMemoId, setCopiedMemoId] = useState<string>("");
   const [copyingMemoId, setCopyingMemoId] = useState<string>("");
   const [draggedMemoId, setDraggedMemoId] = useState<string>("");
-  const [dragProjectedOrder, setDragProjectedOrder] = useState<string[] | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<MemoDropIndicator | null>(null);
   const [dragSaving, setDragSaving] = useState(false);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const cardPositionsRef = useRef<Map<string, DOMRect>>(new Map());
-  const dragSwapLockRef = useRef<MemoSwapRect | null>(null);
   const composeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Export modal
@@ -652,10 +623,9 @@ export default function MemoPage() {
   const memos = memoList.memos;
   const totalMemoCount = memoList.total;
 
-  const displayMemos = useMemo(
-    () => applySectionProjection(memos, dragProjectedOrder),
-    [memos, dragProjectedOrder],
-  );
+  // Memos are never reordered mid-drag — the live order stays stable so cards
+  // hold their position while dragging; the move is committed once on drop.
+  const displayMemos = memos;
 
   const { pinnedMemos, otherMemos } = useMemo(() => {
     const pinned: MemoSummary[] = [];
@@ -1252,8 +1222,7 @@ export default function MemoPage() {
 
   const clearMemoDragState = useCallback(() => {
     setDraggedMemoId("");
-    setDragProjectedOrder(null);
-    dragSwapLockRef.current = null;
+    setDropIndicator(null);
   }, []);
 
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
@@ -1265,8 +1234,7 @@ export default function MemoPage() {
     setOpenMenuMemoId("");
     setMenuPosition(null);
     setDraggedMemoId(memoId);
-    setDragProjectedOrder(null);
-    dragSwapLockRef.current = null;
+    setDropIndicator(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", memoId);
     setMemoDragImage(event);
@@ -1280,22 +1248,7 @@ export default function MemoPage() {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
 
-    // After a swap, dragged occupies the target's old slot. Lock that rect so
-    // micro-jitter inside the same slot doesn't oscillate the projection.
-    const lock = dragSwapLockRef.current;
-    if (lock) {
-      if (
-        event.clientX >= lock.left &&
-        event.clientX <= lock.right &&
-        event.clientY >= lock.top &&
-        event.clientY <= lock.bottom
-      ) {
-        return;
-      }
-      dragSwapLockRef.current = null;
-    }
-
-    const result = computeProjectedSectionOrderFromPoint(
+    const next = computeDropIndicatorFromPoint(
       displayMemos,
       sectionMemos,
       draggedMemoId,
@@ -1303,24 +1256,27 @@ export default function MemoPage() {
       event.clientY,
       cardRefs.current,
     );
-    if (!result) return;
-    setDragProjectedOrder((prev) => {
-      if (prev && prev.length === result.order.length && prev.every((id, i) => id === result.order[i])) {
+    setDropIndicator((prev) => {
+      if (prev === next) return prev;
+      if (prev && next && prev.targetId === next.targetId && prev.position === next.position) {
         return prev;
       }
-      if (result.lockRect) {
-        dragSwapLockRef.current = result.lockRect;
-      }
-      return result.order;
+      return next;
     });
   }, [canReorderCurrentView, displayMemos, draggedMemoId]);
 
   const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
-    const projection = dragProjectedOrder;
+    const indicator = dropIndicator;
 
-    if (!canReorderCurrentView || !sourceId || !projection) {
+    if (!canReorderCurrentView || !sourceId || !indicator || sourceId === indicator.targetId) {
+      clearMemoDragState();
+      return;
+    }
+
+    const projection = computeProjectedSectionOrder(memos, sourceId, indicator.targetId, indicator.position);
+    if (!projection) {
       clearMemoDragState();
       return;
     }
@@ -1369,8 +1325,9 @@ export default function MemoPage() {
   }, [
     canReorderCurrentView,
     clearMemoDragState,
-    dragProjectedOrder,
+    dropIndicator,
     draggedMemoId,
+    memos,
     mutate,
     showFlash,
   ]);
@@ -2112,6 +2069,11 @@ export default function MemoPage() {
                   const isCopied = copiedMemoId === memoId;
                   const isCopying = copyingMemoId === memoId;
                   const canDragMemo = canDragMemos && !isBusy;
+                  const isDragging = draggedMemoId === memoId;
+                  const dropEdge =
+                    dropIndicator && dropIndicator.targetId === memoId && draggedMemoId && !isDragging
+                      ? dropIndicator.position
+                      : null;
                   const displayDate = formatDateTime(memo.updated_at || memo.created_at) || memo.updated_at || memo.created_at || "";
 
                   return (
@@ -2121,7 +2083,7 @@ export default function MemoPage() {
                           if (el) cardRefs.current.set(memoId, el);
                           else cardRefs.current.delete(memoId);
                         }}
-                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${draggedMemoId === memoId ? " is-dragging" : ""}`}
+                        className={`memo-item${memo.is_archived ? " is-archived" : ""}${memo.is_pinned ? " is-pinned" : ""}${memo.background_color ? " has-accent" : ""}${isSelected ? " is-selected" : ""}${canDragMemo ? " is-reorderable" : ""}${isDragging ? " is-dragging" : ""}${dropEdge === "before" ? " is-drop-before" : ""}${dropEdge === "after" ? " is-drop-after" : ""}`}
                         style={memo.background_color ? { "--memo-card-accent": memo.background_color } as React.CSSProperties : undefined}
                         draggable={canDragMemo}
                         onDragStart={(event) => handleMemoDragStart(event, memo)}
