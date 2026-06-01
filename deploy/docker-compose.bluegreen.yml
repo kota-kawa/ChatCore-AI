@@ -2,7 +2,7 @@ name: chatcore-ai
 
 services:
   db:
-    image: postgres:15
+    image: postgres:15.14
     container_name: postgres_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7
+    image: redis:7.4.7
     container_name: redis_cache
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   nginx_bootstrap:
-    image: alpine:3.20
+    image: alpine:3.20.8
     environment:
       NGINX_UPSTREAM_DIR: ${NGINX_UPSTREAM_DIR:-/etc/nginx/chatcore-ai/upstreams}
       NGINX_BOOTSTRAP_COLOR: ${NGINX_BOOTSTRAP_COLOR:-blue}

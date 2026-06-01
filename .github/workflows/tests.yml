@@ -18,6 +18,33 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+  version_lock_check:
+    name: Version Lock Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
+            requirements-dev.txt
+
+      - name: Verify lock configuration
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-build.txt
+          python scripts/check_version_locks.py
+          python -m pip install -r requirements.txt -c requirements.lock
+          python -m pip freeze --exclude pip --exclude setuptools --exclude wheel | LC_ALL=C sort -f > /tmp/requirements.lock
+          diff -u requirements.lock /tmp/requirements.lock
+
   lint:
     name: Ruff Lint (Light)
     runs-on: ubuntu-latest
@@ -30,13 +57,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements-build.txt
+            requirements-dev.txt
 
       - name: Install ruff
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install ruff
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Run light lint checks
         run: |
@@ -55,13 +84,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements-build.txt
+            requirements-dev.txt
 
       - name: Install ruff
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install ruff
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Run full lint checks
         run: |
@@ -82,13 +113,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
 
       - name: Install dependencies
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements.txt -c requirements.lock
 
       - name: Run unit tests
         run: |
@@ -117,13 +151,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
 
       - name: Install dependencies
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements.txt -c requirements.lock
 
       - name: Run integration tests
         run: |
@@ -145,14 +182,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements.lock
+            requirements-build.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install coverage
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements.txt -c requirements.lock
+          python -m pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
         run: |
@@ -246,7 +287,7 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+    needs: [version_lock_check, lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     timeout-minutes: 15
 

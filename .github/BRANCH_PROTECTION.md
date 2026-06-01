@@ -16,6 +16,7 @@ following status checks to pass before merging:
 
 - `Ruff Lint (Light)`
 - `Ruff Lint (Full)`
+- `Version Lock Check`
 - `Unit Tests (Python 3.12)`
 - `Integration Tests (Python 3.12)`
 - `Frontend Static Checks`
@@ -26,7 +27,7 @@ Additional settings:
 
 | Setting | Value | Effect |
 | --- | --- | --- |
-| Required status checks | the 7 jobs above | A merge is blocked until all of them are green. |
+| Required status checks | the 8 jobs above | A merge is blocked until all of them are green. |
 | `enforce_admins` | `true` | The rule applies to admins too — nobody can bypass failing CI. |
 | `strict` (require up to date) | `false` | Branches do not have to be rebased onto the latest `main` before merging. |
 | Required pull request reviews | none | Reviews are not enforced by this rule. |
@@ -40,7 +41,7 @@ Additional settings:
 The `deploy` job in [`tests.yml`](workflows/tests.yml) declares:
 
 ```yaml
-needs: [lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+needs: [version_lock_check, lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
 if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 ```
 
@@ -59,6 +60,7 @@ cat > branch-protection.json <<'JSON'
     "contexts": [
       "Ruff Lint (Light)",
       "Ruff Lint (Full)",
+      "Version Lock Check",
       "Unit Tests (Python 3.12)",
       "Integration Tests (Python 3.12)",
       "Frontend Static Checks",

@@ -42,6 +42,7 @@ class DeployHardeningTest(unittest.TestCase):
     def test_workflow_forwards_nginx_test_command_to_remote_deploy(self):
         workflow_text = WORKFLOW.read_text()
 
+        self.assertIn("version_lock_check", workflow_text)
         self.assertIn("NGINX_TEST_CMD: ${{ secrets.NGINX_TEST_CMD }}", workflow_text)
         self.assertIn("NGINX_TEST_CMD", workflow_text)
         self.assertIn("remote_env_names", workflow_text)
