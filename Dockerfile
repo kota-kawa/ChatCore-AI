@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12.12-slim
 
 WORKDIR /app
 
@@ -6,13 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5004
 
-COPY requirements.txt requirements.txt
+COPY requirements-build.txt requirements.txt requirements.lock ./
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements-build.txt \
+    && pip install --no-cache-dir -r requirements.txt -c requirements.lock
 
 COPY wait-for-it.sh /wait-for-it.sh
 RUN chmod +x /wait-for-it.sh

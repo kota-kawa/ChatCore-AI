@@ -15,6 +15,8 @@
 *.zip
 *.pptx
 *.txt
+!requirements-build.txt
+!requirements-dev.txt
 !requirements.txt
 
 
