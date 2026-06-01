@@ -346,6 +346,44 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn("event: done", body)
         self.assertIn('"room_title": "Short title"', body)
 
+    def test_background_generation_job_streams_valid_generative_ui_parts_before_done(self):
+        artifact_block = (
+            "説明します。\n"
+            "```chatcore-artifact\n"
+            "{"
+            '"version":1,'
+            '"title":"構成図",'
+            '"html":"<div id=\\"app\\"></div>",'
+            '"css":"#app{padding:12px;}",'
+            '"js":"document.getElementById(\\"app\\").textContent = \\"ready\\";"'
+            "}\n"
+            "```"
+        )
+
+        persisted_messages = []
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            return_value=iter([artifact_block[:40], artifact_block[40:]]),
+        ):
+            job = start_generation_job(
+                "guest:sid-1:default",
+                conversation_messages=[{"role": "user", "content": "図で説明して"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, message_parts=None: persisted_messages.append(
+                    (response, message_parts)
+                ),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: response_parts_updated", body)
+        self.assertIn('"type": "sandbox_artifact"', body)
+        self.assertIn('"response": "説明します。"', body)
+        self.assertIn("event: done", body)
+        self.assertEqual(persisted_messages[0][0], "説明します。")
+        self.assertEqual(persisted_messages[0][1][1]["type"], "sandbox_artifact")
+
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
         persisted_messages = []
         search_result = WebSearchResult(

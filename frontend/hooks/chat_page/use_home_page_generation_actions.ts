@@ -15,6 +15,10 @@ import {
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
+  getStreamingGenerativeUiDisplayText,
+  updateStreamingTextPart,
+} from "../../lib/chat_page/generative_ui_stream";
+import {
   appendStoredHistory,
   clearStoredGenerationState,
   normalizeHistorySender,
@@ -347,11 +351,14 @@ export function useHomePageGenerationActions({
 
       let streamingMessageId: string | null = null;
       let streamedText = storedGeneration?.streamedText ?? "";
+      let streamingParts: ChatMessagePart[] | undefined;
 
       const ensureStreamingMessage = () => {
         if (streamingMessageId) return streamingMessageId;
         streamingMessageId = nextMessageId("assistant-stream", messageSeqRef);
         const newId = streamingMessageId;
+        const displayText = getStreamingGenerativeUiDisplayText(streamedText);
+        const displayParts = updateStreamingTextPart(streamingParts, displayText);
 
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -360,8 +367,9 @@ export function useHomePageGenerationActions({
             {
               id: newId,
               sender: "assistant",
-              text: streamedText,
+              text: displayText,
               streaming: true,
+              ...(displayParts ? { parts: displayParts } : {}),
             },
           ];
         });
@@ -389,9 +397,13 @@ export function useHomePageGenerationActions({
         persist = true,
         parts?: ChatMessagePart[],
       ) => {
-        const hasParts = Array.isArray(parts) && parts.length > 0;
+        const finalDisplayText = finalText || getStreamingGenerativeUiDisplayText(streamedText);
+        const resolvedParts = Array.isArray(parts) && parts.length > 0
+          ? parts
+          : updateStreamingTextPart(streamingParts, finalDisplayText);
+        const hasParts = Array.isArray(resolvedParts) && resolvedParts.length > 0;
         if (!streamingMessageId) {
-          if (finalText || hasParts) {
+          if (finalDisplayText || hasParts) {
             setMessages((previous) => {
               if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
               return [
@@ -399,8 +411,8 @@ export function useHomePageGenerationActions({
                 {
                   id: nextMessageId("assistant", messageSeqRef),
                   sender: "assistant",
-                  text: finalText,
-                  ...(hasParts ? { parts } : {}),
+                  text: finalDisplayText,
+                  ...(hasParts ? { parts: resolvedParts } : {}),
                 },
               ];
             });
@@ -410,11 +422,11 @@ export function useHomePageGenerationActions({
               return removeThinkingMessages(previous);
             });
           }
-          if (persist && finalText && isGenerationActive(generation)) {
+          if (persist && finalDisplayText && isGenerationActive(generation)) {
             notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-              text: finalText,
+              text: finalDisplayText,
               sender: "bot",
-              ...(hasParts ? { parts } : {}),
+              ...(hasParts ? { parts: resolvedParts } : {}),
             }));
           }
           clearStoredGenerationState(roomId);
@@ -429,18 +441,18 @@ export function useHomePageGenerationActions({
             if (message.id !== streamId) return message;
             return {
               ...message,
-              text: finalText || message.text,
-              ...(hasParts ? { parts } : {}),
+              text: finalDisplayText || message.text,
+              ...(hasParts ? { parts: resolvedParts } : {}),
               streaming: false,
             };
           });
         });
 
-        if (persist && finalText && isGenerationActive(generation)) {
+        if (persist && finalDisplayText && isGenerationActive(generation)) {
           notifyStoredHistoryWriteIssue(appendStoredHistory(roomId, {
-            text: finalText,
+            text: finalDisplayText,
             sender: "bot",
-            ...(hasParts ? { parts } : {}),
+            ...(hasParts ? { parts: resolvedParts } : {}),
           }));
         }
         clearStoredGenerationState(roomId);
@@ -449,7 +461,7 @@ export function useHomePageGenerationActions({
 
       const persistInterruptedStream = (message: string) => {
         if (streamedText) {
-          finalizeStreamingMessage(streamedText, true);
+          finalizeStreamingMessage(getStreamingGenerativeUiDisplayText(streamedText), true, streamingParts);
           appendAssistantErrorMessage(roomId, message);
           return;
         }
@@ -493,6 +505,8 @@ export function useHomePageGenerationActions({
           const streamId = ensureStreamingMessage();
           streamedText += text;
           updateStoredGenerationState(roomId, { streamedText });
+          const displayText = getStreamingGenerativeUiDisplayText(streamedText);
+          const displayParts = updateStreamingTextPart(streamingParts, displayText);
 
           setMessages((previous) => {
             if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -500,8 +514,34 @@ export function useHomePageGenerationActions({
               if (message.id !== streamId) return message;
               return {
                 ...message,
-                text: streamedText,
+                text: displayText,
                 streaming: true,
+                ...(displayParts ? { parts: displayParts } : {}),
+              };
+            });
+          });
+          scheduleAutoScrollIfNeeded();
+          return;
+        }
+
+        if (parsed.event === "response_parts_updated") {
+          const updatePayload = normalizeChatResponsePayload(parsed.data);
+          const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
+          if (updatePayload.parts?.length) {
+            streamingParts = updateStreamingTextPart(updatePayload.parts, displayText);
+          }
+          const streamId = ensureStreamingMessage();
+          const displayParts = updateStreamingTextPart(streamingParts, displayText);
+
+          setMessages((previous) => {
+            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+            return previous.map((message) => {
+              if (message.id !== streamId) return message;
+              return {
+                ...message,
+                text: displayText,
+                streaming: true,
+                ...(displayParts ? { parts: displayParts } : {}),
               };
             });
           });
