@@ -1,0 +1,23 @@
+{
+  "name": "ChatCore-AI",
+  "short_name": "Chat Core",
+  "description": "日本語AIチャット・プロンプト共有・メモ管理",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/static/apple-touch-icon.png",
+      "sizes": "700x705",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/favicon.png",
+      "sizes": "700x705",
+      "type": "image/png"
+    }
+  ]
+}
