@@ -979,6 +979,7 @@ body.chat-page .chat-share-sns a:hover {
   body.chat-page {
     --chat-mobile-gutter: clamp(0.875rem, 4vw, 1.1rem);
     --chat-mobile-toolbar-space: calc(3.65rem + env(safe-area-inset-top, 0px));
+    --chat-floating-action-bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
     overflow: hidden;
     height: 100%;
     overscroll-behavior: none;
@@ -1051,7 +1052,7 @@ body.chat-page .chat-share-sns a:hover {
     top: auto;
     right: auto;
     left: calc(var(--chat-mobile-gutter, 0.875rem) + env(safe-area-inset-left, 0px));
-    bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+    bottom: var(--chat-floating-action-bottom);
     width: 52px;
     height: 52px;
   }
@@ -1059,10 +1060,11 @@ body.chat-page .chat-share-sns a:hover {
   body.chat-page.chat-view-active .global-ai-agent-button,
   body.chat-page:has(.chat-page-stage[data-view="chat"]) .global-ai-agent-button,
   body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-button {
+    --chat-floating-action-bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px));
     top: auto;
     right: auto;
     left: calc(var(--chat-mobile-gutter, 0.875rem) + env(safe-area-inset-left, 0px));
-    bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px));
+    bottom: var(--chat-floating-action-bottom);
   }
 }
 

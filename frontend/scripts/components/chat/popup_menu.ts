@@ -248,7 +248,7 @@ chatTemplate.innerHTML = `
     @media (max-width: 768px) {
       .actions-menu {
         /* 固定inputの上に配置 (input ~56px + safe-area + 余白) */
-        bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+        bottom: var(--chat-floating-action-bottom, calc(70px + env(safe-area-inset-bottom, 0px)));
         right: 12px;
         width: 56px;
         height: 56px;
@@ -282,7 +282,7 @@ chatTemplate.innerHTML = `
 
     @media (max-width: 480px) {
       .actions-menu {
-        bottom: calc(65px + env(safe-area-inset-bottom, 0px));
+        bottom: var(--chat-floating-action-bottom, calc(65px + env(safe-area-inset-bottom, 0px)));
         right: 10px;
         width: 50px;
         height: 50px;
