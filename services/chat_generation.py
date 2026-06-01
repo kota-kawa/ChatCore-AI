@@ -56,6 +56,23 @@ _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 
+def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
+    if "chatcore-artifact" not in raw_text and "chatcore-buttons" not in raw_text:
+        return None
+
+    normalized_response = normalize_response_with_artifacts(raw_text)
+    if normalized_response.validation_errors or not normalized_response.parts:
+        return None
+
+    if not any(part.get("type") != "text" for part in normalized_response.parts):
+        return None
+
+    return {
+        "response": normalized_response.text,
+        "parts": normalized_response.parts,
+    }
+
+
 def _get_chat_agent_max_steps() -> int:
     raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
     if raw is None:
@@ -404,6 +421,7 @@ class ChatGenerationJob:
 
     def _run(self) -> None:
         chunks: list[str] = []
+        last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
         web_search_trace_steps: list[dict[str, str]] = []
@@ -509,6 +527,16 @@ class ChatGenerationJob:
 
                     chunks.append(chunk)
                     self._publish("chunk", {"text": chunk})
+                    streaming_parts_update = _build_streaming_parts_update("".join(chunks))
+                    if streaming_parts_update is not None:
+                        streaming_parts_signature = json.dumps(
+                            streaming_parts_update,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                        if streaming_parts_signature != last_streaming_parts_signature:
+                            last_streaming_parts_signature = streaming_parts_signature
+                            self._publish("response_parts_updated", streaming_parts_update)
 
                 if not tool_calls_buffer:
                     break
