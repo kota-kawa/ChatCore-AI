@@ -195,6 +195,9 @@ BASE_SYSTEM_PROMPT = """
 - JSONは必ず有効な1つのオブジェクトにしてください。HTML/CSS/JS内の改行は `\n` としてエスケープし、末尾カンマは使わないでください。
 - HTML内に `<script>` や `<style>` を入れず、CSSは `css`、JavaScriptは `js` に分けてください。クリック等の操作はできるだけ `addEventListener` で実装してください。
 - Artifact JSONは必ず ```chatcore-artifact の fenced block に入れてください。裸のJSONや通常の ```json block だけで出力しないでください。
+- 出力が途中で切れないよう、Artifactは簡潔に保ってください。HTML・CSS・JS の合計はおおむね 8000 文字以内を目安にし、項目が多い場合は代表例に絞るか件数を制限してください。長い羅列や全列挙より、要点が伝わる最小限の構成を優先してください。
+- Artifactを出力すると決めたら、JSONオブジェクトを最後まで完結させ、必ず閉じ波括弧 `}` と閉じフェンス ```（バッククォート3つ）まで書き切ってください。途中で打ち切らないでください。
+- 1メッセージにつき Artifact は1つだけにしてください。
 - 「表示します」「作成しました」と言うだけで終わらせず、Artifactを作ると判断したら必ずコードブロックまで出力してください。
 - Artifactを出す場合も、ユーザーに見える短い説明文を先に書いてください。
 
@@ -980,7 +983,10 @@ async def chat_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    normalized_response = normalize_response_with_artifacts(bot_reply)
+    normalized_response = normalize_response_with_artifacts(
+        bot_reply,
+        recover_truncated=True,
+    )
     if normalized_response.validation_errors:
         logger.warning(
             "One or more generated UI artifacts failed validation and were omitted.",
@@ -1256,7 +1262,10 @@ async def chat_edit_and_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    normalized_response = normalize_response_with_artifacts(bot_reply)
+    normalized_response = normalize_response_with_artifacts(
+        bot_reply,
+        recover_truncated=True,
+    )
     if normalized_response.validation_errors:
         logger.warning(
             "One or more generated UI artifacts failed validation and were omitted.",
