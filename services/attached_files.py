@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import html
+import json
 import re
 import zipfile
 from contextlib import contextmanager
@@ -495,3 +496,56 @@ def format_attached_files_for_prompt(attached_files: list[PreparedAttachedFile])
         sections.append(f'<file name="{escaped_name}">\n{escaped_content}\n</file>')
     sections.append("</attached_files>")
     return "\n".join(sections)
+
+
+def encode_attached_files_for_storage(attached_files: list[Any] | None) -> str | None:
+    if not attached_files:
+        return None
+    payload = []
+    for attached_file in attached_files[:MAX_ATTACHED_FILES]:
+        if isinstance(attached_file, dict):
+            raw_name = attached_file.get("name", "")
+            raw_content = attached_file.get("content", "")
+        else:
+            raw_name = getattr(attached_file, "name", "")
+            raw_content = getattr(attached_file, "content", "")
+        try:
+            filename = _normalize_filename(raw_name)
+        except AttachedFileValidationError:
+            continue
+        content = _trim_extracted_text(str(raw_content or ""))
+        if content:
+            payload.append({"name": filename, "content": content})
+    if not payload:
+        return None
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def decode_attached_files_from_storage(raw_payload: Any) -> list[PreparedAttachedFile]:
+    if not raw_payload:
+        return []
+    if isinstance(raw_payload, str):
+        try:
+            payload = json.loads(raw_payload)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return []
+    else:
+        payload = raw_payload
+    if not isinstance(payload, list):
+        return []
+
+    attached_files: list[PreparedAttachedFile] = []
+    for item in payload[:MAX_ATTACHED_FILES]:
+        if isinstance(item, PreparedAttachedFile):
+            attached_files.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        try:
+            filename = _normalize_filename(item.get("name", ""))
+        except AttachedFileValidationError:
+            continue
+        content = _trim_extracted_text(str(item.get("content") or ""))
+        if content:
+            attached_files.append(PreparedAttachedFile(name=filename, content=content))
+    return attached_files

@@ -178,12 +178,18 @@ class ChatPostUseCase:
             if room_mode == "temporary":
                 sid = deps.get_temporary_user_store_key(user_id)
                 await run_blocking(deps.ensure_ephemeral_room, sid, chat_room_id)
+                attachment_content_kwargs = (
+                    {"attached_file_contents": prepared_attached_files}
+                    if prepared_attached_files
+                    else {}
+                )
                 await run_blocking(
                     deps.ephemeral_store.append_message,
                     sid,
                     chat_room_id,
                     "user",
                     formatted_user_message,
+                    **attachment_content_kwargs,
                 )
                 all_messages = await run_blocking(
                     deps.ephemeral_store.get_messages,
@@ -195,6 +201,11 @@ class ChatPostUseCase:
                 # New turns extend the active branch: parent is the current branch tip.
                 parent_message_id = await run_blocking(deps.get_active_leaf_id, chat_room_id)
                 should_auto_title_room = parent_message_id is None
+                attachment_content_kwargs = (
+                    {"attached_file_contents": prepared_attached_files}
+                    if prepared_attached_files
+                    else {}
+                )
                 saved_user_message_id = await run_blocking(
                     deps.save_message_to_db,
                     chat_room_id,
@@ -202,6 +213,7 @@ class ChatPostUseCase:
                     "user",
                     attached_file_name_list,
                     parent_message_id,
+                    **attachment_content_kwargs,
                 )
                 if should_auto_title_room:
                     all_messages = [{"role": "user", "content": formatted_user_message}]
@@ -211,12 +223,18 @@ class ChatPostUseCase:
                         chat_room_id,
                     )
         else:
+            attachment_content_kwargs = (
+                {"attached_file_contents": prepared_attached_files}
+                if prepared_attached_files
+                else {}
+            )
             await run_blocking(
                 deps.ephemeral_store.append_message,
                 sid,
                 chat_room_id,
                 "user",
                 formatted_user_message,
+                **attachment_content_kwargs,
             )
             all_messages = await run_blocking(
                 deps.ephemeral_store.get_messages,

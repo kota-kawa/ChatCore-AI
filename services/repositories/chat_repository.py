@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
+from services.attached_files import decode_attached_files_from_storage, encode_attached_files_for_storage
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from services.error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
@@ -43,6 +44,7 @@ class ChatRepository:
         attached_file_names: list[str] | None = None,
         parent_id: int | None = None,
         message_parts: list[dict[str, Any]] | None = None,
+        attached_file_contents: list[Any] | None = None,
     ) -> int | None:
         """Insert a message and make it the active branch tip.
 
@@ -53,6 +55,7 @@ class ChatRepository:
         """
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         message_parts_json = encode_message_parts(message_parts)
+        attached_file_contents_json = encode_attached_files_for_storage(attached_file_contents)
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -64,9 +67,10 @@ class ChatRepository:
                             sender,
                             attached_file_names,
                             parent_id,
-                            message_parts
+                            message_parts,
+                            attached_file_contents
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """
                     cursor.execute(
@@ -78,6 +82,7 @@ class ChatRepository:
                             file_names_json,
                             parent_id,
                             message_parts_json,
+                            attached_file_contents_json,
                         ),
                     )
                     row = cursor.fetchone()
@@ -328,7 +333,15 @@ class ChatRepository:
         """Load every message of a room plus the room's active root pointer."""
         cursor.execute(
             """
-            SELECT id, message, sender, parent_id, active_child_id, timestamp, attached_file_names, message_parts
+            SELECT id,
+                   message,
+                   sender,
+                   parent_id,
+                   active_child_id,
+                   timestamp,
+                   attached_file_names,
+                   message_parts,
+                   attached_file_contents
               FROM chat_history
              WHERE chat_room_id = %s
              ORDER BY id ASC
@@ -345,6 +358,7 @@ class ChatRepository:
             ts,
             file_names_json,
             message_parts_json,
+            attached_file_contents_json,
         ) in cursor.fetchall():
             nodes[message_id] = {
                 "id": message_id,
@@ -355,6 +369,7 @@ class ChatRepository:
                 "timestamp": ts,
                 "attached_file_names": file_names_json,
                 "message_parts": message_parts_json,
+                "attached_file_contents": attached_file_contents_json,
             }
 
         cursor.execute("SELECT active_root_id FROM chat_rooms WHERE id = %s", (chat_room_id,))
@@ -412,6 +427,7 @@ class ChatRepository:
         children: dict[int | None, list[int]],
         *,
         include_files: bool = True,
+        include_attachment_contents: bool = False,
     ) -> dict[str, Any]:
         sibling_ids = children.get(node["parent_id"], [])
         try:
@@ -434,9 +450,23 @@ class ChatRepository:
         message_parts = decode_message_parts(node.get("message_parts"))
         if message_parts:
             entry["message_parts"] = message_parts
+        if include_attachment_contents:
+            attached_file_contents = decode_attached_files_from_storage(
+                node.get("attached_file_contents")
+            )
+            if attached_file_contents:
+                entry["attached_file_contents"] = [
+                    {"name": attached_file.name, "content": attached_file.content}
+                    for attached_file in attached_file_contents
+                ]
         return entry
 
-    def get_active_path(self, chat_room_id: str) -> list[dict[str, Any]]:
+    def get_active_path(
+        self,
+        chat_room_id: str,
+        *,
+        include_attachment_contents: bool = False,
+    ) -> list[dict[str, Any]]:
         """Return the active branch as serialized messages with version metadata."""
         with self._connection_getter() as conn:
             cursor = conn.cursor()
@@ -444,7 +474,14 @@ class ChatRepository:
                 nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
                 children = self._children_by_parent(nodes)
                 path = self._walk_active_path(nodes, active_root_id, children)
-                return [self._serialize_path_node(node, children) for node in path]
+                return [
+                    self._serialize_path_node(
+                        node,
+                        children,
+                        include_attachment_contents=include_attachment_contents,
+                    )
+                    for node in path
+                ]
             finally:
                 cursor.close()
 

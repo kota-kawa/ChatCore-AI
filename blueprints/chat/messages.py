@@ -11,6 +11,10 @@ from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
+from services.attached_files import (
+    decode_attached_files_from_storage,
+    format_attached_files_for_prompt,
+)
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
@@ -460,17 +464,40 @@ def _normalize_message_content_for_llm(content: str, role: str) -> str:
     return normalized
 
 
-def _normalize_messages_for_llm(messages: list[dict[str, str]]) -> list[dict[str, str]]:
-    normalized_messages: list[dict[str, str]] = []
+def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized_messages: list[dict[str, Any]] = []
     for message in messages:
         role = str(message.get("role", "user"))
-        normalized_messages.append(
-            {
-                "role": role,
-                "content": _normalize_message_content_for_llm(message.get("content", ""), role),
-            }
-        )
+        normalized_message: dict[str, Any] = {
+            "role": role,
+            "content": _normalize_message_content_for_llm(message.get("content", ""), role),
+        }
+        attached_file_contents = message.get("attached_file_contents")
+        if attached_file_contents:
+            normalized_message["attached_file_contents"] = attached_file_contents
+        normalized_messages.append(normalized_message)
     return normalized_messages
+
+
+def _prepend_attached_files_to_latest_user_message(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        if str(message.get("role", "")) != "user":
+            continue
+        attached_files = decode_attached_files_from_storage(
+            message.get("attached_file_contents")
+        )
+        if not attached_files:
+            return messages
+        prefix = format_attached_files_for_prompt(attached_files)
+        updated_message = dict(message)
+        updated_message["content"] = f"{prefix}\n\n{message.get('content', '')}"
+        updated_messages = list(messages)
+        updated_messages[index] = updated_message
+        return updated_messages
+    return messages
 
 
 def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, str] | None:
@@ -853,13 +880,25 @@ async def chat_regenerate(
             await run_blocking(ephemeral_store.delete_last_assistant_message, sid, chat_room_id)
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            path = await run_blocking(get_active_path, chat_room_id)
+            path = await run_blocking(
+                get_active_path,
+                chat_room_id,
+                include_attachment_contents=True,
+            )
             if path and path[-1]["sender"] == "assistant" and len(path) >= 2:
                 assistant_parent_id = path[-2]["id"]
-            all_messages = await run_blocking(get_chat_room_messages, chat_room_id)
             # Exclude the existing answer from the context so it is regenerated.
-            if all_messages and all_messages[-1]["role"] == "assistant":
-                all_messages = all_messages[:-1]
+            if path and path[-1]["sender"] == "assistant":
+                path = path[:-1]
+            all_messages = []
+            for node in path:
+                entry = {
+                    "role": "user" if node["sender"] == "user" else "assistant",
+                    "content": node["message"],
+                }
+                if node.get("attached_file_contents"):
+                    entry["attached_file_contents"] = node["attached_file_contents"]
+                all_messages.append(entry)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
@@ -868,6 +907,9 @@ async def chat_regenerate(
         all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
 
     normalized_all_messages = _normalize_messages_for_llm(all_messages)
+    normalized_all_messages = _prepend_attached_files_to_latest_user_message(
+        normalized_all_messages
+    )
     active_task_request = _find_latest_task_launch_request(normalized_all_messages)
     prompt_data = None
     if active_task_request is not None:
@@ -1089,6 +1131,22 @@ async def chat_edit_and_regenerate(
 
         if room_mode == "temporary":
             sid = get_temporary_user_store_key(user_id)
+            existing_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+            user_positions = [
+                i for i, message in enumerate(existing_messages)
+                if message.get("role") == "user"
+            ]
+            if len(user_positions) <= trailing_user_count:
+                return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+            target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
+            target_attached_file_contents = decode_attached_files_from_storage(
+                existing_messages[target_pos].get("attached_file_contents")
+            )
+            attachment_content_kwargs = (
+                {"attached_file_contents": target_attached_file_contents}
+                if target_attached_file_contents
+                else {}
+            )
             await run_blocking(
                 ephemeral_store.delete_messages_from_trailing_user_count,
                 sid,
@@ -1101,36 +1159,81 @@ async def chat_edit_and_regenerate(
                 chat_room_id,
                 "user",
                 formatted_user_message,
+                **attachment_content_kwargs,
             )
             all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
         else:
-            path = await run_blocking(get_active_path, chat_room_id)
+            path = await run_blocking(
+                get_active_path,
+                chat_room_id,
+                include_attachment_contents=True,
+            )
             user_positions = [i for i, node in enumerate(path) if node["sender"] == "user"]
             if len(user_positions) <= trailing_user_count:
                 return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
             target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
             edit_parent_id = path[target_pos - 1]["id"] if target_pos > 0 else None
+            target_attached_file_names = path[target_pos].get("attached_file_names")
+            target_attached_file_contents = decode_attached_files_from_storage(
+                path[target_pos].get("attached_file_contents")
+            )
+            attachment_content_kwargs = (
+                {"attached_file_contents": target_attached_file_contents}
+                if target_attached_file_contents
+                else {}
+            )
             assistant_parent_id = await run_blocking(
                 save_message_to_db,
                 chat_room_id,
                 formatted_user_message,
                 "user",
-                None,
+                target_attached_file_names,
                 edit_parent_id,
+                **attachment_content_kwargs,
             )
             # Context = branch ancestors up to the edited point, then the new message.
             all_messages = [
                 {
                     "role": "user" if node["sender"] == "user" else "assistant",
                     "content": node["message"],
+                    **(
+                        {"attached_file_contents": node["attached_file_contents"]}
+                        if node.get("attached_file_contents")
+                        else {}
+                    ),
                 }
                 for node in path[:target_pos]
             ]
-            all_messages.append({"role": "user", "content": formatted_user_message})
+            edited_message = {"role": "user", "content": formatted_user_message}
+            if target_attached_file_contents:
+                edited_message["attached_file_contents"] = [
+                    {
+                        "name": attached_file.name,
+                        "content": attached_file.content,
+                    }
+                    for attached_file in target_attached_file_contents
+                ]
+            all_messages.append(edited_message)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
         if guest_error is not None:
             return guest_error
+        existing_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
+        user_positions = [
+            i for i, message in enumerate(existing_messages)
+            if message.get("role") == "user"
+        ]
+        if len(user_positions) <= trailing_user_count:
+            return jsonify({"error": "編集対象のメッセージが見つかりません"}, status_code=404)
+        target_pos = user_positions[len(user_positions) - 1 - trailing_user_count]
+        target_attached_file_contents = decode_attached_files_from_storage(
+            existing_messages[target_pos].get("attached_file_contents")
+        )
+        attachment_content_kwargs = (
+            {"attached_file_contents": target_attached_file_contents}
+            if target_attached_file_contents
+            else {}
+        )
         await run_blocking(
             ephemeral_store.delete_messages_from_trailing_user_count,
             sid,
@@ -1143,10 +1246,14 @@ async def chat_edit_and_regenerate(
             chat_room_id,
             "user",
             formatted_user_message,
+            **attachment_content_kwargs,
         )
         all_messages = await run_blocking(ephemeral_store.get_messages, sid, chat_room_id)
 
     normalized_all_messages = _normalize_messages_for_llm(all_messages)
+    normalized_all_messages = _prepend_attached_files_to_latest_user_message(
+        normalized_all_messages
+    )
     active_task_request = _find_latest_task_launch_request(normalized_all_messages)
     prompt_data = None
     if active_task_request is not None:
