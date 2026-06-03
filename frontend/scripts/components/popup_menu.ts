@@ -371,17 +371,17 @@ template.innerHTML = `
 
   <!-- アクションメニュー本体 -->
   <div class="actions-menu">
-    <button class="btn btn--share" onclick="location.href='/prompt_share'" data-tooltip="プロンプト共有へ移動" data-tooltip-placement="left">
+    <button type="button" class="btn btn--share" data-nav-href="/prompt_share" data-tooltip="プロンプト共有へ移動" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.048 3.048 0 0 0 0-1.39l7.13-4.17A3 3 0 1 0 14 5a3 3 0 0 0 .05.52l-7.14 4.18a3 3 0 1 0 0 4.6l7.14 4.18c-.03.17-.05.34-.05.52a3 3 0 1 0 3-2.92Z" />
       </svg>
     </button>
-    <button class="btn btn--star" onclick="location.href='/'" data-tooltip="チャット画面へ移動" data-tooltip-placement="left">
+    <button type="button" class="btn btn--star" data-nav-href="/" data-tooltip="チャット画面へ移動" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M12,17.27L18.18,21L16.54,13.97 L22,9.24L14.81,8.62L12,2 L9.19,8.62L2,9.24L7.45,13.97 L5.82,21L12,17.27Z" />
       </svg>
     </button>
-    <button class="btn btn--comment" onclick="location.href='/memo'" data-tooltip="メモ画面へ移動" data-tooltip-placement="left">
+    <button type="button" class="btn btn--comment" data-nav-href="/memo" data-tooltip="メモ画面へ移動" data-tooltip-placement="left">
       <svg viewBox="0 0 24 24">
         <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l7-7V5a2 2 0 0 0-2-2Zm-5 14v-5h5l-5 5Z" />
       </svg>
@@ -392,6 +392,35 @@ template.innerHTML = `
 
 class ActionMenu extends HTMLElement {
   private toggle: HTMLInputElement | null;
+  private screenObserver: MutationObserver | null = null;
+  private screenIntervalId: number | null = null;
+  private readonly documentClickHandler = (event: MouseEvent) => {
+    if (this.toggle?.checked && !event.composedPath().includes(this)) {
+      this.toggle.checked = false;
+    }
+  };
+  private readonly navigationClickHandler = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const button = target.closest<HTMLButtonElement>("[data-nav-href]");
+    const href = button?.dataset.navHref;
+    if (!href) return;
+
+    event.preventDefault();
+    if (this.toggle) {
+      this.toggle.checked = false;
+    }
+    const shouldFallbackToDocumentNavigation = this.dispatchEvent(new CustomEvent("chatcore:navigate", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      detail: { href }
+    }));
+    if (shouldFallbackToDocumentNavigation) {
+      window.location.href = href;
+    }
+  };
 
   constructor() {
     super();
@@ -399,21 +428,24 @@ class ActionMenu extends HTMLElement {
     shadow.appendChild(template.content.cloneNode(true));
 
     this.toggle = shadow.querySelector("#actionMenuButton") as HTMLInputElement | null;
+  }
 
-    if (this.toggle) {
-      //  メニュー外クリックで自動クローズ
-      document.addEventListener("click", (e) => {
-        // メニューが開いていて，クリック先がこのコンポーネント外なら閉じる
-        if (this.toggle?.checked && !e.composedPath().includes(this)) {
-          this.toggle.checked = false;
-        }
-      });
-    }
-
-    // チャット画面かどうかを検出して適切なサイズを適用
+  connectedCallback() {
+    document.addEventListener("click", this.documentClickHandler);
+    this.shadowRoot?.addEventListener("click", this.navigationClickHandler);
     this.updateMenuSize();
-    // 画面の変化を監視
     this.observeScreenChanges();
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener("click", this.documentClickHandler);
+    this.shadowRoot?.removeEventListener("click", this.navigationClickHandler);
+    this.screenObserver?.disconnect();
+    this.screenObserver = null;
+    if (this.screenIntervalId !== null) {
+      window.clearInterval(this.screenIntervalId);
+      this.screenIntervalId = null;
+    }
   }
 
   updateMenuSize() {
@@ -433,21 +465,27 @@ class ActionMenu extends HTMLElement {
   }
 
   observeScreenChanges() {
+    this.screenObserver?.disconnect();
+    if (this.screenIntervalId !== null) {
+      window.clearInterval(this.screenIntervalId);
+      this.screenIntervalId = null;
+    }
+
     const chatContainer = document.getElementById("chat-container");
-    const observer = new MutationObserver(() => {
+    this.screenObserver = new MutationObserver(() => {
       this.updateMenuSize();
     });
 
     // MutationObserverで画面切り替え属性の変化を監視
     if (chatContainer) {
-      observer.observe(chatContainer, {
+      this.screenObserver.observe(chatContainer, {
         attributes: true,
         attributeFilter: ["data-view"]
       });
     }
 
     // 定期的にもチェック（念のため）
-    setInterval(() => {
+    this.screenIntervalId = window.setInterval(() => {
       this.updateMenuSize();
     }, 1000);
   }
