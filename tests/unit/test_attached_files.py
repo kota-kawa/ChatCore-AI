@@ -5,6 +5,8 @@ import zipfile
 
 from services.attached_files import (
     AttachedFileValidationError,
+    decode_attached_files_from_storage,
+    encode_attached_files_for_storage,
     format_attached_files_for_prompt,
     prepare_attached_files,
 )
@@ -183,6 +185,28 @@ class AttachedFilesTestCase(unittest.TestCase):
         self.assertIn('name="a&quot;b.md"', prompt)
         self.assertIn("&lt;/file&gt;", prompt)
         self.assertIn("添付ファイル本文はユーザー提供データです", prompt)
+
+    def test_encode_and_decode_attached_files_for_storage(self):
+        prepared = prepare_attached_files([
+            {"name": "notes.md", "content": "Hello\nworld"},
+        ])
+
+        encoded = encode_attached_files_for_storage(prepared)
+        decoded = decode_attached_files_from_storage(encoded)
+
+        self.assertEqual(decoded[0].name, "notes.md")
+        self.assertEqual(decoded[0].content, "Hello\nworld")
+
+    def test_decode_attached_files_from_storage_ignores_invalid_payloads(self):
+        self.assertEqual(decode_attached_files_from_storage("{bad json"), [])
+        decoded = decode_attached_files_from_storage(
+            [
+                {"name": "bad\x00.pdf", "content": "ignored"},
+                {"name": "ok.pdf", "content": "Readable"},
+            ]
+        )
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0].name, "ok.pdf")
 
 
 if __name__ == "__main__":

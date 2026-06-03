@@ -5,6 +5,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from services.attached_files import encode_attached_files_for_storage
+
 from .cache import get_redis_client
 
 logger = logging.getLogger(__name__)
@@ -205,6 +207,7 @@ class EphemeralChatStore:
         role: str,
         content: str,
         message_parts: list[dict] | None = None,
+        attached_file_contents: list | None = None,
     ) -> bool:
         # 指定ルームへメッセージを追記して永続化する
         # Append a message to the room and persist updated state.
@@ -215,6 +218,10 @@ class EphemeralChatStore:
         entry = {"role": role, "content": content}
         if message_parts:
             entry["message_parts"] = message_parts
+        if attached_file_contents:
+            encoded_attached_files = encode_attached_files_for_storage(attached_file_contents)
+            if encoded_attached_files:
+                entry["attached_file_contents"] = json.loads(encoded_attached_files)
         messages.append(entry)
         room["messages"] = messages
         return self._save_room(sid, room_id, room)

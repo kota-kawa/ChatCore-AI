@@ -1,5 +1,6 @@
 import unittest
 
+from services.attached_files import PreparedAttachedFile
 from services.repositories.chat_repository import ChatRepository
 
 
@@ -21,7 +22,15 @@ class FakeCursor:
         self.rowcount = 0
 
         if normalized.startswith("INSERT INTO chat_history"):
-            chat_room_id, message, sender, file_names_json, parent_id, message_parts_json = params
+            (
+                chat_room_id,
+                message,
+                sender,
+                file_names_json,
+                parent_id,
+                message_parts_json,
+                attached_file_contents_json,
+            ) = params
             new_id = self.store["seq"]
             self.store["seq"] += 1
             self.store["history"].append(
@@ -35,6 +44,7 @@ class FakeCursor:
                     "timestamp": None,
                     "attached_file_names": file_names_json,
                     "message_parts": message_parts_json,
+                    "attached_file_contents": attached_file_contents_json,
                 }
             )
             self._result_one = (new_id,)
@@ -76,6 +86,7 @@ class FakeCursor:
                     r["timestamp"],
                     r["attached_file_names"],
                     r.get("message_parts"),
+                    r.get("attached_file_contents"),
                 )
                 for r in rows
             ]
@@ -241,6 +252,27 @@ class ChatBranchingTestCase(unittest.TestCase):
                 {"role": "user", "content": "hi"},
                 {"role": "assistant", "content": "answer two"},
             ],
+        )
+
+    def test_attachment_contents_are_internal_to_explicit_active_path_load(self):
+        self.repo.save_message(
+            "room-1",
+            "summarize this",
+            "user",
+            ["sample.pdf"],
+            None,
+            None,
+            [PreparedAttachedFile(name="sample.pdf", content="[page 1]\nHello PDF")],
+        )
+
+        public_path = self.repo.get_active_path("room-1")
+        self.assertEqual(public_path[0]["attached_file_names"], ["sample.pdf"])
+        self.assertNotIn("attached_file_contents", public_path[0])
+
+        internal_path = self.repo.get_active_path("room-1", include_attachment_contents=True)
+        self.assertEqual(
+            internal_path[0]["attached_file_contents"],
+            [{"name": "sample.pdf", "content": "[page 1]\nHello PDF"}],
         )
 
 

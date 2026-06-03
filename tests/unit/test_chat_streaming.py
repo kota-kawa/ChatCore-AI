@@ -10,6 +10,8 @@ from blueprints.chat.messages import (
     _paginate_ephemeral_chat_history,
     _truncate_conversation_for_llm,
     chat,
+    chat_edit_and_regenerate,
+    chat_regenerate,
     _iter_llm_stream_events,
     chat_generation_status,
     chat_generation_stream,
@@ -950,6 +952,114 @@ class ChatStreamingTestCase(unittest.TestCase):
             ["user", "assistant"],
         )
         self.assertEqual(history_payload["messages"][-1]["message"], "完了")
+
+    def test_regenerate_reinjects_saved_attachment_contents_for_llm(self):
+        captured_messages = {}
+        request = build_request(
+            method="POST",
+            path="/api/chat_regenerate",
+            json_body={"chat_room_id": "room-1", "model": "gemini-2.5-flash"},
+            session={"user_id": 42},
+        )
+
+        def get_llm_response(messages, model):
+            captured_messages["messages"] = messages
+            return "new answer"
+
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                return_value=[
+                    {
+                        "id": 10,
+                        "message": "要約して",
+                        "sender": "user",
+                        "attached_file_names": ["sample.pdf"],
+                        "attached_file_contents": [
+                            {"name": "sample.pdf", "content": "[page 1]\nPDF BODY"}
+                        ],
+                    },
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ],
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
+            patch("blueprints.chat.messages.get_room_summary", return_value={}),
+            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
+            patch("blueprints.chat.messages.save_message_to_db", return_value=12),
+        ):
+            response = asyncio.run(chat_regenerate(request))
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["response"], "new answer")
+        contents = [message["content"] for message in captured_messages["messages"]]
+        self.assertTrue(any("PDF BODY" in content for content in contents))
+        self.assertFalse(any("old answer" in content for content in contents))
+
+    def test_edit_and_regenerate_carries_original_attachment_contents(self):
+        captured_messages = {}
+        saved_messages = []
+        request = build_request(
+            method="POST",
+            path="/api/chat_edit_and_regenerate",
+            json_body={
+                "chat_room_id": "room-1",
+                "new_message": "この資料を短く要約して",
+                "trailing_user_count": 0,
+                "model": "gemini-2.5-flash",
+            },
+            session={"user_id": 42},
+        )
+
+        def save_message(*args, **kwargs):
+            saved_messages.append((args, kwargs))
+            return 20 + len(saved_messages)
+
+        def get_llm_response(messages, model):
+            captured_messages["messages"] = messages
+            return "edited answer"
+
+        with (
+            patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
+            patch("blueprints.chat.messages.validate_model_name"),
+            patch("blueprints.chat.messages.validate_room_owner", return_value=(None, None)),
+            patch(
+                "blueprints.chat.messages.get_active_path",
+                return_value=[
+                    {
+                        "id": 10,
+                        "message": "要約して",
+                        "sender": "user",
+                        "attached_file_names": ["sample.pdf"],
+                        "attached_file_contents": [
+                            {"name": "sample.pdf", "content": "[page 1]\nPDF BODY"}
+                        ],
+                    },
+                    {"id": 11, "message": "old answer", "sender": "assistant"},
+                ],
+            ),
+            patch("blueprints.chat.messages.get_user_by_id", return_value={}),
+            patch("blueprints.chat.messages.get_room_summary", return_value={}),
+            patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
+            patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
+            patch("blueprints.chat.messages.is_streaming_model", return_value=False),
+            patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
+            patch("blueprints.chat.messages.save_message_to_db", side_effect=save_message),
+        ):
+            response = asyncio.run(chat_edit_and_regenerate(request))
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["response"], "edited answer")
+        contents = [message["content"] for message in captured_messages["messages"]]
+        self.assertTrue(any("PDF BODY" in content for content in contents))
+        user_save_args, user_save_kwargs = saved_messages[0]
+        self.assertEqual(user_save_args[3], ["sample.pdf"])
+        self.assertIn("attached_file_contents", user_save_kwargs)
 
     def test_get_chat_history_forwards_limit_and_before_id(self):
         session = {"user_id": 24}
