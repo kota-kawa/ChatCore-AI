@@ -15,15 +15,15 @@ body {
 .cc-route-frame {
   min-height: 100dvh;
   transition:
-    opacity 180ms ease,
-    transform 220ms cubic-bezier(0.2, 0, 0, 1),
-    filter 220ms ease;
+    opacity 220ms ease,
+    transform 260ms cubic-bezier(0.2, 0, 0, 1),
+    filter 260ms ease;
   transform-origin: center top;
 }
 
 .is-route-transitioning .cc-route-frame {
-  opacity: 0.84;
-  transform: translateY(5px) scale(0.998);
+  opacity: 0;
+  transform: translateY(8px) scale(0.996);
   filter: saturate(0.96);
 }
 
@@ -34,9 +34,9 @@ body {
   pointer-events: none;
   opacity: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 20%),
-    linear-gradient(90deg, rgba(26, 115, 232, 0.06), rgba(25, 195, 125, 0.06), rgba(217, 119, 6, 0.05));
-  transition: opacity 160ms ease;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.98)),
+    linear-gradient(90deg, rgba(26, 115, 232, 0.12), rgba(25, 195, 125, 0.1), rgba(217, 119, 6, 0.08));
+  transition: opacity 180ms ease;
 }
 
 .is-route-transitioning .cc-route-transition-overlay {
@@ -53,6 +53,12 @@ body {
   transform-origin: left center;
   background: linear-gradient(90deg, #1a73e8, #19c37d, #f59e0b);
   box-shadow: 0 0 18px rgba(26, 115, 232, 0.26);
+}
+
+[data-theme="dark"] .cc-route-transition-overlay {
+  background:
+    linear-gradient(180deg, rgba(9, 13, 23, 0.98), rgba(15, 23, 42, 0.98)),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.14), rgba(45, 212, 191, 0.1), rgba(251, 191, 36, 0.08));
 }
 
 .is-route-transitioning .cc-route-transition-overlay__bar {

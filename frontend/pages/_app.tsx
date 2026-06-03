@@ -5,7 +5,7 @@ import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
 import "../scripts/core/csrf";
 import type { AppProps } from "next/app";
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
 import { useRouter } from "next/router";
 import { GoogleAnalytics } from "../components/GoogleAnalytics";
@@ -74,6 +74,15 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
 const AUTH_PAGES = new Set(["/login", "/register"]);
 const MENU_NAVIGATION_PATHS = ["/", "/memo", "/prompt_share"] as const;
 const MENU_NAVIGATION_PATH_SET = new Set<string>(MENU_NAVIGATION_PATHS);
+const ROUTE_STYLESHEETS_BY_PATH: Record<string, string[]> = {
+  "/": ["/static/css/pages/chat/page.css"],
+  "/memo": ["/memo/static/css/memo_form.css"],
+  "/prompt_share": ["/prompt_share/static/css/pages/prompt_share.css"]
+};
+const ROUTE_REVEAL_DELAY_MS = 220;
+const MENU_NAVIGATION_MIN_DELAY_MS = 120;
+const STYLESHEET_PRELOAD_TIMEOUT_MS = 2200;
+const stylesheetPreloadPromises = new Map<string, Promise<void>>();
 
 type ChatCoreNavigationEvent = CustomEvent<{
   href?: string;
@@ -94,10 +103,90 @@ function getMenuNavigationTarget(rawHref: string | undefined) {
   }
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function getPathnameFromRouteUrl(rawUrl: string | undefined) {
+  if (!rawUrl || typeof window === "undefined") return "";
+
+  try {
+    return new URL(rawUrl, window.location.origin).pathname;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeStylesheetHref(href: string) {
+  return new URL(href, window.location.origin).href;
+}
+
+function isStylesheetLoaded(absoluteHref: string) {
+  const links = document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet'], link[rel='preload'][as='style']");
+  return Array.from(links).some((link) => (
+    link.href === absoluteHref && (link.dataset.ccRouteStylesheetReady === "true" || Boolean(link.sheet))
+  ));
+}
+
+function ensureStylesheetPreloaded(href: string) {
+  if (typeof window === "undefined") return Promise.resolve();
+
+  const absoluteHref = normalizeStylesheetHref(href);
+  if (isStylesheetLoaded(absoluteHref)) return Promise.resolve();
+
+  const cachedPromise = stylesheetPreloadPromises.get(absoluteHref);
+  if (cachedPromise) return cachedPromise;
+
+  const promise = new Promise<void>((resolve) => {
+    const existingLink = Array.from(document.querySelectorAll<HTMLLinkElement>("link[href]")).find((candidate) => (
+      candidate.href === absoluteHref || candidate.getAttribute("href") === href
+    ));
+    const link = existingLink || document.createElement("link");
+    let didResolve = false;
+
+    const cleanup = () => {
+      link.removeEventListener("load", handleLoad);
+      link.removeEventListener("error", handleLoad);
+    };
+    const handleLoad = () => {
+      if (didResolve) return;
+      didResolve = true;
+      link.dataset.ccRouteStylesheetReady = "true";
+      cleanup();
+      resolve();
+    };
+
+    window.setTimeout(handleLoad, STYLESHEET_PRELOAD_TIMEOUT_MS);
+    link.addEventListener("load", handleLoad, { once: true });
+    link.addEventListener("error", handleLoad, { once: true });
+
+    if (!existingLink) {
+      link.rel = "preload";
+      link.as = "style";
+      link.href = href;
+      link.dataset.ccRouteStylesheetPreload = "true";
+      document.head.appendChild(link);
+    }
+  });
+
+  stylesheetPreloadPromises.set(absoluteHref, promise);
+  return promise;
+}
+
+function ensureRouteStylesheetsLoaded(pathname: string) {
+  const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
+  if (stylesheetHrefs.length === 0) return Promise.resolve();
+
+  return Promise.all(stylesheetHrefs.map(ensureStylesheetPreloaded)).then(() => undefined);
+}
+
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const showAiAgent = !AUTH_PAGES.has(router.pathname);
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
+  const navigationRequestIdRef = useRef(0);
 
   useEffect(() => {
     const reapplyTheme = () => {
@@ -129,6 +218,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
   useEffect(() => {
     let finishTimerId: number | null = null;
+    let finishRequestId = 0;
 
     const clearFinishTimer = () => {
       if (finishTimerId === null) return;
@@ -137,25 +227,38 @@ export default function App({ Component, pageProps }: AppProps) {
     };
     const startTransition = () => {
       clearFinishTimer();
+      finishRequestId += 1;
       setIsRouteTransitioning(true);
     };
-    const finishTransition = () => {
+    const finishTransition = (url?: string) => {
       clearFinishTimer();
+      const currentFinishRequestId = ++finishRequestId;
+      void Promise.all([
+        ensureRouteStylesheetsLoaded(getPathnameFromRouteUrl(url)),
+        wait(ROUTE_REVEAL_DELAY_MS)
+      ]).finally(() => {
+        if (currentFinishRequestId !== finishRequestId) return;
+        setIsRouteTransitioning(false);
+      });
+    };
+    const cancelTransition = () => {
+      clearFinishTimer();
+      finishRequestId += 1;
       finishTimerId = window.setTimeout(() => {
         setIsRouteTransitioning(false);
         finishTimerId = null;
-      }, 140);
+      }, ROUTE_REVEAL_DELAY_MS);
     };
 
     router.events.on("routeChangeStart", startTransition);
     router.events.on("routeChangeComplete", finishTransition);
-    router.events.on("routeChangeError", finishTransition);
+    router.events.on("routeChangeError", cancelTransition);
 
     return () => {
       clearFinishTimer();
       router.events.off("routeChangeStart", startTransition);
       router.events.off("routeChangeComplete", finishTransition);
-      router.events.off("routeChangeError", finishTransition);
+      router.events.off("routeChangeError", cancelTransition);
     };
   }, [router.events]);
 
@@ -164,18 +267,27 @@ export default function App({ Component, pageProps }: AppProps) {
       void router.prefetch(path).catch(() => {
         // Prefetch is an optimization only; navigation still works without it.
       });
+      void ensureRouteStylesheetsLoaded(path);
     });
   }, [router]);
 
   useEffect(() => {
-    const handleMenuNavigation = (event: Event) => {
+    const handleMenuNavigation = async (event: Event) => {
       const target = getMenuNavigationTarget((event as ChatCoreNavigationEvent).detail?.href);
       if (!target) return;
 
       event.preventDefault();
       if (target === router.asPath) return;
 
+      const currentNavigationRequestId = navigationRequestIdRef.current + 1;
+      navigationRequestIdRef.current = currentNavigationRequestId;
       setIsRouteTransitioning(true);
+      await Promise.all([
+        ensureRouteStylesheetsLoaded(getPathnameFromRouteUrl(target)),
+        wait(MENU_NAVIGATION_MIN_DELAY_MS)
+      ]);
+      if (currentNavigationRequestId !== navigationRequestIdRef.current) return;
+
       void router.push(target).catch(() => {
         window.location.href = target;
       });
