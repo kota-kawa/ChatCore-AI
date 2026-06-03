@@ -572,6 +572,7 @@ export function useHomePageRoomActions({
       taskLaunchInProgressRef.current = false;
     }
   }, [
+    attachedFiles,
     closeOverlaySidebar,
     createNewChatRoom,
     generateResponse,
@@ -581,6 +582,7 @@ export function useHomePageRoomActions({
     prepareChatViewTransition,
     resetLaunchingRoomState,
     selectedModel,
+    setAttachedFiles,
     setPageViewState,
     setSetupInfo,
     setupInfo,

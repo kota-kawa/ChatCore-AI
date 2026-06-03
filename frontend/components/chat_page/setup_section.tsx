@@ -13,10 +13,10 @@ import {
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
   CHAT_ATTACHMENT_ACCEPT,
+  MAX_ATTACHED_FILES,
   getAttachmentIconClass,
-  mergeChatAttachments,
-  readSelectedChatAttachments,
 } from "../../lib/chat_page/file_attachments";
+import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import type { NormalizedTask } from "../../lib/chat_page/types";
 import {
   useHomePageSetupChatContext,
@@ -229,6 +229,7 @@ function SetupSectionComponent() {
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const setupInfoInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const notifyAttachmentError = useCallback((message: string) => {
     import("../../scripts/core/toast").then(({ showToast }) => {
@@ -236,21 +237,28 @@ function SetupSectionComponent() {
     });
   }, []);
 
+  const {
+    attachSelectedFiles,
+    isAttachmentDropActive,
+    attachmentDropzoneProps,
+  } = useChatAttachmentDropzone({
+    attachedFiles,
+    setAttachedFiles,
+    isAttachmentDisabled: isChatLaunching,
+    focusTargetRef: setupInfoInputRef,
+    notifyAttachmentError,
+  });
+
   const handleFileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
-      void readSelectedChatAttachments(Array.from(files), attachedFiles, notifyAttachmentError).then(
-        (selectedFiles) => {
-          if (selectedFiles.length === 0) return;
-          setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
-        },
-      );
+      attachSelectedFiles(Array.from(files));
 
       if (event.target) event.target.value = "";
     },
-    [attachedFiles, notifyAttachmentError, setAttachedFiles],
+    [attachSelectedFiles],
   );
 
   const handleRemoveAttachedFile = useCallback(
@@ -830,7 +838,19 @@ function SetupSectionComponent() {
 
         <div className="form-group setup-info-group">
           <label className="form-label" htmlFor="setup-info">やりたいことを入力（任意）</label>
-          <div className="setup-info-field-shell">
+          <div
+            className={`setup-info-field-shell chat-attachment-dropzone ${
+              isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
+            }`.trim()}
+            {...attachmentDropzoneProps}
+          >
+            <div className="chat-attachment-drop-overlay" aria-hidden="true">
+              <span className="chat-attachment-drop-overlay__icon">
+                <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+              </span>
+              <span className="chat-attachment-drop-overlay__text">ファイルをドロップして添付</span>
+              <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
+            </div>
             <div className="chat-save-mode-control">
               <button
                 id="temporary-chat-mode-btn"
@@ -908,6 +928,7 @@ function SetupSectionComponent() {
                 onChange={handleFileInputChange}
               />
               <textarea
+                ref={setupInfoInputRef}
                 id="setup-info"
                 data-agent-id="chat.setup-message"
                 rows={4}
@@ -926,7 +947,7 @@ function SetupSectionComponent() {
                 aria-label="ファイルを添付"
                 data-tooltip="ファイルを添付"
                 data-tooltip-placement="top"
-                disabled={isChatLaunching || attachedFiles.length >= 5}
+                disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <i className="bi bi-paperclip" aria-hidden="true"></i>
