@@ -345,6 +345,154 @@
   --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
 }
 
+/* ─── ドラッグ＆ドロップ添付 ─── */
+.chat-attachment-dropzone {
+  position: relative;
+}
+
+.chat-attachment-drop-overlay {
+  position: absolute;
+  inset: -0.25rem;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  min-height: 5.6rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(13, 148, 136, 0.42);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(240, 253, 250, 0.94), rgba(236, 253, 245, 0.9));
+  color: #0f766e;
+  box-shadow:
+    0 18px 42px rgba(15, 118, 110, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 6px, 0) scale(0.985);
+  visibility: hidden;
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0.18s ease;
+}
+
+.input-container .chat-attachment-drop-overlay {
+  top: 0.48rem;
+  bottom: 0.55rem;
+  left: 50%;
+  right: auto;
+  width: min(calc(100% - 2rem), 800px);
+  transform: translate3d(-50%, 6px, 0) scale(0.985);
+}
+
+.chat-attachment-dropzone--active .chat-attachment-drop-overlay {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  visibility: visible;
+}
+
+.input-container.chat-attachment-dropzone--active .chat-attachment-drop-overlay {
+  transform: translate3d(-50%, 0, 0) scale(1);
+}
+
+.chat-attachment-drop-overlay__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: 50%;
+  background: rgba(13, 148, 136, 0.12);
+  color: #0f766e;
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.18);
+}
+
+.chat-attachment-drop-overlay__icon i {
+  font-size: 1.25rem;
+}
+
+.chat-attachment-drop-overlay__text {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.chat-attachment-drop-overlay__hint {
+  font-size: var(--text-xs, 0.75rem);
+  color: rgba(17, 94, 89, 0.72);
+  line-height: 1.35;
+  text-align: center;
+}
+
+.chat-attachment-dropzone--active .input-wrapper,
+.chat-attachment-dropzone--active #setup-info {
+  border-color: rgba(13, 148, 136, 0.58);
+  box-shadow:
+    0 0 0 4px rgba(20, 184, 166, 0.13),
+    0 18px 42px rgba(13, 148, 136, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+[data-theme="dark"] .chat-attachment-drop-overlay {
+  border-color: rgba(45, 212, 191, 0.42);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(17, 35, 46, 0.9));
+  color: #99f6e4;
+  box-shadow:
+    0 18px 42px rgba(2, 6, 23, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .chat-attachment-drop-overlay__icon {
+  background: rgba(45, 212, 191, 0.12);
+  color: #99f6e4;
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18);
+}
+
+[data-theme="dark"] .chat-attachment-drop-overlay__hint {
+  color: rgba(204, 251, 241, 0.72);
+}
+
+[data-theme="dark"] .chat-attachment-dropzone--active .input-wrapper,
+[data-theme="dark"] .chat-attachment-dropzone--active #setup-info {
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow:
+    0 0 0 4px rgba(45, 212, 191, 0.12),
+    0 18px 42px rgba(2, 6, 23, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 576px) {
+  .chat-attachment-drop-overlay {
+    gap: 0.12rem;
+    min-height: 4.7rem;
+    padding: 0.72rem 0.75rem;
+  }
+
+  .input-container .chat-attachment-drop-overlay {
+    width: calc(100% - 1.1rem);
+    top: 0.38rem;
+    bottom: calc(0.42rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .chat-attachment-drop-overlay__icon {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+
+  .chat-attachment-drop-overlay__text {
+    font-size: var(--text-xs, 0.75rem);
+  }
+
+  .chat-attachment-drop-overlay__hint {
+    display: none;
+  }
+}
+
 /* ─── 添付ファイルチップ（コンポーザー内） ─── */
 .chat-attached-files {
   display: flex;
@@ -919,6 +1067,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-attachment-drop-overlay,
+  .chat-attachment-dropzone--active .input-wrapper,
+  .chat-attachment-dropzone--active #setup-info {
+    transition: none;
+  }
+
   .thinking-message::before,
   .constellation-loader,
   .constellation-loader::before,

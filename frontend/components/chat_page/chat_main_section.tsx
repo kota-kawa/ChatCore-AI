@@ -5,10 +5,10 @@ import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } 
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
   CHAT_ATTACHMENT_ACCEPT,
+  MAX_ATTACHED_FILES,
   getAttachmentIconClass,
-  mergeChatAttachments,
-  readSelectedChatAttachments,
 } from "../../lib/chat_page/file_attachments";
+import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 
 function ChatMainSectionComponent() {
@@ -92,23 +92,30 @@ function ChatMainSectionComponent() {
     });
   }, []);
 
+  const {
+    attachSelectedFiles,
+    isAttachmentDropActive,
+    attachmentDropzoneProps,
+  } = useChatAttachmentDropzone({
+    attachedFiles,
+    setAttachedFiles,
+    isAttachmentDisabled: isChatLaunching,
+    focusTargetRef: chatInputRef,
+    notifyAttachmentError,
+  });
+
   const handleFileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) return;
 
-      void readSelectedChatAttachments(Array.from(files), attachedFiles, notifyAttachmentError).then(
-        (selectedFiles) => {
-          if (selectedFiles.length === 0) return;
-          setAttachedFiles((prev) => mergeChatAttachments(prev, selectedFiles));
-        },
-      );
+      attachSelectedFiles(Array.from(files));
 
       if (event.target) {
         event.target.value = "";
       }
     },
-    [attachedFiles, notifyAttachmentError, setAttachedFiles],
+    [attachSelectedFiles],
   );
 
   const handleRemoveAttachedFile = useCallback(
@@ -471,7 +478,19 @@ function ChatMainSectionComponent() {
             onSwitchBranch={handleSwitchBranch}
           />
 
-          <div className="input-container supports-[backdrop-filter]:backdrop-blur-xl">
+          <div
+            className={`input-container chat-attachment-dropzone supports-[backdrop-filter]:backdrop-blur-xl ${
+              isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
+            }`.trim()}
+            {...attachmentDropzoneProps}
+          >
+            <div className="chat-attachment-drop-overlay" aria-hidden="true">
+              <span className="chat-attachment-drop-overlay__icon">
+                <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+              </span>
+              <span className="chat-attachment-drop-overlay__text">ファイルをドロップして添付</span>
+              <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
+            </div>
             {detectedUrls.length > 0 && (
               <div className="chat-detected-urls" aria-label="送信時にAIが読み取るURL">
                 {detectedUrls.map((url) => (
@@ -528,7 +547,7 @@ function ChatMainSectionComponent() {
                 aria-label="ファイルを添付"
                 data-tooltip="ファイルを添付"
                 data-tooltip-placement="top"
-                disabled={isChatLaunching || attachedFiles.length >= 5}
+                disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <i className="bi bi-paperclip" aria-hidden="true"></i>
