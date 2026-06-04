@@ -279,6 +279,42 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIsNone(normalized.parts)
 
+    def test_long_prose_mentioning_chart_keyword_stays_plain_text(self):
+        raw = (
+            "藤沢市の天気の概要です。" + "詳細な気温や降水確率を説明します。" * 12 +
+            "具体的な数値は、サイト上の表やグラフで確認してください。"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, raw)
+        self.assertIsNone(normalized.parts)
+
+    def test_web_search_trace_block_is_not_dumped_into_fallback(self):
+        trace_block = (
+            '<details class="web-search-sources web-search-sources--trace">'
+            '<summary class="web-search-sources__summary">'
+            '<span class="web-search-sources__label">回答までのステップ</span>'
+            '<span class="web-search-sources__count">4ステップ / 1件</span>'
+            "</summary>"
+            '<div class="web-search-sources__list">'
+            '<ol class="web-search-sources__steps">'
+            '<li class="web-search-sources__step">検索結果</li>'
+            "</ol></div></details>"
+        )
+        raw = f"{trace_block}\n\n表示します。"
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+        artifact = normalized.parts[1]["artifact"]
+        self.assertIn("fallback-ui", artifact["html"])
+        self.assertNotIn("web-search-sources", artifact["html"])
+        self.assertNotIn("回答までのステップ", artifact["html"])
+        # トレースブロックは可視テキストには残り、フロントで参照リンクとして描画される。
+        self.assertTrue(normalized.text.startswith(trace_block))
+
     def test_decode_message_parts_drops_invalid_artifacts(self):
         parts = [
             {"type": "text", "text": "hello"},
