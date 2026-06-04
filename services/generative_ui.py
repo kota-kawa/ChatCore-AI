@@ -84,14 +84,37 @@ _ARTIFACT_CONTEXT_KEY_RE = re.compile(
     r'"(?:artifact|version|title|name|label|height|description|summary|caption)"\s*:',
     re.IGNORECASE,
 )
-_ARTIFACT_INTENT_RE = re.compile(
-    r"(chatcore-artifact|generative ui|生成UI|artifact|"
-    r"可視化|図解|インフォグラフィック|ダッシュボード|チャート|グラフ|"
+# 「明示的に生成UIを作ろうとした」強いシグナル。本文の長さに関わらずfallbackを許可する。
+# Strong signals that the model explicitly attempted an artifact; allow a fallback
+# regardless of how long the surrounding prose is.
+_STRONG_ARTIFACT_INTENT_RE = re.compile(
+    r"(chatcore-artifact|generative ui|生成UI|artifact)",
+    re.IGNORECASE,
+)
+# 可視化を匂わせる弱いシグナル。通常の文章でも偶発的に出現する（例: 「表やグラフで確認」）
+# ため、短い宣言文のときだけfallbackのトリガーにする。
+# Weak visualization hints that also appear incidentally in ordinary prose (e.g.
+# "check the tables and charts"). Only treat them as intent for short announcements.
+_WEAK_ARTIFACT_INTENT_RE = re.compile(
+    r"(可視化|図解|インフォグラフィック|ダッシュボード|チャート|グラフ|"
     r"タイムライン|フローチャート|比較表|カードビュー)",
     re.IGNORECASE,
 )
 _DISPLAY_ONLY_INTENT_RE = re.compile(
     r"(表示します|表示しました|作成します|作成しました|用意しました|以下に示します)",
+    re.IGNORECASE,
+)
+# 弱いシグナルや表示宣言から生成UIを補完するのは、本文が短い宣言文のときに限る。
+# Only synthesize a fallback from weak/display-only intent when the prose is short.
+_SHORT_INTENT_CHAR_LIMIT = 180
+# Web検索結果は <details class="web-search-sources …">…</details> として本文へ差し込まれる。
+# fallback生成やintent判定では本文だけを見たいので、このブロックを除去する。
+# Web search results are injected as <details class="web-search-sources …">…</details>
+# blocks. Strip them before inferring intent or building a fallback so the raw markup
+# never leaks into a generated UI card.
+_WEB_SEARCH_SOURCES_BLOCK_RE = re.compile(
+    r"<details\b[^>]*\bclass\s*=\s*(?P<quote>[\"'])[^\"']*web-search-sources[^\"']*(?P=quote)[^>]*>"
+    r"(?:(?!</?details\b)[\s\S])*?</details>",
     re.IGNORECASE,
 )
 _JS_BANNED_TOKEN_RE = re.compile(
@@ -345,8 +368,23 @@ def _looks_like_artifact_json(source: str) -> bool:
     return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
 
 
+def _strip_web_search_sources_html(text: str) -> str:
+    if "web-search-sources" not in text:
+        return text
+    # ネストした details を含まない最も内側のブロックから順に除去し、変化が無くなるまで
+    # 繰り返すことで外側のトレースブロックも安全に取り除く。
+    # Remove the innermost blocks first and repeat until stable so nested trace
+    # blocks are stripped safely as well.
+    current = text
+    while True:
+        stripped = _WEB_SEARCH_SOURCES_BLOCK_RE.sub("", current)
+        if stripped == current:
+            return current
+        current = stripped
+
+
 def _infer_artifact_title(text: str) -> str:
-    cleaned = FENCED_BLOCK_RE.sub("", text).strip()
+    cleaned = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
     for line in cleaned.splitlines():
         line = line.strip(" #:-\t")
         if line:
@@ -355,10 +393,15 @@ def _infer_artifact_title(text: str) -> str:
 
 
 def _has_artifact_intent(text: str) -> bool:
-    stripped = FENCED_BLOCK_RE.sub("", text).strip()
-    if _ARTIFACT_INTENT_RE.search(stripped):
+    stripped = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
+    if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
         return True
-    return len(stripped) <= 180 and bool(_DISPLAY_ONLY_INTENT_RE.search(stripped))
+    if len(stripped) > _SHORT_INTENT_CHAR_LIMIT:
+        return False
+    return bool(
+        _WEAK_ARTIFACT_INTENT_RE.search(stripped)
+        or _DISPLAY_ONLY_INTENT_RE.search(stripped)
+    )
 
 
 def _find_balanced_object_end(source: str, start: int) -> int | None:
@@ -908,7 +951,13 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
 
 def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]:
     title = _infer_artifact_title(visible_text or raw_text)
-    source_text = (visible_text or raw_text or "生成UIを表示するための内容を補完しました。").strip()
+    # Web検索のトレースブロックHTMLがエスケープされてカード本文に流れ込むのを防ぐ。
+    # Keep the web-search trace markup out of the escaped card body.
+    source_text = _strip_web_search_sources_html(
+        visible_text or raw_text or "生成UIを表示するための内容を補完しました。"
+    ).strip()
+    if not source_text:
+        source_text = "生成UIを表示するための内容を補完しました。"
     if len(source_text) > 900:
         source_text = f"{source_text[:900].rstrip()}..."
     paragraphs = [
