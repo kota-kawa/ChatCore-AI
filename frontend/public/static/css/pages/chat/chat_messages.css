@@ -2202,3 +2202,88 @@ chat-action-menu {
   background: var(--surface-hover, #f1f5f9);
   color: var(--text-primary, #0f172a);
 }
+
+/* タスク起動メッセージの「裏側のタスクプロンプト」を折り畳みで表示する。 */
+/* Collapsible disclosure for the underlying task prompt of a task-launch message. */
+.task-prompt-disclosure {
+  display: block;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.task-prompt-disclosure__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.2rem 0.25rem;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.82rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.task-prompt-disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-prompt-disclosure__summary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.task-prompt-disclosure__summary:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 1px;
+}
+
+.task-prompt-disclosure__chevron {
+  flex: 0 0 auto;
+  font-size: 0.78em;
+  opacity: 0.85;
+  transition: transform 0.18s ease;
+}
+
+.task-prompt-disclosure[open] .task-prompt-disclosure__chevron {
+  transform: rotate(90deg);
+}
+
+.task-prompt-disclosure__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-prompt-disclosure__body {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.task-prompt-disclosure__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.task-prompt-disclosure__section-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+.task-prompt-disclosure__section-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 0.86rem;
+  line-height: var(--leading-relaxed, 1.55);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm, 8px);
+  padding: 0.5rem 0.65rem;
+}

@@ -37,3 +37,44 @@ export function normalizeTaskList(rawTasks: TaskItem[] | undefined | null): Norm
   if (!Array.isArray(rawTasks) || rawTasks.length === 0) return FALLBACK_TASKS;
   return rawTasks.map((task) => normalizeTask(task));
 }
+
+export type ParsedTaskLaunch = {
+  taskName: string;
+  setupInfo: string;
+};
+
+// 履歴から読み込んだユーザーメッセージはサーバー側で html.escape + 改行→<br> 変換されて
+// 保存される（services/chat_use_case.py）。送信直後の生テキストと同じ形に戻してから解析する。
+// History-loaded user messages are stored html-escaped with newlines turned into <br>
+// (services/chat_use_case.py). Restore them to the raw shape used right after sending.
+function normalizeStoredUserMessage(message: string): string {
+  return message
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// 「【タスク】<名前>」で始まる起動メッセージからタスク名と入力（状況・作業環境）を抽出する。
+// blueprints/chat/messages.py の _parse_task_launch_message と同じ規則に揃えている。
+// Extract the task name and setup input from a task-launch message; mirrors the backend parser.
+// 送信直後（生の改行）でも、再読込後（<br>・HTMLエスケープ済み）でも同じ結果になるようにする。
+// Produces the same result whether the text is freshly sent (raw newlines) or reloaded
+// from history (<br>-joined and html-escaped).
+export function parseTaskLaunchMessage(message: string | null | undefined): ParsedTaskLaunch | null {
+  if (!message) return null;
+
+  const normalized = normalizeStoredUserMessage(message);
+
+  const taskMatch = /^【タスク】([^\n]+)/m.exec(normalized);
+  if (!taskMatch) return null;
+
+  const setupMatch = /【状況・作業環境】([\s\S]+)/.exec(normalized);
+  return {
+    taskName: taskMatch[1].trim(),
+    setupInfo: setupMatch ? setupMatch[1].trim() : "",
+  };
+}

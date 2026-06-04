@@ -26,7 +26,7 @@ function ChatMainSectionComponent() {
     setSelectedModel,
   } = useHomePageUiContext();
 
-  const { launchingTaskName } = useHomePageTaskContext();
+  const { launchingTaskName, tasks } = useHomePageTaskContext();
 
   const {
     hasCurrentRoom,
@@ -476,6 +476,7 @@ function ChatMainSectionComponent() {
             onRegenerate={handleRegenerateMessage}
             onEditAndRegenerate={handleEditAndRegenerateMessage}
             onSwitchBranch={handleSwitchBranch}
+            tasks={tasks}
           />
 
           <div

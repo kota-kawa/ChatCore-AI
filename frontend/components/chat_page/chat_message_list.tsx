@@ -14,7 +14,8 @@ import { List, useDynamicRowHeight, type ListImperativeAPI } from "react-window"
 
 import { InlineLoading } from "../ui/inline_loading";
 import { MAX_CHAT_MESSAGE_LENGTH } from "../../lib/chat_page/constants";
-import type { UiChatMessage } from "../../lib/chat_page/types";
+import { parseTaskLaunchMessage } from "../../lib/chat_page/task_utils";
+import type { NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { stripWebSearchSourcesHtml } from "../../scripts/chat/message_utils";
 import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
@@ -22,6 +23,7 @@ import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { RegenerateActionButton } from "./regenerate_action_button";
+import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 
@@ -123,6 +125,7 @@ type ChatMessageRowProps = {
   onEditCancel: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
+  taskLookup: Map<string, NormalizedTask>;
 };
 
 type ChatMessageRowComponentProps = ChatMessageRowProps & {
@@ -149,6 +152,7 @@ function ChatMessageRow({
   onSwitchBranch,
   rows,
   style,
+  taskLookup,
 }: ChatMessageRowComponentProps) {
   const row = rows[index];
   const rowClassName = [
@@ -228,11 +232,17 @@ function ChatMessageRow({
     }
 
     const isEditDisabled = isGenerating || editingMessageId !== null;
+    const taskLaunch = parseTaskLaunchMessage(message.text);
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
         <div className="message-wrapper user-message-wrapper">
-          <div className="user-message">
+          <div
+            className={`user-message${taskLaunch ? " user-message--task-launch" : ""}`}
+          >
+            {/* 【タスク】名と【状況・作業環境】は折り畳みの外に常時表示する。 */}
+            {/* The task name and setup input always stay visible (outside the disclosure). */}
             <UserMessageHtml text={message.text} attachedFileNames={message.attachedFileNames} />
+            {taskLaunch ? <TaskPromptDisclosure task={taskLookup.get(taskLaunch.taskName)} /> : null}
           </div>
           {isLaunchPreview ? (
             <div className="message-actions" style={{ visibility: "hidden" }}>
@@ -324,6 +334,7 @@ type ChatMessageListProps = {
   onRegenerate: () => void;
   onEditAndRegenerate: (newMessage: string, trailingUserCount: number) => void;
   onSwitchBranch: (messageId: number) => void;
+  tasks: NormalizedTask[];
 };
 
 function ChatMessageListComponent({
@@ -341,6 +352,7 @@ function ChatMessageListComponent({
   onRegenerate,
   onEditAndRegenerate,
   onSwitchBranch,
+  tasks,
 }: ChatMessageListProps) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
@@ -351,6 +363,18 @@ function ChatMessageListComponent({
   const handleEditCancel = useCallback(() => {
     setEditingMessageId(null);
   }, []);
+
+  // タスク名から定義を引くための索引。履歴から読み込んだメッセージは本文しか持たないため、
+  // 表示中のタスク一覧と突き合わせて裏側のプロンプトを復元する。
+  // Index task definitions by name so history-loaded messages (text only) can be matched
+  // back to their underlying prompt.
+  const taskLookup = useMemo(() => {
+    const lookup = new Map<string, NormalizedTask>();
+    tasks.forEach((task) => {
+      lookup.set(task.name, task);
+    });
+    return lookup;
+  }, [tasks]);
   const rowHeight = useDynamicRowHeight({
     defaultRowHeight: 104,
     key: currentRoomId || "no-room",
@@ -412,6 +436,7 @@ function ChatMessageListComponent({
       onEditCancel: handleEditCancel,
       onEditAndRegenerate,
       onSwitchBranch,
+      taskLookup,
     }),
     [
       rows,
@@ -424,6 +449,7 @@ function ChatMessageListComponent({
       handleEditCancel,
       onEditAndRegenerate,
       onSwitchBranch,
+      taskLookup,
     ],
   );
 
