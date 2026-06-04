@@ -47,15 +47,21 @@ class _ConnectionProxy:
     # Lightweight wrapper that prevents reuse after returning to the pool.
     """Pooled connection wrapper with dictionary=True cursor support."""
 
+    # プロキシインスタンスを初期化し、DB接続と接続プールを保持する
+    # Initialize the proxy instance, retaining the database connection and the connection pool.
     def __init__(self, connection: Any, connection_pool: Any) -> None:
         self._connection = connection
         self._connection_pool = connection_pool
         self._returned = False
 
+    # 接続がすでにプールに返却されていないことを確認する
+    # Ensure that the connection has not already been returned to the pool.
     def _ensure_open(self) -> None:
         if self._returned or self._connection is None:
             raise RuntimeError("Connection already returned to pool.")
 
+    # データベース操作を実行するためのカーソルオブジェクトを作成して返す
+    # Create and return a cursor object to execute database operations.
     def cursor(self, *args: Any, **kwargs: Any) -> Any:
         self._ensure_open()
         dictionary = kwargs.pop("dictionary", False)
@@ -67,6 +73,8 @@ class _ConnectionProxy:
             kwargs["cursor_factory"] = extras.RealDictCursor
         return self._connection.cursor(*args, **kwargs)
 
+    # 接続をプールに返却し、必要に応じてロールバックを行う
+    # Return the connection back to the pool, performing a rollback if necessary.
     def close(self) -> None:
         if self._returned or self._connection is None:
             return
@@ -93,10 +101,14 @@ class _ConnectionProxy:
             except Exception:
                 pass
 
+    # context managerの開始処理。自身を返す
+    # Context manager entry. Returns self.
     def __enter__(self) -> "_ConnectionProxy":
         self._ensure_open()
         return self
 
+    # context managerの終了処理。接続を閉じる（プールに返却する）
+    # Context manager exit. Closes the connection (returns it to the pool).
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
@@ -106,17 +118,23 @@ class _ConnectionProxy:
         self.close()
         return False
 
+    # デストラクタ。インスタンス破棄時に接続を安全に閉じる
+    # Destructor. Safely closes the connection when the instance is destroyed.
     def __del__(self) -> None:  # pragma: no cover - GC timing is nondeterministic
         try:
             self.close()
         except Exception:
             pass
 
+    # 内部の接続オブジェクトの属性へアクセスを委譲する
+    # Delegate attribute access to the underlying connection object.
     def __getattr__(self, name: str) -> Any:
         self._ensure_open()
         return getattr(self._connection, name)
 
 
+# 環境変数を優先度の順に参照し、値を決定するヘルパー関数
+# Helper function to resolve environment variables in order of priority.
 def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
     # 新旧環境変数を順番に見て互換性を維持する
     # Resolve value from primary and legacy env vars for backward compatibility.
@@ -129,6 +147,8 @@ def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
     return default
 
 
+# 接続オブジェクトに対して安全にロールバックを実行する
+# Safely perform a rollback on the connection object.
 def rollback_connection(connection: Any) -> bool:
     # 例外処理時に安全にロールバックし、失敗しても二次例外を出さない
     # Roll back safely during exception handling and swallow rollback failures.
@@ -141,6 +161,8 @@ def rollback_connection(connection: Any) -> bool:
         return False
 
 
+# DBエラーが一時的で、再試行可能なものかどうかを判定する
+# Determine whether the database error is transient and can be retried.
 def is_retryable_db_error(exc: BaseException) -> bool:
     # DB例外から再試行可能性を判定する
     # Infer whether a DB error is retryable.
@@ -156,6 +178,8 @@ def is_retryable_db_error(exc: BaseException) -> bool:
     return False
 
 
+# 環境変数からDBのホスト名のリストを取得する（ローカル開発用フォールバックを含む）
+# Get the list of database hosts from environment variables (including local development fallbacks).
 def _get_db_hosts() -> list[str]:
     env_host = os.environ.get("POSTGRES_HOST") or os.environ.get("MYSQL_HOST")
     if env_host:
@@ -168,6 +192,8 @@ def _get_db_hosts() -> list[str]:
     return ["db", "localhost", "127.0.0.1", "host.docker.internal"]
 
 
+# 環境変数からデータベース設定（ユーザー名、パスワード、DB名など）を取得する
+# Retrieve database configuration settings (user, password, dbname, etc.) from env variables.
 def _get_db_config() -> DbConfig:
     user = _get_env("POSTGRES_USER", "MYSQL_USER", None)
     password = _get_env("POSTGRES_PASSWORD", "MYSQL_PASSWORD", None)
@@ -185,6 +211,8 @@ def _get_db_config() -> DbConfig:
     }
 
 
+# 接続プールの最小接続数と最大接続数の制限値を取得・検証する
+# Retrieve and validate the minimum and maximum connection limits for the connection pool.
 def _get_pool_bounds() -> tuple[int, int]:
     if is_production_env():
         min_conn_raw = os.environ.get(
@@ -208,6 +236,8 @@ def _get_pool_bounds() -> tuple[int, int]:
     return min_conn, max_conn
 
 
+# 接続プールのキャッシュキーとなるタプルを構築する
+# Construct a tuple that serves as the cache key for the connection pool.
 def _build_pool_key(
     config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
 ) -> PoolKey:
@@ -222,6 +252,8 @@ def _build_pool_key(
     )
 
 
+# 設定とホストリストに基づいてスレッドセーフな接続プールを生成する
+# Create a thread-safe connection pool based on configuration and host list.
 def _build_connection_pool(
     config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
 ) -> Any:
@@ -255,6 +287,8 @@ def _build_connection_pool(
     raise RuntimeError("Database connection pool initialization failed without an exception.")
 
 
+# キャッシュされた接続プールを取得する、または必要に応じて初期化/更新する
+# Retrieve the cached connection pool, initializing or updating it if necessary.
 def _get_connection_pool() -> Any:
     global _connection_pool, _connection_pool_key
 
@@ -285,9 +319,9 @@ def _get_connection_pool() -> Any:
     return new_pool
 
 
+# 接続プール内のすべてのコネクションをクローズし、リソースを解放する
+# Close all connections in the pool and release resources.
 def close_db_pool() -> None:
-    # プロセス終了時やシャットダウン時に全コネクションを確実に解放する
-    # Ensure all pooled connections are released on shutdown/exit.
     """Close all pooled DB connections."""
     global _connection_pool, _connection_pool_key
 
@@ -308,6 +342,8 @@ def close_db_pool() -> None:
 atexit.register(close_db_pool)
 
 
+# データベース接続プールから接続を1つ取得し、プロキシオブジェクトとして返す
+# Retrieve a connection from the pool and return it as a proxy object.
 def get_db_connection() -> _ConnectionProxy:
     # プールから 1 接続を貸し出し、close() 時に自動返却されるプロキシを返す
     # Borrow a pooled connection and return a proxy that puts it back on close().
