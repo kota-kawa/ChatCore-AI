@@ -2210,6 +2210,9 @@ chat-action-menu {
   margin-top: 0.55rem;
   padding-top: 0.55rem;
   border-top: 1px solid rgba(255, 255, 255, 0.22);
+  /* auto への補間を許可し、開閉時に高さをなめらかにアニメーションさせる。 */
+  /* Allow interpolation to auto so the open/close height animates smoothly. */
+  interpolate-size: allow-keywords;
 }
 
 .task-prompt-disclosure__summary {
@@ -2242,11 +2245,40 @@ chat-action-menu {
   flex: 0 0 auto;
   font-size: 0.78em;
   opacity: 0.85;
-  transition: transform 0.18s ease;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .task-prompt-disclosure[open] .task-prompt-disclosure__chevron {
   transform: rotate(90deg);
+}
+
+/* 折り畳みの中身を開閉時に高さ・透明度・移動でなめらかにアニメーションさせる。 */
+/* 対応ブラウザでは ::details-content を使い、未対応環境では従来どおり即時開閉になる。 */
+/* Animate the disclosed content (height, opacity, slide) on open/close. */
+/* Uses ::details-content where supported; falls back to instant toggle otherwise. */
+.task-prompt-disclosure::details-content {
+  overflow: hidden;
+  block-size: 0;
+  opacity: 0;
+  transform: translateY(-0.25rem);
+  transition:
+    block-size 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease,
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    content-visibility 0.28s allow-discrete;
+}
+
+.task-prompt-disclosure[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-prompt-disclosure__chevron,
+  .task-prompt-disclosure::details-content {
+    transition: none;
+  }
 }
 
 .task-prompt-disclosure__label {

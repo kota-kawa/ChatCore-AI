@@ -40,7 +40,7 @@ function TaskPromptDisclosureComponent({ task }: TaskPromptDisclosureProps) {
     <details className="task-prompt-disclosure">
       <summary className="task-prompt-disclosure__summary">
         <i className="bi bi-chevron-right task-prompt-disclosure__chevron" aria-hidden="true"></i>
-        <span className="task-prompt-disclosure__label">タスクプロンプト（AIへの指示）</span>
+        <span className="task-prompt-disclosure__label">タスクプロンプト</span>
       </summary>
 
       <div className="task-prompt-disclosure__body">
