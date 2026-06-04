@@ -94,6 +94,10 @@ function toKeyValueBullet(line: string) {
   return `- **${key}:** ${value}`;
 }
 
+function isStandaloneConclusionLine(line: string) {
+  return /^(?:結論|まとめ|要約|回答)$/u.test(line.trim());
+}
+
 function collapseConsecutiveBlankLines(lines: string[], maxBlankLines = 1) {
   const output: string[] = [];
   let blankCount = 0;
@@ -111,6 +115,142 @@ function collapseConsecutiveBlankLines(lines: string[], maxBlankLines = 1) {
   return output;
 }
 
+function readBracedGroup(value: string, startIndex: number) {
+  if (value[startIndex] !== "{") return null;
+
+  let depth = 0;
+  for (let index = startIndex; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char !== "}") continue;
+    depth -= 1;
+    if (depth === 0) {
+      return {
+        content: value.slice(startIndex + 1, index),
+        endIndex: index + 1,
+      };
+    }
+  }
+
+  return null;
+}
+
+function replaceLatexFractions(value: string) {
+  let output = value;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const commandIndex = output.search(/\\d?frac\{/);
+    if (commandIndex < 0) break;
+
+    const command = output.startsWith("\\dfrac", commandIndex) ? "\\dfrac" : "\\frac";
+    const numerator = readBracedGroup(output, commandIndex + command.length);
+    if (!numerator) break;
+    const denominator = readBracedGroup(output, numerator.endIndex);
+    if (!denominator) break;
+
+    output = [
+      output.slice(0, commandIndex),
+      `(${numerator.content})/(${denominator.content})`,
+      output.slice(denominator.endIndex),
+    ].join("");
+  }
+  return output;
+}
+
+function formatMathExpressionForDisplay(value: string) {
+  return replaceLatexFractions(value)
+    .replace(/\\left\s*/g, "")
+    .replace(/\\right\s*/g, "")
+    .replace(/\\begin\{cases\}/g, "{")
+    .replace(/\\end\{cases\}/g, "")
+    .replace(/\\\[\s*\d+(?:\.\d+)?(?:pt|em|ex|px)\s*\]/g, "")
+    .replace(/\\\\/g, "")
+    .replace(/\s*&\s*/g, "    ")
+    .replace(/\\qquad/g, "    ")
+    .replace(/\\quad/g, "  ")
+    .replace(/\\lambda/g, "λ")
+    .replace(/\\mu/g, "μ")
+    .replace(/\\rho/g, "ρ")
+    .replace(/\\sum/g, "∑")
+    .replace(/\\leq?/g, "≤")
+    .replace(/\\geq?/g, "≥")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\infty/g, "∞")
+    .replace(/\\cdot/g, "⋅")
+    .replace(/\\times/g, "×")
+    .replace(/,\s*/g, ", ")
+    .replace(/\s{5,}/g, "    ")
+    .trim();
+}
+
+function looksLikeLooseMathLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return (
+    /\\(?:d?frac|sum|rho|lambda|mu|begin|end|leq?|geq?|left|right|qquad|quad)/.test(trimmed) ||
+    /^[A-Za-z][A-Za-z0-9_{}^]*\s*=/.test(trimmed) ||
+    /[_^].*=/.test(trimmed)
+  );
+}
+
+function renderMathDisplay(lines: string[]) {
+  const mathLines = lines.map((line) => formatMathExpressionForDisplay(line)).filter((line) => line.length > 0);
+  if (mathLines.length === 0) return "";
+
+  return [
+    '<div class="math-display">',
+    ...mathLines.map((line) => `<span class="math-line">${escapeHtml(line)}</span>`),
+    "</div>",
+  ].join("\n");
+}
+
+function isLooseMathBlockDelimiter(line: string, delimiter: "[" | "]") {
+  const trimmed = line.trim();
+  return trimmed === delimiter || trimmed === `\\${delimiter}`;
+}
+
+function normalizeLooseMathBlocks(lines: string[]) {
+  const output: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isLooseMathBlockDelimiter(lines[index], "[")) {
+      output.push(lines[index]);
+      continue;
+    }
+
+    let endIndex = index + 1;
+    const mathLines: string[] = [];
+    while (endIndex < lines.length && !isLooseMathBlockDelimiter(lines[endIndex], "]")) {
+      mathLines.push(lines[endIndex]);
+      endIndex += 1;
+    }
+
+    if (endIndex >= lines.length || !mathLines.some(looksLikeLooseMathLine)) {
+      output.push(lines[index], ...mathLines);
+      index = endIndex - 1;
+      continue;
+    }
+
+    const rendered = renderMathDisplay(mathLines);
+    if (rendered) {
+      if (output.length > 0 && output[output.length - 1].trim() !== "") output.push("");
+      output.push(rendered, "");
+    }
+    index = endIndex;
+  }
+
+  return output;
+}
+
+function normalizeLooseInlineMath(line: string) {
+  return line.replace(/\(([A-Za-z][A-Za-z0-9_{}^=+\-*/\\]+)\)/g, (match, expression: string) => {
+    if (!/[_^=\\]/.test(expression) || expression.length > 32) return match;
+    return `<span class="math-inline">${escapeHtml(formatMathExpressionForDisplay(expression))}</span>`;
+  });
+}
+
 function normalizeMarkdownSegmentForDisplay(segment: string) {
   const normalizedLines = segment
     .replace(/\u00a0/g, " ")
@@ -126,6 +266,10 @@ function normalizeMarkdownSegmentForDisplay(segment: string) {
 
   for (let i = 0; i < promotedLines.length; i += 1) {
     const trimmed = promotedLines[i].trim();
+    if (isStandaloneConclusionLine(trimmed)) {
+      promotedLines[i] = `## ${trimmed}`;
+      continue;
+    }
     if (/^「[^」]{4,80}」$/.test(trimmed)) {
       promotedLines[i] = `### ${trimmed}`;
       continue;
@@ -158,7 +302,12 @@ function normalizeMarkdownSegmentForDisplay(segment: string) {
     i = j;
   }
 
-  const labeledLines = listifiedLines.map((line) => (isStandaloneLabelLine(line) ? toStandaloneLabel(line) : line));
+  const mathNormalizedLines = normalizeLooseMathBlocks(listifiedLines);
+  const labeledLines = mathNormalizedLines.map((line) => {
+    if (line.includes('class="math-display"') || line.includes('class="math-line"')) return line;
+    const labeled = isStandaloneLabelLine(line) ? toStandaloneLabel(line) : line;
+    return normalizeLooseInlineMath(labeled);
+  });
   const compacted = collapseConsecutiveBlankLines(labeledLines, 1);
   return stripInvisibleCharacters(compacted.join("\n").replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n").trimEnd());
 }
