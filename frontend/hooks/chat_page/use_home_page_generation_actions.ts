@@ -159,8 +159,18 @@ export function useHomePageGenerationActions({
       abortControllerRef.current = null;
     }
     setIsGenerating(false);
+    setMessages((previous) => {
+      if (currentRoomIdRef.current !== generation.roomId) return previous;
+      return removeThinkingMessages(previous).map((message) => {
+        if (!message.streaming) return message;
+        return {
+          ...message,
+          streaming: false,
+        };
+      });
+    });
     return true;
-  }, []);
+  }, [removeThinkingMessages]);
 
   const notifyLocalStorageWriteFailure = useCallback(() => {
     if (localStorageWarningShownRef.current) return;

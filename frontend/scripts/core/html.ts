@@ -8,6 +8,7 @@ const SAFE_CLASS_PATTERNS = [
   /^code-block-(?:container|header|lang|copy-btn)$/i,
   /^bi(?:-[a-z0-9_-]+)?$/i,
   /^web-search-sources(?:(?:__|--)[a-z0-9_-]+)?$/i,
+  /^math-(?:display|line|inline)$/i,
 ];
 
 export function sanitizeClassAttributeValue(value: unknown): string {

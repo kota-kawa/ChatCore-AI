@@ -266,44 +266,44 @@ function ChatMessageRow({
   const isLastAssistantMessage =
     message.sender === "assistant" &&
     !rows.slice(index + 1).some((r) => r.kind === "message" && r.message.sender === "assistant");
+  const isActivelyStreaming = Boolean(message.streaming && isGenerating);
+  const actionVisibilityStyle = isActivelyStreaming ? { visibility: "hidden" as const } : undefined;
 
   return (
     <div {...ariaAttributes} className={rowClassName} style={style}>
       <div
-        className={`message-wrapper bot-message-wrapper ${message.streaming ? "message-wrapper--streaming" : ""}`.trim()}
+        className={`message-wrapper bot-message-wrapper ${isActivelyStreaming ? "message-wrapper--streaming" : ""}`.trim()}
       >
-        <div className={`bot-message ${message.streaming ? "bot-message--streaming" : ""}`.trim()}>
+        <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
           <BotMessageParts fallbackText={message.text} parts={message.parts} />
         </div>
-        {!message.streaming && (
-          <div className="message-actions">
-            {!message.error && (
-              <BranchNavigator
-                message={message}
-                disabled={isGenerating}
-                onSwitchBranch={onSwitchBranch}
-              />
-            )}
-            <CopyActionButton
+        <div className="message-actions" style={actionVisibilityStyle}>
+          {!message.error && (
+            <BranchNavigator
+              message={message}
+              disabled={isGenerating}
+              onSwitchBranch={onSwitchBranch}
+            />
+          )}
+          <CopyActionButton
+            getText={() => {
+              return message.text;
+            }}
+          />
+          {!message.error && (
+            <MemoSaveActionButton
               getText={() => {
-                return message.text;
+                return stripWebSearchSourcesHtml(message.text);
               }}
             />
-            {!message.error && (
-              <MemoSaveActionButton
-                getText={() => {
-                  return stripWebSearchSourcesHtml(message.text);
-                }}
-              />
-            )}
-            {!message.error && isLastAssistantMessage && (
-              <RegenerateActionButton
-                onRegenerate={onRegenerate}
-                disabled={isGenerating}
-              />
-            )}
-          </div>
-        )}
+          )}
+          {!message.error && isLastAssistantMessage && (
+            <RegenerateActionButton
+              onRegenerate={onRegenerate}
+              disabled={isGenerating}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
