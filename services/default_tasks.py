@@ -13,6 +13,8 @@ DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
+# JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
+# Load, cache, and normalize default task definitions from the JSON file.
 @lru_cache(maxsize=1)
 def load_default_tasks() -> list[dict]:
     # JSON からデフォルトタスクを読み込み、型とキーを正規化する
@@ -42,6 +44,8 @@ def load_default_tasks() -> list[dict]:
     return normalized
 
 
+# APIレスポンス用のペイロード形式に変換したデフォルトタスクのリストを返す
+# Convert and return default tasks formatted as API payloads.
 def default_task_payloads() -> list[dict]:
     # APIレスポンス向けに is_default を付与した形へ変換する
     # Build API payload objects with is_default metadata.
@@ -61,6 +65,8 @@ def default_task_payloads() -> list[dict]:
     return payloads
 
 
+# データベース挿入用のタプル形式に変換したデフォルトタスクのリストを返す
+# Convert and return default tasks formatted as tuples for database insertion.
 def default_task_rows() -> list[tuple]:
     # DB INSERT 用のタプル配列へ変換する
     # Convert normalized tasks into DB insert row tuples.
@@ -80,6 +86,8 @@ def default_task_rows() -> list[tuple]:
     return rows
 
 
+# データベース行オブジェクト（辞書またはタプル）から名前フィールドを抽出する
+# Extract the name field from a database row object (which can be a dict or tuple).
 def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
     # dict/tuple どちらの fetch 結果でも name を取り出せるようにする
     # Extract "name" from either dict-based or tuple-based DB rows.
@@ -90,6 +98,8 @@ def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
     return row[0]
 
 
+# データベースに不足しているデフォルトタスクをインサートし、追加された件数を返す
+# Seed default tasks into the database if they do not already exist, returning the insert count.
 def ensure_default_tasks_seeded() -> int:
     # 共通タスク（user_id IS NULL）に不足分のみ追加し、追加件数を返す
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.

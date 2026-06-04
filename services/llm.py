@@ -216,10 +216,14 @@ class LlmInvalidModelError(LlmServiceError):
     pass
 
 
+# 与えられた例外がLLMプロバイダの一時的なエラー（再試行可能）かどうかを判定する
+# Determine whether the given exception is a transient/retryable LLM provider error.
 def is_retryable_llm_error(exc: BaseException) -> bool:
     return isinstance(exc, LlmRetryableProviderError)
 
 
+# HTTPレスポンスヘッダからRetry-After秒数を抽出する
+# Extract the Retry-After value (in seconds) from the HTTP response headers.
 def _extract_retry_after_seconds(exc: BaseException) -> int | None:
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
@@ -235,6 +239,8 @@ def _extract_retry_after_seconds(exc: BaseException) -> int | None:
     return retry_after if retry_after >= 0 else None
 
 
+# 外部OpenAI/Groq/Geminiクライアントの例外をアプリケーション独自のLlmProviderError派生例外にマッピングする
+# Map raw exceptions from OpenAI/Groq/Gemini SDKs to application-specific LlmProviderError sub-classes.
 def _map_provider_exception(
     exc: BaseException,
     *,
@@ -272,6 +278,8 @@ def _map_provider_exception(
     return LlmProviderError(fallback_message)
 
 
+# マッピングされたLLMプロバイダエラーをログ出力し、例外として発生させる
+# Log and raise the mapped LLM provider error.
 def _raise_provider_error(
     exc: BaseException,
     *,
@@ -292,6 +300,8 @@ def _raise_provider_error(
     raise mapped_error from exc
 
 
+# 指定されたLLMモデルが無効であることを警告し、例外を発生させる
+# Log a warning for an invalid LLM model name and raise a LlmInvalidModelError.
 def _raise_invalid_model_error(model_name: str) -> None:
     valid_models = sorted(VALID_GEMINI_MODELS | VALID_GROQ_MODELS | VALID_OPENAI_MODELS)
     logger.warning(
@@ -305,12 +315,16 @@ def _raise_invalid_model_error(model_name: str) -> None:
     )
 
 
+# モデルの種類に応じて最大トークン数指定のキーを設定する（OpenAIの場合はmax_completion_tokens）
+# Resolve parameter name and value for limiting output tokens based on the model (e.g. max_completion_tokens for OpenAI).
 def _chat_completion_token_limit_kwargs(model_name: str) -> dict[str, int]:
     if is_openai_model(model_name):
         return {"max_completion_tokens": LLM_MAX_TOKENS}
     return {"max_tokens": LLM_MAX_TOKENS}
 
 
+# ツール呼び出しの設定用キーワード引数を構築する
+# Build tool-choice keyword arguments for chat completions.
 def _chat_completion_tool_kwargs(
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
@@ -322,6 +336,8 @@ def _chat_completion_tool_kwargs(
     }
 
 
+# 会話履歴にツール（関数呼び出し）の履歴が含まれているかチェックする
+# Check if the conversation messages history contains tool-call results or requests.
 def _conversation_has_tool_history(conversation_messages: ConversationMessages) -> bool:
     for message in conversation_messages:
         role = str(message.get("role", ""))
@@ -332,6 +348,8 @@ def _conversation_has_tool_history(conversation_messages: ConversationMessages) 
     return False
 
 
+# テキスト内にあるAPIキーやパスワードなどの機密情報を伏せ字にする
+# Redact sensitive information (API keys, passwords) from the given text.
 def _redact_sensitive_text(value: str) -> str:
     # 既知トークン形式と key=value 形式の両方を伏せ字化する
     # Redact both known token patterns and key=value style secrets.
@@ -343,6 +361,8 @@ def _redact_sensitive_text(value: str) -> str:
     return redacted
 
 
+# 会話メッセージ履歴内のすべての機密情報（APIキー等）をマスク処理する
+# Redact sensitive information from all conversation messages in the history.
 def _sanitize_conversation_messages(
     conversation_messages: ConversationMessages,
 ) -> ConversationMessages:
@@ -375,6 +395,8 @@ def _sanitize_conversation_messages(
     return sanitized_messages
 
 
+# OpenAI Responses API形式の入力メッセージに変換し、システムロール等を適切に修正する
+# Prepare conversation messages for OpenAI Responses API, converting system roles to developer.
 def _prepare_openai_responses_input(
     conversation_messages: ConversationMessages,
 ) -> ConversationMessages:
@@ -408,6 +430,8 @@ def _prepare_openai_responses_input(
     return prepared_messages
 
 
+# Groq APIを呼び出してモデルからのテキスト応答または関数呼び出しデータを取得する
+# Call the Groq API to retrieve text responses or function-call details.
 def get_groq_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -454,6 +478,8 @@ def get_groq_response(
         )
 
 
+# OpenAI互換API用のストリーム応答ジェネレータを構築して返す
+# Build and return an incremental generator for OpenAI-compatible streaming responses.
 def _get_openai_compatible_response_stream(
     *,
     client: OpenAI | None,
@@ -542,6 +568,8 @@ def _get_openai_compatible_response_stream(
             stream.close()
 
 
+# Groq APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
+# Call the Groq API and yield response chunks incrementally as a stream.
 def get_groq_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -560,6 +588,8 @@ def get_groq_response_stream(
     )
 
 
+# Google Gemini APIを呼び出してモデルからのテキスト応答または関数呼び出しデータを取得する
+# Call the Google Gemini API to retrieve text responses or function-call details.
 def get_gemini_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -606,6 +636,8 @@ def get_gemini_response(
         )
 
 
+# Google Gemini APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
+# Call the Google Gemini API and yield response chunks incrementally as a stream.
 def get_gemini_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -624,6 +656,8 @@ def get_gemini_response_stream(
     )
 
 
+# OpenAI Responses APIを呼び出してテキスト応答を取得する
+# Call the OpenAI Responses API to retrieve text responses.
 def get_openai_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -680,6 +714,8 @@ def get_openai_response(
         )
 
 
+# OpenAI Responses APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
+# Call the OpenAI Responses API and yield response chunks incrementally as a stream.
 def get_openai_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -725,36 +761,48 @@ def get_openai_response_stream(
         )
 
 
+# 与えられたモデル名がGeminiファミリーのものか確認する
+# Check if the given model name belongs to the Gemini family.
 def is_gemini_model(model_name: str) -> bool:
     # モデル名が Gemini 系かを判定する
     # Check whether the selected model belongs to Gemini.
     return model_name in VALID_GEMINI_MODELS
 
 
+# 与えられたモデル名がGroqファミリーのものか確認する
+# Check if the given model name belongs to the Groq family.
 def is_groq_model(model_name: str) -> bool:
     # モデル名が Groq 系かを判定する
     # Check whether the selected model belongs to Groq.
     return model_name in VALID_GROQ_MODELS
 
 
+# 与えられたモデル名がOpenAIファミリーのものか確認する
+# Check if the given model name belongs to the OpenAI family.
 def is_openai_model(model_name: str) -> bool:
     # モデル名が OpenAI 系かを判定する
     # Check whether the selected model belongs to OpenAI.
     return model_name in VALID_OPENAI_MODELS
 
 
+# 指定されたモデルがストリーミング（逐次出力）に対応しているか確認する
+# Verify if the specified model supports streaming/SSE output in this application.
 def is_streaming_model(model_name: str) -> bool:
     # 現在SSE配信に対応しているモデルかを判定する
     # Check whether the selected model supports SSE streaming in this app.
     return is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name)
 
 
+# 指定されたモデル名がサポート対象であるか確認し、無効であればエラーを投げる
+# Validate whether the specified model name is supported, raising an error if invalid.
 def validate_model_name(model_name: str) -> None:
     if is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name):
         return
     _raise_invalid_model_error(model_name)
 
 
+# 指定モデルでプロバイダ（Gemini、Groq、OpenAI等）を自動で振り分けてチャット完了応答を取得する
+# Route to the appropriate LLM provider based on the model name and return the chat completion response.
 def get_llm_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -773,6 +821,8 @@ def get_llm_response(
     raise RuntimeError("Unreachable model dispatch branch in get_llm_response.")
 
 
+# チャット完了APIを使ってJSON形式のオブジェクト出力を強制し、応答を取得する
+# Request and retrieve a chat completion response formatted strictly as a JSON object.
 def _get_chat_completions_json_response(
     *,
     client: OpenAI | None,
@@ -806,6 +856,8 @@ def _get_chat_completions_json_response(
         )
 
 
+# OpenAI Responses APIを利用してJSON形式のオブジェクト応答を取得する
+# Call the OpenAI Responses API to retrieve a response structured as a JSON object.
 def _get_openai_responses_json_response(
     conversation_messages: ConversationMessages,
     model_name: str,
@@ -832,6 +884,8 @@ def _get_openai_responses_json_response(
         )
 
 
+# 指定されたモデルを使用してJSON形式のLLM応答を取得する
+# Fetch a JSON object response from the LLM based on the selected model name.
 def get_llm_json_response(
     conversation_messages: ConversationMessages, model_name: str
 ) -> str | None:
@@ -861,6 +915,8 @@ def get_llm_json_response(
     raise RuntimeError("Unreachable model dispatch branch in get_llm_json_response.")
 
 
+# 指定モデルでプロバイダを自動で振り分けてチャット完了応答をストリーミング配信形式で取得する
+# Route to the appropriate provider based on the model and yield streaming output deltas.
 def get_llm_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,

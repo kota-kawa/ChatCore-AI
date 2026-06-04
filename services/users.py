@@ -11,6 +11,8 @@ GOOGLE_AUTH_PROVIDER = "google"
 ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT"
 
 
+# 認証プロバイダのメタデータを検証・正規化する
+# Validate and normalize authentication provider metadata.
 def _normalize_provider_metadata(
     auth_provider: str,
     email: str,
@@ -27,6 +29,8 @@ def _normalize_provider_metadata(
     return normalized_provider_user_id, normalized_provider_email
 
 
+# アバターURLを検証・正規化し、無効な場合はデフォルトのアバターURLを返す
+# Validate and normalize the avatar URL, returning the default if invalid.
 def _normalize_avatar_url(avatar_url: str | None) -> str:
     normalized = (avatar_url or "").strip()
     if not normalized:
@@ -36,6 +40,8 @@ def _normalize_avatar_url(avatar_url: str | None) -> str:
     return normalized
 
 
+# ユーザーの認証プロバイダ情報をテーブルに挿入または更新（アップサート）する
+# Insert or update (upsert) the user's authentication provider information in the database.
 def _upsert_user_auth_provider(
     cursor: Any,
     user_id: int,
@@ -61,6 +67,8 @@ def _upsert_user_auth_provider(
     )
 
 
+# 共通のデフォルトタスクを新規ユーザーにコピーする
+# Copy common default tasks into user-specific tasks.
 def copy_default_tasks_for_user(user_id: int) -> None:
     # 共有タスクをユーザー専用タスクとして重複なく複製する
     # Copy shared default tasks into user-owned rows without duplicates.
@@ -109,6 +117,8 @@ def copy_default_tasks_for_user(user_id: int) -> None:
             cursor.close()
 
 
+# 指定されたメールアドレスを持つユーザーを取得する
+# Retrieve a user by their email address.
 def get_user_by_email(email: str) -> dict[str, Any] | None:
     # メールアドレス一致のユーザー1件を返す
     # Fetch a single user by email.
@@ -135,6 +145,8 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
             cursor.close()
 
 
+# GoogleのユーザーID（プロバイダ識別子）に紐付くユーザーを取得する
+# Retrieve a user by their Google provider user ID.
 def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
     # Google の安定IDでユーザーを取得する
     # Look up a user by Google provider identity.
@@ -160,6 +172,8 @@ def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
             cursor.close()
 
 
+# ユーザーIDに紐付くユーザー情報を取得する
+# Retrieve user information by user ID.
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     # プロフィール表示に必要なユーザー情報を取得する
     # Fetch user fields needed by profile and session endpoints.
@@ -181,6 +195,8 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
             cursor.close()
 
 
+# 新しいユーザーレコードを作成し、そのIDを返す
+# Create a new user record and return its ID.
 def create_user(
     email: str,
     username: str | None = None,
@@ -245,6 +261,8 @@ def create_user(
             cursor.close()
 
 
+# 指定されたユーザーIDにGoogleアカウントの認証情報を紐付ける
+# Link a Google account authentication provider to an existing user.
 def link_google_account(user_id: int, google_user_id: str, provider_email: str) -> None:
     # 既存ユーザーへ Google 連携情報を紐付け・更新する
     # Attach or refresh Google provider metadata for an existing user.
@@ -271,6 +289,8 @@ def link_google_account(user_id: int, google_user_id: str, provider_email: str) 
             cursor.close()
 
 
+# プロフィール項目（ユーザー名やアバター）が未設定の場合、Googleの情報で更新する
+# Update user profile fields (username, avatar) with Google details if they are currently default/unset.
 def update_user_profile_from_google_if_unset(
     user_id: int,
     name: str | None = None,
@@ -319,6 +339,8 @@ def update_user_profile_from_google_if_unset(
             cursor.close()
 
 
+# ユーザーに関連する全データとアカウント自体をデータベースから削除する
+# Delete all data associated with a user and remove their account from the database.
 def delete_user_account(user_id: int) -> bool:
     # Delete user-owned records that are not fully covered by cascading FKs,
     # then remove the user row in the same transaction.
@@ -361,6 +383,8 @@ def delete_user_account(user_id: int) -> bool:
             cursor.close()
 
 
+# ユーザーの認証状態（is_verified）をTrue（認証済み）に変更する
+# Set the user's verification status (is_verified) to True in the database.
 def set_user_verified(user_id: int) -> None:
     # 認証完了後に is_verified フラグを更新する
     # Mark user as verified after successful verification.

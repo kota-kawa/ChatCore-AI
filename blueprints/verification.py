@@ -45,6 +45,8 @@ VERIFICATION_CODE_MAX_ATTEMPTS = 5
 AUTH_FAILURE_STATUS_CODE = 401
 
 
+# セッションから登録・認証用の一時データを削除する
+# Clear temporary registration and verification data from the session.
 def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code", None)
     session.pop("temp_user_id", None)
@@ -53,6 +55,8 @@ def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code_attempts", None)
 
 
+# 渡されたAuthLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
+# Helper function to resolve the AuthLimitService from the request if not already provided.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
@@ -62,6 +66,8 @@ def _resolve_auth_limit_service(
     return get_auth_limit_service(request)
 
 
+# 渡されたLlmDailyLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
+# Helper function to resolve the LlmDailyLimitService from the request if not already provided.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
@@ -70,6 +76,8 @@ def _resolve_llm_daily_limit_service(
         return service
     return get_llm_daily_limit_service(request)
 
+# ユーザー登録用の認証コードを生成し、メールで送信するエンドポイント
+# Endpoint to generate a registration verification code and send it via email.
 @verification_bp.post("/api/send_verification_email", name="verification.api_send_verification_email")
 async def api_send_verification_email(
     request: Request,
@@ -166,6 +174,8 @@ async def api_send_verification_email(
             status="fail",
         )
 
+# ユーザーから送信された認証コードを検証し、成功すればユーザーを有効化してログインさせるエンドポイント
+# Endpoint to verify the submitted registration code, activate the user, and establish a session.
 @verification_bp.post("/api/verify_registration_code", name="verification.api_verify_registration_code")
 async def api_verify_registration_code(
     request: Request,

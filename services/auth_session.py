@@ -6,6 +6,8 @@ from services.session_middleware import rotate_session_identifier
 from services.web import set_session_permanent
 
 
+# 認証に成功したユーザーのセッションを確立（初期化・クッキー固定化対策）する
+# Establish and initialize an authenticated session for a successfully verified user.
 def establish_authenticated_session(request: Request, user_id: int, email: str) -> None:
     # 認証成功時のセッション確立処理を1か所に集約する
     # Centralize post-auth session establishment in one helper.

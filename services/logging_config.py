@@ -54,6 +54,8 @@ class JsonLogFormatter(logging.Formatter):
         "threadName",
     }
 
+    # ログレコードをJSON文字列形式にフォーマットする
+    # Format the log record into a JSON-serialized string.
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -81,6 +83,8 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+# 環境変数から正の整数値を安全に解析し、無効な場合はデフォルト値を返すヘルパー関数
+# Safely parse a positive integer from environment variables or fallback to a default value.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     raw_value = os.getenv(env_name, str(default_value))
     try:
@@ -105,6 +109,8 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     return parsed_value
 
 
+# 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズする
+# Remove and close an existing log handler with the specified name from the root logger.
 def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> None:
     for existing_handler in list(root_logger.handlers):
         if getattr(existing_handler, "name", "") == handler_name:
@@ -112,12 +118,16 @@ def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> No
             existing_handler.close()
 
 
+# ログ出力形式の設定（plainかjson）に基づいてフォーマッタを構築する
+# Build a log formatter based on the log output format setting (plain or json).
 def _build_formatter(log_output: str) -> logging.Formatter:
     if log_output == "plain":
         return logging.Formatter(LOG_FORMAT)
     return JsonLogFormatter()
 
 
+# ローテーションログファイル用ハンドラ（RotatingFileHandler）を構築する
+# Build a RotatingFileHandler to write logs to a file with size rotation.
 def _build_rotating_handler(
     *,
     file_path: Path,
@@ -140,6 +150,8 @@ def _build_rotating_handler(
     return handler
 
 
+# コンソール（標準出力）用ハンドラ（StreamHandler）を構築する
+# Build a StreamHandler to output logs to the console (stdout/stderr).
 def _build_console_handler(
     *,
     level: int,
@@ -153,6 +165,8 @@ def _build_console_handler(
     return handler
 
 
+# 環境変数等に基づいてアプリケーション全体のロギング設定を適用する
+# Apply application-wide logging configuration based on environment variables and defaults.
 def configure_logging() -> None:
     log_level_name = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
     resolved_log_level = getattr(logging, log_level_name, logging.INFO)

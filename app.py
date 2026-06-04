@@ -63,6 +63,8 @@ same_site = get_session_same_site()
 https_only = is_production_env()
 
 
+# 定期的にエフェメラル（一時的）チャットをクリーンアップするバックグラウンドタスク
+# A background task to periodically clean up ephemeral chats.
 def periodic_cleanup(stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
@@ -74,6 +76,8 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
         stop_event.wait(timeout=6000)
 
 
+# アプリケーションの起動時とシャットダウン時のライフサイクルイベントを管理する
+# Manage startup and shutdown lifecycle events of the FastAPI application.
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     # 起動時にデフォルトタスクを投入する（未投入分のみ）
@@ -145,17 +149,23 @@ app.state.session_secret = secret_key
 app.state.session_cookie = "session"
 
 
+# 新しいCSRFトークンを生成、または既存のトークンを取得してクライアントに返却する
+# Generate a new CSRF token or retrieve an existing one, then return it to the client.
 @app.get("/api/csrf-token")
 async def issue_csrf_token(request: Request):
     token = get_or_create_csrf_token(request)
     return jsonify({"csrf_token": token})
 
 
+# アプリケーションの生存状態（Liveness）を確認するためのエンドポイント
+# Endpoint for checking the liveness status of the application.
 @app.get("/healthz")
 async def healthz():
     return jsonify(get_liveness_status())
 
 
+# アプリケーションの準備状態（Readiness）を確認するためのエンドポイント
+# Endpoint for checking the readiness status of the application.
 @app.get("/readyz")
 async def readyz():
     payload, status_code = get_readiness_status()
@@ -187,6 +197,8 @@ app.include_router(admin_bp)
 app.include_router(memo_bp)
 
 
+# キャッチされなかった例外を処理し、安全なエラーレスポンスを返却するグローバル例外ハンドラー
+# Global exception handler to catch unhandled exceptions and return a safe error response.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception(
