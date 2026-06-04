@@ -50,6 +50,7 @@
   --scrollbar-thumb-border-current: rgba(248, 251, 249, 0.98);
   flex: 1;
   min-width: 0;
+  align-self: center;
   min-height: 2.5rem;
   max-height: min(40vh, 11.5rem);
   padding: 0.66rem 0.1rem 0.66rem 0;
