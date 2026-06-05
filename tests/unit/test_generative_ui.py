@@ -109,7 +109,7 @@ document.getElementById('app').textContent = 'ready';
             payload = json.loads(raw_payload)
             artifact = validate_artifact_payload(payload)
 
-            self.assertIn('id="app"', artifact["html"])
+            self.assertRegex(artifact["html"], r"id=[\"']app[\"']")
             self.assertLessEqual(
                 len(artifact["html"]) + len(artifact["css"]) + len(artifact["js"]),
                 8000,
