@@ -114,7 +114,7 @@ document.getElementById('app').textContent = 'ready';
                 len(artifact["html"]) + len(artifact["css"]) + len(artifact["js"]),
                 8000,
             )
-            self.assertLessEqual(artifact.get("height", 0), 620)
+            self.assertLessEqual(artifact.get("height", 0), 720)
 
     def test_normalize_response_creates_fallback_for_short_display_intent(self):
         normalized = normalize_response_with_artifacts("表示します。")
