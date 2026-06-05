@@ -1,6 +1,8 @@
 import json
+import re
 import unittest
 
+from blueprints.chat.messages import BASE_SYSTEM_PROMPT
 from services.generative_ui import (
     GenerativeUiValidationError,
     decode_message_parts,
@@ -95,6 +97,24 @@ document.getElementById('app').textContent = 'ready';
         self.assertIn('<div id="app"></div>', artifact["html"])
         self.assertIn("#app{padding", artifact["css"])
         self.assertIn("textContent", artifact["js"])
+
+    def test_base_prompt_few_shot_artifacts_are_valid_and_compact(self):
+        artifact_blocks = re.findall(
+            r"```chatcore-artifact\s*(\{[\s\S]*?\})\s*```",
+            BASE_SYSTEM_PROMPT,
+        )
+
+        self.assertGreaterEqual(len(artifact_blocks), 3)
+        for raw_payload in artifact_blocks:
+            payload = json.loads(raw_payload)
+            artifact = validate_artifact_payload(payload)
+
+            self.assertIn('id="app"', artifact["html"])
+            self.assertLessEqual(
+                len(artifact["html"]) + len(artifact["css"]) + len(artifact["js"]),
+                8000,
+            )
+            self.assertLessEqual(artifact.get("height", 0), 620)
 
     def test_normalize_response_creates_fallback_for_short_display_intent(self):
         normalized = normalize_response_with_artifacts("表示します。")

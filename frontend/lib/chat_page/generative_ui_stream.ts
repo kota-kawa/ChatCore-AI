@@ -1,7 +1,22 @@
 import type { ChatMessagePart } from "./types";
 
-const COMPLETE_GENERATIVE_UI_FENCE_RE = /```[ \t]*(?:chatcore-artifact|chatcore-buttons)\b[^\n]*\n[\s\S]*?```/gi;
-const GENERATIVE_UI_FENCE_START_RE = /```[ \t]*(?:chatcore-artifact|chatcore-buttons)\b[^\n]*(?:\n|$)/gi;
+const GENERATIVE_UI_FENCE_NAMES = [
+  "chatcore-artifact",
+  "generative-ui",
+  "generative_ui",
+  "ui_artifact",
+  "chatcore-buttons",
+  "interactive-buttons",
+  "interactive_buttons",
+].join("|");
+const COMPLETE_GENERATIVE_UI_FENCE_RE = new RegExp(
+  "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
+  "gi",
+);
+const GENERATIVE_UI_FENCE_START_RE = new RegExp(
+  "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+  "gi",
+);
 const GENERATIVE_UI_IN_PROGRESS_TEXT = "生成UIを作成中です...";
 
 export function stripGenerativeUiFencesForStreaming(text: string) {
