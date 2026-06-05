@@ -15,11 +15,20 @@ const SANDBOX_CSP = [
   "form-action 'none'",
 ].join("; ");
 
+const MIN_FRAME_HEIGHT = 160;
+const MAX_FRAME_HEIGHT = 900;
+const DEFAULT_FRAME_HEIGHT = 420;
+
 const BASE_SANDBOX_CSS = `
-html,body{margin:0;min-height:100%;background:transparent;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+html,body{margin:0;min-height:100%;background:transparent;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere;}
 *{box-sizing:border-box;}
+img,svg,canvas,video{max-width:100%;height:auto;}
+table{max-width:100%;border-collapse:collapse;}
+pre{max-width:100%;overflow:auto;}
 button,input,select,textarea{font:inherit;}
 button{cursor:pointer;}
+a{color:inherit;}
+#chatcore-artifact-root{display:block;min-height:160px;width:100%;overflow:auto;}
 .chatcore-empty-artifact{min-height:180px;margin:0;padding:18px;border:1px solid #d1d5db;border-radius:8px;background:#f8fafc;color:#111827;display:flex;flex-direction:column;justify-content:center;gap:8px;}
 .chatcore-empty-artifact strong{font-size:15px;}
 .chatcore-empty-artifact span{font-size:13px;line-height:1.5;color:#4b5563;}
@@ -48,10 +57,21 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
   const html = artifact.html || "";
   const shellScript = `
 (function(){
+  var MIN_HEIGHT = ${MIN_FRAME_HEIGHT};
+  var MAX_HEIGHT = ${MAX_FRAME_HEIGHT};
+  var resizePending = false;
+  function root(){
+    return document.getElementById("chatcore-artifact-root") || document.body;
+  }
   function send(type, payload){
     try { parent.postMessage(Object.assign({ type: type }, payload || {}), "*"); } catch (_) {}
   }
+  function clampHeight(value){
+    if (!isFinite(value)) return MIN_HEIGHT;
+    return Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.ceil(value)));
+  }
   function sendHeight(){
+    resizePending = false;
     var doc = document.documentElement;
     var body = document.body;
     var height = Math.max(
@@ -60,17 +80,28 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
       doc ? doc.offsetHeight : 0,
       body ? body.offsetHeight : 0
     );
-    send("chatcore-artifact-resize", { height: height });
+    send("chatcore-artifact-resize", { height: clampHeight(height) });
+  }
+  function requestHeight(){
+    if (resizePending) return;
+    resizePending = true;
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(sendHeight);
+    } else {
+      setTimeout(sendHeight, 16);
+    }
   }
   function hasRenderableContent(){
-    var body = document.body;
-    if (!body) return false;
-    var nodes = body.querySelectorAll("body > *:not(script):not(style)");
+    var container = root();
+    if (!container) return false;
+    var nodes = container.children || [];
     for (var i = 0; i < nodes.length; i += 1) {
       var node = nodes[i];
       if (node.id === "chatcore-empty-artifact") continue;
       var tag = String(node.tagName || "").toLowerCase();
+      if (tag === "script" || tag === "style") continue;
       if (/^(canvas|svg|img|video|button|input|select|textarea)$/.test(tag)) return true;
+      if (node.querySelector && node.querySelector("canvas,svg,img,video,button,input,select,textarea")) return true;
       if (String(node.textContent || "").trim()) return true;
       var rect = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
       if (rect && rect.width > 2 && rect.height > 2) return true;
@@ -81,7 +112,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
     if (hasRenderableContent()) {
       var existing = document.getElementById("chatcore-empty-artifact");
       if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-      sendHeight();
+      requestHeight();
       return;
     }
     if (!document.getElementById("chatcore-empty-artifact")) {
@@ -94,21 +125,26 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
       note.textContent = "モデル出力が空だったため、安全な表示領域を補完しました。";
       fallback.appendChild(title);
       fallback.appendChild(note);
-      document.body.appendChild(fallback);
+      root().appendChild(fallback);
     }
-    sendHeight();
+    requestHeight();
+  }
+  function reportError(message){
+    send("chatcore-artifact-error", { message: String(message || "Artifact script error") });
+    setTimeout(ensureVisibleContent, 0);
   }
   window.__chatcoreEnsureArtifactVisible = ensureVisibleContent;
-  window.addEventListener("load", sendHeight);
+  window.__chatcoreReportArtifactError = reportError;
+  window.addEventListener("load", requestHeight);
   window.addEventListener("error", function(event){
-    send("chatcore-artifact-error", { message: String(event.message || "Artifact script error") });
-    setTimeout(ensureVisibleContent, 0);
+    reportError(event.message);
   });
   if (typeof ResizeObserver === "function") {
-    try { new ResizeObserver(sendHeight).observe(document.documentElement); } catch (_) {}
+    try { new ResizeObserver(requestHeight).observe(document.documentElement); } catch (_) {}
+    try { new ResizeObserver(requestHeight).observe(root()); } catch (_) {}
   }
-  setTimeout(sendHeight, 0);
-  setTimeout(sendHeight, 250);
+  setTimeout(requestHeight, 0);
+  setTimeout(requestHeight, 250);
   setTimeout(ensureVisibleContent, 400);
 })();`;
 
@@ -122,13 +158,21 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
 <style>${css}</style>
 </head>
 <body>
+<main id="chatcore-artifact-root" aria-label="${title}">
 ${html}
+</main>
 <script>${shellScript}</script>
 <script>
 try {
 ${js}
 } catch (error) {
-  try { parent.postMessage({ type: "chatcore-artifact-error", message: String(error && error.message || error || "Artifact error") }, "*"); } catch (_) {}
+  try {
+    if (typeof window.__chatcoreReportArtifactError === "function") {
+      window.__chatcoreReportArtifactError(String(error && error.message || error || "Artifact error"));
+    } else {
+      parent.postMessage({ type: "chatcore-artifact-error", message: String(error && error.message || error || "Artifact error") }, "*");
+    }
+  } catch (_) {}
 }
 try {
   if (typeof window.__chatcoreEnsureArtifactVisible === "function") {
@@ -147,14 +191,19 @@ type SandboxArtifactFrameProps = {
 
 function clampHeight(value: number) {
   if (!Number.isFinite(value)) return undefined;
-  return Math.min(Math.max(Math.ceil(value), 160), 1200);
+  return Math.min(Math.max(Math.ceil(value), MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT);
 }
 
 function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [height, setHeight] = useState(() => artifact.height ?? 420);
+  const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
   const [errorMessage, setErrorMessage] = useState("");
   const srcDoc = useMemo(() => buildSandboxArtifactSrcDoc(artifact), [artifact]);
+
+  useEffect(() => {
+    setHeight(clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
+    setErrorMessage("");
+  }, [artifact]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -165,7 +214,11 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
 
       if ((data as { type?: unknown }).type === "chatcore-artifact-resize") {
         const nextHeight = clampHeight((data as { height?: unknown }).height as number);
-        if (nextHeight) setHeight(nextHeight);
+        if (nextHeight) {
+          setHeight((previousHeight) => (
+            Math.abs(previousHeight - nextHeight) > 1 ? nextHeight : previousHeight
+          ));
+        }
         return;
       }
 

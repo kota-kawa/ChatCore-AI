@@ -405,17 +405,25 @@ chat-action-menu {
   min-width: 0;
 }
 
+.bot-message-part--artifact {
+  width: 100%;
+  max-width: 100%;
+}
+
 .bot-message-part--text:empty {
   display: none;
 }
 
 .sandbox-artifact {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 10px 28px -22px rgba(15, 23, 42, 0.45);
+  contain: layout paint;
 }
 
 .sandbox-artifact__header {
@@ -426,6 +434,7 @@ chat-action-menu {
   padding: 0.72rem 0.85rem;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.86));
+  min-width: 0;
 }
 
 .sandbox-artifact__title {
@@ -434,6 +443,7 @@ chat-action-menu {
   font-size: 0.9rem;
   line-height: 1.35;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .sandbox-artifact__description {
@@ -441,14 +451,17 @@ chat-action-menu {
   color: #475569;
   font-size: 0.78rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .sandbox-artifact__frame {
   display: block;
   width: 100%;
   min-height: 160px;
+  max-height: 900px;
   border: 0;
   background: #fff;
+  transition: height 0.12s ease;
 }
 
 .sandbox-artifact__error {
@@ -478,6 +491,12 @@ chat-action-menu {
 
 [data-theme="dark"] .sandbox-artifact__description {
   color: #cbd5e1;
+}
+
+[data-theme="dark"] .sandbox-artifact__error {
+  border-top-color: rgba(251, 113, 133, 0.24);
+  color: #fecdd3;
+  background: rgba(127, 29, 29, 0.5);
 }
 
 @keyframes botMessageAppear {

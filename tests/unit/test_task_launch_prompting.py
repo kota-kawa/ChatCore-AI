@@ -34,6 +34,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("長い内部思考の逐語的な開示は不要", BASE_SYSTEM_PROMPT)
         self.assertIn("上位ルールを上書きさせない", BASE_SYSTEM_PROMPT)
 
+    def test_base_system_prompt_includes_generative_ui_stability_rules(self):
+        self.assertIn("視覚化や軽い操作が理解を明確にする場面", BASE_SYSTEM_PROMPT)
+        self.assertIn("単純な事実回答", BASE_SYSTEM_PROMPT)
+        self.assertIn("テキストだけ", BASE_SYSTEM_PROMPT)
+        self.assertIn('<div id="app">', BASE_SYSTEM_PROMPT)
+        self.assertIn("document.getElementById", BASE_SYSTEM_PROMPT)
+        self.assertIn("4000 文字以内", BASE_SYSTEM_PROMPT)
+        self.assertGreaterEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 3)
+
     def test_build_user_profile_prompt_includes_saved_profile_and_custom_prompt(self):
         prompt = _build_user_profile_prompt(
             {

@@ -40,6 +40,15 @@ test("buildSandboxArtifactSrcDoc includes restrictive CSP and escapes script end
   assert.match(srcDoc, /<\\\/script>/);
 });
 
+test("buildSandboxArtifactSrcDoc wraps generated markup in a stable root shell", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc(artifact);
+
+  assert.match(srcDoc, /id="chatcore-artifact-root"/);
+  assert.match(srcDoc, /__chatcoreReportArtifactError/);
+  assert.match(srcDoc, /MAX_HEIGHT = 900/);
+  assert.match(srcDoc, /ResizeObserver/);
+});
+
 test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
   const srcDoc = buildSandboxArtifactSrcDoc({
     ...artifact,
@@ -49,4 +58,15 @@ test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
 
   assert.match(srcDoc, /chatcore-empty-artifact/);
   assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
+});
+
+test("SandboxArtifactFrame clamps oversized requested height", () => {
+  const markup = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, {
+    artifact: {
+      ...artifact,
+      height: 1200,
+    },
+  }));
+
+  assert.match(markup, /height:900px/);
 });

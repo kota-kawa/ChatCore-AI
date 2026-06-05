@@ -23,6 +23,23 @@ test("stripGenerativeUiFencesForStreaming removes complete artifact fences", () 
   assert.doesNotMatch(stripped, /chatcore-artifact/);
 });
 
+test("stripGenerativeUiFencesForStreaming removes supported artifact aliases", () => {
+  const text = [
+    "前置きです。",
+    "```generative-ui json",
+    '{"version":1,"title":"UI","html":"<div></div>","css":"","js":""}',
+    "```",
+    "```interactive-buttons",
+    '{"type":"yes_no","question":"続けますか？"}',
+    "```",
+  ].join("\n");
+
+  const stripped = stripGenerativeUiFencesForStreaming(text);
+
+  assert.equal(stripped, "前置きです。");
+  assert.doesNotMatch(stripped, /generative-ui|interactive-buttons/);
+});
+
 test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while streaming", () => {
   const text = [
     "説明します。",
@@ -31,6 +48,15 @@ test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while s
   ].join("\n");
 
   assert.equal(getStreamingGenerativeUiDisplayText(text), "説明します。");
+});
+
+test("getStreamingGenerativeUiDisplayText shows progress for alias-only artifact output", () => {
+  const text = [
+    "```ui_artifact",
+    '{"version":1,"title":"UI"',
+  ].join("\n");
+
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "生成UIを作成中です...");
 });
 
 test("getStreamingGenerativeUiDisplayText shows an in-progress label for artifact-only output", () => {
