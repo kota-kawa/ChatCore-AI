@@ -247,9 +247,11 @@ chatTemplate.innerHTML = `
 
     @media (max-width: 768px) {
       .actions-menu {
-        /* 固定inputの上に配置 (input ~56px + safe-area + 余白) */
+        /* AIエージェントボタンと同じ高さに揃える。
+           --chat-action-menu-top が JS で設定されている場合はそれを優先し、
+           未設定時のフォールバックも AI エージェントボタンの bottom に一致させる。 */
         top: var(--chat-action-menu-top, auto);
-        bottom: var(--chat-floating-action-bottom, calc(70px + env(safe-area-inset-bottom, 0px)));
+        bottom: calc(70px + env(safe-area-inset-bottom, 0px));
         right: 12px;
         width: var(--chat-action-menu-size, 56px);
         height: var(--chat-action-menu-size, 56px);
@@ -284,7 +286,7 @@ chatTemplate.innerHTML = `
     @media (max-width: 480px) {
       .actions-menu {
         top: var(--chat-action-menu-top, auto);
-        bottom: var(--chat-floating-action-bottom, calc(65px + env(safe-area-inset-bottom, 0px)));
+        bottom: calc(65px + env(safe-area-inset-bottom, 0px));
         right: 10px;
         width: var(--chat-action-menu-size, 50px);
         height: var(--chat-action-menu-size, 50px);
