@@ -104,7 +104,7 @@ export default function HomePage() {
       </SeoHead>
 
       <HomePageContextProvider controller={controller}>
-        <div className="chat-page-shell">
+        <div className="chat-page-shell cc-page-rise">
           <action-menu></action-menu>
 
           <div
