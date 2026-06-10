@@ -1,4 +1,7 @@
 .env
+.env.*
+*.env
+*.env.bak
 .git
 .github
 __pycache__
