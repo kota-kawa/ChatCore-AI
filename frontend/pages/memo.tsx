@@ -1634,7 +1634,7 @@ export default function MemoPage() {
         <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
       </SeoHead>
 
-      <div className="memo-page-shell">
+      <div className="memo-page-shell cc-page-rise">
         <action-menu></action-menu>
 
         <div

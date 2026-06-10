@@ -81,7 +81,7 @@ export function PromptSharePageLayout({
   children
 }: PromptSharePageLayoutProps) {
   return (
-    <div className="prompt-share-page">
+    <div className="prompt-share-page cc-page-rise">
       <action-menu></action-menu>
 
       <div
