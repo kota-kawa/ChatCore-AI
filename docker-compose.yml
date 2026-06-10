@@ -46,7 +46,9 @@ services:
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
     ports:
-      - "5004:5004"
+      # ホスト側 nginx からのみアクセスするためループバックに限定する
+      # Bind to loopback only; the host nginx is the sole external consumer.
+      - "127.0.0.1:5004:5004"
     depends_on:
       db:
         condition: service_healthy
@@ -79,7 +81,9 @@ services:
       - NEXT_PUBLIC_SITE_URL=${FRONTEND_URL:-https://chatcore-ai.com}
       - NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID:-G-Q1F9PY8BFJ}
     ports:
-      - "3000:3000"
+      # ホスト側 nginx からのみアクセスするためループバックに限定する
+      # Bind to loopback only; the host nginx is the sole external consumer.
+      - "127.0.0.1:3000:3000"
     depends_on:
       app:
         condition: service_healthy
@@ -133,7 +137,9 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6380:6379"
+      # Redis はセッションストアのため外部公開しない（ホスト内デバッグ用途のみ）
+      # Never expose Redis externally; loopback binding is for host-side debugging only.
+      - "127.0.0.1:6380:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 5s

@@ -119,7 +119,9 @@ services:
       - FASTAPI_DEBUG=0
       - LOG_OUTPUT=${LOG_OUTPUT:-json}
     ports:
-      - "5004:5004"
+      # ホスト側 nginx からのみアクセスするためループバックに限定する
+      # Bind to loopback only; the host nginx is the sole external consumer.
+      - "127.0.0.1:5004:5004"
     depends_on:
       db:
         condition: service_healthy
@@ -144,7 +146,7 @@ services:
     <<: *app_service
     container_name: chatcore_app_green
     ports:
-      - "5005:5004"
+      - "127.0.0.1:5005:5004"
 
   frontend_blue: &frontend_service
     build:
@@ -157,7 +159,9 @@ services:
     environment:
       - BACKEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
     ports:
-      - "3000:3000"
+      # ホスト側 nginx からのみアクセスするためループバックに限定する
+      # Bind to loopback only; the host nginx is the sole external consumer.
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test:
         [
@@ -177,7 +181,7 @@ services:
     <<: *frontend_service
     container_name: chatcore_frontend_green
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
 
 volumes:
   db_data:
