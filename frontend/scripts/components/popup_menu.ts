@@ -324,6 +324,14 @@ template.innerHTML = `
       }
     }
 
+    /* トップページ（chat-page）では index.css が AI エージェントボタンを
+       --chat-floating-action-bottom（0.9rem + safe-area）に配置するため、それに揃える */
+    @media (max-width: 576px) {
+      :host([data-chat-page][data-context="non-chat"]) .actions-menu {
+        bottom: var(--chat-floating-action-bottom, calc(0.9rem + env(safe-area-inset-bottom, 0px)));
+      }
+    }
+
     /* 非常に小さな画面での調整（画面幅480px以下） - プロンプト投稿ボタンと完全に同じサイズに */
     @media (max-width: 480px) {
       /* メニュー全体のサイズをプロンプト投稿ボタンに完全に合わせて調整 */
