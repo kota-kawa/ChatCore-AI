@@ -98,9 +98,10 @@ template.innerHTML = `
     /* ============
        Action Menu Wrapper
        ============ */
+    /* bottom は AI エージェントボタン（.global-ai-agent-button）と同じ計算式で高さを揃える */
     .actions-menu {
       position: fixed;
-      bottom: 40px;
+      bottom: max(40px, env(safe-area-inset-bottom));
       right: 40px;
       width: 60px;
       height: 60px;
@@ -109,7 +110,7 @@ template.innerHTML = `
     }
 
     :host([data-context="non-chat"]) .actions-menu {
-      bottom: 40px;
+      bottom: max(40px, env(safe-area-inset-bottom));
     }
 
     @keyframes popIn {
@@ -283,7 +284,7 @@ template.innerHTML = `
       }
 
       :host([data-context="non-chat"]) .actions-menu {
-        bottom: 20px;
+        bottom: max(40px, env(safe-area-inset-bottom));
       }
       /* ハンバーガーボタンをプロンプト投稿ボタンと完全に同じサイズに */
       .actions-menu .btn--menu {
@@ -313,6 +314,13 @@ template.innerHTML = `
       #actionMenuButton:checked + .actions-menu > .btn--comment {
         top: 2px;
         left: -88px;
+      }
+    }
+
+    /* AIエージェントボタンが bottom: max(20px, safe-area) になる幅に合わせる */
+    @media (max-width: 640px) {
+      :host([data-context="non-chat"]) .actions-menu {
+        bottom: max(20px, env(safe-area-inset-bottom));
       }
     }
 
@@ -346,7 +354,7 @@ template.innerHTML = `
       }
 
       :host([data-context="non-chat"]) .actions-menu {
-        bottom: 15px;
+        bottom: max(15px, env(safe-area-inset-bottom));
       }
 
       /* 展開位置調整 — メニュー中心(25,25)から半径80pxの円弧上、ボタンサイズ47px */
