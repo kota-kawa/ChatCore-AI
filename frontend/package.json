@@ -4,7 +4,6 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "build:css-bundles": "node scripts/build-css-bundles.mjs",
     "check:imports": "node scripts/check-import-resolve.cjs",
     "generate:api-schemas": "cd .. && python3 scripts/generate_frontend_zod_schemas.py",
     "predev": "npm run check:imports",
