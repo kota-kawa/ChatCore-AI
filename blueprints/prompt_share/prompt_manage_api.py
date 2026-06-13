@@ -109,7 +109,7 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
                        p.title,
                        p.category,
                        p.content,
-                       p.author,
+                       COALESCE(u.username, p.author, 'ユーザー') AS author,
                        p.prompt_type,
                        p.reference_image_url,
                        p.skill_markdown,
@@ -121,6 +121,7 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
                 FROM prompt_list_entries ple
                 JOIN prompts p ON p.id = ple.prompt_id
                               AND p.deleted_at IS NULL
+                LEFT JOIN users u ON u.id = p.user_id
                 WHERE ple.user_id = %s
                 ORDER BY ple.created_at DESC, ple.id DESC
             """

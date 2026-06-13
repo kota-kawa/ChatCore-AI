@@ -190,7 +190,6 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: str = ""
     content: str = ""
-    author: NonEmptyStr
     prompt_type: Literal["text", "image", "skill"] = "text"
     input_examples: str = ""
     output_examples: str = ""

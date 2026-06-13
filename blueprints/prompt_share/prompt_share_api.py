@@ -242,7 +242,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.title,
                 p.category,
                 p.content,
-                p.author,
+                COALESCE(u.username, p.author, 'ユーザー') AS author,
                 p.input_examples,
                 p.output_examples,
                 p.ai_model,
@@ -256,6 +256,8 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
                 CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
+            LEFT JOIN users AS u
+              ON u.id = p.user_id
             LEFT JOIN (
                 SELECT prompt_id, COUNT(*) AS comment_count
                 FROM prompt_comments
@@ -301,30 +303,32 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
         cursor.execute(
             """
             SELECT
-                id,
-                title,
-                category,
-                content,
-                author,
-                input_examples,
-                output_examples,
-                ai_model,
-                prompt_type,
-                reference_image_url,
-                skill_markdown,
-                skill_python_script,
+                p.id,
+                p.title,
+                p.category,
+                p.content,
+                COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.input_examples,
+                p.output_examples,
+                p.ai_model,
+                p.prompt_type,
+                p.reference_image_url,
+                p.skill_markdown,
+                p.skill_python_script,
                 (
                     SELECT COUNT(*)
                     FROM prompt_comments AS pc
-                    WHERE pc.prompt_id = prompts.id
+                    WHERE pc.prompt_id = p.id
                       AND pc.deleted_at IS NULL
                       AND pc.hidden_by_reports_at IS NULL
                 ) AS comment_count,
-                created_at
-            FROM prompts
-            WHERE id = %s
-              AND is_public = TRUE
-              AND deleted_at IS NULL
+                p.created_at
+            FROM prompts AS p
+            LEFT JOIN users AS u
+              ON u.id = p.user_id
+            WHERE p.id = %s
+              AND p.is_public = TRUE
+              AND p.deleted_at IS NULL
             LIMIT 1
             """,
             (prompt_id,),
@@ -345,7 +349,6 @@ def _create_prompt_for_user(
     title: str,
     category: str,
     content: str,
-    author: str,
     prompt_type: str,
     input_examples: str,
     output_examples: str,
@@ -359,6 +362,8 @@ def _create_prompt_for_user(
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        # 投稿者名は入力値ではなく投稿ユーザーの username を保存する。
+        # 表示時は users.username を JOIN して取得するため、username の変更にも追従する。
         query = """
             INSERT INTO prompts (
                 title,
@@ -377,7 +382,11 @@ def _create_prompt_for_user(
                 created_at,
                 updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW())
+            VALUES (
+                %s, %s, %s,
+                (SELECT COALESCE(username, 'ユーザー') FROM users WHERE id = %s),
+                %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW()
+            )
             RETURNING id
         """
         cursor.execute(
@@ -386,7 +395,7 @@ def _create_prompt_for_user(
                 title,
                 category,
                 content,
-                author,
+                user_id,
                 _normalize_prompt_type(prompt_type),
                 reference_image_url,
                 skill_markdown,
@@ -1197,7 +1206,6 @@ async def create_prompt(request: Request):
             "title": form.get("title", ""),
             "category": form.get("category", ""),
             "content": form.get("content", ""),
-            "author": form.get("author", ""),
             "prompt_type": form.get("prompt_type", PROMPT_TYPE_TEXT),
             "input_examples": form.get("input_examples", ""),
             "output_examples": form.get("output_examples", ""),
@@ -1237,7 +1245,6 @@ async def create_prompt(request: Request):
             payload.title,
             payload.category,
             payload.content,
-            payload.author,
             normalized_prompt_type,
             payload.input_examples,
             payload.output_examples,

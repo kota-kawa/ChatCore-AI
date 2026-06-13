@@ -184,7 +184,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [postTitle, setPostTitle] = useState("");
   const [postCategory, setPostCategory] = useState("未選択");
   const [postContent, setPostContent] = useState("");
-  const [postAuthor, setPostAuthor] = useState("");
   const [postAiModel, setPostAiModel] = useState("");
   const [guardrailEnabled, setGuardrailEnabled] = useState(false);
   const [postInputExample, setPostInputExample] = useState("");
@@ -194,7 +193,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [referenceImageFile, setReferenceImageFile] = useState<File | null>(null);
   const [promptImagePreviewUrl, setPromptImagePreviewUrl] = useState("");
   const [promptImagePreviewName, setPromptImagePreviewName] = useState("");
-  const [hasAutoFilledAuthor, setHasAutoFilledAuthor] = useState(false);
   const [isPostSubmitting, setIsPostSubmitting] = useState(false);
   const [promptPostStatus, setPromptPostStatusState] = useState<PromptPostStatus>({
     message: "",
@@ -205,7 +203,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const promptsRef = useRef<PromptRecord[]>(initialPromptRecords);
   const selectedCategoryRef = useRef("all");
   const selectedPromptTypeFilterRef = useRef<PromptTypeFilter>("all");
-  const hasAutoFilledAuthorRef = useRef(false);
   const activeModalRef = useRef<ModalKey>(null);
 
   const postModalRef = useRef<HTMLDivElement | null>(null);
@@ -217,7 +214,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const promptPostTitleInputRef = useRef<HTMLInputElement | null>(null);
   const promptPostCategorySelectRef = useRef<HTMLSelectElement | null>(null);
   const promptPostContentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const promptPostAuthorInputRef = useRef<HTMLInputElement | null>(null);
   const promptPostAiModelSelectRef = useRef<HTMLSelectElement | null>(null);
   const promptPostInputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
@@ -258,10 +254,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   useEffect(() => {
     selectedPromptTypeFilterRef.current = selectedPromptTypeFilter;
   }, [selectedPromptTypeFilter]);
-
-  useEffect(() => {
-    hasAutoFilledAuthorRef.current = hasAutoFilledAuthor;
-  }, [hasAutoFilledAuthor]);
 
   useEffect(() => {
     activeModalRef.current = activeModal;
@@ -843,24 +835,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [setPromptShareStatus, shareUrl]);
 
-  const applyDefaultAuthorName = useCallback((user?: { username?: string } | null) => {
-    const username = String(user?.username || "").trim();
-    if (!username) {
-      return;
-    }
-
-    setPostAuthor((current) => {
-      const currentValue = current.trim();
-      const shouldAutofill =
-        !currentValue || currentValue === "アイデア職人" || hasAutoFilledAuthorRef.current;
-      if (!shouldAutofill) {
-        return current;
-      }
-      setHasAutoFilledAuthor(true);
-      return username;
-    });
-  }, []);
-
   const loadPromptComments = useCallback(
     async (promptId: string | number) => {
       const targetPromptId = String(promptId);
@@ -1232,8 +1206,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       if (
         !promptPostTitleInputRef.current ||
         !promptPostCategorySelectRef.current ||
-        !promptPostContentTextareaRef.current ||
-        !promptPostAuthorInputRef.current
+        !promptPostContentTextareaRef.current
       ) {
         setPromptPostStatus(
           "フォーム要素が見つかりませんでした。ページを再読み込みしてください。",
@@ -1256,7 +1229,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       formData.append("title", postTitle);
       formData.append("category", postCategory === "未選択" ? "" : postCategory);
       formData.append("content", promptType === "skill" ? "" : postContent);
-      formData.append("author", postAuthor);
       formData.append("prompt_type", promptType);
       formData.append("input_examples", promptType !== "skill" && guardrailEnabled ? postInputExample : "");
       formData.append("output_examples", promptType !== "skill" && guardrailEnabled ? postOutputExample : "");
@@ -1280,7 +1252,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         setPostTitle("");
         setPostCategory("未選択");
         setPostContent("");
-        setPostAuthor("");
         setPostAiModel("");
         setGuardrailEnabled(false);
         setPostInputExample("");
@@ -1319,7 +1290,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       isPostSubmitting,
       loadPrompts,
       postAiModel,
-      postAuthor,
       postCategory,
       postContent,
       postInputExample,
@@ -1377,7 +1347,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     const timerId = window.setTimeout(() => {
       void fetch("/api/current_user")
         .then((res) => (res.ok ? res.json() : { logged_in: false }))
-        .then((data: { logged_in?: boolean; user?: { username?: string } }) => {
+        .then((data: { logged_in?: boolean }) => {
           if (cancelled) {
             return;
           }
@@ -1386,9 +1356,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           setLoggedInState(loggedIn);
           setAuthUiReady(true);
           writeCachedAuthState(loggedIn);
-          if (loggedIn) {
-            applyDefaultAuthorName(data.user);
-          }
         })
         .catch((error) => {
           if (cancelled) {
@@ -1405,7 +1372,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       cancelled = true;
       window.clearTimeout(timerId);
     };
-  }, [applyDefaultAuthorName]);
+  }, []);
 
   useEffect(() => {
     const cachedPrompts = readPromptCache();
@@ -1449,7 +1416,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       !promptPostTitleInputRef.current ||
       !promptPostCategorySelectRef.current ||
       !promptPostContentTextareaRef.current ||
-      !promptPostAuthorInputRef.current ||
       !promptPostAiModelSelectRef.current ||
       !promptPostInputExamplesRef.current ||
       !promptPostOutputExamplesRef.current ||
@@ -1476,7 +1442,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           element: promptPostSkillPythonScriptRef.current,
           setValue: setPostSkillPythonScript
         },
-        author: { label: "投稿者名", element: promptPostAuthorInputRef.current, setValue: setPostAuthor },
         ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {
           label: "投稿タイプ",
@@ -1699,9 +1664,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           setPostCategory={setPostCategory}
           postContent={postContent}
           setPostContent={setPostContent}
-          postAuthor={postAuthor}
-          setPostAuthor={setPostAuthor}
-          setHasAutoFilledAuthor={setHasAutoFilledAuthor}
           postAiModel={postAiModel}
           setPostAiModel={setPostAiModel}
           guardrailEnabled={guardrailEnabled}
@@ -1720,7 +1682,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           promptPostTitleInputRef={promptPostTitleInputRef}
           promptPostCategorySelectRef={promptPostCategorySelectRef}
           promptPostContentTextareaRef={promptPostContentTextareaRef}
-          promptPostAuthorInputRef={promptPostAuthorInputRef}
           promptPostAiModelSelectRef={promptPostAiModelSelectRef}
           promptPostInputExamplesRef={promptPostInputExamplesRef}
           promptPostOutputExamplesRef={promptPostOutputExamplesRef}

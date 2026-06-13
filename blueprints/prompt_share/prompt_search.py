@@ -75,14 +75,14 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         offset = (page - 1) * per_page
         prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
         select_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
-        count_type_condition = "AND COALESCE(prompt_type, 'text') = %s" if prompt_type_filter else ""
+        count_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
         sql = f"""
             SELECT
               p.id,
               p.title,
               p.category,
               p.content,
-              p.author,
+              COALESCE(u.username, p.author, 'ユーザー') AS author,
               p.input_examples,
               p.output_examples,
               p.prompt_type,
@@ -95,6 +95,8 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
               CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
               CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
             FROM prompts AS p
+            LEFT JOIN users AS u
+              ON u.id = p.user_id
             LEFT JOIN (
               SELECT prompt_id, COUNT(*) AS comment_count
               FROM prompt_comments
@@ -116,7 +118,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
                 p.category LIKE %s OR
-                p.author  LIKE %s
+                COALESCE(u.username, p.author) LIKE %s
               )
             ORDER BY p.created_at DESC
             LIMIT %s
@@ -124,15 +126,17 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         """
         count_sql = f"""
             SELECT COUNT(*) AS total
-            FROM prompts
-            WHERE is_public = TRUE
-              AND deleted_at IS NULL
+            FROM prompts AS p
+            LEFT JOIN users AS u
+              ON u.id = p.user_id
+            WHERE p.is_public = TRUE
+              AND p.deleted_at IS NULL
               {count_type_condition}
               AND (
-                title   LIKE %s OR
-                content LIKE %s OR
-                category LIKE %s OR
-                author  LIKE %s
+                p.title   LIKE %s OR
+                p.content LIKE %s OR
+                p.category LIKE %s OR
+                COALESCE(u.username, p.author) LIKE %s
               )
         """
         like_query = f"%{query}%"
