@@ -75,7 +75,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         offset = (page - 1) * per_page
         prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
         select_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
-        count_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
+        count_type_condition = "AND COALESCE(prompt_type, 'text') = %s" if prompt_type_filter else ""
         sql = f"""
             SELECT
               p.id,
