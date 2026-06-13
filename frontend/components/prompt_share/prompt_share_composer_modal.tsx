@@ -27,9 +27,6 @@ type PromptShareComposerModalProps = {
   setPostCategory: (value: string) => void;
   postContent: string;
   setPostContent: (value: string) => void;
-  postAuthor: string;
-  setPostAuthor: (value: string) => void;
-  setHasAutoFilledAuthor: (value: boolean) => void;
   postAiModel: string;
   setPostAiModel: (value: string) => void;
   guardrailEnabled: boolean;
@@ -48,7 +45,6 @@ type PromptShareComposerModalProps = {
   promptPostTitleInputRef: RefObject<HTMLInputElement>;
   promptPostCategorySelectRef: RefObject<HTMLSelectElement>;
   promptPostContentTextareaRef: RefObject<HTMLTextAreaElement>;
-  promptPostAuthorInputRef: RefObject<HTMLInputElement>;
   promptPostAiModelSelectRef: RefObject<HTMLSelectElement>;
   promptPostInputExamplesRef: RefObject<HTMLTextAreaElement>;
   promptPostOutputExamplesRef: RefObject<HTMLTextAreaElement>;
@@ -429,9 +425,6 @@ export function PromptShareComposerModal({
   setPostCategory,
   postContent,
   setPostContent,
-  postAuthor,
-  setPostAuthor,
-  setHasAutoFilledAuthor,
   postAiModel,
   setPostAiModel,
   guardrailEnabled,
@@ -450,7 +443,6 @@ export function PromptShareComposerModal({
   promptPostTitleInputRef,
   promptPostCategorySelectRef,
   promptPostContentTextareaRef,
-  promptPostAuthorInputRef,
   promptPostAiModelSelectRef,
   promptPostInputExamplesRef,
   promptPostOutputExamplesRef,
@@ -673,25 +665,7 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
-              <div className="composer-field-grid composer-field-grid--two">
-                <div className="form-group">
-                  <label htmlFor="prompt-author">投稿者名</label>
-                  <span className="form-group__hint">ニックネームやチーム名など、公開してよい表示名を使ってください。</span>
-                  <input
-                    type="text"
-                    id="prompt-author"
-                    placeholder="ニックネームなど"
-                    required
-                    ref={promptPostAuthorInputRef}
-                    value={postAuthor}
-                    onChange={(event) => {
-                      setPostAuthor(event.target.value);
-                      setHasAutoFilledAuthor(false);
-                      updatePromptFeedbackErrorIfNeeded();
-                    }}
-                  />
-                </div>
-
+              <div className="composer-field-grid">
                 <div className="form-group">
                   <label htmlFor="prompt-ai-model">使用AIモデル（任意）</label>
                   <span className="form-group__hint">このプロンプトを試したモデルを残すと、再現条件の共有に役立ちます。</span>

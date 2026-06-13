@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 875b3d81a6381c1326a12783153e55196c20a4c53f9e031b48e8a4a7f22c2889
+// Schema fingerprint: ed4404741cdbaa70649da4b653d2c35acfc3da4fdd6d5995207d94b4e6e3a373
 
 import { z } from "zod";
 
@@ -44,7 +44,7 @@ export type AddTaskRequest = z.infer<typeof AddTaskRequestSchema>;
 export const PromptAssistRequestSchema = z.object({ "target": z.enum(["task_modal","shared_prompt_modal"]), "action": z.enum(["generate_draft","improve","shorten","expand","generate_examples"]), "instruction": z.string().max(4000).default(""), "fields": z.object({ "title": z.string().max(256).default(""), "content": z.string().max(4000).default(""), "prompt_content": z.string().max(4000).default(""), "skill_markdown": z.string().max(30000).default(""), "skill_python_script": z.string().max(30000).default(""), "category": z.string().max(256).default(""), "author": z.string().max(256).default(""), "prompt_type": z.string().default("text"), "input_examples": z.string().max(4000).default(""), "output_examples": z.string().max(4000).default(""), "ai_model": z.string().max(256).default("") }).optional() });
 export type PromptAssistRequest = z.infer<typeof PromptAssistRequestSchema>;
 
-export const SharedPromptCreateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().default(""), "content": z.string().default(""), "author": z.string().min(1), "prompt_type": z.enum(["text","image","skill"]).default("text"), "input_examples": z.string().default(""), "output_examples": z.string().default(""), "ai_model": z.string().default(""), "skill_markdown": z.string().max(30000).default(""), "skill_python_script": z.string().max(30000).default("") });
+export const SharedPromptCreateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().default(""), "content": z.string().default(""), "prompt_type": z.enum(["text","image","skill"]).default("text"), "input_examples": z.string().default(""), "output_examples": z.string().default(""), "ai_model": z.string().default(""), "skill_markdown": z.string().max(30000).default(""), "skill_python_script": z.string().max(30000).default("") });
 export type SharedPromptCreateRequest = z.infer<typeof SharedPromptCreateRequestSchema>;
 
 export const BookmarkCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
