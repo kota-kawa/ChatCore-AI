@@ -23,10 +23,14 @@ def _existing_tables() -> set[str]:
 
 
 def upgrade() -> None:
+    # Check if dependent tables exist before creating the table.
+    # テーブル作成前に依存先テーブルが存在することを確認します。
     tables = _existing_tables()
     if "users" not in tables or "prompts" not in tables:
         return
 
+    # Create prompt_likes table.
+    # prompt_likesテーブルを作成します。
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_likes (
@@ -47,6 +51,8 @@ def upgrade() -> None:
         )
         """
     )
+    # Create indexes on prompt_likes table.
+    # prompt_likesテーブルにインデックスを作成します。
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_likes_user_created_at
@@ -62,4 +68,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop prompt_likes table.
+    # prompt_likesテーブルを削除します。
     op.execute("DROP TABLE IF EXISTS prompt_likes")

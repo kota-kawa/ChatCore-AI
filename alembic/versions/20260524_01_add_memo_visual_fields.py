@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add 'background_color' column to 'memo_entries' table to store visual styling choices
+    # メモの背景色（スタイリング設定）を保存するため、memo_entries テーブルに 'background_color' カラムを追加する
     op.execute(
         """
         ALTER TABLE memo_entries
@@ -25,6 +27,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Remove 'background_color' column from 'memo_entries' table
+    # memo_entries テーブルから 'background_color' カラムを削除する
     op.execute(
         """
         ALTER TABLE memo_entries

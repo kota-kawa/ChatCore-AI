@@ -23,8 +23,12 @@ def _existing_tables() -> set[str]:
 
 
 def upgrade() -> None:
+    # Check existing tables in the database schema.
+    # データベースのスキーマ内に存在するテーブルを確認します。
     tables = _existing_tables()
 
+    # Expand memo_entries table with archived_at, pinned_at and their index.
+    # memo_entriesテーブルを拡張し、archived_at、pinned_at列およびインデックスを追加します。
     if "memo_entries" in tables:
         op.execute("ALTER TABLE memo_entries ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL")
         op.execute("ALTER TABLE memo_entries ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP NULL")
@@ -35,6 +39,8 @@ def upgrade() -> None:
             """
         )
 
+    # Expand shared_memo_entries table with expires_at, revoked_at and their index.
+    # shared_memo_entriesテーブルを拡張し、expires_at、revoked_at列およびインデックスを追加します。
     if "shared_memo_entries" in tables:
         op.execute("ALTER TABLE shared_memo_entries ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NULL")
         op.execute("ALTER TABLE shared_memo_entries ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP NULL")
@@ -47,9 +53,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop index on shared_memo_entries.
+    # shared_memo_entriesのインデックスを削除します。
     op.execute("DROP INDEX IF EXISTS idx_shared_memo_entries_active_lookup")
+    # Drop index on memo_entries.
+    # memo_entriesのインデックスを削除します。
     op.execute("DROP INDEX IF EXISTS idx_memo_entries_user_archived_pinned_created")
+    # Drop revoked_at and expires_at columns from shared_memo_entries.
+    # shared_memo_entriesテーブルからrevoked_atおよびexpires_at列を削除します。
     op.execute("ALTER TABLE shared_memo_entries DROP COLUMN IF EXISTS revoked_at")
     op.execute("ALTER TABLE shared_memo_entries DROP COLUMN IF EXISTS expires_at")
+    # Drop pinned_at and archived_at columns from memo_entries.
+    # memo_entriesテーブルからpinned_atおよびarchived_at列を削除します。
     op.execute("ALTER TABLE memo_entries DROP COLUMN IF EXISTS pinned_at")
     op.execute("ALTER TABLE memo_entries DROP COLUMN IF EXISTS archived_at")

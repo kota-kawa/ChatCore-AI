@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Remove the 'tags' column from 'memo_entries' table
+    # memo_entries テーブルから 'tags' カラムを削除する
     op.execute(
         """
         ALTER TABLE memo_entries
@@ -25,6 +27,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Add back the 'tags' column to 'memo_entries' table with a default NULL value
+    # memo_entries テーブルに 'tags' カラムをデフォルト NULL で再度追加する
     op.execute(
         """
         ALTER TABLE memo_entries

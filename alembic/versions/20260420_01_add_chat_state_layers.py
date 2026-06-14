@@ -17,6 +17,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add mode column and check constraint to chat_rooms table.
+    # chat_roomsテーブルにmode列とCHECK制約を追加します。
     op.execute(
         """
         ALTER TABLE chat_rooms
@@ -37,6 +39,8 @@ def upgrade() -> None:
         """
     )
 
+    # Create chat_room_summaries table.
+    # chat_room_summariesテーブルを作成します。
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_room_summaries (
@@ -52,6 +56,8 @@ def upgrade() -> None:
         """
     )
 
+    # Create memory_facts table.
+    # memory_factsテーブルを作成します。
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS memory_facts (
@@ -81,6 +87,9 @@ def upgrade() -> None:
         )
         """
     )
+    
+    # Create indexes on memory_facts table.
+    # memory_factsテーブルにインデックスを作成します。
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_memory_facts_room_updated_at
@@ -98,9 +107,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop indexes on memory_facts table.
+    # memory_factsテーブルのインデックスを削除します。
     op.execute("DROP INDEX IF EXISTS idx_memory_facts_user_updated_at")
     op.execute("DROP INDEX IF EXISTS idx_memory_facts_room_updated_at")
+    
+    # Drop memory_facts table.
+    # memory_factsテーブルを削除します。
     op.execute("DROP TABLE IF EXISTS memory_facts")
+    
+    # Drop chat_room_summaries table.
+    # chat_room_summariesテーブルを削除します。
     op.execute("DROP TABLE IF EXISTS chat_room_summaries")
+    
+    # Remove mode column and constraint from chat_rooms.
+    # chat_roomsテーブルから制約とmode列を削除します。
     op.execute("ALTER TABLE chat_rooms DROP CONSTRAINT IF EXISTS chk_chat_rooms_mode")
     op.execute("ALTER TABLE chat_rooms DROP COLUMN IF EXISTS mode")

@@ -17,12 +17,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """
+    [JP] 論理削除(deleted_at)、変更履歴保存(バージョンテーブル & トリガー)、および複数プロバイダー対応用ユーザー認証テーブルを追加します。
+    [EN] Add soft delete (deleted_at), version history (version tables & triggers), and multi-provider user authentication table.
+    """
+    # [JP] task_with_examples テーブルに deleted_at カラムを追加
+    # [EN] Add deleted_at column to task_with_examples table
     op.execute(
         """
         ALTER TABLE task_with_examples
             ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL
         """
     )
+    # [JP] prompts テーブルに updated_at と deleted_at カラムを追加し、初期化
+    # [EN] Add updated_at and deleted_at columns to prompts table and initialize updated_at
     op.execute(
         """
         ALTER TABLE prompts
@@ -38,6 +46,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] 論理削除されていない有効なタスクとプロンプトに対するインデックスを作成
+    # [EN] Create indexes on active (non-soft-deleted) tasks and prompts
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_with_examples_active_user_order
@@ -67,6 +77,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] task_versions テーブルの作成 (タスク履歴保存用)
+    # [EN] Create task_versions table (for storing task revision history)
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS task_versions (
@@ -95,6 +107,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] task_versions インデックス作成
+    # [EN] Create index on task_versions
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_versions_task_created_at
@@ -102,6 +116,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] prompt_versions テーブルの作成 (プロンプト履歴保存用)
+    # [EN] Create prompt_versions table (for storing prompt revision history)
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_versions (
@@ -130,6 +146,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] prompt_versions インデックス作成
+    # [EN] Create index on prompt_versions
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_versions_prompt_created_at
@@ -137,6 +155,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] user_auth_providers テーブルの作成 (複数プロバイダー認証用)
+    # [EN] Create user_auth_providers table (for multi-provider authentication)
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS user_auth_providers (
@@ -156,6 +176,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] プロバイダーごと・ユーザーごとの各種インデックス作成
+    # [EN] Create index structures for user_auth_providers
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_user_auth_providers_provider_identity
@@ -170,6 +192,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] 既存の users テーブルの認証情報を user_auth_providers テーブルへ移行
+    # [EN] Migrate existing user auth information from users table to user_auth_providers table
     op.execute(
         """
         INSERT INTO user_auth_providers (
@@ -193,6 +217,8 @@ def upgrade() -> None:
                updated_at = CURRENT_TIMESTAMP
         """
     )
+    # [JP] 既存のタスクの初期バージョン (version 1) を記録
+    # [EN] Record the initial version (version 1) for all existing tasks
     op.execute(
         """
         INSERT INTO task_versions (
@@ -236,6 +262,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] 既存のプロンプトの初期バージョン (version 1) を記録
+    # [EN] Record the initial version (version 1) for all existing prompts
     op.execute(
         """
         INSERT INTO prompt_versions (
@@ -280,6 +308,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] タスクの変更履歴を自動記録するトリガー関数の定義
+    # [EN] Define trigger function to automatically record task history versions
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_task_version()
@@ -335,6 +365,8 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql
         """
     )
+    # [JP] プロンプトの変更履歴を自動記録するトリガー関数の定義
+    # [EN] Define trigger function to automatically record prompt history versions
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_prompt_version()
@@ -391,6 +423,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] プロンプト更新時の updated_at 自動更新トリガーの設定
+    # [EN] Set up trigger on prompts table to update updated_at
     op.execute(
         """
         DO $$
@@ -409,6 +443,8 @@ def upgrade() -> None:
         END $$;
         """
     )
+    # [JP] 認証プロバイダー更新時の updated_at 自動更新トリガーの設定
+    # [EN] Set up trigger on user_auth_providers table to update updated_at
     op.execute(
         """
         DO $$
@@ -427,6 +463,8 @@ def upgrade() -> None:
         END $$;
         """
     )
+    # [JP] タスク変更時の履歴自動記録トリガーの設定
+    # [EN] Set up trigger on task_with_examples table to record history versions
     op.execute(
         """
         DO $$
@@ -445,6 +483,8 @@ def upgrade() -> None:
         END $$;
         """
     )
+    # [JP] プロンプト変更時の履歴自動記録トリガーの設定
+    # [EN] Set up trigger on prompts table to record history versions
     op.execute(
         """
         DO $$
@@ -464,6 +504,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] users テーブルから旧認証カラムを削除
+    # [EN] Drop legacy auth columns from users table
     op.execute(
         """
         ALTER TABLE users
@@ -472,6 +514,8 @@ def upgrade() -> None:
             DROP COLUMN IF EXISTS provider_email
         """
     )
+    # [JP] 古いインデックス構造を整理し、論理削除対応のインデックスに更新
+    # [EN] Drop old index structures and recreate soft-delete-aware indexes
     op.execute("DROP INDEX IF EXISTS uq_users_provider_identity")
     op.execute("DROP INDEX IF EXISTS idx_task_with_examples_active_user_order")
     op.execute("DROP INDEX IF EXISTS idx_task_with_examples_active_user_name")
@@ -508,12 +552,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] バージョン管理、論理削除、マルチ認証機能を削除し、元のスキーマ構成に戻します。
+    [EN] Revert multi-auth, soft-delete, and versioning enhancements, restoring the legacy schema.
+    """
+    # [JP] トリガーおよび関連関数の削除
+    # [EN] Drop triggers and associated helper functions
     op.execute("DROP TRIGGER IF EXISTS trg_prompt_versions_record ON prompts")
     op.execute("DROP TRIGGER IF EXISTS trg_task_versions_record ON task_with_examples")
     op.execute("DROP TRIGGER IF EXISTS trg_user_auth_providers_updated_at ON user_auth_providers")
     op.execute("DROP TRIGGER IF EXISTS trg_prompts_updated_at ON prompts")
     op.execute("DROP FUNCTION IF EXISTS record_prompt_version()")
     op.execute("DROP FUNCTION IF EXISTS record_task_version()")
+    # [JP] users テーブルに旧認証用カラムを復元
+    # [EN] Re-add legacy authentication columns to the users table
     op.execute(
         """
         ALTER TABLE users
@@ -522,6 +574,8 @@ def downgrade() -> None:
             ADD COLUMN IF NOT EXISTS provider_email VARCHAR(255) NULL
         """
     )
+    # [JP] user_auth_providers の最新設定を利用して、ユーザーごとに1つの認証プロバイダ情報を users に書き戻す
+    # [EN] Re-populate legacy columns in users table from user_auth_providers (ranking to pick one per user)
     op.execute(
         """
         WITH ranked_providers AS (
@@ -545,6 +599,8 @@ def downgrade() -> None:
            AND rp.provider_rank = 1
         """
     )
+    # [JP] users テーブルのユニークインデックスを復元
+    # [EN] Restore unique index on users table
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_users_provider_identity
@@ -552,14 +608,20 @@ def downgrade() -> None:
             WHERE provider_user_id IS NOT NULL
         """
     )
+    # [JP] 移行した各種バージョン管理用テーブル、および認証プロバイダー用テーブルの削除
+    # [EN] Drop new authentication provider and version history tables
     op.execute("DROP INDEX IF EXISTS uq_user_auth_providers_provider_identity")
     op.execute("DROP TABLE IF EXISTS user_auth_providers")
     op.execute("DROP TABLE IF EXISTS prompt_versions")
     op.execute("DROP TABLE IF EXISTS task_versions")
+    # [JP] 論理削除に対応していたアクティブインデックスの削除
+    # [EN] Drop soft-delete-aware indexes
     op.execute("DROP INDEX IF EXISTS idx_prompts_active_user_created_at")
     op.execute("DROP INDEX IF EXISTS idx_prompts_active_public_created_at")
     op.execute("DROP INDEX IF EXISTS idx_task_with_examples_active_user_name")
     op.execute("DROP INDEX IF EXISTS idx_task_with_examples_active_user_order")
+    # [JP] 論理削除および更新日付カラムの削除
+    # [EN] Drop soft-delete (deleted_at) and updated_at columns
     op.execute(
         """
         ALTER TABLE task_with_examples

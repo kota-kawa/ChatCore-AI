@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Backfill prompt bookmarks by matching active tasks against public prompts
+    # アクティブなタスクと公開プロンプトをマッチングし、プロンプトのブックマークをバックフィルする
     op.execute(
         """
         WITH matched_task_bookmarks AS (
@@ -48,4 +50,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Backfill data migrations are generally not reverted, so downgrade is a no-op
+    # データ移行のバックフィルは通常元に戻さないため、downgrade は何もしない
     pass

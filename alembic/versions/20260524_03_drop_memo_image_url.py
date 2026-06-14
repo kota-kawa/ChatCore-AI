@@ -16,8 +16,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Drop 'image_url' column from 'memo_entries' table
+    # memo_entries テーブルから 'image_url' カラムを削除する
     op.execute("ALTER TABLE memo_entries DROP COLUMN IF EXISTS image_url")
 
 
 def downgrade() -> None:
+    # Add back 'image_url' column to 'memo_entries' table with a default NULL
+    # memo_entries テーブルに 'image_url' カラムをデフォルト NULL で再度追加する
     op.execute("ALTER TABLE memo_entries ADD COLUMN IF NOT EXISTS image_url VARCHAR(255) NULL")

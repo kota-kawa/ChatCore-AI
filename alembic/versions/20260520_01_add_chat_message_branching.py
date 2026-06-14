@@ -24,6 +24,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 1. Add parent_id and active_child_id columns to chat_history to enable a tree structure for message branching
+    # 1. メッセージの分岐（ツリー構造）を可能にするため、chat_history テーブルに parent_id と active_child_id カラムを追加する
     op.execute(
         """
         ALTER TABLE chat_history
@@ -31,6 +33,8 @@ def upgrade() -> None:
             ADD COLUMN IF NOT EXISTS active_child_id INTEGER
         """
     )
+    # 2. Add active_root_id column to chat_rooms to track the active starting message of the room
+    # 2. チャットルームのアクティブな最初のメッセージを追跡するため、chat_rooms テーブルに active_root_id カラムを追加する
     op.execute(
         """
         ALTER TABLE chat_rooms
@@ -38,7 +42,8 @@ def upgrade() -> None:
         """
     )
 
-    # Self-referential FK so deleting a parent cascades to its whole subtree.
+    # 3. Add a self-referential foreign key constraint to chat_history so that deleting a message cascades to its sub-branches
+    # 3. メッセージが削除された際にそのサブブランチも連鎖的に削除されるよう、chat_history に自己参照の外部キー制約を追加する
     op.execute(
         """
         DO $$
@@ -58,6 +63,8 @@ def upgrade() -> None:
         """
     )
 
+    # 4. Create an index on (chat_room_id, parent_id) to optimize tree traversal and branch lookup
+    # 4. ツリーの探索やブランチの検索を最適化するため、(chat_room_id, parent_id) に対するインデックスを作成する
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_chat_history_room_parent
@@ -65,8 +72,8 @@ def upgrade() -> None:
         """
     )
 
-    # Backfill existing flat history into a single linear branch per room.
-    # parent_id = previous message id (by id order), active_child_id = next message id.
+    # 5. Backfill existing flat history into a single linear branch per room using window functions (LAG and LEAD)
+    # 5. ウィンドウ関数 (LAG と LEAD) を使用して、既存のフラットな履歴をルームごとの単一の線形ブランチとしてバックフィルする
     op.execute(
         """
         WITH ordered AS (
@@ -85,6 +92,8 @@ def upgrade() -> None:
         """
     )
 
+    # 6. Set active_root_id to the earliest message ID for existing chat rooms
+    # 6. 既存のチャットルームに対して、最も古いメッセージIDを active_root_id に設定する
     op.execute(
         """
         UPDATE chat_rooms cr
@@ -101,19 +110,27 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 1. Remove active_root_id column from chat_rooms
+    # 1. chat_rooms テーブルから active_root_id カラムを削除する
     op.execute(
         """
         ALTER TABLE chat_rooms
             DROP COLUMN IF EXISTS active_root_id
         """
     )
+    # 2. Drop the composite index for message relationships
+    # 2. メッセージ関係の複合インデックスを削除する
     op.execute("DROP INDEX IF EXISTS idx_chat_history_room_parent")
+    # 3. Drop the self-referential foreign key constraint fk_chat_history_parent from chat_history
+    # 3. chat_history から自己参照外部キー制約 fk_chat_history_parent を削除する
     op.execute(
         """
         ALTER TABLE chat_history
             DROP CONSTRAINT IF EXISTS fk_chat_history_parent
         """
     )
+    # 4. Drop active_child_id and parent_id columns from chat_history
+    # 4. chat_history テーブルから active_child_id と parent_id カラムを削除する
     op.execute(
         """
         ALTER TABLE chat_history

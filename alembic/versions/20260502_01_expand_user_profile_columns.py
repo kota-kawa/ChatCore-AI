@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Change avatar_url and username columns in users table from VARCHAR(255) to TEXT.
+    # usersテーブルのavatar_urlとusername列をVARCHAR(255)からTEXTに変更します。
     op.execute(
         """
         ALTER TABLE users
@@ -26,6 +28,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Revert avatar_url and username columns in users table back to VARCHAR(255).
+    # usersテーブルのavatar_urlとusername列をVARCHAR(255)に戻します。
     op.execute(
         """
         ALTER TABLE users

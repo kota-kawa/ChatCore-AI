@@ -18,15 +18,27 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _existing_tables() -> set[str]:
+    """
+    [JP] 現在データベース内に存在するテーブル名のセットを返します。
+    [EN] Return a set of table names existing in the database.
+    """
     inspector = sa.inspect(op.get_bind())
     return set(inspector.get_table_names())
 
 
 def upgrade() -> None:
+    """
+    [JP] prompt_list_entries を正規化し、prompts テーブルのIDのみを参照するようにスキーマとデータを移行します。
+    [EN] Normalize prompt_list_entries to only reference the prompts table, migrating schema and data.
+    """
     tables = _existing_tables()
+    # [JP] 必要なテーブルが存在しない場合は何も行わない
+    # [EN] Do nothing if required tables do not exist
     if "prompt_list_entries" not in tables or "prompts" not in tables or "users" not in tables:
         return
 
+    # [JP] 正規化されたスキーマを持つ一時テーブル (prompt_list_entries_v2) を作成
+    # [EN] Create temporary table (prompt_list_entries_v2) with the normalized schema
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_list_entries_v2 (
@@ -47,12 +59,16 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] インデックスの作成
+    # [EN] Create index
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_list_v2_user_created_at
             ON prompt_list_entries_v2 (user_id, created_at DESC, id DESC)
         """
     )
+    # [JP] 既存の prompt_list_entries データからタイトル/内容などの一致する prompts の ID を紐づけて移行
+    # [EN] Migrate existing prompt_list_entries data, resolving matching prompts by title/content/etc.
     op.execute(
         """
         WITH resolved_entries AS (
@@ -85,6 +101,8 @@ def upgrade() -> None:
         ORDER BY created_at, id
         """
     )
+    # [JP] 旧テーブルの削除と新テーブルのテーブル名・制約名の変更
+    # [EN] Drop old table and rename the new table, constraints, and indexes
     op.execute("DROP TABLE IF EXISTS prompt_list_entries")
     op.execute("ALTER TABLE prompt_list_entries_v2 RENAME TO prompt_list_entries")
     op.execute(
@@ -114,10 +132,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] prompt_list_entries の正規化を解除し、元の内容非正規化スキーマとデータに戻します。
+    [EN] Denormalize prompt_list_entries, reverting to the legacy schema with content columns.
+    """
     tables = _existing_tables()
+    # [JP] 必要なテーブルが存在しない場合は何も行わない
+    # [EN] Do nothing if required tables do not exist
     if "prompt_list_entries" not in tables or "prompts" not in tables or "users" not in tables:
         return
 
+    # [JP] 非正規化スキーマを持つレガシーテーブルを作成
+    # [EN] Create the legacy table with denormalized content columns
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_list_entries_legacy (
@@ -143,6 +169,8 @@ def downgrade() -> None:
         )
         """
     )
+    # [JP] prompts テーブルから内容を取得してデータをレガシーテーブルへ復元
+    # [EN] Populate legacy table by fetching content fields from the prompts table
     op.execute(
         """
         INSERT INTO prompt_list_entries_legacy
@@ -160,8 +188,12 @@ def downgrade() -> None:
         ORDER BY ple.created_at, ple.id
         """
     )
+    # [JP] 現行のテーブルを削除し、レガシーテーブルを元の名前に変更
+    # [EN] Drop current table and rename the legacy table
     op.execute("DROP TABLE IF EXISTS prompt_list_entries")
     op.execute("ALTER TABLE prompt_list_entries_legacy RENAME TO prompt_list_entries")
+    # [JP] インデックスの再作成
+    # [EN] Recreate indexes
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_list_user_title
@@ -174,6 +206,8 @@ def downgrade() -> None:
             ON prompt_list_entries (user_id, created_at DESC, id DESC)
         """
     )
+    # [JP] prompt_id が NULL の場合の一意制約部分インデックスを再作成
+    # [EN] Recreate unique partial index for when prompt_id is NULL
     op.execute(
         """
         DO $$

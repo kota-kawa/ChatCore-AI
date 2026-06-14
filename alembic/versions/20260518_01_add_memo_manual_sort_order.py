@@ -16,12 +16,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 1. Add the 'sort_order' column to the 'memo_entries' table
+    # 1. memo_entries テーブルに 'sort_order' カラムを追加する
     op.execute(
         """
         ALTER TABLE memo_entries
             ADD COLUMN IF NOT EXISTS sort_order NUMERIC(20, 6)
         """
     )
+    # 2. Populate the 'sort_order' using the unix epoch of the 'created_at' timestamp
+    # 2. 既存のデータの 'sort_order' に 'created_at' の Unix エポック値を設定する
     op.execute(
         """
         UPDATE memo_entries
@@ -29,6 +33,8 @@ def upgrade() -> None:
         WHERE sort_order IS NULL
         """
     )
+    # 3. Create a composite index to optimize memo sorting and filtering
+    # 3. メモの並び替えとフィルタリングを最適化するために複合インデックスを作成する
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_memo_entries_user_archived_pinned_sort
@@ -38,7 +44,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 1. Drop the composite index for memo sorting
+    # 1. メモの並び替え用複合インデックスを削除する
     op.execute("DROP INDEX IF EXISTS idx_memo_entries_user_archived_pinned_sort")
+    # 2. Drop the 'sort_order' column from the 'memo_entries' table
+    # 2. memo_entries テーブルから 'sort_order' カラムを削除する
     op.execute(
         """
         ALTER TABLE memo_entries

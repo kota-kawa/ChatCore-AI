@@ -23,21 +23,29 @@ def _existing_tables() -> set[str]:
 
 
 def upgrade() -> None:
+    # Check if the prompts table exists.
+    # promptsテーブルが存在することを確認します。
     if "prompts" not in _existing_tables():
         return
 
+    # Add skill_markdown column to prompts table.
+    # promptsテーブルにskill_markdown列を追加します。
     op.execute(
         """
         ALTER TABLE prompts
         ADD COLUMN IF NOT EXISTS skill_markdown TEXT NOT NULL DEFAULT ''
         """
     )
+    # Add skill_python_script column to prompts table.
+    # promptsテーブルにskill_python_script列を追加します。
     op.execute(
         """
         ALTER TABLE prompts
         ADD COLUMN IF NOT EXISTS skill_python_script TEXT NOT NULL DEFAULT ''
         """
     )
+    # Ensure existing rows have non-null default values.
+    # 既存の行に対して非nullのデフォルト値が設定されていることを保証します。
     op.execute(
         """
         UPDATE prompts
@@ -48,15 +56,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Check if the prompts table exists.
+    # promptsテーブルが存在することを確認します。
     if "prompts" not in _existing_tables():
         return
 
+    # Drop skill_python_script column from prompts table.
+    # promptsテーブルからskill_python_script列を削除します。
     op.execute(
         """
         ALTER TABLE prompts
         DROP COLUMN IF EXISTS skill_python_script
         """
     )
+    # Drop skill_markdown column from prompts table.
+    # promptsテーブルからskill_markdown列を削除します。
     op.execute(
         """
         ALTER TABLE prompts
