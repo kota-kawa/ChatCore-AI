@@ -11,7 +11,11 @@ import {
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 
+// チャット画面の中央ペイン全体（サイドバー・メッセージリスト・入力欄）を管理するコンポーネント。
+// Component managing the entire chat center pane: sidebar, message list, and input area.
 function ChatMainSectionComponent() {
+  // UI 状態（ページビュー、モデル選択メニュー、セットアップフォーム表示など）を Context から取得する。
+  // Retrieve UI state (page view, model selection menu, setup form visibility) from context.
   const {
     pageViewState,
     isChatVisible,
@@ -28,6 +32,8 @@ function ChatMainSectionComponent() {
 
   const { launchingTaskName, tasks } = useHomePageTaskContext();
 
+  // チャット操作に関するすべての状態とハンドラーを Context から取得する。
+  // Obtain all chat operation state and handlers from context.
   const {
     hasCurrentRoom,
     sidebarOpen,
@@ -71,27 +77,41 @@ function ChatMainSectionComponent() {
     handleSwitchBranch,
   } = useHomePageChatContext();
 
+  // DOM 要素への直接参照。入力欄のフォーカス・高さ調整、ファイル選択ダイアログ、
+  // サイドバースクロールセンチネルなどで使用する。
+  // Direct DOM refs used for: textarea focus/resize, file picker, sidebar scroll sentinel.
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarRef = useRef<HTMLDivElement | null>(null);
   const chatRoomsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // 未保存チャット・起動中は共有できない。これらの条件をまとめて UI の有効/無効に使う。
+  // Sharing is unavailable for temporary rooms or while chat is launching.
   const canShareCurrentRoom = hasCurrentRoom && !isChatLaunching && currentRoomMode !== "temporary";
   const selectedRoomCount = selectedRoomIds.size;
   const hasSelectedRooms = selectedRoomCount > 0;
+  // 入力欄が空・文字数超過・起動中・ルーム未選択の場合は送信を禁止する。
+  // Block sending when input is empty, over limit, launching, or no room is active.
   const canSendChatMessage =
     hasCurrentRoom &&
     !isChatLaunching &&
     chatInput.trim().length > 0 &&
     chatInput.length <= MAX_CHAT_MESSAGE_LENGTH;
 
+  // 入力テキストに含まれる URL を検出し、AI が参照するページとしてチップ表示する。
+  // Detect URLs in the chat input to show as "AI will read" chips before sending.
   const detectedUrls = useMemo(() => extractUrlsFromText(chatInput), [chatInput]);
 
+  // 添付エラー通知は動的インポートで toast モジュールを遅延読み込みする。
+  // Lazy-import the toast module to show attachment error notifications.
   const notifyAttachmentError = useCallback((message: string) => {
     import("../../scripts/core/toast").then(({ showToast }) => {
       showToast(message, { variant: "error" });
     });
   }, []);
 
+  // ドラッグ＆ドロップによるファイル添付機能を提供するフック。
+  // Hook providing drag-and-drop file attachment capabilities for the input area.
   const {
     attachSelectedFiles,
     isAttachmentDropActive,
@@ -104,6 +124,9 @@ function ChatMainSectionComponent() {
     notifyAttachmentError,
   });
 
+  // ファイル選択ダイアログ経由のファイル追加処理。選択後に input の値をリセットして
+  // 同じファイルを再度選択できるようにする。
+  // Handle files chosen via the file picker dialog; reset input value to allow re-selection.
   const handleFileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
@@ -118,6 +141,8 @@ function ChatMainSectionComponent() {
     [attachSelectedFiles],
   );
 
+  // 添付ファイルチップの削除ボタンで特定ファイルを除去する。
+  // Remove a specific attached file when its chip remove button is clicked.
   const handleRemoveAttachedFile = useCallback(
     (fileId: string) => {
       setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
@@ -125,6 +150,8 @@ function ChatMainSectionComponent() {
     [setAttachedFiles],
   );
 
+  // チャットルームカードのキーボード操作（Enter/Space）で選択またはルーム切替を行う。
+  // Handle keyboard activation (Enter/Space) on room cards for selection or navigation.
   const handleRoomCardKeyDown = (
     event: React.KeyboardEvent<HTMLDivElement>,
     roomId: string,
@@ -139,6 +166,8 @@ function ChatMainSectionComponent() {
     switchChatRoom(roomId, roomMode);
   };
 
+  // サイドバーをスクロールしたとき、下端に近づいたら追加のチャットルームを読み込む。
+  // Load more chat rooms when the sidebar is scrolled near the bottom (within 160px).
   const handleSidebarScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
       if (!chatRoomsHasMore || isLoadingMoreChatRooms) return;
@@ -150,6 +179,10 @@ function ChatMainSectionComponent() {
     [chatRoomsHasMore, isLoadingMoreChatRooms, loadMoreChatRooms],
   );
 
+  // IntersectionObserver でセンチネル要素の可視性を監視し、サイドバー末尾に
+  // 達したときに追加チャットルームを自動読み込みする。
+  // Use IntersectionObserver on the sentinel element to auto-load more rooms
+  // when the bottom of the sidebar list scrolls into view.
   useEffect(() => {
     const sidebar = sidebarRef.current;
     const sentinel = chatRoomsLoadMoreRef.current;
@@ -173,6 +206,8 @@ function ChatMainSectionComponent() {
     };
   }, [chatRooms.length, chatRoomsHasMore, loadMoreChatRooms]);
 
+  // テキストエリアの高さを内容量に合わせて自動調整する（最大 6 行分）。
+  // Auto-resize the chat textarea to fit its content, capped at 6 lines.
   const adjustChatInputHeight = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
 
@@ -187,16 +222,21 @@ function ChatMainSectionComponent() {
     element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
   };
 
+  // chatInput が変わるたびに入力欄の高さを再計算する。
+  // Recalculate textarea height whenever the chat input value changes.
   useEffect(() => {
     adjustChatInputHeight(chatInputRef.current);
   }, [chatInput]);
 
   // モバイルでテキスト入力欄にフォーカスした際、最新メッセージを画面下端に貼り付け、
   // ヘッダー・入力欄が常に見える状態を保証する。
+  // On mobile, re-anchor the message list to the bottom when the textarea is focused
+  // so the input area stays visible after the virtual keyboard resizes the viewport.
   const handleChatInputFocus = () => {
     const list = chatMessagesRef.current;
     if (!list) return;
     // visualViewport.resize が走るまでわずかに待ってからスクロール位置を補正する。
+    // Wait briefly for visualViewport resize to complete before correcting scroll position.
     window.setTimeout(() => {
       const node = chatMessagesRef.current;
       if (!node) return;
@@ -211,6 +251,8 @@ function ChatMainSectionComponent() {
       data-launching={isChatLaunching ? "true" : "false"}
       aria-hidden={isChatVisible ? "false" : "true"}
     >
+      {/* チャットヘッダー：タスク選択への戻るボタン、モデル選択、共有ボタンを含む */}
+      {/* Chat header: back-to-setup button, model selector, and share button */}
       <div className="chat-header">
         <div className="header-left">
           <button
@@ -229,6 +271,8 @@ function ChatMainSectionComponent() {
           )}
         </div>
         <div className="header-right">
+          {/* AI モデルをその場で切り替えられるドロップダウンメニュー */}
+          {/* Dropdown menu to switch the AI model without leaving the chat */}
           <div
             ref={chatHeaderModelSelectRef}
             className={`chat-header-model-select ${chatHeaderModelMenuOpen ? "is-open" : ""}`.trim()}
@@ -265,6 +309,8 @@ function ChatMainSectionComponent() {
             </div>
           </div>
 
+          {/* 未保存チャットや起動中は共有できないため、状態に応じてツールチップも変える */}
+          {/* Share button disabled for temporary rooms or during launch; tooltip reflects reason */}
           <button
             id="share-chat-btn"
             className={`icon-button chat-share-btn ${canShareCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
@@ -283,6 +329,8 @@ function ChatMainSectionComponent() {
       </div>
 
       <div className={`chat-main ${sidebarOpen ? "chat-main--sidebar-open" : "chat-main--sidebar-closed"}`.trim()}>
+        {/* チャットルーム一覧サイドバー。選択モード時は一括削除バーを表示する。 */}
+        {/* Chat room list sidebar. Shows bulk-delete bar when room selection mode is active. */}
         <div
           ref={sidebarRef}
           className={`sidebar ${sidebarOpen ? "open" : ""}`.trim()}
@@ -291,6 +339,8 @@ function ChatMainSectionComponent() {
           onScroll={handleSidebarScroll}
         >
           {isRoomSelectionMode ? (
+            // 複数選択モード中は選択件数と一括削除ボタンを表示する。
+            // In selection mode, show the selection count and bulk-delete controls.
             <div className="room-selection-bar" aria-live="polite">
               <span className="room-selection-bar__count">{selectedRoomCount}件選択中</span>
               <button
@@ -330,6 +380,8 @@ function ChatMainSectionComponent() {
           <div id="chat-room-list" aria-busy={isLoadingMoreChatRooms ? "true" : "false"}>
             {chatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
+              // タイトルが空の場合は「新規チャット」をフォールバック表示する。
+              // Fall back to "新規チャット" when the room has no title yet.
               const roomTitle = room.title || "新規チャット";
               const roomMenuId = `room-actions-menu-${room.id}`;
               const roomSelected = selectedRoomIds.has(room.id);
@@ -338,6 +390,8 @@ function ChatMainSectionComponent() {
                 <div
                   key={room.id}
                   className={`chat-room-card ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""}`.trim()}
+                  // 選択モード時は checkbox、通常時は button として扱い、アクセシビリティを確保する。
+                  // Use checkbox role in selection mode, button role otherwise for accessibility.
                   role={isRoomSelectionMode ? "checkbox" : "button"}
                   tabIndex={0}
                   aria-current={currentRoomId === room.id ? "page" : undefined}
@@ -369,6 +423,8 @@ function ChatMainSectionComponent() {
                   </div>
 
                   {!isRoomSelectionMode && (
+                    // ルームカード右端の縦三点メニュー。名前変更・複数選択・削除を提供する。
+                    // Three-dot context menu on each room card for rename, multi-select, and delete.
                     <div className="chat-room-card-actions">
                       <button
                         type="button"
@@ -378,6 +434,8 @@ function ChatMainSectionComponent() {
                         aria-expanded={roomMenuOpen ? "true" : "false"}
                         aria-controls={roomMenuId}
                         onClick={(event) => {
+                          // カードのクリックイベントへの伝播を止めてルーム切替を防ぐ。
+                          // Stop propagation to prevent triggering room switch on card click.
                           event.stopPropagation();
                           setOpenRoomActionsFor((previous) => (previous === room.id ? null : room.id));
                         }}
@@ -439,11 +497,15 @@ function ChatMainSectionComponent() {
                 <InlineLoading label="読み込み中" />
               </div>
             )}
+            {/* IntersectionObserver がこのセンチネルを監視し、末尾到達時に追加読み込みを発火する。 */}
+            {/* IntersectionObserver watches this sentinel to trigger more-room loading on scroll. */}
             <div ref={chatRoomsLoadMoreRef} className="chat-room-list__sentinel" aria-hidden="true" />
           </div>
         </div>
 
         <div className="chat-area">
+          {/* サイドバーの開閉トグルボタン。aria-expanded でアクセシブルに状態を伝える。 */}
+          {/* Sidebar toggle button; aria-expanded communicates open/closed state accessibly. */}
           <button
             id="sidebar-toggle"
             className="icon-button sidebar-toggle chat-sidebar-toggle"
@@ -460,6 +522,8 @@ function ChatMainSectionComponent() {
             <i className={`bi ${sidebarOpen ? "bi-x-lg" : "bi-layout-sidebar-inset"}`}></i>
           </button>
 
+          {/* chatMessageListResetKey が変わるとリストをアンマウント/再マウントして初期スクロール位置をリセットする。 */}
+          {/* Changing chatMessageListResetKey unmounts and remounts the list to reset scroll position. */}
           <ChatMessageList
             key={`chat-message-list:${chatMessageListResetKey}`}
             chatMessagesRef={chatMessagesRef}
@@ -479,12 +543,16 @@ function ChatMainSectionComponent() {
             tasks={tasks}
           />
 
+          {/* 入力コンテナ：ドロップゾーン・URL チップ・添付ファイルチップ・テキストエリア・送信ボタンを含む */}
+          {/* Input container: dropzone overlay, URL chips, attachment chips, textarea, send button */}
           <div
             className={`input-container chat-attachment-dropzone supports-[backdrop-filter]:backdrop-blur-xl ${
               isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
             }`.trim()}
             {...attachmentDropzoneProps}
           >
+            {/* ドラッグ中に全面に表示されるドロップ受付オーバーレイ。 */}
+            {/* Full-area overlay shown while dragging files over the input zone. */}
             <div className="chat-attachment-drop-overlay" aria-hidden="true">
               <span className="chat-attachment-drop-overlay__icon">
                 <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
@@ -493,6 +561,8 @@ function ChatMainSectionComponent() {
               <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
             </div>
             {detectedUrls.length > 0 && (
+              // 入力テキストから検出した URL を送信前にチップとして表示し、AI が読み取ることを知らせる。
+              // Show chips for detected URLs so users know the AI will fetch them on send.
               <div className="chat-detected-urls" aria-label="送信時にAIが読み取るURL">
                 {detectedUrls.map((url) => (
                   <div key={url} className="chat-detected-url-chip" title={url}>
@@ -504,6 +574,8 @@ function ChatMainSectionComponent() {
               </div>
             )}
             {attachedFiles.length > 0 && (
+              // 添付済みファイルをチップとして表示し、ファイル名・サイズ・削除ボタンを提供する。
+              // Render attached files as chips showing name, size, and a remove button.
               <div className="chat-attached-files">
                 {attachedFiles.map((file) => (
                   <div key={file.id} className="chat-attached-file-chip">
@@ -512,6 +584,8 @@ function ChatMainSectionComponent() {
                       aria-hidden="true"
                     ></i>
                     <span className="chat-attached-file-chip__name" title={file.name}>{file.name}</span>
+                    {/* ファイルサイズを B / KB / MB で単位自動変換して表示する。 */}
+                    {/* Display file size with automatic unit conversion (B / KB / MB). */}
                     <span className="chat-attached-file-chip__size">
                       {file.size < 1024
                         ? `${file.size}B`
@@ -532,6 +606,8 @@ function ChatMainSectionComponent() {
               </div>
             )}
             <div className="input-wrapper">
+              {/* 実際のファイル選択 input は非表示にし、クリップアイコンボタン経由で開く。 */}
+              {/* Hidden file input triggered programmatically by the paperclip button. */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -570,6 +646,8 @@ function ChatMainSectionComponent() {
                 onFocus={handleChatInputFocus}
                 onKeyDown={handleChatInputKeyDown}
               ></textarea>
+              {/* 生成中は停止ボタン、それ以外は送信ボタンとして機能する。 */}
+              {/* Acts as a stop button while generating, and a send button otherwise. */}
               <button
                 type="button"
                 id="send-btn"
@@ -588,6 +666,8 @@ function ChatMainSectionComponent() {
               </button>
             </div>
             {chatInput.length > 0 && (
+              // 文字数カウンターを表示し、上限超過時は赤色でエラー状態を知らせる。
+              // Show character counter; turns red to warn when the limit is exceeded.
               <div className={`chat-input-counter${chatInput.length > MAX_CHAT_MESSAGE_LENGTH ? " chat-input-counter--over" : ""}`}>
                 {chatInput.length > MAX_CHAT_MESSAGE_LENGTH
                   ? `文字数制限を超えています（${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字）`
@@ -603,5 +683,7 @@ function ChatMainSectionComponent() {
   );
 }
 
+// 不要な再レンダリングを防ぐため memo でラップしてエクスポートする。
+// Wrap in memo to prevent re-renders when parent re-renders with unchanged props.
 export const ChatMainSection = memo(ChatMainSectionComponent);
 ChatMainSection.displayName = "ChatMainSection";
