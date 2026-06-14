@@ -13,6 +13,8 @@ import { normalizePromptType } from "../../scripts/prompt_share/formatters";
 import type { PromptType } from "../../scripts/prompt_share/types";
 import type { PromptPostStatus } from "./prompt_share_page_types";
 
+// 投稿モーダルが親コンポーネントから受け取るすべての状態とハンドラを定義する
+// Defines all state and handlers passed down from the parent into the composer modal
 type PromptShareComposerModalProps = {
   isOpen: boolean;
   isPostSubmitting: boolean;
@@ -58,12 +60,16 @@ type PromptShareComposerModalProps = {
   onClearReferenceImage: () => void;
 };
 
+// カスタムセレクトの各選択肢を表す型
+// Represents a single option in the custom select dropdown
 type PromptComposerSelectOption = {
   value: string;
   label: string;
   group?: string;
 };
 
+// AIモデルをベンダーでグループ化した選択肢の定義
+// AI model options grouped by vendor for visual separation in the dropdown
 const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOption[] }[] = [
   {
     label: "OpenAI",
@@ -120,6 +126,8 @@ const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOpti
   }
 ];
 
+// フラットなオプションリストを用意し、グループ情報を各要素に付与する
+// Flatten grouped options into a single list while preserving group metadata for rendering
 const AI_MODEL_OPTIONS: PromptComposerSelectOption[] = [
   { value: "", label: "未設定" },
   ...AI_MODEL_OPTION_GROUPS.flatMap((group) =>
@@ -128,6 +136,8 @@ const AI_MODEL_OPTIONS: PromptComposerSelectOption[] = [
   { value: "その他", label: "その他" }
 ];
 
+// ネイティブ<select>とカスタムUIを同期させ、キーボード操作も担うコンポーネント
+// Renders a custom accessible dropdown that stays in sync with a hidden native <select>
 function PromptComposerSelect({
   selectId,
   nativeRef,
@@ -151,6 +161,8 @@ function PromptComposerSelect({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // 各選択肢ボタンへのrefを配列で管理し、矢印キーフォーカス移動に使う
+  // Holds refs to each option button so arrow-key navigation can call .focus() directly
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [isOpen, setIsOpen] = useState(false);
   const selectedIndex = Math.max(
@@ -161,10 +173,14 @@ function PromptComposerSelect({
   const selectedLabel = options[selectedIndex]?.label ?? value;
   const listboxId = `${selectId}-menu`;
 
+  // 外部からvalueが変わったとき、activeIndexを新しい選択位置に追従させる
+  // Keep activeIndex in sync when the selected value changes externally
   useEffect(() => {
     setActiveIndex(selectedIndex);
   }, [selectedIndex]);
 
+  // メニューが開いている間だけpointerdownを監視し、外側クリックで閉じる
+  // Listen for outside pointer events only while the menu is open to close it on click-away
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -182,6 +198,8 @@ function PromptComposerSelect({
     };
   }, [isOpen]);
 
+  // activeIndexが変わったとき、対応するオプションボタンにフォーカスを移す
+  // Shift DOM focus to the newly active option after arrow-key navigation
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -189,6 +207,8 @@ function PromptComposerSelect({
     optionRefs.current[activeIndex]?.focus();
   }, [activeIndex, isOpen]);
 
+  // 選択を確定し、親に通知してメニューを閉じる
+  // Commit a selection, notify the parent, and return focus to the trigger
   const selectOption = (index: number) => {
     const option = options[index];
     if (!option) {
@@ -200,11 +220,15 @@ function PromptComposerSelect({
     triggerRef.current?.focus();
   };
 
+  // 指定インデックスでメニューを開き、範囲外のインデックスをクランプする
+  // Open the menu at the given index, clamped to valid range
   const openAt = (index: number) => {
     setActiveIndex(Math.min(Math.max(index, 0), options.length - 1));
     setIsOpen(true);
   };
 
+  // トリガーボタンのキーボード操作：矢印でメニューを開き、Enter/Spaceで選択を開く
+  // Trigger keyboard handler: arrows open the menu; Enter/Space opens at selected index
   const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -222,6 +246,8 @@ function PromptComposerSelect({
     }
   };
 
+  // オプション内のキー操作：Home/Endで端へ、Escapeでメニューを閉じる
+  // Option keyboard handler: Home/End jump to edges; Escape closes and returns focus
   const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -255,10 +281,14 @@ function PromptComposerSelect({
     }
   };
 
+  // グループ付きレンダリング時にフラットなoptionIndexを手動でインクリメントする
+  // Manual counter for flat option index when rendering grouped options
   let optionIndex = 0;
 
   return (
     <div ref={rootRef} className={`prompt-composer-select${isOpen ? " is-open" : ""}`.trim()}>
+      {/* ネイティブselectはフォームバリデーションとスクリーンリーダーのためのフォールバック */}
+      {/* Native select acts as fallback for form validation and screen reader compatibility */}
       <select
         id={selectId}
         className="prompt-composer-select-native"
@@ -314,6 +344,8 @@ function PromptComposerSelect({
       <div className="prompt-composer-select__menu" id={listboxId} role="listbox" aria-label={menuLabel}>
         {groupedOptions ? (
           <>
+            {/* 「未設定」はグループ外の先頭に独立して配置する */}
+            {/* Render the "unset" option separately before the grouped options */}
             <PromptComposerSelectOptionButton
               index={optionIndex++}
               option={options[0]}
@@ -340,6 +372,8 @@ function PromptComposerSelect({
                 ))}
               </div>
             ))}
+            {/* 「その他」はグループ外の末尾に独立して配置する */}
+            {/* Render "other" as a standalone option after all groups */}
             <PromptComposerSelectOptionButton
               index={optionIndex++}
               option={options[options.length - 1]}
@@ -369,6 +403,8 @@ function PromptComposerSelect({
   );
 }
 
+// カスタムセレクトの各オプションをボタンとして描画し、ARIA属性でlistboxの役割を満たす
+// Renders each select option as a button, satisfying listbox ARIA semantics
 function PromptComposerSelectOptionButton({
   index,
   option,
@@ -397,6 +433,8 @@ function PromptComposerSelectOptionButton({
       className={`prompt-composer-select__option${selected ? " is-selected" : ""}`.trim()}
       role="option"
       aria-selected={selected ? "true" : "false"}
+      // activeIndexと一致するときだけtabIndex=0にし、ローバーtabindexパターンを実現する
+      // Only the active option is tab-reachable, implementing the roving tabindex pattern
       tabIndex={activeIndex === index ? 0 : -1}
       onClick={() => {
         onSelect(index);
@@ -411,6 +449,8 @@ function PromptComposerSelectOptionButton({
   );
 }
 
+// プロンプト投稿フォーム全体を内包するモーダルコンポーネント
+// Main composer modal that wraps the full prompt submission form
 export function PromptShareComposerModal({
   isOpen,
   isPostSubmitting,
@@ -455,11 +495,15 @@ export function PromptShareComposerModal({
   onReferenceImageChange,
   onClearReferenceImage
 }: PromptShareComposerModalProps) {
+  // カテゴリ文字列をセレクト用のオブジェクト配列に変換する
+  // Convert raw category strings into option objects for the custom select component
   const categorySelectOptions = categoryOptions.map((category) => ({
     value: category,
     label: category
   }));
 
+  // SKILLの説明パネルの開閉状態を管理し、投稿タイプが切り替わると自動で閉じる
+  // Manage the SKILL info panel toggle; reset it whenever the prompt type changes
   const [showSkillInfo, setShowSkillInfo] = useState(false);
   useEffect(() => {
     setShowSkillInfo(false);
@@ -493,6 +537,8 @@ export function PromptShareComposerModal({
           </div>
 
           <form className="post-form" id="postForm" onSubmit={onSubmit}>
+            {/* --- 基本情報セクション: タイプ・タイトル・カテゴリを設定する --- */}
+            {/* --- Basics section: set prompt type, title, and category --- */}
             <section className="composer-section composer-section--primary" aria-labelledby="composerBasicsTitle">
               <div className="composer-section__header">
                 <div>
@@ -503,6 +549,8 @@ export function PromptShareComposerModal({
 
               <div className="form-group">
                 <label>投稿タイプ</label>
+                {/* ラジオグループでタイプを排他選択し、以降のフォームフィールドを切り替える */}
+                {/* Radio group for exclusive type selection; drives conditional field visibility below */}
                 <div className="prompt-type-toggle" role="radiogroup" aria-label="投稿タイプを選択">
                   <label className={`prompt-type-option${promptType === "text" ? " prompt-type-option--active" : ""}`}>
                     <input
@@ -567,6 +615,8 @@ export function PromptShareComposerModal({
                 <div className="form-group">
                   <label htmlFor="prompt-title">タイトル</label>
                   <span className="form-group__hint">用途が伝わる短い名前にすると保存後に探しやすくなります。</span>
+                  {/* 入力のたびにバリデーションエラーをリアルタイムでクリアする */}
+                  {/* Clear validation feedback in real-time as the user types */}
                   <input
                     type="text"
                     id="prompt-title"
@@ -597,6 +647,8 @@ export function PromptShareComposerModal({
               </div>
             </section>
 
+            {/* --- 本文セクション: SKILLタイプのときはフィールドを切り替える --- */}
+            {/* --- Content section: field visibility switches based on prompt type --- */}
             <section className="composer-section composer-section--content" aria-labelledby="composerContentTitle">
               <div className="composer-section__header">
                 <div>
@@ -605,6 +657,8 @@ export function PromptShareComposerModal({
                     <h3 id="composerContentTitle">
                       {promptType === "skill" ? "SKILL作成サポート" : "プロンプト本文"}
                     </h3>
+                    {/* SKILLの場合のみ情報ボタンを表示し、説明文の表示をトグルする */}
+                    {/* Show info toggle only for skill type to explain the SKILL format */}
                     {promptType === "skill" ? (
                       <button
                         type="button"
@@ -629,6 +683,8 @@ export function PromptShareComposerModal({
                 ) : null}
               </div>
 
+              {/* SKILLタイプのときはCSSのdisplayで隠し、DOMを維持してrefを保持する */}
+              {/* Hide with CSS display rather than unmounting to preserve refs for skill type */}
               <div className="form-group" style={{ display: promptType === "skill" ? "none" : "" }}>
                 <label htmlFor="prompt-content">プロンプト内容</label>
                 <span className="form-group__hint">役割、前提条件、出力形式まで書くと再利用しやすくなります。</span>
@@ -646,6 +702,8 @@ export function PromptShareComposerModal({
                 ></textarea>
               </div>
 
+              {/* AI補助UIのマウントポイント（外部スクリプトがここにReactツリーを注入する） */}
+              {/* Mount point for the AI-assist widget injected by an external script */}
               <div id="sharedPromptAssistRoot" ref={promptAssistRootRef}></div>
               <p
                 id="promptPostStatus"
@@ -657,6 +715,8 @@ export function PromptShareComposerModal({
               </p>
             </section>
 
+            {/* --- 詳細設定セクション: AIモデル選択・画像・SKILLフィールド --- */}
+            {/* --- Details section: AI model, reference image, and SKILL-specific fields --- */}
             <section className="composer-section" aria-labelledby="composerMetaTitle">
               <div className="composer-section__header">
                 <div>
@@ -682,6 +742,8 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
+              {/* 画像プロンプトタイプのときのみ作例画像フィールドを表示する */}
+              {/* Reference image field is only relevant for image-type prompts */}
               <div id="imagePromptFields" className="image-prompt-fields" hidden={promptType !== "image"}>
                 <div className="form-group">
                   <label htmlFor="prompt-reference-image">作例画像（任意・1枚）</label>
@@ -703,6 +765,8 @@ export function PromptShareComposerModal({
                     </span>
                   </label>
 
+                  {/* プレビューは画像が選択されているときのみ表示する */}
+                  {/* Preview section is only shown once an image has been selected */}
                   <div id="promptImagePreview" className="prompt-image-preview" hidden={!promptImagePreviewUrl}>
                     <img id="promptImagePreviewImg" src={promptImagePreviewUrl} alt="アップロード画像のプレビュー" />
                     <div className="prompt-image-preview__meta">
@@ -721,6 +785,8 @@ export function PromptShareComposerModal({
                 </div>
               </div>
 
+              {/* SKILLタイプのときだけMarkdownと補助スクリプトのフィールドを表示する */}
+              {/* SKILL-specific fields for Markdown definition and optional Python script */}
               <div id="skillPromptFields" className="skill-prompt-fields" hidden={promptType !== "skill"}>
                 <div className="form-group">
                   <label htmlFor="prompt-skill-markdown">SKILL定義（Markdown）</label>
@@ -761,6 +827,8 @@ export function PromptShareComposerModal({
               </div>
             </section>
 
+            {/* --- 利用例セクション: SKILLタイプでは非表示 --- */}
+            {/* --- Examples section: hidden for skill-type posts since SKILL has its own fields --- */}
             <section className="composer-section" aria-labelledby="composerExamplesTitle" hidden={promptType === "skill"}>
               <div className="composer-section__header">
                 <div>
@@ -772,6 +840,8 @@ export function PromptShareComposerModal({
                 </p>
               </div>
 
+              {/* トグルをONにしたときだけ入出力例フィールドを展開する */}
+              {/* Expand example fields only when the user opts in via the toggle */}
               <div className="form-group form-group--toggle">
                 <label className="composer-toggle" htmlFor="guardrail-checkbox">
                   <input
@@ -826,6 +896,8 @@ export function PromptShareComposerModal({
             </section>
 
             <div className="composer-footer">
+              {/* 送信中はボタンをdisabledにして重複送信を防ぐ */}
+              {/* Disable submit button during submission to prevent duplicate requests */}
               <button type="submit" className="submit-btn" disabled={isPostSubmitting}>
                 <i className={`bi ${isPostSubmitting ? "bi-stars" : "bi-upload"}`}></i>
                 {isPostSubmitting ? " 投稿を準備中..." : " 投稿する"}

@@ -4,6 +4,8 @@ import useSWR from "swr";
 
 import { SeoHead } from "../../components/SeoHead";
 
+// テーブルの各カラムのメタ情報を表す型
+// Type representing metadata for each column of a database table
 type ColumnDetail = {
   name: string;
   type?: string | null;
@@ -13,8 +15,12 @@ type ColumnDetail = {
   extra?: string | null;
 };
 
+// フラッシュメッセージの型 [カテゴリ, テキスト]
+// Flash message tuple type [category, text]
 type FlashMessage = [string, string];
 
+// フロントエンド内部で使用するダッシュボードデータの型
+// Normalized dashboard data type used internally in the frontend
 type AdminDashboardData = {
   tables: string[];
   selectedTable: string;
@@ -25,6 +31,8 @@ type AdminDashboardData = {
   messages: FlashMessage[];
 };
 
+// バックエンドAPIから返るレスポンスの型（snake_case）
+// Raw API response type from the backend (snake_case keys)
 type AdminDashboardResponse = {
   tables?: string[];
   selected_table?: string;
@@ -35,15 +43,21 @@ type AdminDashboardResponse = {
   messages?: FlashMessage[];
 };
 
+// フォーム操作結果をUIに表示するためのローカルメッセージ型
+// Local message type for displaying form operation results in the UI
 type LocalMessage = {
   type: "success" | "error";
   text: string;
 };
 
+// HTTPステータスコードを保持するエラー型
+// Error type that carries an HTTP status code
 type HttpError = Error & {
   status?: number;
 };
 
+// SWRのフォールバック値として使用する空のダッシュボードデータ
+// Empty dashboard data used as SWR fallback to avoid undefined checks
 const EMPTY_DASHBOARD: AdminDashboardData = {
   tables: [],
   selectedTable: "",
@@ -54,6 +68,8 @@ const EMPTY_DASHBOARD: AdminDashboardData = {
   messages: []
 };
 
+// SWRのフェッチャー関数：APIからダッシュボードデータを取得してnormalizeする
+// SWR fetcher: fetches dashboard data from the API and normalizes keys
 const loadAdminDashboard = async (url: string): Promise<AdminDashboardData> => {
   const res = await fetch(url, { credentials: "same-origin" });
   const data: AdminDashboardResponse = await res.json().catch(() => ({}));
@@ -81,19 +97,30 @@ const loadAdminDashboard = async (url: string): Promise<AdminDashboardData> => {
   };
 };
 
+// 管理コンソールのメインページコンポーネント
+// Main page component for the admin console
 export default function AdminDashboard() {
   const router = useRouter();
+
+  // URLクエリパラメータからテーブル名を取得する（配列の場合は先頭要素を使用）
+  // Extract table name from URL query params; use first element if array
   const selectedQueryTable = useMemo(() => {
     const raw = router.query.table;
     if (typeof raw === "string") return raw;
     if (Array.isArray(raw) && raw.length > 0) return raw[0];
     return "";
   }, [router.query.table]);
+
+  // ルーターの準備完了後にのみAPIエンドポイントURLを構築する
+  // Build the API endpoint URL only after the router is ready to avoid double-fetch
   const dashboardUrl = useMemo(() => {
     if (!router.isReady) return null;
     const query = selectedQueryTable ? `?table=${encodeURIComponent(selectedQueryTable)}` : "";
     return `/admin/api/dashboard${query}`;
   }, [router.isReady, selectedQueryTable]);
+
+  // ダッシュボードデータを定期的に自動更新する（15秒ごと）
+  // Auto-refresh dashboard data every 15 seconds to keep data current
   const {
     data: dashboard = EMPTY_DASHBOARD,
     error: dashboardFetchError,
@@ -104,6 +131,7 @@ export default function AdminDashboard() {
     dedupingInterval: 5000,
     keepPreviousData: true
   });
+
   const [localMessage, setLocalMessage] = useState<LocalMessage | null>(null);
   const {
     tables,
@@ -114,7 +142,13 @@ export default function AdminDashboard() {
     error: dashboardError,
     messages
   } = dashboard;
+
+  // カラムが1つしかない場合は削除を禁止する（テーブルを壊さないため）
+  // Disable column deletion when only one column exists to prevent table corruption
   const deleteDisabled = columnDetails.length <= 1;
+
+  // 長いテキストコンテンツを持つカラムは表示幅を広げる
+  // Widen display columns known to contain long text content
   const wideColumns = [
     "message",
     "content",
@@ -122,6 +156,9 @@ export default function AdminDashboard() {
     "input_examples",
     "output_examples"
   ];
+
+  // 共通UIスタイルクラスをまとめて定義することで一貫性を保つ
+  // Centralized style class definitions for UI consistency across the page
   const panelClass =
     "rounded-3xl border border-white/70 bg-white/80 p-6 shadow-xl shadow-indigo-100/40 backdrop-blur";
   const labelClass = "text-sm font-semibold text-slate-700";
@@ -129,6 +166,9 @@ export default function AdminDashboard() {
     "w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100";
   const buttonClass =
     "cc-texture-btn cc-texture-btn--indigo rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
+
+  // メッセージカテゴリに応じたTailwindクラスを返すヘルパー
+  // Returns Tailwind classes based on flash message category
   const flashTone = (category: string) => {
     if (category === "success") {
       return "border-emerald-400/70 bg-emerald-50 text-emerald-700";
@@ -138,15 +178,22 @@ export default function AdminDashboard() {
     }
     return "border-slate-200 bg-slate-50 text-slate-600";
   };
+
+  // 幅広カラムとそれ以外でセルの表示幅クラスを切り替える
+  // Switch cell width class between wide and standard based on column name
   const cellWidthClass = (columnName: string) =>
     wideColumns.includes(columnName) ? "min-w-[240px] max-w-[420px]" : "min-w-[140px]";
 
+  // 401エラー発生時はログインページへリダイレクトする
+  // Redirect to login page when a 401 Unauthorized error is detected
   useEffect(() => {
     if (dashboardFetchError?.status !== 401) return;
     const nextPath = router.asPath || "/admin";
     void router.replace(`/admin/login?next=${encodeURIComponent(nextPath)}`);
   }, [dashboardFetchError, router]);
 
+  // フォームをAPIエンドポイントにPOSTして結果に応じてページを更新する
+  // POST form data to an API endpoint and refresh the page based on the result
   const submitForm = async (event: FormEvent<HTMLFormElement>, endpoint: string) => {
     event.preventDefault();
     setLocalMessage(null);
@@ -177,6 +224,8 @@ export default function AdminDashboard() {
     }
   };
 
+  // ログアウトAPIを呼び出してからログインページへ遷移する
+  // Call logout API then navigate to the login page regardless of the outcome
   const handleLogout = async (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     try {
@@ -198,9 +247,11 @@ export default function AdminDashboard() {
         noindex
       />
       <div className="relative min-h-screen overflow-hidden bg-slate-50">
+        {/* 背景の装飾的なぼかし円（ポインターイベントを無効化）/ Decorative blurred circles in background, non-interactive */}
         <div className="pointer-events-none absolute -top-24 right-[-12rem] h-72 w-72 rounded-full bg-indigo-200/50 blur-3xl"></div>
         <div className="pointer-events-none absolute top-40 -left-24 h-96 w-96 rounded-full bg-emerald-200/40 blur-3xl"></div>
 
+        {/* 画面上部に固定されたナビゲーションヘッダー / Sticky navigation header fixed at the top */}
         <header className="sticky top-0 z-20 border-b border-white/60 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
             <div className="flex items-center gap-3">
@@ -233,6 +284,7 @@ export default function AdminDashboard() {
         </header>
 
         <main className="relative z-10 mx-auto max-w-6xl px-6 py-10 lg:py-12">
+          {/* ローディング状態・エラー・フラッシュメッセージを表示するエリア / Area for loading state, errors, and flash messages */}
           <div className="mb-8 grid gap-3">
             {isLoading ? (
               <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
@@ -244,6 +296,7 @@ export default function AdminDashboard() {
                 {dashboardFetchError.message}
               </div>
             ) : null}
+            {/* サーバーサイドのフラッシュメッセージを表示する / Render server-side flash messages */}
             {messages.map(([category, message], index) => (
               <div
                 className={`rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${flashTone(
@@ -254,6 +307,7 @@ export default function AdminDashboard() {
                 {message}
               </div>
             ))}
+            {/* クライアントサイドのフォーム操作結果メッセージを表示する / Render client-side form operation result message */}
             {localMessage ? (
               <div
                 className={`rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${flashTone(
@@ -265,7 +319,9 @@ export default function AdminDashboard() {
             ) : null}
           </div>
 
+          {/* テーブル一覧パネルと操作パネルを2カラムレイアウトで並べる / Two-column layout: table list panel on left, operations panel on right */}
           <div className="grid gap-8 xl:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+            {/* 左カラム：テーブル一覧と削除フォーム / Left column: table list and delete table form */}
             <section className={panelClass}>
               <h2 className="text-lg font-semibold text-slate-900">テーブル一覧</h2>
               <ul className="mt-4 space-y-3">
@@ -291,6 +347,7 @@ export default function AdminDashboard() {
                 )}
               </ul>
 
+              {/* テーブル削除フォーム：誤操作防止のため手入力を必須とする / Table deletion form: requires manual input to prevent accidental deletion */}
               <form className="mt-6 space-y-4" onSubmit={(event) => submitForm(event, "/admin/api/delete-table")}>
                 <h3 className="text-base font-semibold text-slate-700">テーブルの削除</h3>
                 <div className="space-y-2">
@@ -308,7 +365,9 @@ export default function AdminDashboard() {
               </form>
             </section>
 
+            {/* 右カラム：テーブルプレビューとカラム操作フォーム / Right column: table preview and column operation forms */}
             <div className="space-y-8">
+              {/* テーブルプレビューセクション：定義と最大100件のデータ行を表示 / Table preview section: shows schema definition and up to 100 data rows */}
               <section className={panelClass}>
                 <h2 className="text-lg font-semibold text-slate-900">テーブルプレビュー</h2>
                 {selectedTable ? (
@@ -371,6 +430,8 @@ export default function AdminDashboard() {
                                   {row.map((value, colIndex) => {
                                     const columnName = columnNames[colIndex];
                                     const cellText = value === null || value === undefined ? "" : String(value);
+                                    // 160文字を超える長いテキストはdetails要素で折りたたむ
+                                    // Collapse long text exceeding 160 chars inside a details element
                                     if (cellText.length > 160) {
                                       const summaryText = cellText
                                         .slice(0, 160)
@@ -418,6 +479,7 @@ export default function AdminDashboard() {
                 )}
               </section>
 
+              {/* テーブル操作セクション：テーブル選択時はカラム追加/削除、未選択時はテーブル作成を表示 / Table operations: show column add/delete when table selected, else show create table form */}
               <section className={panelClass}>
                 <h2 className="text-lg font-semibold text-slate-900">テーブル操作</h2>
                 {selectedTable ? (
@@ -482,6 +544,7 @@ export default function AdminDashboard() {
                   <>
                     <p className="mt-3 text-sm text-slate-500">カラムの変更を行うテーブルを選択してください。</p>
 
+                    {/* テーブル作成フォーム：PostgreSQLのカラム定義をSQL形式で入力する / Table creation form: accepts PostgreSQL column definitions in SQL syntax */}
                     <h3 className="mt-6 text-base font-semibold text-slate-700">テーブルの作成</h3>
                     <form className="mt-3 space-y-4" onSubmit={(event) => submitForm(event, "/admin/api/create-table")}>
                       <div className="space-y-2">

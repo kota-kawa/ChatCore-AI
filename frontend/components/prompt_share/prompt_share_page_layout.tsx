@@ -3,6 +3,8 @@ import React, { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type 
 import { PromptCard, type PromptRecord } from "./prompt_card";
 import type { PromptCategory, PromptFeedback, PromptTypeFilter, PromptTypeFilterOption } from "./prompt_share_page_types";
 
+// ページ全体のレイアウトが受け取るすべての状態・フィルター・ハンドラを定義する
+// Defines all state, filters, and event handlers passed into the page layout component
 type PromptSharePageLayoutProps = {
   authUiReady: boolean;
   isLoggedIn: boolean;
@@ -39,9 +41,13 @@ type PromptSharePageLayoutProps = {
   onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
   onToggleBookmark: (prompt: PromptRecord) => void;
+  // モーダルなど追加UIを差し込める拡張スロット
+  // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
 };
 
+// プロンプト共有ページのヘッダー・フィルター・カード一覧を担う純粋なレイアウトコンポーネント
+// Pure layout component for the prompt share page: header, filters, and card grid
 export function PromptSharePageLayout({
   authUiReady,
   isLoggedIn,
@@ -82,8 +88,12 @@ export function PromptSharePageLayout({
 }: PromptSharePageLayoutProps) {
   return (
     <div className="prompt-share-page cc-page-rise">
+      {/* カスタム要素：グローバルなアクションメニューWebComponent */}
+      {/* Custom element: global action menu Web Component */}
       <action-menu></action-menu>
 
+      {/* 認証UIの準備ができており未ログインの場合のみログインボタンを表示する */}
+      {/* Show login button only when auth is ready and the user is not logged in */}
       <div
         id="auth-buttons"
         style={{
@@ -107,6 +117,8 @@ export function PromptSharePageLayout({
         </button>
       </div>
 
+      {/* ログイン済みのときだけユーザーアイコンWebComponentを表示する */}
+      {/* User icon Web Component is hidden until auth is confirmed */}
       <user-icon id="userIcon" style={authUiReady && isLoggedIn ? undefined : { display: "none" }}></user-icon>
 
       <header className="prompts-header" aria-labelledby="promptShareHeroTitle">
@@ -119,6 +131,8 @@ export function PromptSharePageLayout({
             シンプルな検索で公開プロンプトを見つけて、そのまま保存・共有できます。
           </p>
 
+          {/* role="search"でランドマークとして検索UIをスクリーンリーダーに認識させる */}
+          {/* role="search" exposes the search region as a landmark for screen readers */}
           <div className="search-section" role="search" aria-label="プロンプト検索">
             <div className="search-box">
               <input
@@ -162,6 +176,8 @@ export function PromptSharePageLayout({
       </header>
 
       <main>
+        {/* SEO用のサマリーセクション。カテゴリ一覧をリストとしてマークアップする */}
+        {/* SEO summary section; lists categories as semantic markup for crawlers */}
         <section className="prompt-crawl-summary" aria-labelledby="prompt-crawl-summary-title">
           <h2 id="prompt-crawl-summary-title">公開プロンプトライブラリ</h2>
           <p>
@@ -175,6 +191,8 @@ export function PromptSharePageLayout({
           </ul>
         </section>
 
+        {/* カテゴリフィルターとプロンプトタイプフィルターを並べたサイドバー的セクション */}
+        {/* Category and type filter controls for narrowing down the prompt list */}
         <section className="categories" aria-labelledby="categories-title">
           <div className="section-header section-header--compact">
             <h2 id="categories-title">カテゴリ</h2>
@@ -197,6 +215,8 @@ export function PromptSharePageLayout({
             ))}
           </div>
 
+          {/* タイプフィルターはrole="group"でカテゴリとは独立したコントロールグループにする */}
+          {/* Type filters use role="group" to form a distinct ARIA group from category buttons */}
           <div className="prompt-filter-block">
             <div id="prompt-type-filter-title" className="prompt-filter-heading">
               表示タイプ
@@ -220,6 +240,8 @@ export function PromptSharePageLayout({
           </div>
         </section>
 
+        {/* プロンプトカード一覧セクション */}
+        {/* Prompt card feed section */}
         <section id="prompt-feed-section" data-agent-id="prompt.results" className="prompts-list" aria-labelledby="selected-category-title">
           <div className="section-header prompts-list-header section-header--compact">
             <h2 id="selected-category-title">{selectedCategoryTitle}</h2>
@@ -229,6 +251,8 @@ export function PromptSharePageLayout({
             <p id="promptCountMeta" className="prompt-count-meta">
               {promptCountMeta}
             </p>
+            {/* 追加ページが存在する場合のみ「さらに読み込む」ボタンを表示する */}
+            {/* Show "load more" only when the API indicates more pages exist */}
             {hasMoreSearchResults ? (
               <button
                 type="button"
@@ -241,13 +265,19 @@ export function PromptSharePageLayout({
             ) : null}
           </div>
 
+          {/* 非React（レガシー）スクリプトのマウントポイント */}
+          {/* Mount point for legacy non-React rendering scripts */}
           <div id="promptResults"></div>
 
           <div className="prompt-cards">
+            {/* 初回ロード中のみローディングメッセージを表示し、フィードバックと重複させない */}
+            {/* Show loading message only on initial empty load, not when feedback is displayed */}
             {isPromptsLoading && visiblePrompts.length === 0 && !hasPromptFeedback ? (
               <p className="prompt-loading-message">読み込み中...</p>
             ) : null}
 
+            {/* エラーや空状態のフィードバックをvariantに応じたスタイルで表示する */}
+            {/* Show feedback message with variant-specific styling for error or empty states */}
             {feedbackToShow ? (
               <p className={`prompt-feedback prompt-feedback--${feedbackToShow.variant}`}>
                 {feedbackToShow.message}
@@ -257,6 +287,8 @@ export function PromptSharePageLayout({
             {visiblePrompts.map((prompt) => {
               const promptId = prompt.clientId;
               return (
+                // 各カードに必要な状態とハンドラをSetから引いて渡す
+                // Look up per-card state from Sets and forward the right handlers
                 <PromptCard
                   key={promptId}
                   prompt={prompt}
@@ -281,6 +313,8 @@ export function PromptSharePageLayout({
         </section>
       </main>
 
+      {/* モーダルなど子コンポーネントをページ末尾に差し込む */}
+      {/* Render child components (e.g. modals) at the end of the page */}
       {children}
     </div>
   );

@@ -79,9 +79,13 @@ import { PromptShareShareModal } from "../../components/prompt_share/prompt_shar
 import type { PromptRecord } from "../../components/prompt_share/prompt_card";
 import { absoluteUrl } from "../../lib/seo";
 
+// SEO向けのページ説明文。検索エンジンのスニペットとして表示される
+// Page description for SEO; displayed as the search engine snippet
 const promptShareDescription =
   "Chat Coreのプロンプト共有ページです。文章作成、調査、画像生成などに使える日本語AIプロンプトを探して、保存して、共有できます。";
 
+// 構造化データ（JSON-LD）。Googleがリッチリザルトとしてページを解釈できるようにする
+// Structured data (JSON-LD) that helps Google understand and display this page as a rich result
 const promptShareStructuredData = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
@@ -100,12 +104,18 @@ type PromptSharePageProps = {
   initialPrompts?: PromptData[];
 };
 
+// SSRで事前取得するプロンプトの最大件数。初期表示の速度とデータ量のバランスをとるための定数
+// Maximum number of prompts fetched during SSR; balances initial render speed against payload size
 const INITIAL_PROMPT_LIMIT = 18;
 
+// バックエンドのオリジンを環境変数から取得し、末尾スラッシュを除去する
+// Reads the backend origin from the environment variable and strips any trailing slashes
 function getBackendOrigin() {
   return (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
 }
 
+// SSR時にプロンプト一覧を事前取得する。失敗した場合でも空配列でページを返し、CSRで再取得させる
+// Pre-fetches the prompt list at SSR time; returns an empty array on failure so the client can retry
 export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = async () => {
   try {
     const response = await fetch(`${getBackendOrigin()}/prompt_share/api/prompts`, {
@@ -118,6 +128,8 @@ export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = asyn
     }
 
     const data = await response.json() as PromptFeedResponse;
+    // 件数上限を適用し、クライアント側で使いやすい形式に正規化する
+    // Apply the item limit and normalize into the client-friendly format
     const initialPrompts = Array.isArray(data.prompts)
       ? data.prompts.slice(0, INITIAL_PROMPT_LIMIT).map(normalizePromptData)
       : [];
@@ -129,7 +141,11 @@ export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = asyn
   }
 };
 
+// プロンプト共有ページのメインコンポーネント。検索・フィルタ・モーダル・いいね・ブックマークなど全機能を管理する
+// Main component for the prompt share page; manages search, filters, modals, likes, bookmarks, and all other features
 export default function PromptSharePage({ initialPrompts = [] }: PromptSharePageProps) {
+  // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
+  // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
   const initialPromptRecords = useMemo<PromptRecord[]>(() => {
     return initialPrompts.map((item, index) => ({
       ...normalizePromptData(item),
@@ -137,16 +153,23 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       liked: Boolean(item.liked)
     }));
   }, [initialPrompts]);
+
+  // 認証状態の管理。キャッシュから即座にUIを表示し、API確認後に最新の状態へ更新する
+  // Auth state management: shows UI immediately from cache, then syncs with the API
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authUiReady, setAuthUiReady] = useState(false);
   const [supportsNativeShare, setSupportsNativeShare] = useState(false);
 
+  // 検索・フィルタ関連の状態
+  // Search and filter state
   const [searchInput, setSearchInput] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedCategoryTitle, setSelectedCategoryTitle] = useState("全てのプロンプト");
   const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
   const [selectedPromptTypeFilter, setSelectedPromptTypeFilter] = useState<PromptTypeFilter>("all");
 
+  // プロンプト一覧の状態。SSRデータで初期化することで、初期描画をキャッシュで高速化する
+  // Prompt list state; initialized from SSR data to speed up the first render with cached content
   const [prompts, setPrompts] = useState<PromptRecord[]>(initialPromptRecords);
   const [isPromptsLoading, setIsPromptsLoading] = useState(initialPromptRecords.length === 0);
   const [promptCountMeta, setPromptCountMeta] = useState(
@@ -159,6 +182,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [searchPagination, setSearchPagination] = useState<PromptPagination | null>(null);
   const [isLoadingMoreSearchResults, setIsLoadingMoreSearchResults] = useState(false);
 
+  // モーダルの状態。どのモーダルが開いているかと、詳細・コメントビューの切り替えを管理する
+  // Modal state: tracks which modal is open and toggles between detail and comments views
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
   const [detailModalView, setDetailModalView] = useState<"detail" | "comments">("detail");
   const [detailPrompt, setDetailPrompt] = useState<PromptRecord | null>(null);
@@ -174,12 +199,16 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   });
   const [shareActionLoading, setShareActionLoading] = useState(false);
 
+  // カードのドロップダウンとアクションの保留中IDを追跡する
+  // Tracks open card dropdown and pending action IDs to prevent duplicate requests
   const [openDropdownPromptId, setOpenDropdownPromptId] = useState<string | null>(null);
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [bookmarkPendingIds, setBookmarkPendingIds] = useState<Set<string>>(new Set());
   const [actionEffectIds, setActionEffectIds] = useState<Set<string>>(new Set());
   const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
 
+  // 投稿フォームの各フィールドの状態
+  // Composer form field states
   const [promptType, setPromptType] = useState<PromptType>("text");
   const [postTitle, setPostTitle] = useState("");
   const [postCategory, setPostCategory] = useState("未選択");
@@ -199,18 +228,24 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     variant: "info"
   });
 
+  // Refは非同期コールバックからも常に最新の状態値にアクセスするために使用する
+  // Refs allow async callbacks to always read the latest state without stale closures
   const nextPromptClientIdRef = useRef(initialPromptRecords.length);
   const promptsRef = useRef<PromptRecord[]>(initialPromptRecords);
   const selectedCategoryRef = useRef("all");
   const selectedPromptTypeFilterRef = useRef<PromptTypeFilter>("all");
   const activeModalRef = useRef<ModalKey>(null);
 
+  // モーダルのDOM要素への参照。フォーカス管理とアクセシビリティのために使用する
+  // Refs to modal DOM elements for focus management and accessibility
   const postModalRef = useRef<HTMLDivElement | null>(null);
   const promptDetailModalRef = useRef<HTMLDivElement | null>(null);
   const promptCommentsSectionRef = useRef<HTMLElement | null>(null);
   const promptCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptShareModalRef = useRef<HTMLDivElement | null>(null);
 
+  // 投稿フォームのフォーム要素への参照。バリデーションとAI補助機能の初期化に使用する
+  // Refs to composer form elements used for validation and AI-assist initialization
   const promptPostTitleInputRef = useRef<HTMLInputElement | null>(null);
   const promptPostCategorySelectRef = useRef<HTMLSelectElement | null>(null);
   const promptPostContentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -222,27 +257,37 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
   const promptImageInputRef = useRef<HTMLInputElement | null>(null);
 
+  // AI補助パネルの制御。一度だけ初期化し、プロンプトタイプ変更時に更新する
+  // AI-assist panel control; initialized once and updated when prompt type changes
   const promptAssistRootRef = useRef<HTMLDivElement | null>(null);
   const promptAssistInitializedRef = useRef(false);
   const promptAssistControllerRef = useRef<{ reset: () => void; updateForPromptType: (t: string) => void } | null>(null);
   const promptTypeRef = useRef<PromptType>("text");
   const likePendingIdsRef = useRef<Set<string>>(new Set());
   const bookmarkPendingIdsRef = useRef<Set<string>>(new Set());
+  // アニメーション効果のタイマーIDを管理し、素早い連続操作でタイマーが積み重ならないようにする
+  // Stores animation effect timer IDs to cancel previous timers on rapid successive actions
   const actionEffectTimersRef = useRef<Map<string, number>>(new Map());
 
   const promptDetailCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const promptShareCopyButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  // モーダル開閉時のフォーカス復元とスクロール位置の保存に使用する
+  // Used to restore focus and save scroll position when modals open/close
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
   const preferredFocusElementRef = useRef<HTMLElement | null>(null);
   const lockedScrollYRef = useRef(0);
   const hasModalLockRef = useRef(false);
 
   const promptImagePreviewUrlRef = useRef("");
+  // 投稿後にモーダルを自動で閉じるタイマーの参照
+  // Reference to the timer that auto-closes the composer modal after a successful post
   const postCloseTimerRef = useRef<number | null>(null);
   const cachedPromptShareUrlsRef = useRef<Map<string, string>>(new Map());
   const detailPromptIdRef = useRef("");
 
+  // stateが変わるたびにRefを同期する。これにより非同期コールバック内でも最新値を参照できる
+  // Syncs refs whenever state changes so async callbacks always see the latest values
   useEffect(() => {
     promptsRef.current = prompts;
   }, [prompts]);
@@ -263,6 +308,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     promptTypeRef.current = promptType;
   }, [promptType]);
 
+  // コンポーネントのアンマウント時に残存するアニメーションタイマーを全てクリアする
+  // Clears all lingering animation timers when the component unmounts
   useEffect(() => {
     return () => {
       actionEffectTimersRef.current.forEach((timerId) => {
@@ -272,10 +319,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, []);
 
+  // PromptRecordからキャッシュ保存用のデータ形式に変換する（クライアント専用のclientIdを除外）
+  // Strips the client-only clientId field to produce a cacheable representation
   const toCachedPromptData = useCallback((items: PromptRecord[]) => {
     return items.map(({ clientId, ...prompt }) => prompt);
   }, []);
 
+  // 投稿ステータスメッセージをvariantとともに更新するためのヘルパー
+  // Helper to update the post status message together with its severity variant
   const setPromptPostStatus = useCallback(
     (message: string, variant: PromptPostStatusVariant = "info") => {
       setPromptPostStatusState({ message, variant });
@@ -283,6 +334,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     []
   );
 
+  // エラー表示中のみクリアする。情報メッセージはユーザーが操作を続けても消さない
+  // Clears the status only when it shows an error, so informational messages persist while the user edits
   const updatePromptFeedbackErrorIfNeeded = useCallback(() => {
     setPromptPostStatusState((current) => {
       if (current.variant !== "error") {
@@ -292,6 +345,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     });
   }, []);
 
+  // 画像プレビューのObject URLを解放してメモリリークを防ぐ
+  // Revokes the image preview Object URL to prevent memory leaks
   const revokePromptImagePreview = useCallback(() => {
     if (!promptImagePreviewUrlRef.current) {
       return;
@@ -300,6 +355,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     promptImagePreviewUrlRef.current = "";
   }, []);
 
+  // 選択中の画像ファイルとプレビューを全て削除し、inputの値もリセットする
+  // Removes the selected image file, clears the preview, and resets the file input value
   const clearPromptImageSelection = useCallback(() => {
     revokePromptImagePreview();
     setReferenceImageFile(null);
@@ -310,6 +367,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [revokePromptImagePreview]);
 
+  // ファイルの拡張子とMIMEタイプおよびサイズを検証する
+  // Validates the file's extension, MIME type, and size against allowed values
   const validateReferenceImageFile = useCallback((file: File | null) => {
     if (!file) return null;
     const lowerName = file.name.toLowerCase();
@@ -325,6 +384,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     return null;
   }, []);
 
+  // 新しいファイルが選択された際に以前のObject URLを解放してから新しいプレビューを生成する
+  // Revokes the previous Object URL before generating a new preview to avoid accumulating blob URLs
   const updatePromptImagePreview = useCallback(
     (file: File | null) => {
       if (!file) {
@@ -341,6 +402,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [clearPromptImageSelection, revokePromptImagePreview]
   );
 
+  // APIレスポンスのPromptDataをReactが管理するPromptRecordへ変換し、一意のclientIdを付与する
+  // Converts API PromptData into React-managed PromptRecords with unique clientIds
   const toPromptRecords = useCallback((items: PromptData[]) => {
     return items.map((item) => ({
       ...normalizePromptData(item),
@@ -349,10 +412,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }));
   }, []);
 
+  // フィルタ値からUI表示用のラベル文字列を取得する
+  // Returns the display label for a given prompt type filter value
   const getPromptTypeFilterLabel = useCallback((promptTypeFilter: PromptTypeFilter) => {
     return PROMPT_TYPE_FILTERS.find((option) => option.value === promptTypeFilter)?.label || "全て";
   }, []);
 
+  // カテゴリとプロンプトタイプの両方の条件でプロンプト一覧をフィルタリングする
+  // Filters the prompt list by both category and prompt type simultaneously
   const filterPrompts = useCallback(
     (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
       return items.filter((item) => {
@@ -365,6 +432,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     []
   );
 
+  // 現在のフィルタ条件に一致する表示件数を算出する
+  // Counts how many prompts are visible under the current filter conditions
   const countVisiblePrompts = useCallback(
     (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
       return filterPrompts(items, category, promptTypeFilter).length;
@@ -372,6 +441,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [filterPrompts]
   );
 
+  // 現在のフィルタ・検索結果に応じてカウント表示文字列を構築する
+  // Builds the count display string based on current filters and search results
   const buildPromptCountMeta = useCallback(
     (
       items: PromptRecord[],
@@ -391,6 +462,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [countVisiblePrompts, getPromptTypeFilterLabel]
   );
 
+  // フィルタ結果が0件だった場合にプロンプトタイプを含む適切なメッセージを返す
+  // Returns an appropriate empty-state message that includes the active prompt type filter
   const getFilterEmptyMessage = useCallback(() => {
     if (selectedPromptTypeFilterRef.current === "all") {
       return "条件に一致するプロンプトが見つかりませんでした。";
@@ -398,12 +471,19 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     return `${getPromptTypeFilterLabel(selectedPromptTypeFilterRef.current)}のプロンプトが見つかりませんでした。`;
   }, [getPromptTypeFilterLabel]);
 
+  // カテゴリとプロンプトタイプでフィルタリングした後の表示対象プロンプト一覧
+  // Derived list of prompts visible after applying category and prompt type filters
   const visiblePrompts = useMemo(() => {
     return filterPrompts(prompts, appliedCategoryFilter, selectedPromptTypeFilter);
   }, [filterPrompts, prompts, appliedCategoryFilter, selectedPromptTypeFilter]);
+
+  // 検索中かつ次ページが存在する場合に「もっと見る」ボタンを表示する
+  // Indicates whether a "load more" button should be shown for search results
   const hasMoreSearchResults =
     activeSearchQuery.trim().length > 0 && Boolean(searchPagination?.has_next);
 
+  // SNS共有リンクを共有URLから動的に生成する。URLが未設定の場合は無効なリンクを返す
+  // Derives SNS share links from the share URL; returns placeholder links if none is set
   const shareSnsLinks = useMemo(() => {
     if (!shareUrl) {
       return {
@@ -421,12 +501,16 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, [shareUrl]);
 
+  // モーダルキーからDOMのref要素へのマッピングを提供する
+  // Maps a modal key to its corresponding DOM ref element
   const getModalElement = useCallback((modal: Exclude<ModalKey, null>) => {
     if (modal === "post") return postModalRef.current;
     if (modal === "detail") return promptDetailModalRef.current;
     return promptShareModalRef.current;
   }, []);
 
+  // モーダル内のフォーカス可能な要素を取得し、優先要素または先頭要素へフォーカスを移す
+  // Finds focusable elements inside a modal and moves focus to the preferred or first element
   const focusModal = useCallback(
     (modal: Exclude<ModalKey, null>) => {
       const modalElement = getModalElement(modal);
@@ -451,12 +535,16 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [getModalElement]
   );
 
+  // 投稿モーダルのステータスと送信中フラグをリセットし、AI補助パネルも初期状態へ戻す
+  // Resets the post modal status, the submitting flag, and the AI-assist panel to their initial states
   const resetPostModalState = useCallback(() => {
     setPromptPostStatus("", "info");
     setIsPostSubmitting(false);
     promptAssistControllerRef.current?.reset();
   }, [setPromptPostStatus]);
 
+  // 指定されたモーダルを閉じ、詳細モーダルの場合はコメント関連の状態も全てクリアする
+  // Closes the specified modal and, for the detail modal, also clears all comment-related state
   const closeModal = useCallback(
     (modal: Exclude<ModalKey, null>, options?: { rotateTrigger?: boolean }) => {
       if (activeModalRef.current !== modal) {
@@ -482,6 +570,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     );
 
 
+  // モーダルを開く前にトリガー要素を記録しておき、閉じた後にフォーカスを元の位置へ戻せるようにする
+  // Records the trigger element before opening so focus can be restored when the modal closes
   const openModal = useCallback((modal: Exclude<ModalKey, null>, preferredElement?: HTMLElement | null) => {
     previousFocusedElementRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -489,6 +579,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setActiveModal(modal);
   }, []);
 
+  // 単一のプロンプトレコードを更新し、変更後の一覧をローカルキャッシュに書き込む
+  // Updates a single prompt record and writes the updated list to local cache
   const updatePromptRecord = useCallback(
     (clientId: string, updater: (prompt: PromptRecord) => PromptRecord) => {
       setPrompts((current) => {
@@ -506,6 +598,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [toCachedPromptData]
   );
 
+  // いいね操作のAPIリクエスト中に重複送信を防ぐためのフラグを管理する
+  // Manages a pending flag to prevent duplicate like API requests
   const setLikePending = useCallback((clientId: string, pending: boolean) => {
     if (pending) {
       likePendingIdsRef.current.add(clientId);
@@ -515,6 +609,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setLikePendingIds(new Set(likePendingIdsRef.current));
   }, []);
 
+  // ブックマーク操作のAPIリクエスト中に重複送信を防ぐためのフラグを管理する
+  // Manages a pending flag to prevent duplicate bookmark API requests
   const setBookmarkPending = useCallback((clientId: string, pending: boolean) => {
     if (pending) {
       bookmarkPendingIdsRef.current.add(clientId);
@@ -524,6 +620,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setBookmarkPendingIds(new Set(bookmarkPendingIdsRef.current));
   }, []);
 
+  // いいね・ブックマーク時のアニメーション効果を発火させ、一定時間後に自動解除する
+  // Triggers a visual animation effect and automatically removes it after a fixed duration
   const triggerActionEffect = useCallback((effectId: string) => {
     const activeTimerId = actionEffectTimersRef.current.get(effectId);
     if (activeTimerId) {
@@ -548,6 +646,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     actionEffectTimersRef.current.set(effectId, timerId);
   }, []);
 
+  // タスク追加の非同期処理中に重複リクエストを防ぐためのフラグを管理する
+  // Manages a pending flag to prevent duplicate add-as-task requests
   const setAddAsTaskPending = useCallback((clientId: string, pending: boolean) => {
     setAddAsTaskPendingIds((current) => {
       const next = new Set(current);
@@ -560,6 +660,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     });
   }, []);
 
+  // コメントの削除・報告操作の処理中に重複リクエストを防ぐためのフラグを管理する
+  // Manages pending flags for comment delete/report operations to avoid duplicate requests
   const setCommentActionPending = useCallback((commentId: string, pending: boolean) => {
     setCommentActionPendingIds((current) => {
       const next = new Set(current);
@@ -572,6 +674,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     });
   }, []);
 
+  // 指定プロンプトのコメント数を一覧と詳細モーダルの両方で同期して更新する
+  // Synchronously updates the comment count in both the prompt list and the detail modal
   const updatePromptCommentCount = useCallback(
     (promptId: string | number, nextCount: number) => {
       const normalizedPromptId = String(promptId);
@@ -601,6 +705,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [toCachedPromptData]
   );
 
+  // APIからプロンプト一覧を取得し、フィルタ状態を適用した上でキャッシュに書き込む
+  // Fetches the full prompt list from the API, applies filter state, and writes the result to cache
   const loadPrompts = useCallback(
     async (options?: { categoryToApply?: string; promptTypeToApply?: PromptTypeFilter }) => {
       const categoryToApply = options?.categoryToApply || selectedCategoryRef.current;
@@ -651,6 +757,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [buildPromptCountMeta, toPromptRecords]
   );
 
+  // 入力文字列でプロンプトを検索し、クエリが空の場合は通常の一覧表示に戻る
+  // Searches prompts by the current input; falls back to the full list if the query is empty
   const searchPrompts = useCallback(async (options?: { promptTypeToApply?: PromptTypeFilter }) => {
     const query = searchInput.trim();
     const promptTypeToApply = options?.promptTypeToApply || selectedPromptTypeFilterRef.current;
@@ -681,6 +789,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       setSelectedPromptTypeFilter(promptTypeToApply);
       setActiveSearchQuery(query);
       setSearchPagination(data.pagination || null);
+      // 検索中はカテゴリフィルタを無効化する
+      // Disable category filter while a search is active
       setAppliedCategoryFilter(null);
 
       if (promptRecords.length > 0) {
@@ -709,6 +819,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [buildPromptCountMeta, loadPrompts, searchInput, toPromptRecords]);
 
+  // 検索結果の次ページを取得して既存リストに追記する（無限スクロール的な追加読み込み）
+  // Fetches the next page of search results and appends them to the existing list (infinite-scroll style)
   const loadMoreSearchResults = useCallback(async () => {
     const query = activeSearchQuery.trim();
     const nextPage = Number(searchPagination?.page || 0) + 1;
@@ -749,6 +861,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [activeSearchQuery, buildPromptCountMeta, searchPagination, toPromptRecords]);
 
+  // プロンプトIDをもとに外部共有用のパーマリンクを生成する
+  // Generates a permanent shareable link from the prompt's ID
   const buildPromptShareUrl = useCallback((prompt: PromptRecord | null) => {
     const promptId = getPromptId(prompt);
     if (!promptId) {
@@ -757,10 +871,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     return `${window.location.origin}/shared/prompt/${encodeURIComponent(promptId)}`;
   }, []);
 
+  // 共有モーダルのステータステキストをisErrorフラグと一緒に更新するヘルパー
+  // Helper to update the share modal status text alongside the isError flag
   const setPromptShareStatus = useCallback((text: string, isError = false) => {
     setShareStatus({ text, isError });
   }, []);
 
+  // キャッシュされた共有URLがあれば再利用し、なければ新たにURLを生成する
+  // Reuses a cached share URL when available to avoid regenerating it unnecessarily
   const createPromptShareLink = useCallback(
     async (prompt: PromptRecord | null, forceRefresh = false) => {
       const promptId = getPromptId(prompt);
@@ -793,6 +911,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [buildPromptShareUrl, setPromptShareStatus]
   );
 
+  // 共有URLをクリップボードにコピーし、結果をステータスメッセージとして表示する
+  // Copies the share URL to the clipboard and reflects the outcome in the status message
   const handleCopyShareLink = useCallback(async () => {
     const currentShareUrl = shareUrl.trim();
     if (!currentShareUrl) {
@@ -808,6 +928,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [setPromptShareStatus, shareUrl]);
 
+  // Web Share APIを呼び出し、ネイティブ共有シートを表示する（非対応ブラウザでは使用不可）
+  // Invokes the Web Share API to open the native share sheet (unavailable on unsupported browsers)
   const handleNativeShare = useCallback(async () => {
     const currentShareUrl = shareUrl.trim();
     if (!currentShareUrl) {
@@ -828,6 +950,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       });
       setPromptShareStatus("共有シートを開きました。");
     } catch (error) {
+      // ユーザーが共有シートをキャンセルした場合はエラーとして扱わない
+      // User-initiated cancellation of the share sheet is not treated as an error
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
@@ -835,6 +959,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [setPromptShareStatus, shareUrl]);
 
+  // 指定プロンプトのコメントを取得する。モーダルの切り替えによる競合を防ぐためpromptIdで検証する
+  // Fetches comments for a prompt; validates against the current promptId to prevent race conditions when switching modals
   const loadPromptComments = useCallback(
     async (promptId: string | number) => {
       const targetPromptId = String(promptId);
@@ -842,6 +968,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       setIsDetailCommentsLoading(true);
       try {
         const payload = await fetchPromptComments(promptId);
+        // 取得完了前にモーダルが切り替わっていた場合は結果を破棄する
+        // Discard results if the modal was switched before the fetch completed
         if (detailPromptIdRef.current !== targetPromptId) {
           return;
         }
@@ -865,6 +993,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [updatePromptCommentCount]
   );
 
+  // コメントを投稿し、成功したらレスポンスから直接コメントリストを更新する
+  // Posts a comment and updates the comment list directly from the response to avoid a refetch
   const handleSubmitPromptComment = useCallback(async () => {
     if (!isLoggedIn) {
       showToast("コメントするにはログインが必要です。", { variant: "error" });
@@ -889,6 +1019,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       if (payload.comment) {
         setDetailComments((current) => [...current, payload.comment!]);
       } else {
+        // APIがコメントオブジェクトを返さなかった場合はコメント一覧を再取得する
+        // If the API did not return a comment object, re-fetch the full comment list
         await loadPromptComments(promptId);
       }
       setCommentDraft("");
@@ -903,6 +1035,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [commentDraft, detailPrompt, isLoggedIn, loadPromptComments, updatePromptCommentCount]);
 
+  // ユーザーに確認を求めてからコメントを削除し、削除後はリストから該当コメントを除外する
+  // Prompts the user for confirmation before deleting, then removes the comment from the local list
   const handleDeletePromptComment = useCallback(
     async (commentId: string | number) => {
       const confirmed = await showConfirmModal("このコメントを削除しますか？");
@@ -930,6 +1064,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [setCommentActionPending, updatePromptCommentCount]
   );
 
+  // コメントを不正利用として報告し、モデレーターによって非表示にされた場合はリストから即座に除外する
+  // Reports a comment for abuse and removes it from the local list immediately if the server hides it
   const handleReportPromptComment = useCallback(
     async (commentId: string | number) => {
       if (!isLoggedIn) {
@@ -967,12 +1103,16 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [isLoggedIn, setCommentActionPending, updatePromptCommentCount]
   );
 
+  // 詳細モーダルからコメントを手動で再読み込みするためのアクション
+  // Action for manually refreshing comments from within the detail modal
   const reloadDetailComments = useCallback(() => {
     const promptId = getPromptId(detailPrompt);
     if (!promptId) return;
     void loadPromptComments(promptId);
   }, [detailPrompt, loadPromptComments]);
 
+  // 共有モーダルを開き、対象プロンプトの共有URLを非同期で生成する
+  // Opens the share modal and asynchronously generates the share URL for the target prompt
   const openPromptShareDialog = useCallback(
     (prompt: PromptRecord, event?: Event | MouseEvent<HTMLButtonElement>) => {
       event?.stopPropagation();
@@ -983,6 +1123,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [createPromptShareLink, openModal]
   );
 
+  // 詳細ビューでプロンプト詳細モーダルを開き、コメントを非同期で取得する
+  // Opens the prompt detail modal in detail view and asynchronously fetches comments
   const openPromptDetailModal = useCallback(
     (prompt: PromptRecord) => {
       const promptId = getPromptId(prompt);
@@ -1000,6 +1142,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [loadPromptComments, openModal]
   );
 
+  // コメントビューで詳細モーダルを直接開き、テキストエリアへのフォーカスを優先する
+  // Opens the detail modal directly in comments view, prioritizing focus on the textarea
   const openPromptCommentsModal = useCallback(
     (prompt: PromptRecord) => {
       const promptId = getPromptId(prompt);
@@ -1017,6 +1161,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [loadPromptComments, openModal]
   );
 
+  // 同じカードのドロップダウンを再度クリックした場合はトグルとして閉じる
+  // Toggles the dropdown closed if the same card's menu is clicked again
   const togglePromptDropdown = useCallback((promptId: string) => {
     setOpenDropdownPromptId((current) => (current === promptId ? null : promptId));
   }, []);
@@ -1025,6 +1171,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setOpenDropdownPromptId(null);
   }, []);
 
+  // プロンプトをタスクとして追加するAPIを呼び出す。未ログインの場合はトーストで案内する
+  // Calls the add-as-task API; shows a toast guide if the user is not logged in
   const handleAddPromptAsTask = useCallback(
     async (prompt: PromptRecord) => {
       const promptId = prompt.clientId;
@@ -1049,6 +1197,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [isLoggedIn, setAddAsTaskPending]
   );
 
+  // いいね状態を楽観的UIで即座に反映し、API失敗時はロールバックする
+  // Optimistically updates the like state immediately and rolls back if the API call fails
   const handleTogglePromptLike = useCallback(
     async (prompt: PromptRecord) => {
       if (!isLoggedIn) {
@@ -1057,6 +1207,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       }
 
       const promptId = prompt.clientId;
+      // 処理中の場合は重複リクエストを無視する
+      // Ignore duplicate requests while an operation is already in progress
       if (likePendingIdsRef.current.has(promptId)) {
         return;
       }
@@ -1076,6 +1228,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         await request;
       } catch (error) {
         console.error("いいね操作エラー:", error);
+        // 失敗した場合は元の状態に戻す
+        // Revert to the original state on failure
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           liked: !shouldLike
@@ -1088,6 +1242,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [isLoggedIn, setLikePending, triggerActionEffect, updatePromptRecord]
   );
 
+  // ブックマーク状態を楽観的UIで即座に反映し、API失敗時はロールバックする
+  // Optimistically updates the bookmark state immediately and rolls back if the API call fails
   const handleTogglePromptBookmark = useCallback(
     async (prompt: PromptRecord) => {
       if (!isLoggedIn) {
@@ -1127,6 +1283,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [isLoggedIn, setBookmarkPending, triggerActionEffect, updatePromptRecord]
   );
 
+  // 未ログイン時はトーストで案内し、ログイン済みの場合は投稿モーダルを開く
+  // Shows a toast guide for unauthenticated users and opens the composer modal for logged-in users
   const openComposerModal = useCallback(() => {
     if (!isLoggedIn) {
       showToast("プロンプトを投稿するにはログインが必要です。", { variant: "error" });
@@ -1137,6 +1295,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     openModal("post", promptPostTitleInputRef.current);
   }, [isLoggedIn, openModal, setPromptPostStatus]);
 
+  // カテゴリをクリックしたとき、検索中なら一覧をリセットしてから選択カテゴリを適用する
+  // When a category is clicked, resets the search if active before applying the selected category
   const handleCategoryClick = useCallback(
     (category: string) => {
       setOpenDropdownPromptId(null);
@@ -1157,6 +1317,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [buildPromptCountMeta, loadPrompts, searchInput]
   );
 
+  // プロンプトタイプのフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
+  // When a prompt type filter is clicked, re-searches if a query is active to apply the new filter
   const handlePromptTypeFilterClick = useCallback(
     (promptTypeFilter: PromptTypeFilter) => {
       setOpenDropdownPromptId(null);
@@ -1175,6 +1337,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
   );
 
+  // Enterキーで検索を実行する。デフォルトのフォーム送信を防止する
+  // Triggers search on Enter key press; prevents the default form submission
   const handleSearchInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
@@ -1185,6 +1349,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [searchPrompts]
   );
 
+  // 画像ファイルが選択されたときにバリデーションを行い、問題なければプレビューを更新する
+  // Validates the selected image file on change and updates the preview if validation passes
   const handleReferenceImageChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0] || null;
@@ -1199,10 +1365,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     [clearPromptImageSelection, updatePromptImagePreview, validateReferenceImageFile]
   );
 
+  // プロンプト投稿フォームのサブミットハンドラ。バリデーション後にFormDataを構築してAPIに送信する
+  // Handles prompt composer form submission: validates inputs, builds FormData, and calls the API
   const handlePostSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
+      // 必須のフォーム要素が存在するかを確認する
+      // Verify that all required form elements are present in the DOM
       if (
         !promptPostTitleInputRef.current ||
         !promptPostCategorySelectRef.current ||
@@ -1225,6 +1395,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         return;
       }
 
+      // プロンプトタイプに応じてフィールドを選択的にFormDataへ追加する
+      // Selectively appends fields to FormData based on the selected prompt type
       const formData = new FormData();
       formData.append("title", postTitle);
       formData.append("category", postCategory === "未選択" ? "" : postCategory);
@@ -1248,6 +1420,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
         setPromptPostStatus("プロンプトが投稿されました。公開一覧へ反映します。", "success");
 
+        // 投稿成功後にフォームを全フィールドリセットする
+        // Reset all form fields after a successful submission
         setPromptType("text");
         setPostTitle("");
         setPostCategory("未選択");
@@ -1265,6 +1439,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           promptTypeToApply: selectedPromptTypeFilterRef.current
         });
 
+        // 成功メッセージをユーザーに見せてからモーダルを閉じるための短い遅延
+        // Brief delay to let the user see the success message before auto-closing the modal
         if (postCloseTimerRef.current !== null) {
           window.clearTimeout(postCloseTimerRef.current);
         }
@@ -1304,6 +1480,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     ]
   );
 
+  // ページ初期化時のセットアップ処理。カスタム要素を動的インポートしてWeb Shareの対応状況を検出する
+  // Page initialization: dynamically imports custom elements and detects Web Share API support
   useEffect(() => {
     document.body.classList.add("prompt-share-page");
     setSupportsNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
@@ -1317,6 +1495,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     void importCustomElements();
 
     return () => {
+      // アンマウント時にスクロールロックとページ固有のクラスを全てクリーンアップする
+      // Clean up scroll lock state and page-specific classes on unmount
       document.documentElement.classList.remove("ps-modal-open");
       document.body.classList.remove("ps-modal-open");
       document.body.style.position = "";
@@ -1335,6 +1515,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, [revokePromptImagePreview]);
 
+  // キャッシュから即座にUIを表示し、バックグラウンドでAPIを呼び出して最新の認証状態を確認する
+  // Shows the UI immediately from cache while checking the latest auth state from the API in the background
   useEffect(() => {
     const cachedAuthState = readCachedAuthState();
     if (cachedAuthState !== null) {
@@ -1344,6 +1526,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
 
     let cancelled = false;
+    // タイムアウト0でAPI呼び出しをマイクロタスクキューに遅延させ、キャッシュが先にレンダリングされるようにする
+    // Defers the API call to the next tick so the cached state renders first
     const timerId = window.setTimeout(() => {
       void fetch("/api/current_user")
         .then((res) => (res.ok ? res.json() : { logged_in: false }))
@@ -1374,6 +1558,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, []);
 
+  // キャッシュからプロンプトをすぐに表示してから、APIで最新データを取得する（ストア・スワップ戦略）
+  // Renders cached prompts immediately, then fetches fresh data from the API (stale-while-revalidate)
   useEffect(() => {
     const cachedPrompts = readPromptCache();
     if (cachedPrompts && cachedPrompts.length > 0) {
@@ -1388,16 +1574,22 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     void loadPrompts();
   }, [buildPromptCountMeta, loadPrompts, toPromptRecords]);
 
+  // 画像タイプ以外に切り替えた場合は参照画像の選択をクリアしてメモリを解放する
+  // Clears the reference image selection to free memory when switching away from the image prompt type
   useEffect(() => {
     if (promptType !== "image") {
       clearPromptImageSelection();
     }
   }, [clearPromptImageSelection, promptType]);
 
+  // プロンプトタイプが変わったときにAI補助パネルの表示を更新する
+  // Updates the AI-assist panel display whenever the prompt type changes
   useEffect(() => {
     promptAssistControllerRef.current?.updateForPromptType(promptType);
   }, [promptType]);
 
+  // ドキュメント全体のクリックでドロップダウンを閉じる。バブリングを利用した実装
+  // Closes any open dropdown on document click, leveraging event bubbling
   useEffect(() => {
     const handleDocumentClick = () => {
       setOpenDropdownPromptId(null);
@@ -1408,6 +1600,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, []);
 
+  // 投稿フォームの全フィールドがDOMにマウントされてからAI補助パネルを一度だけ初期化する
+  // Initializes the AI-assist panel exactly once after all composer form fields are mounted in the DOM
   useEffect(() => {
     if (!promptAssistRootRef.current || promptAssistInitializedRef.current) {
       return;
@@ -1452,6 +1646,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         output_examples: { label: "出力例", element: promptPostOutputExamplesRef.current, setValue: setPostOutputExample }
       },
       beforeApplyField: (fieldName) => {
+        // 入力例や出力例が自動入力されるときにガードレールを自動的に有効化する
+        // Auto-enables guardrails when AI-assist populates input/output examples
         if (fieldName === "input_examples" || fieldName === "output_examples") {
           setGuardrailEnabled(true);
         }
@@ -1467,6 +1663,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, []);
 
+  // モーダルの開閉に応じてbodyのスクロールをロック/アンロックし、フォーカスを管理する
+  // Locks/unlocks body scroll when modals open/close and manages focus accordingly
   useEffect(() => {
     if (!activeModal) {
       if (!hasModalLockRef.current) {
@@ -1474,6 +1672,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         preferredFocusElementRef.current = null;
         return;
       }
+      // モーダルを閉じるときにスクロール位置を復元する
+      // Restore the scroll position when closing a modal
       document.documentElement.classList.remove("ps-modal-open");
       document.body.classList.remove("ps-modal-open");
       document.body.style.position = "";
@@ -1492,6 +1692,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       return;
     }
 
+    // position: fixed でbodyを固定し、CSSでスクロールバーが消えても幅が変わらないようにする
+    // Fixes the body position to prevent scroll while keeping the width stable to avoid layout shift
     if (!document.body.classList.contains("ps-modal-open")) {
       lockedScrollYRef.current = window.scrollY || window.pageYOffset || 0;
       document.documentElement.classList.add("ps-modal-open");
@@ -1507,6 +1709,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     focusModal(activeModal);
   }, [activeModal, focusModal]);
 
+  // モーダル内でのキーボード操作（Escape・Tabトラップ）を処理してアクセシビリティを確保する
+  // Handles keyboard navigation inside modals (Escape to close, Tab trapping for accessibility)
   useEffect(() => {
     if (!activeModal) {
       return;
@@ -1519,6 +1723,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       }
 
       if (event.key === "Escape") {
+        // 投稿送信中はEscapeキーでモーダルを閉じない
+        // Prevent closing the modal with Escape while a post submission is in progress
         if (activeModal === "post" && isPostSubmitting) {
           return;
         }
@@ -1531,6 +1737,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         return;
       }
 
+      // Tabキーでフォーカスをモーダル内に閉じ込めるフォーカストラップ
+      // Focus trap: keeps Tab navigation confined within the modal
       const focusableElements = getModalFocusableElements(modalElement);
       if (focusableElements.length === 0) {
         event.preventDefault();
@@ -1563,6 +1771,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, [activeModal, closeModal, getModalElement, isPostSubmitting]);
 
+  // コメントビューが開いたときにテキストエリアへフォーカスしてスムーズにスクロールする
+  // Scrolls to and focuses the comment textarea when the comments view becomes active
   useEffect(() => {
     if (activeModal !== "detail" || detailModalView !== "comments") {
       return;
@@ -1582,6 +1792,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, [activeModal, detailModalView, detailPrompt]);
 
+  // フィルタ適用後に表示件数がゼロになった場合のフィードバックを生成する（読み込み中は非表示）
+  // Generates empty-filter feedback when visible prompts drop to zero after filtering (hidden during loading)
   const filterEmptyFeedback = useMemo<PromptFeedback | null>(() => {
     if (isPromptsLoading || promptFeedback || prompts.length === 0 || visiblePrompts.length > 0) {
       return null;
@@ -1592,11 +1804,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     };
   }, [getFilterEmptyMessage, isPromptsLoading, promptFeedback, prompts.length, visiblePrompts.length]);
 
+  // APIエラーやフィルタの空状態などを統合して、表示するフィードバックを一本化する
+  // Consolidates API error feedback and filter-empty feedback into a single value to display
   const showPromptFeedback = Boolean(promptFeedback && visiblePrompts.length === 0 && !isPromptsLoading);
   const feedbackToShow = showPromptFeedback ? promptFeedback : filterEmptyFeedback;
 
   return (
     <>
+      {/* SEOメタタグと構造化データを設定するヘッドコンポーネント / Head component that sets SEO meta tags and structured data */}
       <SeoHead
         title="プロンプト共有 | Chat Core"
         description={promptShareDescription}
@@ -1606,6 +1821,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_share.css" />
       </SeoHead>
 
+      {/* プロンプト一覧・検索・フィルタを含むページレイアウト / Page layout containing the prompt list, search bar, and filters */}
       <PromptSharePageLayout
         authUiReady={authUiReady}
         isLoggedIn={isLoggedIn}
@@ -1648,6 +1864,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         onToggleBookmark={handleTogglePromptBookmark}
       >
 
+        {/* プロンプト投稿フォームのモーダル。ログイン済みユーザーのみ利用可能 / Composer modal for posting new prompts; only available to logged-in users */}
         <PromptShareComposerModal
           isOpen={activeModal === "post"}
           isPostSubmitting={isPostSubmitting}
@@ -1695,6 +1912,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           onClearReferenceImage={clearPromptImageSelection}
         />
 
+        {/* プロンプト詳細とコメント一覧を表示するモーダル / Modal showing prompt details and the comment thread */}
         <PromptShareDetailModal
           isOpen={activeModal === "detail"}
           isLoggedIn={isLoggedIn}
@@ -1720,6 +1938,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           }}
         />
 
+        {/* 共有URLとSNSリンクを表示するモーダル / Modal displaying the share URL and SNS share links */}
         <PromptShareShareModal
           isOpen={activeModal === "share"}
           promptShareModalRef={promptShareModalRef}

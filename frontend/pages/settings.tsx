@@ -1,3 +1,5 @@
+// ユーザー設定ページ全体のエントリポイント — プロフィール・外観・プロンプト・セキュリティを一画面で管理する
+// Entry point for the user settings page — manages profile, appearance, prompts, and security in a single view
 import { SeoHead } from "../components/SeoHead";
 import {
   useCallback,
@@ -29,8 +31,12 @@ import {
 import { truncateTitle } from "../scripts/user/settings/utils";
 import { PROMPT_CATEGORY_OPTIONS } from "../components/prompt_share/prompt_share_page_constants";
 
+// 設定画面のどのセクションを表示するかを識別するユニオン型
+// Union type identifying which section of the settings page is currently visible
 type SettingsSection = "profile" | "appearance" | "prompts" | "prompt-list" | "notifications" | "security";
 
+// テーマ選択肢の定義型 — アイコン・ラベル・説明を束ねる
+// Type for a single theme option bundling icon, label, and description
 type ThemeOption = {
   value: ThemePreference;
   iconClass: string;
@@ -38,6 +44,8 @@ type ThemeOption = {
   description: string;
 };
 
+// 選択可能なテーマの一覧 — ライト・ダーク・システム追従の 3 択
+// Available theme choices — light, dark, and system-follow
 const THEME_OPTIONS: ThemeOption[] = [
   {
     value: "light",
@@ -59,12 +67,16 @@ const THEME_OPTIONS: ThemeOption[] = [
   }
 ];
 
+// サイドバーナビゲーション項目の型
+// Type for a sidebar navigation item
 type SettingsNavItem = {
   section: SettingsSection;
   iconClass: string;
   label: string;
 };
 
+// プロフィールフォームの入力値をまとめた型 — 送信前の一時的な状態を保持する
+// Type holding the current (unsaved) values of the profile form
 type ProfileFormState = {
   username: string;
   email: string;
@@ -72,13 +84,19 @@ type ProfileFormState = {
   llmProfileContext: string;
 };
 
+// プロフィール保存後のフィードバック表示に使う型
+// Type used to display inline feedback after a profile save attempt
 type ProfileSaveStatus = {
   tone: "success" | "error";
   message: string;
 };
 
+// メールアドレス変更フローの進行ステージ
+// Progress stage of the email-change two-step verification flow
 type EmailChangeStage = "idle" | "current_email" | "new_email";
 
+// プロンプト編集モーダルで管理するフォーム状態
+// Form state managed inside the prompt-edit modal
 type EditPromptFormState = {
   id: string;
   title: string;
@@ -88,6 +106,8 @@ type EditPromptFormState = {
   outputExamples: string;
 };
 
+// 登録済み Passkey 1 件の情報を表す型
+// Represents a single registered passkey record
 type PasskeyRecord = {
   id: number;
   label: string;
@@ -97,9 +117,15 @@ type PasskeyRecord = {
   lastUsedAt: string;
 };
 
+// 保存成功アニメーションの表示時間（ミリ秒）
+// Duration in milliseconds to show the save-success animation
 const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
+// アカウント削除を確定させるためにユーザーが入力すべき文字列
+// Exact string the user must type to confirm account deletion
 const ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT";
 
+// サイドバーに表示するナビゲーション項目の定義
+// Definition of navigation items shown in the settings sidebar
 const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
@@ -109,22 +135,34 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "security", iconClass: "bi bi-key", label: "セキュリティ" }
 ];
 
+// アバター未設定時に表示するデフォルト画像のパス
+// Path to the default avatar image shown when no avatar is set
 const DEFAULT_AVATAR_URL = "/static/user-icon.png";
+// Passkey 対応状況チェック開始前に表示する初期メッセージ
+// Initial message shown while checking passkey browser support
 const PASSKEY_INITIAL_SUPPORT_TEXT = "このブラウザの対応状況を確認しています。";
 
+// 生の日付文字列を人間が読みやすい形式に変換する — 空値は空文字を返す
+// Converts a raw date string to a human-readable format; returns empty string for falsy input
 function toDisplayDate(rawDate?: string): string {
   return formatDateTime(rawDate) || rawDate || "";
 }
 
+// 複数の空白文字を 1 つに正規化しトリムする — カード上のプレビューテキスト整形用
+// Collapses consecutive whitespace and trims — used to format preview text on cards
 function normalizePreviewText(value?: string): string {
   return (value || "").replace(/\s+/g, " ").trim();
 }
 
+// API レスポンスの未知の配列を型安全な PasskeyRecord 配列に変換する
+// Converts an unknown array from the API response into a type-safe PasskeyRecord array
 function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
   return rawPasskeys
     .map((rawPasskey) => {
       const passkey = asRecord(rawPasskey);
       const id = Number(passkey.id);
+      // 数値として有効でない ID はスキップして配列から除外する
+      // Skip entries whose id is not a finite number to avoid corrupted records
       if (!Number.isFinite(id)) {
         return null;
       }
@@ -145,6 +183,8 @@ function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
     .filter((passkey): passkey is PasskeyRecord => passkey !== null);
 }
 
+// Passkey の日時を表示用にフォーマットする — 値がなければ「未使用」を返す
+// Formats a passkey datetime for display; returns "未使用" when the value is absent
 function formatPasskeyDateTime(value: string): string {
   if (!value) {
     return "未使用";
@@ -152,12 +192,16 @@ function formatPasskeyDateTime(value: string): string {
   return formatDateTime(value) || "未使用";
 }
 
+// プロフィール情報から LLM に渡すデフォルトコンテキスト文字列を組み立てる
+// Builds the default LLM context string from profile fields when no custom value has been saved
 function buildDefaultLlmProfileContext(profile: Pick<ProfileFormState, "username" | "email" | "bio">): string {
   const lines: string[] = [];
   const username = profile.username.trim();
   const email = profile.email.trim();
   const bio = profile.bio.trim();
 
+  // 空フィールドは出力に含めず、入力済みの項目だけを改行区切りで連結する
+  // Only include fields that have content so the context stays clean
   if (username) {
     lines.push(`名前: ${username}`);
   }
@@ -171,6 +215,8 @@ function buildDefaultLlmProfileContext(profile: Pick<ProfileFormState, "username
   return lines.join("\n");
 }
 
+// 設定画面の左側に表示するナビゲーションサイドバー
+// Navigation sidebar displayed on the left side of the settings page
 function SettingsSidebar({
   activeSection,
   onSectionSelect
@@ -184,6 +230,7 @@ function SettingsSidebar({
         <h3>設定</h3>
       </div>
 
+      {/* 各設定セクションへのリンク一覧 — アクティブ状態を aria-current で通知する / List of links to each settings section — active state is communicated via aria-current */}
       <ul className="nav-menu">
         {SETTINGS_NAV_ITEMS.map((item) => (
           <li key={item.section}>
@@ -211,6 +258,8 @@ function SettingsSidebar({
   );
 }
 
+// ユーザーが投稿したプロンプト 1 件を表示するカードコンポーネント
+// Card component displaying a single user-authored prompt
 function PromptCard({
   prompt,
   onEdit,
@@ -220,6 +269,8 @@ function PromptCard({
   onEdit: (prompt: PromptRecord) => void;
   onDelete: (prompt: PromptRecord) => void;
 }) {
+  // プレビュー用に各テキストを正規化・整形する
+  // Normalize each text field for preview display
   const promptId = asId(prompt.id);
   const contentPreview = normalizePreviewText(prompt.content);
   const inputPreview = normalizePreviewText(prompt.inputExamples);
@@ -244,6 +295,7 @@ function PromptCard({
           <p className="prompt-card__description" title={prompt.content}>
             {contentPreview || "内容が設定されていません。"}
           </p>
+          {/* 入出力例が存在する場合のみプレビューセクションを表示する / Show the preview section only when input or output examples exist */}
           {(inputPreview || outputPreview) ? (
             <div className="prompt-card__preview-sections">
               {inputPreview ? (
@@ -288,6 +340,8 @@ function PromptCard({
   );
 }
 
+// ユーザーが保存した（お気に入り）プロンプト 1 件を表示するカードコンポーネント
+// Card component displaying a single saved (bookmarked) prompt list entry
 function PromptListCard({
   entry,
   onDelete
@@ -307,6 +361,7 @@ function PromptListCard({
       <div className="prompt-card__main">
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
+            {/* 保存済みバッジを常に表示し、カテゴリがある場合のみカテゴリバッジも表示する / Always show the saved badge; show category badge only when a category is set */}
             <span className="prompt-card__badge prompt-card__badge--saved">
               <i className="bi bi-bookmark-fill me-1"></i>保存済み
             </span>
@@ -358,6 +413,8 @@ function PromptListCard({
   );
 }
 
+// キーボード操作に対応したアクセシブルなカテゴリ選択コンポーネント
+// Accessible category select component with full keyboard navigation support
 function PromptCategorySelect({
   selectId,
   value,
@@ -371,9 +428,13 @@ function PromptCategorySelect({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  // 各オプションボタンへの参照を保持し、フォーカス移動に使う
+  // Holds refs to each option button so keyboard navigation can move focus programmatically
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [isOpen, setIsOpen] = useState(false);
   const selectedValue = value || "未選択";
+  // 現在値が選択肢リストにない場合は先頭に追加して一覧に含める
+  // Prepend the current value when it is not part of the standard option list
   const categoryOptions = PROMPT_CATEGORY_OPTIONS.includes(selectedValue)
     ? PROMPT_CATEGORY_OPTIONS
     : [selectedValue, ...PROMPT_CATEGORY_OPTIONS];
@@ -381,10 +442,14 @@ function PromptCategorySelect({
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const listboxId = `${selectId}-menu`;
 
+  // 選択値が外部から変わったときにアクティブインデックスを同期する
+  // Keep activeIndex in sync when the selected value changes externally
   useEffect(() => {
     setActiveIndex(selectedIndex);
   }, [selectedIndex]);
 
+  // ドロップダウンが開いている間、外側クリックで閉じるためのグローバルリスナーを登録する
+  // Register a global pointer-down listener to close the dropdown when clicking outside
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -402,17 +467,23 @@ function PromptCategorySelect({
     };
   }, [isOpen]);
 
+  // activeIndex が変わるたびに対応するオプションにフォーカスを移す
+  // Move focus to the option at activeIndex whenever it changes while the list is open
   useEffect(() => {
     if (isOpen) {
       optionRefs.current[activeIndex]?.focus();
     }
   }, [activeIndex, isOpen]);
 
+  // 指定インデックスでリストを開く — 範囲外にならないようクランプする
+  // Open the list at the specified index, clamped within valid bounds
   const openAt = (index: number) => {
     setActiveIndex(Math.min(Math.max(index, 0), categoryOptions.length - 1));
     setIsOpen(true);
   };
 
+  // 選択を確定してリストを閉じ、トリガーボタンにフォーカスを戻す
+  // Commit the selection, close the list, and return focus to the trigger button
   const selectOption = (index: number) => {
     const nextValue = categoryOptions[index];
     if (!nextValue) {
@@ -423,6 +494,8 @@ function PromptCategorySelect({
     triggerRef.current?.focus();
   };
 
+  // トリガーボタンのキーボードイベント — 矢印キーでリストを開く
+  // Keyboard handler for the trigger button — arrow keys open the dropdown
   const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (disabled) {
       return;
@@ -443,6 +516,8 @@ function PromptCategorySelect({
     }
   };
 
+  // オプション項目のキーボードイベント — Home/End でリストの端へ移動し、Escape で閉じる
+  // Keyboard handler for option items — Home/End jump to list edges; Escape closes the list
   const handleOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -478,6 +553,7 @@ function PromptCategorySelect({
 
   return (
     <div ref={rootRef} className="relative w-full">
+      {/* ネイティブ select はスクリーンリーダー向けにのみ保持し、見た目は非表示にする / Native select is kept for screen-reader compatibility but hidden visually */}
       <select
         id={selectId}
         className="pointer-events-none absolute h-px w-px opacity-0"
@@ -530,6 +606,7 @@ function PromptCategorySelect({
         ></i>
       </button>
 
+      {/* ドロップダウンリスト — isOpen が true の間だけレンダリングする / Dropdown list — rendered only while isOpen is true */}
       {isOpen ? (
         <div
           id={listboxId}
@@ -581,6 +658,8 @@ function PromptCategorySelect({
   );
 }
 
+// プロンプト編集用のモーダルダイアログ — 保存中は全フォームを無効化する
+// Modal dialog for editing a prompt — disables all form controls while saving
 function EditPromptModal({
   formState,
   saving,
@@ -596,6 +675,8 @@ function EditPromptModal({
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  // 複数の入力欄で共通利用するクラス名をまとめて管理する
+  // Reusable class string shared across all text inputs and textareas in the modal
   const inputClassName = [
     "w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5",
     "text-sm text-slate-900 shadow-sm outline-none transition",
@@ -619,6 +700,8 @@ function EditPromptModal({
       aria-modal="true"
       aria-labelledby="editPromptModalTitle"
       onClick={(event) => {
+        // モーダル背景クリックでも閉じられるが、保存中は誤操作を防ぐためブロックする
+        // Allow closing by clicking the backdrop, but block it during save to prevent accidental dismissal
         if (event.target === event.currentTarget && !saving) {
           onClose();
         }
@@ -651,6 +734,7 @@ function EditPromptModal({
 
           <form id="editForm" className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+              {/* 編集対象のプロンプト ID を hidden フィールドで保持する / Hold the target prompt ID in a hidden field for form submission */}
               <input type="hidden" id="editPromptId" value={formState.id} readOnly />
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -757,9 +841,15 @@ function EditPromptModal({
   );
 }
 
+// ユーザー設定ページのメインコンポーネント — すべての設定セクションを統括する
+// Main component for the user settings page — orchestrates all settings sections
 export default function UserSettingsPage() {
+  // 現在表示中のセクションを管理する
+  // Track which section is currently displayed
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
 
+  // プロフィールフォームの現在値と初期値を別々に保持して「キャンセル」で元に戻せるようにする
+  // Keep current and initial profile form values separately so Cancel can restore them
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     username: "",
     email: "",
@@ -777,24 +867,36 @@ export default function UserSettingsPage() {
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<ProfileSaveStatus | null>(null);
+  // トークンをインクリメントすることで保存成功アニメーションを再トリガーする
+  // Incrementing this token re-triggers the save-success animation effect
   const [profileSaveEffectToken, setProfileSaveEffectToken] = useState(0);
   const [profileSaveEffectActive, setProfileSaveEffectActive] = useState(false);
+  // LLM コンテキストが自動生成のデフォルト値を使っているかどうかを追跡する
+  // Track whether the LLM context is currently using the auto-generated default
   const [llmProfileContextUsesGeneratedDefault, setLlmProfileContextUsesGeneratedDefault] = useState(false);
   const [initialLlmProfileContextUsesGeneratedDefault, setInitialLlmProfileContextUsesGeneratedDefault] = useState(false);
 
+  // 投稿済みプロンプト一覧の状態
+  // State for the list of prompts authored by this user
   const [myPrompts, setMyPrompts] = useState<PromptRecord[]>([]);
   const [myPromptsLoading, setMyPromptsLoading] = useState(false);
   const [myPromptsError, setMyPromptsError] = useState<string | null>(null);
 
+  // 保存済みプロンプト一覧の状態
+  // State for the list of saved (bookmarked) prompt entries
   const [promptListEntries, setPromptListEntries] = useState<PromptListEntry[]>([]);
   const [promptListLoading, setPromptListLoading] = useState(false);
   const [promptListError, setPromptListError] = useState<string | null>(null);
 
+  // 編集モーダルの表示制御 — null のときモーダルは非表示
+  // Controls the edit modal; null means the modal is hidden
   const [editPromptForm, setEditPromptForm] = useState<EditPromptFormState | null>(null);
   const [promptSaving, setPromptSaving] = useState(false);
 
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("auto");
 
+  // Passkey 関連の状態 — 対応有無・一覧・ローディング・操作中フラグを管理する
+  // Passkey-related state — tracks support, list, loading, and in-progress operation flags
   const [passkeySupported, setPasskeySupported] = useState(true);
   const [passkeySupportStatus, setPasskeySupportStatus] = useState(PASSKEY_INITIAL_SUPPORT_TEXT);
   const [passkeys, setPasskeys] = useState<PasskeyRecord[]>([]);
@@ -804,6 +906,9 @@ export default function UserSettingsPage() {
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
+
+  // メールアドレス変更フローの状態 — 段階・入力値・送信中フラグ・結果を管理する
+  // Email-change flow state — tracks stage, input values, submission flag, and result
   const [emailChangeStage, setEmailChangeStage] = useState<EmailChangeStage>("idle");
   const [emailChangeNewEmail, setEmailChangeNewEmail] = useState("");
   const [emailChangeCode, setEmailChangeCode] = useState("");
@@ -811,13 +916,19 @@ export default function UserSettingsPage() {
   const [emailChangeStatus, setEmailChangeStatus] = useState<ProfileSaveStatus | null>(null);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  // 保存成功アニメーション用タイマーを保持し、再保存時にリセットできるようにする
+  // Holds the save-effect timer so it can be cleared and reset on rapid saves
   const profileSaveEffectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 現在のセクションが指定したセクションかどうかを返すコールバック
+  // Callback that returns whether the given section is currently active
   const isSectionActive = useCallback(
     (section: SettingsSection) => activeSection === section,
     [activeSection]
   );
 
+  // プロフィール情報を API から取得してフォームに反映する
+  // Fetch profile data from the API and populate the form
   const loadProfile = useCallback(async () => {
     try {
       const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
@@ -833,6 +944,8 @@ export default function UserSettingsPage() {
         llmProfileContext: ""
       };
       const rawLlmProfileContext = payload.llm_profile_context;
+      // llm_profile_context が null/undefined の場合はプロフィールから自動生成する
+      // Auto-generate LLM context from profile fields when llm_profile_context is null/undefined
       const shouldUseGeneratedDefault = rawLlmProfileContext === null || rawLlmProfileContext === undefined;
       const nextLlmProfileContext = shouldUseGeneratedDefault
         ? buildDefaultLlmProfileContext(nextProfile)
@@ -858,6 +971,8 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // ユーザーが投稿したプロンプト一覧を取得する
+  // Fetch the list of prompts authored by the current user
   const loadMyPrompts = useCallback(async () => {
     setMyPromptsLoading(true);
     setMyPromptsError(null);
@@ -880,6 +995,8 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // ユーザーが保存したプロンプト一覧を取得する
+  // Fetch the list of prompts saved (bookmarked) by the current user
   const loadPromptList = useCallback(async () => {
     setPromptListLoading(true);
     setPromptListError(null);
@@ -902,6 +1019,8 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // ブラウザの Passkey 対応を確認してから登録済み Passkey 一覧を取得する
+  // Check browser passkey support, then fetch the list of registered passkeys
   const loadPasskeys = useCallback(async () => {
     if (!browserSupportsPasskeys()) {
       setPasskeySupported(false);
@@ -935,6 +1054,8 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする
+  // On mount, add the page class and perform initial loads for theme, profile, and passkeys
   useEffect(() => {
     document.body.classList.add("settings-page");
 
@@ -957,6 +1078,8 @@ export default function UserSettingsPage() {
     };
   }, [loadPasskeys, loadProfile]);
 
+  // 保存成功トークンが変わるたびにアニメーションを一定時間表示して自動消灯する
+  // Show the save-success animation for a fixed duration each time the token increments
   useEffect(() => {
     if (profileSaveEffectToken === 0) {
       return;
@@ -980,6 +1103,8 @@ export default function UserSettingsPage() {
     };
   }, [profileSaveEffectToken]);
 
+  // 編集モーダルが開いている間、Escape キーでモーダルを閉じられるようにする
+  // While the edit modal is open, allow closing it with the Escape key
   useEffect(() => {
     if (!editPromptForm) {
       return;
@@ -996,6 +1121,8 @@ export default function UserSettingsPage() {
     };
   }, [editPromptForm, promptSaving]);
 
+  // モーダルの開閉に合わせて body に modal-open クラスを付け外しし、背景スクロールを制御する
+  // Toggle modal-open on body to prevent background scrolling when the modal is shown
   useEffect(() => {
     document.body.classList.toggle("modal-open", Boolean(editPromptForm));
     return () => {
@@ -1003,6 +1130,8 @@ export default function UserSettingsPage() {
     };
   }, [editPromptForm]);
 
+  // セクション切り替え時に必要なデータを遅延ロードする
+  // Lazily load section-specific data when the user navigates to that section
   const handleSectionSelect = useCallback((section: SettingsSection) => {
     setActiveSection(section);
 
@@ -1019,11 +1148,15 @@ export default function UserSettingsPage() {
     }
   }, [loadMyPrompts, loadPasskeys, loadPromptList]);
 
+  // テーマ選択を React 状態と localStorage の両方に反映する
+  // Apply the selected theme to both React state and localStorage
   const handleThemeSelect = useCallback((preference: ThemePreference) => {
     setThemePreferenceState(preference);
     setThemePreference(preference);
   }, []);
 
+  // プロフィールフィールドの変更を処理する — LLM コンテキストが自動生成の場合は連動更新する
+  // Handle profile field changes — auto-update LLM context when it uses the generated default
   const handleProfileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = event.target;
@@ -1035,11 +1168,15 @@ export default function UserSettingsPage() {
           [name]: value
         };
 
+        // LLM コンテキスト欄自体を編集したら「自動生成を使用中」フラグを解除する
+        // When the LLM context field itself is edited, stop using the auto-generated default
         if (name === "llmProfileContext") {
           setLlmProfileContextUsesGeneratedDefault(false);
           return nextProfile;
         }
 
+        // 他のフィールドが変わったとき、自動生成中なら LLM コンテキストも再生成する
+        // When other fields change and auto-default is active, regenerate the LLM context
         if (llmProfileContextUsesGeneratedDefault) {
           nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
         }
@@ -1049,11 +1186,15 @@ export default function UserSettingsPage() {
     [llmProfileContextUsesGeneratedDefault]
   );
 
+  // アバター画像ファイルを選択し、FileReader でプレビュー表示する
+  // Select an avatar image file and display a preview using FileReader
   const handleAvatarFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] || null;
     if (!file) {
       return;
     }
+    // 画像以外のファイルは無視してアップロードを防ぐ
+    // Ignore non-image files to prevent uploading unsupported types
     if (!file.type.startsWith("image/")) {
       return;
     }
@@ -1071,6 +1212,8 @@ export default function UserSettingsPage() {
     setSelectedAvatarFile(file);
   }, []);
 
+  // プロフィール変更をキャンセルして初期値に戻す
+  // Cancel profile changes and restore the initial values
   const handleProfileCancel = useCallback(() => {
     setProfileForm(initialProfileForm);
     setAvatarPreviewUrl(initialAvatarUrl);
@@ -1083,9 +1226,13 @@ export default function UserSettingsPage() {
     setProfileSaveEffectActive(false);
   }, [initialAvatarUrl, initialLlmProfileContextUsesGeneratedDefault, initialProfileForm]);
 
+  // プロフィールフォームを送信し、成功時に初期値を更新して「変更なし」状態にする
+  // Submit the profile form and update the initial values on success to reset dirty state
   const handleProfileSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    // multipart/form-data でアバターファイルも一緒に送信するため FormData を使う
+    // Use FormData to include the avatar file in a multipart/form-data POST
     const formData = new FormData();
     formData.append("username", profileForm.username.trim());
     formData.append("email", profileForm.email.trim());
@@ -1113,6 +1260,8 @@ export default function UserSettingsPage() {
 
       const successMessage = asString(payload.message) || "プロフィールを更新しました";
       setProfileSaveStatus({ tone: "success", message: successMessage });
+      // トークンをインクリメントして保存成功アニメーションを再起動する
+      // Increment the token to restart the save-success animation
       setProfileSaveEffectToken((current) => current + 1);
 
       const persistedAvatarUrl = asString(payload.avatar_url) || avatarPreviewUrl;
@@ -1144,6 +1293,8 @@ export default function UserSettingsPage() {
     }
   }, [avatarPreviewUrl, profileForm, selectedAvatarFile]);
 
+  // メールアドレス変更が完了したとき、フォームと初期値の両方に新しいアドレスを反映する
+  // After an email change is committed, apply the new address to both form state and initial state
   const applyCommittedEmail = useCallback((email: string) => {
     setProfileForm((prev) => {
       const nextProfile = { ...prev, email };
@@ -1161,6 +1312,8 @@ export default function UserSettingsPage() {
     });
   }, [initialLlmProfileContextUsesGeneratedDefault, llmProfileContextUsesGeneratedDefault]);
 
+  // メールアドレス変更の第 1 ステップ — 新しいアドレスへの確認コード送信をリクエストする
+  // First step of the email-change flow — request a verification code sent to the new address
   const handleRequestEmailChange = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextEmail = emailChangeNewEmail.trim();
@@ -1182,6 +1335,8 @@ export default function UserSettingsPage() {
         },
         { defaultMessage: "確認メールの送信に失敗しました。" }
       );
+      // 現在のメールへの確認コード入力ステージに進む
+      // Advance to the stage that collects the verification code sent to the current email
       setEmailChangeStage("current_email");
       setEmailChangeCode("");
       setEmailChangeStatus({
@@ -1198,6 +1353,8 @@ export default function UserSettingsPage() {
     }
   }, [emailChangeNewEmail]);
 
+  // メールアドレス変更の第 2・第 3 ステップ — 確認コードを検証して変更を完了させる
+  // Second and third steps — verify the confirmation code and finalize the email change
   const handleConfirmEmailChange = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const authCode = emailChangeCode.trim();
@@ -1221,6 +1378,8 @@ export default function UserSettingsPage() {
       );
 
       const committedEmail = asString(payload.email);
+      // email が返ってきた場合は変更完了 — フォームを初期化してアイドル状態に戻す
+      // If an email is returned, the change is complete — reset and return to idle state
       if (committedEmail) {
         applyCommittedEmail(committedEmail);
         setEmailChangeNewEmail("");
@@ -1233,6 +1392,8 @@ export default function UserSettingsPage() {
         return;
       }
 
+      // stage が new_email であれば新しいメールへのコード確認ステップに進む
+      // If stage is new_email, advance to confirming the code sent to the new address
       if (asString(payload.stage) === "new_email") {
         setEmailChangeStage("new_email");
         setEmailChangeCode("");
@@ -1257,12 +1418,16 @@ export default function UserSettingsPage() {
     }
   }, [applyCommittedEmail, emailChangeCode]);
 
+  // メールアドレス変更フローを中断してアイドル状態に戻す
+  // Abort the email-change flow and reset to idle state
   const handleCancelEmailChange = useCallback(() => {
     setEmailChangeStage("idle");
     setEmailChangeCode("");
     setEmailChangeStatus(null);
   }, []);
 
+  // 編集モーダルを開き、対象プロンプトの現在値をフォームに設定する
+  // Open the edit modal and populate the form with the selected prompt's current values
   const handleOpenPromptEdit = useCallback((prompt: PromptRecord) => {
     setEditPromptForm({
       id: asId(prompt.id),
@@ -1274,6 +1439,8 @@ export default function UserSettingsPage() {
     });
   }, []);
 
+  // 確認ダイアログを経てプロンプトを削除し、成功後に一覧を再取得する
+  // Delete a prompt after user confirmation, then refresh the list on success
   const handleDeletePrompt = useCallback(async (prompt: PromptRecord) => {
     const promptId = asId(prompt.id);
     if (!promptId) {
@@ -1305,6 +1472,8 @@ export default function UserSettingsPage() {
     }
   }, [loadMyPrompts]);
 
+  // プロンプト編集フォームの汎用入力変更ハンドラ
+  // Generic input change handler for the prompt edit form
   const handleEditPromptChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
     setEditPromptForm((prev) => {
@@ -1318,6 +1487,8 @@ export default function UserSettingsPage() {
     });
   }, []);
 
+  // プロンプト編集フォームのカテゴリ変更ハンドラ
+  // Handler for category changes in the prompt edit form
   const handleEditPromptCategoryChange = useCallback((value: string) => {
     setEditPromptForm((prev) => {
       if (!prev) {
@@ -1330,12 +1501,16 @@ export default function UserSettingsPage() {
     });
   }, []);
 
+  // プロンプト編集フォームを送信して更新 API を呼び出す — 必須フィールドのバリデーションも行う
+  // Submit the prompt edit form and call the update API — includes required-field validation
   const handleEditPromptSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editPromptForm) {
       return;
     }
 
+    // 必須フィールドが揃っていない場合はサーバーに送らず早期リターンする
+    // Guard against empty required fields before sending the request
     if (
       !editPromptForm.id ||
       !editPromptForm.title.trim() ||
@@ -1380,6 +1555,8 @@ export default function UserSettingsPage() {
     }
   }, [editPromptForm, loadMyPrompts]);
 
+  // 確認ダイアログを経て保存済みプロンプトを一覧から削除する
+  // Remove a saved prompt list entry after user confirmation
   const handleDeletePromptListEntry = useCallback(async (entry: PromptListEntry) => {
     const entryId = asId(entry.id);
     if (!entryId) {
@@ -1411,6 +1588,8 @@ export default function UserSettingsPage() {
     }
   }, [loadPromptList]);
 
+  // ブラウザの Passkey 登録フローを起動し、キャンセル時はトーストを出さない
+  // Launch the browser passkey registration flow; silently swallow user-cancelled errors
   const handleRegisterPasskey = useCallback(async () => {
     setRegisteringPasskey(true);
     try {
@@ -1418,6 +1597,8 @@ export default function UserSettingsPage() {
       showToast("Passkeyを追加しました。", { variant: "success" });
       await loadPasskeys();
     } catch (error) {
+      // ユーザーが自らキャンセルした場合はエラートーストを表示しない
+      // Do not show an error toast when the user intentionally cancelled the flow
       if (error instanceof PasskeyCancelledError) {
         return;
       }
@@ -1427,6 +1608,8 @@ export default function UserSettingsPage() {
     }
   }, [loadPasskeys]);
 
+  // 確認ダイアログを経て指定の Passkey を削除する
+  // Delete the specified passkey after user confirmation
   const handleDeletePasskey = useCallback(async (passkeyId: number) => {
     const confirmed = await showConfirmModal("このPasskeyを削除しますか？");
     if (!confirmed) {
@@ -1458,8 +1641,12 @@ export default function UserSettingsPage() {
     }
   }, [loadPasskeys]);
 
+  // アカウントを完全削除する — 確認テキスト入力と二段階ダイアログで誤操作を防ぐ
+  // Permanently delete the account — guarded by typed confirmation and a two-step dialog
   const handleDeleteAccount = useCallback(async () => {
     const normalizedConfirmation = accountDeleteConfirmation.trim();
+    // 入力テキストが正確に一致しない場合はボタンが無効になるが、防衛的にチェックする
+    // Button is already disabled unless text matches, but check defensively
     if (normalizedConfirmation !== ACCOUNT_DELETE_CONFIRMATION_TEXT) {
       setAccountDeleteError(`確認のため「${ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力してください。`);
       return;
@@ -1490,6 +1677,8 @@ export default function UserSettingsPage() {
         }
       );
       showToast("アカウントを削除しました。", { variant: "success" });
+      // 削除完了後、少し間を置いてからログインページへリダイレクトする
+      // Brief delay before redirecting to login so the toast can be seen
       window.setTimeout(() => {
         window.location.assign("/login");
       }, 400);
@@ -1499,6 +1688,8 @@ export default function UserSettingsPage() {
     }
   }, [accountDeleteConfirmation]);
 
+  // 投稿済みプロンプトのカードリストをメモ化して不要な再レンダリングを防ぐ
+  // Memoize the authored prompt card list to avoid unnecessary re-renders
   const myPromptCards = useMemo(
     () => myPrompts.map((prompt, index) => {
       const key = asId(prompt.id) || `${prompt.title}-${index}`;
@@ -1514,6 +1705,8 @@ export default function UserSettingsPage() {
     [handleDeletePrompt, handleOpenPromptEdit, myPrompts]
   );
 
+  // 保存済みプロンプトのカードリストをメモ化して不要な再レンダリングを防ぐ
+  // Memoize the saved prompt card list to avoid unnecessary re-renders
   const promptListCards = useMemo(
     () => promptListEntries.map((entry, index) => {
       const key = asId(entry.id) || `${entry.title}-${index}`;
@@ -1547,6 +1740,7 @@ export default function UserSettingsPage() {
         <action-menu></action-menu>
 
         <div className="user-settings-layout">
+          {/* サイドバーでセクションを切り替え、コンテンツ側で対応パネルを表示する / Sidebar switches sections; the content area shows the corresponding panel */}
           <SettingsSidebar activeSection={activeSection} onSectionSelect={handleSectionSelect} />
 
           <main className="settings-content">
@@ -1562,7 +1756,9 @@ export default function UserSettingsPage() {
               </button>
             </div>
 
+            {/* ---- プロフィールセクション / Profile section ---- */}
             <div id="profile-section" className={`settings-section${isSectionActive("profile") ? " active" : ""}`}>
+              {/* 保存成功時に settings-card--save-success クラスを付与してアニメーションを発火する / Add save-success class on success to trigger the animation */}
               <div className={`settings-card${profileSaveEffectActive ? " settings-card--save-success" : ""}`}>
                 <h2>ユーザープロフィール設定</h2>
                 {profileSaveStatus ? (
@@ -1580,6 +1776,7 @@ export default function UserSettingsPage() {
                   </p>
                 ) : null}
                 <form id="userSettingsForm" onSubmit={handleProfileSubmit}>
+                  {/* アバター画像の選択 — hidden input を重ねてスタイル自由なボタンで起動する / Avatar selection — triggers a hidden file input via a custom button */}
                   <div className="form-group avatar-group">
                     <label className="form-label" htmlFor="avatarInput">
                       プロフィール画像
@@ -1627,6 +1824,7 @@ export default function UserSettingsPage() {
                     />
                   </div>
 
+                  {/* メールアドレスは読み取り専用 — 変更はセキュリティセクションで行う / Email is read-only here; changes are made in the Security section */}
                   <div className="form-group">
                     <label className="form-label" htmlFor="email">
                       メールアドレス
@@ -1660,6 +1858,7 @@ export default function UserSettingsPage() {
                     ></textarea>
                   </div>
 
+                  {/* LLM コンテキスト欄 — 未設定時はプロフィールから自動生成した値が入る / LLM context field — auto-populated from profile fields when not explicitly set */}
                   <div className="form-group">
                     <label className="form-label" htmlFor="llmProfileContext">
                       AI に伝えておきたい情報
@@ -1682,6 +1881,7 @@ export default function UserSettingsPage() {
                     <button type="button" className="secondary-button" id="cancelBtn" onClick={handleProfileCancel}>
                       キャンセル
                     </button>
+                    {/* 保存中・保存直後でボタンラベルとアイコンを切り替えてフィードバックを伝える / Switch button label and icon to reflect saving / saved states */}
                     <button
                       type="submit"
                       className={`primary-button profile-save-button${profileSaveEffectActive ? " profile-save-button--saved" : ""}`}
@@ -1698,6 +1898,7 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
+            {/* ---- 外観セクション / Appearance section ---- */}
             <div id="appearance-section" className={`settings-section${isSectionActive("appearance") ? " active" : ""}`}>
               <div className="settings-card">
                 <h2>外観</h2>
@@ -1705,6 +1906,7 @@ export default function UserSettingsPage() {
                   画面のテーマを切り替えます。「システムに合わせる」を選ぶと OS の設定に追従します。
                 </p>
 
+                {/* radiogroup ロールでスクリーンリーダーにグループを認識させる / radiogroup role helps screen readers recognize the group of theme choices */}
                 <div className="theme-options" role="radiogroup" aria-label="テーマ選択">
                   {THEME_OPTIONS.map((option) => {
                     const isSelected = themePreference === option.value;
@@ -1736,6 +1938,7 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
+            {/* ---- 投稿済みプロンプトセクション / Authored prompts section ---- */}
             <div id="prompts-section" className={`settings-section${isSectionActive("prompts") ? " active" : ""}`}>
               <div className="settings-card">
                 <h2>投稿したプロンプト</h2>
@@ -1743,6 +1946,7 @@ export default function UserSettingsPage() {
                   <h3 className="section-title">投稿したプロンプト</h3>
                 </div>
 
+                {/* ローディング・エラー・空状態の 3 パターンを排他的に表示する / Show loading, error, or empty state exclusively — only one at a time */}
                 {myPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
                 {!myPromptsLoading && myPromptsError ? <p>{myPromptsError}</p> : null}
                 {!myPromptsLoading && !myPromptsError && myPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
@@ -1753,6 +1957,7 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
+            {/* ---- 保存済みプロンプトセクション / Saved prompts section ---- */}
             <div id="prompt-list-section" className={`settings-section${isSectionActive("prompt-list") ? " active" : ""}`}>
               <div className="settings-card">
                 <h2>保存したプロンプト</h2>
@@ -1772,6 +1977,7 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
+            {/* ---- 通知設定セクション（未実装）/ Notifications section (not yet implemented) ---- */}
             <div
               id="notifications-section"
               className={`settings-section${isSectionActive("notifications") ? " active" : ""}`}
@@ -1782,11 +1988,13 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
+            {/* ---- セキュリティセクション / Security section ---- */}
             <div id="security-section" className={`settings-section${isSectionActive("security") ? " active" : ""}`}>
               <div className="settings-card">
                 <h2>セキュリティ</h2>
 
                 <div className="security-stack">
+                  {/* メールアドレス変更パネル — 2 段階確認コードフローを含む / Email-change panel — includes two-step verification code flow */}
                   <div className="security-panel">
                     <h3>メールアドレス変更</h3>
                     <p className="security-panel__description">
@@ -1810,6 +2018,7 @@ export default function UserSettingsPage() {
                       </p>
                     ) : null}
 
+                    {/* 第 1 フォーム: 新しいメールアドレスの入力 — idle 状態のみ送信ボタンを表示する / First form: enter new email — submit button visible only in idle stage */}
                     <form className="email-change-form" onSubmit={handleRequestEmailChange}>
                       <div className="form-group">
                         <label className="form-label" htmlFor="emailChangeNewEmail">
@@ -1839,6 +2048,7 @@ export default function UserSettingsPage() {
                       ) : null}
                     </form>
 
+                    {/* 第 2・第 3 フォーム: 確認コードの入力 — ステージに応じてラベルを切り替える / Second/third form: enter verification code — label reflects current stage */}
                     {emailChangeStage !== "idle" ? (
                       <form className="email-change-form" onSubmit={handleConfirmEmailChange}>
                         <div className="form-group">
@@ -1885,6 +2095,7 @@ export default function UserSettingsPage() {
                     ) : null}
                   </div>
 
+                  {/* Passkey 登録パネル — ブラウザ非対応時はボタンを無効化する / Passkey registration panel — buttons disabled when browser lacks support */}
                   <div className="security-panel">
                     <h3>Passkeys</h3>
                     <p id="passkeySupportStatus">{passkeySupportStatus}</p>
@@ -1914,6 +2125,7 @@ export default function UserSettingsPage() {
                     </div>
                   </div>
 
+                  {/* 登録済み Passkey の一覧パネル — 削除ボタンは操作中のキーのみ無効化する / Registered passkey list panel — only the key being deleted has its button disabled */}
                   <div className="security-panel">
                     <h3>登録済みPasskeys</h3>
                     <div id="passkeyList" className="passkey-list">
@@ -1951,6 +2163,7 @@ export default function UserSettingsPage() {
                     </div>
                   </div>
 
+                  {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}
                   <div className="security-panel security-panel--danger">
                     <div className="account-delete-header">
                       <h3>アカウント削除</h3>
@@ -2004,6 +2217,7 @@ export default function UserSettingsPage() {
           </main>
         </div>
 
+        {/* プロンプト編集モーダル — editPromptForm が存在する場合のみレンダリングする / Prompt edit modal — rendered only when editPromptForm is non-null */}
         {editPromptForm ? (
           <EditPromptModal
             formState={editPromptForm}

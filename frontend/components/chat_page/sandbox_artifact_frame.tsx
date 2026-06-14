@@ -2,6 +2,8 @@ import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GenerativeUiArtifactV1 } from "../../lib/chat_page/types";
 
+// サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
+// Content Security Policy for sandbox iframe (fully blocks external connections, forms, etc.)
 const SANDBOX_CSP = [
   "default-src 'none'",
   "img-src data: blob:",
@@ -15,10 +17,14 @@ const SANDBOX_CSP = [
   "form-action 'none'",
 ].join("; ");
 
+// フレームの高さの最小・最大・デフォルト値（px）
+// Minimum, maximum, and default frame heights (px)
 const MIN_FRAME_HEIGHT = 160;
 const MAX_FRAME_HEIGHT = 900;
 const DEFAULT_FRAME_HEIGHT = 420;
 
+// サンドボックス内に適用するベースCSSリセット
+// Base CSS reset applied inside the sandbox
 const BASE_SANDBOX_CSS = `
 html,body{margin:0;min-height:100%;background:transparent;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere;}
 *{box-sizing:border-box;}
@@ -34,6 +40,8 @@ a{color:inherit;}
 .chatcore-empty-artifact span{font-size:13px;line-height:1.5;color:#4b5563;}
 `;
 
+// HTML属性値のエスケープ（XSS防止）
+// Escape HTML attribute values (XSS prevention)
 function escapeHtmlAttribute(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -42,14 +50,20 @@ function escapeHtmlAttribute(value: string) {
     .replace(/>/g, "&gt;");
 }
 
+// </script>タグが途中で閉じてしまうのを防ぐエスケープ
+// Escape to prevent </script> tag from prematurely closing
 function escapeScript(value: string) {
   return value.replace(/<\/script/gi, "<\\/script");
 }
 
+// </style>タグが途中で閉じてしまうのを防ぐエスケープ
+// Escape to prevent </style> tag from prematurely closing
 function escapeStyle(value: string) {
   return value.replace(/<\/style/gi, "<\\/style");
 }
 
+// アーティファクトをiframeのsrcdocとして埋め込むHTMLを生成する（CSP・高さ自動調整スクリプト込み）
+// Generate the srcdoc HTML to embed an artifact in an iframe (includes CSP and auto-height script)
 export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
   const title = escapeHtmlAttribute(artifact.title);
   const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${artifact.css || ""}`);
@@ -185,26 +199,36 @@ try {
 </html>`;
 }
 
+// サンドボックスアーティファクトフレームのprops型定義
+// Props type definition for the sandbox artifact frame
 type SandboxArtifactFrameProps = {
   artifact: GenerativeUiArtifactV1;
 };
 
+// フレームの高さを最小・最大の範囲内に収める
+// Clamp the frame height within the minimum and maximum range
 function clampHeight(value: number) {
   if (!Number.isFinite(value)) return undefined;
   return Math.min(Math.max(Math.ceil(value), MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT);
 }
 
+// 生成UIアーティファクトをサンドボックスiframe内で安全に実行・表示するコンポーネント
+// Component that safely runs and displays generative UI artifacts inside a sandbox iframe
 function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
   const [errorMessage, setErrorMessage] = useState("");
   const srcDoc = useMemo(() => buildSandboxArtifactSrcDoc(artifact), [artifact]);
 
+  // アーティファクトが変わったら高さとエラーをリセットする
+  // Reset height and error when the artifact changes
   useEffect(() => {
     setHeight(clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
     setErrorMessage("");
   }, [artifact]);
 
+  // iframeからのpostMessageで高さ変更とエラーを受け取る
+  // Receive height changes and errors from the iframe via postMessage
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const iframeWindow = iframeRef.current?.contentWindow;
@@ -260,5 +284,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
   );
 }
 
+// 不要な再レンダリングを防ぐためにメモ化する
+// Memoized to prevent unnecessary re-renders
 export const SandboxArtifactFrame = memo(SandboxArtifactFrameComponent);
 SandboxArtifactFrame.displayName = "SandboxArtifactFrame";

@@ -9,6 +9,8 @@ import {
 import type { PromptCommentData } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 
+// 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
+// All props required by the detail modal including prompt data, comment state, and handlers
 type PromptShareDetailModalProps = {
   isOpen: boolean;
   isLoggedIn: boolean;
@@ -32,6 +34,8 @@ type PromptShareDetailModalProps = {
   onClose: () => void;
 };
 
+// プロンプト詳細とコメントを切り替えて表示するモーダルコンポーネント
+// Modal that switches between prompt detail view and comments view via tabs
 export function PromptShareDetailModal({
   isOpen,
   isLoggedIn,
@@ -54,6 +58,8 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
+  // promptがnullのときは安全なデフォルト値を使い、タイプ表示を崩さない
+  // Fall back to "text" when no prompt is loaded to keep type-dependent rendering stable
   const detailPromptType = detailPrompt ? normalizePromptType(detailPrompt.prompt_type) : "text";
 
   return (
@@ -66,6 +72,8 @@ export function PromptShareDetailModal({
       aria-hidden={isOpen ? "false" : "true"}
       ref={promptDetailModalRef}
       onClick={(event) => {
+        // オーバーレイ背景クリックでモーダルを閉じる（内部クリックは無視する）
+        // Close when clicking the backdrop; ignore clicks on modal content itself
         if (event.target === event.currentTarget) {
           onClose();
         }
@@ -85,6 +93,8 @@ export function PromptShareDetailModal({
         <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
 
         <div className="modal-content-body">
+          {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
+          {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
           <div className="prompt-detail-tabs" role="tablist" aria-label="プロンプト詳細表示">
             <button
               type="button"
@@ -115,6 +125,8 @@ export function PromptShareDetailModal({
             </button>
           </div>
 
+          {/* 詳細パネル: hidden属性でDOM上は残しつつ非表示にする */}
+          {/* Detail panel: kept in DOM via hidden attribute for fast tab switching */}
           <section
             id="promptDetailPanel"
             role="tabpanel"
@@ -131,6 +143,8 @@ export function PromptShareDetailModal({
               </p>
             </div>
 
+            {/* 作例画像はURLが存在するプロンプトにのみ表示する */}
+            {/* Reference image is only rendered when the prompt has an image URL */}
             {detailPrompt?.reference_image_url ? (
               <div id="modalReferenceImageGroup" className="form-group" style={{ display: "block" }}>
                 <label>
@@ -153,6 +167,8 @@ export function PromptShareDetailModal({
               <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
             </div>
 
+            {/* SKILLタイプはcontent欄がなく代わりにMarkdownで定義を表示するため除外する */}
+            {/* SKILL prompts use skill_markdown instead of content, so content field is skipped */}
             {detailPromptType !== "skill" ? (
               <div className="form-group">
                 <label>
@@ -169,6 +185,8 @@ export function PromptShareDetailModal({
               <p id="modalPromptAuthor">{detailPrompt?.author || ""}</p>
             </div>
 
+            {/* AIモデルが設定されているときのみ表示し、再現性情報を提供する */}
+            {/* Show AI model only when set, to help users reproduce the same results */}
             {detailPrompt?.ai_model ? (
               <div id="modalAiModelGroup" className="form-group" style={{ display: "block" }}>
                 <label>
@@ -196,6 +214,8 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
+            {/* SKILLのMarkdown定義はMarkdownContentコンポーネントでレンダリングする */}
+            {/* Render SKILL Markdown definition with the shared MarkdownContent renderer */}
             {detailPromptType === "skill" && detailPrompt?.skill_markdown ? (
               <div id="modalSkillMarkdownGroup" className="form-group" style={{ display: "block" }}>
                 <label>
@@ -205,6 +225,8 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
+            {/* Pythonスクリプトはpreタグで等幅フォント表示し、コードの可読性を保つ */}
+            {/* Python script shown in a <pre> block to preserve monospace formatting */}
             {detailPromptType === "skill" && detailPrompt?.skill_python_script ? (
               <div id="modalSkillPythonScriptGroup" className="form-group" style={{ display: "block" }}>
                 <label>
@@ -217,6 +239,8 @@ export function PromptShareDetailModal({
             ) : null}
           </section>
 
+          {/* コメントパネル: aria-liveで更新時にスクリーンリーダーへ通知する */}
+          {/* Comments panel: aria-live announces updates to screen readers */}
           <section
             id="promptCommentsPanel"
             role="tabpanel"
@@ -233,6 +257,8 @@ export function PromptShareDetailModal({
             </div>
             <div className="prompt-detail-comments__header">
               <h3>コメント</h3>
+              {/* 読み込み中はボタンを無効化して重複フェッチを防ぐ */}
+              {/* Disable reload while loading to prevent duplicate fetch requests */}
               <button
                 type="button"
                 className="prompt-detail-comments__reload"
@@ -243,6 +269,8 @@ export function PromptShareDetailModal({
               </button>
             </div>
 
+            {/* 未ログインユーザーにはフォームの代わりにログイン案内を表示する */}
+            {/* Show login prompt instead of composer for unauthenticated users */}
             {isLoggedIn ? (
               <form
                 className="prompt-detail-comments__composer"
@@ -276,6 +304,8 @@ export function PromptShareDetailModal({
               <ul className="prompt-detail-comments__list">
                 {detailComments.map((comment) => {
                   const commentId = String(comment.id);
+                  // pendingIdsにIDが含まれる間はアクションボタンを無効化する
+                  // Disable action buttons while a delete/report request is in flight for this comment
                   const isPending = commentActionPendingIds.has(commentId);
                   return (
                     <li key={commentId} className="prompt-detail-comments__item">
@@ -285,6 +315,8 @@ export function PromptShareDetailModal({
                       </div>
                       <p>{comment.content || ""}</p>
                       <div className="prompt-detail-comments__actions">
+                        {/* 自分のコメントは削除でき、他人のコメントは報告できる */}
+                        {/* Own comments show delete; others' comments show report */}
                         {comment.can_delete ? (
                           <button
                             type="button"

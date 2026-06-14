@@ -33,7 +33,11 @@ const homeStructuredData = [
   }
 ];
 
+// ホームページのメインコンポーネント
+// Main component for the home page
 export default function HomePage() {
+  // ホームページのコントローラーフックを使用して状態とアクションを取得
+  // Get state and actions using the home page controller hook
   const controller = useHomePageController();
 
   const {
@@ -80,12 +84,20 @@ export default function HomePage() {
     shareWithNativeSheet,
   } = controller;
 
+// チャットビュー内かどうかを判定
+  // Check if we are in the chat view
   const isInChatView = pageViewState === "chat" || pageViewState === "launching";
+  
+  // フローティングUIのスタイル定義
+  // Style definition for floating UI elements
   const floatingAuthUiStyle = {
     position: "fixed" as const,
     // チャット画面では visual viewport の offset-top を考慮してチャットヘッダー内に収める。
     // キーボードが開いている間は chat-page-shell が visual viewport に追従するが、
     // この要素は body 直下 fixed なので offset-top を加算して揃える。
+    // In the chat screen, consider the visual viewport's offset-top to fit within the chat header.
+    // While the keyboard is open, chat-page-shell follows the visual viewport,
+    // but since this element is fixed directly under body, we add offset-top to align it.
     top: isInChatView
       ? "calc(var(--chat-visual-viewport-offset-top, 0px) + max(10px, env(safe-area-inset-top, 0px)))"
       : "max(10px, env(safe-area-inset-top, 0px))",
@@ -114,7 +126,11 @@ export default function HomePage() {
               display: authResolved && !loggedIn ? "" : "none"
             }}
           >
+            {/* ログイン/登録ボタン */}
+            {/* Login/Register button */}
             <button id="login-btn" className="auth-btn" onClick={() => {
+              // ログインページへリダイレクト
+              // Redirect to the login page
               window.location.href = "/login";
             }}>
               <i className="bi bi-person-circle"></i>

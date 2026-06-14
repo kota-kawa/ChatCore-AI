@@ -4,6 +4,8 @@ import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { TaskEditFormState } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 
+// タスク編集モーダルのprops型定義
+// Props type definition for the task edit modal
 type TaskEditModalProps = {
   taskEditModalOpen: boolean;
   taskEditForm: TaskEditFormState;
@@ -12,6 +14,8 @@ type TaskEditModalProps = {
   onSave: () => void;
 };
 
+// タスクの各フィールド（名前・プロンプト・ルール・例など）を編集するモーダルコンポーネント
+// Modal component for editing task fields (name, prompt, rules, examples, etc.)
 export function TaskEditModal({
   taskEditModalOpen,
   taskEditForm,
@@ -20,10 +24,15 @@ export function TaskEditModal({
   onSave,
 }: TaskEditModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+
+  // 初期フォーカスをタスク名入力欄に設定する
+  // Set initial focus to the task name input field
   const getInitialFocus = useCallback(() => {
     return modalRef.current?.querySelector<HTMLElement>("#taskName") ?? null;
   }, []);
 
+  // Escキーでモーダルを閉じるフォーカストラップを設定する
+  // Set up focus trap with Escape key closing behavior
   useModalFocusTrap({
     isOpen: taskEditModalOpen,
     containerRef: modalRef,
@@ -41,6 +50,7 @@ export function TaskEditModal({
       aria-hidden={taskEditModalOpen ? "false" : "true"}
       aria-labelledby="taskEditModalTitle"
       tabIndex={-1}
+      // 背景クリックでモーダルを閉じる / Close modal on backdrop click
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeTaskEditModal();
@@ -59,8 +69,11 @@ export function TaskEditModal({
             />
           </div>
 
+          {/* タスク編集フォーム（送信はReactで制御するのでdefaultのsubmitを防ぐ）*/}
+          {/* Task edit form (prevent default submit as it's controlled by React) */}
           <div className="custom-modal-body">
             <form id="taskEditForm" onSubmit={(event) => event.preventDefault()}>
+              {/* タスク名 / Task name */}
               <div className="custom-form-group">
                 <label htmlFor="taskName" className="custom-form-label">
                   <span className="custom-form-label__required">タイトル</span>
@@ -84,6 +97,7 @@ export function TaskEditModal({
                 <div className="custom-form-text">タスクの名前を入力してください。</div>
               </div>
 
+              {/* プロンプトテンプレート / Prompt template */}
               <div className="custom-form-group">
                 <label htmlFor="promptTemplate" className="custom-form-label">
                   プロンプトテンプレート
@@ -105,6 +119,7 @@ export function TaskEditModal({
                 <div className="custom-form-text">タスク実行時に使用するプロンプトテンプレートです。</div>
               </div>
 
+              {/* 回答ルール / Response rules */}
               <div className="custom-form-group">
                 <label htmlFor="responseRules" className="custom-form-label">
                   回答ルール
@@ -126,6 +141,7 @@ export function TaskEditModal({
                 <div className="custom-form-text">回答時に優先させたいルールを任意で指定します。</div>
               </div>
 
+              {/* 出力テンプレート / Output template */}
               <div className="custom-form-group">
                 <label htmlFor="outputSkeleton" className="custom-form-label">
                   出力テンプレート
@@ -147,6 +163,7 @@ export function TaskEditModal({
                 <div className="custom-form-text">回答の骨組みを任意で指定します。</div>
               </div>
 
+              {/* 入力例 / Input examples */}
               <div className="custom-form-group">
                 <label htmlFor="inputExamples" className="custom-form-label">
                   入力例
@@ -168,6 +185,7 @@ export function TaskEditModal({
                 <div className="custom-form-text">ユーザーが入力する例です。</div>
               </div>
 
+              {/* 出力例 / Output examples */}
               <div className="custom-form-group">
                 <label htmlFor="outputExamples" className="custom-form-label">
                   出力例
@@ -191,6 +209,7 @@ export function TaskEditModal({
             </form>
           </div>
 
+          {/* キャンセルと保存ボタン / Cancel and save buttons */}
           <div className="custom-modal-footer">
             <button
               type="button"

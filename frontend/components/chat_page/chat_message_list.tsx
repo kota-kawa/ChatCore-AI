@@ -27,8 +27,12 @@ import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
 
+// SSR 環境では useLayoutEffect が警告を出すため、ブラウザ上でのみ useLayoutEffect を使う。
+// Use useLayoutEffect on the browser to avoid React SSR warnings.
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+// ユーザーメッセージのインライン編集フォーム。送信すると再生成をトリガーする。
+// Inline edit form for a user message; submitting triggers message regeneration.
 function UserMessageEditForm({
   initialText,
   onSubmit,
@@ -41,6 +45,8 @@ function UserMessageEditForm({
   const [text, setText] = useState(initialText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // マウント直後にフォーカスを当て、カーソルを末尾へ移動し、テキスト量に合わせて高さを調整する。
+  // On mount: focus the textarea, move cursor to end, and auto-size height to content.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -51,6 +57,8 @@ function UserMessageEditForm({
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, []);
 
+  // IME 確定中の Enter による誤送信を防ぎ、Escape でキャンセル、Enter（Shift なし）で送信する。
+  // Prevent accidental submit during IME composition; Escape cancels, bare Enter submits.
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing) return;
@@ -69,6 +77,8 @@ function UserMessageEditForm({
     [onCancel, onSubmit, text],
   );
 
+  // テキスト変更のたびに textarea の高さを内容に合わせて伸縮させる（最大 240px）。
+  // Auto-resize textarea height to match content on every change (capped at 240px).
   const handleChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value);
     const el = event.currentTarget;
@@ -76,6 +86,8 @@ function UserMessageEditForm({
     el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
   }, []);
 
+  // 空文字または文字数上限超過の場合は送信ボタンを無効化する。
+  // Disable submit when text is empty or exceeds the max message length.
   const trimmed = text.trim();
   const canSubmit = trimmed.length > 0 && trimmed.length <= MAX_CHAT_MESSAGE_LENGTH;
 
@@ -110,10 +122,14 @@ function UserMessageEditForm({
   );
 }
 
+// 仮想リスト上の各行を表す型。「もっと読む」ボタン行とメッセージ行の 2 種類がある。
+// Discriminated union for virtual list rows: a load-more trigger or a chat message.
 type ChatMessageListRow =
   | { kind: "load-more" }
   | { kind: "message"; message: UiChatMessage };
 
+// ChatMessageRow に渡す共有プロパティ群。react-window の rowProps 経由で全行に届く。
+// Shared props passed to every ChatMessageRow via react-window's rowProps mechanism.
 type ChatMessageRowProps = {
   rows: ChatMessageListRow[];
   isGenerating: boolean;
@@ -128,6 +144,8 @@ type ChatMessageRowProps = {
   taskLookup: Map<string, NormalizedTask>;
 };
 
+// react-window が行コンポーネントに渡す追加プロパティ（位置・サイズ・aria 属性）。
+// Additional props injected by react-window per row: position, size, and ARIA attributes.
 type ChatMessageRowComponentProps = ChatMessageRowProps & {
   ariaAttributes: {
     "aria-posinset": number;
@@ -138,6 +156,9 @@ type ChatMessageRowComponentProps = ChatMessageRowProps & {
   style: CSSProperties;
 };
 
+// 仮想リストの 1 行を描画するコンポーネント。行の種別（ロード・思考中・ユーザー・アシスタント）
+// に応じて適切な UI を返す。
+// Renders a single virtual list row, branching on row kind and message sender.
 function ChatMessageRow({
   ariaAttributes,
   index,
@@ -155,6 +176,8 @@ function ChatMessageRow({
   taskLookup,
 }: ChatMessageRowComponentProps) {
   const row = rows[index];
+  // 先頭・末尾・ロード行にそれぞれ専用クラスを付与してスタイリングを切り替える。
+  // Apply positional and kind-specific CSS modifier classes for styling.
   const rowClassName = [
     "chat-message-row",
     index === 0 ? "chat-message-row--first" : "",
@@ -168,6 +191,8 @@ function ChatMessageRow({
     return <div {...ariaAttributes} className={rowClassName} style={style}></div>;
   }
 
+  // 過去メッセージが存在する場合に「もっと読む」ボタン行を表示する。
+  // Show a "load more" row when older chat history is available.
   if (row.kind === "load-more") {
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
@@ -186,6 +211,8 @@ function ChatMessageRow({
   }
 
   const { message } = row;
+  // AI が応答を生成中であることを視覚的にアニメーションで示す思考中インジケーター。
+  // Thinking indicator shown while the AI is preparing its response, with accessibility live region.
   if (message.sender === "thinking") {
     const statusText = message.text.trim() || "AIが応答を準備しています";
     const generationPhase = message.generationPhase ?? "preparing";
@@ -208,10 +235,14 @@ function ChatMessageRow({
   }
 
   if (message.sender === "user") {
+    // launch-preview-user はチャット起動中に仮表示するプレースホルダーで、編集対象外。
+    // launch-preview-user is a placeholder shown during chat launch; it cannot be edited.
     const isLaunchPreview = message.id === "launch-preview-user";
     const isEditing = editingMessageId === message.id;
 
     if (!isLaunchPreview && isEditing) {
+      // 現在の行より後ろに続くユーザーメッセージ数を数え、再生成時の削除範囲を決定する。
+      // Count trailing user messages after this row to determine regeneration scope.
       const trailingUserCount = rows
         .slice(index + 1)
         .filter((r) => r.kind === "message" && r.message.sender === "user").length;
@@ -231,6 +262,8 @@ function ChatMessageRow({
       );
     }
 
+    // 生成中または別のメッセージ編集中は編集ボタンを無効化する。
+    // Disable editing while the AI is generating or another message is being edited.
     const isEditDisabled = isGenerating || editingMessageId !== null;
     const taskLaunch = parseTaskLaunchMessage(message.text);
     return (
@@ -245,6 +278,8 @@ function ChatMessageRow({
             {taskLaunch ? <TaskPromptDisclosure task={taskLookup.get(taskLaunch.taskName)} /> : null}
           </div>
           {isLaunchPreview ? (
+            // プレースホルダー行ではアクションボタン領域をレイアウト確保のため非表示で保持する。
+            // Reserve action button space invisibly for placeholder rows to maintain layout.
             <div className="message-actions" style={{ visibility: "hidden" }}>
               <div className="copy-btn"><i className="bi bi-clipboard"></i></div>
             </div>
@@ -273,9 +308,13 @@ function ChatMessageRow({
     );
   }
 
+  // 直後にアシスタントメッセージが無い場合のみ再生成ボタンを表示する。
+  // Show the regenerate button only on the last assistant message in the list.
   const isLastAssistantMessage =
     message.sender === "assistant" &&
     !rows.slice(index + 1).some((r) => r.kind === "message" && r.message.sender === "assistant");
+  // ストリーミング中はアクションボタンを非表示にして誤操作を防ぐ。
+  // Hide action buttons during active streaming to prevent accidental interactions.
   const isActivelyStreaming = Boolean(message.streaming && isGenerating);
   const actionVisibilityStyle = isActivelyStreaming ? { visibility: "hidden" as const } : undefined;
 
@@ -301,6 +340,8 @@ function ChatMessageRow({
             }}
           />
           {!message.error && (
+            // メモ保存前に Web 検索ソースの HTML タグを除去してプレーンテキストにする。
+            // Strip web search source HTML before saving to memo for clean plain text.
             <MemoSaveActionButton
               getText={() => {
                 return stripWebSearchSourcesHtml(message.text);
@@ -319,6 +360,8 @@ function ChatMessageRow({
   );
 }
 
+// ChatMessageList が受け取る公開 Props の型定義。
+// Public prop types for the ChatMessageList component.
 type ChatMessageListProps = {
   chatMessagesRef: MutableRefObject<HTMLDivElement | null>;
   currentRoomId: string | null;
@@ -337,6 +380,8 @@ type ChatMessageListProps = {
   tasks: NormalizedTask[];
 };
 
+// react-window による仮想スクロールでチャットメッセージを描画する本体コンポーネント。
+// Core component that renders chat messages in a react-window virtual scroll list.
 function ChatMessageListComponent({
   chatMessagesRef,
   currentRoomId,
@@ -354,6 +399,8 @@ function ChatMessageListComponent({
   onSwitchBranch,
   tasks,
 }: ChatMessageListProps) {
+  // 同時に編集できるメッセージは 1 件のみ。null は非編集状態を表す。
+  // Only one message can be in edit mode at a time; null means no active edit.
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const handleEditStart = useCallback((messageId: string) => {
@@ -375,12 +422,17 @@ function ChatMessageListComponent({
     });
     return lookup;
   }, [tasks]);
+
+  // 動的行高を計測・管理する。roomId が変わると計測キャッシュをリセットする。
+  // Track dynamic row heights; reset cache when the room changes.
   const rowHeight = useDynamicRowHeight({
     defaultRowHeight: 104,
     key: currentRoomId || "no-room",
   });
   const listApiRef = useRef<ListImperativeAPI | null>(null);
 
+  // react-window の List API と DOM 要素を両方の ref に紐付けて外部から参照できるようにする。
+  // Bind both the virtual list API and its DOM element to refs for external scroll control.
   const setListRef = useCallback(
     (api: ListImperativeAPI | null) => {
       listApiRef.current = api;
@@ -389,6 +441,10 @@ function ChatMessageListComponent({
     [chatMessagesRef],
   );
 
+  // 「もっと読む」行と実際のメッセージ行を結合して仮想リストに渡す行配列を構築する。
+  // チャット起動中かつメッセージがない場合はプレースホルダー行を差し込む。
+  // Build the row array for the virtual list, prepending a load-more entry when needed.
+  // During chat launch with no messages yet, inject placeholder rows instead.
   const rows = useMemo<ChatMessageListRow[]>(() => {
     const nextRows: ChatMessageListRow[] = [];
     if (historyHasMore && historyNextBeforeId !== null) {
@@ -424,6 +480,8 @@ function ChatMessageListComponent({
     return nextRows;
   }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskName, messages, setupInfo]);
 
+  // rowProps をメモ化することで、rows や状態が変わらない限り各行の再レンダリングを防ぐ。
+  // Memoize rowProps to prevent unnecessary re-renders of individual rows.
   const rowProps = useMemo<ChatMessageRowProps>(
     () => ({
       rows,
@@ -453,14 +511,20 @@ function ChatMessageListComponent({
     ],
   );
 
+  // 最後のメッセージが思考中か、起動中なら末尾スクロールを追従させる必要がある。
+  // Auto-scroll to bottom is needed when the AI is actively thinking or chat is launching.
   const shouldRevealThinking = isChatLaunching || messages[messages.length - 1]?.sender === "thinking";
   const hasPerformedInitialScrollRef = useRef(false);
   // 初回マウント直後は react-window が動的行高を計測する数フレームで scrollTop が
   // 補正されることがあるため、その「ガタつき」を利用者から隠す目的で
   // メッセージ一覧自体を一瞬だけ不可視にしておき、末尾アンカリングが落ち着いてから
   // フェードインさせる。アンカリングが終わるまでの 80ms ほどを目安にする。
+  // Hide the list briefly on first mount to mask the scroll-position jitter that occurs
+  // while react-window measures dynamic row heights over several frames (~80ms).
   const [isInitialContentRevealed, setIsInitialContentRevealed] = useState(false);
 
+  // 仮想リストの末尾へスクロールする。List API が使えない場合は DOM を直接操作する。
+  // Scroll to the last row using the virtual list API, falling back to direct DOM scroll.
   const scrollListToEnd = useCallback(() => {
     const listApi = listApiRef.current;
     const listElement = chatMessagesRef.current;
@@ -481,6 +545,8 @@ function ChatMessageListComponent({
 
   const scrollThinkingIntoView = scrollListToEnd;
 
+  // リストの高さが変わった際（キーボード表示など）、思考中なら末尾を追従させる。
+  // Re-anchor to the bottom on list resize (e.g. virtual keyboard appearing) when thinking.
   const handleListResize = useCallback(() => {
     if (!shouldRevealThinking || typeof window === "undefined") return;
     window.requestAnimationFrame(scrollThinkingIntoView);
@@ -491,10 +557,14 @@ function ChatMessageListComponent({
   // react-window の動的行高計測がフレームをまたいで進むため、追加フレームでも再調整する。
   // その間は [isInitialContentRevealed=false] で一覧自体を不可視にしておき、
   // 末尾アンカリングが完了してから表示する。
+  // On initial mount (room switch or "view history" press), scroll to the bottom before paint
+  // so users never see the top of the list flash by. Re-scroll over multiple frames while
+  // react-window settles dynamic row heights, then reveal the list.
   useIsomorphicLayoutEffect(() => {
     if (hasPerformedInitialScrollRef.current) return;
     if (rows.length === 0) {
       // 表示する行が無い場合は隠す必要が無いので、空状態をそのまま見せる。
+      // No rows to anchor — reveal immediately without hiding.
       setIsInitialContentRevealed(true);
       return;
     }
@@ -507,6 +577,8 @@ function ChatMessageListComponent({
     // 起動のプレースホルダや短いチャットなど）は、アンカリングのガタつきが
     // 発生しないため paint 前にそのまま表示する。opacity:0 のベールを描画しない
     // ことで「一覧が一瞬消えてまた表示される」挙動を避ける。
+    // If the content fits the viewport (short chat or launch placeholder), no scroll
+    // correction will happen — reveal without the opacity veil to avoid a flash.
     const listElement = chatMessagesRef.current;
     const needsBottomAnchoring =
       !!listElement && listElement.scrollHeight - listElement.clientHeight > 1;
@@ -521,6 +593,8 @@ function ChatMessageListComponent({
     // 再調整し、計測が落ち着いた次フレームでフェードイン表示する。wall-clock の
     // setTimeout ではなく requestAnimationFrame に紐づけることで、遷移時の重い
     // 再レンダリング中でも復帰が遅れて「空白のまま」見えてしまうのを防ぐ。
+    // Re-anchor over 3 consecutive rAF frames while row heights settle, then fade in.
+    // rAF-chaining avoids the "blank gap" that setTimeout would cause during heavy renders.
     const revealAfterSettle = () => {
       scrollListToEnd();
       setIsInitialContentRevealed(true);
@@ -545,6 +619,10 @@ function ChatMessageListComponent({
     };
   }, [chatMessagesRef, rows, scrollListToEnd]);
 
+  // 思考中インジケーターが表示される間、複数フレームにまたがって末尾スクロールを維持する。
+  // 80ms・220ms の setTimeout はリサイズ完了後のスクロール漏れを補完するフォールバック。
+  // While the thinking indicator is visible, keep scrolling to the bottom across multiple
+  // frames. The 80ms/220ms timeouts catch any scroll misses after layout completes.
   useIsomorphicLayoutEffect(() => {
     if (!shouldRevealThinking) return;
 
@@ -607,5 +685,7 @@ function ChatMessageListComponent({
   );
 }
 
+// 不要な再レンダリングを防ぐため memo でラップしてエクスポートする。
+// Wrap in memo to prevent re-renders when parent re-renders with unchanged props.
 export const ChatMessageList = memo(ChatMessageListComponent);
 ChatMessageList.displayName = "ChatMessageList";

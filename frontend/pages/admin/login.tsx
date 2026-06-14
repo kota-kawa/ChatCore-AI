@@ -3,21 +3,29 @@ import { useState, type FormEvent } from "react";
 
 import { SeoHead } from "../../components/SeoHead";
 
+// ステータスメッセージの型定義（成功・エラーの2種類）
+// Type definition for status messages (success or error)
 type StatusMessage = {
   type: "success" | "error";
   text: string;
 };
 
+// 管理者ログインページコンポーネント（検索エンジンには非公開）
+// Admin login page component (excluded from search engine indexing)
 export default function AdminLogin() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<StatusMessage | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // メッセージの種類に応じてTailwindのカラークラスを切り替える
+  // Switch Tailwind color classes based on message type
   const messageTone =
     message?.type === "success"
       ? "border-emerald-400/70 bg-emerald-50 text-emerald-700"
       : "border-rose-400/70 bg-rose-50 text-rose-700";
 
+  // ログインフォームの送信処理（管理者ログインAPIを呼び出してリダイレクトする）
+  // Handle login form submission (call admin login API and redirect on success)
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage(null);
@@ -30,6 +38,8 @@ export default function AdminLogin() {
         credentials: "same-origin",
         body: JSON.stringify({
           password,
+          // nextパラメータがある場合はログイン後にそのパスへ戻る
+          // Redirect to the next path after login if specified
           next: router.query.next || ""
         })
       });
@@ -58,6 +68,7 @@ export default function AdminLogin() {
         noindex
       />
       <div className="relative min-h-screen overflow-hidden bg-slate-50">
+        {/* 背景の装飾的なブラーエフェクト / Decorative blur effect in the background */}
         <div className="pointer-events-none absolute -top-24 right-[-10rem] h-72 w-72 rounded-full bg-indigo-200/50 blur-3xl"></div>
         <div className="pointer-events-none absolute bottom-0 left-[-6rem] h-80 w-80 rounded-full bg-emerald-200/40 blur-3xl"></div>
 
@@ -79,6 +90,7 @@ export default function AdminLogin() {
               セキュアな管理コンソールへアクセスするための認証です。
             </p>
 
+            {/* 送信後のエラーまたは成功メッセージ / Error or success message after submission */}
             {message ? (
               <div
                 className={`mt-6 rounded-2xl border border-transparent border-l-4 px-4 py-3 text-sm font-semibold ${messageTone}`}
@@ -102,6 +114,7 @@ export default function AdminLogin() {
                   onChange={(event) => setPassword(event.target.value)}
                 />
               </div>
+              {/* 送信中はボタンを無効化する / Disable button while submitting */}
               <button
                 type="submit"
                 className="cc-texture-btn cc-texture-btn--indigo w-full rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60"

@@ -4,6 +4,8 @@ import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { PromptStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 
+// 新規プロンプト作成モーダルのprops型定義
+// Props type definition for the new prompt creation modal
 type NewPromptModalProps = {
   isOpen: boolean;
   isPromptSubmitting: boolean;
@@ -27,6 +29,8 @@ type NewPromptModalProps = {
   setNewPromptOutputExample: (value: string) => void;
 };
 
+// 新しいプロンプトを作成して投稿するためのモーダルコンポーネント
+// Modal component for creating and submitting a new prompt
 export function NewPromptModal({
   isOpen,
   isPromptSubmitting,
@@ -50,7 +54,13 @@ export function NewPromptModal({
   setNewPromptOutputExample,
 }: NewPromptModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+
+  // 初期フォーカスをタイトル入力欄またはモーダルコンテナに設定する
+  // Set initial focus to the title input field or modal container
   const getInitialFocus = useCallback(() => titleInputRef.current ?? modalRef.current, [titleInputRef]);
+
+  // 送信中はEscキーでの閉じる動作を無効化する
+  // Disable Escape key close behavior while submitting
   const closeWithEscape = useCallback(() => {
     if (isPromptSubmitting) return;
     onClose();
@@ -73,6 +83,7 @@ export function NewPromptModal({
       aria-labelledby="new-prompt-modal-title"
       aria-hidden={isOpen ? "false" : "true"}
       tabIndex={-1}
+      // 送信中でなければ背景クリックで閉じる / Close on backdrop click unless submitting
       onClick={(event) => {
         if (event.target === event.currentTarget && !isPromptSubmitting) {
           onClose();
@@ -91,6 +102,7 @@ export function NewPromptModal({
         />
 
         <div className="new-prompt-modal-body">
+          {/* モーダルのヘッダー（説明文付き）/ Modal header with description */}
           <div className="new-prompt-modal__hero">
             <div className="new-prompt-modal__hero-copy">
               <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
@@ -104,6 +116,7 @@ export function NewPromptModal({
             </div>
           </div>
 
+          {/* プロンプト作成フォーム / Prompt creation form */}
           <form
             className="new-post-form"
             id="newPostForm"
@@ -141,6 +154,7 @@ export function NewPromptModal({
             ></textarea>
           </div>
 
+          {/* AI補助機能のルートノード（JSで動的に内容を注入する）/ Root node for AI assist feature (content injected dynamically) */}
           <div id="newPromptAssistRoot" ref={newPromptAssistRootRef}></div>
           <p
             id="newPromptSubmitStatus"
@@ -151,6 +165,7 @@ export function NewPromptModal({
             {newPromptStatus.message}
           </p>
 
+          {/* 入出力例の追加オプション（AIの再現性を高めるための設定）/ Option to add input/output examples (improves AI reproducibility) */}
           <div className="form-group form-group--toggle">
             <label className="composer-toggle" htmlFor="new-guardrail-checkbox">
               <input
@@ -168,6 +183,7 @@ export function NewPromptModal({
             </label>
           </div>
 
+          {/* 入出力例の入力欄（チェックボックスがONの場合のみ表示）/ Input/output example fields (shown only when checkbox is checked) */}
           <div id="new-guardrail-fields" hidden={!guardrailEnabled}>
             <div className="form-group">
               <label htmlFor="new-prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
@@ -199,6 +215,7 @@ export function NewPromptModal({
             </div>
           </div>
 
+          {/* 投稿ボタン（送信中はローディング表示）/ Submit button (shows loading state while submitting) */}
           <button type="submit" className="primary-button new-prompt-submit-btn" disabled={isPromptSubmitting}>
             {isPromptSubmitting ? (
               <>

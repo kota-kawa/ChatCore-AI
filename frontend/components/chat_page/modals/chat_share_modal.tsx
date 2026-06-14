@@ -4,6 +4,8 @@ import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { ShareStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 
+// チャット共有モーダルのprops型定義
+// Props type definition for the chat share modal
 type ChatShareModalProps = {
   shareModalOpen: boolean;
   shareStatus: ShareStatus;
@@ -18,6 +20,8 @@ type ChatShareModalProps = {
   shareWithNativeSheet: () => void;
 };
 
+// チャット履歴を共有するためのリンク生成・コピー・SNSシェアを提供するモーダルコンポーネント
+// Modal component for sharing chat history by generating, copying, and sharing on SNS
 export function ChatShareModal({
   shareModalOpen,
   shareStatus,
@@ -32,10 +36,15 @@ export function ChatShareModal({
   shareWithNativeSheet,
 }: ChatShareModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+
+  // 初期フォーカスをコピーボタンに設定する
+  // Set initial focus to the copy button
   const getInitialFocus = useCallback(() => {
     return modalRef.current?.querySelector<HTMLElement>("#chat-share-copy-btn") ?? null;
   }, []);
 
+  // フォーカストラップとEscキーでの閉じる動作を設定する
+  // Set up focus trap and close behavior on Escape key
   useModalFocusTrap({
     isOpen: shareModalOpen,
     containerRef: modalRef,
@@ -53,6 +62,7 @@ export function ChatShareModal({
       aria-hidden={shareModalOpen ? "false" : "true"}
       aria-labelledby="chat-share-title"
       tabIndex={-1}
+      // 背景クリックでモーダルを閉じる / Close modal on backdrop click
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           closeShareModal();
@@ -75,6 +85,7 @@ export function ChatShareModal({
         </header>
 
         <div className="chat-share-modal__body cc-share-modal__body">
+          {/* 共有リンクの表示欄 / Share link display field */}
           <div className="chat-share-link-row cc-share-modal__row">
             <input
               type="text"
@@ -85,6 +96,7 @@ export function ChatShareModal({
             />
           </div>
 
+          {/* 共有状態のステータスメッセージ / Share status message */}
           <p
             id="chat-share-status"
             className={`chat-share-status cc-share-modal__status ${shareStatus.error ? "chat-share-status--error cc-share-modal__status--error" : ""}`.trim()}
@@ -92,6 +104,7 @@ export function ChatShareModal({
             {shareStatus.message}
           </p>
 
+          {/* リンクコピーと端末共有ボタン / Link copy and device share buttons */}
           <div className="chat-share-actions cc-share-modal__actions">
             <button
               type="button"
@@ -118,6 +131,7 @@ export function ChatShareModal({
             </button>
           </div>
 
+          {/* SNS共有リンク（X / LINE / Facebook）/ SNS share links (X / LINE / Facebook) */}
           <div className="chat-share-sns cc-share-modal__sns">
             <a id="chat-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareXUrl}>
               <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">

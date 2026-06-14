@@ -5,6 +5,8 @@ import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 
+// 共有チャットの個別メッセージを表す型
+// Represents a single message in a shared chat
 type SharedMessage = {
   message: string;
   message_parts?: ChatMessagePart[];
@@ -12,26 +14,36 @@ type SharedMessage = {
   timestamp?: string;
 };
 
+// 共有チャットルームのメタ情報を表す型
+// Represents metadata for a shared chat room
 type SharedRoom = {
   id: string;
   title?: string;
   created_at?: string;
 };
 
+// バックエンドから取得した共有チャット全体のペイロード型
+// Top-level payload returned from the shared chat API
 type SharedChatPayload = {
   room?: SharedRoom;
   messages?: SharedMessage[];
   error?: string;
 };
 
+// ページコンポーネントに渡されるProps型
+// Props passed to the SharedChatPage component
 type SharedChatPageProps = {
   payload: SharedChatPayload;
   pageUrl: string;
   ogImageUrl: string;
 };
 
+// APIレスポンスの型エイリアス（ペイロードと同一構造）
+// Type alias for the API response (same shape as the payload)
 type SharedChatResponse = SharedChatPayload;
 
+// DBに保存されたHTMLエスケープ済み文字列を表示用プレーンテキストに戻す
+// Reverses HTML entity encoding so stored messages render correctly
 function decodeStoredMessage(raw: string) {
   return raw
     .replace(/<br\s*\/?>/gi, "\n")
@@ -42,17 +54,23 @@ function decodeStoredMessage(raw: string) {
     .replace(/&#39;/g, "'");
 }
 
+// リバースプロキシ経由でも正しいホスト名を取得するためにヘッダーを正規化する
+// Normalises the Host header so it works correctly behind reverse proxies
 function normalizeHostHeader(header: string | string[] | undefined) {
   if (Array.isArray(header)) return header[0] || "";
   return header || "";
 }
 
+// カンマ区切りで複数の値が来た場合に最初のプロトコルだけを取り出す
+// Extracts only the first protocol value when the header contains a comma-separated list
 function normalizeProtoHeader(header: string | string[] | undefined) {
   const raw = Array.isArray(header) ? header[0] : header;
   if (!raw) return "";
   return raw.split(",")[0]?.trim() || "";
 }
 
+// OGP用のdescriptionからMarkdown記法や画像・リンクを除去してプレーンテキスト化する
+// Strips Markdown syntax to produce plain text suitable for OGP meta descriptions
 function stripPreviewText(value: string) {
   return value
     .replace(/```[\s\S]*?```/g, " ")
@@ -64,16 +82,22 @@ function stripPreviewText(value: string) {
     .trim();
 }
 
+// SEOのmeta descriptionが長くなり過ぎないよう指定文字数で切り詰める
+// Truncates text to keep meta descriptions within a reasonable length for SEO
 function truncateText(value: string, maxLength = 140) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+// ページのmeta descriptionをペイロードの内容から動的に生成する
+// Dynamically builds the meta description from the payload content
 function buildMetaDescription(payload: SharedChatPayload) {
   if (payload.error) {
     return truncateText(payload.error);
   }
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
+  // アシスタントの最初のメッセージを優先してdescriptionのソースにする
+  // Prefer the first assistant message as the description source for richer preview text
   const previewTarget = messages.find((item) => item.sender === "assistant") || messages[0];
   if (!previewTarget?.message) {
     return "Chat Core で共有されたチャットの閲覧ページです。";
@@ -82,6 +106,8 @@ function buildMetaDescription(payload: SharedChatPayload) {
   return truncateText(normalized || "Chat Core で共有されたチャットの閲覧ページです。");
 }
 
+// サーバーサイドでトークンを検証し、共有チャットデータをバックエンドから取得する
+// Validates the token server-side and fetches shared chat data from the backend
 export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async (context) => {
   const rawToken = context.params?.token;
   const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
@@ -90,6 +116,8 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   }
 
   const backendUrl = process.env.BACKEND_URL || "http://localhost:5004";
+  // プロキシ環境でも正しい正規URLを構築するためにリクエストヘッダーを参照する
+  // Use request headers to build the correct canonical URL when running behind a proxy
   const host = normalizeHostHeader(context.req.headers["x-forwarded-host"]) || normalizeHostHeader(context.req.headers.host);
   const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
     || (process.env.NODE_ENV === "development" ? "http" : "https");
@@ -103,6 +131,8 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   try {
     const res = await fetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`);
     const data: SharedChatResponse = await res.json().catch(() => ({}));
+    // バックエンドのステータスコードをそのままクライアントに転送する
+    // Forward the backend status code to the client response
     if (!res.ok) {
       context.res.statusCode = res.status;
     }
@@ -124,11 +154,15 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   };
 };
 
+// 共有チャットの読み取り専用ビューを表示するページコンポーネント
+// Page component that renders a read-only view of a shared chat conversation
 export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedChatPageProps) {
   const title = payload.room?.title || "共有チャット";
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   const pageTitle = `${title} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
+  // エラー時はStructured Dataを出力せずインデックスもブロックする
+  // Suppress structured data on error pages to prevent indexing invalid content
   const structuredData = !payload.error
     ? {
         "@context": "https://schema.org",
@@ -160,6 +194,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
       </SeoHead>
 
       <div className="shared-chat-page">
+        {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}
         {payload.error ? (
           <div className="shared-chat-error">{payload.error}</div>
         ) : (
@@ -179,6 +214,8 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
               ) : null}
 
               {messages.map((message, index) => {
+                // "user" 以外の送信者はすべて "assistant" として扱う
+                // Treat any sender value other than "user" as "assistant"
                 const normalizedSender = message.sender === "user" ? "user" : "assistant";
                 const decoded = decodeStoredMessage(message.message || "");
                 const parts = Array.isArray(message.message_parts) ? message.message_parts : [];
@@ -208,6 +245,8 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
                             );
                           }
                           if (part.type === "interactive_buttons") {
+                            {/* 共有ページでは対話型ボタンは機能しないため非活性状態で表示する */}
+                            {/* Interactive buttons are non-functional on shared pages, so display them as disabled */}
                             return (
                               <div key={`buttons-${partIndex}`} style={{ marginTop: "1rem", opacity: 0.7 }}>
                                 <strong>{part.buttons.question}</strong>

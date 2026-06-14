@@ -4,17 +4,26 @@ import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { NormalizedTask } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
 
+// タスク詳細モーダルのprops型定義
+// Props type definition for the task detail modal
 type TaskDetailModalProps = {
   taskDetail: NormalizedTask | null;
   onClose: () => void;
 };
 
+// タスクの詳細情報（プロンプトテンプレート・回答ルール・例など）を表示するモーダルコンポーネント
+// Modal component that displays task details (prompt template, response rules, examples, etc.)
 export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+
+  // 初期フォーカスを閉じるボタンに設定する
+  // Set initial focus to the close button
   const getInitialFocus = useCallback(() => {
     return modalRef.current?.querySelector<HTMLElement>("[data-close-task-detail]") ?? null;
   }, []);
 
+  // フォーカストラップを有効化してキーボード操作でモーダル内に留まるようにする
+  // Enable focus trap so keyboard navigation stays within the modal
   useModalFocusTrap({
     isOpen: Boolean(taskDetail),
     containerRef: modalRef,
@@ -22,6 +31,8 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
     onEscape: onClose,
   });
 
+  // 複数行テキストを改行を保持して表示するヘルパー
+  // Helper to display multi-line text with preserved line breaks
   const renderMultilineText = (value: string) => (
     <div className="task-detail-section-body" style={{ whiteSpace: "pre-wrap" }}>
       {value}
@@ -38,6 +49,8 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
       aria-labelledby="taskDetailTitle"
       aria-hidden={taskDetail ? "false" : "true"}
       tabIndex={-1}
+      // モーダル背景クリックで閉じる
+      // Close on backdrop click
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -68,6 +81,7 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
               />
             </div>
 
+            {/* タスクの各フィールドをセクションとして表示する / Display each task field as a section */}
             <div className="task-detail-sections">
               <section className="task-detail-section">
                 <h6 className="task-detail-section-title">タスク名</h6>
@@ -107,6 +121,7 @@ export function TaskDetailModal({ taskDetail, onClose }: TaskDetailModalProps) {
                 </section>
               )}
 
+              {/* 補助情報がいずれも未設定の場合のフォールバック表示 / Fallback display when no supplementary info is set */}
               {!taskDetail.response_rules &&
                 !taskDetail.output_skeleton &&
                 !taskDetail.input_examples &&

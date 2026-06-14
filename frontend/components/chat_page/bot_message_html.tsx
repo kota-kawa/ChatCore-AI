@@ -3,20 +3,34 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
 
+// SSR環境ではuseEffect、クライアント環境ではuseLayoutEffectを使用する（ハイドレーション互換）
+// Use useEffect on SSR and useLayoutEffect on client for hydration compatibility
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+// Webソース展開アニメーションの設定
+// Web source expand animation settings
 const WEB_SEARCH_SOURCES_ANIMATION_MS = 170;
 const WEB_SEARCH_SOURCES_ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+// 実行中のWebソースアニメーションを追跡するWeakMap（GCに優しい）
+// WeakMap to track active web source animations (GC-friendly)
 const activeWebSearchSourceAnimations = new WeakMap<HTMLDetailsElement, Animation>();
+// 展開時にスクロールで確保するパディング量（px）
+// Padding (px) to ensure while scrolling on expand
 const WEB_SEARCH_SOURCES_REVEAL_PADDING = 16;
 
+// ボットメッセージHTMLコンポーネントのprops型定義
+// Props type definition for the bot message HTML component
 type BotMessageHtmlProps = {
   text: string;
 };
 
+// ユーザーのprefers-reduced-motionメディアクエリが有効かどうかを確認する
+// Check if the user's prefers-reduced-motion media query is active
 function prefersReducedMotion() {
   return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+// detailsの子要素からWebソース一覧リスト要素を取得する
+// Get the web source list element from the children of a details element
 function getWebSearchSourcesList(details: HTMLDetailsElement) {
   return Array.from(details.children).find(
     (child): child is HTMLElement =>
@@ -24,6 +38,8 @@ function getWebSearchSourcesList(details: HTMLDetailsElement) {
   );
 }
 
+// リスト要素のインラインスタイルをリセットする
+// Reset inline styles on the list element
 function resetWebSearchSourcesListStyles(list: HTMLElement) {
   list.style.height = "";
   list.style.overflow = "";
@@ -31,6 +47,8 @@ function resetWebSearchSourcesListStyles(list: HTMLElement) {
   list.style.transform = "";
 }
 
+// 展開されたWebソースの詳細がビューポートに収まるようにオーバーフロー状態を更新する
+// Update overflow state so expanded web source details fit within the viewport
 function setWebSearchOverflowState(sourceDetails: HTMLElement) {
   const row = sourceDetails.closest<HTMLElement>(".chat-message-row");
   const wrapper = sourceDetails.closest<HTMLElement>(".message-wrapper");
@@ -47,6 +65,8 @@ function setWebSearchOverflowState(sourceDetails: HTMLElement) {
   });
 }
 
+// 実行中のWebソースアニメーションをキャンセルしてWeakMapから削除する
+// Cancel the active web source animation and remove it from the WeakMap
 function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   const activeAnimation = activeWebSearchSourceAnimations.get(details);
   if (!activeAnimation) return;
@@ -56,10 +76,14 @@ function cancelWebSearchSourcesAnimation(details: HTMLDetailsElement) {
   activeWebSearchSourceAnimations.delete(details);
 }
 
+// チャットメッセージスクローラーのDOM要素を取得する
+// Get the DOM element of the chat messages scroller
 function getChatMessagesScroller(element: HTMLElement) {
   return element.closest<HTMLElement>(".chat-messages");
 }
 
+// 展開したWebソースがスクローラー内に収まるようにスクロール位置を調整する
+// Adjust the scroll position so expanded web sources are visible within the scroller
 function revealWebSearchSources(details: HTMLDetailsElement) {
   const scroller = getChatMessagesScroller(details);
   if (!scroller) {
@@ -91,6 +115,8 @@ function revealWebSearchSources(details: HTMLDetailsElement) {
   }
 }
 
+// 次のアニメーションフレームでWebソースの表示位置を調整するリクエストをスケジュールする
+// Schedule a reveal position adjustment for web sources in the next animation frame
 function scheduleWebSearchSourcesReveal(details: HTMLDetailsElement) {
   if (typeof window === "undefined") return;
 
@@ -99,9 +125,13 @@ function scheduleWebSearchSourcesReveal(details: HTMLDetailsElement) {
   });
 }
 
+// WebソースリストのアコーディオンをWeb Animations APIでアニメーション付き開閉する
+// Open/close the web source list accordion with animation using the Web Animations API
 function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolean) {
   const list = getWebSearchSourcesList(details);
   if (!list || typeof list.animate !== "function" || prefersReducedMotion()) {
+    // アニメーション非対応またはモーション軽減設定の場合は即時切り替え
+    // Immediately toggle if animation is unsupported or reduced motion is preferred
     cancelWebSearchSourcesAnimation(details);
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
@@ -125,6 +155,8 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
   const endHeight = shouldOpen ? list.scrollHeight : 0;
   details.dataset.webSearchSourcesState = shouldOpen ? "opening" : "closing";
 
+  // 高さの変化が1px未満の場合はアニメーションをスキップする
+  // Skip animation if height change is less than 1px
   if (Math.abs(endHeight - startHeight) < 1) {
     details.open = shouldOpen;
     delete details.dataset.webSearchSourcesState;
@@ -166,6 +198,8 @@ function animateWebSearchSources(details: HTMLDetailsElement, shouldOpen: boolea
   };
 }
 
+// コンテナ内のWebソースアコーディオンにクリックイベントをバインドし、クリーンアップ関数を返す
+// Bind click events to web source accordions in the container and return a cleanup function
 function bindWebSearchSourcesAccordions(container: HTMLElement) {
   const cleanupCallbacks: Array<() => void> = [];
 
@@ -188,6 +222,8 @@ function bindWebSearchSourcesAccordions(container: HTMLElement) {
     });
   });
 
+  // ステップ詳細・ソース詳細のトグルイベントでオーバーフロー状態を更新する
+  // Update overflow state on toggle events for step details and source details
   container
     .querySelectorAll<HTMLDetailsElement>(
       "details.web-search-sources__step-details, details.web-search-sources__source-details"
@@ -216,10 +252,16 @@ function bindWebSearchSourcesAccordions(container: HTMLElement) {
   };
 }
 
+// LLMのボットメッセージをサニタイズされたHTMLとしてレンダリングするコンポーネント
+// Component that renders LLM bot messages as sanitized HTML
 function BotMessageHtmlComponent({ text }: BotMessageHtmlProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // テキストが変わった場合のみフォーマット済みHTMLを再計算する
+  // Recompute formatted HTML only when text changes
   const formatted = useMemo(() => formatLLMOutput(text), [text]);
 
+  // DOMへの書き込みはレイアウト計算前に行う必要があるためuseIsomorphicLayoutEffectを使用する
+  // Use useIsomorphicLayoutEffect as DOM writes must occur before layout calculations
   useIsomorphicLayoutEffect(() => {
     if (!containerRef.current) return;
     renderSanitizedHTML(containerRef.current, formatted);
@@ -229,5 +271,7 @@ function BotMessageHtmlComponent({ text }: BotMessageHtmlProps) {
   return <div ref={containerRef}></div>;
 }
 
+// 不要な再レンダリングを防ぐためにメモ化する
+// Memoized to prevent unnecessary re-renders
 export const BotMessageHtml = memo(BotMessageHtmlComponent);
 BotMessageHtml.displayName = "BotMessageHtml";

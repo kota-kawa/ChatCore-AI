@@ -1,16 +1,22 @@
 import type { RefObject } from "react";
 
+// SNSシェアリンクのURL一式（X・LINE・Facebook）
+// Set of SNS share link URLs (X, LINE, Facebook)
 type PromptShareLinks = {
   x: string;
   line: string;
   facebook: string;
 };
 
+// 共有操作の結果を表すステータス型（エラー有無とメッセージ）
+// Status type for share action result (error flag and message)
 type PromptShareStatus = {
   text: string;
   isError: boolean;
 };
 
+// 共有モーダルのプロップス
+// Props for the share modal
 type PromptShareShareModalProps = {
   isOpen: boolean;
   promptShareModalRef: RefObject<HTMLDivElement>;
@@ -25,6 +31,8 @@ type PromptShareShareModalProps = {
   shareSnsLinks: PromptShareLinks;
 };
 
+// プロンプト共有モーダル（URLコピー・ネイティブシェア・SNSシェアを提供）
+// Prompt share modal providing URL copy, native share, and SNS share options
 export function PromptShareShareModal({
   isOpen,
   promptShareModalRef,
@@ -48,6 +56,7 @@ export function PromptShareShareModal({
       aria-hidden={isOpen ? "false" : "true"}
       ref={promptShareModalRef}
       onClick={(event) => {
+        {/* オーバーレイ背景クリックでモーダルを閉じる / Close modal on overlay background click */}
         if (event.target === event.currentTarget) {
           onClose();
         }
@@ -74,6 +83,7 @@ export function PromptShareShareModal({
         </header>
 
         <div className="prompt-share-dialog__body cc-share-modal__body">
+          {/* 共有URLを表示する読み取り専用入力フィールド / Read-only input field displaying the share URL */}
           <div className="prompt-share-dialog__row cc-share-modal__row">
             <input
               type="text"
@@ -84,6 +94,7 @@ export function PromptShareShareModal({
             />
           </div>
 
+          {/* コピー・シェア操作のフィードバックメッセージ / Feedback message for copy/share actions */}
           <p
             id="prompt-share-status"
             className={`prompt-share-dialog__status cc-share-modal__status${shareStatus.isError ? " prompt-share-dialog__status--error cc-share-modal__status--error" : ""}`}
@@ -92,6 +103,7 @@ export function PromptShareShareModal({
           </p>
 
           <div className="prompt-share-dialog__actions cc-share-modal__actions">
+            {/* URLをクリップボードにコピーするボタン / Button to copy URL to clipboard */}
             <button
               type="button"
               id="prompt-share-copy-btn"
@@ -107,6 +119,7 @@ export function PromptShareShareModal({
               <i className="bi bi-files" aria-hidden="true"></i>
             </button>
 
+            {/* Web Share APIが利用可能な場合のみネイティブシェアボタンを表示 / Native share button shown only when Web Share API is available */}
             {supportsNativeShare ? (
               <button
                 type="button"
@@ -124,6 +137,7 @@ export function PromptShareShareModal({
             ) : null}
           </div>
 
+          {/* SNSシェアリンク（X・LINE・Facebook） / SNS share links (X, LINE, Facebook) */}
           <div className="prompt-share-dialog__sns cc-share-modal__sns">
             <a id="prompt-share-sns-x" target="_blank" rel="noopener noreferrer" href={shareSnsLinks.x}>
               <svg className="share-x-icon" viewBox="0 0 24 24" aria-hidden="true">
