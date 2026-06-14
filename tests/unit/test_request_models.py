@@ -17,48 +17,52 @@ from services.request_models import (
 )
 
 
+# 指定したPydanticモデルクラスを用いて入力データをバリデーションします（v1とv2の互換性を考慮）。
+# Validate input data using the specified Pydantic model class (supports v1 and v2 compatibilities).
 def _validate(model_cls, data):
     validate = getattr(model_cls, "model_validate", None)
-    # 日本語: 条件に基づいて処理の流れを切り替えます。
-        # English: Switch the execution flow based on the condition.
+    # model_validate メソッドが存在する場合は呼び出し、存在しない場合は旧 API である parse_obj を使用
+    # Call model_validate if it exists, otherwise fall back to parse_obj for backward compatibility
     if callable(validate):
         return validate(data)
     return model_cls.parse_obj(data)
 
 
-# 日本語: Request Modelsの機能や仕様を検証するテストクラスです。
-# English: Test case class to verify the functionality and specifications of Request Models.
+# 各種APIリクエストモデル（Pydantic）のバリデーション仕様を検証するテストクラス。
+# Test case class to verify validation behaviors of various API request models (Pydantic).
 class RequestModelsTestCase(unittest.TestCase):
-    # 日本語: addタスク拒否するblankタイトルことを検証します。
-    # English: Verify that add task rejects blank title.
+    # タスク追加リクエストでタイトルが空文字またはスペースのみの場合、バリデーションエラーになることを検証します。
+    # Verify that creating an AddTaskRequest rejects a blank or whitespace-only title.
     def test_add_task_rejects_blank_title(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # タイトルが空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the title is empty
         with self.assertRaises(ValidationError):
             _validate(
                 AddTaskRequest,
                 {"title": "   ", "prompt_content": "prompt"},
             )
 
-    # 日本語: 更新tasksorder要求するnon空listことを検証します。
-    # English: Verify that update tasks order requires non empty list.
+    # タスク順序更新リクエストで順序リストが空の場合、バリデーションエラーになることを検証します。
+    # Verify that updating tasks order requires a non-empty order list.
     def test_update_tasks_order_requires_non_empty_list(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 順序リストが空のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the order list is empty
         with self.assertRaises(ValidationError):
             _validate(UpdateTasksOrderRequest, {"order": []})
 
-    # 日本語: メモcreate要求するnon空aiレスポンスことを検証します。
-    # English: Verify that memo create requires non empty ai response.
+    # メモ作成リクエストでAIの回答内容が空の場合、バリデーションエラーになることを検証します。
+    # Verify that memo creation requires a non-empty AI response.
     def test_memo_create_requires_non_empty_ai_response(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # AI回答が空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the ai_response is empty
         with self.assertRaises(ValidationError):
             _validate(MemoCreateRequest, {"ai_response": "   "})
 
-    # 日本語: メモcreateacceptsbackgroundcolorことを検証します。
-    # English: Verify that memo create accepts background color.
+    # メモ作成リクエストで有効な背景色コード（HEX形式など）を指定できることを検証します。
+    # Verify that memo creation accepts a valid background color hex code.
     def test_memo_create_accepts_background_color(self):
+        # 背景色を指定してメモのバリデーションを実行
+        # Run memo validation with a background color specified
         payload = _validate(
             MemoCreateRequest,
             {
@@ -69,11 +73,11 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(payload.background_color, "#fff8b8")
 
-    # 日本語: メモcreate拒否する無効なbackgroundcolorことを検証します。
-    # English: Verify that memo create rejects invalid background color.
+    # メモ作成リクエストで不正な形式の背景色（インジェクションの恐れがある値など）が拒否されることを検証します。
+    # Verify that memo creation rejects invalid background color format codes.
     def test_memo_create_rejects_invalid_background_color(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 不正な背景色を指定したときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when background_color is invalid
         with self.assertRaises(ValidationError):
             _validate(
                 MemoCreateRequest,
@@ -83,11 +87,11 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # 日本語: プロンプトcreate拒否するblankタイトルことを検証します。
-    # English: Verify that prompt create rejects blank title.
+    # 共有プロンプト作成リクエストでタイトルが空文字の場合、バリデーションエラーになることを検証します。
+    # Verify that shared prompt creation rejects a blank title.
     def test_prompt_create_rejects_blank_title(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # タイトルが空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the title is empty
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
@@ -99,9 +103,11 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # 日本語: プロンプトcreateacceptsblankcategoryことを検証します。
-    # English: Verify that prompt create accepts blank category.
+    # 共有プロンプト作成リクエストでカテゴリフィールドが空文字であっても許容されることを検証します。
+    # Verify that shared prompt creation accepts a blank category field.
     def test_prompt_create_accepts_blank_category(self):
+        # カテゴリを空欄にしてバリデーションを実行
+        # Run prompt creation validation with a blank category field
         result = _validate(
             SharedPromptCreateRequest,
             {
@@ -113,11 +119,11 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.category, "")
 
-    # 日本語: texttypeに対して、プロンプトcreate要求するcontentことを検証します。
-    # English: Verify that prompt create requires content for text type.
+    # プロンプト種別がテキストの場合、本文（content）の指定が必須であることを検証します。
+    # Verify that prompt creation requires content when prompt_type is set to 'text'.
     def test_prompt_create_requires_content_for_text_type(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # テキスト種別で本文が空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when content is empty for text prompt type
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
@@ -130,11 +136,11 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # 日本語: skilltypeに対して、プロンプトcreate要求するskillMarkdownことを検証します。
-    # English: Verify that prompt create requires skill markdown for skill type.
+    # プロンプト種別がスキルの場合、解説用のMarkdown（skill_markdown）の指定が必須であることを検証します。
+    # Verify that prompt creation requires skill markdown when prompt_type is set to 'skill'.
     def test_prompt_create_requires_skill_markdown_for_skill_type(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # スキル種別で解説用Markdownが空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when skill_markdown is empty for skill prompt type
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
@@ -148,9 +154,11 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # 日本語: pythonscriptを使用する場合、プロンプトcreateacceptsskillペイロードことを検証します。
-    # English: Verify that prompt create accepts skill payload with python script.
+    # プロンプト種別がスキルの場合に Python スクリプトを含んだペイロードが正常に受け入れられることを検証します。
+    # Verify that prompt creation accepts a skill payload containing a python script.
     def test_prompt_create_accepts_skill_payload_with_python_script(self):
+        # スキル用パラメータとPythonスクリプトを指定してバリデーションを実行
+        # Run prompt creation validation with skill parameters and python script
         result = _validate(
             SharedPromptCreateRequest,
             {
@@ -166,55 +174,63 @@ class RequestModelsTestCase(unittest.TestCase):
         self.assertEqual(result.prompt_type, "skill")
         self.assertEqual(result.skill_markdown, "# Skill")
 
-    # 日本語: プロンプトlistentryparsesプロンプトidtypeことを検証します。
-    # English: Verify that prompt list entry parses prompt id type.
+    # 保存プロンプトリスト追加リクエストで、プロンプトIDが文字列型であっても自動で整数型へパースされることを検証します。
+    # Verify that prompt list entry request correctly parses string prompt_id to integer type.
     def test_prompt_list_entry_parses_prompt_id_type(self):
+        # 文字列のIDを渡してバリデーションを実行
+        # Run validation with prompt_id as a string value
         payload = _validate(
             PromptListEntryCreateRequest,
             {"prompt_id": "12"},
         )
         self.assertEqual(payload.prompt_id, 12)
 
-    # 日本語: プロンプトlistentry要求するプロンプトidことを検証します。
-    # English: Verify that prompt list entry requires prompt id.
+    # 保存プロンプトリスト追加リクエストで、プロンプトIDが指定されていない場合はエラーになることを検証します。
+    # Verify that prompt list entry request requires prompt_id parameter.
     def test_prompt_list_entry_requires_prompt_id(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # IDが未指定のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when prompt_id is missing
         with self.assertRaises(ValidationError):
             _validate(PromptListEntryCreateRequest, {})
 
-    # 日本語: bookmarkcreateusesプロンプトidことを検証します。
-    # English: Verify that bookmark create uses prompt id.
+    # ブックマーク追加リクエストで、プロンプトIDをパースして認識できることを検証します。
+    # Verify that bookmark creation parses the prompt_id successfully.
     def test_bookmark_create_uses_prompt_id(self):
+        # プロンプトIDを指定してブックマーク作成のバリデーションを実行
+        # Run bookmark creation validation with prompt_id
         payload = _validate(
             BookmarkCreateRequest,
             {"prompt_id": "12"},
         )
         self.assertEqual(payload.prompt_id, 12)
 
-    # 日本語: プロンプトタスクcreateusesプロンプトidことを検証します。
-    # English: Verify that prompt task create uses prompt id.
+    # プロンプトからのタスク作成リクエストで、プロンプトIDをパースして認識できることを検証します。
+    # Verify that creating a task from a prompt parses the prompt_id successfully.
     def test_prompt_task_create_uses_prompt_id(self):
+        # プロンプトIDを指定してタスク作成用のバリデーションを実行
+        # Run validation for prompt task creation with prompt_id
         payload = _validate(
             PromptTaskCreateRequest,
             {"prompt_id": "12"},
         )
         self.assertEqual(payload.prompt_id, 12)
 
-    # 日本語: プロンプトlikeリクエストparsesプロンプトidtypeことを検証します。
-    # English: Verify that prompt like request parses prompt id type.
+    # いいねリクエストで、プロンプトIDが文字列型であっても自動で整数型へパースされることを検証します。
+    # Verify that prompt like request correctly parses string prompt_id to integer type.
     def test_prompt_like_request_parses_prompt_id_type(self):
+        # 文字列のIDを渡していいねリクエストのバリデーションを実行
+        # Run prompt like request validation with prompt_id as a string value
         payload = _validate(
             PromptLikeRequest,
             {"prompt_id": "24"},
         )
         self.assertEqual(payload.prompt_id, 24)
 
-    # 日本語: チャットmessage拒否するoversizedbodyことを検証します。
-    # English: Verify that chat message rejects oversized body.
+    # チャットメッセージ送信リクエストで、文字数制限（30,000文字）を超える長い本文が拒否されることを検証します。
+    # Verify that chat message rejects an oversized body exceeding character limits.
     def test_chat_message_rejects_oversized_body(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 30,001文字のメッセージを渡したときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the message has 30,001 characters
         with self.assertRaises(ValidationError):
             _validate(
                 ChatMessageRequest,
@@ -224,9 +240,11 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # 日本語: チャットmessageacceptsbinaryattachmentmetadataことを検証します。
-    # English: Verify that chat message accepts binary attachment metadata.
+    # チャットメッセージ送信リクエストで、Base64形式のバイナリ添付ファイルを受け入れ可能であることを検証します。
+    # Verify that chat message accepts binary file attachments encoded in Base64.
     def test_chat_message_accepts_binary_attachment_metadata(self):
+        # 添付ファイルメタデータを含めてチャットメッセージのバリデーションを実行
+        # Run chat message validation including attached file metadata details
         payload = _validate(
             ChatMessageRequest,
             {
@@ -245,35 +263,35 @@ class RequestModelsTestCase(unittest.TestCase):
         self.assertEqual(payload.attached_files[0].name, "document.pdf")
         self.assertEqual(payload.attached_files[0].data_base64, "QUJD")
 
-    # 日本語: チャットroomids要求するnon空listことを検証します。
-    # English: Verify that chat room ids requires non empty list.
+    # チャットルームIDリスト送信リクエストで、空のリストが拒否されることを検証します。
+    # Verify that chat room IDs request requires a non-empty room list.
     def test_chat_room_ids_requires_non_empty_list(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # ルームIDリストが空のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when the room IDs list is empty
         with self.assertRaises(ValidationError):
             _validate(ChatRoomIdsRequest, {"room_ids": []})
 
-    # 日本語: チャットroomids拒否するmorethan100ルームことを検証します。
-    # English: Verify that chat room ids rejects more than 100 rooms.
+    # チャットルームIDリスト送信リクエストで、上限（100件）を超える件数が指定された場合に拒否されることを検証します。
+    # Verify that chat room IDs request rejects a list with more than 100 rooms.
     def test_chat_room_ids_rejects_more_than_100_rooms(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 101件のルームIDリストを渡したときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when there are 101 room IDs in the list
         with self.assertRaises(ValidationError):
             _validate(ChatRoomIdsRequest, {"room_ids": [str(index) for index in range(101)]})
 
-    # 日本語: チャットroomids拒否するblankroomidことを検証します。
-    # English: Verify that chat room ids rejects blank room id.
+    # チャットルームIDリスト送信リクエストで、リスト内に空欄やスペースのみのルームIDが含まれる場合に拒否されることを検証します。
+    # Verify that chat room IDs request rejects any blank or whitespace-only room ID in the list.
     def test_chat_room_ids_rejects_blank_room_id(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 空白のIDを含むリストを渡したときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when there is an empty ID string in the list
         with self.assertRaises(ValidationError):
             _validate(ChatRoomIdsRequest, {"room_ids": ["room-1", "   "]})
 
-    # 日本語: プロンプトアシスト拒否するoversizedfieldsことを検証します。
-    # English: Verify that prompt assist rejects oversized fields.
+    # アシスト機能（プロンプト生成・ドラフト作成など）のリクエストで、規定サイズを超える長いフィールド入力値が拒否されることを検証します。
+    # Verify that prompt assist request rejects oversized input fields.
     def test_prompt_assist_rejects_oversized_fields(self):
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 規定文字数を超えるタスク内容を指定したときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when prompt_content exceeds allowed limits
         with self.assertRaises(ValidationError):
             _validate(
                 PromptAssistRequest,

@@ -4,50 +4,62 @@ from unittest.mock import patch
 from blueprints.prompt_share.prompt_share_api import _get_prompts_with_flags
 
 
-# 日本語: テスト用の擬似Fake Cursorクラスです。
-# English: Mock Fake Cursor class for testing.
+# テスト用の疑似DBカーソルクラス。
+# Mock database cursor class for testing.
 class FakeCursor:
+    # 疑似カーソルを返却する行データで初期化します。
+    # Initialize the mock cursor with rows to be returned.
     def __init__(self, rows):
         self.rows = rows
         self.executed = []
         self.closed = False
 
+    # クエリを実行し、実行された内容を記録します。
+    # Execute a query and record the query execution state.
     def execute(self, query, params=None):
+        # クエリ内の余分な空白をトリミングして記録
+        # Record the normalized query string and parameters
         self.executed.append((" ".join(query.split()), params))
 
+    # 全ての行データを返却します。
+    # Fetch all row results.
     def fetchall(self):
         return self.rows
 
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
+    # カーソルをクローズ状態にします。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: テスト用の擬似Fake Connectionクラスです。
-# English: Mock Fake Connection class for testing.
+# テスト用の疑似DBコネクションクラス。
+# Mock database connection class for testing.
 class FakeConnection:
+    # 疑似コネクションをカーソルオブジェクトで初期化します。
+    # Initialize the fake connection with a cursor instance.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False
 
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
+    # 疑似カーソルを取得します。
+    # Return the cursor.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
+    # コネクションをクローズ状態にします。
+    # Close the connection.
     def close(self):
         self.closed = True
 
 
-# 日本語: Prompt Share Query Optimizationの機能や仕様を検証するテストクラスです。
-# English: Test case class to verify the functionality and specifications of Prompt Share Query Optimization.
+# クエリの最適化（フラグ情報などを一括取得する効率的なJOINクエリ）を検証するテストクラス。
+# Test case class to verify query optimization (efficient JOIN queries that fetch flags together).
 class PromptShareQueryOptimizationTestCase(unittest.TestCase):
-    # 日本語: flagsusessinglejoinクエリを使用する場合、getpromptsことを検証します。
-    # English: Verify that get prompts with flags uses single join query.
+    # 各種フラグ情報（いいね/ブックマークなど）を含むプロンプト取得時に、不要な重複クエリではなく1回のJOINクエリで取得されることを検証します。
+    # Verify that get prompts with flags uses a single join query instead of multiple query executions.
     def test_get_prompts_with_flags_uses_single_join_query(self):
+        # テスト対象関数から返されるダミーレコードを設定
+        # Configure dummy records returned by the function under test
         fake_cursor = FakeCursor(
             [
                 {
@@ -70,13 +82,18 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         )
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # データベース接続をモック化してプロンプト取得処理を実行
+        # Mock database connection and execute retrieval helper
         with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
             prompts = _get_prompts_with_flags(7)
 
+        # クエリが一度だけ実行されたことを検証
+        # Verify that only a single query was executed
         self.assertEqual(len(fake_cursor.executed), 1)
         query, params = fake_cursor.executed[0]
+        
+        # 必要なJOIN文が含まれ、不要なテーブルJOINがないこと、およびパラメータの妥当性を検証
+        # Verify needed JOINs are present, unnecessary joins are absent, and check parameter mappings
         self.assertIn("LEFT JOIN prompt_likes AS pl", query)
         self.assertIn("LEFT JOIN prompt_list_entries AS ple", query)
         self.assertNotIn("LEFT JOIN task_with_examples AS b", query)

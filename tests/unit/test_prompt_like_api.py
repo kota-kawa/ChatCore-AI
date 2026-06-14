@@ -10,6 +10,8 @@ from tests.helpers.request_helpers import build_request
 # いいね操作のAPIテスト用のHTTPリクエストを構築します。
 # Build a mock HTTP request for testing prompt like API endpoints.
 def make_request(method, payload, session=None):
+    # build_request ヘルパーを使用してリクエストオブジェクトを作成
+    # Create the request object using the build_request helper
     return build_request(
         method=method,
         path="/prompt_share/api/like",
@@ -24,10 +26,16 @@ class PromptLikeApiTestCase(unittest.TestCase):
     # ログインしていない状態で「いいね」を追加しようとすると、401エラー（未認証）になることを検証します。
     # Verify that adding a like returns a 401 status when the user is not logged in.
     def test_add_like_requires_login(self):
+        # ログイン情報を空にしたセッションとリクエストデータを設定してリクエストを構築
+        # Build the request with an empty session indicating no login
         request = make_request("POST", {"prompt_id": 10}, session={})
 
+        # いいね追加のハンドラーを実行
+        # Run the add like API handler
         response = asyncio.run(add_like(request))
 
+        # 401ステータスとエラーメッセージを検証
+        # Verify the 401 status code and the error message
         self.assertEqual(response.status_code, 401)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "ログインしていません")
@@ -35,6 +43,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
     # リクエストボディにprompt_idが不足している場合、400エラーで拒否されることを検証します。
     # Verify that adding a like returns a 400 status when the prompt_id is missing from the payload.
     def test_add_like_rejects_missing_prompt_id(self):
+        # 必要なパラメータ prompt_id を含めないリクエストを構築
+        # Build the request without the required prompt_id parameter
         request = make_request("POST", {}, session={"user_id": 5})
 
         # いいね追加処理が呼び出されないことをモックで確認
@@ -42,6 +52,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
         with patch("blueprints.prompt_share.prompt_share_api._add_prompt_like_for_user") as mock_add:
             response = asyncio.run(add_like(request))
 
+        # 400ステータスとエラーメッセージ、およびDB処理が呼ばれなかったことを検証
+        # Verify the 400 status code, error message, and ensure the DB helper wasn't called
         self.assertEqual(response.status_code, 400)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "必要なフィールドが不足しています")
@@ -50,6 +62,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
     # 正常に「いいね」を追加できた場合に、201ステータスと更新されたステータス情報を返すことを検証します。
     # Verify that successfully adding a like returns a 201 status and the updated status payload.
     def test_add_like_returns_created_payload(self):
+        # 有効なセッションとパラメータを含むリクエストを構築
+        # Build the request with a valid session and payload
         request = make_request("POST", {"prompt_id": 10}, session={"user_id": 5})
 
         # いいね登録の戻り値をモック
@@ -60,6 +74,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
         ) as mock_add:
             response = asyncio.run(add_like(request))
 
+        # 201ステータスとレスポンス内容、DB処理の呼び出し引数を検証
+        # Verify the 201 status code, response payload, and DB helper arguments
         self.assertEqual(response.status_code, 201)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertTrue(payload["liked"])
@@ -69,6 +85,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
     # 「いいね」を正常に解除できた場合に、200ステータスと解除成功情報を返すことを検証します。
     # Verify that successfully removing a like returns a 200 status and the updated status payload.
     def test_remove_like_returns_success_payload(self):
+        # いいね削除のリクエストを構築
+        # Build the request to remove a like
         request = make_request("DELETE", {"prompt_id": 10}, session={"user_id": 5})
 
         # いいね削除処理をモック
@@ -76,6 +94,8 @@ class PromptLikeApiTestCase(unittest.TestCase):
         with patch("blueprints.prompt_share.prompt_share_api._remove_prompt_like_for_user") as mock_remove:
             response = asyncio.run(remove_like(request))
 
+        # 200ステータスとレスポンス内容、DB処理の呼び出し引数を検証
+        # Verify the 200 status code, response payload, and DB helper arguments
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertFalse(payload["liked"])

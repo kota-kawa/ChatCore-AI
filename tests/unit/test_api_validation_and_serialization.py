@@ -12,8 +12,8 @@ from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearc
 from tests.helpers.request_helpers import build_request
 
 
-# APIテスト用のHTTPリクエストを構築します。
-# Build a mock HTTP request for testing API endpoints.
+# 日本語: APIテスト用のHTTPリクエストを構築します。
+# English: Build a mock HTTP request for testing API endpoints.
 def make_request(
     *,
     method: str,
@@ -31,11 +31,11 @@ def make_request(
     )
 
 
-# APIの入力検証（バリデーション：不正なJSON形式のハンドリング等）と出力のシリアライズ処理（日付のフォーマット、Web検索ソースのHTML整形等）をテストするクラス。
-# Test class to check API input validation (e.g. malformed JSON) and response serialization (e.g. datetimes, web search sources layout).
+# 日本語: APIの入力検証（バリデーション：不正なJSON形式のハンドリング等）と出力のシリアライズ処理（日付のフォーマット、Web検索ソースのHTML整形等）をテストするクラス。
+# English: Test class to check API input validation (e.g. malformed JSON) and response serialization (e.g. datetimes, web search sources layout).
 class ApiValidationAndSerializationTestCase(unittest.TestCase):
-    # タスクの並び順更新APIが、不正なJSON形式のリクエストに対して400エラーで拒否することを検証します。
-    # Verify that the update tasks order API rejects malformed JSON payloads with a 400 error.
+    # 日本語: タスクの並び順更新APIが、不正なJSON形式のリクエストに対して400エラーで拒否することを検証します。
+    # English: Verify that the update tasks order API rejects malformed JSON payloads with a 400 error.
     def test_chat_update_tasks_order_rejects_malformed_json(self):
         request = make_request(
             method="POST",
@@ -50,8 +50,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "JSON形式が不正です。")
 
-    # ログインコード送信APIが、不正なJSON形式のリクエストに対してステータス"fail"の400エラーで拒否することを検証します。
-    # Verify that the send login code API rejects malformed JSON payloads with a 400 error and a "fail" status.
+    # 日本語: ログインコード送信APIが、不正なJSON形式のリクエストに対してステータス"fail"の400エラーで拒否することを検証します。
+    # English: Verify that the send login code API rejects malformed JSON payloads with a 400 error and a "fail" status.
     def test_auth_send_login_code_rejects_malformed_json_with_fail_status(self):
         request = make_request(
             method="POST",
@@ -66,8 +66,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "JSON形式が不正です。")
 
-    # 存在しない一時チャットルーム（ephemeral room）への投稿が、404エラー（見つからない）として返却されることを検証します。
-    # Verify that posting to a non-existent ephemeral room returns a 404 error response.
+    # 日本語: 存在しない一時チャットルーム（ephemeral room）への投稿が、404エラー（見つからない）として返却されることを検証します。
+    # English: Verify that posting to a non-existent ephemeral room returns a 404 error response.
     def test_chat_missing_ephemeral_room_returns_404_response(self):
         request = make_request(
             method="POST",
@@ -76,8 +76,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             session={},
         )
 
-        # ephemeral roomの存在有無判定をモック
-        # Mock room existence checks and run the chat API handler
+        # 日本語: ephemeral roomの存在有無判定をモック
+        # English: Mock room existence checks and run the chat API handler
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -90,8 +90,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "該当ルームが見つかりません")
 
-    # 無効または利用不可能なLLMモデル名が指定された場合に、400エラーで拒否されることを検証します。
-    # Verify that requesting an invalid or unavailable LLM model returns a 400 error.
+    # 日本語: 無効または利用不可能なLLMモデル名が指定された場合に、400エラーで拒否されることを検証します。
+    # English: Verify that requesting an invalid or unavailable LLM model returns a 400 error.
     def test_chat_returns_400_when_invalid_model_is_requested(self):
         request = make_request(
             method="POST",
@@ -100,8 +100,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             session={},
         )
 
-        # 各種処理をモックして無効なモデル名指定時の挙動を検証
-        # Mock various handlers and components to check response when invalid model is specified
+        # 日本語: 各種処理をモックして無効なモデル名指定時の挙動を検証
+        # English: Mock various handlers and components to check response when invalid model is specified
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -120,14 +120,14 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_quota.assert_not_called()
         mock_llm.assert_not_called()
 
-    # チャットの正常応答において、Web検索によって補強された場合に、検索ソースと詳細情報（参照URL等）がレスポンスに含まれていることを検証します。
-    # Verify that successful chat responses augmented with web search results include the search sources metadata in the payload.
+    # 日本語: チャットの正常応答において、Web検索によって補強された場合に、検索ソースと詳細情報（参照URL等）がレスポンスに含まれていることを検証します。
+    # English: Verify that successful chat responses augmented with web search results include the search sources metadata in the payload.
     def test_chat_json_response_path_includes_web_search_sources(self):
         request = make_request(
             method="POST",
             path="/api/chat",
             json_body={
-                "message": "今日のOpenAIの最新ニュースを教えて",
+                "message": "今日のOpenAI of the day を教えて",
                 "chat_room_id": "room-1",
                 "model": "openai/gpt-oss-120b",
             },
@@ -148,8 +148,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             ),
         )
 
-        # Web検索結果の拡張及びLLM呼び出し結果をモック
-        # Mock search augmentation result and the subsequent LLM response
+        # 日本語: Web検索結果の拡張及びLLM呼び出し結果をモック
+        # English: Mock search augmentation result and the subsequent LLM response
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -158,7 +158,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                 with patch("blueprints.chat.messages.ephemeral_store.room_exists", return_value=True):
                     with patch(
                         "blueprints.chat.messages.ephemeral_store.get_messages",
-                        return_value=[{"role": "user", "content": "今日のOpenAIの最新ニュースを教えて"}],
+                        return_value=[{"role": "user", "content": "今日のOpenAI of the day を教えて"}],
                     ):
                         with patch("blueprints.chat.messages.ephemeral_store.append_message"):
                             with patch(
@@ -172,7 +172,7 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
                                     with patch(
                                         "services.chat_use_case.maybe_augment_messages_with_web_search",
                                         return_value=WebSearchAugmentation(
-                                            messages=[{"role": "user", "content": "今日のOpenAIの最新ニュースを教えて"}],
+                                            messages=[{"role": "user", "content": "今日のOpenAI of the day を教えて"}],
                                             result=search_result,
                                         ),
                                     ) as mock_augment:
@@ -194,8 +194,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
 
-    # プロンプト管理APIにおける日付オブジェクトが、ISO-8601形式（YYYY-MM-DDTHH:MM:SS）で一貫してシリアライズされることを検証します。
-    # Verify that datetime objects in prompt management API payloads are consistently serialized to ISO-8601 format.
+    # 日本語: プロンプト管理APIにおける日付オブジェクトが、ISO-8601形式（YYYY-MM-DDTHH:MM:SS）で一貫してシリアライズされることを検証します。
+    # English: Verify that datetime objects in prompt management API payloads are consistently serialized to ISO-8601 format.
     def test_prompt_manage_serializes_datetime_consistently(self):
         request = make_request(
             method="GET",
@@ -214,8 +214,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             }
         ]
 
-        # プロンプト一覧取得処理をモック
-        # Mock fetching user prompts and verify serialized datetime format
+        # 日本語: プロンプト一覧取得処理をモック
+        # English: Mock fetching user prompts and verify serialized datetime format
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_my_prompts",
             return_value=sample_prompts,

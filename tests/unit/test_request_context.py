@@ -43,25 +43,37 @@ class RequestContextMiddlewareTestCase(unittest.TestCase):
         app = FastAPI()
         app.add_middleware(RequestContextMiddleware)
 
+        # テスト用のダミールーティングエンドポイント関数。
+        # Dummy routing endpoint function for testing.
         @app.get("/ping")
         async def ping():
+            # ルート内でログを出力し、ミドルウェアによるコンテキスト追加効果を発生させる
+            # Output logs inside the route to trigger the middleware context additions
             self.logger.info("inside route")
             return {"status": "ok"}
 
-        # HTTPリクエストテスト用の非同期シナリオ
-        # Async scenario to perform test HTTP requests
+        # HTTPリクエストテスト用の非同期シナリオを実行する関数。
+        # Function to perform test HTTP requests in an async environment.
         async def scenario():
+            # ASGIトランスポートを使用してFastAPIアプリをモック接続
+            # Mock connect to the FastAPI app using the ASGITransport
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://testserver",
             ) as client:
                 response = await client.get("/ping", headers={"X-Request-ID": "req-123"})
 
+            # レスポンスヘッダーにリクエストIDが引き継がれていることを確認
+            # Verify the response status code and that the X-Request-ID header is propagated
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["X-Request-ID"], "req-123")
 
+        # 非同期テストシナリオの実行
+        # Execute the async test scenario
         asyncio.run(scenario())
 
+        # ログメッセージ内にリクエストID、メソッド、パスが正しく含まれているか検証
+        # Verify request ID, method, and path are correctly formatted in the log output
         self.assertIn("req-123 GET /ping inside route", self.stream.getvalue())
 
 
