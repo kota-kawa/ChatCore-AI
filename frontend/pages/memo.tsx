@@ -134,6 +134,8 @@ const MEMO_AGENT_QUICK_PROMPTS = [
   "このメモについて質問に答えて"
 ];
 
+// メモ機能の概要を表示するコンポーネント
+// Component to display the summary of memo features
 export function MemoCrawlSummary() {
   const features = [
     "AIチャットの回答をメモとして保存",
@@ -168,6 +170,8 @@ export function MemoCrawlSummary() {
 // Utilities
 // ---------------------------------------------------------------------------
 
+// メモのテキストをパースする関数。必要に応じてJSONから文字列を抽出する。
+// Function to parse memo text. Extracts string from JSON if necessary.
 function parseMemoText(raw: string | null | undefined) {
   if (!raw) return "";
   try {
@@ -178,6 +182,8 @@ function parseMemoText(raw: string | null | undefined) {
   }
 }
 
+// メモ一覧を取得するためのURLを構築する関数
+// Function to build the URL for fetching the memo list
 function buildMemoListUrl(options: {
   query: string;
   sort: string;
@@ -199,6 +205,8 @@ function buildMemoListUrl(options: {
   return `/memo/api/recent?${params.toString()}`;
 }
 
+// メモのアクションメニューの表示位置を計算する関数
+// Function to calculate the display position of the memo action menu
 function getMemoActionMenuPosition(trigger: HTMLElement): MemoActionMenuPosition {
   const rect = trigger.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
@@ -221,10 +229,14 @@ function getMemoActionMenuPosition(trigger: HTMLElement): MemoActionMenuPosition
   return { top, left, width, maxHeight: availableHeight };
 }
 
+// メモのセクションキー（ピン留め、アーカイブ状態など）を取得する関数
+// Function to get the section key for a memo (e.g., pinned or archived status)
 function getMemoSectionKey(memo: MemoSummary) {
   return `${memo.is_pinned ? "pinned" : "other"}:${memo.is_archived ? "archived" : "active"}`;
 }
 
+// ドラッグ＆ドロップ時のメモのセクション内の並び順を計算する関数
+// Function to compute the projected section order of memos during drag & drop
 function computeProjectedSectionOrder(
   memos: MemoSummary[],
   draggedId: string,
@@ -256,6 +268,8 @@ type FrozenRect = { left: number; top: number; right: number; bottom: number };
 // targeting pass. That feedback loop was what made the board oscillate; with a
 // frozen reference the projection is a pure function of the pointer position and
 // stays rock-steady while the cards still animate aside to make room.
+// 各カードの現在の位置情報のスナップショットをキャプチャする関数
+// Function to capture a snapshot of current position info for each card
 function captureCardSnapshot(cardRefs: Map<string, HTMLElement>): Map<string, FrozenRect> {
   const snapshot = new Map<string, FrozenRect>();
   cardRefs.forEach((element, id) => {
@@ -267,6 +281,8 @@ function captureCardSnapshot(cardRefs: Map<string, HTMLElement>): Map<string, Fr
   return snapshot;
 }
 
+// スナップショットとポインター位置から予測される並び順を計算する関数
+// Function to compute the projected order from snapshots and pointer position
 function computeProjectedOrderFromSnapshot(
   memos: MemoSummary[],
   draggedId: string,
@@ -317,6 +333,8 @@ function computeProjectedOrderFromSnapshot(
   return computeProjectedSectionOrder(memos, draggedId, chosen.id, position);
 }
 
+// 計算された並び順のプロジェクションを実際のメモ配列に適用する関数
+// Function to apply the computed projection of order to the actual memo array
 function applySectionProjection(memos: MemoSummary[], projection: string[] | null): MemoSummary[] {
   if (!projection || projection.length === 0) return memos;
   const projectedSet = new Set(projection);
@@ -339,6 +357,8 @@ function applySectionProjection(memos: MemoSummary[], projection: string[] | nul
   return result;
 }
 
+// ドラッグ時のカスタムイメージ（ドラッグ中要素のクローン）を設定する関数
+// Function to set a custom drag image (clone of the dragged element) during drag
 function setMemoDragImage(event: DragEvent<HTMLElement>) {
   const source = event.currentTarget;
   const rect = source.getBoundingClientRect();
@@ -361,6 +381,8 @@ function setMemoDragImage(event: DragEvent<HTMLElement>) {
   }, 0);
 }
 
+// 指定されたURLからメモ一覧を読み込む非同期関数
+// Async function to load the memo list from the specified URL
 const loadMemoList = async (url: string): Promise<MemoListState> => {
   const res = await fetch(url, { credentials: "same-origin" });
   const data: MemoListPayload = await res.json().catch(() => ({}));
@@ -376,6 +398,8 @@ const loadMemoList = async (url: string): Promise<MemoListState> => {
   };
 };
 
+// メモのコレクション（タグ/フォルダ）一覧を読み込む非同期関数
+// Async function to load the list of memo collections (tags/folders)
 const loadCollections = async (): Promise<Collection[]> => {
   const res = await fetch("/memo/api/collections", { credentials: "same-origin" });
   const data: CollectionListPayload = await res.json().catch(() => ({}));
@@ -383,6 +407,8 @@ const loadCollections = async (): Promise<Collection[]> => {
   return Array.isArray(data.collections) ? data.collections : [];
 };
 
+// メモのIDから詳細情報を取得する非同期関数
+// Async function to load memo detail from its ID
 async function loadMemoDetail(memoId: string | number) {
   const { payload } = await fetchJsonOrThrow<MemoDetailPayload>(
     `/memo/api/${memoId}`,
@@ -396,12 +422,13 @@ async function loadMemoDetail(memoId: string | number) {
 // MemoMarkdown component (renders LLM-formatted markdown)
 // ---------------------------------------------------------------------------
 
+// マークダウン形式のテキストをHTMLとしてレンダリングするコンポーネント
+// Component to render markdown formatted text as HTML
 function MemoMarkdown({ text, className }: { text: string; className?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Markdownのテキストが変更されたときにサニタイズして描画する副作用
+  // Effect to render sanitized HTML when markdown text changes
   useEffect(() => {
-    if (!containerRef.current) return;
-    renderSanitizedHTML(containerRef.current, formatMemoOutput(text || ""));
-  }, [text]);
   return <div ref={containerRef} className={className}></div>;
 }
 
@@ -409,6 +436,8 @@ function MemoMarkdown({ text, className }: { text: string; className?: string })
 // CollectionBadge
 // ---------------------------------------------------------------------------
 
+// コレクション（タグ）のバッジを表示するコンポーネント
+// Component to display a collection (tag) badge
 function CollectionBadge({ name, color }: { name: string; color: string }) {
   return (
     <span className="memo-collection-badge" style={{ "--badge-color": color } as React.CSSProperties}>
@@ -424,6 +453,8 @@ function CollectionBadge({ name, color }: { name: string; color: string }) {
 
 type SelectOption = { value: string; label: string };
 
+// カスタムセレクトボックス（ドロップダウン）コンポーネント
+// Custom select box (dropdown) component
 function MemoSelect({
   value,
   onChange,
@@ -453,6 +484,8 @@ function MemoSelect({
     setOpen((v) => !v);
   };
 
+  // セレクトメニュー外のクリックとスクロールを検知して閉じる副作用
+  // Effect to close the select menu when clicking outside or scrolling
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -520,6 +553,8 @@ function MemoSelect({
 // Main page
 // ---------------------------------------------------------------------------
 
+// メモ機能のメインページコンポーネント
+// Main page component for the memo feature
 export default function MemoPage() {
   const router = useRouter();
 
@@ -669,6 +704,8 @@ export default function MemoPage() {
   // Effects
   // -----------------------------------------------------------------------
 
+  // ページマウント時にカスタム要素の読み込みやボディのクラス設定を行う副作用
+  // Effect to add body class and import custom elements on mount
   useEffect(() => {
     document.body.classList.add("memo-page");
     const importCustomElements = async () => {
@@ -690,12 +727,16 @@ export default function MemoPage() {
     };
   }, []);
 
+  // モーダル開閉時にbody要素のスクロールを制御するクラスを切り替える副作用
+  // Effect to toggle a body class controlling scroll when modals open/close
   useEffect(() => {
     const open = Boolean(selectedMemo) || isShareModalOpen || isCollectionPanelOpen || isExportModalOpen;
     document.body.classList.toggle("modal-open", open);
     return () => { document.body.classList.remove("modal-open"); };
   }, [isShareModalOpen, selectedMemo, isCollectionPanelOpen, isExportModalOpen]);
 
+  // 認証状態の同期を行う副作用
+  // Effect to synchronize the authentication state
   useEffect(() => {
     const syncAuthState = async () => {
       try {
@@ -712,6 +753,8 @@ export default function MemoPage() {
     void syncAuthState();
   }, []);
 
+  // URLクエリパラメータから保存成功などのフラッシュメッセージを表示する副作用
+  // Effect to show flash messages like save success from URL query parameters
   useEffect(() => {
     if (!router.isReady) return;
     if (router.query.saved !== "1") return;
@@ -726,6 +769,8 @@ export default function MemoPage() {
     void router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true });
   }, [router, router.isReady, router.pathname, router.query]);
 
+  // 新規メモ作成用テキストエリアの高さを自動調整する副作用
+  // Effect to automatically resize the textarea for new memo composition
   useEffect(() => {
     const el = composeTextareaRef.current;
     if (!el) return;
@@ -734,6 +779,8 @@ export default function MemoPage() {
     el.style.height = `${next}px`;
   }, [formState.ai_response, previewMode, isComposeExpanded]);
 
+  // メモ詳細が閉じられた際に自動保存タイマーをクリアする副作用
+  // Effect to clear the auto-save timer when the memo detail is closed
   useEffect(() => {
     if (selectedMemo) return;
     if (detailAutoSaveTimerRef.current) {
@@ -750,6 +797,8 @@ export default function MemoPage() {
     setDetailSaveError("");
   }, [selectedMemo]);
 
+  // メモアクションメニュー外のクリックやスクロールでメニューを閉じる副作用
+  // Effect to close the memo action menu on outside click or scroll
   useEffect(() => {
     if (!openMenuMemoId) return;
     const onDown = (e: MouseEvent) => {
@@ -814,6 +863,8 @@ export default function MemoPage() {
   const canReorderCurrentView =
     canDragMemos;
 
+  // フォーム入力の変更ハンドラー。入力値をローカルステートに反映する
+  // Form input change handler. Reflects input values into local state
   const handleFormChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
     setFormState((prev) => ({
@@ -840,6 +891,8 @@ export default function MemoPage() {
   // Submit / AI suggest
   // -----------------------------------------------------------------------
 
+  // メモの保存・更新を処理するハンドラー
+  // Handler to process memo saving/updating
   const handleSubmitMemo = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFlashState(null);
@@ -869,6 +922,8 @@ export default function MemoPage() {
     }
   }, [formState, mutate, showFlash]);
 
+  // AIによる自動入力補完を実行するハンドラー
+  // Handler to execute AI-based auto-completion for inputs
   const handleAiSuggest = useCallback(async () => {
     if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を先に入力してください。"); return; }
     setAiSuggesting(true);
@@ -1153,6 +1208,8 @@ export default function MemoPage() {
   // Pin / Archive / Delete
   // -----------------------------------------------------------------------
 
+  // ピン留め状態を切り替えるハンドラー
+  // Handler to toggle the pinned state
   const handleTogglePin = useCallback(async (memo: MemoSummary) => {
     await withActionLoading(memo.id, async () => {
       try {
@@ -1168,6 +1225,8 @@ export default function MemoPage() {
     });
   }, [mutate, refreshSelectedMemoIfNeeded, showFlash, withActionLoading]);
 
+  // アーカイブ状態を切り替えるハンドラー
+  // Handler to toggle the archived state
   const handleToggleArchive = useCallback(async (memo: MemoSummary) => {
     await withActionLoading(memo.id, async () => {
       try {
@@ -1183,6 +1242,8 @@ export default function MemoPage() {
     });
   }, [mutate, refreshSelectedMemoIfNeeded, showFlash, withActionLoading]);
 
+  // メモを削除するハンドラー
+  // Handler to delete a memo
   const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
     const confirmed = await showConfirmModal(`「${memo.title || "保存したメモ"}」を削除しますか？`);
     if (!confirmed) return;
@@ -1242,6 +1303,8 @@ export default function MemoPage() {
     dragSnapshotRef.current = new Map();
   }, []);
 
+  // メモのドラッグ開始時のハンドラー
+  // Handler when starting to drag a memo
   const handleMemoDragStart = useCallback((event: DragEvent<HTMLElement>, memo: MemoSummary) => {
     if (!canDragMemos) {
       event.preventDefault();
@@ -1261,6 +1324,8 @@ export default function MemoPage() {
     setMemoDragImage(event);
   }, [canDragMemos]);
 
+  // メモをドラッグ中のリスト上の判定処理
+  // Handler for drag-over events on the memo list to determine drop targets
   const handleMemoSectionDragOver = useCallback((event: DragEvent<HTMLUListElement>, sectionMemos: MemoSummary[]) => {
     if (!canReorderCurrentView || !draggedMemoId || sectionMemos.length === 0) return;
     const draggedMemo = memos.find((memo) => String(memo.id) === draggedMemoId);
@@ -1289,6 +1354,8 @@ export default function MemoPage() {
     });
   }, [canReorderCurrentView, memos, draggedMemoId]);
 
+  // ドラッグ＆ドロップ完了時の処理。並び順の更新を行う
+  // Handler for dropping a memo. Updates the order of memos
   const handleMemoDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const sourceId = draggedMemoId || event.dataTransfer.getData("text/plain");
@@ -1530,6 +1597,8 @@ export default function MemoPage() {
   // Collections management
   // -----------------------------------------------------------------------
 
+  // 新しいコレクションを作成するハンドラー
+  // Handler to create a new collection
   const handleCreateCollection = useCallback(async () => {
     const name = newCollectionName.trim();
     if (!name) { showFlash("error", "コレクション名を入力してください。"); return; }
@@ -1548,6 +1617,8 @@ export default function MemoPage() {
     finally { setCollectionActionLoading(false); }
   }, [newCollectionColor, newCollectionName, mutateCollections, showFlash]);
 
+  // 既存のコレクションを更新するハンドラー
+  // Handler to update an existing collection
   const handleUpdateCollection = useCallback(async (collectionId: number) => {
     setCollectionActionLoading(true);
     try {
@@ -1564,6 +1635,8 @@ export default function MemoPage() {
     finally { setCollectionActionLoading(false); }
   }, [editingCollectionColor, editingCollectionName, mutate, mutateCollections, showFlash]);
 
+  // コレクションを削除するハンドラー
+  // Handler to delete a collection
   const handleDeleteCollection = useCallback(async (collectionId: number, name: string) => {
     const confirmed = await showConfirmModal(`「${name}」を削除しますか？\nコレクション内のメモはコレクションから外れます。`);
     if (!confirmed) return;
@@ -1586,6 +1659,8 @@ export default function MemoPage() {
   // Export
   // -----------------------------------------------------------------------
 
+  // メモをJSON形式でエクスポートするハンドラー
+  // Handler to export memos in JSON format
   const handleExport = useCallback(() => {
     if (exportScope === "selected" && exportSelectedIds.size === 0) {
       showFlash("error", "エクスポートするメモを選択してください。");
