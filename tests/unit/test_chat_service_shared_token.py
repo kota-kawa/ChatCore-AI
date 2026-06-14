@@ -8,8 +8,6 @@ from services.chat_service import create_or_get_shared_chat_token
 # PostgreSQLの一意性制約エラー（エラーコード: 23505）をシミュレートする疑似例外クラス。
 # Mock exception class simulating PostgreSQL's unique key violation (error code: 23505).
 class UniqueViolation(Exception):
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self):
         super().__init__("duplicate key")
         self.pgcode = "23505"
@@ -18,8 +16,6 @@ class UniqueViolation(Exception):
 # チャットルーム共有トークン生成ロジック（ルーム所有権、ON CONFLICT処理、一意性衝突リトライ等）をテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing shared chat token creation, ownership check, ON CONFLICT, and collision retries.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, *, room_owner_id=1, insert_results=None, fail_attempts=None):
         self.room_owner_id = room_owner_id
         self.insert_results = list(insert_results or [])
@@ -71,8 +67,6 @@ class FakeCursor:
 # チャットルーム共有トークン生成ロジックをテストするための疑似DBコネクションクラス。
 # Mock database connection class for testing shared chat token creation.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False
@@ -99,12 +93,10 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()

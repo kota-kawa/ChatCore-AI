@@ -13,8 +13,6 @@ from blueprints.chat.profile import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(path, json_body, session=None):
     return build_request(
         method="POST",
@@ -162,8 +160,6 @@ class RequestEmailChangeTestCase(unittest.TestCase):
 # 日本語: Confirm Email Changeの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Confirm Email Change.
 class ConfirmEmailChangeTestCase(unittest.TestCase):
-    # 日本語: session with state に関する処理の入口です。
-    # English: Entry point for logic related to session with state.
     def _session_with_state(self, **overrides):
         state = {
             "stage": EMAIL_CHANGE_STAGE_NEW,
@@ -373,8 +369,6 @@ class ProfileEndpointRefusesEmailChangeTestCase(unittest.TestCase):
             b"--" + boundary + b"--\r\n"
         )
 
-        # 日本語: テスト用の処理の入口関数receiveです。
-# English: Entry point helper function receive for testing.
         async def receive():
             return {"type": "http.request", "body": body, "more_body": False}
 

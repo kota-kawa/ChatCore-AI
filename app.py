@@ -254,7 +254,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 # アプリケーションを直接実行する場合のエントリーポイント
-# Entry point when starting the application script directly
 if __name__ == "__main__":
     import uvicorn
 

@@ -7,20 +7,14 @@ from blueprints.prompt_share.prompt_share_api import _get_prompts_with_flags
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, rows):
         self.rows = rows
         self.executed = []
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.executed.append((" ".join(query.split()), params))
 
-    # 日本語: テスト用の処理の入口関数fetchallです。
-# English: Entry point helper function fetchall for testing.
     def fetchall(self):
         return self.rows
 
@@ -33,8 +27,6 @@ class FakeCursor:
 # 日本語: テスト用の擬似Fake Connectionクラスです。
 # English: Mock Fake Connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False

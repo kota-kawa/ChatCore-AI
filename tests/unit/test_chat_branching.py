@@ -9,8 +9,6 @@ from services.repositories.chat_repository import ChatRepository
 class FakeCursor:
     """Minimal in-memory emulation of the SQL the branching methods issue."""
 
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
         self._result_one = None
@@ -148,17 +146,13 @@ class FakeCursor:
 # テスト用の疑似DBコネクションクラス。
 # Mock database connection class for testing.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, *exc):
         return False

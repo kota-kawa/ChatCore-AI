@@ -130,12 +130,8 @@ def is_action_request(query: str) -> bool:
 def _read_file_head(rel_path: str, max_lines: int) -> str:
     """ファイルの先頭 max_lines 行を読み取って返す。"""
     full_path = PROJECT_ROOT / rel_path
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not full_path.exists():
         return ""
-    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         lines = full_path.read_text(encoding="utf-8").splitlines()
         head = lines[:max_lines]
@@ -152,13 +148,9 @@ def _read_file_head(rel_path: str, max_lines: int) -> str:
 # English: Build a prompt context string containing relevant source code files and capabilities for the current route.
 def get_page_context(pathname: str) -> str:
     """URL パスに対応するページのソースコードを読み取りコンテキスト文字列として返す。"""
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not pathname:
         return ""
 
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for pattern, page_label, file_specs in _PAGE_MAP:
         if pattern.search(pathname):
             parts = [

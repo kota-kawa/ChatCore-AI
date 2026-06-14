@@ -8,8 +8,6 @@ from services.llm import LlmProviderError
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: collect sse done に関する処理の入口です。
-# English: Entry point for logic related to collect sse done.
 async def _collect_sse_done(response) -> dict:
     """StreamingResponse の body_iterator を読み進め、done/action_plan/error イベントのペイロードを返す。"""
     body = b""
@@ -18,7 +16,6 @@ async def _collect_sse_done(response) -> dict:
     async for chunk in response.body_iterator:
         body += chunk if isinstance(chunk, bytes) else chunk.encode("utf-8")
     # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
     for block in body.decode("utf-8").split("\n\n"):
         event_type = "message"
         data = ""
@@ -32,8 +29,6 @@ async def _collect_sse_done(response) -> dict:
     return {}
 
 
-# 日本語: collect sse events に関する処理の入口です。
-# English: Entry point for logic related to collect sse events.
 async def _collect_sse_events(response) -> list[tuple[str, dict]]:
     body = b""
     # 日本語: 非同期の対象データを順番に処理します。
@@ -43,7 +38,6 @@ async def _collect_sse_events(response) -> list[tuple[str, dict]]:
 
     events = []
     # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
     for block in body.decode("utf-8").split("\n\n"):
         event_type = "message"
         data = ""
@@ -57,8 +51,6 @@ async def _collect_sse_events(response) -> list[tuple[str, dict]]:
     return events
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -68,8 +60,6 @@ def make_request(json_body, session=None):
     )
 
 
-# 日本語: make ai agent request の生成処理を担当します。
-# English: Handle creating for make ai agent request.
 def make_ai_agent_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -164,8 +154,6 @@ class PromptAssistApiTestCase(unittest.TestCase):
             session={},
         )
 
-        # 日本語: run の実行処理を非同期で担当します。
-        # English: Handle running for run asynchronously.
         async def _run():
             # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
@@ -200,8 +188,6 @@ class PromptAssistApiTestCase(unittest.TestCase):
             session={},
         )
 
-        # 日本語: run の実行処理を非同期で担当します。
-        # English: Handle running for run asynchronously.
         async def _run():
             # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
@@ -238,8 +224,6 @@ class PromptAssistApiTestCase(unittest.TestCase):
             session={},
         )
 
-        # 日本語: run の実行処理を非同期で担当します。
-        # English: Handle running for run asynchronously.
         async def _run():
             # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.

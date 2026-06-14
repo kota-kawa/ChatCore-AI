@@ -15,14 +15,10 @@ from services.web import jsonify
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(path: str, *, json_body=None, session=None):
     return build_request(method="POST", path=path, json_body=json_body, session=session)
 
 
-# 日本語: immediate run blocking に関する処理の入口です。
-# English: Entry point for logic related to immediate run blocking.
 async def immediate_run_blocking(func, *args, **kwargs):
     return func(*args, **kwargs)
 

@@ -7,11 +7,7 @@ from pathlib import Path
 from scripts.generate_frontend_zod_schemas import get_schema_fingerprint
 
 
-# 日本語: GeneratedApiSchemasTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to GeneratedApiSchemasTestCase.
 class GeneratedApiSchemasTestCase(unittest.TestCase):
-    # 日本語: test generated api schema fingerprint matches backend models のテスト検証を担当します。
-    # English: Handle verifying test behavior for test generated api schema fingerprint matches backend models.
     def test_generated_api_schema_fingerprint_matches_backend_models(self):
         generated_file = (
             Path(__file__).resolve().parents[2]

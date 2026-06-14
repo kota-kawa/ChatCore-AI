@@ -35,8 +35,6 @@ from services.chat_title import (
 )
 
 
-# 日本語: ChatPostUseCaseDependencies に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatPostUseCaseDependencies.
 @dataclass(frozen=True)
 class ChatPostUseCaseDependencies:
     cleanup_ephemeral_chats: Callable[[], Any]
@@ -85,11 +83,7 @@ class ChatPostUseCaseDependencies:
     logger: Any
 
 
-# 日本語: ChatPostUseCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatPostUseCase.
 class ChatPostUseCase:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         dependencies: ChatPostUseCaseDependencies,
@@ -99,8 +93,6 @@ class ChatPostUseCase:
         self.deps = dependencies
         self.default_model = default_model
 
-    # 日本語: execute の実行処理を非同期で担当します。
-    # English: Handle executing for execute asynchronously.
     async def execute(
         self,
         request: Request,
@@ -113,8 +105,6 @@ class ChatPostUseCase:
 
         await run_blocking(deps.cleanup_ephemeral_chats)
         data, error_response = await deps.require_json_dict(request)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if error_response is not None:
             return error_response
 
@@ -123,8 +113,6 @@ class ChatPostUseCase:
             ChatMessageRequest,
             error_message="'message' が必要です。",
         )
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if validation_error is not None:
             return validation_error
 
@@ -188,6 +176,8 @@ class ChatPostUseCase:
 
         if "user_id" in session:
             if room_mode == "temporary":
+                # ログイン中でも temporary room は DB に保存せず、ユーザー単位の一時ストアに閉じ込める。
+                # sid ではなく user_id 由来のキーを使うため、同じユーザーの再読み込みにも耐える。
                 sid = deps.get_temporary_user_store_key(user_id)
                 await run_blocking(deps.ensure_ephemeral_room, sid, chat_room_id)
                 attachment_content_kwargs = (
@@ -212,6 +202,8 @@ class ChatPostUseCase:
                 attached_file_name_list = [f.name for f in prepared_attached_files] if prepared_attached_files else None
                 # New turns extend the active branch: parent is the current branch tip.
                 parent_message_id = await run_blocking(deps.get_active_leaf_id, chat_room_id)
+                # 初回発話では assistant 応答がまだないため、DB から履歴を読み直さず最小文脈を作る。
+                # このフラグは、後段の初回タイトル自動生成にも使う。
                 should_auto_title_room = parent_message_id is None
                 attachment_content_kwargs = (
                     {"attached_file_contents": prepared_attached_files}
@@ -262,6 +254,8 @@ class ChatPostUseCase:
 
         urls_in_message = extract_urls_from_text(user_message)
         if urls_in_message:
+            # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
+            # system message に混ぜると、外部ページ本文が指示階層を持っているように見えやすい。
             fetched_urls = await run_blocking(fetch_urls_content, urls_in_message)
             if fetched_urls:
                 url_xml = "\n".join(
@@ -310,6 +304,8 @@ class ChatPostUseCase:
                     deps.logger.warning("Failed to load memory facts; proceeding without them.")
             if saved_user_message_id is not None:
                 try:
+                    # 記憶抽出は元メッセージIDと結びつけて保存する。失敗しても応答生成は継続し、
+                    # 次回以降のパーソナル文脈だけが欠ける扱いにする。
                     remembered_facts = await run_blocking(
                         deps.remember_facts_from_message,
                         chat_room_id,
@@ -359,6 +355,8 @@ class ChatPostUseCase:
             user_key=quota_user_key,
         )
         if not can_access_llm:
+            # quota 失敗時にユーザー発話だけを残すと、次回の文脈が「未回答の発話」から始まる。
+            # そのため通常ルーム/一時ルームの差を吸収して、assistant 応答なしの投稿を掃除する。
             await run_blocking(
                 deps.cleanup_failed_room_without_assistant_response,
                 chat_room_id,
@@ -382,8 +380,6 @@ class ChatPostUseCase:
                     task_launch_request=active_task_request,
                 )
 
-                # 日本語: persist response に関する処理の入口です。
-                # English: Entry point for logic related to persist response.
                 def persist_response(
                     response: str,
                     *,
@@ -396,15 +392,13 @@ class ChatPostUseCase:
                         None,
                         saved_user_message_id,
                     ]
-                    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-                    # English: Switch the flow according to the current condition.
                     if message_parts:
                         save_args.append(message_parts)
                     deps.save_message_to_db(
                         *save_args,
                     )
-                    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-                    # English: Switch the flow according to the current condition.
+                    # 初回応答を保存できた後にだけタイトルを自動生成する。
+                    # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
                     if not should_auto_title_room:
                         return None
                     generated_title = maybe_auto_title_chat_room(
@@ -419,13 +413,11 @@ class ChatPostUseCase:
                         return {"room_title": generated_title}
                     return None
 
-                # 日本語: on finished に関する処理の入口です。
-                # English: Entry point for logic related to on finished.
                 def on_finished() -> None:
-                    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-                    # English: Run potentially failing work in a form that can be caught.
                     try:
                         updated_messages = deps.get_chat_room_messages(chat_room_id)
+                        # 要約はストリーミング完了後に一度だけ更新する。
+                        # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
                         deps.rebuild_room_summary(chat_room_id, updated_messages)
                     except Exception:
                         deps.logger.warning(

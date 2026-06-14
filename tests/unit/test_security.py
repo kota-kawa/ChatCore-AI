@@ -15,7 +15,6 @@ class SecurityUtilsTestCase(unittest.TestCase):
     # English: Verify that generate verification code is six digits.
     def test_generate_verification_code_is_six_digits(self):
         # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
         for _ in range(50):
             code = generate_verification_code()
             self.assertTrue(code.isdigit())

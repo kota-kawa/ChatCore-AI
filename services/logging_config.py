@@ -76,13 +76,9 @@ class JsonLogFormatter(logging.Formatter):
             for key, value in record.__dict__.items()
             if key not in self.RESERVED_KEYS and not key.startswith("_")
         }
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if extras:
             payload["extra"] = extras
 
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         if record.stack_info:
@@ -97,8 +93,6 @@ class JsonLogFormatter(logging.Formatter):
 # English: Safely parse a positive integer from environment variables, falling back to a default value if invalid.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     raw_value = os.getenv(env_name, str(default_value))
-    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         parsed_value = int(raw_value)
     except (TypeError, ValueError):
@@ -110,8 +104,6 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
         )
         return default_value
 
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if parsed_value <= 0:
         logger.warning(
             "Invalid %s value '%s'. Falling back to %s.",
@@ -128,8 +120,6 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
 # 日本語: ルートロガーから指定された名前を持つ既存のログハンドラを削除し、クローズします。
 # English: Remove and close an existing log handler with the specified name from the root logger.
 def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> None:
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for existing_handler in list(root_logger.handlers):
         if getattr(existing_handler, "name", "") == handler_name:
             root_logger.removeHandler(existing_handler)
@@ -141,8 +131,6 @@ def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> No
 # 日本語: ログ出力設定（"plain" または "json"）に基づいてログフォーマッタオブジェクトを構築します。
 # English: Build a log formatter object based on the output configuration ("plain" or "json").
 def _build_formatter(log_output: str) -> logging.Formatter:
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if log_output == "plain":
         return logging.Formatter(LOG_FORMAT)
     return JsonLogFormatter()
@@ -204,8 +192,6 @@ def configure_logging() -> None:
     root_logger.setLevel(resolved_log_level)
 
     log_dir = Path(os.getenv("LOG_DIR", DEFAULT_LOG_DIR))
-    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -218,8 +204,6 @@ def configure_logging() -> None:
     error_log_file = log_dir / os.getenv("ERROR_LOG_FILE", DEFAULT_ERROR_LOG_FILE)
     formatter = _build_formatter(log_output)
 
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for handler_name in (CONSOLE_HANDLER_NAME, APP_LOG_HANDLER_NAME, ERROR_LOG_HANDLER_NAME):
         _replace_named_handler(root_logger, handler_name)
 

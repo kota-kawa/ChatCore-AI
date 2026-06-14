@@ -9,8 +9,6 @@ from services import web_search
 # 日本語: Web Search Serviceの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Web Search Service.
 class WebSearchServiceTestCase(unittest.TestCase):
-    # 日本語: テスト用の処理の入口関数setUpです。
-# English: Entry point helper function setUp for testing.
     def setUp(self):
         web_search._search_cache.clear()
 
@@ -619,8 +617,6 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual([source.url for source in combined.sources], ["https://example.com/a", "https://example.com/b"])
 
 
-    # 日本語: result with sources に関する処理の入口です。
-    # English: Entry point for logic related to result with sources.
     def _result_with_sources(self, *urls_with_snippets):
         return web_search.WebSearchResult(
             query="q",

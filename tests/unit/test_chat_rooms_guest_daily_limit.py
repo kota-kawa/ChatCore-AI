@@ -7,8 +7,6 @@ from blueprints.chat.rooms import new_chat_room
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",

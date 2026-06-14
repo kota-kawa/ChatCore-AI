@@ -6,7 +6,6 @@ from . import chat_bp, cleanup_ephemeral_chats
 
 
 # チャットトップ画面へのGETリクエストをハンドリングするエンドポイント
-# Handle GET requests for the chat top page.
 @chat_bp.get("/", name="chat.index")
 async def index(request: Request):
     # 画面表示前に不要な一時チャットを掃除し、フロント側ルートへ転送する
@@ -16,7 +15,6 @@ async def index(request: Request):
 
 
 # 設定画面へのGETリクエストをハンドリングするエンドポイント
-# Handle GET requests for settings page, redirecting to frontend.
 @chat_bp.get("/settings", name="chat.settings")
 async def settings(request: Request):
     # 設定画面も FastAPI 側では描画せず、フロントエンドへルーティングする

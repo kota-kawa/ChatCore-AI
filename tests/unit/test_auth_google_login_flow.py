@@ -17,26 +17,18 @@ from tests.helpers.request_helpers import build_request
 # 日本語: テスト用の擬似Fake Flowクラスです。
 # English: Mock Fake Flow class for testing.
 class FakeFlow:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.credentials = SimpleNamespace(token="google-access-token")
         self.authorization_responses = []
 
-    # 日本語: fetch token の取得処理を担当します。
-    # English: Handle fetching for fetch token.
     def fetch_token(self, *, authorization_response):
         self.authorization_responses.append(authorization_response)
 
 
-# 日本語: immediate run blocking に関する処理の入口です。
-# English: Entry point for logic related to immediate run blocking.
 async def immediate_run_blocking(func, *args, **kwargs):
     return func(*args, **kwargs)
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(*, query_string=b"code=abc&state=google-state", session=None):
     return build_request(
         method="GET",
@@ -50,8 +42,6 @@ def make_request(*, query_string=b"code=abc&state=google-state", session=None):
     )
 
 
-# 日本語: make google login request の生成処理を担当します。
-# English: Handle creating for make google login request.
 def make_google_login_request(*, query_string=b"", session=None):
     return build_request(
         method="GET",
@@ -65,8 +55,6 @@ def make_google_login_request(*, query_string=b"", session=None):
     )
 
 
-# 日本語: valid google client config に関する処理の入口です。
-# English: Entry point for logic related to valid google client config.
 def valid_google_client_config():
     return {
         "web": {

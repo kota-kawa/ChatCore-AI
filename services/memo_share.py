@@ -20,8 +20,6 @@ DEFAULT_SHARE_EXPIRES_DAYS = 30
 # 日本語: 指定された期限日時が現時刻を過ぎている（有効期限切れ）か判定します。
 # English: Check whether the given expiration datetime has passed.
 def _is_expired(expires_at: Any) -> bool:
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not isinstance(expires_at, datetime):
         return False
     return expires_at <= datetime.utcnow()
@@ -51,8 +49,6 @@ def _serialize_share_state(
 # 日本語: 指定日数後の期限切れ日時(datetime)を算出します。
 # English: Calculate the future expiration datetime based on the number of days.
 def _resolve_expires_at(expires_in_days: int | None) -> datetime | None:
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if expires_in_days is None:
         return None
     return datetime.utcnow() + timedelta(days=max(int(expires_in_days), 1))
@@ -69,8 +65,6 @@ def create_or_get_shared_memo_token(
 ) -> dict[str, Any]:
     # メモ所有者を検証した上で共有トークンを作成し、既存があれば再利用する
     # Create a memo share token after owner validation and reuse the existing one.
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
         token = secrets.token_urlsafe(18)
         collision_detected = False
