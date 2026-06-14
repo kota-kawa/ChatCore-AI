@@ -83,6 +83,7 @@ const ROUTE_REVEAL_DELAY_MS = 220;
 const MENU_NAVIGATION_MIN_DELAY_MS = 120;
 const STYLESHEET_PRELOAD_TIMEOUT_MS = 2200;
 const stylesheetPreloadPromises = new Map<string, Promise<void>>();
+const stylesheetApplyPromises = new Map<string, Promise<void>>();
 
 type ChatCoreNavigationEvent = CustomEvent<{
   href?: string;
@@ -123,8 +124,8 @@ function normalizeStylesheetHref(href: string) {
   return new URL(href, window.location.origin).href;
 }
 
-function isStylesheetLoaded(absoluteHref: string) {
-  const links = document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet'], link[rel='preload'][as='style']");
+function isStylesheetApplied(absoluteHref: string) {
+  const links = document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet']");
   return Array.from(links).some((link) => (
     link.href === absoluteHref && (link.dataset.ccRouteStylesheetReady === "true" || Boolean(link.sheet))
   ));
@@ -134,7 +135,7 @@ function ensureStylesheetPreloaded(href: string) {
   if (typeof window === "undefined") return Promise.resolve();
 
   const absoluteHref = normalizeStylesheetHref(href);
-  if (isStylesheetLoaded(absoluteHref)) return Promise.resolve();
+  if (isStylesheetApplied(absoluteHref)) return Promise.resolve();
 
   const cachedPromise = stylesheetPreloadPromises.get(absoluteHref);
   if (cachedPromise) return cachedPromise;
@@ -175,11 +176,67 @@ function ensureStylesheetPreloaded(href: string) {
   return promise;
 }
 
-function ensureRouteStylesheetsLoaded(pathname: string) {
+function ensureStylesheetApplied(href: string) {
+  if (typeof window === "undefined") return Promise.resolve();
+
+  const absoluteHref = normalizeStylesheetHref(href);
+  if (isStylesheetApplied(absoluteHref)) return Promise.resolve();
+
+  const cachedPromise = stylesheetApplyPromises.get(absoluteHref);
+  if (cachedPromise) return cachedPromise;
+
+  const promise = new Promise<void>((resolve) => {
+    const existingStylesheet = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet'][href]")).find((candidate) => (
+      candidate.href === absoluteHref || candidate.getAttribute("href") === href
+    ));
+    const link = existingStylesheet || document.createElement("link");
+    let didResolve = false;
+
+    const cleanup = () => {
+      link.removeEventListener("load", handleLoad);
+      link.removeEventListener("error", handleLoad);
+    };
+    const handleLoad = () => {
+      if (didResolve) return;
+      didResolve = true;
+      link.dataset.ccRouteStylesheetReady = "true";
+      cleanup();
+      resolve();
+    };
+
+    window.setTimeout(handleLoad, STYLESHEET_PRELOAD_TIMEOUT_MS);
+    link.addEventListener("load", handleLoad, { once: true });
+    link.addEventListener("error", handleLoad, { once: true });
+
+    if (link.sheet) {
+      handleLoad();
+      return;
+    }
+
+    if (!existingStylesheet) {
+      link.rel = "stylesheet";
+      link.href = href;
+      link.dataset.ccRouteStylesheetInjected = "true";
+      document.head.appendChild(link);
+    }
+  });
+
+  stylesheetApplyPromises.set(absoluteHref, promise);
+  return promise;
+}
+
+function ensureRouteStylesheetsPreloaded(pathname: string) {
   const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
   if (stylesheetHrefs.length === 0) return Promise.resolve();
 
   return Promise.all(stylesheetHrefs.map(ensureStylesheetPreloaded)).then(() => undefined);
+}
+
+function ensureRouteStylesheetsApplied(pathname: string) {
+  const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
+  if (stylesheetHrefs.length === 0) return Promise.resolve();
+
+  return Promise.all(stylesheetHrefs.map(ensureStylesheetApplied)).then(() => undefined);
 }
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -234,7 +291,7 @@ export default function App({ Component, pageProps }: AppProps) {
       clearFinishTimer();
       const currentFinishRequestId = ++finishRequestId;
       void Promise.all([
-        ensureRouteStylesheetsLoaded(getPathnameFromRouteUrl(url)),
+        ensureRouteStylesheetsApplied(getPathnameFromRouteUrl(url)),
         wait(ROUTE_REVEAL_DELAY_MS)
       ]).finally(() => {
         if (currentFinishRequestId !== finishRequestId) return;
@@ -267,7 +324,7 @@ export default function App({ Component, pageProps }: AppProps) {
       void router.prefetch(path).catch(() => {
         // Prefetch is an optimization only; navigation still works without it.
       });
-      void ensureRouteStylesheetsLoaded(path);
+      void ensureRouteStylesheetsPreloaded(path);
     });
   }, [router]);
 
@@ -283,7 +340,7 @@ export default function App({ Component, pageProps }: AppProps) {
       navigationRequestIdRef.current = currentNavigationRequestId;
       setIsRouteTransitioning(true);
       await Promise.all([
-        ensureRouteStylesheetsLoaded(getPathnameFromRouteUrl(target)),
+        ensureRouteStylesheetsPreloaded(getPathnameFromRouteUrl(target)),
         wait(MENU_NAVIGATION_MIN_DELAY_MS)
       ]);
       if (currentNavigationRequestId !== navigationRequestIdRef.current) return;
