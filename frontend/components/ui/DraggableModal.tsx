@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from "react"
 
 import { readSessionJson, writeSessionJson } from "../../lib/utils";
 
+// ドラッグ可能モーダルのprops型定義
+// Props type definition for the draggable modal
 type DraggableModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -12,13 +14,21 @@ type DraggableModalProps = {
   positionStorageKey?: string;
 };
 
+// モーダルのx/y座標を表す型
+// Type representing the x/y coordinates of the modal
 type Position = { x: number; y: number };
+// モーダルを閉じるアニメーションの時間（ミリ秒）
+// Duration of the modal close animation (milliseconds)
 const CLOSE_ANIMATION_MS = 320;
 
+// 値が有限な数値かどうかを型ガードで確認する
+// Type guard to check if a value is a finite number
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+// ヘッダーをドラッグして画面内を自由に移動できるモーダルコンポーネント
+// Modal component that can be freely moved within the screen by dragging its header
 export function DraggableModal({
   isOpen,
   onClose,
@@ -28,14 +38,26 @@ export function DraggableModal({
   initialY = 100,
   positionStorageKey,
 }: DraggableModalProps) {
+  // モーダルの現在位置（px）
+  // Current position of the modal (px)
   const [position, setPosition] = useState<Position>({ x: initialX, y: initialY });
   const [isDragging, setIsDragging] = useState(false);
+  // ドラッグ開始時のポインターとモーダル位置の差分
+  // Offset between pointer and modal position when dragging starts
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // SSRハイドレーション完了フラグ
+  // Flag indicating SSR hydration is complete
   const [hydrated, setHydrated] = useState(false);
+  // 閉じるアニメーション中もDOMを保持するフラグ
+  // Flag to keep the DOM during the close animation
   const [shouldRender, setShouldRender] = useState(isOpen);
   const modalRef = useRef<HTMLDivElement>(null);
+  // モーダルを閉じた後にフォーカスを戻す要素のref
+  // Ref to the element that should receive focus after the modal closes
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
+  // マウント時にセッションストレージから前回の位置を復元する
+  // Restore the previous position from session storage on mount
   useEffect(() => {
     if (positionStorageKey) {
       const stored = readSessionJson<Position | null>(positionStorageKey, null);
@@ -46,11 +68,15 @@ export function DraggableModal({
     setHydrated(true);
   }, [positionStorageKey]);
 
+  // 位置が変わったらセッションストレージに保存する（ハイドレーション後のみ）
+  // Save position to session storage when it changes (only after hydration)
   useEffect(() => {
     if (!hydrated || !positionStorageKey) return;
     writeSessionJson(positionStorageKey, position);
   }, [hydrated, positionStorageKey, position]);
 
+  // 閉じるアニメーションが完了するまでDOMを保持する
+  // Keep the DOM until the close animation completes
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
@@ -66,6 +92,8 @@ export function DraggableModal({
     };
   }, [isOpen]);
 
+  // モーダルがビューポートからはみ出さないよう位置を制限する
+  // Clamp position so the modal stays within the viewport
   const clampPosition = useCallback((nextPosition: { x: number; y: number }) => {
     const modal = modalRef.current;
     const modalWidth = modal?.offsetWidth || 360;
@@ -80,6 +108,8 @@ export function DraggableModal({
     };
   }, []);
 
+  // マウスドラッグ開始ハンドラー（閉じるボタンクリックは除外）
+  // Mouse drag start handler (excluding close button clicks)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(".modal-close-btn")) return;
 
@@ -90,10 +120,14 @@ export function DraggableModal({
     });
   };
 
+  // タッチ/ペンデバイスのドラッグ開始ハンドラー
+  // Drag start handler for touch/pen devices
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest(".modal-close-btn")) return;
     if (event.pointerType === "mouse") return;
 
+    // ポインターをキャプチャしてドラッグ中に外れないようにする
+    // Capture the pointer to keep tracking even if it leaves the element
     event.currentTarget.setPointerCapture(event.pointerId);
     setIsDragging(true);
     setDragOffset({
@@ -102,6 +136,8 @@ export function DraggableModal({
     });
   };
 
+  // タッチ/ペンのドラッグ移動ハンドラー
+  // Drag move handler for touch/pen devices
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging || event.pointerType === "mouse") return;
     setPosition(clampPosition({
@@ -110,11 +146,15 @@ export function DraggableModal({
     }));
   };
 
+  // タッチ/ペンのドラッグ終了ハンドラー
+  // Drag end handler for touch/pen devices
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse") return;
     setIsDragging(false);
   };
 
+  // マウスドラッグ移動ハンドラー（windowレベルで監視）
+  // Mouse drag move handler (monitored at the window level)
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (isDragging) {
@@ -127,10 +167,14 @@ export function DraggableModal({
     [isDragging, dragOffset, clampPosition]
   );
 
+  // マウスボタンリリースハンドラー
+  // Mouse button release handler
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
 
+  // ドラッグ中のみwindowにマウスイベントリスナーを登録する
+  // Register mouse event listeners on the window only while dragging
   useEffect(() => {
     if (isDragging) {
       window.addEventListener("mousemove", handleMouseMove);
@@ -145,6 +189,8 @@ export function DraggableModal({
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // ウィンドウリサイズとVisual Viewport変化時にモーダルをビューポート内に収める
+  // Keep the modal within the viewport on window resize and Visual Viewport changes
   useEffect(() => {
     if (!shouldRender) return undefined;
 
@@ -164,6 +210,8 @@ export function DraggableModal({
     };
   }, [shouldRender, clampPosition]);
 
+  // モーダルが開いたとき、最初のフォーカス可能な要素にフォーカスを移す
+  // Move focus to the first focusable element when the modal opens
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -182,6 +230,8 @@ export function DraggableModal({
     };
   }, [isOpen]);
 
+  // モーダルが閉じたとき、フォーカスを元の要素に戻す
+  // Return focus to the previously focused element when the modal closes
   useEffect(() => {
     if (isOpen) return undefined;
     const previouslyFocused = previouslyFocusedRef.current;
@@ -192,6 +242,8 @@ export function DraggableModal({
     return undefined;
   }, [isOpen]);
 
+  // Escキーでモーダルを閉じるイベントリスナー（キャプチャフェーズで登録して優先度を高める）
+  // Escape key listener to close the modal (registered in capture phase for higher priority)
   useEffect(() => {
     if (!isOpen) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -205,6 +257,8 @@ export function DraggableModal({
     };
   }, [isOpen, onClose]);
 
+  // 閉じるアニメーション完了後はDOMから削除する
+  // Remove from DOM after close animation completes
   if (!shouldRender) return null;
 
   return (
@@ -222,6 +276,7 @@ export function DraggableModal({
         cursor: isDragging ? "grabbing" : "auto",
       }}
     >
+      {/* ドラッグ可能なヘッダー / Draggable header */}
       <div
         className="ai-agent-modal-header"
         onMouseDown={handleMouseDown}

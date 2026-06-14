@@ -10,12 +10,16 @@ import {
 } from "../../lib/chat_page/constants";
 import type { ChatGenerationPhase } from "../../lib/chat_page/types";
 
+// 各生成フェーズにおける星座アニメーションのタイミング設定の型
+// Type for constellation animation timing settings per generation phase
 type ConstellationPhaseTiming = {
   stepMs: number;
   linkDelayMs: number;
   nodeDelayMs: number;
 };
 
+// 生成フェーズごとの星座アニメーションタイミング設定
+// Constellation animation timing settings per generation phase
 const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, ConstellationPhaseTiming> = {
   preparing: {
     stepMs: Math.round(THINKING_CONSTELLATION_STEP_MS * 1.12),
@@ -34,6 +38,8 @@ const CONSTELLATION_PHASE_TIMING: Record<ChatGenerationPhase, ConstellationPhase
   },
 };
 
+// Web検索フェーズ専用の星座バリアント定義
+// Constellation variant definitions for the web search phase
 const WEB_SEARCH_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
     name: "検索レンズ",
@@ -79,6 +85,8 @@ const WEB_SEARCH_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
+// 準備フェーズ専用の星座バリアント定義
+// Constellation variant definitions for the preparing phase
 const PREPARING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   {
     name: "準備コア",
@@ -124,27 +132,37 @@ const PREPARING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
+// 生成フェーズに応じた星座バリアントの配列を返す
+// Return the array of constellation variants for the given generation phase
 function resolveConstellationVariants(phase: ChatGenerationPhase) {
   if (phase === "web-search") return WEB_SEARCH_CONSTELLATION_VARIANTS;
   if (phase === "generating") return THINKING_CONSTELLATION_VARIANTS;
   return PREPARING_CONSTELLATION_VARIANTS;
 }
 
+// タイムスタンプとステップ時間から現在の星座インデックスを算出する
+// Calculate the current constellation index from timestamp and step duration
 function resolveConstellationIndex(timestamp: number, stepMs: number, variantCount: number) {
   if (variantCount <= 0) return 0;
   return Math.floor(timestamp / stepMs) % variantCount;
 }
 
+// AI生成中のフェーズに応じてアニメーションする星座ローダーコンポーネント
+// Constellation loader component that animates based on the AI generation phase
 export function ThinkingConstellation({ phase = "preparing" }: { phase?: ChatGenerationPhase }) {
   const [constellationIndex, setConstellationIndex] = useState(0);
   const phaseTiming = CONSTELLATION_PHASE_TIMING[phase] ?? CONSTELLATION_PHASE_TIMING.preparing;
   const constellationVariants = resolveConstellationVariants(phase);
 
+  // 星座バリアントを一定間隔でウォールクロックに同期して切り替えるタイマー
+  // Timer that switches constellation variants at intervals synchronized with the wall clock
   useEffect(() => {
     if (constellationVariants.length <= 1) return;
 
     let timerId: ReturnType<typeof setTimeout> | null = null;
 
+    // ウォールクロックと同期して次の切り替えタイミングを計算する
+    // Calculate the next switch timing synchronized with the wall clock
     const syncConstellation = () => {
       const now = Date.now();
       setConstellationIndex(resolveConstellationIndex(now, phaseTiming.stepMs, constellationVariants.length));
