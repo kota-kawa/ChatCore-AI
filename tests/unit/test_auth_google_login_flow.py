@@ -14,8 +14,8 @@ from blueprints.auth import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: FakeFlow に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeFlow.
+# 日本語: テスト用の擬似Fake Flowクラスです。
+# English: Mock Fake Flow class for testing.
 class FakeFlow:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -81,16 +81,16 @@ def valid_google_client_config():
     }
 
 
-# 日本語: GoogleLoginFlowTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to GoogleLoginFlowTestCase.
+# 日本語: Google Login Flowの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Google Login Flow.
 class GoogleLoginFlowTestCase(unittest.TestCase):
-    # 日本語: test google login returns 503 when dependency is missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google login returns 503 when dependency is missing.
+    # 日本語: dependencyがmissingのとき、Googleログイン返却する503ことを検証します。
+    # English: Verify that google login returns 503 when dependency is missing.
     def test_google_login_returns_503_when_dependency_is_missing(self):
         request = make_google_login_request()
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", None):
             response = asyncio.run(google_login(request))
 
@@ -98,14 +98,14 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
 
-    # 日本語: test google login returns 503 when oauth settings are missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google login returns 503 when oauth settings are missing.
+    # 日本語: oauthsettingsがmissingのとき、Googleログイン返却する503ことを検証します。
+    # English: Verify that google login returns 503 when oauth settings are missing.
     def test_google_login_returns_503_when_oauth_settings_are_missing(self):
         request = make_google_login_request()
         fake_flow_class = Mock()
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -132,8 +132,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
         fake_flow_class.from_client_config.assert_not_called()
 
-    # 日本語: test google login redirects to redirect uri host before starting oauth のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google login redirects to redirect uri host before starting oauth.
+    # 日本語: redirecturihostへ、startingoauthの前、Googleログインredirectsことを検証します。
+    # English: Verify that google login redirects to redirect uri host before starting oauth.
     def test_google_login_redirects_to_redirect_uri_host_before_starting_oauth(self):
         request = build_request(
             method="GET",
@@ -146,8 +146,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         )
         fake_flow_class = Mock()
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -165,28 +165,28 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(request.session, {})
         fake_flow_class.from_client_config.assert_not_called()
 
-    # 日本語: test google callback redirects to login when dependency is missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google callback redirects to login when dependency is missing.
+    # 日本語: ログインへ、dependencyがmissingのとき、Googlecallbackredirectsことを検証します。
+    # English: Verify that google callback redirects to login when dependency is missing.
     def test_google_callback_redirects_to_login_when_dependency_is_missing(self):
         request = make_request()
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", None):
             response = asyncio.run(google_callback(request))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
 
-    # 日本語: test google login returns 503 when flow initialization fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google login returns 503 when flow initialization fails.
+    # 日本語: フローinitialization失敗するのとき、Googleログイン返却する503ことを検証します。
+    # English: Verify that google login returns 503 when flow initialization fails.
     def test_google_login_returns_503_when_flow_initialization_fails(self):
         request = make_google_login_request()
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.side_effect = ValueError("bad oauth config")
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -202,8 +202,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], GOOGLE_LOGIN_UNAVAILABLE_ERROR)
 
-    # 日本語: test google login stores sanitized next path in session のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google login stores sanitized next path in session.
+    # 日本語: セッション内の、Googleログイン保存するsanitized次のpathことを検証します。
+    # English: Verify that google login stores sanitized next path in session.
     def test_google_login_stores_sanitized_next_path_in_session(self):
         request = make_google_login_request(query_string=b"next=%2Fmemo%3Ftab%3Drecent")
         fake_flow = Mock()
@@ -211,8 +211,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -231,8 +231,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         )
         self.assertEqual(request.session["google_login_next_path"], "/memo?tab=recent")
 
-    # 日本語: test google callback redirects to login when token exchange fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google callback redirects to login when token exchange fails.
+    # 日本語: ログインへ、トークンexchange失敗するのとき、Googlecallbackredirectsことを検証します。
+    # English: Verify that google callback redirects to login when token exchange fails.
     def test_google_callback_redirects_to_login_when_token_exchange_fails(self):
         request = make_request(
             session={
@@ -246,8 +246,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -262,16 +262,16 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertNotIn("google_redirect_uri", request.session)
         self.assertNotIn("google_login_next_path", request.session)
 
-    # 日本語: test google callback redirects to login when userinfo fetch fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google callback redirects to login when userinfo fetch fails.
+    # 日本語: ログインへ、userinfofetch失敗するのとき、Googlecallbackredirectsことを検証します。
+    # English: Verify that google callback redirects to login when userinfo fetch fails.
     def test_google_callback_redirects_to_login_when_userinfo_fetch_fails(self):
         request = make_request()
         fake_flow = FakeFlow()
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -288,16 +288,16 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
         self.assertNotIn("user_id", request.session)
 
-    # 日本語: test new google user is created with profile fields のテスト検証を担当します。
-    # English: Handle verifying test behavior for test new google user is created with profile fields.
+    # 日本語: プロフィールfieldsを使用する場合、newGoogleユーザーがcreatedことを検証します。
+    # English: Verify that new google user is created with profile fields.
     def test_new_google_user_is_created_with_profile_fields(self):
         request = make_request()
         fake_flow = FakeFlow()
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -373,8 +373,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_not_called()
         mock_copy_tasks.assert_called_once_with(42)
 
-    # 日本語: test existing email user is linked and verified のテスト検証を担当します。
-    # English: Handle verifying test behavior for test existing email user is linked and verified.
+    # 日本語: および検証済み、existingメールユーザーがlinkedことを検証します。
+    # English: Verify that existing email user is linked and verified.
     def test_existing_email_user_is_linked_and_verified(self):
         request = make_request()
         fake_flow = FakeFlow()
@@ -389,8 +389,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
             "avatar_url": "/static/uploads/custom.png",
         }
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -450,8 +450,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_called_once_with(7)
         mock_copy_tasks.assert_called_once_with(7)
 
-    # 日本語: test existing verified email user is prompted for passkey after first google link のテスト検証を担当します。
-    # English: Handle verifying test behavior for test existing verified email user is prompted for passkey after first google link.
+    # 日本語: パスキーに対して、初回Googlelinkの後、existing検証済みメールユーザーがpromptedことを検証します。
+    # English: Verify that existing verified email user is prompted for passkey after first google link.
     def test_existing_verified_email_user_is_prompted_for_passkey_after_first_google_link(self):
         request = make_request()
         fake_flow = FakeFlow()
@@ -466,8 +466,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
             "avatar_url": "/static/uploads/custom.png",
         }
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -527,8 +527,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_not_called()
         mock_copy_tasks.assert_called_once_with(8)
 
-    # 日本語: test existing google user keeps normal redirect after passkey prompt was already shown のテスト検証を担当します。
-    # English: Handle verifying test behavior for test existing google user keeps normal redirect after passkey prompt was already shown.
+    # 日本語: パスキープロンプトがalreadyshownの後、existingGoogleユーザー保持するnormalredirectことを検証します。
+    # English: Verify that existing google user keeps normal redirect after passkey prompt was already shown.
     def test_existing_google_user_keeps_normal_redirect_after_passkey_prompt_was_already_shown(self):
         request = make_request(
             session={
@@ -549,8 +549,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
             "avatar_url": "https://example.com/alice.png",
         }
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -593,8 +593,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_link.assert_called_once_with(9, "google-user-789", "user@example.com")
         mock_verify.assert_not_called()
 
-    # 日本語: test google callback redirects to login when db error occurs のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google callback redirects to login when db error occurs.
+    # 日本語: ログインへ、DBエラーoccursのとき、Googlecallbackredirectsことを検証します。
+    # English: Verify that google callback redirects to login when db error occurs.
     def test_google_callback_redirects_to_login_when_db_error_occurs(self):
         request = make_request(
             session={
@@ -607,8 +607,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -635,8 +635,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login?next=%2Fmemo")
         self.assertNotIn("user_id", request.session)
 
-    # 日本語: test google callback redirects to login when create user returns none のテスト検証を担当します。
-    # English: Handle verifying test behavior for test google callback redirects to login when create user returns none.
+    # 日本語: ログインへ、createユーザー返却するnoneのとき、Googlecallbackredirectsことを検証します。
+    # English: Verify that google callback redirects to login when create user returns none.
     def test_google_callback_redirects_to_login_when_create_user_returns_none(self):
         request = make_request(
             session={
@@ -649,8 +649,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -676,8 +676,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login?next=%2Fmemo")
         self.assertNotIn("user_id", request.session)
 
-    # 日本語: test rejects google login when email is not verified のテスト検証を担当します。
-    # English: Handle verifying test behavior for test rejects google login when email is not verified.
+    # 日本語: メールが〜しない検証済みのとき、拒否するGoogleログインことを検証します。
+    # English: Verify that rejects google login when email is not verified.
     def test_rejects_google_login_when_email_is_not_verified(self):
         request = make_request(
             session={
@@ -690,8 +690,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -714,8 +714,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_create.assert_not_called()
         self.assertNotIn("user_id", request.session)
 
-    # 日本語: test new google user onboarding preserves next path のテスト検証を担当します。
-    # English: Handle verifying test behavior for test new google user onboarding preserves next path.
+    # 日本語: newGoogleユーザーonboardingpreserves次のpathことを検証します。
+    # English: Verify that new google user onboarding preserves next path.
     def test_new_google_user_onboarding_preserves_next_path(self):
         request = make_request(
             session={
@@ -728,8 +728,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -762,8 +762,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
             "https://chatcore-ai.com/memo?tab=recent",
         )
 
-    # 日本語: test handles oidc compliant userinfo fields のテスト検証を担当します。
-    # English: Handle verifying test behavior for test handles oidc compliant userinfo fields.
+    # 日本語: 処理するoidccompliantuserinfofieldsことを検証します。
+    # English: Verify that handles oidc compliant userinfo fields.
     def test_handles_oidc_compliant_userinfo_fields(self):
         # sub や email_verified が使用されている場合でも正しく動作することを確認
         request = make_request()
@@ -771,8 +771,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",
@@ -802,8 +802,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         args, kwargs = mock_create.call_args
         self.assertEqual(kwargs["provider_user_id"], "google-oidc-456")
 
-    # 日本語: test handles numeric google id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test handles numeric google id.
+    # 日本語: 処理するnumericGoogleidことを検証します。
+    # English: Verify that handles numeric google id.
     def test_handles_numeric_google_id(self):
         # Google ID が数値として返された場合でも文字列として処理することを確認
         request = make_request()
@@ -811,8 +811,8 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.auth.Flow", fake_flow_class):
             with patch(
                 "blueprints.auth._google_client_config",

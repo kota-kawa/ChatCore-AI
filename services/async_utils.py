@@ -7,12 +7,14 @@ from typing import Any, Callable, TypeVar
 T = TypeVar("T")
 
 
-# 日本語: run blocking の実行処理を非同期で担当します。
-# English: Handle running for run blocking asynchronously.
+# ブロッキングを伴う同期関数を非同期に実行するヘルパー関数
+# Helper function to asynchronously run a blocking synchronous function
 async def run_blocking(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # 同期I/O関数をスレッドプールへ逃がし、イベントループのブロックを防ぐ
     # Offload blocking sync call to threadpool to keep the event loop responsive.
     # kwargs 付き呼び出しも同じ経路で扱えるよう partial で束ねる
     # Bind positional/keyword args via partial for uniform thread execution.
     bound = partial(func, *args, **kwargs) if kwargs else partial(func, *args)
+    # スレッドプール上で関数を実行し、完了を非同期に待機する
+    # Execute the function on the thread pool and await completion asynchronously
     return await asyncio.to_thread(bound)

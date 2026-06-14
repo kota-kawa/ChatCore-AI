@@ -20,22 +20,18 @@ DEFAULT_REDIS_CONNECT_TIMEOUT_SECONDS = 1.0
 logger = logging.getLogger(__name__)
 
 
-# 日本語: is redis configured に関する処理の入口です。
-# English: Entry point for logic related to is redis configured.
+# 環境変数にRedis設定（URLまたはHOST）が存在するか判定する
+# Check if Redis configuration (URL or HOST) exists in environment variables
 def is_redis_configured() -> bool:
     return bool(os.environ.get("REDIS_URL") or os.environ.get("REDIS_HOST"))
 
 
-# 日本語: get positive float env の取得処理を担当します。
-# English: Handle fetching for get positive float env.
+# 環境変数から正の浮動小数点数値を取得するヘルパー関数
+# Helper function to get a positive float from environment variables
 def _get_positive_float_env(name: str, default: float) -> float:
     raw_value = os.environ.get(name)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw_value is None:
         return default
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         value = float(raw_value)
     except (TypeError, ValueError):
@@ -43,14 +39,14 @@ def _get_positive_float_env(name: str, default: float) -> float:
     return value if value > 0 else default
 
 
-# 日本語: mark redis unavailable に関する処理の入口です。
-# English: Entry point for logic related to mark redis unavailable.
+# Redisへの接続が失敗した際に、一時的にRedis利用を無効化する
+# Temporarily disable Redis usage when connection fails
 def mark_redis_unavailable(exc: Exception | None = None) -> None:
     global _redis_client, _redis_retry_after
     _redis_client = None
+    # 次の再試行可能時刻をクールダウン秒数後に設定する
+    # Set the next retry timestamp after the cooldown duration
     _redis_retry_after = time.monotonic() + DEFAULT_REDIS_RETRY_COOLDOWN_SECONDS
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if exc is not None:
         logger.warning(
             "Redis is unavailable; falling back to local session/cache behavior for %s seconds.",
@@ -59,16 +55,14 @@ def mark_redis_unavailable(exc: Exception | None = None) -> None:
         )
 
 
-# 日本語: ping redis with timeout に関する処理の入口です。
-# English: Entry point for logic related to ping redis with timeout.
+# Redisに対するping疎通確認をタイムアウト付きで実行する
+# Execute ping check to Redis with a timeout duration
 def _ping_redis_with_timeout(candidate: Any, timeout_seconds: float) -> None:
     result_queue: queue.Queue[Exception | None] = queue.Queue(maxsize=1)
 
-    # 日本語: ping に関する処理の入口です。
-    # English: Entry point for logic related to ping.
+    # 別スレッドでpingを実行してキュー経由で結果を返す関数
+    # Internal function to run ping in a separate thread and return result via queue
     def ping() -> None:
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             candidate.ping()
         except Exception as exc:
@@ -78,35 +72,31 @@ def _ping_redis_with_timeout(candidate: Any, timeout_seconds: float) -> None:
 
     thread = threading.Thread(target=ping, daemon=True)
     thread.start()
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
+        # タイムアウト付きでキューから結果を取得
+        # Retrieve the result from the queue with a timeout
         exc = result_queue.get(timeout=timeout_seconds)
     except queue.Empty as exc:
         raise TimeoutError("Timed out while connecting to Redis.") from exc
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if exc is not None:
         raise exc
 
 
-# 日本語: get redis client の取得処理を担当します。
-# English: Handle fetching for get redis client.
+# Redisクライアントインスタンスを取得する
+# Retrieve the Redis client instance
 def get_redis_client() -> Any | None:
     # Redis 依存がない環境では None を返し、呼び出し側がメモリ実装へフォールバックする
     # Return None when Redis dependency is unavailable so callers can fallback to memory.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if redis is None:
         return None
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not is_redis_configured():
         return None
 
     global _redis_client, _redis_retry_after
     if _redis_client is not None:
         return _redis_client
+    # 前回の失敗からクールダウン期間が明けているか確認
+    # Check if the cooldown period has elapsed since the last failure
     if time.monotonic() < _redis_retry_after:
         return None
 
@@ -140,6 +130,8 @@ def get_redis_client() -> Any | None:
             socket_timeout=connect_timeout,
         )
 
+    # 接続確認pingを実行する
+    # Execute a connection verification ping
     try:
         _ping_redis_with_timeout(candidate, connect_timeout)
     except Exception as exc:

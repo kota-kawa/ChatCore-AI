@@ -5,11 +5,11 @@ from services.session_middleware import SESSION_IDS_TO_DELETE_SCOPE_KEY
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: AuthSessionTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to AuthSessionTestCase.
+# 認証セッションの確立時におけるセッションIDのローテーション（旧セッションIDの無効化処理登録）やセッション変数設定をテストするクラス。
+# Test class to check session ID rotation and session variable initialization during authenticated session establishment.
 class AuthSessionTestCase(unittest.TestCase):
-    # 日本語: test establish authenticated session rotates existing session id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test establish authenticated session rotates existing session id.
+    # 既存のセッションが存在する場合に、セッションIDがローテーション（削除保留リストへの追加・現在のIDの初期化）され、ユーザーIDやメールアドレスがセッションに設定されることを検証します。
+    # Verify that an existing session ID is rotated (appended to the pending delete list and reset) and authenticated session attributes are initialized.
     def test_establish_authenticated_session_rotates_existing_session_id(self):
         request = build_request(path="/api/login", session={"pre_auth": "keep"})
         request.scope["session_id"] = "session-before-login"
@@ -25,8 +25,8 @@ class AuthSessionTestCase(unittest.TestCase):
         self.assertEqual(request.session["pre_auth"], "keep")
         self.assertTrue(request.session.get("_permanent"))
 
-    # 日本語: test establish authenticated session without existing session id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test establish authenticated session without existing session id.
+    # 既存のセッションIDが存在しない（新規セッション等の）状態で認証セッションを確立した際、削除保留リストに追加されずに正常にセッションが開始されることを検証します。
+    # Verify that establishing a session when no pre-existing session ID exists initializes the session successfully without registering any pending deletions.
     def test_establish_authenticated_session_without_existing_session_id(self):
         request = build_request(path="/api/login", session={})
 

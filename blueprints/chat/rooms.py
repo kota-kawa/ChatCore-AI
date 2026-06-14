@@ -63,28 +63,22 @@ CHAT_ROOMS_DEFAULT_PAGE_SIZE = 20
 CHAT_ROOMS_MAX_PAGE_SIZE = 100
 
 
-# 日本語: resolve auth limit service に関する処理の入口です。
-# English: Entry point for logic related to resolve auth limit service.
+# リクエストから認証制限サービスを解決するヘルパー関数
+# Helper function to resolve the AuthLimitService instance from the request.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
 
 
-# 日本語: parse positive int の解析処理を担当します。
-# English: Handle parsing for parse positive int.
+# クエリ値から正の整数をパースし、デフォルト値の設定および上限クランプを行う関数
+# Parse positive integer from string value, applying defaults and clamping to a maximum limit.
 def _parse_positive_int(value: str | None, default: int, maximum: int) -> int:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if value is None:
         return default
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -92,8 +86,8 @@ def _parse_positive_int(value: str | None, default: int, maximum: int) -> int:
     return min(max(1, parsed), maximum)
 
 
-# 日本語: resolve room list pagination に関する処理の入口です。
-# English: Entry point for logic related to resolve room list pagination.
+# リクエストからルーム一覧取得用のページング情報（リミット、カーソル）を解析する関数
+# Parse paging parameters (limit and cursor) from request query parameters.
 def _resolve_room_list_pagination(request: Request) -> tuple[int, tuple[datetime, str] | None]:
     limit = _parse_positive_int(
         request.query_params.get("limit"),
@@ -104,15 +98,11 @@ def _resolve_room_list_pagination(request: Request) -> tuple[int, tuple[datetime
     return limit, cursor
 
 
-# 日本語: decode room list cursor に関する処理の入口です。
-# English: Entry point for logic related to decode room list cursor.
+# ページネーションカーソル文字列（Base64 URL Safe）をデコードし日時とルームIDを取り出す関数
+# Decode a URL-safe Base64 cursor string into a tuple of (datetime, room_id) for pagination.
 def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not value:
         return None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         padded = value + "=" * (-len(value) % 4)
         decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
@@ -127,13 +117,11 @@ def _decode_room_list_cursor(value: str | None) -> tuple[datetime, str] | None:
         raise ApiServiceError("invalid cursor", 400)
 
 
-# 日本語: encode room list cursor に関する処理の入口です。
-# English: Entry point for logic related to encode room list cursor.
+# ルームデータからページネーションカーソル用のBase64 URL Safe文字列を作成する関数
+# Encode room metadata (created_at and id) into a URL-safe Base64 cursor string for pagination.
 def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
     created_at = room.get("created_at")
     room_id = room.get("id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(created_at, str) or not isinstance(room_id, str) or not room_id:
         return None
     payload = json.dumps(
@@ -144,8 +132,8 @@ def _encode_room_list_cursor(room: dict[str, Any]) -> str | None:
     return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
 
 
-# 日本語: fetch persisted user rooms の取得処理を担当します。
-# English: Handle fetching for fetch persisted user rooms.
+# データベースに保存されているユーザーのチャットルーム一覧を取得する関数（カーソルページング対応）
+# Fetch persisted chat rooms for a user from the database using cursor-based pagination.
 def _fetch_persisted_user_rooms(
     user_id: int,
     *,
@@ -156,8 +144,6 @@ def _fetch_persisted_user_rooms(
     # Fetch only persisted chat rooms ordered by newest first.
     conn = None
     db_cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         db_cursor = conn.cursor()
@@ -195,8 +181,8 @@ def _fetch_persisted_user_rooms(
             conn.close()
 
 
-# 日本語: fetch temporary user rooms の取得処理を担当します。
-# English: Handle fetching for fetch temporary user rooms.
+# 一時保存（EphemeralStore）されているユーザーの一時チャットルーム一覧を取得する関数
+# Fetch temporary guest-level chat rooms from the ephemeral store for a user.
 def _fetch_temporary_user_rooms(user_id: int) -> list[dict[str, Any]]:
     temporary_sid = get_temporary_user_store_key(user_id)
     rooms = ephemeral_store.list_rooms(temporary_sid)
@@ -212,8 +198,8 @@ def _fetch_temporary_user_rooms(user_id: int) -> list[dict[str, Any]]:
     ]
 
 
-# 日本語: sort rooms newest first に関する処理の入口です。
-# English: Entry point for logic related to sort rooms newest first.
+# ルーム一覧を最新の作成日時順に並び替えるヘルパー関数
+# Helper to sort room payloads by creation time in descending order.
 def _sort_rooms_newest_first(rooms: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         rooms,
@@ -222,37 +208,31 @@ def _sort_rooms_newest_first(rooms: list[dict[str, Any]]) -> list[dict[str, Any]
     )
 
 
-# 日本語: resolve authenticated room mode に関する処理の入口です。
-# English: Entry point for logic related to resolve authenticated room mode.
+# 指定ルームのモード（通常モードnormalまたは一時モードtemporary）を判定する関数
+# Resolve whether the room is normal (persisted in DB) or temporary (ephemeral store) for authenticated requests.
 def _resolve_authenticated_room_mode(
     user_id: int,
     room_id: str,
     forbidden_message: str,
 ) -> tuple[str | None, Any]:
     temporary_sid = get_temporary_user_store_key(user_id)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if ephemeral_store.room_exists(temporary_sid, room_id):
         return "temporary", None
 
     owner_result = validate_room_owner(room_id, user_id, forbidden_message)
     legacy_response = _legacy_error_response(owner_result)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if legacy_response is not None:
         return None, legacy_response
     return str(owner_result or "normal"), None
 
 
-# 日本語: delete room for user の削除処理を担当します。
-# English: Handle deleting for delete room for user.
+# DBから指定されたチャットルームとそのメッセージ履歴を削除する関数
+# Delete a specific chat room and its message history from the database after verifying ownership.
 def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
     # 所有者確認後に履歴→ルームの順で削除し、整合性を保つ
     # Validate owner, then delete history and room to keep data consistent.
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -277,28 +257,26 @@ def _delete_room_for_user(room_id: str, user_id: int) -> dict[str, str]:
             conn.close()
 
 
-# 日本語: unique room ids に関する処理の入口です。
-# English: Entry point for logic related to unique room ids.
+# ルームIDリストから重複したIDを取り除く関数
+# Deduplicate a list of room ID strings.
 def _unique_room_ids(room_ids: list[str]) -> list[str]:
     return list(dict.fromkeys(room_ids))
 
 
-# 日本語: placeholders に関する処理の入口です。
-# English: Entry point for logic related to placeholders.
+# SQLクエリの IN 句用のプレースホルダ（%s）を組み立てる関数
+# Generate SQL placeholder parameter markers (e.g., "%s, %s") for an IN clause.
 def _placeholders(count: int) -> str:
     return ", ".join(["%s"] * count)
 
 
-# 日本語: delete rooms for user の削除処理を担当します。
-# English: Handle deleting for delete rooms for user.
+# 複数のチャットルームとそのメッセージ履歴を一括削除する関数
+# Bulk delete multiple chat rooms and their history from the database after verifying ownership.
 def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:
     # 一括削除は全IDの所有者確認後に実行し、部分削除を避ける
     # Validate every room before deleting so bulk actions do not partially apply.
     unique_room_ids = _unique_room_ids(room_ids)
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -340,16 +318,12 @@ def _delete_rooms_for_user(room_ids: list[str], user_id: int) -> dict[str, Any]:
             conn.close()
 
 
-# 日本語: legacy error response に関する処理の入口です。
-# English: Entry point for logic related to legacy error response.
+# レガシーなエラーレスポンス形式を FastAPI 互換 of JSONResponse に整形するヘルパー関数
+# Format a legacy error response payload into a FastAPI-compatible response.
 def _legacy_error_response(result: Any):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not (isinstance(result, tuple) and len(result) == 2):
         return None
     payload, status_code = result
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if payload is None:
         return None
     if isinstance(payload, dict) and isinstance(status_code, int):
@@ -357,8 +331,8 @@ def _legacy_error_response(result: Any):
     return None
 
 
-# 日本語: new chat room に関する処理の入口です。
-# English: Entry point for logic related to new chat room.
+# 新しいチャットルーム（通常または一時ルーム）を作成するAPIエンドポイント
+# API endpoint to create a new chat room (normal/persisted or temporary/ephemeral).
 @chat_bp.post("/api/new_chat_room", name="chat.new_chat_room")
 async def new_chat_room(
     request: Request,
@@ -367,8 +341,6 @@ async def new_chat_room(
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -377,8 +349,6 @@ async def new_chat_room(
         NewChatRoomRequest,
         error_message="'id' フィールドが必要です。",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -440,14 +410,12 @@ async def new_chat_room(
         )
 
 
-# 日本語: get chat rooms の取得処理を非同期で担当します。
-# English: Handle fetching for get chat rooms asynchronously.
+# ユーザーのチャットルーム一覧を取得するAPIエンドポイント
+# API endpoint to fetch a paginated list of chat rooms for the authenticated user.
 @chat_bp.get("/api/get_chat_rooms", name="chat.get_chat_rooms")
 async def get_chat_rooms(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     session = request.session
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" in session:
         # ログインユーザー：DBから取得
         # Authenticated users read room list from DB.
@@ -497,14 +465,12 @@ async def get_chat_rooms(request: Request):
         )
 
 
-# 日本語: delete chat room の削除処理を非同期で担当します。
-# English: Handle deleting for delete chat room asynchronously.
+# チャットルームを削除するAPIエンドポイント
+# API endpoint to delete a specific chat room and its contents.
 @chat_bp.post("/api/delete_chat_room", name="chat.delete_chat_room")
 async def delete_chat_room(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -513,8 +479,6 @@ async def delete_chat_room(request: Request):
         ChatRoomIdRequest,
         error_message="room_id is required",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -555,14 +519,12 @@ async def delete_chat_room(request: Request):
         return jsonify({"message": "エフェメラルチャットルームを削除しました"}, status_code=200)
 
 
-# 日本語: delete chat rooms の削除処理を非同期で担当します。
-# English: Handle deleting for delete chat rooms asynchronously.
+# 複数のチャットルームを一括削除するAPIエンドポイント
+# API endpoint to bulk delete multiple chat rooms.
 @chat_bp.post("/api/delete_chat_rooms", name="chat.delete_chat_rooms")
 async def delete_chat_rooms(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -571,8 +533,6 @@ async def delete_chat_rooms(request: Request):
         ChatRoomIdsRequest,
         error_message="room_ids is required",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -596,14 +556,12 @@ async def delete_chat_rooms(request: Request):
         )
 
 
-# 日本語: rename chat room に関する処理の入口です。
-# English: Entry point for logic related to rename chat room.
+# チャットルームの名前を変更するAPIエンドポイント
+# API endpoint to rename an existing chat room.
 @chat_bp.post("/api/rename_chat_room", name="chat.rename_chat_room")
 async def rename_chat_room(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -612,8 +570,6 @@ async def rename_chat_room(request: Request):
         RenameChatRoomRequest,
         error_message="room_id と new_title が必要です",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -654,14 +610,12 @@ async def rename_chat_room(request: Request):
         return jsonify({"message": "ルーム名を変更しました"}, status_code=200)
 
 
-# 日本語: share chat room に関する処理の入口です。
-# English: Entry point for logic related to share chat room.
+# チャットルーム共有用トークンおよびURLを生成するAPIエンドポイント
+# API endpoint to generate a share token and link for a room.
 @chat_bp.post("/api/share_chat_room", name="chat.share_chat_room")
 async def share_chat_room(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -670,8 +624,6 @@ async def share_chat_room(request: Request):
         ShareChatRoomRequest,
         error_message="room_id is required",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -716,19 +668,15 @@ async def share_chat_room(request: Request):
         )
 
 
-# 日本語: shared chat room に関する処理の入口です。
-# English: Entry point for logic related to shared chat room.
+# 共有トークンを用いて共有チャットルームの内容を取得するAPIエンドポイント
+# API endpoint to retrieve a shared chat room's content using its share token.
 @chat_bp.get("/api/shared_chat_room", name="chat.shared_chat_room")
 async def shared_chat_room(request: Request):
     await run_blocking(cleanup_ephemeral_chats)
     token = (request.query_params.get("token") or "").strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not token:
         return jsonify({"error": ERROR_TOKEN_REQUIRED}, status_code=400)
 
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         payload_result = await run_blocking(get_shared_chat_room_payload, token)
         if isinstance(payload_result, tuple) and len(payload_result) == 2:

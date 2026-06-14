@@ -11,15 +11,15 @@ REQUEST_TIMEOUT_SECONDS = 10
 VERIFICATION_CODE_PATTERN = re.compile(r"(?:認証コード|確認コード):\s*(\d{6})")
 
 
-# 日本語: load resend config の読み込み処理を担当します。
-# English: Handle loading for load resend config.
+# 日本語: 環境変数からResend APIキーと送信元アドレスを読み込みます。
+# English: Load the Resend API key and sender address from environment variables.
 def _load_resend_config() -> tuple[str, str]:
     # 起動時ではなく送信時に明示的に失敗させる。
     # Fail explicitly at send time instead of import/startup time.
     api_key = (os.getenv(RESEND_API_KEY_ENV) or "").strip()
     from_address = (os.getenv(RESEND_FROM_ADDRESS_ENV) or "").strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: APIキーまたは送信元アドレスが設定されていない場合はエラーを発生させます。
+    # English: Raise an error if the API key or sender address is not configured.
     if not api_key or not from_address:
         raise RuntimeError(
             "Resend email credentials are not configured. "
@@ -28,18 +28,18 @@ def _load_resend_config() -> tuple[str, str]:
     return api_key, from_address
 
 
-# 日本語: extract resend error に関する処理の入口です。
-# English: Entry point for logic related to extract resend error.
+# 日本語: Resend APIからのエラーレスポンスを解析し、エラーメッセージを抽出します。
+# English: Parse the error response from Resend API and extract the error message.
 def _extract_resend_error(response: requests.Response) -> str:
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: レスポンスをJSONとして解析し、エラー詳細の抽出を試みます。
+    # English: Try to parse the response as JSON to extract error details.
     try:
         payload = response.json()
     except ValueError:
         payload = None
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 解析されたJSONオブジェクトからエラーメッセージを取り出します。
+    # English: Extract the error message from the parsed JSON object.
     if isinstance(payload, dict):
         message = payload.get("message")
         if isinstance(message, str) and message:
@@ -55,8 +55,8 @@ def _extract_resend_error(response: requests.Response) -> str:
     return response.text[:300]
 
 
-# 日本語: build email html の組み立て処理を担当します。
-# English: Handle building for build email html.
+# 日本語: 件名と本文テキストに基づいて、整えられたHTMLメール本文を構築します。
+# English: Build a well-formatted HTML email body based on the subject and plain text content.
 def _build_email_html(subject: str, body_text: str) -> str:
     code_match = VERIFICATION_CODE_PATTERN.search(body_text)
     code = code_match.group(1) if code_match else ""
@@ -74,8 +74,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
         )
         for line in intro_lines
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 本文HTMLが空の場合、デフォルトの案内文を設定します。
+    # English: Set a default notification message if the body HTML is empty.
     if not intro_html:
         intro_html = (
             '<p style="margin:0 0 14px;color:#334155;font-size:15px;line-height:1.7;">'
@@ -83,8 +83,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
             "</p>"
         )
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: メールの件名に応じて、見出しや説明文を切り替えます。
+    # English: Customize the heading and notes based on the email subject.
     if "ログイン" in subject:
         heading = "ログイン認証コード"
         eyebrow = "Secure sign-in"
@@ -158,8 +158,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
 </html>"""
 
 
-# 日本語: send email の送信処理を担当します。
-# English: Handle sending for send email.
+# 日本語: 指定されたメールアドレスにメールを送信します。
+# English: Send an email to the specified email address.
 def send_email(to_address: str, subject: str, body_text: str) -> None:
     # Resend Email API を使って HTML とテキストの両方を送信する。
     # Send both HTML and plain-text email through the Resend Email API.
@@ -181,8 +181,8 @@ def send_email(to_address: str, subject: str, body_text: str) -> None:
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: レスポンスステータスが成功（2xx）でない場合はエラーを発生させます。
+    # English: Raise an error if the response status code is not successful (2xx).
     if response.status_code < 200 or response.status_code >= 300:
         detail = _extract_resend_error(response)
         raise RuntimeError(

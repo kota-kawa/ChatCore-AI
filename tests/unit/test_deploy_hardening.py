@@ -12,13 +12,13 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 # 日本語: DeployHardeningTest のテストケースをまとめます。
 # English: Group test cases for DeployHardeningTest.
 class DeployHardeningTest(unittest.TestCase):
-    # 日本語: test deploy script has valid bash syntax のテスト検証を担当します。
-    # English: Handle verifying test behavior for test deploy script has valid bash syntax.
+    # 日本語: デプロイscripthas有効なbashsyntaxことを検証します。
+    # English: Verify that deploy script has valid bash syntax.
     def test_deploy_script_has_valid_bash_syntax(self):
         subprocess.run(["bash", "-n", str(DEPLOY_SCRIPT)], check=True)
 
-    # 日本語: test braced env references are not flagged as unresolved のテスト検証を担当します。
-    # English: Handle verifying test behavior for test braced env references are not flagged as unresolved.
+    # 日本語: bracedenvreferencesが〜しないflaggedasunresolvedことを検証します。
+    # English: Verify that braced env references are not flagged as unresolved.
     def test_braced_env_references_are_not_flagged_as_unresolved(self):
         script_text = DEPLOY_SCRIPT.read_text()
         match = re.search(
@@ -37,8 +37,8 @@ class DeployHardeningTest(unittest.TestCase):
         )
         subprocess.run(["bash", "-c", bash_script], check=True)
 
-    # 日本語: test deploy script uses noninteractive sudo and db query wait のテスト検証を担当します。
-    # English: Handle verifying test behavior for test deploy script uses noninteractive sudo and db query wait.
+    # 日本語: およびDBクエリwait、デプロイscriptusesnoninteractivesudoことを検証します。
+    # English: Verify that deploy script uses noninteractive sudo and db query wait.
     def test_deploy_script_uses_noninteractive_sudo_and_db_query_wait(self):
         script_text = DEPLOY_SCRIPT.read_text()
 
@@ -47,8 +47,8 @@ class DeployHardeningTest(unittest.TestCase):
         self.assertIn("wait_for_postgres_accepting_queries", script_text)
         self.assertIn('psql -h 127.0.0.1', script_text)
 
-    # 日本語: test workflow forwards nginx test command to remote deploy のテスト検証を担当します。
-    # English: Handle verifying test behavior for test workflow forwards nginx test command to remote deploy.
+    # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
+    # English: Verify that workflow forwards nginx test command to remote deploy.
     def test_workflow_forwards_nginx_test_command_to_remote_deploy(self):
         workflow_text = WORKFLOW.read_text()
 

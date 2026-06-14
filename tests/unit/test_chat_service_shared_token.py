@@ -5,21 +5,21 @@ from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.chat_service import create_or_get_shared_chat_token
 
 
-# 日本語: UniqueViolation に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to UniqueViolation.
+# PostgreSQLの一意性制約エラー（エラーコード: 23505）をシミュレートする疑似例外クラス。
+# Mock exception class simulating PostgreSQL's unique key violation (error code: 23505).
 class UniqueViolation(Exception):
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self):
         super().__init__("duplicate key")
         self.pgcode = "23505"
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# チャットルーム共有トークン生成ロジック（ルーム所有権、ON CONFLICT処理、一意性衝突リトライ等）をテストするための疑似DBカーソルクラス。
+# Mock database cursor class for testing shared chat token creation, ownership check, ON CONFLICT, and collision retries.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, *, room_owner_id=1, insert_results=None, fail_attempts=None):
         self.room_owner_id = room_owner_id
         self.insert_results = list(insert_results or [])
@@ -29,20 +29,20 @@ class FakeCursor:
         self.closed = False
         self._fetchone_result = None
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、引数および状態の変化を記録します。
+    # Execute a query and track/log the execution arguments.
     def execute(self, query, params=None):
         self.executed.append((query, params))
         normalized = " ".join(query.split())
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # チャットルームの所有者検索をモック
+        # Mock chat room owner lookup query
         if normalized == "SELECT user_id FROM chat_rooms WHERE id = %s":
             self._fetchone_result = None if self.room_owner_id is None else (self.room_owner_id,)
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 共有エントリ追加クエリをモック（競合時にUniqueViolationを発生させる）
+        # Mock shared room insertion query (raise UniqueViolation on configured attempts)
         if "INSERT INTO shared_chat_rooms" in normalized:
             self.insert_attempts += 1
             if self.insert_attempts in self.fail_attempts:
@@ -57,71 +57,69 @@ class FakeCursor:
 
         raise AssertionError(f"Unexpected query: {normalized}")
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # レコードの取得結果を返却します。
+    # Return fetch result.
     def fetchone(self):
         return self._fetchone_result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# チャットルーム共有トークン生成ロジックをテストするための疑似DBコネクションクラス。
+# Mock database connection class for testing shared chat token creation.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False
         self.commit_calls = 0
         self.rollback_calls = 0
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self):
         return self._cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # コミットされた回数を記録します。
+    # Record commit execution count.
     def commit(self):
         self.commit_calls += 1
 
-    # 日本語: rollback に関する処理の入口です。
-    # English: Entry point for logic related to rollback.
+    # ロールバックされた回数を記録します。
+    # Record rollback execution count.
     def rollback(self):
         self.rollback_calls += 1
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
 
-# 日本語: ChatServiceSharedTokenTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatServiceSharedTokenTestCase.
+# チャットルームを公開共有するためのアクセストークン生成処理をテストするクラス。
+# Test class to check the access token generation for public sharing of chat rooms.
 class ChatServiceSharedTokenTestCase(unittest.TestCase):
-    # 日本語: test create or get shared chat token raises 404 when room missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared chat token raises 404 when room missing.
+    # 指定されたチャットルームが存在しない場合に、ResourceNotFoundError(404)がスローされることを検証します。
+    # Verify that a ResourceNotFoundError (404) is raised if the chat room does not exist.
     def test_create_or_get_shared_chat_token_raises_404_when_room_missing(self):
         fake_cursor = FakeCursor(room_owner_id=None)
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ResourceNotFoundError) as exc_info:
                 create_or_get_shared_chat_token("missing-room", 10)
@@ -133,14 +131,12 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_connection.closed)
 
-    # 日本語: test create or get shared chat token raises 403 when room is not owned のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared chat token raises 403 when room is not owned.
+    # 他人の所有するチャットルームを共有しようとした場合に、ForbiddenOperationError(403)がスローされることを検証します。
+    # Verify that a ForbiddenOperationError (403) is raised if trying to share a chat room owned by another user.
     def test_create_or_get_shared_chat_token_raises_403_when_room_is_not_owned(self):
         fake_cursor = FakeCursor(room_owner_id=99)
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ForbiddenOperationError) as exc_info:
                 create_or_get_shared_chat_token("room-1", 10)
@@ -152,14 +148,12 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_connection.closed)
 
-    # 日本語: test create or get shared chat token uses on conflict and reuses existing token のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared chat token uses on conflict and reuses existing token.
+    # すでに共有トークンが存在する場合、ON CONFLICT句により既存のトークンが再利用（取得）されることを検証します。
+    # Verify that an existing share token is reused (returned) by leveraging the ON CONFLICT clause.
     def test_create_or_get_shared_chat_token_uses_on_conflict_and_reuses_existing_token(self):
         fake_cursor = FakeCursor(room_owner_id=3, insert_results=["existing-share-token"])
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with patch("services.chat_service.secrets.token_urlsafe", return_value="new-token"):
                 token = create_or_get_shared_chat_token("room-1", 3)
@@ -172,8 +166,8 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_connection.closed)
 
-    # 日本語: test create or get shared chat token retries on unique token collision のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared chat token retries on unique token collision.
+    # トークン追加時のランダムトークン重複競合時に、自動的に別トークンで再生成・リトライされ成功することを検証します。
+    # Verify that a token collision triggers a retry with a freshly generated token, which then succeeds.
     def test_create_or_get_shared_chat_token_retries_on_unique_token_collision(self):
         fake_cursor = FakeCursor(
             room_owner_id=5,
@@ -182,8 +176,8 @@ class ChatServiceSharedTokenTestCase(unittest.TestCase):
         )
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 最初のインサート試行で衝突が発生し、再試行で新鮮なトークンが適用される
+        # First attempt colliding, retrying to insert with a fresh token
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with patch(
                 "services.chat_service.secrets.token_urlsafe",

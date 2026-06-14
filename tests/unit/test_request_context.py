@@ -9,11 +9,11 @@ from fastapi import FastAPI
 from services.request_context import RequestContextFilter, RequestContextMiddleware
 
 
-# 日本語: RequestContextMiddlewareTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to RequestContextMiddlewareTestCase.
+# HTTPリクエストのコンテキスト情報をログやレスポンスヘッダー（X-Request-ID等）へ追加するミドルウェアとフィルターの動作をテストするクラス。
+# Test class to check the middleware and log filter adding request context details (e.g. X-Request-ID, path, method) to logs and headers.
 class RequestContextMiddlewareTestCase(unittest.TestCase):
-    # 日本語: setUp に関する処理の入口です。
-    # English: Entry point for logic related to setUp.
+    # ロガーとハンドラーを初期化し、リクエストコンテキストフィルターを設定してテスト出力用ストリームを設定します。
+    # Set up a temporary log handler with a request context filter and buffer for verifying log content.
     def setUp(self):
         self.stream = io.StringIO()
         self.handler = logging.StreamHandler(self.stream)
@@ -29,32 +29,28 @@ class RequestContextMiddlewareTestCase(unittest.TestCase):
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False
 
-    # 日本語: tearDown に関する処理の入口です。
-    # English: Entry point for logic related to tearDown.
+    # テスト終了後にロガーの設定を元に戻し、一時ハンドラーをクローズします。
+    # Clean up log handlers and restore original logging configurations.
     def tearDown(self):
         self.handler.close()
         self.logger.handlers = self.original_handlers
         self.logger.setLevel(self.original_level)
         self.logger.propagate = self.original_propagate
 
-    # 日本語: test request context sets response header and log fields のテスト検証を担当します。
-    # English: Handle verifying test behavior for test request context sets response header and log fields.
+    # リクエストIDヘッダーを送信したとき、それがレスポンスヘッダーに返り、ロガーから出力されるメッセージにリクエストIDやパス情報が動的に埋め込まれていることを検証します。
+    # Verify that the X-Request-ID header is propagated to the response and injected into the log output details (id, method, path).
     def test_request_context_sets_response_header_and_log_fields(self):
         app = FastAPI()
         app.add_middleware(RequestContextMiddleware)
 
-        # 日本語: ping に関する処理の入口です。
-        # English: Entry point for logic related to ping.
         @app.get("/ping")
         async def ping():
             self.logger.info("inside route")
             return {"status": "ok"}
 
-        # 日本語: scenario に関する処理の入口です。
-        # English: Entry point for logic related to scenario.
+        # HTTPリクエストテスト用の非同期シナリオ
+        # Async scenario to perform test HTTP requests
         async def scenario():
-            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
-            # English: Use the required resource inside the asynchronous context.
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app),
                 base_url="http://testserver",

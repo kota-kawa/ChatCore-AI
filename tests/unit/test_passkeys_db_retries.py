@@ -14,8 +14,8 @@ class RetryableDeadlockError(Exception):
         self.pgcode = "40P01"
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# 日本語: テスト用の擬似Fake Cursorクラスです。
+# English: Mock Fake Cursor class for testing.
 class FakeCursor:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -28,19 +28,19 @@ class FakeCursor:
     # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.execute_calls += 1
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if self.execute_calls in self.fail_attempts:
             raise RetryableDeadlockError()
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# 日本語: テスト用の擬似Fake Connectionクラスです。
+# English: Mock Fake Connection class for testing.
 class FakeConnection:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -50,23 +50,23 @@ class FakeConnection:
         self.rollback_calls = 0
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # 日本語: テスト用の処理の入口関数commitです。
+# English: Entry point helper function commit for testing.
     def commit(self):
         self.commit_calls += 1
 
-    # 日本語: rollback に関する処理の入口です。
-    # English: Entry point for logic related to rollback.
+    # 日本語: テスト用の処理の入口関数rollbackです。
+# English: Entry point helper function rollback for testing.
     def rollback(self):
         self.rollback_calls += 1
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
@@ -82,17 +82,17 @@ class FakeConnection:
         return False
 
 
-# 日本語: PasskeyDbRetryTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PasskeyDbRetryTestCase.
+# 日本語: Passkey Db Retryの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Passkey Db Retry.
 class PasskeyDbRetryTestCase(unittest.TestCase):
-    # 日本語: test update passkey usage retries retryable deadlock のテスト検証を担当します。
-    # English: Handle verifying test behavior for test update passkey usage retries retryable deadlock.
+    # 日本語: 更新パスキー使用状況リトライretryabledeadlockことを検証します。
+    # English: Verify that update passkey usage retries retryable deadlock.
     def test_update_passkey_usage_retries_retryable_deadlock(self):
         fake_cursor = FakeCursor(fail_attempts={1})
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.passkeys.Error", Exception):
             with patch("services.passkeys.get_db_connection", return_value=fake_connection):
                 with patch("services.passkeys.time.sleep"):

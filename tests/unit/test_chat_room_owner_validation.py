@@ -5,72 +5,73 @@ from services.api_errors import ForbiddenOperationError, ResourceNotFoundError
 from services.chat_service import validate_room_owner
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# チャットルームの所有者検証ロジックをテストするための疑似DBカーソルクラス。
+# Mock database cursor class for testing chat room owner validation logic.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, fetchone_result):
         self.fetchone_result = fetchone_result
         self.executed = []
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、引数を記録します。
+    # Execute a query and record arguments.
     def execute(self, query, params=None):
         self.executed.append((query, params))
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # モックの取得結果を返却します。
+    # Return mock fetch result.
     def fetchone(self):
         return self.fetchone_result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# チャットルームの所有者検証ロジックをテストするための疑似DBコネクションクラス。
+# Mock database connection class for testing chat room owner validation logic.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, fetchone_result):
         self._cursor = FakeCursor(fetchone_result)
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self):
         return self._cursor
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
 
-# 日本語: ChatRoomOwnerValidationTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatRoomOwnerValidationTestCase.
+# チャットルームの所有者IDの検証ロジック（ルームが存在しない場合や他人のルームである場合のハンドリング）を検証するテストクラス。
+# Test class to verify chat room owner ID validation logic (e.g. non-existent rooms or unauthorized room access).
 class ChatRoomOwnerValidationTestCase(unittest.TestCase):
-    # 日本語: test validate room owner raises 404 when room missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate room owner raises 404 when room missing.
+    # 指定されたルームが存在しない場合、ResourceNotFoundError(404)が発生することを検証します。
+    # Verify that a ResourceNotFoundError (404) is raised when the requested room is missing.
     def test_validate_room_owner_raises_404_when_room_missing(self):
         fake_connection = FakeConnection(fetchone_result=None)
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+
+        # 存在しないルームに対する検証実行
+        # Run owner validation on a missing room
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ResourceNotFoundError) as exc_info:
                 validate_room_owner(
@@ -85,12 +86,13 @@ class ChatRoomOwnerValidationTestCase(unittest.TestCase):
         self.assertTrue(fake_connection.closed)
         self.assertEqual(fake_connection._cursor.executed[0][1], ("missing-room",))
 
-    # 日本語: test validate room owner raises 403 for other users room のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate room owner raises 403 for other users room.
+    # 他人のチャットルームへアクセスしようとした場合、ForbiddenOperationError(403)が発生することを検証します。
+    # Verify that a ForbiddenOperationError (403) is raised when accessing another user's chat room.
     def test_validate_room_owner_raises_403_for_other_users_room(self):
         fake_connection = FakeConnection(fetchone_result=(99,))
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+
+        # 他人の所有するルームに対する検証実行
+        # Run owner validation on a room owned by another user
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ForbiddenOperationError) as exc_info:
                 validate_room_owner(
@@ -104,12 +106,13 @@ class ChatRoomOwnerValidationTestCase(unittest.TestCase):
         self.assertTrue(fake_connection._cursor.closed)
         self.assertTrue(fake_connection.closed)
 
-    # 日本語: test validate room owner returns none when owner matches のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate room owner returns none when owner matches.
+    # 所有者が一致し、正当な権限がある場合に例外を投げず正常に完了することを検証します。
+    # Verify that validation passes successfully (returns None) without exceptions when the owner matches.
     def test_validate_room_owner_returns_none_when_owner_matches(self):
         fake_connection = FakeConnection(fetchone_result=(1,))
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+
+        # 一致する所有者に対する検証実行
+        # Run owner validation when current user owns the room
         with patch("services.chat_service.get_db_connection", return_value=fake_connection):
             result = validate_room_owner(
                 room_id="room-1",

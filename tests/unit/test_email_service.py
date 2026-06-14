@@ -4,8 +4,8 @@ from unittest.mock import patch
 from services import email_service
 
 
-# 日本語: FakeResponse に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeResponse.
+# 日本語: テスト用の擬似Fake Responseクラスです。
+# English: Mock Fake Response class for testing.
 class FakeResponse:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -14,24 +14,24 @@ class FakeResponse:
         self._json_payload = json_payload
         self.text = text
 
-    # 日本語: json に関する処理の入口です。
-    # English: Entry point for logic related to json.
+    # 日本語: テスト用の処理の入口関数jsonです。
+# English: Entry point helper function json for testing.
     def json(self):
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if isinstance(self._json_payload, Exception):
             raise self._json_payload
         return self._json_payload
 
 
-# 日本語: EmailServiceConfigTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to EmailServiceConfigTestCase.
+# 日本語: Email Service Configの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Email Service Config.
 class EmailServiceConfigTestCase(unittest.TestCase):
-    # 日本語: test load resend config uses resend from address のテスト検証を担当します。
-    # English: Handle verifying test behavior for test load resend config uses resend from address.
+    # 日本語: アドレスから、loadresend設定usesresendことを検証します。
+    # English: Verify that load resend config uses resend from address.
     def test_load_resend_config_uses_resend_from_address(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             "os.environ",
             {
@@ -45,11 +45,11 @@ class EmailServiceConfigTestCase(unittest.TestCase):
         self.assertEqual(api_key, "re_test")
         self.assertEqual(from_address, "Chat Core <noreply@example.com>")
 
-    # 日本語: test load resend config requires resend from address のテスト検証を担当します。
-    # English: Handle verifying test behavior for test load resend config requires resend from address.
+    # 日本語: アドレスから、loadresend設定要求するresendことを検証します。
+    # English: Verify that load resend config requires resend from address.
     def test_load_resend_config_requires_resend_from_address(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             "os.environ",
             {
@@ -60,21 +60,21 @@ class EmailServiceConfigTestCase(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 email_service._load_resend_config()
 
-    # 日本語: test load resend config raises when missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test load resend config raises when missing.
+    # 日本語: missingのとき、loadresend設定送出することを検証します。
+    # English: Verify that load resend config raises when missing.
     def test_load_resend_config_raises_when_missing(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(RuntimeError):
                 email_service._load_resend_config()
 
-    # 日本語: test send email posts rich html and plain text message to resend のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send email posts rich html and plain text message to resend.
+    # 日本語: およびplaintextmessage、resendへ、送信メールpostsrichhtmlことを検証します。
+    # English: Verify that send email posts rich html and plain text message to resend.
     def test_send_email_posts_rich_html_and_plain_text_message_to_resend(self):
         fake_response = FakeResponse(status_code=200, json_payload={"id": "email-id"})
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             "os.environ",
             {
@@ -110,8 +110,8 @@ class EmailServiceConfigTestCase(unittest.TestCase):
         self.assertIn("123456", payload["html"])
         self.assertIn("Verification code", payload["html"])
 
-    # 日本語: test build email html escapes text content のテスト検証を担当します。
-    # English: Handle verifying test behavior for test build email html escapes text content.
+    # 日本語: ビルドメールhtmlescapestextcontentことを検証します。
+    # English: Verify that build email html escapes text content.
     def test_build_email_html_escapes_text_content(self):
         html = email_service._build_email_html(
             "Subject <unsafe>",
@@ -122,11 +122,11 @@ class EmailServiceConfigTestCase(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert(1)</script>", html)
 
-    # 日本語: test send email does not call resend when config is missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send email does not call resend when config is missing.
+    # 日本語: 設定がmissingのとき、送信メールdoes〜しないcallresendことを検証します。
+    # English: Verify that send email does not call resend when config is missing.
     def test_send_email_does_not_call_resend_when_config_is_missing(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict("os.environ", {}, clear=True):
             with patch("services.email_service.requests.post") as mock_post:
                 with self.assertRaises(RuntimeError):
@@ -138,15 +138,15 @@ class EmailServiceConfigTestCase(unittest.TestCase):
 
         mock_post.assert_not_called()
 
-    # 日本語: test send email raises for resend error message のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send email raises for resend error message.
+    # 日本語: resendエラーmessageに対して、送信メール送出することを検証します。
+    # English: Verify that send email raises for resend error message.
     def test_send_email_raises_for_resend_error_message(self):
         fake_response = FakeResponse(
             status_code=403,
             json_payload={"message": "invalid api key"},
         )
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             "os.environ",
             {
@@ -166,16 +166,16 @@ class EmailServiceConfigTestCase(unittest.TestCase):
                         body_text="body",
                     )
 
-    # 日本語: test send email raises for resend plain text error のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send email raises for resend plain text error.
+    # 日本語: resendplaintextエラーに対して、送信メール送出することを検証します。
+    # English: Verify that send email raises for resend plain text error.
     def test_send_email_raises_for_resend_plain_text_error(self):
         fake_response = FakeResponse(
             status_code=500,
             json_payload=ValueError("not json"),
             text="upstream failed",
         )
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             "os.environ",
             {

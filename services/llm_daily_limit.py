@@ -30,14 +30,14 @@ _BRAVE_WEB_SEARCH_MONTHLY_COUNT_KEY_PREFIX = "brave:web_search_monthly_total"
 logger = logging.getLogger(__name__)
 
 
-# 日本語: get limit の取得処理を担当します。
-# English: Handle fetching for get limit.
+# 日本語: 環境変数から上限値を読み込みます。無効な値の場合はデフォルト値にフォールバックします。
+# English: Retrieve limit value from environment variables, falling back to default on invalid values.
 def _get_limit(env_name: str, default_limit: int) -> int:
     # 環境変数値を整数化し、異常値はデフォルトへフォールバックする
     # Parse limit from env and fallback to default on invalid values.
     raw_limit = os.environ.get(env_name, str(default_limit))
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
+    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         limit = int(raw_limit)
     except (TypeError, ValueError):
@@ -51,8 +51,8 @@ def _get_limit(env_name: str, default_limit: int) -> int:
     return max(limit, 0)
 
 
-# 日本語: seconds until tomorrow に関する処理の入口です。
-# English: Entry point for logic related to seconds until tomorrow.
+# 日本語: 現在時刻から翌日の深夜0時までの残り時間を秒単位で計算します。
+# English: Calculate the remaining seconds from now until midnight of the next day.
 def _seconds_until_tomorrow() -> int:
     # 日次クォータのキー期限を「次の0時」までに合わせる
     # Compute TTL that expires at the next midnight.
@@ -62,14 +62,14 @@ def _seconds_until_tomorrow() -> int:
     return max(seconds, 1)
 
 
-# 日本語: seconds until next month に関する処理の入口です。
-# English: Entry point for logic related to seconds until next month.
+# 日本語: 現在時刻から翌月1日の0時までの残り時間を秒単位で計算します。
+# English: Calculate the remaining seconds from now until the first day of the next month.
 def _seconds_until_next_month() -> int:
     # 月次クォータのキー期限を「翌月1日の0時」までに合わせる
     # Compute TTL that expires at the first day of the next month.
     now = datetime.now()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if now.month == 12:
         first_of_next_month = datetime(now.year + 1, 1, 1)
     else:
@@ -78,23 +78,23 @@ def _seconds_until_next_month() -> int:
     return max(seconds, 1)
 
 
-# 日本語: get seconds until daily reset の取得処理を担当します。
-# English: Handle fetching for get seconds until daily reset.
+# 日本語: 日次リセット（翌日の深夜0時）までの残り秒数を取得します。
+# English: Retrieve the remaining seconds until the daily reset (midnight of the next day).
 def get_seconds_until_daily_reset() -> int:
     return _seconds_until_tomorrow()
 
 
-# 日本語: get seconds until monthly reset の取得処理を担当します。
-# English: Handle fetching for get seconds until monthly reset.
+# 日本語: 月次リセット（翌月1日の0時）までの残り秒数を取得します。
+# English: Retrieve the remaining seconds until the monthly reset (first day of the next month).
 def get_seconds_until_monthly_reset() -> int:
     return _seconds_until_next_month()
 
 
-# 日本語: LlmDailyLimitService に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to LlmDailyLimitService.
+# 日本語: 各種API（LLM、メール、検索、エージェント）の利用上限回数（クォータ）を制御するサービス。Redisまたはオンメモリでカウントを保持します。
+# English: Service to manage API limits (LLM, email, search, agent). Keeps track of usage using Redis or in-memory fallback.
 class LlmDailyLimitService:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # 日本語: ロックとオンメモリ用のカウンタ辞書を初期化します。
+    # English: Initialize lock and in-memory counter dictionaries.
     def __init__(
         self,
         *,
@@ -105,26 +105,26 @@ class LlmDailyLimitService:
         self._in_memory_daily_counts: dict[str, int] = {}
         self._in_memory_monthly_counts: dict[str, int] = {}
 
-    # 日本語: get redis client の取得処理を担当します。
-    # English: Handle fetching for get redis client.
+    # 日本語: Redisクライアントを取得します。
+    # English: Retrieve the Redis client.
     def _get_redis_client(self) -> Any | None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 与えられた条件に基づいて分岐処理を行います。
+        # English: Branch execution flow based on the given conditions.
         if self._redis_client_getter is not None:
             return self._redis_client_getter()
         return get_redis_client()
 
-    # 日本語: reset in memory state に関する処理の入口です。
-    # English: Entry point for logic related to reset in memory state.
+    # 日本語: オンメモリのカウント状態をすべてクリアします。
+    # English: Clear all in-memory counts.
     def reset_in_memory_state(self) -> None:
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
+        # English: Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             self._in_memory_daily_counts.clear()
             self._in_memory_monthly_counts.clear()
 
-    # 日本語: consume with redis に関する処理の入口です。
-    # English: Entry point for logic related to consume with redis.
+    # 日本語: Redisを用いて利用回数を1カウント消費します（Luaスクリプトを用いてINCR+EXPIREをアトミックに実行）。
+    # English: Consume one usage count using Redis (atoms INCR+EXPIRE via Lua script).
     def _consume_with_redis(
         self,
         redis_client: Any,
@@ -151,8 +151,8 @@ end
 
 return {1, current}
 """
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
+        # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
+        # English: Execute operations that might raise exceptions and handle them appropriately.
         try:
             result = redis_client.eval(
                 lua_script,
@@ -171,8 +171,8 @@ return {1, current}
             logger.exception("Redis quota tracking failed; falling back to in-memory.")
             return None
 
-    # 日本語: consume with in memory に関する処理の入口です。
-    # English: Entry point for logic related to consume with in memory.
+    # 日本語: Redisが利用できない場合に、オンメモリで利用回数を1カウント消費します。無効になった期間のキーは自動的に削除します。
+    # English: Consume one usage count in-memory as fallback. Expired keys are automatically pruned.
     def _consume_with_in_memory(
         self,
         counts: dict[str, int],
@@ -182,8 +182,8 @@ return {1, current}
     ) -> tuple[bool, int]:
         # Redis 不可時のフォールバック。期間が変わったキーを都度掃除する
         # Fallback path when Redis is unavailable; prune stale period keys on each call.
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
+        # English: Secure and clean up the required resource using a context manager.
         with self._in_memory_lock:
             period_suffix = f":{current_period}"
             stale_keys = [
@@ -201,8 +201,8 @@ return {1, current}
             remaining = max(limit - current, 0)
             return True, remaining
 
-    # 日本語: consume daily quota に関する処理の入口です。
-    # English: Entry point for logic related to consume daily quota.
+    # 日本語: 日次の利用上限（クォータ）を1カウント消費します。Redisを優先し、失敗時はオンメモリにフォールバックします。
+    # English: Consume one unit from the daily quota, preferring Redis and falling back to memory on failure.
     def _consume_daily_quota(
         self,
         *,
@@ -217,14 +217,14 @@ return {1, current}
         # When user_key is provided the quota is scoped per user/session so one
         # caller cannot burn the global daily budget for everyone else.
         daily_limit = _get_limit(env_name, default_limit)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 与えられた条件に基づいて分岐処理を行います。
+        # English: Branch execution flow based on the given conditions.
         if daily_limit <= 0:
             return False, 0, daily_limit
 
         today = current_date or date.today().isoformat()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 与えられた条件に基づいて分岐処理を行います。
+        # English: Branch execution flow based on the given conditions.
         if user_key:
             # Hash to avoid leaking user identifiers into Redis keys and to
             # keep key length bounded regardless of input.
@@ -253,8 +253,8 @@ return {1, current}
         )
         return allowed, remaining, daily_limit
 
-    # 日本語: consume monthly quota に関する処理の入口です。
-    # English: Entry point for logic related to consume monthly quota.
+    # 日本語: 月次の利用上限（クォータ）を1カウント消費します。Redisを優先し、失敗時はオンメモリにフォールバックします。
+    # English: Consume one unit from the monthly quota, preferring Redis and falling back to memory on failure.
     def _consume_monthly_quota(
         self,
         *,
@@ -266,8 +266,8 @@ return {1, current}
         # 月単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替える
         # Consume quota using a month-scoped key, preferring Redis and falling back to memory.
         monthly_limit = _get_limit(env_name, default_limit)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 与えられた条件に基づいて分岐処理を行います。
+        # English: Branch execution flow based on the given conditions.
         if monthly_limit <= 0:
             return False, 0, monthly_limit
 
@@ -275,8 +275,8 @@ return {1, current}
         quota_key = f"{key_prefix}:{month}"
 
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 与えられた条件に基づいて分岐処理を行います。
+        # English: Branch execution flow based on the given conditions.
         if redis_client is not None:
             redis_result = self._consume_with_redis(
                 redis_client,
@@ -296,8 +296,8 @@ return {1, current}
         )
         return allowed, remaining, monthly_limit
 
-    # 日本語: consume llm daily quota に関する処理の入口です。
-    # English: Entry point for logic related to consume llm daily quota.
+    # 日本語: LLMチャット応答APIの日次クォータを1カウント消費します。
+    # English: Consume one unit from the daily quota for LLM chat API usage.
     def consume_llm_daily_quota(
         self,
         current_date: str | None = None,
@@ -316,8 +316,8 @@ return {1, current}
             user_key=user_key,
         )
 
-    # 日本語: consume auth email daily quota に関する処理の入口です。
-    # English: Entry point for logic related to consume auth email daily quota.
+    # 日本語: 認証メール送信の日次クォータを1カウント消費します。
+    # English: Consume one unit from the daily quota for auth email sending.
     def consume_auth_email_daily_quota(
         self,
         current_date: str | None = None,
@@ -331,8 +331,8 @@ return {1, current}
             current_date=current_date,
         )
 
-    # 日本語: consume ai agent monthly quota に関する処理の入口です。
-    # English: Entry point for logic related to consume ai agent monthly quota.
+    # 日本語: AIサポートエージェントの月次クォータを1カウント消費します。
+    # English: Consume one unit from the monthly quota for support AI agent usage.
     def consume_ai_agent_monthly_quota(
         self,
         current_month: str | None = None,
@@ -346,8 +346,8 @@ return {1, current}
             current_month=current_month,
         )
 
-    # 日本語: consume brave web search monthly quota に関する処理の入口です。
-    # English: Entry point for logic related to consume brave web search monthly quota.
+    # 日本語: Brave Web検索の月次クォータを1カウント消費します。
+    # English: Consume one unit from the monthly quota for Brave web search usage.
     def consume_brave_web_search_monthly_quota(
         self,
         current_month: str | None = None,
@@ -362,22 +362,22 @@ return {1, current}
         )
 
 
-# 日本語: get llm daily api limit の取得処理を担当します。
-# English: Handle fetching for get llm daily api limit.
+# 日本語: LLM APIの日次利用上限数を取得します。
+# English: Get the daily limit for LLM API calls.
 def get_llm_daily_api_limit() -> int:
     return _get_limit(LLM_DAILY_API_LIMIT_ENV, DEFAULT_LLM_DAILY_API_LIMIT)
 
 
-# 日本語: get auth email daily send limit の取得処理を担当します。
-# English: Handle fetching for get auth email daily send limit.
+# 日本語: 認証メールの日次送信上限数を取得します。
+# English: Get the daily limit for auth email sends.
 def get_auth_email_daily_send_limit() -> int:
     return _get_limit(
         AUTH_EMAIL_DAILY_SEND_LIMIT_ENV, DEFAULT_AUTH_EMAIL_DAILY_SEND_LIMIT
     )
 
 
-# 日本語: get ai agent monthly api limit の取得処理を担当します。
-# English: Handle fetching for get ai agent monthly api limit.
+# 日本語: AIサポートエージェントの月次利用上限数を取得します。
+# English: Get the monthly limit for support AI agent calls.
 def get_ai_agent_monthly_api_limit() -> int:
     return _get_limit(
         AI_AGENT_MONTHLY_API_LIMIT_ENV,
@@ -385,8 +385,8 @@ def get_ai_agent_monthly_api_limit() -> int:
     )
 
 
-# 日本語: get brave web search monthly limit の取得処理を担当します。
-# English: Handle fetching for get brave web search monthly limit.
+# 日本語: Brave Web検索の月次検索上限数を取得します。
+# English: Get the monthly limit for Brave web searches.
 def get_brave_web_search_monthly_limit() -> int:
     return _get_limit(
         BRAVE_WEB_SEARCH_MONTHLY_LIMIT_ENV,
@@ -397,11 +397,11 @@ def get_brave_web_search_monthly_limit() -> int:
 _default_llm_daily_limit_service = LlmDailyLimitService()
 
 
-# 日本語: get llm daily limit service の取得処理を担当します。
-# English: Handle fetching for get llm daily limit service.
+# 日本語: Requestオブジェクトのコンテキストからサービスインスタンスを取得します。なければデフォルトインスタンスを返します。
+# English: Retrieve the service instance from the Request context, falling back to the default instance.
 def get_llm_daily_limit_service(request: Request = None) -> LlmDailyLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if request is not None:
         app = request.scope.get("app")
         state = getattr(app, "state", None)
@@ -411,14 +411,14 @@ def get_llm_daily_limit_service(request: Request = None) -> LlmDailyLimitService
     return _default_llm_daily_limit_service
 
 
-# 日本語: clear in memory daily limit state の初期化処理を担当します。
-# English: Handle clearing for clear in memory daily limit state.
+# 日本語: オンメモリの利用制限状態をリセットします。
+# English: Reset the in-memory daily limit states.
 def clear_in_memory_daily_limit_state() -> None:
     get_llm_daily_limit_service().reset_in_memory_state()
 
 
-# 日本語: consume llm daily quota に関する処理の入口です。
-# English: Entry point for logic related to consume llm daily quota.
+# 日本語: LLMチャット応答APIの日次クォータを1カウント消費します。
+# English: Consume one unit from the daily quota for LLM chat API usage.
 def consume_llm_daily_quota(
     current_date: str | None = None,
     *,
@@ -433,8 +433,8 @@ def consume_llm_daily_quota(
     return target.consume_llm_daily_quota(current_date=current_date, user_key=user_key)
 
 
-# 日本語: consume auth email daily quota に関する処理の入口です。
-# English: Entry point for logic related to consume auth email daily quota.
+# 日本語: 認証メール送信の日次クォータを1カウント消費します。
+# English: Consume one unit from the daily quota for auth email sending.
 def consume_auth_email_daily_quota(
     current_date: str | None = None,
     *,
@@ -450,8 +450,8 @@ def consume_auth_email_daily_quota(
     )
 
 
-# 日本語: consume ai agent monthly quota に関する処理の入口です。
-# English: Entry point for logic related to consume ai agent monthly quota.
+# 日本語: AIサポートエージェントの月次クォータを1カウント消費します。
+# English: Consume one unit from the monthly quota for support AI agent usage.
 def consume_ai_agent_monthly_quota(
     current_month: str | None = None,
     *,
@@ -465,8 +465,8 @@ def consume_ai_agent_monthly_quota(
     return target.consume_ai_agent_monthly_quota(current_month=current_month)
 
 
-# 日本語: consume brave web search monthly quota に関する処理の入口です。
-# English: Entry point for logic related to consume brave web search monthly quota.
+# 日本語: Brave Web検索の月次クォータを1カウント消費します。
+# English: Consume one unit from the monthly quota for Brave web search usage.
 def consume_brave_web_search_monthly_quota(
     current_month: str | None = None,
     *,

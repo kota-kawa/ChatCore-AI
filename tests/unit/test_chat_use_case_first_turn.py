@@ -10,34 +10,34 @@ from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: ChatUseCaseFirstTurnTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatUseCaseFirstTurnTestCase.
+# チャットの最初の発話（First Turn）において、不要なルーム履歴クエリがスキップされることを検証するテストクラス。
+# Test class to verify that empty/unnecessary room context queries are skipped during the first turn of a chat session.
 class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
-    # 日本語: test authenticated first turn skips empty room context queries のテスト検証を担当します。
-    # English: Handle verifying test behavior for test authenticated first turn skips empty room context queries.
+    # 認証されたユーザーの初回発話において、過去ログが存在しないため要約や長期記憶のデータベースクエリ取得処理がスキップされ、適切に記憶抽出とコンテキスト生成が行われることを検証します。
+    # Verify that the first turn of an authenticated user skips room summary and long-term memory queries (since they are empty), and correctly extracts facts and builds the prompt.
     def test_authenticated_first_turn_skips_empty_room_context_queries(self):
         user_message = "【タスク】レビュー\n【状況・作業環境】A&B"
         saved_messages = []
         history_query_message_counts = []
         captured_context = {}
 
-        # 日本語: require json dict に関する処理の入口です。
-        # English: Entry point for logic related to require json dict.
+        # リクエスト内のJSON辞書取得をシミュレート
+        # Simulate requiring a JSON dictionary from the request
         async def require_json_dict(request):
             return await request.json(), None
 
-        # 日本語: validate payload model の検証処理を担当します。
-        # English: Handle validating for validate payload model.
+        # ペイロードのバリデーションをシミュレート
+        # Simulate validating the payload model
         def validate_payload_model(data, model_cls, **_kwargs):
             return model_cls(**data), None
 
-        # 日本語: jsonify に関する処理の入口です。
-        # English: Entry point for logic related to jsonify.
+        # JSONResponseレスポンスヘルパー
+        # Helper to return a JSONResponse
         def jsonify(payload, status_code=200):
             return JSONResponse(payload, status_code=status_code)
 
-        # 日本語: save message to db の保存処理を担当します。
-        # English: Handle saving for save message to db.
+        # メッセージのDB保存処理を疑似的に行う
+        # Mock saving user and assistant messages to the DB
         def save_message_to_db(room_id, message, sender, attached_file_names=None, parent_id=None):
             saved_messages.append(
                 {
@@ -50,8 +50,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             )
             return len(saved_messages)
 
-        # 日本語: get chat room messages の取得処理を担当します。
-        # English: Handle fetching for get chat room messages.
+        # チャット履歴取得を疑似的に行う（メッセージ数計測付き）
+        # Mock fetching chat history and log the message count
         def get_chat_room_messages(room_id):
             history_query_message_counts.append(len(saved_messages))
             return [
@@ -63,12 +63,14 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 if entry["room_id"] == room_id
             ]
 
-        # 日本語: build context messages の組み立て処理を担当します。
-        # English: Handle building for build context messages.
+        # プロンプト用コンテキストメッセージ構築をフック
+        # Hook the prompt building to capture context variables
         def build_context_messages(**kwargs):
             captured_context.update(kwargs)
             return kwargs["recent_messages"]
 
+        # 依存関係モックオブジェクトの作成
+        # Create mocked dependency container for the chat post usecase
         deps = ChatPostUseCaseDependencies(
             cleanup_ephemeral_chats=Mock(),
             require_json_dict=require_json_dict,
@@ -136,8 +138,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             session={"user_id": 42},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ウェブ検索拡張や自動タイトル生成処理をモック
+        # Mock web search augmentation and automatic room renaming/titling
         with (
             patch(
                 "services.chat_use_case.maybe_augment_messages_with_web_search",

@@ -61,17 +61,19 @@ from .routes import (
 )
 
 
-# 日本語: share payload に関する処理の入口です。
-# English: Entry point for logic related to share payload.
+# 共有状態を表すレスポンス用ペイロードを作成する関数
+# Construct the response payload for a memo sharing state.
 def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
     share_token = str(share_state.get("share_token") or "")
     share_url = ""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 有効なトークンがあり、共有状態がアクティブであれば共有URLを設定
+    # Set the share URL if the token is present and the share state is active.
     if share_token and bool(share_state.get("is_active")):
         share_url = frontend_url(f"/shared/memo/{share_token}")
     return {"status": "success", **share_state, "share_url": share_url}
 
+# 外部に公開されるモジュールAPIの定義
+# Exported module API components.
 __all__ = [
     "_build_csv_export",
     "_build_json_export",

@@ -73,15 +73,11 @@ _AVATAR_FORMAT_TO_CANONICAL_EXTENSION = {
 }
 
 
-# 日本語: detect avatar format に関する処理の入口です。
-# English: Entry point for logic related to detect avatar format.
+# アバター画像のマジックバイト（シグネチャ）から画像形式を特定する関数
+# Detect the avatar image format (PNG, JPEG, GIF, or WEBP) based on file magic bytes.
 def _detect_avatar_format(header: bytes) -> str | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if header.startswith(b"\x89PNG\r\n\x1a\n"):
         return "png"
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if header.startswith(b"\xff\xd8\xff"):
         return "jpeg"
     if header.startswith(b"GIF87a") or header.startswith(b"GIF89a"):
@@ -91,30 +87,24 @@ def _detect_avatar_format(header: bytes) -> str | None:
     return None
 
 
-# 日本語: normalize content type の正規化処理を担当します。
-# English: Handle normalizing for normalize content type.
+# HTTPヘッダーのContent-Typeを正規化（パラメータ除去・小文字化）する関数
+# Normalize the raw Content-Type header value by stripping parameters and converting to lowercase.
 def _normalize_content_type(raw_content_type) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(raw_content_type, str):
         return ""
     return raw_content_type.split(";", 1)[0].strip().lower()
 
 
-# 日本語: save avatar file の保存処理を担当します。
-# English: Handle saving for save avatar file.
+# アップロードされたアバター画像ファイルを検証してディスクに保存する関数
+# Validate and save the uploaded avatar image file to disk, enforcing size/type constraints.
 def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_type):
     # 拡張子・Content-Type・マジックバイトを検証し、サイズ制限付きで保存する
     # Validate extension/content-type/signature and persist with a strict size cap.
     safe_filename = secure_filename(str(original_filename or ""))
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not safe_filename:
         raise ValueError("画像ファイル名が不正です。")
 
     extension = os.path.splitext(safe_filename)[1].lower()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if extension not in _ALLOWED_AVATAR_EXTENSIONS:
         raise ValueError("画像は JPG / PNG / GIF / WebP のいずれかを指定してください。")
 
@@ -173,8 +163,8 @@ def _save_avatar_file(upload_dir, avatar_file_obj, original_filename, content_ty
     return f"/static/uploads/{stored_filename}"
 
 
-# 日本語: update user profile の更新処理を担当します。
-# English: Handle updating for update user profile.
+# ユーザーのプロフィール情報（メールアドレスを除く）をデータベースに保存する関数
+# Persist updated user profile fields (excluding email) to the database.
 def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_context):
     # Update only non-identity profile fields. The email column is intentionally
     # excluded — changing the email is privileged and must go through the
@@ -184,8 +174,6 @@ def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_
     # is kept in the signature for backwards compatibility with the test
     # fixtures but is no longer written to the database.
     _ = email  # intentionally ignored; see docstring above
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -210,24 +198,20 @@ def _update_user_profile(user_id, username, email, bio, avatar_url, llm_profile_
 
 # --- プロフィール取得 ---
 # User profile read/update endpoint.
-# 日本語: user profile に関する処理の入口です。
-# English: Entry point for logic related to user profile.
+# プロフィール情報の取得・更新を行うAPIエンドポイント
+# API endpoint to retrieve or update user profile information.
 @chat_bp.api_route('/api/user/profile', methods=['GET', 'POST'], name="chat.user_profile")
 async def user_profile(request: Request):
     """
     GET  : 自分のプロフィールを JSON で返す
     POST : フォーム / multipart で受け取ったプロフィールを更新する
     """
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if 'user_id' not in request.session:
         return jsonify({'error': 'ログインが必要です'}, status_code=401)
     user_id = request.session['user_id']
 
     # ---------- GET ----------
     # Return current profile data as JSON.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if request.method == 'GET':
         user = await run_blocking(get_user_by_id, user_id)
         if not user:
@@ -316,14 +300,14 @@ async def user_profile(request: Request):
         )
 
 
-# 日本語: clear email change session の初期化処理を担当します。
-# English: Handle clearing for clear email change session.
+# セッションからメールアドレス変更関連の一時データを削除する関数
+# Clear email change related state data from the user's session.
 def _clear_email_change_session(session: dict) -> None:
     session.pop(EMAIL_CHANGE_SESSION_KEY, None)
 
 
-# 日本語: send email change code の送信処理を非同期で担当します。
-# English: Handle sending for send email change code asynchronously.
+# メールアドレス変更用認証コード付きの確認メールを送信する非同期関数
+# Asynchronously send verification code email for email change request, enforcing rate limits.
 async def _send_email_change_code(
     *,
     request: Request,
@@ -338,8 +322,6 @@ async def _send_email_change_code(
         to_email,
         service=auth_limit_service,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not allowed:
         return limit_error or '試行回数が多すぎます。時間をおいて再試行してください。'
 
@@ -347,8 +329,6 @@ async def _send_email_change_code(
         consume_auth_email_daily_quota,
         service=llm_daily_limit_service,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not can_send_email:
         return (
             f'本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。'
@@ -364,15 +344,13 @@ async def _send_email_change_code(
     return None
 
 
-# 日本語: commit email change に関する処理の入口です。
-# English: Entry point for logic related to commit email change.
+# 認証完了後に新しいメールアドレスをDBに反映する関数
+# Atomically update users.email in the database after the verification steps.
 def _commit_email_change(user_id: int, new_email: str) -> bool:
     # Atomically rewrite users.email after the new address has been verified.
     # Returns False if some other account claimed the address between the
     # request and the confirmation step, so the caller can report a clear
     # error instead of leaving the row in an inconsistent state.
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -401,23 +379,19 @@ def _commit_email_change(user_id: int, new_email: str) -> bool:
             cursor.close()
 
 
-# 日本語: request email change に関する処理の入口です。
-# English: Entry point for logic related to request email change.
+# メールアドレス変更手続きを開始し、現在のメールアドレス宛に認証コードを送信するAPIエンドポイント
+# API endpoint to initiate email change request and send verification code to current address.
 @chat_bp.post('/api/user/email/request_change', name='chat.request_email_change')
 async def request_email_change(
     request: Request,
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
 ):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if 'user_id' not in request.session:
         return jsonify({'error': 'ログインが必要です'}, status_code=401)
     user_id = request.session['user_id']
 
     data, error_response = await require_json_dict(request, status='fail')
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -504,23 +478,19 @@ async def request_email_change(
         )
 
 
-# 日本語: confirm email change に関する処理の入口です。
-# English: Entry point for logic related to confirm email change.
+# メールアドレス変更コードを確認し、次の検証段階へ移行するか変更を完了するAPIエンドポイント
+# API endpoint to verify email-change code, advancing stage or completing the update.
 @chat_bp.post('/api/user/email/confirm_change', name='chat.confirm_email_change')
 async def confirm_email_change(
     request: Request,
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
 ):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if 'user_id' not in request.session:
         return jsonify({'error': 'ログインが必要です'}, status_code=401)
     user_id = request.session['user_id']
 
     data, error_response = await require_json_dict(request, status='fail')
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 

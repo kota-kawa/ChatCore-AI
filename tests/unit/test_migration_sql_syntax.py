@@ -1,31 +1,29 @@
-"""Static analysis tests for SQL syntax in Alembic migration files.
-
-These tests catch PostgreSQL-incompatible SQL patterns that are syntactically
-valid Python strings but fail at runtime when the DB executes them.
-"""
+# AlembicのマイグレーションファイルのSQL構文に関する静的解析テスト。
+# Static analysis tests for SQL syntax in Alembic migration files.
 
 import ast
 import re
 import unittest
 from pathlib import Path
 
+# マイグレーションファイルが存在するディレクトリのパスを取得
+# Get the directory path where migration files are located
 MIGRATIONS_DIR = Path(__file__).parents[2] / "alembic" / "versions"
 
-# Extracts the string literal passed to every op.execute() call.
-# Matches both triple-double-quoted and triple-single-quoted forms.
+# op.execute() への呼び出しからSQL文字列リテラルを抽出する正規表現
+# Regular expression to extract SQL string literals passed to op.execute()
 _OP_EXECUTE_SQL = re.compile(
     r'op\.execute\(\s*(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')\s*\)',
     re.DOTALL,
 )
 
 
-# 日本語: all migration sql blocks に関する処理の入口です。
-# English: Entry point for logic related to all migration sql blocks.
+# 全てのop.execute()呼び出しからファイル名とSQLブロックのペアを取得します。
+# Return (filename, sql_block) pairs for every op.execute() call found.
 def _all_migration_sql_blocks():
-    """Return (filename, sql_block) pairs for every op.execute() call found."""
     results = []
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # マイグレーションディレクトリ内のすべてのPythonファイルをソートして読み込む
+    # Sort and read all Python files in the migrations directory
     for p in sorted(MIGRATIONS_DIR.glob("*.py")):
         content = p.read_text()
         for m in _OP_EXECUTE_SQL.finditer(content):
@@ -34,11 +32,11 @@ def _all_migration_sql_blocks():
     return results
 
 
-# 日本語: read revision value の読み込み処理を担当します。
-# English: Handle reading for read revision value.
+# 指定されたASTノードからリビジョン値（revision/down_revision）を読み取ります。
+# Read revision or down_revision values from the given AST node.
 def _read_revision_value(node):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 代入文、または型注釈付きの代入文から変数名と値を取得
+    # Get variable names and values from assign or annotated assign AST nodes
     if isinstance(node, ast.Assign):
         names = [target.id for target in node.targets if isinstance(target, ast.Name)]
         value = node.value
@@ -48,22 +46,22 @@ def _read_revision_value(node):
     else:
         return None, None
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # revisionまたはdown_revisionの値を評価して返却
+    # Evaluate and return revision or down_revision values
     if "revision" in names or "down_revision" in names:
         return names, ast.literal_eval(value)
 
     return None, None
 
 
-# 日本語: migration revision graph に関する処理の入口です。
-# English: Entry point for logic related to migration revision graph.
+# 全てのリビジョンとdown_revisionの関係からリビジョングラフを構築します。
+# Build the revision graph using all revisions and down_revisions.
 def _migration_revision_graph():
     revisions = {}
     down_revisions = {}
 
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 各マイグレーションファイルをパースしてリビジョン情報を収集
+    # Parse each migration file to collect revision information
     for path in sorted(MIGRATIONS_DIR.glob("*.py")):
         values = {}
         for node in ast.parse(path.read_text()).body:
@@ -78,9 +76,9 @@ def _migration_revision_graph():
         revisions[revision] = path.name
         down_revisions[revision] = values.get("down_revision")
 
+    # 親リビジョンから子リビジョンへのマッピングを構築
+    # Build child mapping from parent revisions
     children = {revision: [] for revision in revisions}
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for revision, down_revision in down_revisions.items():
         parents = (
             down_revision
@@ -94,13 +92,15 @@ def _migration_revision_graph():
     return revisions, down_revisions, children
 
 
-# 日本語: MigrationRevisionGraphTest のテストケースをまとめます。
-# English: Group test cases for MigrationRevisionGraphTest.
+# マイグレーション履歴の構造（リビジョングラフ）をテストするクラス。
+# Test class for verifying the structure of the migration revision graph.
 class MigrationRevisionGraphTest(unittest.TestCase):
-    # 日本語: test migrations have single head のテスト検証を担当します。
-    # English: Handle verifying test behavior for test migrations have single head.
+    # マイグレーション履歴にヘッド（末尾）が1つだけ存在することを確認します。
+    # Ensure that the migrations have only a single head revision.
     def test_migrations_have_single_head(self):
         revisions, down_revisions, children = _migration_revision_graph()
+        # 子リビジョンが存在しないノードをヘッドとして抽出
+        # Extract nodes with no child revisions as heads
         heads = sorted(revision for revision, child_revisions in children.items() if not child_revisions)
 
         self.assertEqual(
@@ -111,8 +111,8 @@ class MigrationRevisionGraphTest(unittest.TestCase):
         )
 
 
-# 日本語: MigrationTriggerCaseExpressionTest のテストケースをまとめます。
-# English: Group test cases for MigrationTriggerCaseExpressionTest.
+# トリガー関数内のCASE式でPostgreSQLでエラーになるパターンがないか検証するクラス。
+# Test class to check for PostgreSQL-incompatible CASE syntax in triggers.
 class MigrationTriggerCaseExpressionTest(unittest.TestCase):
     """
     Guard against mixing simple-CASE selectors with boolean WHEN branches.
@@ -137,10 +137,12 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
         re.DOTALL | re.IGNORECASE,
     )
 
-    # 日本語: test no simple case tg op with record field when のテスト検証を担当します。
-    # English: Handle verifying test behavior for test no simple case tg op with record field when.
+    # CASE TG_OP での条件分岐内にレコードフィールド(NEW/OLD)の比較が混在していないかを検証します。
+    # Verify that CASE TG_OP does not contain NEW/OLD record field comparisons in WHEN clauses.
     def test_no_simple_case_tg_op_with_record_field_when(self):
         """CASE TG_OP must not have NEW.<col> or OLD.<col> as a WHEN value."""
+        # エラーの原因となる構文パターンを含むマイグレーションファイルをリストアップ
+        # List up migration files that contain syntax patterns causing the error
         violations = [
             filename
             for filename, sql in _all_migration_sql_blocks()
@@ -161,8 +163,8 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
         )
 
 
-# 日本語: MigrationTriggerOperationLengthTest のテストケースをまとめます。
-# English: Group test cases for MigrationTriggerOperationLengthTest.
+# トリガー関数内の操作名文字列がVARCHAR(16)制限を超えていないかを検証するクラス。
+# Test class to check if operation name string lengths in trigger functions are within VARCHAR(16).
 class MigrationTriggerOperationLengthTest(unittest.TestCase):
     """
     Guard against operation strings that exceed the VARCHAR(16) column width
@@ -173,13 +175,13 @@ class MigrationTriggerOperationLengthTest(unittest.TestCase):
     # expression within a CREATE FUNCTION / DO $$ block.
     _THEN_STRING = re.compile(r"\bTHEN\s+'([^']{17,})'", re.IGNORECASE)
 
-    # 日本語: test operation values fit in varchar16 のテスト検証を担当します。
-    # English: Handle verifying test behavior for test operation values fit in varchar16.
+    # トリガー関数内のTHEN節の操作名文字列が16文字以下であることを検証します。
+    # Verify that all operation name string literals after THEN are at most 16 characters.
     def test_operation_values_fit_in_varchar16(self):
         """String literals after THEN in trigger functions must be ≤16 chars."""
         violations = []
-        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-        # English: Process each target item in order and accumulate the needed result.
+        # 全てのSQLブロックで、THENの後に続く文字列の長さをチェック
+        # Check the length of strings following THEN in all SQL blocks
         for filename, sql in _all_migration_sql_blocks():
             for match in self._THEN_STRING.finditer(sql):
                 violations.append((filename, match.group(1)))

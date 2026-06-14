@@ -18,19 +18,17 @@ from .helpers import date_end, date_start, ensure_title, resolve_sort_order
 from .serializers import serialize_memo_detail, serialize_memo_summary
 
 
-# 日本語: get db connection の取得処理を担当します。
-# English: Handle fetching for get db connection.
+# メモモジュールから動的にDB接続取得関数を解決するヘルパー（循環参照防止）
+# Helper to dynamically retrieve the DB connection function to avoid circular imports.
 def _get_db_connection():
     memo_module = sys.modules.get("blueprints.memo")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if memo_module is not None:
         return getattr(memo_module, "get_db_connection", default_get_db_connection)()
     return default_get_db_connection()
 
 
-# 日本語: fetch memo summaries の取得処理を担当します。
-# English: Handle fetching for fetch memo summaries.
+# 条件フィルターおよびソート設定に基づき、メモの概要リストを取得する関数
+# Retrieve a list of memo summaries based on filters and sorting criteria.
 def fetch_memo_summaries(
     user_id: int,
     *,
@@ -48,20 +46,24 @@ def fetch_memo_summaries(
 ) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
 
+        # 基本的なWHERE句を設定（ユーザーID一致）
+        # Set basic WHERE clause (user ID match).
         where_clauses = ["me.user_id = %s"]
         filter_params: list[Any] = [user_id]
 
+        # アーカイブ状態によるフィルタリング
+        # Filter based on archived state.
         if only_archived:
             where_clauses.append("me.archived_at IS NOT NULL")
         elif not include_archived:
             where_clauses.append("me.archived_at IS NULL")
 
+        # キーワード検索（セマンティック検索でない場合）
+        # Text-based keyword search (when not using semantic search).
         normalized_query = query.strip()
         if normalized_query and not semantic_query_embedding:
             query_like = f"%{normalized_query}%"
@@ -70,6 +72,8 @@ def fetch_memo_summaries(
             )
             filter_params.extend([query_like, query_like])
 
+        # 作成日時による範囲指定フィルタリング
+        # Filter by created_at datetime range.
         parsed_date_from = date_start(date_from)
         if parsed_date_from is not None:
             filter_params.append(parsed_date_from)
@@ -80,23 +84,30 @@ def fetch_memo_summaries(
             filter_params.append(parsed_date_to)
             where_clauses.append("me.created_at <= %s")
 
+        # コレクションIDによるフィルタリング
+        # Filter by collection ID.
         if collection_id is not None:
             filter_params.append(collection_id)
             where_clauses.append("me.collection_id = %s")
 
         where_sql = " AND ".join(where_clauses)
 
-        # For semantic search: fetch all matching memos (up to cap), rank in Python
+        # セマンティック検索（ベクトル検索）の場合の処理。上位レコードを取得しPython側で類似度順ソートを行う。
+        # For semantic search: fetch matching embedded memos, rank by similarity in Python.
         if semantic_query_embedding is not None:
             where_clauses_sem = list(where_clauses)
             where_clauses_sem.append("me.embedding IS NOT NULL")
             where_sem_sql = " AND ".join(where_clauses_sem)
 
+            # 総件数を取得
+            # Fetch total count.
             count_sql = f"SELECT COUNT(*) AS total_count FROM memo_entries me WHERE {where_sql}"
             cursor.execute(count_sql, tuple(filter_params))
             count_row = cursor.fetchone() or {}
             total_count = int(count_row.get("total_count") or 0)
 
+            # 最大件数分、埋め込みベクトル付きのメモを取得
+            # Fetch memos with embeddings up to the semantic limit.
             sem_sql = f"""
                 SELECT
                     me.id, me.title, me.created_at, me.updated_at,
@@ -116,13 +127,21 @@ def fetch_memo_summaries(
             """
             cursor.execute(sem_sql, tuple([*filter_params, SEMANTIC_SEARCH_MAX_MEMOS]))
             rows = list(cursor.fetchall())
+            
+            # コサイン類似度を用いてランキングを算出
+            # Rank and sort memos based on cosine similarity.
             ranked = rank_memos_by_semantic_similarity(semantic_query_embedding, rows)
+            
+            # ページネーションを適用
+            # Apply offset and limit pagination.
             paginated = ranked[offset : offset + limit]
             return {
                 "total": total_count,
                 "memos": [serialize_memo_summary(r) for r in paginated],
             }
 
+        # 通常ソート条件の組み立て（ピン留め優先対応など）
+        # Construct SQL ORDER BY clauses for normal queries.
         order_by_parts: list[str] = []
         if pinned_first:
             order_by_parts.append("CASE WHEN me.pinned_at IS NULL THEN 1 ELSE 0 END ASC")
@@ -131,11 +150,15 @@ def fetch_memo_summaries(
         order_by_parts.append(resolve_sort_order(sort))
         order_sql = ", ".join(order_by_parts)
 
+        # 通常クエリでの総件数取得
+        # Fetch total count for standard query.
         count_sql = f"SELECT COUNT(*) AS total_count FROM memo_entries me WHERE {where_sql}"
         cursor.execute(count_sql, tuple(filter_params))
         count_row = cursor.fetchone() or {}
         total_count = int(count_row.get("total_count") or 0)
 
+        # 通常クエリでのメモ一覧取得
+        # Retrieve paginated memo records.
         list_sql = f"""
             SELECT
                 me.id, me.title, me.created_at, me.updated_at,
@@ -167,13 +190,11 @@ def fetch_memo_summaries(
             connection.close()
 
 
-# 日本語: fetch memo detail の取得処理を担当します。
-# English: Handle fetching for fetch memo detail.
+# 指定されたメモの詳細情報を取得する関数
+# Retrieve the detailed data for a specific memo entry.
 def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -196,6 +217,8 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
             (memo_id, user_id),
         )
         row = cursor.fetchone()
+        # メモが見つからない場合は例外を送出
+        # Raise an exception if the memo is not found.
         if not row:
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
         return serialize_memo_detail(row)
@@ -206,8 +229,8 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
             connection.close()
 
 
-# 日本語: validate collection owner の検証処理を担当します。
-# English: Handle validating for validate collection owner.
+# 指定されたコレクションがユーザー所有のものか検証する関数
+# Validate whether the specified collection belongs to the user.
 def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> bool:
     cursor.execute(
         "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",
@@ -216,8 +239,8 @@ def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> 
     return cursor.fetchone() is not None
 
 
-# 日本語: insert memo の登録処理を担当します。
-# English: Handle inserting for insert memo.
+# メモをDBに新規挿入・保存する関数
+# Insert and save a new memo entry in the database.
 def insert_memo(
     user_id: int,
     ai_response: str,
@@ -227,12 +250,12 @@ def insert_memo(
 ) -> int | None:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
 
+        # コレクションIDが渡された場合、所有権を事前に検証
+        # Verify collection ownership if provided.
         validated_collection_id: int | None = None
         if collection_id is not None:
             ccheck = connection.cursor(dictionary=True)
@@ -246,6 +269,8 @@ def insert_memo(
             finally:
                 ccheck.close()
 
+        # メモをデータベースにインサート（sort_orderは最大値に+1して末尾に追加）
+        # Insert the memo (assigning next sort order sequence number).
         cursor.execute(
             """
             INSERT INTO memo_entries (
@@ -277,8 +302,8 @@ def insert_memo(
             connection.close()
 
 
-# 日本語: update memo の更新処理を担当します。
-# English: Handle updating for update memo.
+# メモの属性情報（タイトル、コンテンツ、コレクション等）を更新する関数
+# Update metadata or content attributes of a memo entry.
 def update_memo(
     user_id: int,
     memo_id: int,
@@ -292,8 +317,6 @@ def update_memo(
 ) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -310,16 +333,22 @@ def update_memo(
         if not existing:
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
 
+        # メモ本文の更新判定とバリデーション
+        # Determine updated content value and validate.
         resolved_ai_response = existing.get("ai_response") or ""
         if ai_response is not None:
             resolved_ai_response = ai_response
         if not str(resolved_ai_response).strip():
             raise ApiServiceError("AIの回答を入力してください。", 400, status="fail")
 
+        # タイトルの更新判定
+        # Resolve title update.
         resolved_title = existing.get("title") or ""
         if title is not None:
             resolved_title = ensure_title(str(resolved_ai_response), title)
 
+        # コレクション設定の更新判定（クリア指定または新規ID指定）
+        # Resolve collection relationship update (clear or set new ID).
         resolved_collection: int | None = existing.get("collection_id")
         if clear_collection:
             resolved_collection = None
@@ -327,6 +356,8 @@ def update_memo(
             if validate_collection_owner(cursor, user_id, collection_id):
                 resolved_collection = collection_id
 
+        # 背景色の更新判定（クリア指定または新規カラー指定）
+        # Resolve background color update (clear or set new color).
         if clear_background_color:
             resolved_background_color = None
         else:
@@ -335,6 +366,9 @@ def update_memo(
                 if background_color is not None
                 else existing.get("background_color")
             )
+        
+        # データベースに更新を書き込み
+        # Write updates to the database.
         cursor.execute(
             """
             UPDATE memo_entries
@@ -363,13 +397,11 @@ def update_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
-# 日本語: set memo archive state の設定処理を担当します。
-# English: Handle setting for set memo archive state.
+# メモのアーカイブ状態を設定する関数
+# Set the archived state (archived_at timestamp) of a memo.
 def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -395,13 +427,11 @@ def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[st
     return fetch_memo_detail(user_id, memo_id)
 
 
-# 日本語: set memo pin state の設定処理を担当します。
-# English: Handle setting for set memo pin state.
+# メモのピン留め状態を設定する関数
+# Set the pinned state (pinned_at timestamp) and adjust manual sort order.
 def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -437,18 +467,16 @@ def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, A
     return fetch_memo_detail(user_id, memo_id)
 
 
-# 日本語: decimal order に関する処理の入口です。
-# English: Entry point for logic related to decimal order.
+# 値を安全にDecimal型に変換する内部ヘルパー
+# Internal helper to safely cast a value to Decimal.
 def _decimal_order(value: Any) -> Decimal:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value or 0))
 
 
-# 日本語: reorder memo に関する処理の入口です。
-# English: Entry point for logic related to reorder memo.
+# メモの表示順（並び順）をドラッグ＆ドロップ先の近隣要素情報から再計算して更新する関数
+# Update manual sorting order based on target neighbors.
 def reorder_memo(
     user_id: int,
     memo_id: int,
@@ -456,14 +484,12 @@ def reorder_memo(
     before_id: int | None,
     after_id: int | None,
 ) -> dict[str, Any]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 移動先と自身のIDが重複している場合はエラー
+    # Error out if neighbors match the moving memo ID.
     if before_id == memo_id or after_id == memo_id:
         raise ApiServiceError("並べ替え位置が不正です。", 400, status="fail")
 
     ordered_ids = [memo_id]
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for candidate in (before_id, after_id):
         if candidate is not None and candidate not in ordered_ids:
             ordered_ids.append(candidate)
@@ -475,6 +501,8 @@ def reorder_memo(
         cursor = connection.cursor(dictionary=True)
 
         placeholders = ",".join(["%s"] * len(ordered_ids))
+        # 対象メモおよび近隣メモの現在の並び順と状態を取得
+        # Retrieve current sort orders and states of target memos.
         cursor.execute(
             f"""
             SELECT
@@ -495,16 +523,12 @@ def reorder_memo(
         dragged_is_pinned = dragged.get("pinned_at") is not None
         dragged_is_archived = dragged.get("archived_at") is not None
 
-        # 日本語: neighbor order に関する処理の入口です。
-        # English: Entry point for logic related to neighbor order.
+        # 近隣メモのソートオーダーを解決し、状態不整合をバリデーションする内部ヘルパー
+        # Resolve neighbor sort order and validate consistent states (pinned/archived).
         def neighbor_order(neighbor_id: int | None) -> Decimal | None:
-            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-            # English: Switch the flow according to the current condition.
             if neighbor_id is None:
                 return None
             neighbor = rows.get(neighbor_id)
-            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-            # English: Switch the flow according to the current condition.
             if neighbor is None:
                 raise ApiServiceError("並べ替え先のメモが見つかりません。", 400, status="fail")
             if (
@@ -517,6 +541,8 @@ def reorder_memo(
         before_order = neighbor_order(before_id)
         after_order = neighbor_order(after_id)
 
+        # 順序の決定（前後要素の中間値、または増減値）
+        # Calculate new order position (midpoint between neighbors, or increments).
         if before_order is not None and after_order is not None:
             new_order = (before_order + after_order) / Decimal("2")
         elif before_order is not None:
@@ -524,6 +550,8 @@ def reorder_memo(
         elif after_order is not None:
             new_order = after_order + Decimal("1")
         else:
+            # 近隣情報が全く無い場合は同一セクション内の最大値に+1を設定
+            # If no neighbor info, default to the maximum order + 1 in that group.
             cursor.execute(
                 """
                 SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order
@@ -537,6 +565,8 @@ def reorder_memo(
             next_row = cursor.fetchone() or {}
             new_order = _decimal_order(next_row.get("next_order"))
 
+        # 並び順を更新
+        # Update manual sequence value.
         cursor.execute(
             """
             UPDATE memo_entries
@@ -558,13 +588,11 @@ def reorder_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
-# 日本語: delete memo の削除処理を担当します。
-# English: Handle deleting for delete memo.
+# メモをDBから完全に削除する関数
+# Permanently delete a memo entry from the database.
 def delete_memo(user_id: int, memo_id: int) -> None:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -582,8 +610,8 @@ def delete_memo(user_id: int, memo_id: int) -> None:
             connection.close()
 
 
-# 日本語: bulk action に関する処理の入口です。
-# English: Entry point for logic related to bulk action.
+# 複数メモに対して一括操作（アーカイブ、削除、ピン留め、コレクション割当等）を行う関数
+# Perform bulk action (delete, archive, pin, unpin, assign collection) on multiple memos.
 def bulk_action(
     user_id: int,
     action: str,
@@ -591,20 +619,18 @@ def bulk_action(
     *,
     collection_id: int | None,
 ) -> dict[str, Any]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not memo_ids:
         return {"affected": 0}
 
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
 
         placeholders = ",".join(["%s"] * len(memo_ids))
+        # 指定されたIDのうち、ユーザーが所有するもののみ抽出
+        # Filter target memo IDs to only those owned by the user.
         ownership_sql = f"""
             SELECT id FROM memo_entries
             WHERE user_id = %s AND id IN ({placeholders})
@@ -617,6 +643,8 @@ def bulk_action(
         owned_ph = ",".join(["%s"] * len(owned_ids))
         affected = 0
 
+        # 各アクションに対応するSQLの実行
+        # Execute the specified bulk action.
         if action == "delete":
             cursor.execute(
                 f"DELETE FROM memo_entries WHERE id IN ({owned_ph})",
@@ -648,6 +676,8 @@ def bulk_action(
             )
             affected = max(cursor.rowcount, 0)
         elif action == "set_collection" and collection_id is not None:
+            # コレクションの所有者検証
+            # Verify collection owner.
             cursor.execute(
                 "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",
                 (collection_id, user_id),
@@ -674,13 +704,11 @@ def bulk_action(
             connection.close()
 
 
-# 日本語: fetch collections の取得処理を担当します。
-# English: Handle fetching for fetch collections.
+# 所有するコレクションの一覧および各所属メモ数を取得する関数
+# Fetch all memo collections of a user including active memo count in each.
 def fetch_collections(user_id: int) -> list[dict[str, Any]]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -715,13 +743,11 @@ def fetch_collections(user_id: int) -> list[dict[str, Any]]:
             connection.close()
 
 
-# 日本語: insert collection の登録処理を担当します。
-# English: Handle inserting for insert collection.
+# コレクションを新規作成してDBに挿入する関数
+# Create and insert a new memo collection.
 def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -752,13 +778,11 @@ def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
             connection.close()
 
 
-# 日本語: update collection の更新処理を担当します。
-# English: Handle updating for update collection.
+# コレクションの名前または色情報を更新する関数
+# Update collection attributes (name and/or color).
 def update_collection(user_id: int, collection_id: int, name: str | None, color: str | None) -> dict[str, Any]:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -785,6 +809,8 @@ def update_collection(user_id: int, collection_id: int, name: str | None, color:
         row = cursor.fetchone()
         connection.commit()
 
+        # 所属する有効なメモの総数をカウント
+        # Count non-archived memos currently in this collection.
         count_cur = connection.cursor(dictionary=True)
         try:
             count_cur.execute(
@@ -810,13 +836,11 @@ def update_collection(user_id: int, collection_id: int, name: str | None, color:
             connection.close()
 
 
-# 日本語: delete collection の削除処理を担当します。
-# English: Handle deleting for delete collection.
+# コレクションを削除する関数
+# Delete a memo collection.
 def delete_collection(user_id: int, collection_id: int) -> None:
     connection = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()

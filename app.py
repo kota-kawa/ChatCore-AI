@@ -63,34 +63,32 @@ same_site = get_session_same_site()
 https_only = is_production_env()
 
 
-# 定期的にエフェメラル（一時的）チャットをクリーンアップするバックグラウンドタスク
-# A background task to periodically clean up ephemeral chats.
-# 日本語: periodic cleanup に関する処理の入口です。
-# English: Entry point for logic related to periodic cleanup.
+# 一時的なチャットデータを定期的にクリーンアップするバックグラウンドタスク
+# A background task to periodically clean up ephemeral chat data
 def periodic_cleanup(stop_event: threading.Event) -> None:
-    # 日本語: 条件が満たされている間、同じ処理を継続します。
-    # English: Continue the same work while the condition remains true.
+    # 停止イベントがセットされるまでループを実行
+    # Run the loop until the stop event is set
     while not stop_event.is_set():
         try:
+            # 一時チャットの削除処理を呼び出す
+            # Call the handler to delete ephemeral chats
             cleanup_ephemeral_chats()
         except Exception:
             logger.exception("Failed to clean up ephemeral chats.")
-        # 停止シグナルまで定期的にエフェメラルチャットをクリーンアップする
-        # Keep cleaning ephemeral chats periodically until stop is requested.
+        # 100分（6000秒）待機するか、停止イベントの発生を待つ
+        # Wait for 100 minutes (6000 seconds) or until the stop event is signaled
         stop_event.wait(timeout=6000)
 
 
 # アプリケーションの起動時とシャットダウン時のライフサイクルイベントを管理する
 # Manage startup and shutdown lifecycle events of the FastAPI application.
-# 日本語: lifespan に関する処理の入口です。
-# English: Entry point for logic related to lifespan.
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
-    # 起動時にデフォルトタスクを投入する（未投入分のみ）
-    # Seed default tasks on startup (insert only missing rows).
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 起動時の処理: デフォルトタスクや初期プロンプトのDB登録
+    # Startup processing: Seeding default tasks and initial shared prompts
     try:
+        # デフォルトタスクの初期データをデータベースに投入する（未投入分のみ）
+        # Seed default tasks into the database (insert only missing rows)
         inserted = ensure_default_tasks_seeded()
         if inserted > 0:
             logger.info("Seeded %s default tasks.", inserted)
@@ -98,11 +96,9 @@ async def lifespan(app_instance: FastAPI):
         logger.exception("Failed to seed default tasks.")
         raise
 
-    # 起動時に共有サンプルプロンプトを投入する（未投入分のみ）
-    # Seed sample shared prompts on startup (insert only missing rows).
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
+        # 共有の初期プロンプトデータをデータベースに投入する（未投入分のみ）
+        # Seed sample shared prompts into the database (insert only missing rows)
         inserted = ensure_default_shared_prompts()
         if inserted > 0:
             logger.info("Seeded %s sample shared prompts.", inserted)
@@ -110,40 +106,67 @@ async def lifespan(app_instance: FastAPI):
         logger.exception("Failed to seed sample shared prompts.")
         raise
 
+    # クリーンアップタスク用の停止シグナルイベントを作成
+    # Create a stop signal event for the periodic cleanup task
     cleanup_stop_event = threading.Event()
+    # バックグラウンドスレッドで一時チャットのクリーンアップを開始
+    # Start the ephemeral chat cleanup task in a background thread
     cleanup_future = submit_background_task(periodic_cleanup, cleanup_stop_event)
 
     try:
+        # アプリケーションが実行中の状態となる
+        # Application runs and serves requests
         yield
     finally:
+        # シャットダウン時の処理: 各種リソースやスレッドの安全なクリーンアップ
+        # Shutdown processing: Safe cleanup of active resources and worker threads
         shutdown_wait_safe = True
+        
+        # チャット生成サービスのインメモリ状態をリセットし、実行中のジョブをキャンセルする
+        # Reset in-memory state of the chat generation service and cancel running jobs
         chat_generation_service = getattr(app_instance.state, "chat_generation_service", None)
         if isinstance(chat_generation_service, ChatGenerationService):
             chat_generation_service.reset_in_memory_state(cancel_running=True)
+            # ジョブが正常に終了するのを最大5秒待機する
+            # Wait up to 5 seconds for active generation jobs to finish
             jobs_stopped = chat_generation_service.wait_for_running_jobs(timeout=5.0)
             if not jobs_stopped:
                 shutdown_wait_safe = False
                 logger.warning("Timed out while waiting for chat generation jobs to finish.")
+        
+        # バックグラウンドのクリーンアップタスクを停止する
+        # Stop the background cleanup task
         cleanup_stop_event.set()
         try:
+            # クリーンアップタスクのスレッド終了を最大5秒待機する
+            # Wait up to 5 seconds for the cleanup task thread to exit
             cleanup_future.result(timeout=5.0)
         except FutureTimeoutError:
             shutdown_wait_safe = False
             logger.warning("Timed out while waiting for periodic cleanup to stop.")
         except Exception:
             logger.exception("Periodic cleanup worker exited with an unexpected error.")
+        
+        # バックグラウンドタスク実行用のスレッドプールをシャットダウンする
+        # Shutdown the background task executor pool
         shutdown_background_executor(
             wait=shutdown_wait_safe,
             cancel_futures=not shutdown_wait_safe,
         )
+        # データベース接続プールを閉じる
+        # Close the database connection pool
         close_db_pool()
 
 
+# FastAPIアプリケーションの初期化とサービスの登録
+# Initialize FastAPI application and register global services
 app = FastAPI(lifespan=lifespan)
 app.state.auth_limit_service = AuthLimitService()
 app.state.llm_daily_limit_service = LlmDailyLimitService()
 app.state.chat_generation_service = ChatGenerationService()
 
+# セッション管理、コンテキスト管理、セキュリティヘッダー付与用のミドルウェアを設定
+# Register middlewares for session handling, request context, and security headers
 app.add_middleware(
     PermanentSessionMiddleware,
     secret_key=secret_key,
@@ -155,35 +178,37 @@ app.add_middleware(
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
+# ミドルウェア設定値をアプリケーション状態に保存
+# Store session settings in the application state
 app.state.session_secret = secret_key
 app.state.session_cookie = "session"
 
 
 # 新しいCSRFトークンを生成、または既存のトークンを取得してクライアントに返却する
 # Generate a new CSRF token or retrieve an existing one, then return it to the client.
-# 日本語: issue csrf token に関する処理の入口です。
-# English: Entry point for logic related to issue csrf token.
 @app.get("/api/csrf-token")
 async def issue_csrf_token(request: Request):
+    # CSRFトークンを取得、または新規生成してJSONで返却
+    # Retrieve or generate CSRF token and return as JSON
     token = get_or_create_csrf_token(request)
     return jsonify({"csrf_token": token})
 
 
 # アプリケーションの生存状態（Liveness）を確認するためのエンドポイント
 # Endpoint for checking the liveness status of the application.
-# 日本語: healthz に関する処理の入口です。
-# English: Entry point for logic related to healthz.
 @app.get("/healthz")
 async def healthz():
+    # 生存状態チェック結果をJSONで返却
+    # Return the liveness check result as JSON
     return jsonify(get_liveness_status())
 
 
 # アプリケーションの準備状態（Readiness）を確認するためのエンドポイント
 # Endpoint for checking the readiness status of the application.
-# 日本語: readyz に関する処理の入口です。
-# English: Entry point for logic related to readyz.
 @app.get("/readyz")
 async def readyz():
+    # 接続先DBや各種サービスのステータスを含む準備状態をJSONで返却
+    # Return the readiness check results and corresponding HTTP status code
     payload, status_code = get_readiness_status()
     return jsonify(payload, status_code=status_code)
 
@@ -215,10 +240,10 @@ app.include_router(memo_bp)
 
 # キャッチされなかった例外を処理し、安全なエラーレスポンスを返却するグローバル例外ハンドラー
 # Global exception handler to catch unhandled exceptions and return a safe error response.
-# 日本語: unhandled exception handler に関する処理の入口です。
-# English: Entry point for logic related to unhandled exception handler.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    # エラー内容をログ出力し、一般的なエラーメッセージを返却
+    # Log the full exception trace and return a generic internal error message
     logger.exception(
         "Unhandled exception on %s %s",
         request.method,
@@ -228,8 +253,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return jsonify({"error": DEFAULT_INTERNAL_ERROR_MESSAGE}, status_code=500)
 
 
+# アプリケーションを直接実行する場合のエントリーポイント
+# Entry point when starting the application script directly
 if __name__ == "__main__":
     import uvicorn
 
+    # ポート番号を取得し、Uvicornサーバーを起動
+    # Get port configuration from environment variables and start the Uvicorn server
     port = int(os.getenv("PORT", "5004"))
     uvicorn.run("app:app", host="0.0.0.0", port=port)

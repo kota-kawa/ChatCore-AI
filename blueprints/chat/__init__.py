@@ -18,66 +18,64 @@ ephemeral_store = EphemeralChatStore(EXPIRATION_TIME)
 
 # セッションIDを取得/生成するヘルパー関数
 # Helper to get or create session ID for guest chat isolation.
-# 日本語: get session id の取得処理を担当します。
-# English: Handle fetching for get session id.
 def get_session_id(session: dict) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # セッションIDが無い場合、UUIDで新規生成してセッションに設定
+    # If session ID does not exist, generate a new UUID and store it in session.
     if "sid" not in session:
         session["sid"] = str(uuid.uuid4())
     return session["sid"]
 
 
-# 日本語: get guest room ids の取得処理を担当します。
-# English: Handle fetching for get guest room ids.
+# セッションに登録されたゲスト用のチャットルームID一覧を取得する関数
+# Retrieve the list of guest chat room IDs stored in the session.
 def get_guest_room_ids(session: dict) -> list[str]:
     raw_room_ids = session.get(GUEST_ROOM_IDS_SESSION_KEY)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(raw_room_ids, list):
         return []
+    # 有効な文字列型のルームIDのみフィルタリングして返却
+    # Filter and return only non-empty string room IDs.
     return [room_id for room_id in raw_room_ids if isinstance(room_id, str) and room_id]
 
 
-# 日本語: register guest room に関する処理の入口です。
-# English: Entry point for logic related to register guest room.
+# ゲスト用ルームIDをセッションに登録する関数
+# Register a guest room ID in the session.
 def register_guest_room(session: dict, room_id: str) -> None:
     room_ids = get_guest_room_ids(session)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if room_id in room_ids:
         return
+    # ルームIDリストの末尾に追加
+    # Append the room ID to the list.
     session[GUEST_ROOM_IDS_SESSION_KEY] = [*room_ids, room_id]
 
 
-# 日本語: unregister guest room に関する処理の入口です。
-# English: Entry point for logic related to unregister guest room.
+# ゲスト用ルームIDをセッションから登録解除する関数
+# Unregister/remove a guest room ID from the session.
 def unregister_guest_room(session: dict, room_id: str) -> None:
+    # 指定IDを除いた新規リストを作成
+    # Construct a new list excluding the targeted room ID.
     room_ids = [existing_room_id for existing_room_id in get_guest_room_ids(session) if existing_room_id != room_id]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if room_ids:
         session[GUEST_ROOM_IDS_SESSION_KEY] = room_ids
         return
+    # 空になった場合はキーごと削除
+    # If the list is empty, clear the session key.
     session.pop(GUEST_ROOM_IDS_SESSION_KEY, None)
 
 
-# 日本語: guest room belongs to session に関する処理の入口です。
-# English: Entry point for logic related to guest room belongs to session.
+# 指定されたルームIDがセッションのゲストルーム一覧に含まれているか確認する関数
+# Verify whether the specified room ID belongs to the guest's session.
 def guest_room_belongs_to_session(session: dict, room_id: str) -> bool:
     return room_id in get_guest_room_ids(session)
 
 
-# 日本語: get temporary user store key の取得処理を担当します。
-# English: Handle fetching for get temporary user store key.
+# ゲスト/仮ユーザーのデータストアキーを取得する関数
+# Generate a storage lookup key for a temporary/guest user.
 def get_temporary_user_store_key(user_id: int) -> str:
     return f"temporary-user:{user_id}"
 
 
-# エフェメラルチャットの期限切れデータを掃除する
+# エフェメラルチャットの期限切れデータを掃除する関数
 # Clean up expired data from the ephemeral chat store.
-# 日本語: cleanup ephemeral chats に関する処理の入口です。
-# English: Entry point for logic related to cleanup ephemeral chats.
 def cleanup_ephemeral_chats():
     ephemeral_store.cleanup()
 

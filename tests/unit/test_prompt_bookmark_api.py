@@ -12,8 +12,8 @@ from blueprints.prompt_share.prompt_share_api import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
+# ブックマーク操作のAPIテスト用のHTTPリクエストを構築します。
+# Build a mock HTTP request for testing prompt bookmark API endpoints.
 def make_request(method, path, payload, session=None):
     return build_request(
         method=method,
@@ -23,11 +23,11 @@ def make_request(method, path, payload, session=None):
     )
 
 
-# 日本語: PromptBookmarkApiTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptBookmarkApiTestCase.
+# プロンプトのブックマーク追加・解除、マイタスク（保存）追加機能のAPIエンドポイントをテストするクラス。
+# Test class to check API endpoints for prompt bookmarking, unbookmarking, and adding to my tasks.
 class PromptBookmarkApiTestCase(unittest.TestCase):
-    # 日本語: test add bookmark uses prompt id without requiring content のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add bookmark uses prompt id without requiring content.
+    # プロンプトのブックマーク追加が、余分なコンテンツデータを要求せずprompt_idのみで処理できることを検証します。
+    # Verify that adding a bookmark only requires prompt_id and succeeds without extra payload fields.
     def test_add_bookmark_uses_prompt_id_without_requiring_content(self):
         request = make_request(
             "POST",
@@ -36,8 +36,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
             session={"user_id": 5},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ブックマーク追加ヘルパーの戻り値をモック
+        # Mock the helper response for adding a bookmark
         with patch(
             "blueprints.prompt_share.prompt_share_api._add_bookmark_for_user",
             return_value=({"message": "ブックマークが保存されました。"}, 201),
@@ -47,8 +47,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         mock_add.assert_called_once_with(5, 10)
 
-    # 日本語: test add bookmark rejects missing prompt id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add bookmark rejects missing prompt id.
+    # prompt_idが不足しているブックマーク追加要求が400エラーで拒否されることを検証します。
+    # Verify that bookmark addition is rejected with a 400 error when prompt_id is missing.
     def test_add_bookmark_rejects_missing_prompt_id(self):
         request = make_request(
             "POST",
@@ -57,8 +57,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
             session={"user_id": 5},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 不正なリクエストのため追加処理が呼ばれないことをモックで確認
+        # Verify that the DB helper is not called for invalid request
         with patch("blueprints.prompt_share.prompt_share_api._add_bookmark_for_user") as mock_add:
             response = asyncio.run(add_bookmark(request))
 
@@ -67,8 +67,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "必要なフィールドが不足しています")
         mock_add.assert_not_called()
 
-    # 日本語: test remove bookmark uses prompt id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test remove bookmark uses prompt id.
+    # ブックマークの削除（解除）が、prompt_idに基づいて正常に処理されることを検証します。
+    # Verify that removing a bookmark correctly processes using the provided prompt_id.
     def test_remove_bookmark_uses_prompt_id(self):
         request = make_request(
             "DELETE",
@@ -77,8 +77,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
             session={"user_id": 5},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ブックマーク削除処理をモック
+        # Mock the bookmark removal helper
         with patch(
             "blueprints.prompt_share.prompt_share_api._remove_bookmark_for_user",
             return_value=1,
@@ -90,8 +90,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
         self.assertFalse(payload["bookmarked"])
         mock_remove.assert_called_once_with(5, 10)
 
-    # 日本語: test add prompt as task uses separate endpoint のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add prompt as task uses separate endpoint.
+    # 共有プロンプトを「マイタスク」として追加する処理が、専用のエンドポイントを通じて実行できることを検証します。
+    # Verify that adding a prompt as a task goes through the dedicated task-creation endpoint.
     def test_add_prompt_as_task_uses_separate_endpoint(self):
         request = make_request(
             "POST",
@@ -100,8 +100,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
             session={"user_id": 5},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # タスク追加ヘルパーの戻り値をモック
+        # Mock the helper response for adding a prompt as a task
         with patch(
             "blueprints.prompt_share.prompt_share_api._add_prompt_as_task_for_user",
             return_value=({"message": "タスクとして追加しました。"}, 201),
@@ -111,8 +111,8 @@ class PromptBookmarkApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         mock_add.assert_called_once_with(5, 10)
 
-    # 日本語: test compose task prompt template keeps skill body and script のテスト検証を担当します。
-    # English: Handle verifying test behavior for test compose task prompt template keeps skill body and script.
+    # スキル型プロンプトからタスク用テンプレートを生成する際、説明文やPythonスクリプトが欠落せず維持されることを検証します。
+    # Verify that composing a task template from a skill-type prompt preserves both description markdown and Python script.
     def test_compose_task_prompt_template_keeps_skill_body_and_script(self):
         template = _compose_task_prompt_template(
             {

@@ -8,11 +8,11 @@ from services.default_shared_prompts import (
 from tests.helpers.db_helpers import TransactionTrackingConnection
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# デフォルト共有プロンプト作成処理をテストするための疑似DBカーソルクラス。
+# Mock database cursor class for testing default shared prompt insertion logic.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, *, owner_id=None, existing_prompt_titles=None):
         self.owner_id = owner_id
         self.existing_prompt_titles = set(existing_prompt_titles or [])
@@ -22,30 +22,34 @@ class FakeCursor:
         self._fetchall_result = None
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、テーブルのデータ状態をシミュレートします。
+    # Execute a query and simulate the database tables state.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed_queries.append((normalized, params))
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 管理者ユーザー（所有者）IDの検索をシミュレート
+        # Simulate lookup for admin user (owner) ID
         if "SELECT id FROM users WHERE email = %s" in normalized:
             self._fetchone_result = (self.owner_id,) if self.owner_id is not None else None
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 管理者ユーザーの新規作成をシミュレート
+        # Simulate inserting a new admin user if not exists
         if "INSERT INTO users" in normalized and "RETURNING id" in normalized:
             self.owner_id = 999
             self._fetchone_result = (self.owner_id,)
             return
 
+        # 既存プロンプトのタイトル重複チェックをシミュレート
+        # Simulate check for existing prompt titles to avoid duplicate insertions
         if "SELECT title FROM prompts" in normalized and "title IN" in normalized:
             titles = params[1:]
             self._fetchall_result = [(title,) for title in titles if title in self.existing_prompt_titles]
             return
 
+        # プロンプトの新規登録をシミュレート
+        # Simulate inserting a new prompt
         if "INSERT INTO prompts" in normalized:
             title = params[1]
             self.inserted_prompts.append(title)
@@ -55,37 +59,37 @@ class FakeCursor:
 
         self._fetchone_result = None
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # 1レコードの結果を取得します。
+    # Fetch a single query result.
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
         return result
 
-    # 日本語: fetchall に関する処理の入口です。
-    # English: Entry point for logic related to fetchall.
+    # 全ての結果を取得します。
+    # Fetch all query results.
     def fetchall(self):
         result = self._fetchall_result or []
         self._fetchall_result = None
         return result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: DefaultSharedPromptsTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to DefaultSharedPromptsTestCase.
+# システム標準のデフォルト共有プロンプトが存在しない場合に自動挿入され、存在する場合はスキップされるかをテストするクラス。
+# Test class to check that default shared prompts are auto-inserted if missing, and skipped if they already exist.
 class DefaultSharedPromptsTestCase(unittest.TestCase):
-    # 日本語: test inserts samples when they are missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test inserts samples when they are missing.
+    # デフォルト共有プロンプトが存在しないとき、データベースに不足しているすべてのプロンプトが挿入されることを検証します。
+    # Verify that all missing default shared prompts are inserted into the database when they are not present.
     def test_inserts_samples_when_they_are_missing(self):
         fake_cursor = FakeCursor()
         fake_conn = TransactionTrackingConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 挿入処理をモックされたDB接続を利用して呼び出し
+        # Call the insertion function using the mocked DB connection
         with patch("services.default_shared_prompts.get_db_connection", return_value=fake_conn):
             inserted = ensure_default_shared_prompts()
 
@@ -101,15 +105,15 @@ class DefaultSharedPromptsTestCase(unittest.TestCase):
             1,
         )
 
-    # 日本語: test skips when all samples already exist のテスト検証を担当します。
-    # English: Handle verifying test behavior for test skips when all samples already exist.
+    # すべてのデフォルト共有プロンプトが既に登録されているとき、挿入処理がスキップされることを検証します。
+    # Verify that the insertion is skipped when all default shared prompts already exist in the database.
     def test_skips_when_all_samples_already_exist(self):
         existing_titles = {prompt["title"] for prompt in DEFAULT_SHARED_PROMPTS}
         fake_cursor = FakeCursor(owner_id=999, existing_prompt_titles=existing_titles)
         fake_conn = TransactionTrackingConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 挿入処理をモックされたDB接続を利用して呼び出し
+        # Call the insertion function using the mocked DB connection
         with patch("services.default_shared_prompts.get_db_connection", return_value=fake_conn):
             inserted = ensure_default_shared_prompts()
 

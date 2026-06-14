@@ -10,6 +10,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
+# リクエストコンテキスト情報を保持するコンテキスト変数
+# Context variables for storing request context information.
 _request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 _request_method_var: ContextVar[str | None] = ContextVar("request_method", default=None)
 _request_path_var: ContextVar[str | None] = ContextVar("request_path", default=None)
@@ -17,8 +19,8 @@ _request_path_var: ContextVar[str | None] = ContextVar("request_path", default=N
 logger = logging.getLogger("chatcore.request")
 
 
-# 日本語: get request context の取得処理を担当します。
-# English: Handle fetching for get request context.
+# 現在のスレッド/コンテキストに紐付けられたリクエストメタデータ（ID、メソッド、パス）を取得する
+# Retrieve the request metadata (ID, method, path) bound to the current context.
 def get_request_context() -> dict[str, str | None]:
     # ContextVar から現在リクエスト情報を取り出す
     # Read current request metadata from ContextVars.
@@ -29,11 +31,11 @@ def get_request_context() -> dict[str, str | None]:
     }
 
 
-# 日本語: RequestContextFilter に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to RequestContextFilter.
+# ログレコードにリクエストコンテキスト情報（Request ID等）を付与するためのログフィルター
+# A logging filter that attaches request context information (such as Request ID) to log records.
 class RequestContextFilter(logging.Filter):
-    # 日本語: filter に関する処理の入口です。
-    # English: Entry point for logic related to filter.
+    # ログレコードをフィルタリングし、リクエストのメタデータを追加する
+    # Filter the log record and inject request metadata into it.
     def filter(self, record: logging.LogRecord) -> bool:
         context = get_request_context()
         # ログ整形時に未設定項目は "-" を入れて欠損を明示する
@@ -44,19 +46,19 @@ class RequestContextFilter(logging.Filter):
         return True
 
 
-# 日本語: RequestContextMiddleware に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to RequestContextMiddleware.
+# リクエストIDやHTTPメソッド、パスを ContextVar に設定し、レスポンスヘッダーにRequest IDを付与するASGIミドルウェア
+# ASGI middleware that stores request ID, HTTP method, and path in ContextVars, and adds the Request ID to response headers.
 class RequestContextMiddleware:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # ミドルウェアインスタンスを初期化する
+    # Initialize the middleware instance.
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    # 日本語: call に関する処理の入口です。
-    # English: Entry point for logic related to call.
+    # リクエストを処理し、コンテキスト変数の設定とクリーンアップを行う
+    # Process the request, setting up and cleaning up context variables.
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # HTTP リクエスト以外（WebSocket や Lifespan 等）の場合は処理をスキップして次のアプリに委譲する
+        # Skip processing and delegate to the next app for non-HTTP scopes (e.g. WebSocket or Lifespan).
         if scope["type"] != "http":
             # HTTP 以外 (websocket/lifespan など) はそのまま委譲する
             # Pass through non-HTTP scopes (websocket/lifespan, etc.).
@@ -76,20 +78,20 @@ class RequestContextMiddleware:
 
         status_code = 500
 
-        # 日本語: send wrapper の送信処理を非同期で担当します。
-        # English: Handle sending for send wrapper asynchronously.
+        # レスポンス送信時にステータスコードをキャプチャし、カスタムヘッダーを挿入するラッパー関数
+        # A wrapper function to capture the status code and inject custom headers when sending the response.
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code
-            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-            # English: Switch the flow according to the current condition.
+            # レスポンス開始メッセージの場合、ステータスコードを取得してヘッダーにRequest-IDを追加する
+            # For HTTP response start messages, extract status code and append Request-ID to the headers.
             if message["type"] == "http.response.start":
                 status_code = int(message["status"])
                 headers = MutableHeaders(scope=message)
                 headers[REQUEST_ID_HEADER] = request_id
             await send(message)
 
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
+        # リクエスト処理を実行し、完了時に所要時間を計測・ログ出力してコンテキスト変数をリセットする
+        # Execute the request handler, log the response duration, and restore context variables upon completion.
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
@@ -109,12 +111,12 @@ class RequestContextMiddleware:
             _request_path_var.reset(path_token)
 
 
-# 日本語: extract request id に関する処理の入口です。
-# English: Entry point for logic related to extract request id.
+# リクエストヘッダーから X-Request-ID ヘッダーの値を抽出する
+# Extract the value of the X-Request-ID header from the request headers.
 def _extract_request_id(scope: Scope) -> str | None:
     headers = scope.get("headers") or []
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 各ヘッダー項目を走査して Request ID ヘッダーを検索する
+    # Iterate through all headers to find the Request ID header.
     for key, value in headers:
         if key.lower() == REQUEST_ID_HEADER.lower().encode("latin-1"):
             try:
@@ -124,3 +126,4 @@ def _extract_request_id(scope: Scope) -> str | None:
             if candidate:
                 return candidate
     return None
+

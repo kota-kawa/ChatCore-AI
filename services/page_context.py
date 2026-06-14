@@ -111,31 +111,31 @@ _PAGE_CONTEXT_PATTERNS = re.compile(
 )
 
 
-# 日本語: is page specific query に関する処理の入口です。
-# English: Entry point for logic related to is page specific query.
+# 日本語: ユーザーのメッセージが「現在のページ」に関連するもの（「この画面」「ここ」など）を指しているか判定します。
+# English: Assess if the query refers to the current page/screen context.
 def is_page_specific_query(query: str) -> bool:
     """ユーザーが今開いているページについて質問しているか判定する。"""
     return bool(_PAGE_CONTEXT_PATTERNS.search(query))
 
 
-# 日本語: is action request に関する処理の入口です。
-# English: Entry point for logic related to is action request.
+# 日本語: ユーザーのメッセージが画面の代理操作（「クリックして」「入力して」など）を依頼しているか判定します。
+# English: Assess if the query requests automation actions like clicking or typing.
 def is_action_request(query: str) -> bool:
     """ユーザーがページ上での操作（クリック・入力等）を依頼しているか判定する。"""
     return bool(_ACTION_REQUEST_PATTERNS.search(query))
 
 
-# 日本語: read file head の読み込み処理を担当します。
-# English: Handle reading for read file head.
+# 日本語: フロントエンドのソースコードファイルを読み込み、行数制限以内で先頭部分を返します。
+# English: Read and return the top lines of a source file up to the specified line limit.
 def _read_file_head(rel_path: str, max_lines: int) -> str:
     """ファイルの先頭 max_lines 行を読み取って返す。"""
     full_path = PROJECT_ROOT / rel_path
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not full_path.exists():
         return ""
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
+    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         lines = full_path.read_text(encoding="utf-8").splitlines()
         head = lines[:max_lines]
@@ -148,17 +148,17 @@ def _read_file_head(rel_path: str, max_lines: int) -> str:
         return ""
 
 
-# 日本語: get page context の取得処理を担当します。
-# English: Handle fetching for get page context.
+# 日本語: 現在のURLパスに対応する画面のソースコードおよびAPI機能カタログを結合したコンテキスト文字列を返します。
+# English: Build a prompt context string containing relevant source code files and capabilities for the current route.
 def get_page_context(pathname: str) -> str:
     """URL パスに対応するページのソースコードを読み取りコンテキスト文字列として返す。"""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not pathname:
         return ""
 
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for pattern, page_label, file_specs in _PAGE_MAP:
         if pattern.search(pathname):
             parts = [

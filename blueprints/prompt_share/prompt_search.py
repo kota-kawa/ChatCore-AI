@@ -8,19 +8,31 @@ from services.db import get_db_connection  # 既存の DB 接続関数を利用
 # Reuse the shared DB connection helper.
 from services.web import jsonify, log_and_internal_server_error
 
+# 検索機能用ルーターの初期化
+# Initialize APIRouter for search.
 search_bp = APIRouter(prefix="/search")
 logger = logging.getLogger(__name__)
+
+# デフォルトの検索開始ページ
+# Default starting page for pagination.
 SEARCH_DEFAULT_PAGE = 1
+
+# 1ページあたりのデフォルト表示件数
+# Default number of items per page.
 SEARCH_DEFAULT_PER_PAGE = 20
+
+# 1ページあたりの最大表示件数制限
+# Upper limit of items allowed per page.
 SEARCH_MAX_PER_PAGE = 100
+
+# 検索可能なプロンプトタイプのセット
+# Set of allowed prompt types for filtering.
 SEARCH_PROMPT_TYPES = {"text", "image", "skill"}
 
 
-# 日本語: parse positive int の解析処理を担当します。
-# English: Handle parsing for parse positive int.
+# クエリパラメータを安全に正の整数値に変換するヘルパー関数
+# Safely parse and convert query parameter to a positive integer.
 def _parse_positive_int(raw_value: str | None, default: int) -> int:
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(str(raw_value or "").strip())
     except (TypeError, ValueError):
@@ -28,25 +40,30 @@ def _parse_positive_int(raw_value: str | None, default: int) -> int:
     return value if value > 0 else default
 
 
-# 日本語: normalize search prompt row の正規化処理を担当します。
-# English: Handle normalizing for normalize search prompt row.
+# 検索結果レコードの各フィールドを標準化・整形するヘルパー関数
+# Normalize and format database row fields for the API response.
 def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt = dict(row)
     created_at = prompt.get("created_at")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # datetime型の日付データをISOフォーマット文字列にシリアライズ
+    # Serialize datetime object to ISO format string.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
+    
+    # プロンプトタイプを小文字正規化
+    # Normalize prompt type format.
     normalized_prompt_type = str(prompt.get("prompt_type") or "").strip().lower()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if normalized_prompt_type in {"image", "skill"}:
         prompt["prompt_type"] = normalized_prompt_type
     else:
         prompt["prompt_type"] = "text"
+        
     prompt["reference_image_url"] = prompt.get("reference_image_url") or None
     prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
     prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
+    
+    # Pythonの真偽値にキャスト
+    # Cast fields to Boolean.
     prompt["liked"] = bool(prompt.get("liked"))
     prompt["bookmarked"] = bool(prompt.get("bookmarked"))
     prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
@@ -54,22 +71,23 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     return prompt
 
 
-# 日本語: normalize prompt type filter の正規化処理を担当します。
-# English: Handle normalizing for normalize prompt type filter.
+# プロンプトタイプフィルターを検証し、許容される値のみに正規化する関数
+# Validate and normalize the prompt type filter value.
 def _normalize_prompt_type_filter(value):
     normalized = str(value or "").strip().lower()
     return normalized if normalized in SEARCH_PROMPT_TYPES else None
 
 
-# 日本語: search public prompts に関する処理の入口です。
-# English: Entry point for logic related to search public prompts.
+# 公開プロンプトの部分一致検索をデータベースクエリとして実行する関数
+# Database lookup function to search public prompts by keywords and optional types.
 def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None):
     # 公開プロンプトを title/content/category/author で部分一致検索する
     # Search public prompts with partial matching across multiple columns.
     page = max(int(page), SEARCH_DEFAULT_PAGE)
     per_page = max(1, min(int(per_page), SEARCH_MAX_PER_PAGE))
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    
+    # 検索クエリが無い場合は空の結果を返す
+    # Return empty response immediately if query is empty.
     if not query:
         return {
             "prompts": [],
@@ -85,15 +103,19 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
 
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         offset = (page - 1) * per_page
+        
+        # プロンプトタイプ指定の検証と追加SQL文の組み立て
+        # Validate and construct optional SQL segments for prompt type filter.
         prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
         select_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
         count_type_condition = "AND COALESCE(prompt_type, 'text') = %s" if prompt_type_filter else ""
+        
+        # 検索結果取得用SQL
+        # SQL query to retrieve matching prompts.
         sql = f"""
             SELECT
               p.id,
@@ -142,6 +164,9 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             LIMIT %s
             OFFSET %s
         """
+        
+        # 総ヒット数取得用SQL
+        # SQL query to get the total hit count.
         count_sql = f"""
             SELECT COUNT(*) AS total
             FROM prompts AS p
@@ -162,10 +187,15 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         if prompt_type_filter:
             count_params.append(prompt_type_filter)
         count_params.extend([like_query, like_query, like_query, like_query])
+        
+        # 件数のカウント実行
+        # Execute counting.
         cursor.execute(count_sql, tuple(count_params))
         count_row = cursor.fetchone() or {}
         total = int(count_row.get("total") or 0)
 
+        # 検索パラメータの構築
+        # Build query arguments list.
         search_params = [
             user_id,
             user_id,
@@ -180,6 +210,9 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             per_page,
             offset,
         ])
+        
+        # 検索結果レコードの取得実行
+        # Execute query retrieval.
         cursor.execute(
             sql,
             tuple(search_params),
@@ -203,8 +236,8 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             conn.close()
 
 
-# 日本語: search prompts に関する処理の入口です。
-# English: Entry point for logic related to search prompts.
+# クエリパラメータに基づいてプロンプトを検索しJSONで返却するエンドポイント
+# Endpoint to search public prompts by query parameter `q` and return JSON.
 @search_bp.get('/prompts', name="search.search_prompts")
 async def search_prompts(request: Request):
     """
@@ -220,9 +253,9 @@ async def search_prompts(request: Request):
     )
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
+        # 非ブロッキングスレッドプールでDB検索処理を実行
+        # Run DB lookup in the blocking thread pool safely.
         payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id, prompt_type)
         return jsonify({"status": "success", **payload})
     except Exception:
