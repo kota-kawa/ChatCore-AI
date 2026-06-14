@@ -3,6 +3,10 @@ import { useCallback, useRef, useState, type Dispatch, type SetStateAction } fro
 import { capUiChatMessages } from "../../lib/chat_page/message_window";
 import type { AttachedFile, ChatRoom, ChatRoomMode, UiChatMessage } from "../../lib/chat_page/types";
 
+/**
+ * ホームページのチャット状態を管理するカスタムフック
+ * Custom hook to manage the chat state of the home page
+ */
 export function useHomePageChatState() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [chatRoomsHasMore, setChatRoomsHasMore] = useState(false);
@@ -11,8 +15,13 @@ export function useHomePageChatState() {
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [currentRoomMode, setCurrentRoomMode] = useState<ChatRoomMode>("normal");
   const [messages, setRawMessages] = useState<UiChatMessage[]>([]);
+  
+  // メッセージのリストを更新し、上限数で切り詰める
+  // Update the messages list and cap it at the maximum limit
   const setMessages = useCallback<Dispatch<SetStateAction<UiChatMessage[]>>>((nextMessages) => {
     setRawMessages((previous) => {
+      // 関数で更新されるか、値で直接更新されるかを判定
+      // Determine if updating via function or direct value
       const resolvedMessages =
         typeof nextMessages === "function"
           ? (nextMessages as (previousMessages: UiChatMessage[]) => UiChatMessage[])(previous)
@@ -20,6 +29,7 @@ export function useHomePageChatState() {
       return capUiChatMessages(resolvedMessages);
     });
   }, []);
+  
   const [chatInput, setChatInput] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);

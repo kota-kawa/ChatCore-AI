@@ -68,6 +68,10 @@ type ErrorPayload = {
   retry_after?: unknown;
 };
 
+/**
+ * AIエージェント用のメッセージIDを生成する
+ * Create a message ID for the AI agent
+ */
 export function createAiAgentMessageId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -75,6 +79,10 @@ export function createAiAgentMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * CSSセレクタ用に文字列をエスケープする
+ * Escape a string for use in a CSS selector
+ */
 export function cssEscape(value: string) {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(value);
@@ -82,11 +90,19 @@ export function cssEscape(value: string) {
   return value.replace(/["\\#.;:[\]()>+~*='|\s]/g, "\\$&");
 }
 
+/**
+ * AIのコンテキスト長を節約するために文字列を切り詰める
+ * Truncate a string to save context length for the AI
+ */
 export function truncateForContext(value: string | null | undefined, maxLength = 80) {
   const normalized = (value || "").replace(/\s+/g, " ").trim();
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
+/**
+ * 要素が画面上に表示されているかどうかを判定する
+ * Check if the element is visible on the screen
+ */
 export function isVisibleElement(element: Element | null) {
   if (!(element instanceof HTMLElement)) return false;
   const rect = element.getBoundingClientRect();
@@ -94,6 +110,10 @@ export function isVisibleElement(element: Element | null) {
   return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
 }
 
+/**
+ * 安全な内部パスかどうかを検証する
+ * Verify if the path is a safe internal path
+ */
 export function isSafeInternalPath(path: string | undefined): path is string {
   if (!path || !path.startsWith("/") || path.startsWith("//")) return false;
   if (/[\u0000-\u001f]/.test(path)) return false;
@@ -180,6 +200,10 @@ export function isUnexpectedAuthRedirect(
   return !AUTH_PATHNAMES.has(expected);
 }
 
+/**
+ * 要素のセレクターを構築する
+ * Build a CSS selector for an element
+ */
 function buildElementSelector(element: Element): string | null {
   const id = element.getAttribute("id");
   if (id) return `#${cssEscape(id)}`;
@@ -197,7 +221,13 @@ function buildElementSelector(element: Element): string | null {
   return null;
 }
 
+/**
+ * 要素が操作可能かつ可視であるか判定する
+ * Check if the element is actionable and visible
+ */
 function isVisibleActionableElement(element: Element) {
+  // モーダル内の要素は除外
+  // Exclude elements inside the global agent modal
   if (element.closest(".global-ai-agent-modal")) return false;
   if (!(element instanceof HTMLElement)) return false;
   if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
@@ -286,6 +316,10 @@ export function isActionStep(value: unknown): value is ActionStep {
   ) && typeof step.description === "string";
 }
 
+/**
+ * SSEブロックをパースしてイベントに変換する
+ * Parse an SSE block into an event
+ */
 export function parseSseBlock(block: string): AiAgentSseEvent | null {
   if (!block.trim()) return null;
   let eventType = "message";
@@ -309,6 +343,10 @@ export function parseSseBlock(block: string): AiAgentSseEvent | null {
   }
 }
 
+/**
+ * SSEストリームを非同期ジェネレーターとして読み込む
+ * Read an SSE stream as an asynchronous generator
+ */
 export async function* readSseStream(response: Response): AsyncGenerator<AiAgentSseEvent> {
   if (!response.body) throw new Error("レスポンスボディがありません。");
   const reader = response.body.getReader();
@@ -334,6 +372,10 @@ export async function* readSseStream(response: Response): AsyncGenerator<AiAgent
   if (trailingEvent) yield trailingEvent;
 }
 
+/**
+ * AIエージェントのHTTPエラーからエラーオブジェクトを生成する
+ * Build an error object from an AI agent HTTP error response
+ */
 export async function buildAiAgentHttpError(response: Response): Promise<Error> {
   let payload: ErrorPayload | null = null;
   try {

@@ -5,26 +5,42 @@ import { STORAGE_KEYS } from "../../scripts/core/constants";
 
 export type HomePageViewState = "setup" | "launching" | "chat";
 
+/**
+ * 保存されたセットアップ情報を読み込む
+ * Read the stored setup information
+ */
 function readStoredSetupInfo() {
   if (typeof window === "undefined") return "";
 
   try {
+    // ローカルストレージからセットアップ情報を取得し、最大長で切り取る
+    // Get setup info from local storage and truncate it to the max length
     return (localStorage.getItem(STORAGE_KEYS.setupInfoDraft) ?? "").slice(0, MAX_SETUP_INFO_LENGTH);
   } catch {
     return "";
   }
 }
 
+/**
+ * 一時モードが有効になっているかどうかを読み込む
+ * Read whether the temporary mode is enabled
+ */
 function readStoredTemporaryModeEnabled() {
   if (typeof window === "undefined") return false;
 
   try {
+    // ローカルストレージから一時モードの設定を取得する
+    // Get the temporary mode setting from local storage
     return localStorage.getItem(STORAGE_KEYS.temporaryModeEnabled) === "1";
   } catch {
     return false;
   }
 }
 
+/**
+ * ホームページのUI状態を管理するカスタムフック
+ * Custom hook to manage the UI state of the home page
+ */
 export function useHomePageUiState() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
@@ -40,20 +56,28 @@ export function useHomePageUiState() {
   const modelSelectRef = useRef<HTMLDivElement | null>(null);
   const chatHeaderModelSelectRef = useRef<HTMLDivElement | null>(null);
 
+  // 選択されたモデルのラベルを取得する
+  // Get the label of the selected model
   const selectedModelLabel = useMemo(() => {
     return MODEL_OPTIONS.find((option) => option.value === selectedModel)?.label ?? MODEL_OPTIONS[0]?.label ?? "";
   }, [selectedModel]);
 
+  // 選択されたモデルの短いラベルを取得する
+  // Get the short label of the selected model
   const selectedModelShortLabel = useMemo(() => {
     return MODEL_OPTIONS.find((option) => option.value === selectedModel)?.shortLabel ?? MODEL_OPTIONS[0]?.shortLabel ?? "";
   }, [selectedModel]);
 
+  // 初回マウント時に保存された設定を読み込む
+  // Load stored settings on initial mount
   useEffect(() => {
     setSetupInfo(readStoredSetupInfo());
     setTemporaryModeEnabled(readStoredTemporaryModeEnabled());
     setStoredSetupStateLoaded(true);
   }, []);
 
+  // セットアップ情報の変更をローカルストレージに保存する
+  // Save setup info changes to local storage
   useEffect(() => {
     if (!storedSetupStateLoaded) return;
 
@@ -64,16 +88,20 @@ export function useHomePageUiState() {
         localStorage.removeItem(STORAGE_KEYS.setupInfoDraft);
       }
     } catch {
+      // ローカルストレージの失敗を無視する
       // ignore localStorage failures
     }
   }, [setupInfo, storedSetupStateLoaded]);
 
+  // 一時モードの変更をローカルストレージに保存する
+  // Save temporary mode changes to local storage
   useEffect(() => {
     if (!storedSetupStateLoaded) return;
 
     try {
       localStorage.setItem(STORAGE_KEYS.temporaryModeEnabled, temporaryModeEnabled ? "1" : "0");
     } catch {
+      // ローカルストレージの失敗を無視する
       // ignore localStorage failures
     }
   }, [storedSetupStateLoaded, temporaryModeEnabled]);
