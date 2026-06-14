@@ -61,9 +61,13 @@ from .routes import (
 )
 
 
+# 日本語: share payload に関する処理の入口です。
+# English: Entry point for logic related to share payload.
 def _share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
     share_token = str(share_state.get("share_token") or "")
     share_url = ""
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if share_token and bool(share_state.get("is_active")):
         share_url = frontend_url(f"/shared/memo/{share_token}")
     return {"status": "success", **share_state, "share_url": share_url}

@@ -26,6 +26,8 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 logger = logging.getLogger(__name__)
 
 
+# 日本語: JsonLogFormatter に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to JsonLogFormatter.
 class JsonLogFormatter(logging.Formatter):
     RESERVED_KEYS = {
         "args",
@@ -56,6 +58,8 @@ class JsonLogFormatter(logging.Formatter):
 
     # ログレコードをJSON文字列形式にフォーマットする
     # Format the log record into a JSON-serialized string.
+    # 日本語: format の整形処理を担当します。
+    # English: Handle formatting for format.
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -72,9 +76,13 @@ class JsonLogFormatter(logging.Formatter):
             for key, value in record.__dict__.items()
             if key not in self.RESERVED_KEYS and not key.startswith("_")
         }
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if extras:
             payload["extra"] = extras
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         if record.stack_info:
@@ -85,8 +93,12 @@ class JsonLogFormatter(logging.Formatter):
 
 # 環境変数から正の整数値を安全に解析し、無効な場合はデフォルト値を返すヘルパー関数
 # Safely parse a positive integer from environment variables or fallback to a default value.
+# 日本語: parse positive int env の解析処理を担当します。
+# English: Handle parsing for parse positive int env.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     raw_value = os.getenv(env_name, str(default_value))
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed_value = int(raw_value)
     except (TypeError, ValueError):
@@ -98,6 +110,8 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
         )
         return default_value
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if parsed_value <= 0:
         logger.warning(
             "Invalid %s value '%s'. Falling back to %s.",
@@ -111,7 +125,11 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
 
 # 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズする
 # Remove and close an existing log handler with the specified name from the root logger.
+# 日本語: replace named handler に関する処理の入口です。
+# English: Entry point for logic related to replace named handler.
 def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> None:
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for existing_handler in list(root_logger.handlers):
         if getattr(existing_handler, "name", "") == handler_name:
             root_logger.removeHandler(existing_handler)
@@ -120,7 +138,11 @@ def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> No
 
 # ログ出力形式の設定（plainかjson）に基づいてフォーマッタを構築する
 # Build a log formatter based on the log output format setting (plain or json).
+# 日本語: build formatter の組み立て処理を担当します。
+# English: Handle building for build formatter.
 def _build_formatter(log_output: str) -> logging.Formatter:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if log_output == "plain":
         return logging.Formatter(LOG_FORMAT)
     return JsonLogFormatter()
@@ -128,6 +150,8 @@ def _build_formatter(log_output: str) -> logging.Formatter:
 
 # ローテーションログファイル用ハンドラ（RotatingFileHandler）を構築する
 # Build a RotatingFileHandler to write logs to a file with size rotation.
+# 日本語: build rotating handler の組み立て処理を担当します。
+# English: Handle building for build rotating handler.
 def _build_rotating_handler(
     *,
     file_path: Path,
@@ -152,6 +176,8 @@ def _build_rotating_handler(
 
 # コンソール（標準出力）用ハンドラ（StreamHandler）を構築する
 # Build a StreamHandler to output logs to the console (stdout/stderr).
+# 日本語: build console handler の組み立て処理を担当します。
+# English: Handle building for build console handler.
 def _build_console_handler(
     *,
     level: int,
@@ -167,6 +193,8 @@ def _build_console_handler(
 
 # 環境変数等に基づいてアプリケーション全体のロギング設定を適用する
 # Apply application-wide logging configuration based on environment variables and defaults.
+# 日本語: configure logging に関する処理の入口です。
+# English: Entry point for logic related to configure logging.
 def configure_logging() -> None:
     log_level_name = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
     resolved_log_level = getattr(logging, log_level_name, logging.INFO)
@@ -176,6 +204,8 @@ def configure_logging() -> None:
     root_logger.setLevel(resolved_log_level)
 
     log_dir = Path(os.getenv("LOG_DIR", DEFAULT_LOG_DIR))
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -188,6 +218,8 @@ def configure_logging() -> None:
     error_log_file = log_dir / os.getenv("ERROR_LOG_FILE", DEFAULT_ERROR_LOG_FILE)
     formatter = _build_formatter(log_output)
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for handler_name in (CONSOLE_HANDLER_NAME, APP_LOG_HANDLER_NAME, ERROR_LOG_HANDLER_NAME):
         _replace_named_handler(root_logger, handler_name)
 

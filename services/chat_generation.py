@@ -56,11 +56,17 @@ _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 
+# 日本語: build streaming parts update の組み立て処理を担当します。
+# English: Handle building for build streaming parts update.
 def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "chatcore-artifact" not in raw_text and "chatcore-buttons" not in raw_text:
         return None
 
     normalized_response = normalize_response_with_artifacts(raw_text, allow_fallback=False)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if normalized_response.validation_errors or not normalized_response.parts:
         return None
 
@@ -73,10 +79,16 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
     }
 
 
+# 日本語: get chat agent max steps の取得処理を担当します。
+# English: Handle fetching for get chat agent max steps.
 def _get_chat_agent_max_steps() -> int:
     raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if raw is None:
         return DEFAULT_CHAT_AGENT_MAX_STEPS
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -84,10 +96,16 @@ def _get_chat_agent_max_steps() -> int:
     return min(max(value, 1), CHAT_AGENT_MAX_STEPS_LIMIT)
 
 
+# 日本語: get llm stream max retries の取得処理を担当します。
+# English: Handle fetching for get llm stream max retries.
 def _get_llm_stream_max_retries() -> int:
     raw = os.environ.get("LLM_STREAM_MAX_RETRIES")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if raw is None:
         return DEFAULT_LLM_STREAM_MAX_RETRIES
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -95,20 +113,30 @@ def _get_llm_stream_max_retries() -> int:
     return max(value, 0)
 
 
+# 日本語: llm stream retry delay に関する処理の入口です。
+# English: Entry point for logic related to llm stream retry delay.
 def _llm_stream_retry_delay(exc: BaseException, attempt: int) -> float:
     # サーバー指定のretry_afterを優先し、なければ指数バックオフ（上限あり）を用いる
     # Prefer server-provided retry_after, otherwise use capped exponential backoff.
     retry_after = getattr(exc, "retry_after_seconds", None)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(retry_after, int) and retry_after > 0:
         return min(float(retry_after), LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
     delay = LLM_STREAM_RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
     return min(delay, LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
 
 
+# 日本語: parse tool calls chunk の解析処理を担当します。
+# English: Handle parsing for parse tool calls chunk.
 def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     stripped = chunk.strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not stripped.startswith("[") or '"function"' not in stripped:
         return None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         loaded = json.loads(stripped)
     except Exception:
@@ -128,12 +156,16 @@ def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     return tool_calls or None
 
 
+# 日本語: normalized search key に関する処理の入口です。
+# English: Entry point for logic related to normalized search key.
 def _normalized_search_key(query: Any, freshness: Any = "") -> tuple[str, str]:
     normalized_query = " ".join(str(query or "").split())
     normalized_freshness = str(freshness or "").strip()
     return (normalized_query.casefold(), normalized_freshness)
 
 
+# 日本語: normalize tool call の正規化処理を担当します。
+# English: Handle normalizing for normalize tool call.
 def _normalize_tool_call(tool_call: dict[str, Any], *, step: int, index: int) -> dict[str, Any]:
     normalized = dict(tool_call)
     function = dict(normalized.get("function") or {})
@@ -145,7 +177,11 @@ def _normalize_tool_call(tool_call: dict[str, Any], *, step: int, index: int) ->
     return normalized
 
 
+# 日本語: tool result message に関する処理の入口です。
+# English: Entry point for logic related to tool result message.
 def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | str) -> dict[str, Any]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(content, str):
         content = json.dumps(content, ensure_ascii=False)
     return {
@@ -156,12 +192,18 @@ def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | st
     }
 
 
+# 日本語: page read trace step に関する処理の入口です。
+# English: Entry point for logic related to page read trace step.
 def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | None:
     # 検索結果から重要なページ本文を取得できた場合に、回答ステップとして可視化する
     # Surface a trace step when full page text was successfully read from result URLs.
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if result is None:
         return None
     read_count = sum(1 for source in result.sources if source.page_text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not read_count:
         return None
     return {
@@ -170,6 +212,8 @@ def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | No
     }
 
 
+# 日本語: web search result tool payload に関する処理の入口です。
+# English: Entry point for logic related to web search result tool payload.
 def _web_search_result_tool_payload(
     result: WebSearchResult,
     *,
@@ -195,11 +239,17 @@ def _web_search_result_tool_payload(
     }
 
 
+# 日本語: ChatGenerationAlreadyRunningError として扱う例外情報を表します。
+# English: Represent exception details handled as ChatGenerationAlreadyRunningError.
 class ChatGenerationAlreadyRunningError(RuntimeError):
     pass
 
 
+# 日本語: ChatGenerationStreamTimeoutError として扱う例外情報を表します。
+# English: Represent exception details handled as ChatGenerationStreamTimeoutError.
 class ChatGenerationStreamTimeoutError(RuntimeError):
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.payload = {
@@ -208,6 +258,8 @@ class ChatGenerationStreamTimeoutError(RuntimeError):
         }
 
 
+# 日本語: ChatGenerationEvent に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatGenerationEvent.
 @dataclass(frozen=True)
 class ChatGenerationEvent:
     sequence_id: int
@@ -215,7 +267,11 @@ class ChatGenerationEvent:
     payload: dict[str, Any]
 
 
+# 日本語: ChatGenerationJob に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatGenerationJob.
 class ChatGenerationJob:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         *,
@@ -244,11 +300,15 @@ class ChatGenerationJob:
         self.finished_at: float | None = None
         self.is_done = False
 
+    # 日本語: persist generated response に関する処理の入口です。
+    # English: Entry point for logic related to persist generated response.
     def _persist_generated_response(
         self,
         response: str,
         message_parts: list[dict[str, Any]] | None,
     ) -> dict[str, Any] | None:
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             signature = inspect.signature(self._persist_response)
             accepts_message_parts = (
@@ -261,26 +321,42 @@ class ChatGenerationJob:
         except (TypeError, ValueError):
             accepts_message_parts = False
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if accepts_message_parts:
             return self._persist_response(response, message_parts=message_parts)
         return self._persist_response(response)
 
+    # 日本語: start に関する処理の入口です。
+    # English: Entry point for logic related to start.
     def start(self) -> None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._future is not None:
             return
         self._future = submit_background_task(self._run)
 
+    # 日本語: cancel に関する処理の入口です。
+    # English: Entry point for logic related to cancel.
     def cancel(self) -> None:
         """生成をキャンセルし、aborted イベントを発行して完了とする."""
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.is_done:
             return
         self._cancelled = True
         self._publish("aborted", {}, done=True)
 
+    # 日本語: wait に関する処理の入口です。
+    # English: Entry point for logic related to wait.
     def wait(self, timeout: float | None = None) -> bool:
         future = self._future
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if future is None:
             return self.is_done
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             future.result(timeout=timeout)
         except TimeoutError:
@@ -289,8 +365,12 @@ class ChatGenerationJob:
             return self.is_done
         return self.is_done
 
+    # 日本語: iter events に関する処理の入口です。
+    # English: Entry point for logic related to iter events.
     def iter_events(self, *, after_sequence_id: int = 0) -> Iterator[ChatGenerationEvent]:
         cursor = 0
+        # 日本語: 条件が満たされている間、同じ処理を継続します。
+        # English: Continue the same work while the condition remains true.
         while True:
             with self._condition:
                 while (
@@ -312,10 +392,14 @@ class ChatGenerationJob:
 
             yield event
 
+    # 日本語: publish に関する処理の入口です。
+    # English: Entry point for logic related to publish.
     def _publish(self, event: str, payload: dict[str, Any], *, done: bool = False) -> None:
         callback: Callable[[], None] | None = None
         event_callback = self._on_event
         published_event: ChatGenerationEvent | None = None
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._condition:
             if self.is_done:
                 return
@@ -330,6 +414,8 @@ class ChatGenerationJob:
             if done:
                 callback = self._mark_done()
             self._condition.notify_all()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if event_callback is not None and published_event is not None:
             try:
                 event_callback(published_event)
@@ -338,16 +424,24 @@ class ChatGenerationJob:
         if callback is not None:
             callback()
 
+    # 日本語: mark done に関する処理の入口です。
+    # English: Entry point for logic related to mark done.
     def _mark_done(self) -> Callable[[], None] | None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.is_done:
             return None
         self.is_done = True
         self.finished_at = time.monotonic()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._on_finished_called or self._on_finished is None:
             return None
         self._on_finished_called = True
         return self._on_finished
 
+    # 日本語: handle error のハンドリング処理を担当します。
+    # English: Handle handling for handle error.
     def _handle_error(
         self,
         message: str,
@@ -357,23 +451,33 @@ class ChatGenerationJob:
     ) -> None:
         self.error_message = message
         self._publish("error", payload, done=True)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not invoke_error_callback or self._on_error is None:
             return
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             self._on_error()
         except Exception:
             logger.exception("Failed to run chat generation error callback.")
 
+    # 日本語: sleep with cancel に関する処理の入口です。
+    # English: Entry point for logic related to sleep with cancel.
     def _sleep_with_cancel(self, delay: float) -> bool:
         # キャンセルを監視しつつ待機し、キャンセルされた場合は True を返す
         # Sleep while watching for cancellation; return True if cancelled.
         deadline = time.monotonic() + max(delay, 0.0)
+        # 日本語: 条件が満たされている間、同じ処理を継続します。
+        # English: Continue the same work while the condition remains true.
         while time.monotonic() < deadline:
             if self._cancelled:
                 return True
             time.sleep(min(0.1, max(deadline - time.monotonic(), 0.0)))
         return self._cancelled
 
+    # 日本語: iter llm stream with retry に関する処理の入口です。
+    # English: Entry point for logic related to iter llm stream with retry.
     def _iter_llm_stream_with_retry(
         self,
         current_messages: list[dict[str, Any]],
@@ -386,6 +490,8 @@ class ChatGenerationJob:
         # been emitted, to avoid duplicated or garbled output.
         max_retries = _get_llm_stream_max_retries()
         attempt = 0
+        # 日本語: 条件が満たされている間、同じ処理を継続します。
+        # English: Continue the same work while the condition remains true.
         while True:
             emitted = False
             try:
@@ -419,6 +525,8 @@ class ChatGenerationJob:
                 if self._sleep_with_cancel(delay):
                     raise
 
+    # 日本語: run の実行処理を担当します。
+    # English: Handle running for run.
     def _run(self) -> None:
         chunks: list[str] = []
         last_streaming_parts_signature: str | None = None
@@ -430,6 +538,8 @@ class ChatGenerationJob:
         max_steps = _get_chat_agent_max_steps()
         step_count = 0
 
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             augmentation = maybe_augment_messages_with_web_search(
                 current_messages,
@@ -809,6 +919,8 @@ class ChatGenerationJob:
             )
             return
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._cancelled:
             return
 
@@ -862,15 +974,25 @@ class ChatGenerationJob:
         self._publish("done", done_payload, done=True)
 
 
+# 日本語: build generation key の組み立て処理を担当します。
+# English: Handle building for build generation key.
 def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: str | None = None) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is not None:
         return f"user:{user_id}:{chat_room_id}"
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if sid is not None:
         return f"guest:{sid}:{chat_room_id}"
     raise ValueError("Either user_id or sid is required to build a generation key.")
 
 
+# 日本語: ChatGenerationService に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatGenerationService.
 class ChatGenerationService:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         *,
@@ -891,20 +1013,32 @@ class ChatGenerationService:
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
 
+    # 日本語: get redis client の取得処理を担当します。
+    # English: Handle fetching for get redis client.
     def _get_redis_client(self) -> Any | None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._redis_client_getter is not None:
             return self._redis_client_getter()
         return get_redis_client()
 
+    # 日本語: active lock key に関する処理の入口です。
+    # English: Entry point for logic related to active lock key.
     def _active_lock_key(self, job_key: str) -> str:
         return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
 
+    # 日本語: event stream key に関する処理の入口です。
+    # English: Entry point for logic related to event stream key.
     def _event_stream_key(self, job_key: str) -> str:
         return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
 
+    # 日本語: event channel name に関する処理の入口です。
+    # English: Entry point for logic related to event channel name.
     def _event_channel_name(self, job_key: str) -> str:
         return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
 
+    # 日本語: serialize event のシリアライズ処理を担当します。
+    # English: Handle serializing for serialize event.
     def _serialize_event(self, event: ChatGenerationEvent) -> str:
         return json.dumps(
             {
@@ -915,11 +1049,17 @@ class ChatGenerationService:
             ensure_ascii=False,
         )
 
+    # 日本語: deserialize event のデシリアライズ処理を担当します。
+    # English: Handle deserializing for deserialize event.
     def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             loaded = json.loads(raw)
         except Exception:
             return None
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not isinstance(loaded, dict):
             return None
         sequence_id = loaded.get("id")
@@ -937,8 +1077,12 @@ class ChatGenerationService:
             payload=payload,
         )
 
+    # 日本語: publish distributed event に関する処理の入口です。
+    # English: Entry point for logic related to publish distributed event.
     def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
         serialized = self._serialize_event(event)
@@ -949,6 +1093,8 @@ class ChatGenerationService:
             self._job_retention_seconds,
             1,
         )
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             pipeline = redis_client.pipeline()
             pipeline.rpush(stream_key, serialized)
@@ -958,6 +1104,8 @@ class ChatGenerationService:
         except Exception:
             logger.exception("Failed to publish chat generation event to Redis.")
 
+    # 日本語: read distributed events の読み込み処理を担当します。
+    # English: Handle reading for read distributed events.
     def _read_distributed_events(
         self,
         job_key: str,
@@ -965,8 +1113,12 @@ class ChatGenerationService:
         after_sequence_id: int = 0,
     ) -> list[ChatGenerationEvent]:
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return []
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             raw_items = redis_client.lrange(self._event_stream_key(job_key), 0, -1)
         except Exception:
@@ -985,13 +1137,19 @@ class ChatGenerationService:
             events.append(event)
         return events
 
+    # 日本語: try acquire active job lock に関する処理の入口です。
+    # English: Entry point for logic related to try acquire active job lock.
     def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return True, None
 
         lock_key = self._active_lock_key(job_key)
         lock_token = uuid.uuid4().hex
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             acquired = redis_client.set(
                 lock_key,
@@ -1009,11 +1167,17 @@ class ChatGenerationService:
             return True, lock_token
         return False, None
 
+    # 日本語: release active job lock に関する処理の入口です。
+    # English: Entry point for logic related to release active job lock.
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not lock_token:
             return
 
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
 
@@ -1030,21 +1194,33 @@ return 0
         except Exception:
             logger.exception("Redis chat generation lock release failed.")
 
+    # 日本語: has distributed active lock に関する処理の入口です。
+    # English: Entry point for logic related to has distributed active lock.
     def _has_distributed_active_lock(self, job_key: str) -> bool:
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return False
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             return bool(redis_client.exists(self._active_lock_key(job_key)))
         except Exception:
             logger.exception("Redis chat generation lock existence check failed.")
             return False
 
+    # 日本語: supports distributed streaming に関する処理の入口です。
+    # English: Entry point for logic related to supports distributed streaming.
     def supports_distributed_streaming(self) -> bool:
         return self._get_redis_client() is not None
 
+    # 日本語: reset in memory state に関する処理の入口です。
+    # English: Entry point for logic related to reset in memory state.
     def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
         running_jobs: list[ChatGenerationJob] = []
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             if cancel_running:
                 running_jobs = [
@@ -1054,13 +1230,21 @@ return 0
                 ]
             self._jobs.clear()
 
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for job in running_jobs:
             job.cancel()
 
+    # 日本語: wait for running jobs に関する処理の入口です。
+    # English: Entry point for logic related to wait for running jobs.
     def wait_for_running_jobs(self, *, timeout: float | None = None) -> bool:
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             running_jobs = [job for job in self._jobs.values() if not job.is_done]
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not running_jobs:
             return True
 
@@ -1076,10 +1260,14 @@ return 0
                 all_done = False
         return all_done
 
+    # 日本語: cleanup expired jobs に関する処理の入口です。
+    # English: Entry point for logic related to cleanup expired jobs.
     def _cleanup_expired_jobs(self, now: float | None = None) -> None:
         current_time = time.monotonic() if now is None else now
         expired_keys: list[str] = []
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             for key, job in self._jobs.items():
                 if not job.is_done or job.finished_at is None:
@@ -1090,31 +1278,47 @@ return 0
             for key in expired_keys:
                 self._jobs.pop(key, None)
 
+    # 日本語: cancel generation job に関する処理の入口です。
+    # English: Entry point for logic related to cancel generation job.
     def cancel_generation_job(self, job_key: str) -> bool:
         """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             job = self._jobs.get(job_key)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if job is None or job.is_done:
             return False
         job.cancel()
         return True
 
+    # 日本語: has active generation に関する処理の入口です。
+    # English: Entry point for logic related to has active generation.
     def has_active_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             job = self._jobs.get(job_key)
             if job is not None:
                 return not job.is_done
         return self._has_distributed_active_lock(job_key)
 
+    # 日本語: has replayable generation に関する処理の入口です。
+    # English: Entry point for logic related to has replayable generation.
     def has_replayable_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             local_job = self._jobs.get(job_key)
             if local_job is not None:
                 return True
 
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return False
         try:
@@ -1123,11 +1327,17 @@ return 0
             logger.exception("Redis chat generation replay-state check failed.")
             return False
 
+    # 日本語: get generation job の取得処理を担当します。
+    # English: Handle fetching for get generation job.
     def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
         self._cleanup_expired_jobs()
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             return self._jobs.get(job_key)
 
+    # 日本語: iter generation events に関する処理の入口です。
+    # English: Entry point for logic related to iter generation events.
     def iter_generation_events(
         self,
         job_key: str,
@@ -1135,11 +1345,15 @@ return 0
         after_sequence_id: int = 0,
     ) -> Iterator[ChatGenerationEvent]:
         job = self.get_generation_job(job_key)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if job is not None:
             yield from job.iter_events(after_sequence_id=after_sequence_id)
             return
 
         redis_client = self._get_redis_client()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
 
@@ -1222,6 +1436,8 @@ return 0
             except Exception:
                 logger.exception("Failed to close Redis pubsub for chat generation stream.")
 
+    # 日本語: start generation job に関する処理の入口です。
+    # English: Entry point for logic related to start generation job.
     def start_generation_job(
         self,
         job_key: str,
@@ -1234,9 +1450,13 @@ return 0
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not acquired_lock:
             raise ChatGenerationAlreadyRunningError(job_key)
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             existing_job = self._jobs.get(job_key)
             if existing_job is not None and not existing_job.is_done:
@@ -1266,6 +1486,8 @@ return 0
             raise
         return job
 
+    # 日本語: finalize job に関する処理の入口です。
+    # English: Entry point for logic related to finalize job.
     def _finalize_job(
         self,
         job_key: str,
@@ -1274,8 +1496,12 @@ return 0
         on_finished: Callable[[], None] | None = None,
     ) -> None:
         self._release_active_job_lock(job_key, lock_token)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if on_finished is None:
             return
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             on_finished()
         except Exception:
@@ -1285,7 +1511,11 @@ return 0
 _default_chat_generation_service = ChatGenerationService()
 
 
+# 日本語: get chat generation service の取得処理を担当します。
+# English: Handle fetching for get chat generation service.
 def get_chat_generation_service(request: Request = None) -> ChatGenerationService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if request is not None:
         app = request.scope.get("app")
         state = getattr(app, "state", None)
@@ -1295,10 +1525,14 @@ def get_chat_generation_service(request: Request = None) -> ChatGenerationServic
     return _default_chat_generation_service
 
 
+# 日本語: clear generation job state の初期化処理を担当します。
+# English: Handle clearing for clear generation job state.
 def clear_generation_job_state(*, cancel_running: bool = False) -> None:
     get_chat_generation_service().reset_in_memory_state(cancel_running=cancel_running)
 
 
+# 日本語: cancel generation job に関する処理の入口です。
+# English: Entry point for logic related to cancel generation job.
 def cancel_generation_job(
     job_key: str,
     *,
@@ -1312,6 +1546,8 @@ def cancel_generation_job(
     return target.cancel_generation_job(job_key)
 
 
+# 日本語: has active generation に関する処理の入口です。
+# English: Entry point for logic related to has active generation.
 def has_active_generation(
     job_key: str,
     *,
@@ -1325,6 +1561,8 @@ def has_active_generation(
     return target.has_active_generation(job_key)
 
 
+# 日本語: get generation job の取得処理を担当します。
+# English: Handle fetching for get generation job.
 def get_generation_job(
     job_key: str,
     *,
@@ -1338,6 +1576,8 @@ def get_generation_job(
     return target.get_generation_job(job_key)
 
 
+# 日本語: has replayable generation に関する処理の入口です。
+# English: Entry point for logic related to has replayable generation.
 def has_replayable_generation(
     job_key: str,
     *,
@@ -1351,6 +1591,8 @@ def has_replayable_generation(
     return target.has_replayable_generation(job_key)
 
 
+# 日本語: iter generation events に関する処理の入口です。
+# English: Entry point for logic related to iter generation events.
 def iter_generation_events(
     job_key: str,
     *,
@@ -1368,6 +1610,8 @@ def iter_generation_events(
     )
 
 
+# 日本語: start generation job に関する処理の入口です。
+# English: Entry point for logic related to start generation job.
 def start_generation_job(
     job_key: str,
     *,

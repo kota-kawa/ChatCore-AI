@@ -18,12 +18,16 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
 try:
     from google.auth.exceptions import GoogleAuthError
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    # 日本語: GoogleAuthError として扱う例外情報を表します。
+    # English: Represent exception details handled as GoogleAuthError.
     class GoogleAuthError(Exception):
         pass
 
 try:
     from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
+    # 日本語: OAuth2Error として扱う例外情報を表します。
+    # English: Represent exception details handled as OAuth2Error.
     class OAuth2Error(Exception):
         pass
 
@@ -158,6 +162,8 @@ GOOGLE_NEXT_PATH_SESSION_KEY = "google_login_next_path"
 AUTH_FAILURE_STATUS_CODE = 401
 
 
+# 日本語: clear login verification session の初期化処理を担当します。
+# English: Handle clearing for clear login verification session.
 def _clear_login_verification_session(session: dict[str, Any]) -> None:
     session.pop("login_verification_code", None)
     session.pop("login_temp_user_id", None)
@@ -166,6 +172,8 @@ def _clear_login_verification_session(session: dict[str, Any]) -> None:
     session.pop("login_verification_code_attempts", None)
 
 
+# 日本語: google client config に関する処理の入口です。
+# English: Entry point for logic related to google client config.
 def _google_client_config() -> dict[str, Any]:
     return {
         "web": {
@@ -181,13 +189,19 @@ def _google_client_config() -> dict[str, Any]:
     }
 
 
+# 日本語: validate google oauth settings の検証処理を担当します。
+# English: Handle validating for validate google oauth settings.
 def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None:
     web_config = client_config.get("web") if isinstance(client_config, dict) else None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(web_config, dict):
         return "Google OAuth client config is invalid."
 
     missing_keys: list[str] = []
     client_id = web_config.get("client_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(client_id, str) or not client_id:
         missing_keys.append("GOOGLE_CLIENT_ID")
 
@@ -201,63 +215,93 @@ def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None
     return None
 
 
+# 日本語: clear google oauth session の初期化処理を担当します。
+# English: Handle clearing for clear google oauth session.
 def _clear_google_oauth_session(session: dict[str, Any]) -> None:
     session.pop("google_oauth_state", None)
     session.pop("google_redirect_uri", None)
     session.pop(GOOGLE_NEXT_PATH_SESSION_KEY, None)
 
 
+# 日本語: clear google oauth state の初期化処理を担当します。
+# English: Handle clearing for clear google oauth state.
 def _clear_google_oauth_state(session: dict[str, Any]) -> None:
     session.pop("google_oauth_state", None)
     session.pop("google_redirect_uri", None)
 
 
+# 日本語: google login unavailable response に関する処理の入口です。
+# English: Entry point for logic related to google login unavailable response.
 def _google_login_unavailable_response() -> Any:
     return jsonify({"error": GOOGLE_LOGIN_UNAVAILABLE_ERROR}, status_code=503)
 
 
+# 日本語: passkey unavailable response に関する処理の入口です。
+# English: Entry point for logic related to passkey unavailable response.
 def _passkey_unavailable_response() -> Any:
     return jsonify({"status": "fail", "error": PASSKEY_UNAVAILABLE_ERROR}, status_code=503)
 
 
+# 日本語: resolve auth limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve auth limit service.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
 
 
+# 日本語: resolve llm daily limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve llm daily limit service.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
 
+# 日本語: user id from session に関する処理の入口です。
+# English: Entry point for logic related to user id from session.
 def _user_id_from_session(session: dict[str, Any]) -> int | None:
     user_id = session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(user_id, int):
         return user_id
     return None
 
 
+# 日本語: copy default tasks after login に関する処理の入口です。
+# English: Entry point for logic related to copy default tasks after login.
 async def _copy_default_tasks_after_login(user_id: int, *, context: str) -> None:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         await run_blocking(copy_default_tasks_for_user, user_id)
     except Exception:
         logger.exception("%s: failed to copy default tasks for user %s", context, user_id)
 
 
+# 日本語: build absolute url from reference の組み立て処理を担当します。
+# English: Handle building for build absolute url from reference.
 def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | None:
     parts = urlsplit(reference_url)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not parts.scheme or not parts.netloc:
         return None
 
     target_parts = urlsplit(path)
     normalized_path = target_parts.path if target_parts.path.startswith("/") else f"/{target_parts.path}"
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not target_parts.path:
         normalized_path = "/"
     return urlunsplit(
@@ -271,6 +315,8 @@ def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | N
     )
 
 
+# 日本語: append query params に関する処理の入口です。
+# English: Entry point for logic related to append query params.
 def _append_query_params(url: str, **params: str) -> str:
     parts = urlsplit(url)
     existing_params = dict(parse_qsl(parts.query, keep_blank_values=True))
@@ -286,6 +332,8 @@ def _append_query_params(url: str, **params: str) -> str:
     )
 
 
+# 日本語: google callback redirect target に関する処理の入口です。
+# English: Entry point for logic related to google callback redirect target.
 def _google_callback_redirect_target(
     request: Request,
     path: str,
@@ -300,6 +348,8 @@ def _google_callback_redirect_target(
         configured_redirect_uri or None,
         str(request.url),
     )
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for reference in references:
         if not isinstance(reference, str) or not reference:
             continue
@@ -309,13 +359,19 @@ def _google_callback_redirect_target(
     return frontend_url(path)
 
 
+# 日本語: google next path に関する処理の入口です。
+# English: Entry point for logic related to google next path.
 def _google_next_path(session: dict[str, Any]) -> str | None:
     next_path = session.get(GOOGLE_NEXT_PATH_SESSION_KEY)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(next_path, str) or not next_path:
         return None
     return sanitize_next_path(next_path, default="/")
 
 
+# 日本語: redirect to login after google failure に関する処理の入口です。
+# English: Entry point for logic related to redirect to login after google failure.
 def _redirect_to_login_after_google_failure(
     request: Request,
     session: dict[str, Any],
@@ -328,18 +384,24 @@ def _redirect_to_login_after_google_failure(
         "/login",
         redirect_uri=redirect_uri,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if next_path:
         target_url = _append_query_params(target_url, next=next_path)
     _clear_google_oauth_state(session)
     return RedirectResponse(target_url, status_code=302)
 
 
+# 日本語: build google authorization response の組み立て処理を担当します。
+# English: Handle building for build google authorization response.
 def _build_google_authorization_response(request: Request, redirect_uri: str) -> str:
     # Reverse proxy 配下では request.url が http になる場合があるため、
     # token 交換に使う URL は redirect_uri の scheme/host/path を優先する。
     # Behind reverse proxies, request.url may appear as http.
     # Prefer redirect_uri origin/path when building authorization_response.
     redirect_parts = urlsplit(redirect_uri)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if redirect_parts.scheme and redirect_parts.netloc:
         return urlunsplit(
             (
@@ -353,6 +415,8 @@ def _build_google_authorization_response(request: Request, redirect_uri: str) ->
     return str(request.url)
 
 
+# 日本語: build google login host redirect の組み立て処理を担当します。
+# English: Handle building for build google login host redirect.
 def _build_google_login_host_redirect(
     request: Request, redirect_uri: str
 ) -> RedirectResponse | None:
@@ -360,10 +424,14 @@ def _build_google_login_host_redirect(
     # セッションが引き継がれないため、認可開始前に callback 側ホストへ寄せる。
     # Canonicalize the auth-start host to the callback host so host-only session cookies survive.
     redirect_parts = urlsplit(redirect_uri)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not redirect_parts.scheme or not redirect_parts.netloc:
         return None
 
     request_host = request.headers.get("host") or request.url.netloc
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(request_host, str) or not request_host:
         return None
 
@@ -382,6 +450,8 @@ def _build_google_login_host_redirect(
     return RedirectResponse(canonical_url, status_code=302)
 
 
+# 日本語: fetch google user info の取得処理を担当します。
+# English: Handle fetching for fetch google user info.
 def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
     # Google API からログインユーザーのプロフィール情報を取得する
     # Fetch authenticated user info from Google UserInfo API.
@@ -391,19 +461,27 @@ def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
         timeout=10,
     )
     response.raise_for_status()
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         return response.json()
     except ValueError as e:
         raise requests.RequestException(f"Invalid JSON response: {e}") from e
 
 
+# 日本語: clean google field に関する処理の入口です。
+# English: Entry point for logic related to clean google field.
 def _clean_google_field(user_info: dict[str, Any], key: str) -> str:
     value = user_info.get(key)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value is None:
         return ""
     return str(value).strip()
 
 
+# 日本語: register page に関する処理の入口です。
+# English: Entry point for logic related to register page.
 @auth_bp.get("/register", name="auth.register_page")
 async def register_page(request: Request):
     """
@@ -412,9 +490,13 @@ async def register_page(request: Request):
     """
     return redirect_to_frontend(request)
 
+# 日本語: api current user に関する処理の入口です。
+# English: Entry point for logic related to api current user.
 @auth_bp.get("/api/current_user", name="auth.api_current_user")
 async def api_current_user(request: Request):
     session = request.session
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "user_id" in session:
         user = await run_blocking(get_user_by_id, session["user_id"])
         if user:
@@ -445,13 +527,19 @@ async def api_current_user(request: Request):
         return jsonify({"logged_in": False})
 
 
+# 日本語: api delete user account に関する処理の入口です。
+# English: Entry point for logic related to api delete user account.
 @auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")
 async def api_delete_user_account(request: Request):
     user_id = _user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"error": "ログインが必要です。"}, status_code=401)
 
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -474,6 +562,8 @@ async def api_delete_user_account(request: Request):
     return jsonify({"message": "アカウントを削除しました。"})
 
 
+# 日本語: login に関する処理の入口です。
+# English: Entry point for logic related to login.
 @auth_bp.get("/login", name="auth.login")
 async def login(request: Request):
     """
@@ -482,12 +572,16 @@ async def login(request: Request):
     """
     return redirect_to_frontend(request)
 
+# 日本語: logout に関する処理の入口です。
+# English: Entry point for logic related to logout.
 @auth_bp.post("/logout", name="auth.logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(frontend_login_url(), status_code=302)
 
 
+# 日本語: api send email code に関する処理の入口です。
+# English: Entry point for logic related to api send email code.
 @auth_bp.post("/api/auth/send_email_code", name="auth.api_send_email_code")
 async def api_send_email_code(
     request: Request,
@@ -500,6 +594,8 @@ async def api_send_email_code(
         llm_daily_limit_service,
     )
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -509,6 +605,8 @@ async def api_send_email_code(
         error_message="メールアドレスが指定されていません",
         status="fail",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -526,11 +624,17 @@ async def api_send_email_code(
     )
 
 
+# 日本語: api verify email code に関する処理の入口です。
+# English: Entry point for logic related to api verify email code.
 @auth_bp.post("/api/auth/verify_email_code", name="auth.api_verify_email_code")
 async def api_verify_email_code(request: Request):
     session = request.session
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if session.get("login_verification_code") and session.get("login_temp_user_id"):
         return await api_verify_login_code(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if session.get("verification_code") and session.get("temp_user_id"):
         return await api_verify_registration_code(request)
     return jsonify(
@@ -539,9 +643,13 @@ async def api_verify_email_code(request: Request):
     )
 
 
+# 日本語: api list passkeys に関する処理の入口です。
+# English: Entry point for logic related to api list passkeys.
 @auth_bp.get("/api/passkeys", name="auth.api_list_passkeys")
 async def api_list_passkeys(request: Request):
     user_id = _user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -549,13 +657,19 @@ async def api_list_passkeys(request: Request):
     return jsonify({"status": "success", "passkeys": passkeys})
 
 
+# 日本語: api delete passkey に関する処理の入口です。
+# English: Entry point for logic related to api delete passkey.
 @auth_bp.post("/api/passkeys/delete", name="auth.api_delete_passkey")
 async def api_delete_passkey(request: Request):
     user_id = _user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -571,8 +685,12 @@ async def api_delete_passkey(request: Request):
     return jsonify({"status": "success"})
 
 
+# 日本語: api passkey register options に関する処理の入口です。
+# English: Entry point for logic related to api passkey register options.
 @auth_bp.post("/api/passkeys/register/options", name="auth.api_passkey_register_options")
 async def api_passkey_register_options(request: Request):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if (
         generate_registration_options is None
         or options_to_json is None
@@ -587,6 +705,8 @@ async def api_passkey_register_options(request: Request):
         return _passkey_unavailable_response()
 
     user_id = _user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -625,8 +745,12 @@ async def api_passkey_register_options(request: Request):
     return jsonify(json.loads(options_to_json(options)))
 
 
+# 日本語: api passkey register verify に関する処理の入口です。
+# English: Entry point for logic related to api passkey register verify.
 @auth_bp.post("/api/passkeys/register/verify", name="auth.api_passkey_register_verify")
 async def api_passkey_register_verify(request: Request):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if (
         verify_registration_response is None
         or base64url_to_bytes is None
@@ -635,6 +759,8 @@ async def api_passkey_register_verify(request: Request):
         return _passkey_unavailable_response()
 
     user_id = _user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
 
@@ -696,12 +822,16 @@ async def api_passkey_register_verify(request: Request):
     return jsonify({"status": "success", "passkey": passkey})
 
 
+# 日本語: api passkey authenticate options に関する処理の入口です。
+# English: Entry point for logic related to api passkey authenticate options.
 @auth_bp.post("/api/passkeys/authenticate/options", name="auth.api_passkey_authenticate_options")
 async def api_passkey_authenticate_options(
     request: Request,
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if (
         generate_authentication_options is None
         or options_to_json is None
@@ -714,6 +844,8 @@ async def api_passkey_authenticate_options(
         request,
         service=resolved_auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return jsonify_rate_limited(
             limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
@@ -735,12 +867,16 @@ async def api_passkey_authenticate_options(
     return jsonify(json.loads(options_to_json(options)))
 
 
+# 日本語: api passkey authenticate verify に関する処理の入口です。
+# English: Entry point for logic related to api passkey authenticate verify.
 @auth_bp.post("/api/passkeys/authenticate/verify", name="auth.api_passkey_authenticate_verify")
 async def api_passkey_authenticate_verify(
     request: Request,
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if (
         verify_authentication_response is None
         or base64url_to_bytes is None
@@ -751,6 +887,8 @@ async def api_passkey_authenticate_verify(
         request,
         service=resolved_auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return jsonify_rate_limited(
             limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
@@ -842,8 +980,12 @@ async def api_passkey_authenticate_verify(
     return jsonify({"status": "success", "message": "Passkeyでログインしました"})
 
 
+# 日本語: google login に関する処理の入口です。
+# English: Entry point for logic related to google login.
 @auth_bp.get("/google-login", name="auth.google_login")
 async def google_login(request: Request):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if Flow is None:
         logger.error(
             "Google login is unavailable because google-auth-oauthlib is not installed."
@@ -854,6 +996,8 @@ async def google_login(request: Request):
         request, "auth.google_callback", _external=True
     )
     canonical_redirect = _build_google_login_host_redirect(request, configured_redirect_uri)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if canonical_redirect is not None:
         return canonical_redirect
     next_param = request.query_params.get("next")
@@ -899,14 +1043,20 @@ async def google_login(request: Request):
     return RedirectResponse(authorization_url, status_code=302)
 
 
+# 日本語: google callback に関する処理の入口です。
+# English: Entry point for logic related to google callback.
 @auth_bp.get("/google-callback", name="auth.google_callback")
 async def google_callback(request: Request):
     session = request.session
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if Flow is None:
         return _redirect_to_login_after_google_failure(request, session)
     # Google 側でエラーが発生した場合（ユーザーがキャンセルした等）を先に処理
     # Handle Google-side errors first (e.g., user cancelled authorization).
     google_error = request.query_params.get("error")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if google_error:
         logger.warning(
             "Google OAuth callback: authorization error from Google: %s",
@@ -1145,6 +1295,8 @@ async def google_callback(request: Request):
         status_code=302,
     )
 
+# 日本語: api send login code に関する処理の入口です。
+# English: Entry point for logic related to api send login code.
 @auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")
 async def api_send_login_code(
     request: Request,
@@ -1167,6 +1319,8 @@ async def api_send_login_code(
     - Store code and temporary user id in session
     """
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1176,6 +1330,8 @@ async def api_send_login_code(
         error_message="メールアドレスが指定されていません",
         status="fail",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -1234,6 +1390,8 @@ async def api_send_login_code(
             status="fail",
         )
 
+# 日本語: api verify login code に関する処理の入口です。
+# English: Entry point for logic related to api verify login code.
 @auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")
 async def api_verify_login_code(
     request: Request,
@@ -1248,6 +1406,8 @@ async def api_verify_login_code(
     - Compare submitted code with session-stored code and complete login on match
     """
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1257,6 +1417,8 @@ async def api_verify_login_code(
         error_message="認証コードが違います",
         status="fail",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 

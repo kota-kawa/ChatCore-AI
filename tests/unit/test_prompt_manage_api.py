@@ -11,7 +11,11 @@ from blueprints.prompt_share.prompt_manage_api import (
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: PromptManageApiTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to PromptManageApiTestCase.
 class PromptManageApiTestCase(unittest.TestCase):
+    # 日本語: test prompt list returns normalized entry shape のテスト検証を担当します。
+    # English: Handle verifying test behavior for test prompt list returns normalized entry shape.
     def test_prompt_list_returns_normalized_entry_shape(self):
         request = build_request(
             method="GET",
@@ -36,6 +40,8 @@ class PromptManageApiTestCase(unittest.TestCase):
             }
         ]
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_prompt_list",
             return_value=sample_entries,
@@ -51,6 +57,8 @@ class PromptManageApiTestCase(unittest.TestCase):
         self.assertEqual(entry["prompt"]["id"], 34)
         self.assertEqual(entry["prompt"]["title"], "title")
 
+    # 日本語: test serialize prompt list entry keeps entry and prompt timestamps separate のテスト検証を担当します。
+    # English: Handle verifying test behavior for test serialize prompt list entry keeps entry and prompt timestamps separate.
     def test_serialize_prompt_list_entry_keeps_entry_and_prompt_timestamps_separate(self):
         serialized = _serialize_prompt_list_entry(
             {

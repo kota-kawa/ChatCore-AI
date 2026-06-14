@@ -18,13 +18,19 @@ ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 
 
+# 日本語: estimate token count に関する処理の入口です。
+# English: Entry point for logic related to estimate token count.
 def estimate_token_count(text: str) -> int:
     normalized = text if isinstance(text, str) else str(text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized:
         return 0
     return max(1, math.ceil(len(normalized) / 4))
 
 
+# 日本語: normalize message text の正規化処理を担当します。
+# English: Handle normalizing for normalize message text.
 def normalize_message_text(text: str) -> str:
     normalized = text if isinstance(text, str) else str(text)
     normalized = html.unescape(normalized)
@@ -35,10 +41,16 @@ def normalize_message_text(text: str) -> str:
     return normalized.strip()
 
 
+# 日本語: trim text to token budget に関する処理の入口です。
+# English: Entry point for logic related to trim text to token budget.
 def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if max_tokens <= 0:
         return ""
     normalized = normalize_message_text(text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if estimate_token_count(normalized) <= max_tokens:
         return normalized
 
@@ -48,11 +60,17 @@ def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
+# 日本語: build room summary の組み立て処理を担当します。
+# English: Handle building for build room summary.
 def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT:
         return "", 0
 
     archived_messages = messages[:-ARCHIVE_RECENT_MESSAGE_COUNT]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not archived_messages:
         return "", 0
 
@@ -110,18 +128,24 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
     return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET), len(archived_messages)
 
 
+# 日本語: select recent messages に関する処理の入口です。
+# English: Entry point for logic related to select recent messages.
 def select_recent_messages(
     messages: list[dict[str, str]],
     token_budget: int,
     *,
     max_messages: int = RECENT_HISTORY_MAX_MESSAGES,
 ) -> list[dict[str, str]]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if token_budget <= 0:
         return []
 
     selected_reversed: list[dict[str, str]] = []
     remaining_tokens = token_budget
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for message in reversed(messages):
         normalized_content = normalize_message_text(message.get("content", ""))
         if not normalized_content:
@@ -158,10 +182,16 @@ def select_recent_messages(
     return list(reversed(selected_reversed))
 
 
+# 日本語: build summary system message の組み立て処理を担当します。
+# English: Handle building for build summary system message.
 def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not summary_text:
         return None
     trimmed = trim_text_to_token_budget(summary_text, SUMMARY_TOKEN_BUDGET)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not trimmed:
         return None
     return {
@@ -175,12 +205,16 @@ def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
     }
 
 
+# 日本語: build memory system message の組み立て処理を担当します。
+# English: Handle building for build memory system message.
 def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | None:
     normalized_facts = [
         trim_text_to_token_budget(fact, 80)
         for fact in memory_facts
         if trim_text_to_token_budget(fact, 80)
     ]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized_facts:
         return None
 
@@ -188,6 +222,8 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
         "<memory_facts>",
         "以下はこの会話で継続的に守るべきユーザー情報または設定です。",
     ]
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for fact in normalized_facts:
         sections.append(f"- {fact}")
     sections.append("</memory_facts>")
@@ -198,6 +234,8 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     }
 
 
+# 日本語: build context messages の組み立て処理を担当します。
+# English: Handle building for build context messages.
 def build_context_messages(
     *,
     base_system_prompt: str,
@@ -209,9 +247,13 @@ def build_context_messages(
 ) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": base_system_prompt}]
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_profile_prompt:
         messages.append({"role": "system", "content": user_profile_prompt})
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if task_prompt:
         messages.append({"role": "system", "content": task_prompt})
 

@@ -7,6 +7,8 @@ from blueprints.chat.messages import chat
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -16,13 +18,19 @@ def make_request(json_body, session=None):
     )
 
 
+# 日本語: ChatDailyLimitTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatDailyLimitTestCase.
 class ChatDailyLimitTestCase(unittest.TestCase):
+    # 日本語: test chat returns 429 when guest daily limit exceeded のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat returns 429 when guest daily limit exceeded.
     def test_chat_returns_429_when_guest_daily_limit_exceeded(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
             session={"free_chats_count": "999999", "free_chats_date": "2099-01-01"},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -40,12 +48,16 @@ class ChatDailyLimitTestCase(unittest.TestCase):
         mock_room_exists.assert_not_called()
         mock_llm_quota.assert_not_called()
 
+    # 日本語: test chat returns 429 when guest daily limit exceeded with custom message のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat returns 429 when guest daily limit exceeded with custom message.
     def test_chat_returns_429_when_guest_daily_limit_exceeded_with_custom_message(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
             session={},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -58,12 +70,16 @@ class ChatDailyLimitTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "1日3回までです")
 
+    # 日本語: test chat returns 429 when global daily limit exceeded のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat returns 429 when global daily limit exceeded.
     def test_chat_returns_429_when_global_daily_limit_exceeded(self):
         request = make_request(
             {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
             session={},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",

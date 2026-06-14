@@ -13,6 +13,8 @@ ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT"
 
 # 認証プロバイダのメタデータを検証・正規化する
 # Validate and normalize authentication provider metadata.
+# 日本語: normalize provider metadata の正規化処理を担当します。
+# English: Handle normalizing for normalize provider metadata.
 def _normalize_provider_metadata(
     auth_provider: str,
     email: str,
@@ -22,6 +24,8 @@ def _normalize_provider_metadata(
     normalized_provider_user_id = (provider_user_id or "").strip() or None
     normalized_provider_email = (provider_email or "").strip() or None
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if auth_provider == EMAIL_AUTH_PROVIDER:
         normalized_provider_user_id = normalized_provider_user_id or email
         normalized_provider_email = normalized_provider_email or email
@@ -31,10 +35,16 @@ def _normalize_provider_metadata(
 
 # アバターURLを検証・正規化し、無効な場合はデフォルトのアバターURLを返す
 # Validate and normalize the avatar URL, returning the default if invalid.
+# 日本語: normalize avatar url の正規化処理を担当します。
+# English: Handle normalizing for normalize avatar url.
 def _normalize_avatar_url(avatar_url: str | None) -> str:
     normalized = (avatar_url or "").strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized:
         return DEFAULT_AVATAR_URL
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(normalized) > LEGACY_AVATAR_URL_MAX_LENGTH:
         return DEFAULT_AVATAR_URL
     return normalized
@@ -42,6 +52,8 @@ def _normalize_avatar_url(avatar_url: str | None) -> str:
 
 # ユーザーの認証プロバイダ情報をテーブルに挿入または更新（アップサート）する
 # Insert or update (upsert) the user's authentication provider information in the database.
+# 日本語: upsert user auth provider に関する処理の入口です。
+# English: Entry point for logic related to upsert user auth provider.
 def _upsert_user_auth_provider(
     cursor: Any,
     user_id: int,
@@ -69,10 +81,14 @@ def _upsert_user_auth_provider(
 
 # 共通のデフォルトタスクを新規ユーザーにコピーする
 # Copy common default tasks into user-specific tasks.
+# 日本語: copy default tasks for user に関する処理の入口です。
+# English: Entry point for logic related to copy default tasks for user.
 def copy_default_tasks_for_user(user_id: int) -> None:
     # 共有タスクをユーザー専用タスクとして重複なく複製する
     # Copy shared default tasks into user-owned rows without duplicates.
     """user_id IS NULL の共通タスクを指定ユーザーに複製"""
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -119,10 +135,14 @@ def copy_default_tasks_for_user(user_id: int) -> None:
 
 # 指定されたメールアドレスを持つユーザーを取得する
 # Retrieve a user by their email address.
+# 日本語: get user by email の取得処理を担当します。
+# English: Handle fetching for get user by email.
 def get_user_by_email(email: str) -> dict[str, Any] | None:
     # メールアドレス一致のユーザー1件を返す
     # Fetch a single user by email.
     """メールアドレスでユーザーを取得"""
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -147,9 +167,13 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
 
 # GoogleのユーザーID（プロバイダ識別子）に紐付くユーザーを取得する
 # Retrieve a user by their Google provider user ID.
+# 日本語: get user by google id の取得処理を担当します。
+# English: Handle fetching for get user by google id.
 def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
     # Google の安定IDでユーザーを取得する
     # Look up a user by Google provider identity.
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -174,10 +198,14 @@ def get_user_by_google_id(google_user_id: str) -> dict[str, Any] | None:
 
 # ユーザーIDに紐付くユーザー情報を取得する
 # Retrieve user information by user ID.
+# 日本語: get user by id の取得処理を担当します。
+# English: Handle fetching for get user by id.
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     # プロフィール表示に必要なユーザー情報を取得する
     # Fetch user fields needed by profile and session endpoints.
     """ユーザーIDでユーザーを取得"""
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -197,6 +225,8 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
 
 # 新しいユーザーレコードを作成し、そのIDを返す
 # Create a new user record and return its ID.
+# 日本語: create user の作成処理を担当します。
+# English: Handle creating for create user.
 def create_user(
     email: str,
     username: str | None = None,
@@ -218,6 +248,8 @@ def create_user(
         provider_user_id,
         provider_email,
     )
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -263,14 +295,20 @@ def create_user(
 
 # 指定されたユーザーIDにGoogleアカウントの認証情報を紐付ける
 # Link a Google account authentication provider to an existing user.
+# 日本語: link google account に関する処理の入口です。
+# English: Entry point for logic related to link google account.
 def link_google_account(user_id: int, google_user_id: str, provider_email: str) -> None:
     # 既存ユーザーへ Google 連携情報を紐付け・更新する
     # Attach or refresh Google provider metadata for an existing user.
     normalized_google_user_id = (google_user_id or "").strip()
     normalized_provider_email = (provider_email or "").strip() or None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized_google_user_id:
         raise ValueError("google_user_id is required")
 
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -291,6 +329,8 @@ def link_google_account(user_id: int, google_user_id: str, provider_email: str) 
 
 # プロフィール項目（ユーザー名やアバター）が未設定の場合、Googleの情報で更新する
 # Update user profile fields (username, avatar) with Google details if they are currently default/unset.
+# 日本語: update user profile from google if unset の更新処理を担当します。
+# English: Handle updating for update user profile from google if unset.
 def update_user_profile_from_google_if_unset(
     user_id: int,
     name: str | None = None,
@@ -301,6 +341,8 @@ def update_user_profile_from_google_if_unset(
     normalized_name = (name or "").strip()
     normalized_picture = (picture or "").strip()
 
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -341,9 +383,13 @@ def update_user_profile_from_google_if_unset(
 
 # ユーザーに関連する全データとアカウント自体をデータベースから削除する
 # Delete all data associated with a user and remove their account from the database.
+# 日本語: delete user account の削除処理を担当します。
+# English: Handle deleting for delete user account.
 def delete_user_account(user_id: int) -> bool:
     # Delete user-owned records that are not fully covered by cascading FKs,
     # then remove the user row in the same transaction.
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -385,10 +431,14 @@ def delete_user_account(user_id: int) -> bool:
 
 # ユーザーの認証状態（is_verified）をTrue（認証済み）に変更する
 # Set the user's verification status (is_verified) to True in the database.
+# 日本語: set user verified の設定処理を担当します。
+# English: Handle setting for set user verified.
 def set_user_verified(user_id: int) -> None:
     # 認証完了後に is_verified フラグを更新する
     # Mark user as verified after successful verification.
     """ユーザーを認証済みに更新"""
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:

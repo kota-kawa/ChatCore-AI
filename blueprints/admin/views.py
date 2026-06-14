@@ -64,54 +64,82 @@ DEFAULT_VALUE_PATTERN = re.compile(
 )
 
 
+# 日本語: resolve auth limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve auth limit service.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
 
 
+# 日本語: verify admin password の確認処理を担当します。
+# English: Handle verifying for verify admin password.
 def _verify_admin_password(password: str) -> bool:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not ADMIN_PASSWORD_HASH:
         return False
     return verify_password(password, ADMIN_PASSWORD_HASH)
 
 
+# 日本語: require pg sql に関する処理の入口です。
+# English: Entry point for logic related to require pg sql.
 def _require_pg_sql():
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if pg_sql is None:  # pragma: no cover - depends on optional dependency
         raise RuntimeError("psycopg2 is required for admin SQL composition.")
     return pg_sql
 
 
+# 日本語: sql identifier に関する処理の入口です。
+# English: Entry point for logic related to sql identifier.
 def _sql_identifier(name: str):
     return _require_pg_sql().Identifier(name)
 
 
+# 日本語: normalize fragment の正規化処理を担当します。
+# English: Handle normalizing for normalize fragment.
 def _normalize_fragment(fragment: str) -> str:
     return fragment.rstrip(";").strip()
 
 
+# 日本語: has multiple statements に関する処理の入口です。
+# English: Entry point for logic related to has multiple statements.
 def _has_multiple_statements(fragment: str) -> bool:
     return ";" in fragment
 
 
+# 日本語: normalize sql whitespace の正規化処理を担当します。
+# English: Handle normalizing for normalize sql whitespace.
 def _normalize_sql_whitespace(fragment: str) -> str:
     return re.sub(r"\s+", " ", fragment).strip()
 
 
+# 日本語: is safe sql identifier に関する処理の入口です。
+# English: Entry point for logic related to is safe sql identifier.
 def _is_safe_sql_identifier(name: str) -> bool:
     return bool(SQL_IDENTIFIER_PATTERN.fullmatch(name))
 
 
+# 日本語: validate sql identifier の検証処理を担当します。
+# English: Handle validating for validate sql identifier.
 def _validate_sql_identifier(name: str, label: str) -> str:
     normalized = name.strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not _is_safe_sql_identifier(normalized):
         raise ValueError(f"Invalid {label}.")
     return normalized
 
 
+# 日本語: split sql csv に関する処理の入口です。
+# English: Entry point for logic related to split sql csv.
 def _split_sql_csv(fragment: str) -> list[str]:
     parts: list[str] = []
     current: list[str] = []
@@ -119,6 +147,8 @@ def _split_sql_csv(fragment: str) -> list[str]:
     in_quote = False
     i = 0
 
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while i < len(fragment):
         ch = fragment[i]
         if ch == "'":
@@ -150,6 +180,8 @@ def _split_sql_csv(fragment: str) -> list[str]:
         current.append(ch)
         i += 1
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if in_quote or depth != 0:
         raise ValueError("Invalid column definition.")
 
@@ -160,7 +192,11 @@ def _split_sql_csv(fragment: str) -> list[str]:
     return parts
 
 
+# 日本語: consume column type に関する処理の入口です。
+# English: Entry point for logic related to consume column type.
 def _consume_column_type(fragment: str) -> tuple[str, str]:
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for pattern in SIMPLE_COLUMN_TYPE_PATTERNS:
         match = pattern.match(fragment)
         if match is None:
@@ -171,8 +207,12 @@ def _consume_column_type(fragment: str) -> tuple[str, str]:
     raise ValueError("Unsupported column type.")
 
 
+# 日本語: consume default value に関する処理の入口です。
+# English: Entry point for logic related to consume default value.
 def _consume_default_value(fragment: str) -> tuple[str, str]:
     match = DEFAULT_VALUE_PATTERN.match(fragment)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if match is None:
         raise ValueError("Unsupported DEFAULT value.")
     matched = match.group(0)
@@ -181,8 +221,12 @@ def _consume_default_value(fragment: str) -> tuple[str, str]:
     return normalized, remainder
 
 
+# 日本語: parse column definition の解析処理を担当します。
+# English: Handle parsing for parse column definition.
 def _parse_column_definition(definition: str) -> dict[str, object]:
     parts = definition.strip().split(None, 1)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(parts) != 2:
         raise ValueError("Invalid column definition.")
 
@@ -191,6 +235,8 @@ def _parse_column_definition(definition: str) -> dict[str, object]:
     modifiers: list[str] = []
     seen_tokens: set[str] = set()
 
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while remainder:
         not_null_match = re.match(r"^NOT\s+NULL(?=\s|$)", remainder, re.IGNORECASE)
         null_match = re.match(r"^NULL(?=\s|$)", remainder, re.IGNORECASE)
@@ -242,44 +288,66 @@ def _parse_column_definition(definition: str) -> dict[str, object]:
     }
 
 
+# 日本語: parse column definitions の解析処理を担当します。
+# English: Handle parsing for parse column definitions.
 def _parse_column_definitions(column_definitions: str) -> list[dict[str, object]]:
     parsed_columns = [_parse_column_definition(part) for part in _split_sql_csv(column_definitions)]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not parsed_columns:
         raise ValueError("At least one column is required.")
     return parsed_columns
 
 
+# 日本語: validate table options の検証処理を担当します。
+# English: Handle validating for validate table options.
 def _validate_table_options(table_options: str) -> str:
     normalized = _normalize_fragment(table_options)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized:
         return ""
     raise ValueError("Table options are not supported.")
 
 
+# 日本語: build column sql の組み立て処理を担当します。
+# English: Handle building for build column sql.
 def _build_column_sql(column_definition: dict[str, object]):
     psql = _require_pg_sql()
     statement = psql.SQL("{} {}").format(
         _sql_identifier(str(column_definition["name"])),
         psql.SQL(str(column_definition["type"])),
     )
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for modifier in column_definition["modifiers"]:
         statement += psql.SQL(" ") + psql.SQL(str(modifier))
     return statement
 
 
+# 日本語: frontend admin dashboard url に関する処理の入口です。
+# English: Entry point for logic related to frontend admin dashboard url.
 def frontend_admin_dashboard_url(request: Request, **params) -> str:
     return frontend_url(url_for(request, "admin.dashboard", **params))
 
 
+# 日本語: admin required に関する処理の入口です。
+# English: Entry point for logic related to admin required.
 def admin_required(view_func):
+    # 日本語: wrapper に関する処理の入口です。
+    # English: Entry point for logic related to wrapper.
     @wraps(view_func)
     async def wrapper(*args, **kwargs):
         request = kwargs.get("request")
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if request is None:
             for arg in args:
                 if isinstance(arg, Request):
                     request = arg
                     break
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if request is None:
             raise RuntimeError("Request is required for admin routes")
 
@@ -299,26 +367,38 @@ def admin_required(view_func):
     return wrapper
 
 
+# 日本語: admin guard に関する処理の入口です。
+# English: Entry point for logic related to admin guard.
 def _admin_guard(request: Request):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not request.session.get("is_admin"):
         return jsonify({"status": "fail", "error": "Unauthorized"}, status_code=401)
     return None
 
 
+# 日本語: get payload の取得処理を非同期で担当します。
+# English: Handle fetching for get payload asynchronously.
 async def _get_payload(request: Request) -> dict:
     data = await get_json(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if data is not None:
         return data
     form = await request.form()
     return {key: value for key, value in form.items()}
 
 
+# 日本語: login に関する処理の入口です。
+# English: Entry point for logic related to login.
 @admin_bp.api_route("/login", methods=["GET", "POST"], name="admin.login")
 async def login(request: Request):
     status_code = 302 if request.method == "GET" else 303
     return redirect_to_frontend(request, path="/admin/login", status_code=status_code)
 
 
+# 日本語: api login に関する処理の入口です。
+# English: Entry point for logic related to api login.
 @admin_bp.post("/api/login", name="admin.api_login")
 async def api_login(
     request: Request,
@@ -332,6 +412,8 @@ async def api_login(
         request,
         service=resolved_auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return jsonify_rate_limited(
             limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
@@ -342,6 +424,8 @@ async def api_login(
             status="fail",
         )
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _verify_admin_password(password):
         rotate_session_identifier(request)
         request.session["is_admin"] = True
@@ -352,6 +436,8 @@ async def api_login(
     return jsonify({"status": "fail", "error": "Invalid password."}, status_code=401)
 
 
+# 日本語: api logout に関する処理の入口です。
+# English: Entry point for logic related to api logout.
 @admin_bp.post("/api/logout", name="admin.api_logout")
 async def api_logout(request: Request):
     request.session.pop("is_admin", None)
@@ -361,6 +447,8 @@ async def api_logout(request: Request):
     )
 
 
+# 日本語: logout に関する処理の入口です。
+# English: Entry point for logic related to logout.
 @admin_bp.get("/logout", name="admin.logout")
 @admin_required
 async def logout(request: Request):
@@ -369,6 +457,8 @@ async def logout(request: Request):
     return RedirectResponse(frontend_url("/admin/login"), status_code=302)
 
 
+# 日本語: fetch tables の取得処理を担当します。
+# English: Handle fetching for fetch tables.
 def _fetch_tables(cursor) -> list[str]:
     cursor.execute(
         """
@@ -382,6 +472,8 @@ def _fetch_tables(cursor) -> list[str]:
     return [row[0] for row in cursor.fetchall()]
 
 
+# 日本語: fetch table columns の取得処理を担当します。
+# English: Handle fetching for fetch table columns.
 def _fetch_table_columns(cursor, table_name: str) -> list[dict[str, object]]:
     cursor.execute(
         """
@@ -437,6 +529,8 @@ def _fetch_table_columns(cursor, table_name: str) -> list[dict[str, object]]:
         (table_name,),
     )
     columns: list[dict[str, object]] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for row in cursor.fetchall():
         columns.append(
             {
@@ -451,6 +545,8 @@ def _fetch_table_columns(cursor, table_name: str) -> list[dict[str, object]]:
     return columns
 
 
+# 日本語: fetch table preview の取得処理を担当します。
+# English: Handle fetching for fetch table preview.
 def _fetch_table_preview(cursor, table_name: str) -> tuple[list[str], list[tuple]]:
     psql = _require_pg_sql()
     cursor.execute(
@@ -461,6 +557,8 @@ def _fetch_table_preview(cursor, table_name: str) -> tuple[list[str], list[tuple
     return column_names, rows
 
 
+# 日本語: build create table sql の組み立て処理を担当します。
+# English: Handle building for build create table sql.
 def _build_create_table_sql(
     table_name: str, column_definitions: str, table_options: str = ""
 ):
@@ -471,16 +569,22 @@ def _build_create_table_sql(
         _sql_identifier(table_name),
         psql.SQL(", ").join(_build_column_sql(column) for column in parsed_columns),
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validated_options:
         statement = statement + psql.SQL(" ") + psql.SQL(validated_options)
     return statement
 
 
+# 日本語: build drop table sql の組み立て処理を担当します。
+# English: Handle building for build drop table sql.
 def _build_drop_table_sql(table_name: str):
     psql = _require_pg_sql()
     return psql.SQL("DROP TABLE {}").format(_sql_identifier(table_name))
 
 
+# 日本語: build add column sql の組み立て処理を担当します。
+# English: Handle building for build add column sql.
 def _build_add_column_sql(table_name: str, column_name: str, column_type: str):
     psql = _require_pg_sql()
     parsed_definition = _parse_column_definition(f"{column_name} {column_type}")
@@ -495,6 +599,8 @@ def _build_add_column_sql(table_name: str, column_name: str, column_type: str):
     )
 
 
+# 日本語: build drop column sql の組み立て処理を担当します。
+# English: Handle building for build drop column sql.
 def _build_drop_column_sql(table_name: str, column_name: str):
     psql = _require_pg_sql()
     return psql.SQL("ALTER TABLE {} DROP COLUMN {}").format(
@@ -502,9 +608,13 @@ def _build_drop_column_sql(table_name: str, column_name: str):
     )
 
 
+# 日本語: load dashboard data の読み込み処理を担当します。
+# English: Handle loading for load dashboard data.
 def _load_dashboard_data(selected_table: Optional[str]) -> dict:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -540,9 +650,13 @@ def _load_dashboard_data(selected_table: Optional[str]) -> dict:
             connection.close()
 
 
+# 日本語: create table in db の作成処理を担当します。
+# English: Handle creating for create table in db.
 def _create_table_in_db(table_name: str, column_definitions: str, table_options: str) -> None:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -555,9 +669,13 @@ def _create_table_in_db(table_name: str, column_definitions: str, table_options:
             connection.close()
 
 
+# 日本語: drop table if exists に関する処理の入口です。
+# English: Entry point for logic related to drop table if exists.
 def _drop_table_if_exists(table_name: str) -> bool:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -574,9 +692,13 @@ def _drop_table_if_exists(table_name: str) -> bool:
             connection.close()
 
 
+# 日本語: add column if valid の追加処理を担当します。
+# English: Handle adding for add column if valid.
 def _add_column_if_valid(table_name: str, column_name: str, column_type: str) -> str:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -599,9 +721,13 @@ def _add_column_if_valid(table_name: str, column_name: str, column_type: str) ->
             connection.close()
 
 
+# 日本語: drop column if valid に関する処理の入口です。
+# English: Entry point for logic related to drop column if valid.
 def _drop_column_if_valid(table_name: str, column_name: str) -> tuple[str, Optional[str]]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
@@ -629,20 +755,28 @@ def _drop_column_if_valid(table_name: str, column_name: str) -> tuple[str, Optio
             connection.close()
 
 
+# 日本語: dashboard に関する処理の入口です。
+# English: Entry point for logic related to dashboard.
 @admin_bp.get("/", name="admin.dashboard")
 @admin_required
 async def dashboard(request: Request):
     return redirect_to_frontend(request)
 
 
+# 日本語: api dashboard に関する処理の入口です。
+# English: Entry point for logic related to api dashboard.
 @admin_bp.get("/api/dashboard", name="admin.api_dashboard")
 async def api_dashboard(request: Request):
     guard = _admin_guard(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if guard is not None:
         return guard
 
     selected_table_raw = (request.query_params.get("table") or "").strip()
     selected_table: Optional[str] = selected_table_raw or None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if selected_table is not None and not _is_safe_sql_identifier(selected_table):
         selected_table = None
         flash(request, "Invalid table selection.", "error")
@@ -683,6 +817,8 @@ async def api_dashboard(request: Request):
     )
 
 
+# 日本語: create table の作成処理を非同期で担当します。
+# English: Handle creating for create table asynchronously.
 @admin_bp.post("/create-table", name="admin.create_table")
 @admin_required
 async def create_table(request: Request):
@@ -691,10 +827,14 @@ async def create_table(request: Request):
     column_definitions = form.get("columns", "").strip()
     table_options = form.get("table_options", "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_definitions:
         flash(request, "Table name and column definition are required.", "error")
         return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _has_multiple_statements(column_definitions):
         flash(request, "カラム定義に複数の文を含めることはできません。", "error")
         return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
@@ -721,9 +861,13 @@ async def create_table(request: Request):
     return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
 
+# 日本語: api create table に関する処理の入口です。
+# English: Entry point for logic related to api create table.
 @admin_bp.post("/api/create-table", name="admin.api_create_table")
 async def api_create_table(request: Request):
     guard = _admin_guard(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if guard is not None:
         return guard
 
@@ -732,6 +876,8 @@ async def api_create_table(request: Request):
     column_definitions = (payload.get("columns") or "").strip()
     table_options = (payload.get("table_options") or "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_definitions:
         flash(request, "Table name and column definition are required.", "error")
         return jsonify(
@@ -771,16 +917,22 @@ async def api_create_table(request: Request):
         )
 
 
+# 日本語: delete table の削除処理を非同期で担当します。
+# English: Handle deleting for delete table asynchronously.
 @admin_bp.post("/delete-table", name="admin.delete_table")
 @admin_required
 async def delete_table(request: Request):
     form = await request.form()
     table_name = form.get("table_name", "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name:
         flash(request, "Table name is required for deletion.", "error")
         return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         table_name = _validate_sql_identifier(table_name, "table name")
     except ValueError as exc:
@@ -800,15 +952,21 @@ async def delete_table(request: Request):
     return RedirectResponse(frontend_admin_dashboard_url(request), status_code=302)
 
 
+# 日本語: api delete table に関する処理の入口です。
+# English: Entry point for logic related to api delete table.
 @admin_bp.post("/api/delete-table", name="admin.api_delete_table")
 async def api_delete_table(request: Request):
     guard = _admin_guard(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if guard is not None:
         return guard
 
     payload = await _get_payload(request)
     table_name = (payload.get("table_name") or "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name:
         flash(request, "Table name is required for deletion.", "error")
         return jsonify(
@@ -839,6 +997,8 @@ async def api_delete_table(request: Request):
         )
 
 
+# 日本語: add column の追加処理を非同期で担当します。
+# English: Handle adding for add column asynchronously.
 @admin_bp.post("/add-column", name="admin.add_column")
 @admin_required
 async def add_column(request: Request):
@@ -847,12 +1007,16 @@ async def add_column(request: Request):
     column_name = form.get("column_name", "").strip()
     column_type = form.get("column_type", "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_name or not column_type:
         flash(request, "テーブル名、カラム名、カラム定義は必須です。", "error")
         return RedirectResponse(
             frontend_admin_dashboard_url(request, table=table_name), status_code=302
         )
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _has_multiple_statements(column_type):
         flash(request, "カラム定義に複数の文を含めることはできません。", "error")
         return RedirectResponse(
@@ -889,9 +1053,13 @@ async def add_column(request: Request):
     )
 
 
+# 日本語: api add column に関する処理の入口です。
+# English: Entry point for logic related to api add column.
 @admin_bp.post("/api/add-column", name="admin.api_add_column")
 async def api_add_column(request: Request):
     guard = _admin_guard(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if guard is not None:
         return guard
 
@@ -900,6 +1068,8 @@ async def api_add_column(request: Request):
     column_name = (payload.get("column_name") or "").strip()
     column_type = (payload.get("column_type") or "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_name or not column_type:
         flash(request, "テーブル名、カラム名、カラム定義は必須です。", "error")
         return jsonify(
@@ -948,6 +1118,8 @@ async def api_add_column(request: Request):
         )
 
 
+# 日本語: delete column の削除処理を非同期で担当します。
+# English: Handle deleting for delete column asynchronously.
 @admin_bp.post("/delete-column", name="admin.delete_column")
 @admin_required
 async def delete_column(request: Request):
@@ -955,12 +1127,16 @@ async def delete_column(request: Request):
     table_name = form.get("table_name", "").strip()
     column_name = form.get("column_name", "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_name:
         flash(request, "テーブル名とカラム名は必須です。", "error")
         return RedirectResponse(
             frontend_admin_dashboard_url(request, table=table_name), status_code=302
         )
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         table_name = _validate_sql_identifier(table_name, "table name")
         column_name = _validate_sql_identifier(column_name, "column name")
@@ -1002,9 +1178,13 @@ async def delete_column(request: Request):
     )
 
 
+# 日本語: api delete column に関する処理の入口です。
+# English: Entry point for logic related to api delete column.
 @admin_bp.post("/api/delete-column", name="admin.api_delete_column")
 async def api_delete_column(request: Request):
     guard = _admin_guard(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if guard is not None:
         return guard
 
@@ -1012,6 +1192,8 @@ async def api_delete_column(request: Request):
     table_name = (payload.get("table_name") or "").strip()
     column_name = (payload.get("column_name") or "").strip()
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not table_name or not column_name:
         flash(request, "テーブル名とカラム名は必須です。", "error")
         return jsonify(

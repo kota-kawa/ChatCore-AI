@@ -7,7 +7,11 @@ from unittest.mock import patch
 from blueprints.prompt_share.prompt_share_api import get_prompt_detail
 
 
+# 日本語: PromptShareApiTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to PromptShareApiTestCase.
 class PromptShareApiTestCase(unittest.TestCase):
+    # 日本語: test get prompt detail returns public prompt のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get prompt detail returns public prompt.
     def test_get_prompt_detail_returns_public_prompt(self):
         sample_prompt = {
             "id": 12,
@@ -25,6 +29,8 @@ class PromptShareApiTestCase(unittest.TestCase):
             "created_at": datetime(2024, 1, 2, 3, 4, 5).isoformat(),
         }
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_public_prompt_by_id",
             return_value=sample_prompt,
@@ -37,7 +43,11 @@ class PromptShareApiTestCase(unittest.TestCase):
         self.assertEqual(payload["prompt"]["title"], "共有タイトル")
         self.assertEqual(payload["prompt"]["skill_markdown"], "")
 
+    # 日本語: test get prompt detail returns 404 for missing prompt のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get prompt detail returns 404 for missing prompt.
     def test_get_prompt_detail_returns_404_for_missing_prompt(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.prompt_share.prompt_share_api._get_public_prompt_by_id",
             return_value=None,

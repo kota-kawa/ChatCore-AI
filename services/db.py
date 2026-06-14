@@ -42,6 +42,8 @@ _RETRYABLE_DB_PG_CODES = {
 }
 
 
+# 日本語: ConnectionProxy に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ConnectionProxy.
 class _ConnectionProxy:
     # プールへ返却済み接続の再利用を防ぐ薄いラッパー
     # Lightweight wrapper that prevents reuse after returning to the pool.
@@ -49,6 +51,8 @@ class _ConnectionProxy:
 
     # プロキシインスタンスを初期化し、DB接続と接続プールを保持する
     # Initialize the proxy instance, retaining the database connection and the connection pool.
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, connection: Any, connection_pool: Any) -> None:
         self._connection = connection
         self._connection_pool = connection_pool
@@ -56,15 +60,23 @@ class _ConnectionProxy:
 
     # 接続がすでにプールに返却されていないことを確認する
     # Ensure that the connection has not already been returned to the pool.
+    # 日本語: ensure open の保証処理を担当します。
+    # English: Handle ensuring for ensure open.
     def _ensure_open(self) -> None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._returned or self._connection is None:
             raise RuntimeError("Connection already returned to pool.")
 
     # データベース操作を実行するためのカーソルオブジェクトを作成して返す
     # Create and return a cursor object to execute database operations.
+    # 日本語: cursor に関する処理の入口です。
+    # English: Entry point for logic related to cursor.
     def cursor(self, *args: Any, **kwargs: Any) -> Any:
         self._ensure_open()
         dictionary = kwargs.pop("dictionary", False)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if dictionary:
             # mysqlclient 互換の dictionary=True を psycopg2 の RealDictCursor に変換する
             # Translate mysqlclient-style dictionary=True into psycopg2 RealDictCursor.
@@ -75,7 +87,11 @@ class _ConnectionProxy:
 
     # 接続をプールに返却し、必要に応じてロールバックを行う
     # Return the connection back to the pool, performing a rollback if necessary.
+    # 日本語: close に関する処理の入口です。
+    # English: Entry point for logic related to close.
     def close(self) -> None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._returned or self._connection is None:
             return
 
@@ -88,6 +104,8 @@ class _ConnectionProxy:
         # 返却前にロールバックし、汚れたトランザクション状態を持ち越さない
         # Roll back before returning so dirty transactions are not leaked.
         close_physical = bool(getattr(connection, "closed", 0))
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not close_physical:
             rolled_back = rollback_connection(connection)
             if not rolled_back:
@@ -103,12 +121,16 @@ class _ConnectionProxy:
 
     # context managerの開始処理。自身を返す
     # Context manager entry. Returns self.
+    # 日本語: コンテキスト開始時に必要な準備を行います。
+    # English: Prepare the object when entering the context.
     def __enter__(self) -> "_ConnectionProxy":
         self._ensure_open()
         return self
 
     # context managerの終了処理。接続を閉じる（プールに返却する）
     # Context manager exit. Closes the connection (returns it to the pool).
+    # 日本語: コンテキスト終了時の後片付けを行います。
+    # English: Clean up when leaving the context.
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
@@ -120,7 +142,11 @@ class _ConnectionProxy:
 
     # デストラクタ。インスタンス破棄時に接続を安全に閉じる
     # Destructor. Safely closes the connection when the instance is destroyed.
+    # 日本語: del に関する処理の入口です。
+    # English: Entry point for logic related to del.
     def __del__(self) -> None:  # pragma: no cover - GC timing is nondeterministic
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             self.close()
         except Exception:
@@ -128,6 +154,8 @@ class _ConnectionProxy:
 
     # 内部の接続オブジェクトの属性へアクセスを委譲する
     # Delegate attribute access to the underlying connection object.
+    # 日本語: getattr に関する処理の入口です。
+    # English: Entry point for logic related to getattr.
     def __getattr__(self, name: str) -> Any:
         self._ensure_open()
         return getattr(self._connection, name)
@@ -135,13 +163,19 @@ class _ConnectionProxy:
 
 # 環境変数を優先度の順に参照し、値を決定するヘルパー関数
 # Helper function to resolve environment variables in order of priority.
+# 日本語: get env の取得処理を担当します。
+# English: Handle fetching for get env.
 def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
     # 新旧環境変数を順番に見て互換性を維持する
     # Resolve value from primary and legacy env vars for backward compatibility.
     value = os.environ.get(name)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value:
         return value
     value = os.environ.get(fallback_name)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value:
         return value
     return default
@@ -149,11 +183,17 @@ def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
 
 # 接続オブジェクトに対して安全にロールバックを実行する
 # Safely perform a rollback on the connection object.
+# 日本語: rollback connection に関する処理の入口です。
+# English: Entry point for logic related to rollback connection.
 def rollback_connection(connection: Any) -> bool:
     # 例外処理時に安全にロールバックし、失敗しても二次例外を出さない
     # Roll back safely during exception handling and swallow rollback failures.
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if connection is None:
         return False
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection.rollback()
         return True
@@ -163,13 +203,19 @@ def rollback_connection(connection: Any) -> bool:
 
 # DBエラーが一時的で、再試行可能なものかどうかを判定する
 # Determine whether the database error is transient and can be retried.
+# 日本語: is retryable db error に関する処理の入口です。
+# English: Entry point for logic related to is retryable db error.
 def is_retryable_db_error(exc: BaseException) -> bool:
     # DB例外から再試行可能性を判定する
     # Infer whether a DB error is retryable.
     pgcode = getattr(exc, "pgcode", None)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(pgcode, str) and pgcode in _RETRYABLE_DB_PG_CODES:
         return True
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if Error is not Exception and isinstance(exc, Error):
         exc_name = exc.__class__.__name__
         if exc_name in {"OperationalError", "InterfaceError"}:
@@ -180,8 +226,12 @@ def is_retryable_db_error(exc: BaseException) -> bool:
 
 # 環境変数からDBのホスト名のリストを取得する（ローカル開発用フォールバックを含む）
 # Get the list of database hosts from environment variables (including local development fallbacks).
+# 日本語: get db hosts の取得処理を担当します。
+# English: Handle fetching for get db hosts.
 def _get_db_hosts() -> list[str]:
     env_host = os.environ.get("POSTGRES_HOST") or os.environ.get("MYSQL_HOST")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if env_host:
         hosts = [host.strip() for host in env_host.split(",") if host.strip()]
         # If a single docker-compose host is provided, add safe local fallbacks.
@@ -194,11 +244,15 @@ def _get_db_hosts() -> list[str]:
 
 # 環境変数からデータベース設定（ユーザー名、パスワード、DB名など）を取得する
 # Retrieve database configuration settings (user, password, dbname, etc.) from env variables.
+# 日本語: get db config の取得処理を担当します。
+# English: Handle fetching for get db config.
 def _get_db_config() -> DbConfig:
     user = _get_env("POSTGRES_USER", "MYSQL_USER", None)
     password = _get_env("POSTGRES_PASSWORD", "MYSQL_PASSWORD", None)
     dbname = _get_env("POSTGRES_DB", "MYSQL_DATABASE", None)
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not all([user, password, dbname]):
         raise ValueError("Database configuration (USER, PASSWORD, DB) must be set in environment variables.")
 
@@ -213,7 +267,11 @@ def _get_db_config() -> DbConfig:
 
 # 接続プールの最小接続数と最大接続数の制限値を取得・検証する
 # Retrieve and validate the minimum and maximum connection limits for the connection pool.
+# 日本語: get pool bounds の取得処理を担当します。
+# English: Handle fetching for get pool bounds.
 def _get_pool_bounds() -> tuple[int, int]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if is_production_env():
         min_conn_raw = os.environ.get(
             "DB_POOL_MIN_CONN_PRODUCTION",
@@ -229,6 +287,8 @@ def _get_pool_bounds() -> tuple[int, int]:
 
     min_conn = int(min_conn_raw)
     max_conn = int(max_conn_raw)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if min_conn < 1:
         raise ValueError("DB_POOL_MIN_CONN must be >= 1.")
     if max_conn < min_conn:
@@ -238,6 +298,8 @@ def _get_pool_bounds() -> tuple[int, int]:
 
 # 接続プールのキャッシュキーとなるタプルを構築する
 # Construct a tuple that serves as the cache key for the connection pool.
+# 日本語: build pool key の組み立て処理を担当します。
+# English: Handle building for build pool key.
 def _build_pool_key(
     config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
 ) -> PoolKey:
@@ -254,15 +316,21 @@ def _build_pool_key(
 
 # 設定とホストリストに基づいてスレッドセーフな接続プールを生成する
 # Create a thread-safe connection pool based on configuration and host list.
+# 日本語: build connection pool の組み立て処理を担当します。
+# English: Handle building for build connection pool.
 def _build_connection_pool(
     config: DbConfig, hosts: list[str], min_conn: int, max_conn: int
 ) -> Any:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if ThreadedConnectionPool is None:
         raise RuntimeError("psycopg2 ThreadedConnectionPool is required to connect to the database.")
 
     first_exc = None
     # 複数ホストを順に試し、最初に接続成功したプールを採用する
     # Try hosts in order and keep the first successfully validated pool.
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for host in hosts:
         candidate_config = dict(config)
         candidate_config["host"] = host
@@ -289,6 +357,8 @@ def _build_connection_pool(
 
 # キャッシュされた接続プールを取得する、または必要に応じて初期化/更新する
 # Retrieve the cached connection pool, initializing or updating it if necessary.
+# 日本語: get connection pool の取得処理を担当します。
+# English: Handle fetching for get connection pool.
 def _get_connection_pool() -> Any:
     global _connection_pool, _connection_pool_key
 
@@ -299,6 +369,8 @@ def _get_connection_pool() -> Any:
     old_pool = None
     new_pool = None
 
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with _pool_lock:
         if _connection_pool is not None and _connection_pool_key == pool_key:
             return _connection_pool
@@ -310,6 +382,8 @@ def _get_connection_pool() -> Any:
         _connection_pool = new_pool
         _connection_pool_key = pool_key
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if old_pool is not None:
         try:
             old_pool.closeall()
@@ -321,15 +395,21 @@ def _get_connection_pool() -> Any:
 
 # 接続プール内のすべてのコネクションをクローズし、リソースを解放する
 # Close all connections in the pool and release resources.
+# 日本語: close db pool に関する処理の入口です。
+# English: Entry point for logic related to close db pool.
 def close_db_pool() -> None:
     """Close all pooled DB connections."""
     global _connection_pool, _connection_pool_key
 
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with _pool_lock:
         pool_instance = _connection_pool
         _connection_pool = None
         _connection_pool_key = None
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if pool_instance is None:
         return
 
@@ -344,10 +424,14 @@ atexit.register(close_db_pool)
 
 # データベース接続プールから接続を1つ取得し、プロキシオブジェクトとして返す
 # Retrieve a connection from the pool and return it as a proxy object.
+# 日本語: get db connection の取得処理を担当します。
+# English: Handle fetching for get db connection.
 def get_db_connection() -> _ConnectionProxy:
     # プールから 1 接続を貸し出し、close() 時に自動返却されるプロキシを返す
     # Borrow a pooled connection and return a proxy that puts it back on close().
     """PostgreSQL への接続を返す (connection pool backed)."""
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if psycopg2 is None:
         raise RuntimeError("psycopg2 is required to connect to the database.")
 

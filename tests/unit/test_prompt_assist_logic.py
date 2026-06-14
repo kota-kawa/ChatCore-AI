@@ -12,7 +12,11 @@ from services.prompt_assist import (
 )
 
 
+# 日本語: PromptAssistLogicTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to PromptAssistLogicTestCase.
 class PromptAssistLogicTestCase(unittest.TestCase):
+    # 日本語: test normalize fields coerces prompt type for shared prompt modal のテスト検証を担当します。
+    # English: Handle verifying test behavior for test normalize fields coerces prompt type for shared prompt modal.
     def test_normalize_fields_coerces_prompt_type_for_shared_prompt_modal(self):
         normalized = _normalize_fields(
             "shared_prompt_modal",
@@ -29,6 +33,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertEqual(normalized["author"], "")
         self.assertEqual(normalized["prompt_type"], "text")
 
+    # 日本語: test normalize fields keeps skill prompt type for shared prompt modal のテスト検証を担当します。
+    # English: Handle verifying test behavior for test normalize fields keeps skill prompt type for shared prompt modal.
     def test_normalize_fields_keeps_skill_prompt_type_for_shared_prompt_modal(self):
         normalized = _normalize_fields(
             "shared_prompt_modal",
@@ -40,7 +46,11 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         )
         self.assertEqual(normalized["prompt_type"], "skill")
 
+    # 日本語: test validate prompt assist request requires primary field for improve のテスト検証を担当します。
+    # English: Handle verifying test behavior for test validate prompt assist request requires primary field for improve.
     def test_validate_prompt_assist_request_requires_primary_field_for_improve(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(ValueError):
             _validate_prompt_assist_request(
                 "task_modal",
@@ -48,7 +58,11 @@ class PromptAssistLogicTestCase(unittest.TestCase):
                 {"prompt_content": "", "title": ""},
             )
 
+    # 日本語: test validate prompt assist request requires primary field for generate examples のテスト検証を担当します。
+    # English: Handle verifying test behavior for test validate prompt assist request requires primary field for generate examples.
     def test_validate_prompt_assist_request_requires_primary_field_for_generate_examples(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(ValueError):
             _validate_prompt_assist_request(
                 "shared_prompt_modal",
@@ -56,6 +70,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
                 {"content": "", "title": ""},
             )
 
+    # 日本語: test build prompt assist messages uses structured request and injection guardrails のテスト検証を担当します。
+    # English: Handle verifying test behavior for test build prompt assist messages uses structured request and injection guardrails.
     def test_build_prompt_assist_messages_uses_structured_request_and_injection_guardrails(self):
         messages = _build_prompt_assist_messages(
             "task_modal",
@@ -74,6 +90,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertIn("<output_schema>", messages[1]["content"])
         self.assertIn("上書きしない", messages[1]["content"])
 
+    # 日本語: test build prompt assist messages for generate examples requires generic examples のテスト検証を担当します。
+    # English: Handle verifying test behavior for test build prompt assist messages for generate examples requires generic examples.
     def test_build_prompt_assist_messages_for_generate_examples_requires_generic_examples(self):
         messages = _build_prompt_assist_messages(
             "task_modal",
@@ -90,6 +108,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertIn("固有名詞、日時、商品名、人名、具体的な題材", messages[1]["content"])
         self.assertIn("見出し、箇条書き、表の列名、ステップ名", messages[1]["content"])
 
+    # 日本語: test normalize prompt assist response filters fields and limits warnings のテスト検証を担当します。
+    # English: Handle verifying test behavior for test normalize prompt assist response filters fields and limits warnings.
     def test_normalize_prompt_assist_response_filters_fields_and_limits_warnings(self):
         current_fields = {
             "title": "旅行計画",
@@ -129,6 +149,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertEqual(normalized["warnings"], ["注意1", "注意2", "注意3"])
         self.assertEqual(normalized["summary"], PROMPT_ASSIST_DEFAULT_SUMMARY)
 
+    # 日本語: test normalize prompt assist response raises when no usable suggestions のテスト検証を担当します。
+    # English: Handle verifying test behavior for test normalize prompt assist response raises when no usable suggestions.
     def test_normalize_prompt_assist_response_raises_when_no_usable_suggestions(self):
         current_fields = {
             "title": "旅行計画",
@@ -141,6 +163,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             "ai_model": "gemini",
         }
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(LlmProviderError):
             _normalize_prompt_assist_response(
                 "shared_prompt_modal",
@@ -152,11 +176,19 @@ class PromptAssistLogicTestCase(unittest.TestCase):
                 current_fields,
             )
 
+    # 日本語: test parse prompt assist response rejects non object json のテスト検証を担当します。
+    # English: Handle verifying test behavior for test parse prompt assist response rejects non object json.
     def test_parse_prompt_assist_response_rejects_non_object_json(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(LlmProviderError):
             _parse_prompt_assist_response("[\"not\", \"object\"]")
 
+    # 日本語: test validate prompt assist request blocks generate examples for skill のテスト検証を担当します。
+    # English: Handle verifying test behavior for test validate prompt assist request blocks generate examples for skill.
     def test_validate_prompt_assist_request_blocks_generate_examples_for_skill(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(ValueError) as ctx:
             _validate_prompt_assist_request(
                 "shared_prompt_modal",
@@ -165,7 +197,11 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             )
         self.assertIn("SKILL", str(ctx.exception))
 
+    # 日本語: test validate prompt assist request skill improve requires skill markdown のテスト検証を担当します。
+    # English: Handle verifying test behavior for test validate prompt assist request skill improve requires skill markdown.
     def test_validate_prompt_assist_request_skill_improve_requires_skill_markdown(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self.assertRaises(ValueError) as ctx:
             _validate_prompt_assist_request(
                 "shared_prompt_modal",
@@ -174,6 +210,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             )
         self.assertIn("SKILL定義", str(ctx.exception))
 
+    # 日本語: test build prompt assist messages for skill uses skill allowed fields のテスト検証を担当します。
+    # English: Handle verifying test behavior for test build prompt assist messages for skill uses skill allowed fields.
     def test_build_prompt_assist_messages_for_skill_uses_skill_allowed_fields(self):
         messages = _build_prompt_assist_messages(
             "shared_prompt_modal",
@@ -196,6 +234,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertIn("SKILL定義", user_content)
         self.assertNotIn('"content"', user_content.split("<allowed_fields>")[1].split("</allowed_fields>")[0])
 
+    # 日本語: test normalize prompt assist response excludes content for skill のテスト検証を担当します。
+    # English: Handle verifying test behavior for test normalize prompt assist response excludes content for skill.
     def test_normalize_prompt_assist_response_excludes_content_for_skill(self):
         current_fields = {
             "title": "Git Helper",

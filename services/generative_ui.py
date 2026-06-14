@@ -132,31 +132,45 @@ _JS_BANNED_TOKEN_RE = re.compile(
     r"(?<![\w$])location\s*(?:=|\.|\[))",
     re.IGNORECASE,
 )
+# 日本語: GenerativeUiValidationError として扱う例外情報を表します。
+# English: Represent exception details handled as GenerativeUiValidationError.
 class GenerativeUiValidationError(ValueError):
     pass
 
 
+# 日本語: ArtifactCandidate に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ArtifactCandidate.
 @dataclass(frozen=True)
 class _ArtifactCandidate:
     raw_json: str
     span: tuple[int, int]
 
 
+# 日本語: InteractiveButtonsV1 に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to InteractiveButtonsV1.
 class InteractiveButtonsV1(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     type: Literal["yes_no", "multiple_choice"]
     question: str = Field(min_length=1, max_length=500)
     options: list[str] | None = Field(default=None, max_length=10)
 
+    # 日本語: validate options の検証処理を担当します。
+    # English: Handle validating for validate options.
     @model_validator(mode="after")
     def _validate_options(self) -> "InteractiveButtonsV1":
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.type == "multiple_choice" and not self.options:
             raise ValueError("options is required for multiple_choice")
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.options:
             self.options = [opt for opt in self.options if opt.strip()]
         return self
 
 
+# 日本語: GenerativeUiArtifactV1 に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to GenerativeUiArtifactV1.
 class GenerativeUiArtifactV1(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -168,19 +182,27 @@ class GenerativeUiArtifactV1(BaseModel):
     css: str = Field(default="", max_length=MAX_ARTIFACT_CSS_CHARS)
     js: str = Field(default="", max_length=MAX_ARTIFACT_JS_CHARS)
 
+    # 日本語: validate html の検証処理を担当します。
+    # English: Handle validating for validate html.
     @field_validator("html")
     @classmethod
     def _validate_html(cls, value: str) -> str:
         sanitized = _sanitize_html(value)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if _BANNED_HTML_TAG_RE.search(sanitized):
             raise ValueError("HTML contains a forbidden tag.")
         return sanitized
 
+    # 日本語: validate css の検証処理を担当します。
+    # English: Handle validating for validate css.
     @field_validator("css")
     @classmethod
     def _validate_css(cls, value: str) -> str:
         return _sanitize_css(value)
 
+    # 日本語: validate js の検証処理を担当します。
+    # English: Handle validating for validate js.
     @field_validator("js")
     @classmethod
     def _validate_js(cls, value: str) -> str:
@@ -188,13 +210,19 @@ class GenerativeUiArtifactV1(BaseModel):
         _validate_javascript_safety(sanitized)
         return sanitized
 
+    # 日本語: validate total size の検証処理を担当します。
+    # English: Handle validating for validate total size.
     @model_validator(mode="after")
     def _validate_total_size(self) -> "GenerativeUiArtifactV1":
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if len(self.html) + len(self.css) + len(self.js) > MAX_ARTIFACT_TOTAL_CHARS:
             raise ValueError("Sandbox artifact is too large.")
         return self
 
 
+# 日本語: NormalizedGenerativeResponse に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to NormalizedGenerativeResponse.
 @dataclass(frozen=True)
 class NormalizedGenerativeResponse:
     text: str
@@ -202,15 +230,25 @@ class NormalizedGenerativeResponse:
     validation_errors: list[str]
 
 
+# 日本語: coerce string に関する処理の入口です。
+# English: Entry point for logic related to coerce string.
 def _coerce_string(value: Any) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value is None:
         return ""
     return value if isinstance(value, str) else str(value)
 
 
+# 日本語: coerce height に関する処理の入口です。
+# English: Entry point for logic related to coerce height.
 def _coerce_height(value: Any) -> int | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value is None or value == "":
         return None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(value, str):
         match = re.search(r"\d+", value)
         if not match:
@@ -221,17 +259,23 @@ def _coerce_height(value: Any) -> int | None:
     return None
 
 
+# 日本語: trim artifact sources に関する処理の入口です。
+# English: Entry point for logic related to trim artifact sources.
 def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]:
     html = html[:MAX_ARTIFACT_HTML_CHARS]
     css = css[:MAX_ARTIFACT_CSS_CHARS]
     js = js[:MAX_ARTIFACT_JS_CHARS]
     overflow = len(html) + len(css) + len(js) - MAX_ARTIFACT_TOTAL_CHARS
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if overflow <= 0:
         return html, css, js
 
     js_trim = min(len(js), overflow)
     js = js[: len(js) - js_trim]
     overflow -= js_trim
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if overflow <= 0:
         return html, css, js
 
@@ -245,20 +289,30 @@ def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]
     return html, css, js
 
 
+# 日本語: ensure artifact has body の保証処理を担当します。
+# English: Handle ensuring for ensure artifact has body.
 def _ensure_artifact_has_body(html: str, js: str) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if html.strip():
         return html
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "getElementById('app')" in js or 'getElementById("app")' in js:
         return '<div id="app"></div>'
     return '<div id="app" class="chatcore-generated-root"></div>'
 
 
+# 日本語: strip json comments に関する処理の入口です。
+# English: Entry point for logic related to strip json comments.
 def _strip_json_comments(source: str) -> str:
     output: list[str] = []
     in_string = False
     quote = ""
     escaped = False
     index = 0
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while index < len(source):
         char = source[index]
         next_char = source[index + 1] if index + 1 < len(source) else ""
@@ -294,19 +348,27 @@ def _strip_json_comments(source: str) -> str:
     return "".join(output)
 
 
+# 日本語: remove trailing json commas の削除処理を担当します。
+# English: Handle removing for remove trailing json commas.
 def _remove_trailing_json_commas(source: str) -> str:
     return re.sub(r",(\s*[}\]])", r"\1", source)
 
 
+# 日本語: remove json line continuations の削除処理を担当します。
+# English: Handle removing for remove json line continuations.
 def _remove_json_line_continuations(source: str) -> str:
     return re.sub(r"\\[ \t]*(?:\r\n|\r|\n)[ \t]*", "", source)
 
 
+# 日本語: escape json string newlines に関する処理の入口です。
+# English: Entry point for logic related to escape json string newlines.
 def _escape_json_string_newlines(source: str) -> str:
     output: list[str] = []
     in_string = False
     escaped = False
     index = 0
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while index < len(source):
         char = source[index]
         if in_string:
@@ -338,6 +400,8 @@ def _escape_json_string_newlines(source: str) -> str:
     return "".join(output)
 
 
+# 日本語: normalize jsonish source の正規化処理を担当します。
+# English: Handle normalizing for normalize jsonish source.
 def _normalize_jsonish_source(source: str) -> str:
     return _remove_trailing_json_commas(
         _strip_json_comments(
@@ -348,27 +412,41 @@ def _normalize_jsonish_source(source: str) -> str:
     )
 
 
+# 日本語: loads artifact json に関する処理の入口です。
+# English: Entry point for logic related to loads artifact json.
 def _loads_artifact_json(raw_json: str) -> Any:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         return json.loads(raw_json)
     except json.JSONDecodeError:
         return json.loads(_normalize_jsonish_source(raw_json))
 
 
+# 日本語: spans overlap に関する処理の入口です。
+# English: Entry point for logic related to spans overlap.
 def _spans_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
     return left[0] < right[1] and right[0] < left[1]
 
 
+# 日本語: span overlaps any に関する処理の入口です。
+# English: Entry point for logic related to span overlaps any.
 def _span_overlaps_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
     return any(_spans_overlap(span, existing) for existing in spans)
 
 
+# 日本語: looks like artifact json に関する処理の入口です。
+# English: Entry point for logic related to looks like artifact json.
 def _looks_like_artifact_json(source: str) -> bool:
     source_keys = {match.group("key").lower() for match in _ARTIFACT_SOURCE_KEY_RE.finditer(source)}
     return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
 
 
+# 日本語: strip web search sources html に関する処理の入口です。
+# English: Entry point for logic related to strip web search sources html.
 def _strip_web_search_sources_html(text: str) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "web-search-sources" not in text:
         return text
     # ネストした details を含まない最も内側のブロックから順に除去し、変化が無くなるまで
@@ -376,6 +454,8 @@ def _strip_web_search_sources_html(text: str) -> str:
     # Remove the innermost blocks first and repeat until stable so nested trace
     # blocks are stripped safely as well.
     current = text
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while True:
         stripped = _WEB_SEARCH_SOURCES_BLOCK_RE.sub("", current)
         if stripped == current:
@@ -383,8 +463,12 @@ def _strip_web_search_sources_html(text: str) -> str:
         current = stripped
 
 
+# 日本語: infer artifact title に関する処理の入口です。
+# English: Entry point for logic related to infer artifact title.
 def _infer_artifact_title(text: str) -> str:
     cleaned = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for line in cleaned.splitlines():
         line = line.strip(" #:-\t")
         if line:
@@ -392,10 +476,16 @@ def _infer_artifact_title(text: str) -> str:
     return "生成UI"
 
 
+# 日本語: has artifact intent に関する処理の入口です。
+# English: Entry point for logic related to has artifact intent.
 def _has_artifact_intent(text: str) -> bool:
     stripped = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
         return True
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(stripped) > _SHORT_INTENT_CHAR_LIMIT:
         return False
     return bool(
@@ -404,12 +494,16 @@ def _has_artifact_intent(text: str) -> bool:
     )
 
 
+# 日本語: find balanced object end に関する処理の入口です。
+# English: Entry point for logic related to find balanced object end.
 def _find_balanced_object_end(source: str, start: int) -> int | None:
     depth = 0
     in_string = False
     quote = ""
     escaped = False
     index = start
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while index < len(source):
         char = source[index]
         if in_string:
@@ -437,12 +531,16 @@ def _find_balanced_object_end(source: str, start: int) -> int | None:
     return None
 
 
+# 日本語: find raw artifact candidates に関する処理の入口です。
+# English: Entry point for logic related to find raw artifact candidates.
 def _find_raw_artifact_candidates(
     text: str,
     excluded_spans: list[tuple[int, int]],
 ) -> list[_ArtifactCandidate]:
     candidates: list[_ArtifactCandidate] = []
     index = 0
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while index < len(text):
         start = text.find("{", index)
         if start == -1:
@@ -462,17 +560,23 @@ def _find_raw_artifact_candidates(
     return candidates
 
 
+# 日本語: extract source code artifact candidates に関する処理の入口です。
+# English: Entry point for logic related to extract source code artifact candidates.
 def _extract_source_code_artifact_candidates(
     text: str,
     occupied_spans: list[tuple[int, int]],
 ) -> list[_ArtifactCandidate]:
     blocks: list[tuple[str, str, tuple[int, int]]] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in SOURCE_CODE_BLOCK_RE.finditer(text):
         span = match.span()
         if _span_overlaps_any(span, occupied_spans):
             continue
         blocks.append((match.group("lang").lower(), match.group("code").strip(), span))
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not blocks:
         return []
 
@@ -507,6 +611,8 @@ def _extract_source_code_artifact_candidates(
     return [_ArtifactCandidate(raw_json=json.dumps(payload, ensure_ascii=False), span=span)]
 
 
+# 日本語: drop trailing json token に関する処理の入口です。
+# English: Entry point for logic related to drop trailing json token.
 def _drop_trailing_json_token(source: str) -> str:
     # 末尾の不完全なトークン（文字列・数値・リテラル）を1つ取り除く。
     # Drop one trailing JSON token (string / number / literal) so a truncated
@@ -515,16 +621,22 @@ def _drop_trailing_json_token(source: str) -> str:
         r'(?:"(?:[^"\\]|\\.)*"|[-+0-9.eE]+|true|false|null)\s*$',
         source,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if match:
         return source[: match.start()].rstrip()
     return source[:-1].rstrip()
 
 
+# 日本語: repair truncated json に関する処理の入口です。
+# English: Entry point for logic related to repair truncated json.
 def _repair_truncated_json(source: str) -> str | None:
     # 出力が途中で打ち切られたJSONオブジェクトを最大限復元する。開いた文字列・括弧を
     # 閉じ、末尾の不完全なトークンや区切り文字を削ってから検証する。
     # Best-effort completion of a JSON object whose output was cut off mid-stream.
     start = source.find("{")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if start == -1:
         return None
 
@@ -532,6 +644,8 @@ def _repair_truncated_json(source: str) -> str | None:
     in_string = False
     escaped = False
     quote = ""
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for char in source[start:]:
         if in_string:
             if escaped:
@@ -593,6 +707,8 @@ def _repair_truncated_json(source: str) -> str | None:
     return None
 
 
+# 日本語: extract truncated artifact candidates に関する処理の入口です。
+# English: Entry point for logic related to extract truncated artifact candidates.
 def _extract_truncated_artifact_candidates(
     text: str,
     occupied_spans: list[tuple[int, int]],
@@ -604,6 +720,8 @@ def _extract_truncated_artifact_candidates(
     # ```). Recover a partial UI when possible; otherwise still record the span so
     # the broken JSON is stripped from the visible text instead of being dumped.
     candidates: list[_ArtifactCandidate] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in ARTIFACT_OPEN_FENCE_RE.finditer(text):
         fence_start = match.start()
         content_start = match.end()
@@ -627,6 +745,8 @@ def _extract_truncated_artifact_candidates(
     return candidates
 
 
+# 日本語: extract artifact candidates に関する処理の入口です。
+# English: Entry point for logic related to extract artifact candidates.
 def _extract_artifact_candidates(
     text: str,
     *,
@@ -635,11 +755,15 @@ def _extract_artifact_candidates(
     candidates: list[_ArtifactCandidate] = []
     occupied_spans: list[tuple[int, int]] = []
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in ARTIFACT_BLOCK_RE.finditer(text):
         candidate = _ArtifactCandidate(raw_json=match.group("json"), span=match.span())
         candidates.append(candidate)
         occupied_spans.append(candidate.span)
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in GENERIC_JSON_BLOCK_RE.finditer(text):
         span = match.span()
         if _span_overlaps_any(span, occupied_spans):
@@ -665,11 +789,17 @@ def _extract_artifact_candidates(
     return sorted(candidates, key=lambda candidate: candidate.span)
 
 
+# 日本語: remove candidate spans の削除処理を担当します。
+# English: Handle removing for remove candidate spans.
 def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not candidates:
         return text.strip()
     pieces: list[str] = []
     cursor = 0
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for candidate in sorted(candidates, key=lambda item: item.span):
         start, end = candidate.span
         if start < cursor:
@@ -680,27 +810,41 @@ def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> 
     return "".join(pieces).strip()
 
 
+# 日本語: first present に関する処理の入口です。
+# English: Entry point for logic related to first present.
 def _first_present(payload: dict[str, Any], *keys: str) -> Any:
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for key in keys:
         if key in payload:
             return payload[key]
     return None
 
 
+# 日本語: strip attribute quotes に関する処理の入口です。
+# English: Entry point for logic related to strip attribute quotes.
 def _strip_attribute_quotes(raw_value: str) -> str:
     value = raw_value.strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(value) >= 2 and value[0] in {"'", '"'} and value[-1] == value[0]:
         return value[1:-1]
     return value
 
 
+# 日本語: sanitize script end に関する処理の入口です。
+# English: Entry point for logic related to sanitize script end.
 def _sanitize_script_end(value: str) -> str:
     return re.sub(r"</\s*script", r"<\\/script", value, flags=re.IGNORECASE)
 
 
+# 日本語: strip javascript literals and comments に関する処理の入口です。
+# English: Entry point for logic related to strip javascript literals and comments.
 def _strip_javascript_literals_and_comments(value: str) -> str:
     output: list[str] = []
     index = 0
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while index < len(value):
         char = value[index]
         next_char = value[index + 1] if index + 1 < len(value) else ""
@@ -766,12 +910,20 @@ def _strip_javascript_literals_and_comments(value: str) -> str:
     return "".join(output)
 
 
+# 日本語: validate javascript safety の検証処理を担当します。
+# English: Handle validating for validate javascript safety.
 def _validate_javascript_safety(value: str) -> None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _JS_BANNED_TOKEN_RE.search(_strip_javascript_literals_and_comments(value)):
         raise ValueError("JavaScript uses an API that is not allowed in sandbox artifacts.")
 
 
+# 日本語: is safe javascript fragment に関する処理の入口です。
+# English: Entry point for logic related to is safe javascript fragment.
 def _is_safe_javascript_fragment(value: str) -> bool:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         _validate_javascript_safety(value)
     except ValueError:
@@ -779,8 +931,12 @@ def _is_safe_javascript_fragment(value: str) -> bool:
     return True
 
 
+# 日本語: is safe resource url に関する処理の入口です。
+# English: Entry point for logic related to is safe resource url.
 def _is_safe_resource_url(value: str) -> bool:
     url = value.strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not url:
         return True
     return (
@@ -790,13 +946,19 @@ def _is_safe_resource_url(value: str) -> bool:
     )
 
 
+# 日本語: sanitize css に関する処理の入口です。
+# English: Entry point for logic related to sanitize css.
 def _sanitize_css(value: str) -> str:
     sanitized = _coerce_string(value)
     sanitized = re.sub(r"</\s*style", r"<\\/style", sanitized, flags=re.IGNORECASE)
     sanitized = _CSS_IMPORT_RE.sub("", sanitized)
 
+    # 日本語: replace url に関する処理の入口です。
+    # English: Entry point for logic related to replace url.
     def replace_url(match: re.Match[str]) -> str:
         url = match.group("value").strip()
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if url.startswith("data:") or url.startswith("blob:") or url.startswith("#"):
             return match.group(0)
         return "url(\"data:,\")"
@@ -804,24 +966,36 @@ def _sanitize_css(value: str) -> str:
     return _CSS_URL_RE.sub(replace_url, sanitized)
 
 
+# 日本語: sanitize html に関する処理の入口です。
+# English: Entry point for logic related to sanitize html.
 def _sanitize_html(value: str) -> str:
     sanitized = _coerce_string(value)
     sanitized = _BLOCKED_ELEMENT_RE.sub("", sanitized)
     sanitized = _BLOCKED_TAG_RE.sub("", sanitized)
 
+    # 日本語: replace event attr に関する処理の入口です。
+    # English: Entry point for logic related to replace event attr.
     def replace_event_attr(match: re.Match[str]) -> str:
         handler = _strip_attribute_quotes(match.group("value"))
         return match.group(0) if _is_safe_javascript_fragment(handler) else ""
 
+    # 日本語: replace style attr に関する処理の入口です。
+    # English: Entry point for logic related to replace style attr.
     def replace_style_attr(match: re.Match[str]) -> str:
         style = _strip_attribute_quotes(match.group("value"))
         return match.group(0) if _sanitize_css(style) == style else ""
 
+    # 日本語: replace nav attr に関する処理の入口です。
+    # English: Entry point for logic related to replace nav attr.
     def replace_nav_attr(match: re.Match[str]) -> str:
         name = match.group("name")
         value = _strip_attribute_quotes(match.group("value"))
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if _is_safe_resource_url(value):
             return match.group(0)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if name.lower() in {"href", "xlink:href"}:
             return f' {name}="#"'
         return ""
@@ -832,9 +1006,15 @@ def _sanitize_html(value: str) -> str:
     return sanitized
 
 
+# 日本語: prepare artifact payload に関する処理の入口です。
+# English: Entry point for logic related to prepare artifact payload.
 def _prepare_artifact_payload(payload: Any) -> Any:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(payload, list):
         payload = next((item for item in payload if isinstance(item, dict)), payload)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(payload, dict):
         return payload
     if isinstance(payload.get("artifact"), dict) and not any(
@@ -849,10 +1029,14 @@ def _prepare_artifact_payload(payload: Any) -> Any:
     embedded_css: list[str] = []
     embedded_js: list[str] = []
 
+    # 日本語: extract style に関する処理の入口です。
+    # English: Entry point for logic related to extract style.
     def extract_style(match: re.Match[str]) -> str:
         embedded_css.append(match.group("body"))
         return ""
 
+    # 日本語: extract script に関する処理の入口です。
+    # English: Entry point for logic related to extract script.
     def extract_script(match: re.Match[str]) -> str:
         embedded_js.append(match.group("body"))
         return ""
@@ -882,7 +1066,11 @@ def _prepare_artifact_payload(payload: Any) -> Any:
     return prepared
 
 
+# 日本語: validate artifact payload の検証処理を担当します。
+# English: Handle validating for validate artifact payload.
 def validate_artifact_payload(payload: Any) -> dict[str, Any]:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         artifact = GenerativeUiArtifactV1.model_validate(_prepare_artifact_payload(payload))
     except ValidationError as exc:
@@ -892,7 +1080,11 @@ def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     return artifact.model_dump(exclude_none=True)
 
 
+# 日本語: validate interactive buttons payload の検証処理を担当します。
+# English: Handle validating for validate interactive buttons payload.
 def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         buttons = InteractiveButtonsV1.model_validate(payload)
     except ValidationError as exc:
@@ -902,9 +1094,15 @@ def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
     return buttons.model_dump(exclude_none=True)
 
 
+# 日本語: decode message parts に関する処理の入口です。
+# English: Entry point for logic related to decode message parts.
 def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not raw_parts:
         return None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(raw_parts, str):
         try:
             raw_parts = json.loads(raw_parts)
@@ -938,17 +1136,25 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     return parts or None
 
 
+# 日本語: decode message parts に関する処理の入口です。
+# English: Entry point for logic related to decode message parts.
 def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     return _decode_message_parts(raw_parts)
 
 
+# 日本語: encode message parts に関する処理の入口です。
+# English: Entry point for logic related to encode message parts.
 def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
     normalized = _decode_message_parts(parts)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized:
         return None
     return json.dumps(normalized, ensure_ascii=False)
 
 
+# 日本語: build fallback artifact の組み立て処理を担当します。
+# English: Handle building for build fallback artifact.
 def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]:
     title = _infer_artifact_title(visible_text or raw_text)
     # Web検索のトレースブロックHTMLがエスケープされてカード本文に流れ込むのを防ぐ。
@@ -956,8 +1162,12 @@ def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]
     source_text = _strip_web_search_sources_html(
         visible_text or raw_text or "生成UIを表示するための内容を補完しました。"
     ).strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not source_text:
         source_text = "生成UIを表示するための内容を補完しました。"
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(source_text) > 900:
         source_text = f"{source_text[:900].rstrip()}..."
     paragraphs = [
@@ -994,6 +1204,8 @@ def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]
     return validate_artifact_payload(payload)
 
 
+# 日本語: normalize response with artifacts の正規化処理を担当します。
+# English: Handle normalizing for normalize response with artifacts.
 def normalize_response_with_artifacts(
     raw_text: str,
     *,
@@ -1004,10 +1216,14 @@ def normalize_response_with_artifacts(
     candidates = _extract_artifact_candidates(text, recover_truncated=recover_truncated)
     
     button_candidates: list[_ArtifactCandidate] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
         button_candidates.append(_ArtifactCandidate(raw_json=match.group("json"), span=match.span()))
         
     has_intent = _has_artifact_intent(text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not candidates and not button_candidates and not has_intent:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 

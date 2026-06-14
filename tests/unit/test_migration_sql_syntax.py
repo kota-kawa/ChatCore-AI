@@ -19,9 +19,13 @@ _OP_EXECUTE_SQL = re.compile(
 )
 
 
+# 日本語: all migration sql blocks に関する処理の入口です。
+# English: Entry point for logic related to all migration sql blocks.
 def _all_migration_sql_blocks():
     """Return (filename, sql_block) pairs for every op.execute() call found."""
     results = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for p in sorted(MIGRATIONS_DIR.glob("*.py")):
         content = p.read_text()
         for m in _OP_EXECUTE_SQL.finditer(content):
@@ -30,7 +34,11 @@ def _all_migration_sql_blocks():
     return results
 
 
+# 日本語: read revision value の読み込み処理を担当します。
+# English: Handle reading for read revision value.
 def _read_revision_value(node):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(node, ast.Assign):
         names = [target.id for target in node.targets if isinstance(target, ast.Name)]
         value = node.value
@@ -40,16 +48,22 @@ def _read_revision_value(node):
     else:
         return None, None
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "revision" in names or "down_revision" in names:
         return names, ast.literal_eval(value)
 
     return None, None
 
 
+# 日本語: migration revision graph に関する処理の入口です。
+# English: Entry point for logic related to migration revision graph.
 def _migration_revision_graph():
     revisions = {}
     down_revisions = {}
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for path in sorted(MIGRATIONS_DIR.glob("*.py")):
         values = {}
         for node in ast.parse(path.read_text()).body:
@@ -65,6 +79,8 @@ def _migration_revision_graph():
         down_revisions[revision] = values.get("down_revision")
 
     children = {revision: [] for revision in revisions}
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for revision, down_revision in down_revisions.items():
         parents = (
             down_revision
@@ -78,7 +94,11 @@ def _migration_revision_graph():
     return revisions, down_revisions, children
 
 
+# 日本語: MigrationRevisionGraphTest のテストケースをまとめます。
+# English: Group test cases for MigrationRevisionGraphTest.
 class MigrationRevisionGraphTest(unittest.TestCase):
+    # 日本語: test migrations have single head のテスト検証を担当します。
+    # English: Handle verifying test behavior for test migrations have single head.
     def test_migrations_have_single_head(self):
         revisions, down_revisions, children = _migration_revision_graph()
         heads = sorted(revision for revision, child_revisions in children.items() if not child_revisions)
@@ -91,6 +111,8 @@ class MigrationRevisionGraphTest(unittest.TestCase):
         )
 
 
+# 日本語: MigrationTriggerCaseExpressionTest のテストケースをまとめます。
+# English: Group test cases for MigrationTriggerCaseExpressionTest.
 class MigrationTriggerCaseExpressionTest(unittest.TestCase):
     """
     Guard against mixing simple-CASE selectors with boolean WHEN branches.
@@ -115,6 +137,8 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
         re.DOTALL | re.IGNORECASE,
     )
 
+    # 日本語: test no simple case tg op with record field when のテスト検証を担当します。
+    # English: Handle verifying test behavior for test no simple case tg op with record field when.
     def test_no_simple_case_tg_op_with_record_field_when(self):
         """CASE TG_OP must not have NEW.<col> or OLD.<col> as a WHEN value."""
         violations = [
@@ -137,6 +161,8 @@ class MigrationTriggerCaseExpressionTest(unittest.TestCase):
         )
 
 
+# 日本語: MigrationTriggerOperationLengthTest のテストケースをまとめます。
+# English: Group test cases for MigrationTriggerOperationLengthTest.
 class MigrationTriggerOperationLengthTest(unittest.TestCase):
     """
     Guard against operation strings that exceed the VARCHAR(16) column width
@@ -147,9 +173,13 @@ class MigrationTriggerOperationLengthTest(unittest.TestCase):
     # expression within a CREATE FUNCTION / DO $$ block.
     _THEN_STRING = re.compile(r"\bTHEN\s+'([^']{17,})'", re.IGNORECASE)
 
+    # 日本語: test operation values fit in varchar16 のテスト検証を担当します。
+    # English: Handle verifying test behavior for test operation values fit in varchar16.
     def test_operation_values_fit_in_varchar16(self):
         """String literals after THEN in trigger functions must be ≤16 chars."""
         violations = []
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for filename, sql in _all_migration_sql_blocks():
             for match in self._THEN_STRING.finditer(sql):
                 violations.append((filename, match.group(1)))

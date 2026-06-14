@@ -16,6 +16,8 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# 日本語: upgrade のスキーマ更新処理を担当します。
+# English: Handle upgrading schema for upgrade.
 def upgrade() -> None:
     op.execute(
         """
@@ -39,6 +41,8 @@ def upgrade() -> None:
     )
 
 
+# 日本語: downgrade のスキーマ差し戻し処理を担当します。
+# English: Handle downgrading schema for downgrade.
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_shared_memo_entries_token_created_at")
     op.execute("DROP TABLE IF EXISTS shared_memo_entries")

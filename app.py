@@ -65,7 +65,11 @@ https_only = is_production_env()
 
 # 定期的にエフェメラル（一時的）チャットをクリーンアップするバックグラウンドタスク
 # A background task to periodically clean up ephemeral chats.
+# 日本語: periodic cleanup に関する処理の入口です。
+# English: Entry point for logic related to periodic cleanup.
 def periodic_cleanup(stop_event: threading.Event) -> None:
+    # 日本語: 条件が満たされている間、同じ処理を継続します。
+    # English: Continue the same work while the condition remains true.
     while not stop_event.is_set():
         try:
             cleanup_ephemeral_chats()
@@ -78,10 +82,14 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
 
 # アプリケーションの起動時とシャットダウン時のライフサイクルイベントを管理する
 # Manage startup and shutdown lifecycle events of the FastAPI application.
+# 日本語: lifespan に関する処理の入口です。
+# English: Entry point for logic related to lifespan.
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     # 起動時にデフォルトタスクを投入する（未投入分のみ）
     # Seed default tasks on startup (insert only missing rows).
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         inserted = ensure_default_tasks_seeded()
         if inserted > 0:
@@ -92,6 +100,8 @@ async def lifespan(app_instance: FastAPI):
 
     # 起動時に共有サンプルプロンプトを投入する（未投入分のみ）
     # Seed sample shared prompts on startup (insert only missing rows).
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         inserted = ensure_default_shared_prompts()
         if inserted > 0:
@@ -151,6 +161,8 @@ app.state.session_cookie = "session"
 
 # 新しいCSRFトークンを生成、または既存のトークンを取得してクライアントに返却する
 # Generate a new CSRF token or retrieve an existing one, then return it to the client.
+# 日本語: issue csrf token に関する処理の入口です。
+# English: Entry point for logic related to issue csrf token.
 @app.get("/api/csrf-token")
 async def issue_csrf_token(request: Request):
     token = get_or_create_csrf_token(request)
@@ -159,6 +171,8 @@ async def issue_csrf_token(request: Request):
 
 # アプリケーションの生存状態（Liveness）を確認するためのエンドポイント
 # Endpoint for checking the liveness status of the application.
+# 日本語: healthz に関する処理の入口です。
+# English: Entry point for logic related to healthz.
 @app.get("/healthz")
 async def healthz():
     return jsonify(get_liveness_status())
@@ -166,6 +180,8 @@ async def healthz():
 
 # アプリケーションの準備状態（Readiness）を確認するためのエンドポイント
 # Endpoint for checking the readiness status of the application.
+# 日本語: readyz に関する処理の入口です。
+# English: Entry point for logic related to readyz.
 @app.get("/readyz")
 async def readyz():
     payload, status_code = get_readiness_status()
@@ -199,6 +215,8 @@ app.include_router(memo_bp)
 
 # キャッチされなかった例外を処理し、安全なエラーレスポンスを返却するグローバル例外ハンドラー
 # Global exception handler to catch unhandled exceptions and return a safe error response.
+# 日本語: unhandled exception handler に関する処理の入口です。
+# English: Entry point for logic related to unhandled exception handler.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception(

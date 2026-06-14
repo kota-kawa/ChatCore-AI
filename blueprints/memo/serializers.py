@@ -11,19 +11,29 @@ from .constants import DEFAULT_EXCERPT_LENGTH
 from .helpers import parse_memo_text
 
 
+# 日本語: frontend url に関する処理の入口です。
+# English: Entry point for logic related to frontend url.
 def _frontend_url(path: str) -> str:
     memo_module = sys.modules.get("blueprints.memo")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if memo_module is not None:
         return getattr(memo_module, "frontend_url", default_frontend_url)(path)
     return default_frontend_url(path)
 
 
+# 日本語: is expired に関する処理の入口です。
+# English: Entry point for logic related to is expired.
 def is_expired(expires_at: Any) -> bool:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(expires_at, datetime):
         return False
     return expires_at <= datetime.utcnow()
 
 
+# 日本語: serialize share meta のシリアライズ処理を担当します。
+# English: Handle serializing for serialize share meta.
 def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     share_token = memo.get("share_token") or ""
     expires_at = memo.get("expires_at")
@@ -40,6 +50,8 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# 日本語: serialize memo summary のシリアライズ処理を担当します。
+# English: Handle serializing for serialize memo summary.
 def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
     preview_source = parse_memo_text(memo.get("preview_response") or "")
     share_meta = serialize_share_meta(memo)
@@ -61,6 +73,8 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# 日本語: serialize memo detail のシリアライズ処理を担当します。
+# English: Handle serializing for serialize memo detail.
 def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
     share_meta = serialize_share_meta(memo)
     return {
@@ -81,9 +95,13 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# 日本語: share payload に関する処理の入口です。
+# English: Entry point for logic related to share payload.
 def share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
     share_token = str(share_state.get("share_token") or "")
     share_url = ""
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if share_token and bool(share_state.get("is_active")):
         share_url = _frontend_url(f"/shared/memo/{share_token}")
     return {"status": "success", **share_state, "share_url": share_url}

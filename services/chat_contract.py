@@ -15,9 +15,15 @@ _DEFAULT_FRONTEND_INTERNAL_CASE = "camelCase"
 _DEFAULT_DATETIME_SERIALIZATION = "iso-8601"
 
 
+# 日本語: to positive int に関する処理の入口です。
+# English: Entry point for logic related to to positive int.
 def _to_positive_int(value: Any, fallback: int) -> int:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(value, bool):
         return fallback
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -25,6 +31,8 @@ def _to_positive_int(value: Any, fallback: int) -> int:
     return parsed if parsed > 0 else fallback
 
 
+# 日本語: load chat contract の読み込み処理を担当します。
+# English: Handle loading for load chat contract.
 def _load_chat_contract() -> dict[str, Any]:
     contract_path = (
         Path(__file__).resolve().parent.parent
@@ -32,6 +40,8 @@ def _load_chat_contract() -> dict[str, Any]:
         / "data"
         / "chat_contract.json"
     )
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         raw = contract_path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -41,6 +51,8 @@ def _load_chat_contract() -> dict[str, Any]:
         logger.exception("Failed to read chat contract file: %s", contract_path)
         return {}
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:

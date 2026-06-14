@@ -13,6 +13,8 @@ from blueprints.chat.profile import (
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(path, json_body, session=None):
     return build_request(
         method="POST",
@@ -22,7 +24,11 @@ def make_request(path, json_body, session=None):
     )
 
 
+# 日本語: RequestEmailChangeTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to RequestEmailChangeTestCase.
 class RequestEmailChangeTestCase(unittest.TestCase):
+    # 日本語: test rejects unauthenticated requests のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects unauthenticated requests.
     def test_rejects_unauthenticated_requests(self):
         request = make_request(
             "/api/user/email/request_change",
@@ -31,6 +37,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 401)
 
+    # 日本語: test rejects email matching current address のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects email matching current address.
     def test_rejects_email_matching_current_address(self):
         session = {"user_id": 1, "csrf_token": "x"}
         request = make_request(
@@ -38,6 +46,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
             {"new_email": "alice@example.com"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.chat.profile.get_user_by_id",
             return_value={"id": 1, "email": "alice@example.com"},
@@ -46,6 +56,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("同じ", json.loads(response.body.decode("utf-8"))["error"])
 
+    # 日本語: test rejects email owned by another user のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects email owned by another user.
     def test_rejects_email_owned_by_another_user(self):
         session = {"user_id": 1}
         request = make_request(
@@ -53,6 +65,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
             {"new_email": "claimed@example.com"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch(
                 "blueprints.chat.profile.get_user_by_id",
@@ -70,6 +84,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
             json.loads(response.body.decode("utf-8"))["error"],
         )
 
+    # 日本語: test rejects malformed email のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects malformed email.
     def test_rejects_malformed_email(self):
         session = {"user_id": 1}
         request = make_request(
@@ -80,6 +96,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 400)
 
+    # 日本語: test rejects email with newline injection のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects email with newline injection.
     def test_rejects_email_with_newline_injection(self):
         session = {"user_id": 1}
         request = make_request(
@@ -90,6 +108,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(request_email_change(request))
         self.assertEqual(response.status_code, 400)
 
+    # 日本語: test stores code and new email in session on success のテスト検証を担当します。
+    # English: Handle verifying test behavior for test stores code and new email in session on success.
     def test_stores_code_and_new_email_in_session_on_success(self):
         session = {"user_id": 1}
         request = make_request(
@@ -97,6 +117,8 @@ class RequestEmailChangeTestCase(unittest.TestCase):
             {"new_email": "new@example.com"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch(
                 "blueprints.chat.profile.get_user_by_id",
@@ -137,7 +159,11 @@ class RequestEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(kwargs["to_address"], "alice@example.com")
 
 
+# 日本語: ConfirmEmailChangeTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ConfirmEmailChangeTestCase.
 class ConfirmEmailChangeTestCase(unittest.TestCase):
+    # 日本語: session with state に関する処理の入口です。
+    # English: Entry point for logic related to session with state.
     def _session_with_state(self, **overrides):
         state = {
             "stage": EMAIL_CHANGE_STAGE_NEW,
@@ -150,6 +176,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         state.update(overrides)
         return {"user_id": 1, EMAIL_CHANGE_SESSION_KEY: state}
 
+    # 日本語: test rejects when no pending request のテスト検証を担当します。
+    # English: Handle verifying test behavior for test rejects when no pending request.
     def test_rejects_when_no_pending_request(self):
         request = make_request(
             "/api/user/email/confirm_change",
@@ -159,6 +187,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 400)
 
+    # 日本語: test expired code is cleared のテスト検証を担当します。
+    # English: Handle verifying test behavior for test expired code is cleared.
     def test_expired_code_is_cleared(self):
         session = self._session_with_state()
         request = make_request(
@@ -166,11 +196,15 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "424242"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.profile.time.time", return_value=99999):
             response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 400)
         self.assertNotIn(EMAIL_CHANGE_SESSION_KEY, session)
 
+    # 日本語: test wrong code increments attempts のテスト検証を担当します。
+    # English: Handle verifying test behavior for test wrong code increments attempts.
     def test_wrong_code_increments_attempts(self):
         session = self._session_with_state()
         request = make_request(
@@ -178,11 +212,15 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "000000"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.profile.time.time", return_value=1001):
             response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 400)
         self.assertEqual(session[EMAIL_CHANGE_SESSION_KEY]["attempts"], 1)
 
+    # 日本語: test too many failures clears session のテスト検証を担当します。
+    # English: Handle verifying test behavior for test too many failures clears session.
     def test_too_many_failures_clears_session(self):
         session = self._session_with_state(attempts=4)
         request = make_request(
@@ -190,11 +228,15 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "000000"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.profile.time.time", return_value=1001):
             response = asyncio.run(confirm_email_change(request))
         self.assertEqual(response.status_code, 429)
         self.assertNotIn(EMAIL_CHANGE_SESSION_KEY, session)
 
+    # 日本語: test current email confirmation sends code to new address のテスト検証を担当します。
+    # English: Handle verifying test behavior for test current email confirmation sends code to new address.
     def test_current_email_confirmation_sends_code_to_new_address(self):
         session = self._session_with_state(stage=EMAIL_CHANGE_STAGE_CURRENT)
         request = make_request(
@@ -202,6 +244,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "424242"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch("blueprints.chat.profile.time.time", return_value=1001),
             patch(
@@ -236,6 +280,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(mock_send.call_args.kwargs["to_address"], "new@example.com")
         mock_commit.assert_not_called()
 
+    # 日本語: test success commits change and updates session email のテスト検証を担当します。
+    # English: Handle verifying test behavior for test success commits change and updates session email.
     def test_success_commits_change_and_updates_session_email(self):
         session = self._session_with_state()
         request = make_request(
@@ -243,6 +289,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "424242"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch("blueprints.chat.profile.time.time", return_value=1001),
             patch(
@@ -258,6 +306,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(session["user_email"], "new@example.com")
         mock_commit.assert_called_once_with(1, "new@example.com")
 
+    # 日本語: test email taken between request and confirm returns 409 のテスト検証を担当します。
+    # English: Handle verifying test behavior for test email taken between request and confirm returns 409.
     def test_email_taken_between_request_and_confirm_returns_409(self):
         session = self._session_with_state()
         request = make_request(
@@ -265,6 +315,8 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
             {"auth_code": "424242"},
             session=session,
         )
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch("blueprints.chat.profile.time.time", return_value=1001),
             patch(
@@ -276,7 +328,11 @@ class ConfirmEmailChangeTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
 
 
+# 日本語: ProfileEndpointRefusesEmailChangeTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ProfileEndpointRefusesEmailChangeTestCase.
 class ProfileEndpointRefusesEmailChangeTestCase(unittest.TestCase):
+    # 日本語: test profile post with different email returns 400 のテスト検証を担当します。
+    # English: Handle verifying test behavior for test profile post with different email returns 400.
     def test_profile_post_with_different_email_returns_400(self):
         from blueprints.chat.profile import user_profile
 
@@ -317,12 +373,16 @@ class ProfileEndpointRefusesEmailChangeTestCase(unittest.TestCase):
             b"--" + boundary + b"--\r\n"
         )
 
+        # 日本語: receive に関する処理の入口です。
+        # English: Entry point for logic related to receive.
         async def receive():
             return {"type": "http.request", "body": body, "more_body": False}
 
         from starlette.requests import Request
         request = Request(scope, receive)
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.chat.profile.get_user_by_id",
             return_value={"id": 1, "email": "alice@example.com"},

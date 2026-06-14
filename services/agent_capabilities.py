@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 
 
+# 日本語: AgentAction に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to AgentAction.
 @dataclass(frozen=True)
 class AgentAction:
     label: str
@@ -12,6 +14,8 @@ class AgentAction:
     description: str
 
 
+# 日本語: AgentPage に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to AgentPage.
 @dataclass(frozen=True)
 class AgentPage:
     label: str
@@ -22,6 +26,8 @@ class AgentPage:
     actions: tuple[AgentAction, ...]
 
 
+# 日本語: AgentTool に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to AgentTool.
 @dataclass(frozen=True)
 class AgentTool:
     command: str
@@ -163,18 +169,26 @@ PAGES: tuple[AgentPage, ...] = (
 )
 
 
+# 日本語: get page capability の取得処理を担当します。
+# English: Handle fetching for get page capability.
 def get_page_capability(pathname: str) -> AgentPage | None:
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for page in PAGES:
         if page.path_pattern.search(pathname or ""):
             return page
     return None
 
 
+# 日本語: build capability context の組み立て処理を担当します。
+# English: Handle building for build capability context.
 def build_capability_context(pathname: str = "") -> str:
     current = get_page_capability(pathname)
     lines = ["【ChatCore 機能カタログ】"]
     lines.append("全ページ共通: 左下のAIエージェントから、現在ページの説明、機能案内、画面操作の提案/実行ができます。")
     lines.append("主要ページ:")
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for page in PAGES:
         marker = "（現在のページ）" if current == page else ""
         lines.append(f"- {page.label} {page.route}{marker}: {page.summary}")
@@ -182,6 +196,8 @@ def build_capability_context(pathname: str = "") -> str:
             lines.append(f"  - {feature}")
 
     lines.append("\n共通ナビゲーション:")
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for action in GLOBAL_ACTIONS:
         lines.append(f"- {action.label}: action={action.action}, target={action.target}, {action.description}")
 

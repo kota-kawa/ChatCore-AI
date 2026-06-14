@@ -67,30 +67,46 @@ DOCUMENT_ATTACHMENT_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx"}
 SUPPORTED_ATTACHMENT_EXTENSIONS = TEXT_ATTACHMENT_EXTENSIONS | DOCUMENT_ATTACHMENT_EXTENSIONS
 
 
+# 日本語: AttachedFileValidationError として扱う例外情報を表します。
+# English: Represent exception details handled as AttachedFileValidationError.
 class AttachedFileValidationError(ValueError):
     pass
 
 
+# 日本語: PreparedAttachedFile に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to PreparedAttachedFile.
 @dataclass(frozen=True)
 class PreparedAttachedFile:
     name: str
     content: str
 
 
+# 日本語: get item value の取得処理を担当します。
+# English: Handle fetching for get item value.
 def _get_item_value(item: Any, key: str, default: str = "") -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(item, dict):
         value = item.get(key, default)
     else:
         value = getattr(item, key, default)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if value is None:
         return default
     return str(value)
 
 
+# 日本語: normalize filename の正規化処理を担当します。
+# English: Handle normalizing for normalize filename.
 def _normalize_filename(raw_name: Any) -> str:
     normalized = str(raw_name or "").strip().replace("\\", "/").rsplit("/", 1)[-1].strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized or normalized in {".", ".."}:
         raise AttachedFileValidationError("添付ファイル名が不正です。")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(normalized) > 256:
         raise AttachedFileValidationError(f"「{normalized[:40]}...」のファイル名が長すぎます。")
     if _CONTROL_CHAR_PATTERN.search(normalized):
@@ -98,11 +114,17 @@ def _normalize_filename(raw_name: Any) -> str:
     return normalized
 
 
+# 日本語: attachment extension に関する処理の入口です。
+# English: Entry point for logic related to attachment extension.
 def _attachment_extension(filename: str) -> str:
     lower_name = filename.lower()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if lower_name in {".env", ".gitignore"}:
         return lower_name
     suffix = PurePosixPath(lower_name).suffix
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if suffix:
         return suffix
     if lower_name.endswith(".gitignore"):
@@ -110,10 +132,16 @@ def _attachment_extension(filename: str) -> str:
     return ""
 
 
+# 日本語: decode base64 file に関する処理の入口です。
+# English: Entry point for logic related to decode base64 file.
 def _decode_base64_file(filename: str, data_base64: str) -> bytes:
     encoded = "".join(str(data_base64 or "").split())
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if encoded.lower().startswith("data:") and "," in encoded:
         encoded = encoded.split(",", 1)[1]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not encoded:
         raise AttachedFileValidationError(f"「{filename}」のファイルデータが空です。")
     if len(encoded) > MAX_ATTACHED_FILE_BASE64_LENGTH:
@@ -129,6 +157,8 @@ def _decode_base64_file(filename: str, data_base64: str) -> bytes:
     return decoded
 
 
+# 日本語: clean text に関する処理の入口です。
+# English: Entry point for logic related to clean text.
 def _clean_text(text: str) -> str:
     normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     normalized = normalized.replace("\x00", "")
@@ -137,39 +167,59 @@ def _clean_text(text: str) -> str:
     return normalized.strip()
 
 
+# 日本語: normalize uploaded text の正規化処理を担当します。
+# English: Handle normalizing for normalize uploaded text.
 def _normalize_uploaded_text(text: str) -> str:
     normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     return normalized.replace("\x00", "").strip()
 
 
+# 日本語: trim extracted text に関する処理の入口です。
+# English: Entry point for logic related to trim extracted text.
 def _trim_extracted_text(text: str) -> str:
     cleaned = _clean_text(text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(cleaned) <= MAX_ATTACHED_FILE_CONTENT_LENGTH:
         return cleaned
     marker = "\n...[truncated]"
     return cleaned[: MAX_ATTACHED_FILE_CONTENT_LENGTH - len(marker)].rstrip() + marker
 
 
+# 日本語: require non empty text に関する処理の入口です。
+# English: Entry point for logic related to require non empty text.
 def _require_non_empty_text(filename: str, text: str) -> str:
     prepared = _trim_extracted_text(text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not prepared:
         raise AttachedFileValidationError(f"「{filename}」から読み取れるテキストが見つかりませんでした。")
     return prepared
 
 
+# 日本語: parse xml bytes の解析処理を担当します。
+# English: Handle parsing for parse xml bytes.
 def _parse_xml_bytes(filename: str, member_name: str, xml_bytes: bytes) -> Any:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         return SafeElementTree.fromstring(xml_bytes)
     except Exception as exc:
         raise AttachedFileValidationError(f"「{filename}」のXMLを安全に解析できませんでした。") from exc
 
 
+# 日本語: local name に関する処理の入口です。
+# English: Entry point for logic related to local name.
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
+# 日本語: paragraph text に関する処理の入口です。
+# English: Entry point for logic related to paragraph text.
 def _paragraph_text(paragraph: Any) -> str:
     parts: list[str] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for element in paragraph.iter():
         name = _local_name(str(element.tag))
         if name == "t":
@@ -181,25 +231,39 @@ def _paragraph_text(paragraph: Any) -> str:
     return _clean_text("".join(parts))
 
 
+# 日本語: text from text nodes に関する処理の入口です。
+# English: Entry point for logic related to text from text nodes.
 def _text_from_text_nodes(root: Any) -> str:
     return "".join(element.text or "" for element in root.iter() if _local_name(str(element.tag)) == "t")
 
 
+# 日本語: validate zip member path の検証処理を担当します。
+# English: Handle validating for validate zip member path.
 def _validate_zip_member_path(filename: str, member_name: str) -> None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not member_name or "\\" in member_name or member_name.startswith("/"):
         raise AttachedFileValidationError(f"「{filename}」の内部ファイル名が不正です。")
     path = PurePosixPath(member_name)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
         raise AttachedFileValidationError(f"「{filename}」の内部ファイル名が不正です。")
 
 
+# 日本語: validate office zip の検証処理を担当します。
+# English: Handle validating for validate office zip.
 def _validate_office_zip(filename: str, zf: zipfile.ZipFile, required_members: set[str]) -> None:
     infos = zf.infolist()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(infos) > MAX_OFFICE_ZIP_ENTRIES:
         raise AttachedFileValidationError(f"「{filename}」の内部ファイル数が多すぎます。")
 
     total_uncompressed = 0
     available_members: set[str] = set()
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for info in infos:
         member_name = info.filename
         if member_name.endswith("/"):
@@ -224,10 +288,16 @@ def _validate_office_zip(filename: str, zf: zipfile.ZipFile, required_members: s
         raise AttachedFileValidationError(f"「{filename}」は対応するOfficeファイルとして読み取れません。")
 
 
+# 日本語: open office zip に関する処理の入口です。
+# English: Entry point for logic related to open office zip.
 @contextmanager
 def _open_office_zip(filename: str, data: bytes, required_members: set[str]) -> Iterator[zipfile.ZipFile]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not zipfile.is_zipfile(BytesIO(data)):
         raise AttachedFileValidationError(f"「{filename}」は対応するOfficeファイルとして読み取れません。")
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         with zipfile.ZipFile(BytesIO(data)) as zf:
             _validate_office_zip(filename, zf, required_members)
@@ -236,11 +306,17 @@ def _open_office_zip(filename: str, data: bytes, required_members: set[str]) -> 
         raise AttachedFileValidationError(f"「{filename}」は対応するOfficeファイルとして読み取れません。") from exc
 
 
+# 日本語: read zip member の読み込み処理を担当します。
+# English: Handle reading for read zip member.
 def _read_zip_member(filename: str, zf: zipfile.ZipFile, member_name: str) -> bytes:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         info = zf.getinfo(member_name)
     except KeyError as exc:
         raise AttachedFileValidationError(f"「{filename}」の内部ファイルを読み取れません。") from exc
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if info.file_size > MAX_OFFICE_XML_MEMBER_BYTES:
         raise AttachedFileValidationError(f"「{filename}」の内部XMLが大きすぎます。")
     with zf.open(info) as fp:
@@ -250,7 +326,11 @@ def _read_zip_member(filename: str, zf: zipfile.ZipFile, member_name: str) -> by
     return data
 
 
+# 日本語: extract docx text に関する処理の入口です。
+# English: Entry point for logic related to extract docx text.
 def _extract_docx_text(filename: str, data: bytes) -> str:
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with _open_office_zip(filename, data, {"[Content_Types].xml", "_rels/.rels", "word/document.xml"}) as zf:
         root = _parse_xml_bytes(filename, "word/document.xml", _read_zip_member(filename, zf, "word/document.xml"))
 
@@ -262,7 +342,11 @@ def _extract_docx_text(filename: str, data: bytes) -> str:
     return _require_non_empty_text(filename, "\n".join(paragraph for paragraph in paragraphs if paragraph))
 
 
+# 日本語: extract pptx text に関する処理の入口です。
+# English: Entry point for logic related to extract pptx text.
 def _extract_pptx_text(filename: str, data: bytes) -> str:
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with _open_office_zip(filename, data, {"[Content_Types].xml", "_rels/.rels", "ppt/presentation.xml"}) as zf:
         slide_members = sorted(
             (
@@ -289,12 +373,18 @@ def _extract_pptx_text(filename: str, data: bytes) -> str:
     return _require_non_empty_text(filename, "\n\n".join(sections))
 
 
+# 日本語: extract shared strings に関する処理の入口です。
+# English: Entry point for logic related to extract shared strings.
 def _extract_shared_strings(filename: str, zf: zipfile.ZipFile) -> list[str]:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         root = _parse_xml_bytes(filename, "xl/sharedStrings.xml", _read_zip_member(filename, zf, "xl/sharedStrings.xml"))
     except AttachedFileValidationError:
         return []
     values: list[str] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for item in root.iter():
         if _local_name(str(item.tag)) != "si":
             continue
@@ -302,9 +392,13 @@ def _extract_shared_strings(filename: str, zf: zipfile.ZipFile) -> list[str]:
     return values
 
 
+# 日本語: extract xlsx sheet names に関する処理の入口です。
+# English: Entry point for logic related to extract xlsx sheet names.
 def _extract_xlsx_sheet_names(filename: str, zf: zipfile.ZipFile) -> dict[str, str]:
     root = _parse_xml_bytes(filename, "xl/workbook.xml", _read_zip_member(filename, zf, "xl/workbook.xml"))
     rels: dict[str, str] = {}
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         rels_root = _parse_xml_bytes(
             filename,
@@ -322,6 +416,8 @@ def _extract_xlsx_sheet_names(filename: str, zf: zipfile.ZipFile) -> dict[str, s
         rels = {}
 
     sheet_names: dict[str, str] = {}
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for sheet in root.iter():
         if _local_name(str(sheet.tag)) != "sheet":
             continue
@@ -332,12 +428,18 @@ def _extract_xlsx_sheet_names(filename: str, zf: zipfile.ZipFile) -> dict[str, s
     return sheet_names
 
 
+# 日本語: xlsx cell text に関する処理の入口です。
+# English: Entry point for logic related to xlsx cell text.
 def _xlsx_cell_text(cell: Any, shared_strings: list[str]) -> str:
     cell_type = str(cell.attrib.get("t") or "")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if cell_type == "inlineStr":
         return _clean_text(_text_from_text_nodes(cell))
 
     value = ""
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for child in cell:
         if _local_name(str(child.tag)) == "v":
             value = child.text or ""
@@ -355,7 +457,11 @@ def _xlsx_cell_text(cell: Any, shared_strings: list[str]) -> str:
     return _clean_text(value)
 
 
+# 日本語: extract xlsx text に関する処理の入口です。
+# English: Entry point for logic related to extract xlsx text.
 def _extract_xlsx_text(filename: str, data: bytes) -> str:
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with _open_office_zip(filename, data, {"[Content_Types].xml", "_rels/.rels", "xl/workbook.xml"}) as zf:
         shared_strings = _extract_shared_strings(filename, zf)
         sheet_names = _extract_xlsx_sheet_names(filename, zf)
@@ -399,9 +505,15 @@ def _extract_xlsx_text(filename: str, data: bytes) -> str:
     return _require_non_empty_text(filename, "\n\n".join(sections))
 
 
+# 日本語: extract pdf text に関する処理の入口です。
+# English: Entry point for logic related to extract pdf text.
 def _extract_pdf_text(filename: str, data: bytes) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not data.startswith(b"%PDF-"):
         raise AttachedFileValidationError(f"「{filename}」はPDFとして読み取れません。")
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -429,9 +541,15 @@ def _extract_pdf_text(filename: str, data: bytes) -> str:
     return _require_non_empty_text(filename, "\n\n".join(pages))
 
 
+# 日本語: extract document text に関する処理の入口です。
+# English: Entry point for logic related to extract document text.
 def _extract_document_text(filename: str, extension: str, data: bytes) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if extension == ".pdf":
         return _extract_pdf_text(filename, data)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if extension == ".docx":
         return _extract_docx_text(filename, data)
     if extension == ".xlsx":
@@ -441,11 +559,17 @@ def _extract_document_text(filename: str, extension: str, data: bytes) -> str:
     raise AttachedFileValidationError(f"「{filename}」はサポートされていないファイル形式です。")
 
 
+# 日本語: prepare text attachment に関する処理の入口です。
+# English: Entry point for logic related to prepare text attachment.
 def _prepare_text_attachment(filename: str, extension: str, content: str) -> PreparedAttachedFile:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if extension not in TEXT_ATTACHMENT_EXTENSIONS:
         if extension in DOCUMENT_ATTACHMENT_EXTENSIONS:
             raise AttachedFileValidationError(f"「{filename}」のファイルデータがありません。")
         raise AttachedFileValidationError(f"「{filename}」はサポートされていないファイル形式です。")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(content) > MAX_ATTACHED_FILE_CONTENT_LENGTH:
         raise AttachedFileValidationError(f"「{filename}」のテキスト量が多すぎます。")
     prepared = _normalize_uploaded_text(content)
@@ -454,15 +578,23 @@ def _prepare_text_attachment(filename: str, extension: str, content: str) -> Pre
     return PreparedAttachedFile(name=filename, content=prepared)
 
 
+# 日本語: prepare document attachment に関する処理の入口です。
+# English: Entry point for logic related to prepare document attachment.
 def _prepare_document_attachment(filename: str, extension: str, data_base64: str) -> PreparedAttachedFile:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if extension not in DOCUMENT_ATTACHMENT_EXTENSIONS:
         raise AttachedFileValidationError(f"「{filename}」はサポートされていないファイル形式です。")
     data = _decode_base64_file(filename, data_base64)
     return PreparedAttachedFile(name=filename, content=_extract_document_text(filename, extension, data))
 
 
+# 日本語: prepare attached files に関する処理の入口です。
+# English: Entry point for logic related to prepare attached files.
 def prepare_attached_files(attached_files: list[Any]) -> list[PreparedAttachedFile]:
     prepared_files: list[PreparedAttachedFile] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for item in attached_files[:MAX_ATTACHED_FILES]:
         filename = _normalize_filename(_get_item_value(item, "name"))
         extension = _attachment_extension(filename)
@@ -480,6 +612,8 @@ def prepare_attached_files(attached_files: list[Any]) -> list[PreparedAttachedFi
     return prepared_files
 
 
+# 日本語: format attached files for prompt の整形処理を担当します。
+# English: Handle formatting for format attached files for prompt.
 def format_attached_files_for_prompt(attached_files: list[PreparedAttachedFile]) -> str:
     sections = [
         "<attached_files>",
@@ -490,6 +624,8 @@ def format_attached_files_for_prompt(attached_files: list[PreparedAttachedFile])
             "</attachment_safety_note>"
         ),
     ]
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attached_file in attached_files:
         escaped_name = html.escape(attached_file.name, quote=True)
         escaped_content = html.escape(attached_file.content, quote=False)
@@ -498,10 +634,16 @@ def format_attached_files_for_prompt(attached_files: list[PreparedAttachedFile])
     return "\n".join(sections)
 
 
+# 日本語: encode attached files for storage に関する処理の入口です。
+# English: Entry point for logic related to encode attached files for storage.
 def encode_attached_files_for_storage(attached_files: list[Any] | None) -> str | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not attached_files:
         return None
     payload = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attached_file in attached_files[:MAX_ATTACHED_FILES]:
         if isinstance(attached_file, dict):
             raw_name = attached_file.get("name", "")
@@ -521,9 +663,15 @@ def encode_attached_files_for_storage(attached_files: list[Any] | None) -> str |
     return json.dumps(payload, ensure_ascii=False)
 
 
+# 日本語: decode attached files from storage に関する処理の入口です。
+# English: Entry point for logic related to decode attached files from storage.
 def decode_attached_files_from_storage(raw_payload: Any) -> list[PreparedAttachedFile]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not raw_payload:
         return []
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(raw_payload, str):
         try:
             payload = json.loads(raw_payload)

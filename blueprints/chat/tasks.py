@@ -102,24 +102,34 @@ AI_AGENT_SYSTEM_PROMPT = """
 """.strip()
 
 
+# 日本語: resolve auth limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve auth limit service.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
 
 
+# 日本語: resolve llm daily limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve llm daily limit service.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
 
 
+# 日本語: consume prompt assist limits に関する処理の入口です。
+# English: Entry point for logic related to consume prompt assist limits.
 def _consume_prompt_assist_limits(
     request: Request,
     user_id: int | str,
@@ -134,6 +144,8 @@ def _consume_prompt_assist_limits(
         window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
         service=auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -150,6 +162,8 @@ def _consume_prompt_assist_limits(
         window_seconds=PROMPT_ASSIST_RATE_WINDOW_SECONDS,
         service=auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -161,6 +175,8 @@ def _consume_prompt_assist_limits(
     return True, None
 
 
+# 日本語: consume ai agent limits に関する処理の入口です。
+# English: Entry point for logic related to consume ai agent limits.
 def _consume_ai_agent_limits(
     request: Request,
     actor_key: str,
@@ -175,6 +191,8 @@ def _consume_ai_agent_limits(
         window_seconds=AI_AGENT_RATE_WINDOW_SECONDS,
         service=auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -191,6 +209,8 @@ def _consume_ai_agent_limits(
         window_seconds=AI_AGENT_RATE_WINDOW_SECONDS,
         service=auth_limit_service,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -202,17 +222,23 @@ def _consume_ai_agent_limits(
     return True, None
 
 
+# 日本語: ai agent sse に関する処理の入口です。
+# English: Entry point for logic related to ai agent sse.
 def _ai_agent_sse(event: str, payload: dict[str, Any]) -> bytes:
     body = json.dumps(payload, ensure_ascii=False)
     return f"event: {event}\ndata: {body}\n\n".encode("utf-8")
 
 
+# 日本語: build ai agent messages の組み立て処理を担当します。
+# English: Handle building for build ai agent messages.
 def _build_ai_agent_messages(
     payload: AiAgentRequest,
     rag_context: str = "",
 ) -> list[dict[str, str]]:
     recent_messages = payload.messages[-12:]
     system_content = f"{AI_AGENT_SYSTEM_PROMPT}\n\n{build_capability_context(payload.current_page or '')}"
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if rag_context:
         system_content = (
             f"{system_content}\n\n"
@@ -228,13 +254,19 @@ def _build_ai_agent_messages(
     return conversation_messages
 
 
+# 日本語: build ai agent memo context の組み立て処理を担当します。
+# English: Handle building for build ai agent memo context.
 def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         raise ResourceNotFoundError("メモが見つかりません。")
 
     memo = fetch_memo_detail(user_id, memo_id)
     title = (memo.get("title") or "保存したメモ").strip()
     memo_text = parse_memo_text(memo.get("ai_response") or "").strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(memo_text) > AI_AGENT_MEMO_CONTEXT_MAX_LENGTH:
         memo_text = f"{memo_text[:AI_AGENT_MEMO_CONTEXT_MAX_LENGTH]}\n\n（本文が長いため一部を省略）"
 
@@ -248,11 +280,15 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
     )
 
 
+# 日本語: fetch tasks from db の取得処理を担当します。
+# English: Handle fetching for fetch tasks from db.
 def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
     # ログイン時はユーザー個別タスク、未ログイン時は共通タスクを取得する
     # Fetch user-specific tasks when logged in, otherwise shared default tasks.
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -300,11 +336,15 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
             conn.close()
 
 
+# 日本語: update tasks order for user の更新処理を担当します。
+# English: Handle updating for update tasks order for user.
 def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
     # 受け取った順序配列で display_order を更新する
     # Update display_order according to the provided order list.
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -326,11 +366,15 @@ def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
             conn.close()
 
 
+# 日本語: delete task for user の削除処理を担当します。
+# English: Handle deleting for delete task for user.
 def _delete_task_for_user(user_id: int, task_name: str) -> None:
     # ユーザー所有タスクを1件削除する
     # Delete a single user-owned task.
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -350,6 +394,8 @@ def _delete_task_for_user(user_id: int, task_name: str) -> None:
             conn.close()
 
 
+# 日本語: edit task for user に関する処理の入口です。
+# English: Entry point for logic related to edit task for user.
 def _edit_task_for_user(
     user_id: int,
     old_task: str,
@@ -365,6 +411,8 @@ def _edit_task_for_user(
     conn = None
     sel_cursor = None
     upd_cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         sel_cursor = conn.cursor()
@@ -418,6 +466,8 @@ def _edit_task_for_user(
             conn.close()
 
 
+# 日本語: add task for user の追加処理を担当します。
+# English: Handle adding for add task for user.
 def _add_task_for_user(
     user_id: int,
     title: str,
@@ -431,6 +481,8 @@ def _add_task_for_user(
     # Insert a new user-owned task.
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -467,6 +519,8 @@ def _add_task_for_user(
             conn.close()
 
 
+# 日本語: get tasks の取得処理を非同期で担当します。
+# English: Handle fetching for get tasks asynchronously.
 @chat_bp.get("/api/tasks", name="chat.get_tasks")
 async def get_tasks(request: Request):
     """
@@ -475,6 +529,8 @@ async def get_tasks(request: Request):
     未ログインの場合:
         ・共通タスク (user_id IS NULL) のみ返す
     """
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         session = request.session
         # user_id が None や空文字の場合は未ログインとして扱う
@@ -518,13 +574,19 @@ async def get_tasks(request: Request):
 
 # タスクカード並び替え
 # Reorder task cards for authenticated users.
+# 日本語: update tasks order の更新処理を非同期で担当します。
+# English: Handle updating for update tasks order asynchronously.
 @chat_bp.post("/api/update_tasks_order", name="chat.update_tasks_order")
 async def update_tasks_order(request: Request):
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     user_id = request.session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
     payload, validation_error = validate_payload_model(
@@ -546,13 +608,19 @@ async def update_tasks_order(request: Request):
         )
 
 
+# 日本語: delete task の削除処理を非同期で担当します。
+# English: Handle deleting for delete task asynchronously.
 @chat_bp.post("/api/delete_task", name="chat.delete_task")
 async def delete_task(request: Request):
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     user_id = request.session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
     payload, validation_error = validate_payload_model(
@@ -574,13 +642,19 @@ async def delete_task(request: Request):
         )
 
 
+# 日本語: edit task に関する処理の入口です。
+# English: Entry point for logic related to edit task.
 @chat_bp.post("/api/edit_task", name="chat.edit_task")
 async def edit_task(request: Request):
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     user_id = request.session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
 
@@ -616,13 +690,19 @@ async def edit_task(request: Request):
         )
 
 
+# 日本語: add task の追加処理を非同期で担当します。
+# English: Handle adding for add task asynchronously.
 @chat_bp.post("/api/add_task", name="chat.add_task")
 async def add_task(request: Request):
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     user_id = request.session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
 
@@ -653,6 +733,8 @@ async def add_task(request: Request):
         )
 
 
+# 日本語: prompt assist に関する処理の入口です。
+# English: Entry point for logic related to prompt assist.
 @chat_bp.post("/api/prompt-assist", name="chat.prompt_assist")
 async def prompt_assist(
     request: Request,
@@ -665,10 +747,14 @@ async def prompt_assist(
         llm_daily_limit_service,
     )
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     user_id = request.session.get("user_id")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_id:
         return jsonify({"error": "ログインが必要です"}, status_code=403)
 
@@ -753,6 +839,8 @@ async def prompt_assist(
         )
 
 
+# 日本語: ai agent に関する処理の入口です。
+# English: Entry point for logic related to ai agent.
 @chat_bp.post("/api/ai-agent", name="chat.ai_agent")
 async def ai_agent(
     request: Request,
@@ -765,6 +853,8 @@ async def ai_agent(
         llm_daily_limit_service,
     )
     data, error_response = await require_json_dict(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -773,6 +863,8 @@ async def ai_agent(
         AiAgentRequest,
         error_message="AIエージェントリクエストが不正です。",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -806,7 +898,11 @@ async def ai_agent(
             retry_after=get_seconds_until_monthly_reset(),
         )
 
+    # 日本語: stream のストリーミング処理を非同期で担当します。
+    # English: Handle streaming for stream asynchronously.
     async def _stream() -> AsyncIterator[bytes]:
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             last_user_message = next(
                 (m.content for m in reversed(payload.messages) if m.role == "user"),

@@ -71,18 +71,26 @@ DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
+# 日本語: extract id に関する処理の入口です。
+# English: Entry point for logic related to extract id.
 def _extract_id(
     row: dict[str, Any] | tuple[Any, ...] | None, key_name: str = "id"
 ) -> Any:
     # DB結果が dict/tuple どちらでもIDを取り出せるようにする
     # Extract ID from DB rows regardless of dict or tuple shape.
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if row is None:
         return None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(row, dict):
         return row.get(key_name)
     return row[0]
 
 
+# 日本語: ensure sample owner の保証処理を担当します。
+# English: Handle ensuring for ensure sample owner.
 def _ensure_sample_owner(cursor: Any) -> int:
     # サンプル投稿者ユーザーを再利用し、未作成なら作成してIDを返す
     # Reuse sample owner user or create it when missing, then return its ID.
@@ -92,6 +100,8 @@ def _ensure_sample_owner(cursor: Any) -> int:
     )
     row = cursor.fetchone()
     owner_id = _extract_id(row)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if owner_id is not None:
         return owner_id
 
@@ -105,6 +115,8 @@ def _ensure_sample_owner(cursor: Any) -> int:
     )
     row = cursor.fetchone()
     owner_id = _extract_id(row)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if owner_id is None:
         raise RuntimeError("Failed to create sample prompt owner.")
     cursor.execute(
@@ -126,9 +138,13 @@ def _ensure_sample_owner(cursor: Any) -> int:
     return owner_id
 
 
+# 日本語: ensure default shared prompts の保証処理を担当します。
+# English: Handle ensuring for ensure default shared prompts.
 def ensure_default_shared_prompts() -> int:
     # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
     # Seed missing public sample prompts under the sample owner account.
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()

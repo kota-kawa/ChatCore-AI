@@ -5,7 +5,11 @@ from services.session_middleware import SESSION_IDS_TO_DELETE_SCOPE_KEY
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: AuthSessionTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to AuthSessionTestCase.
 class AuthSessionTestCase(unittest.TestCase):
+    # 日本語: test establish authenticated session rotates existing session id のテスト検証を担当します。
+    # English: Handle verifying test behavior for test establish authenticated session rotates existing session id.
     def test_establish_authenticated_session_rotates_existing_session_id(self):
         request = build_request(path="/api/login", session={"pre_auth": "keep"})
         request.scope["session_id"] = "session-before-login"
@@ -21,6 +25,8 @@ class AuthSessionTestCase(unittest.TestCase):
         self.assertEqual(request.session["pre_auth"], "keep")
         self.assertTrue(request.session.get("_permanent"))
 
+    # 日本語: test establish authenticated session without existing session id のテスト検証を担当します。
+    # English: Handle verifying test behavior for test establish authenticated session without existing session id.
     def test_establish_authenticated_session_without_existing_session_id(self):
         request = build_request(path="/api/login", session={})
 

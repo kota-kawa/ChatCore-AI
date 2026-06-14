@@ -12,11 +12,17 @@ from services.logging_config import (
 )
 
 
+# 日本語: LoggingConfigTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to LoggingConfigTestCase.
 class LoggingConfigTestCase(unittest.TestCase):
+    # 日本語: setUp に関する処理の入口です。
+    # English: Entry point for logic related to setUp.
     def setUp(self):
         self.root_logger = logging.getLogger()
         self.original_level = self.root_logger.level
 
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for handler in list(self.root_logger.handlers):
             if getattr(handler, "name", "") in {
                 CONSOLE_HANDLER_NAME,
@@ -28,7 +34,11 @@ class LoggingConfigTestCase(unittest.TestCase):
 
         self.original_handlers = list(self.root_logger.handlers)
 
+    # 日本語: tearDown に関する処理の入口です。
+    # English: Entry point for logic related to tearDown.
     def tearDown(self):
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for handler in list(self.root_logger.handlers):
             if getattr(handler, "name", "") in {
                 CONSOLE_HANDLER_NAME,
@@ -41,7 +51,11 @@ class LoggingConfigTestCase(unittest.TestCase):
         self.root_logger.handlers = self.original_handlers
         self.root_logger.setLevel(self.original_level)
 
+    # 日本語: test configure logging writes app and error files のテスト検証を担当します。
+    # English: Handle verifying test behavior for test configure logging writes app and error files.
     def test_configure_logging_writes_app_and_error_files(self):
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(
                 "os.environ",
