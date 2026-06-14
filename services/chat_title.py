@@ -17,6 +17,8 @@ _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
+# HTMLタグを除去し、余分な空白を正規化した上で、指定文字数に制限した平文テキストを返す
+# Remove HTML tags, normalize spacing, and return plain text capped at the character limit
 def _plain_text(value: str, *, limit: int = CHAT_ROOM_TITLE_LLM_INPUT_CHARS) -> str:
     normalized = _HTML_BR_PATTERN.sub("\n", value or "")
     normalized = _HTML_TAG_PATTERN.sub("", normalized)
@@ -26,6 +28,8 @@ def _plain_text(value: str, *, limit: int = CHAT_ROOM_TITLE_LLM_INPUT_CHARS) -> 
     return normalized[:limit].rstrip()
 
 
+# タイトル候補からJSONや余分な記号・空白を取り除き、文字数制限をしてクリーンにする
+# Clean the title candidate by removing JSON wrappers, quotes, markdown characters, and extra spaces
 def _sanitize_title(raw_title: str) -> str:
     title = str(raw_title or "").strip()
     if not title:
@@ -47,6 +51,8 @@ def _sanitize_title(raw_title: str) -> str:
     return title[:CHAT_ROOM_TITLE_MAX_CHARS].rstrip()
 
 
+# ユーザーメッセージやタスク起動リクエスト情報から、初期タイトルの候補リストを構築する
+# Build a list of initial chat room title candidates from the user message and task info
 def build_initial_title_candidates(
     user_message: str,
     *,
@@ -63,6 +69,8 @@ def build_initial_title_candidates(
     return [candidate for candidate in dict.fromkeys(candidates) if candidate]
 
 
+# LLMを使用して会話内容から簡潔なチャットルームのタイトルを生成する
+# Generate a concise chat room title from the conversation content using LLM
 def generate_chat_room_title(
     user_message: str,
     assistant_response: str,
@@ -111,6 +119,8 @@ def generate_chat_room_title(
     return _sanitize_title(raw_title)
 
 
+# 条件を満たす場合にチャットルームのタイトルを自動生成し、データベースのルーム名を更新する
+# Automatically generate and update the chat room title in the DB if condition is met
 def maybe_auto_title_chat_room(
     *,
     chat_room_id: str,

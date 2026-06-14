@@ -13,4 +13,3 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # サーバー内部エラー発生時にユーザーへ提示するデフォルトのメッセージ
 # The default message shown to the user when an internal server error occurs.
 DEFAULT_INTERNAL_ERROR_MESSAGE = "内部エラーが発生しました。"
-

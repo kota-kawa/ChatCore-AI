@@ -70,6 +70,8 @@ _JA_TO_EN: dict[str, list[str]] = {
 }
 
 
+# 検索結果で見つかったコードベースのスニペットを表すデータクラス
+# A dataclass representing a codebase snippet found in search results
 @dataclass
 class CodeSnippet:
     rel_path: str
@@ -78,11 +80,15 @@ class CodeSnippet:
     match_line: int
     content: str
 
+    # ファイルの拡張子に基づいて言語名（python または typescript）を取得する
+    # Get the language name (python or typescript) based on the file extension
     @property
     def lang(self) -> str:
         return "python" if self.rel_path.endswith(".py") else "typescript"
 
 
+# クエリから grep に使うキーワードを抽出する
+# Extract keywords used for grep from the query
 def _extract_search_terms(query: str) -> list[str]:
     """クエリから grep に使うキーワードを抽出する。ASCII 優先、日本語はマッピング経由。"""
     terms: list[str] = []
@@ -106,10 +112,14 @@ def _extract_search_terms(query: str) -> list[str]:
     return result[:5]
 
 
+# パスが除外すべきキーワードを含むか判定する
+# Determine if a path contains any excluded keyword fragments
 def _is_excluded(path: str) -> bool:
     return any(frag in path for frag in _EXCLUDE_PATH_FRAGMENTS)
 
 
+# 指定されたキーワードを含むファイルパスと行番号のリストを返す
+# Return a list of file paths and line numbers containing the specified keyword
 def _grep(term: str) -> list[tuple[str, int]]:
     """term を含むファイルパスと行番号のリストを返す。"""
     matches: list[tuple[str, int]] = []
@@ -142,6 +152,8 @@ def _grep(term: str) -> list[tuple[str, int]]:
     return matches
 
 
+# マッチした行の周辺を含めたコードスニペットオブジェクトを構築する
+# Read and build a CodeSnippet object containing lines surrounding the match line
 def _read_snippet(file_path: str, match_line: int) -> CodeSnippet | None:
     try:
         path = Path(file_path)
@@ -172,6 +184,8 @@ def _read_snippet(file_path: str, match_line: int) -> CodeSnippet | None:
         return None
 
 
+# クエリに関連するコードスニペットを grep で探して文字列で返す
+# Search the codebase for code snippets relevant to the query using grep and return as string
 def search_codebase(query: str, max_snippets: int = MAX_SNIPPETS) -> str:
     """クエリに関連するコードスニペットを grep で探して文字列で返す。
 

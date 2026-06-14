@@ -1,4 +1,5 @@
-"""AI-powered memo assistance: title suggestion and semantic search via embeddings."""
+# AIによるメモ支援機能：埋め込みベクトルを用いたセマンティック検索と、タイトルの提案機能を提供します。
+# AI-powered memo assistance: title suggestion and semantic search via embeddings.
 
 from __future__ import annotations
 
@@ -21,9 +22,11 @@ SUGGEST_TITLE_MAX_LEN = 255
 logger = logging.getLogger(__name__)
 
 
-# 日本語: テキストからJSON部分（Markdownコードフェンス等を含む）を抽出し、辞書オブジェクトに変換します。
-# English: Extract and parse JSON from raw text, stripping markdown code fences.
+# テキストからJSON部分（Markdownコードフェンス等を含む）を抽出し、辞書オブジェクトに変換します。
+# Extract and parse JSON from raw text, stripping markdown code fences.
 def _extract_json(raw: str) -> dict[str, Any]:
+    # テキストからMarkdownのコードフェンスを除去し、最初に見つかったJSONオブジェクトをパースします。
+    # Strip Markdown code fences and parse the first JSON object found.
     """Strip Markdown code fences and parse the first JSON object found."""
     cleaned = raw.strip()
     # Remove ```json ... ``` or ``` ... ```
@@ -38,9 +41,11 @@ def _extract_json(raw: str) -> dict[str, Any]:
     return json.loads(cleaned)
 
 
-# 日本語: AIからの応答テキストの最初の空でない行から、簡易的なタイトルを抽出するフォールバック処理。
-# English: Extract a simple fallback title from the first non-empty line of AI response.
+# AIからの応答テキストの最初の空でない行から、簡易的なタイトルを抽出するフォールバック処理。
+# Extract a simple fallback title from the first non-empty line of AI response.
 def _fallback_suggest(ai_response: str) -> dict[str, Any]:
+    # AI応答の最初の空行以外の行から、最小限のタイトル案を生成します。
+    # Return a minimal suggestion from the first non-empty line of the AI response.
     """Return a minimal suggestion from the first non-empty line of the AI response."""
     for line in (ai_response or "").splitlines():
         cleaned = re.sub(r"^#+\s*", "", line).strip()
@@ -49,8 +54,8 @@ def _fallback_suggest(ai_response: str) -> dict[str, Any]:
     return {"title": ""}
 
 
-# 日本語: メモの本文テキストをもとに、LLMを呼び出して適切なタイトルを提案させます。不全時はヒューリスティクスにフォールバックします。
-# English: Call LLM to suggest a concise title for a memo, falling back to heuristics on failure.
+# メモの本文テキストをもとに、LLMを呼び出して適切なタイトルを提案させます。不全時はヒューリスティクスにフォールバックします。
+# Call LLM to suggest a concise title for a memo, falling back to heuristics on failure.
 def suggest_title(ai_response: str) -> dict[str, Any]:
     """Use LLM to suggest a title for a memo.
 
@@ -97,20 +102,21 @@ def suggest_title(ai_response: str) -> dict[str, Any]:
         return _fallback_suggest(ai_response)
 
 
-# 日本語: 埋め込みベクトルの生成機能（Groqクライアント）が有効かどうかを返します。
-# English: Return whether the embedding generation capability is configured and available.
+# 埋め込みベクトルの生成機能（Groqクライアント）が有効かどうかを返します。
+# Return whether the embedding generation capability is configured and available.
 def embeddings_available() -> bool:
+    # 埋め込みベクトルの生成機能（Groqクライアント）が有効かどうかを返します。
+    # Return True when the Groq client is configured and can generate embeddings.
     """Return True when the Groq client is configured and can generate embeddings."""
     return groq_client is not None
 
 
-# 日本語: 与えられたテキストから、Groq APIを使用して埋め込みベクトル(1次元配列)を生成します。
-# English: Generate a dense embedding vector for the text using the Groq API.
+# 与えられたテキストから、Groq APIを使用して埋め込みベクトル(1次元配列)を生成します。
+# Generate a dense embedding vector for the text using the Groq API.
 def generate_embedding(text: str) -> list[float] | None:
-    """Generate a dense embedding vector for the given text via Groq.
-
-    Returns ``None`` when embeddings are unavailable or the call fails.
-    """
+    # 与えられたテキストから、Groq APIを使用して埋め込みベクトル(1次元配列)を生成します。
+    # Generate a dense embedding vector for the text using the Groq API.
+    """Generate a dense embedding vector for the given text via Groq."""
     if not embeddings_available():
         return None
 
@@ -129,9 +135,11 @@ def generate_embedding(text: str) -> list[float] | None:
         return None
 
 
-# 日本語: メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
-# English: Combine the title and body content into a format optimized for embedding.
+# メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
+# Combine the title and body content into a format optimized for embedding.
 def build_memo_embedding_text(title: str, ai_response: str) -> str:
+    # メモのタイトルと本文を、埋め込みベクトル生成に最適な形式に結合します。
+    # Combine the title and body content into a format optimized for embedding.
     """Combine memo fields into a single string optimised for embedding."""
     parts: list[str] = []
     if title:
@@ -141,8 +149,8 @@ def build_memo_embedding_text(title: str, ai_response: str) -> str:
     return "\n".join(parts)
 
 
-# 日本語: 2つのベクトルのコサイン類似度を算出します。
-# English: Calculate the cosine similarity score between two vectors.
+# 2つのベクトルのコサイン類似度を算出します。
+# Calculate the cosine similarity score between two vectors.
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     va = np.asarray(a, dtype=np.float32)
     vb = np.asarray(b, dtype=np.float32)
@@ -153,16 +161,15 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(va, vb) / (norm_a * norm_b))
 
 
-# 日本語: クエリの埋め込みベクトルと各メモの類似度を計算し、類似度の高い順にソートしたメモ一覧を返します。
-# English: Sort the list of memos in descending order of similarity to the query embedding.
+# クエリの埋め込みベクトルと各メモの類似度を計算し、類似度の高い順にソートしたメモ一覧を返します。
+# Sort the list of memos in descending order of similarity to the query embedding.
 def rank_memos_by_semantic_similarity(
     query_embedding: list[float],
     memos: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Return *memos* sorted by descending cosine similarity to *query_embedding*.
-
-    Memos without an embedding are placed at the end with score 0.
-    """
+    # クエリの埋め込みベクトルと各メモの類似度を計算し、類似度の高い順にソートしたメモ一覧を返します。
+    # Sort the list of memos in descending order of similarity to the query embedding.
+    """Return *memos* sorted by descending cosine similarity to *query_embedding*."""
     scored: list[tuple[float, dict[str, Any]]] = []
     for memo in memos:
         emb_raw = memo.get("embedding")

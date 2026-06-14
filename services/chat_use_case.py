@@ -35,6 +35,8 @@ from services.chat_title import (
 )
 
 
+# 投稿時のチャット処理で使用する外部モジュールやリポジトリの依存関係を集約したクラス
+# A class aggregating external dependencies and repositories utilized in chat posting
 @dataclass(frozen=True)
 class ChatPostUseCaseDependencies:
     cleanup_ephemeral_chats: Callable[[], Any]
@@ -83,7 +85,11 @@ class ChatPostUseCaseDependencies:
     logger: Any
 
 
+# チャット投稿処理（メッセージ保存、RAG/Web検索、LLM呼び出し/ストリーミング、タイトル生成、要約更新）を担うユースケースクラス
+# A use case class handling chat posts (saving messages, RAG/Web search, LLM calls/streaming, title generation, and summary updates)
 class ChatPostUseCase:
+    # ユースケースを依存関係とデフォルトモデル名で初期化する
+    # Initialize the use case with dependencies and the default model name
     def __init__(
         self,
         dependencies: ChatPostUseCaseDependencies,
@@ -93,6 +99,8 @@ class ChatPostUseCase:
         self.deps = dependencies
         self.default_model = default_model
 
+    # リクエストを受け取り、メッセージの検証・コンテキスト補強・AI応答生成・DB保存などの一連の流れを実行する
+    # Receive a request and execute the entire workflow including validation, context augmentation, AI generation, and database updates
     async def execute(
         self,
         request: Request,
@@ -103,6 +111,8 @@ class ChatPostUseCase:
     ) -> Any:
         deps = self.deps
 
+        # 一時チャットのクリーンアップとリクエストJSONのパース・検証
+        # Cleanup ephemeral chats and parse/validate the request JSON payload
         await run_blocking(deps.cleanup_ephemeral_chats)
         data, error_response = await deps.require_json_dict(request)
         if error_response is not None:
@@ -121,11 +131,15 @@ class ChatPostUseCase:
         model = payload.model or self.default_model
         attached_files = payload.attached_files or []
 
+        # モデル名の検証
+        # Validate the requested model name
         try:
             deps.validate_model_name(model)
         except LlmInvalidModelError as exc:
             return deps.jsonify({"error": str(exc)}, status_code=400)
 
+        # ゲスト制限の消費判定とセッション/ユーザーの初期化
+        # Consume guest limits and initialize session/user details
         session = request.session
         if "user_id" not in session:
             allowed, message = await run_blocking(
@@ -146,6 +160,8 @@ class ChatPostUseCase:
         should_auto_title_room = False
         formatted_user_message = html.escape(user_message).replace("\n", "<br>")
 
+        # ルーム所有権およびアクセス権のバリデーション
+        # Validate room ownership and access permissions
         if "user_id" in session:
             try:
                 room_mode, sid, legacy_response = await run_blocking(
@@ -169,11 +185,15 @@ class ChatPostUseCase:
             if guest_error is not None:
                 return guest_error
 
+        # 添付ファイルのアップロード準備と検証
+        # Prepare and validate uploaded attachment files
         try:
             prepared_attached_files = await run_blocking(prepare_attached_files, attached_files)
         except AttachedFileValidationError as exc:
             return deps.jsonify({"error": str(exc)}, status_code=400)
 
+        # 一時ルームと通常ルームで分岐し、ユーザー発話メッセージを保存する
+        # Save the user message depending on temporary vs. normal room mode
         if "user_id" in session:
             if room_mode == "temporary":
                 # ログイン中でも temporary room は DB に保存せず、ユーザー単位の一時ストアに閉じ込める。
@@ -246,12 +266,16 @@ class ChatPostUseCase:
                 chat_room_id,
             )
 
+        # メッセージ履歴を LLM 向けに正規化
+        # Normalize message history for LLM compatibility
         normalized_all_messages = deps.normalize_messages_for_llm(all_messages)
 
         # Build context blocks to prepend to the last user message.
         # Order: fetched URL content → attached file content → user message text.
         prefix_blocks: list[str] = []
 
+        # メッセージからのURL抽出およびコンテンツ取得
+        # Extract URLs from the user message and fetch their web contents
         urls_in_message = extract_urls_from_text(user_message)
         if urls_in_message:
             # URL 本文は「ユーザーが渡した参照資料」として直近 user message にだけ付与する。
@@ -274,6 +298,8 @@ class ChatPostUseCase:
                 {**last_msg, "content": f"{prefix}\n\n{last_msg.get('content', '')}"}
             ]
 
+        # 最新のタスク起動リクエストと定義プロンプトの読み込み
+        # Load the latest task launch request and corresponding task definitions
         active_task_request = deps.find_latest_task_launch_request(normalized_all_messages)
         prompt_data = None
         if active_task_request is not None:
@@ -284,6 +310,8 @@ class ChatPostUseCase:
         memory_facts: list[str] = []
         user_profile_prompt = None
 
+        # ユーザープロフィールプロンプトの構築
+        # Build the user profile prompt
         if user_id is not None:
             try:
                 user = await run_blocking(deps.get_user_by_id, user_id)
@@ -291,6 +319,8 @@ class ChatPostUseCase:
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
 
+        # 通常のユーザーセッションの場合、要約とパーソナル記憶情報の読み込みと抽出
+        # For normal user sessions, load summaries and extract/load personal memory facts
         if user_id is not None and room_mode == "normal":
             if not should_auto_title_room:
                 try:
@@ -322,6 +352,8 @@ class ChatPostUseCase:
                         chat_room_id,
                     )
 
+        # システムプロンプトおよびコンテキストメッセージの構築
+        # Assemble context messages including base system prompts
         conversation_messages = deps.build_context_messages(
             base_system_prompt=deps.build_base_system_prompt(),
             user_profile_prompt=user_profile_prompt,
@@ -331,6 +363,8 @@ class ChatPostUseCase:
             recent_messages=normalized_all_messages,
         )
 
+        # 生成キーの構築と二重送信防止ロック
+        # Build the generation key and check for active running jobs
         generation_key = deps.build_generation_key(
             chat_room_id=chat_room_id,
             user_id=user_id,
@@ -342,6 +376,8 @@ class ChatPostUseCase:
                 status_code=409,
             )
 
+        # LLM利用クォータ制限のチェック
+        # Check daily LLM usage quotas
         quota_user_key: str | None
         if user_id is not None:
             quota_user_key = f"user:{user_id}"
@@ -371,6 +407,8 @@ class ChatPostUseCase:
                 retry_after=deps.get_seconds_until_daily_reset(),
             )
 
+        # ストリーミング対応モデルの場合はバックグラウンドジョブを開始する
+        # Start a background generation job if the model supports streaming
         if deps.is_streaming_model(model):
             on_finished = None
             if user_id is not None and room_mode == "normal":
@@ -455,6 +493,8 @@ class ChatPostUseCase:
 
             return deps.build_llm_stream_response(deps.iter_llm_stream_events(job))
 
+        # 非ストリーミングモデルの場合は同期的にWeb検索/LLM応答を取得し、結果を永続化する
+        # For non-streaming models, synchronously perform web search/LLM call and persist the response
         augmentation = maybe_augment_messages_with_web_search(conversation_messages, model)
         response_messages = augmentation.messages
 

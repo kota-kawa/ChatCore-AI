@@ -22,6 +22,8 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 # 日本語: パスキー(WebAuthn)のRP(Relying Party)名を取得します。
 # English: Get the Relying Party name for passkey authentication.
 def get_passkey_rp_name() -> str:
+    # 日本語: 環境変数にRP名があればそれを取得し、なければデフォルト名を返します。
+    # English: Retrieve the RP name from environment variables if set, otherwise return the default.
     configured_name = (os.getenv("WEBAUTHN_RP_NAME") or os.getenv("PASSKEY_RP_NAME") or "").strip()
     return configured_name or DEFAULT_PASSKEY_RP_NAME
 
@@ -29,6 +31,8 @@ def get_passkey_rp_name() -> str:
 # 日本語: パスキー(WebAuthn)のRP ID（ドメイン）を取得します。
 # English: Get the Relying Party ID (domain) for passkey authentication.
 def get_passkey_rp_id(request: Request) -> str:
+    # 日本語: 環境変数のRP IDがあればそれを取得し、なければベースURL等からホスト名を推測します。
+    # English: Retrieve the RP ID from environment variables if set, otherwise infer the hostname from request URLs.
     configured_rp_id = (os.getenv("WEBAUTHN_RP_ID") or os.getenv("PASSKEY_RP_ID") or "").strip()
     if configured_rp_id:
         return configured_rp_id
@@ -49,6 +53,8 @@ def get_passkey_rp_id(request: Request) -> str:
 # 日本語: WebAuthnで許容されるOrigin(オリジン)の一覧を環境変数またはリクエストから推測して返します。
 # English: Get the list of allowed origins for WebAuthn requests.
 def get_passkey_origins(request: Request) -> list[str]:
+    # 日本語: 環境変数のオリジンがあれば分割してパースし、なければリクエストからオリジン（スキーム + ホスト + ポート）を抽出します。
+    # English: Parse comma-separated origins from environment variables if set, otherwise construct from request URLs.
     configured_env = (os.getenv("PASSKEY_ORIGINS") or os.getenv("WEBAUTHN_ORIGINS") or "").strip()
     if configured_env:
         explicit = [o.strip() for o in configured_env.split(",") if o.strip()]
@@ -74,6 +80,8 @@ def get_passkey_origins(request: Request) -> list[str]:
 # 日本語: セッションからパスキー登録・認証途中のチャレンジデータなどをクリアします。
 # English: Clear passkey registration and authentication ceremony states from the session.
 def clear_passkey_session(session: dict[str, Any]) -> None:
+    # 日本語: セッションオブジェクトから、登録および認証用のCeremonyデータを削除します。
+    # English: Remove the ceremony data for both registration and authentication from the session dictionary.
     session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
     session.pop(PASSKEY_AUTHENTICATION_SESSION_KEY, None)
 
@@ -83,6 +91,8 @@ def clear_passkey_session(session: dict[str, Any]) -> None:
 def store_passkey_registration_ceremony(
     session: dict[str, Any], challenge: str
 ) -> dict[str, Any]:
+    # 日本語: ヘルパー関数を呼び出し、登録用チャレンジをセッションに格納します。
+    # English: Invoke the helper function to store the registration challenge in the session.
     return _store_passkey_ceremony(session, PASSKEY_REGISTRATION_SESSION_KEY, challenge)
 
 
@@ -91,18 +101,24 @@ def store_passkey_registration_ceremony(
 def store_passkey_authentication_ceremony(
     session: dict[str, Any], challenge: str
 ) -> dict[str, Any]:
+    # 日本語: ヘルパー関数を呼び出し、認証用チャレンジをセッションに格納します。
+    # English: Invoke the helper function to store the authentication challenge in the session.
     return _store_passkey_ceremony(session, PASSKEY_AUTHENTICATION_SESSION_KEY, challenge)
 
 
 # 日本語: セッションからパスキー登録用のチャレンジ情報を取得します。
 # English: Retrieve the passkey registration ceremony from the session.
 def get_passkey_registration_ceremony(session: dict[str, Any]) -> dict[str, Any] | None:
+    # 日本語: セッションから登録用のCeremonyをロードし、検証後に返します。
+    # English: Load the registration ceremony from the session and return it after validation.
     return _load_passkey_ceremony(session.get(PASSKEY_REGISTRATION_SESSION_KEY))
 
 
 # 日本語: セッションからパスキーログイン用のチャレンジ情報を取得します。
 # English: Retrieve the passkey authentication ceremony from the session.
 def get_passkey_authentication_ceremony(session: dict[str, Any]) -> dict[str, Any] | None:
+    # 日本語: セッションから認証用のCeremonyをロードし、検証後に返します。
+    # English: Load the authentication ceremony from the session and return it after validation.
     return _load_passkey_ceremony(session.get(PASSKEY_AUTHENTICATION_SESSION_KEY))
 
 
@@ -111,6 +127,8 @@ def get_passkey_authentication_ceremony(session: dict[str, Any]) -> dict[str, An
 def passkey_ceremony_is_expired(
     ceremony: dict[str, Any], *, now: int | None = None
 ) -> bool:
+    # 日本語: チャレンジ発行時刻が有効期間（TTL）を過ぎているか判定します。
+    # English: Determine if the challenge issuance timestamp exceeds the valid TTL duration.
     issued_at = int(ceremony.get("issued_at") or 0)
     if issued_at <= 0:
         return True
@@ -122,6 +140,8 @@ def passkey_ceremony_is_expired(
 # 日本語: クレデンシャルオブジェクトから、データベース照合用のID文字列を抽出します。
 # English: Extract the raw credential ID for lookup from the client assertion.
 def get_credential_lookup_id(credential: dict[str, Any]) -> str | None:
+    # 日本語: クレデンシャルIDの表現方法（rawId または id）のうち、最初に見つかった文字列を返します。
+    # English: Return the first found string format (rawId or id) representation of the credential ID.
     raw_id = credential.get("rawId")
     if isinstance(raw_id, str) and raw_id:
         return raw_id
@@ -138,6 +158,8 @@ def get_credential_lookup_id(credential: dict[str, Any]) -> str | None:
 def _store_passkey_ceremony(
     session: dict[str, Any], session_key: str, challenge: str
 ) -> dict[str, Any]:
+    # 日本語: 既存のCeremonyをクリアし、新しいチャレンジ情報、発行時刻、固有IDを辞書として格納します。
+    # English: Clear existing ceremonies and store new challenge metadata, timestamp, and unique ID in the session.
     clear_passkey_session(session)
     ceremony = {
         "challenge": challenge,
@@ -151,6 +173,8 @@ def _store_passkey_ceremony(
 # 日本語: セッションデータから、チャレンジ情報オブジェクトを検証した上で取得します。
 # English: Validate and load the ceremony dict from raw session payload.
 def _load_passkey_ceremony(raw_state: Any) -> dict[str, Any] | None:
+    # 日本語: 入力データが正しい構造をしているか検証し、正規化した辞書を返します。
+    # English: Validate that the input payload has the correct structure and return a normalized dictionary.
     if not isinstance(raw_state, dict):
         return None
 
@@ -186,6 +210,8 @@ def list_passkeys_for_user(user_id: int) -> list[dict[str, Any]]:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
+            # 日本語: 指定ユーザーのパスキーをデータベースから取得し、新しい順に並べ替えて返します。
+            # English: Retrieve the user's passkeys from the database, sorted by creation date in descending order.
             cursor.execute(
                 """
                 SELECT id,
@@ -217,6 +243,8 @@ def get_passkey_by_credential_id(credential_id: str) -> dict[str, Any] | None:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
+            # 日本語: クレデンシャルIDでDBを検索し、一致するパスキー情報の辞書を返します。
+            # English: Search the database by the credential ID and return the matching passkey dictionary.
             cursor.execute(
                 """
                 SELECT id,
@@ -258,10 +286,14 @@ def create_passkey(
     normalized_aaguid = (aaguid or "").strip() or None
     normalized_device_type = (credential_device_type or "").strip() or None
 
+    # 日本語: 一時的なデータベース書き込みエラーに対するリトライループ。
+    # English: Retry loop for transient database write errors.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
+                # 日本語: パスキーレコードをDBに挿入し、新しく作成されたレコードの情報を返します。
+                # English: Insert the passkey record into DB and return the newly created record details.
                 cursor.execute(
                     """
                     INSERT INTO user_passkeys (
@@ -324,10 +356,14 @@ def update_passkey_usage(
     credential_backed_up: bool | None = None,
     credential_device_type: str | None = None,
 ) -> None:
+    # 日本語: DB書き込みのリトライループ。
+    # English: DB write retry loop.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 日本語: 署名回数、バックアップ有無、デバイスタイプなどを更新します。
+                # English: Update sign count, backup status, and device type.
                 cursor.execute(
                     """
                     UPDATE user_passkeys
@@ -364,10 +400,14 @@ def update_passkey_usage(
 # 日本語: 指定されたパスキーをデータベースから削除します。
 # English: Delete the specified passkey credential from the database.
 def delete_passkey(user_id: int, passkey_id: int) -> bool:
+    # 日本語: DB書き込みのリトライループ。
+    # English: DB write retry loop.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 日本語: 指定されたユーザー所有のパスキーを削除し、削除件数が1件以上あるか返します。
+                # English: Delete the specified user-owned passkey and return whether the delete count is greater than 0.
                 cursor.execute(
                     """
                     DELETE FROM user_passkeys

@@ -42,6 +42,8 @@ _RETRYABLE_DB_PG_CODES = {
 }
 
 
+# 接続プールから取得した接続をラップし、辞書形式のカーソルサポートと安全な返却を提供するプロキシクラス
+# A proxy class wrapping a connection from the pool, providing dictionary cursor support and safe release
 class _ConnectionProxy:
     # プールへ返却済み接続の再利用を防ぐ薄いラッパー
     # Lightweight wrapper that prevents reuse after returning to the pool.
@@ -102,11 +104,13 @@ class _ConnectionProxy:
                 pass
 
     # context managerの開始処理。自身を返す
+    # Enter the context manager, returning the proxy instance itself.
     def __enter__(self) -> "_ConnectionProxy":
         self._ensure_open()
         return self
 
     # context managerの終了処理。接続を閉じる（プールに返却する）
+    # Exit the context manager, closing (returning) the connection.
     def __exit__(
         self,
         exc_type: type[BaseException] | None,

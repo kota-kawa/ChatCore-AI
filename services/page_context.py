@@ -8,11 +8,14 @@ from services.agent_capabilities import build_capability_context
 
 logger = logging.getLogger(__name__)
 
+# 日本語: プロジェクトのルートディレクトリ。
+# English: Root directory of the project.
 PROJECT_ROOT = Path(__file__).parent.parent
 MAX_LINES_PER_FILE = 130
 MAX_FILES_PER_PAGE = 3
 
-# URL パターン → (ページ説明, [(ファイルパス, 最大行数), ...])
+# 日本語: 各URLパターンに対応する画面の説明と読み込むソースコードファイルの定義リスト。
+# English: Definition list matching URL patterns to page descriptions and source files to load.
 _PAGE_MAP: list[tuple[re.Pattern[str], str, list[tuple[str, int]]]] = [
     (
         re.compile(r"^/$"),
@@ -90,7 +93,8 @@ _PAGE_MAP: list[tuple[re.Pattern[str], str, list[tuple[str, int]]]] = [
     ),
 ]
 
-# ユーザーが操作（クリック・入力等）を依頼しているパターン
+# 日本語: ユーザーがページの代理操作（クリックや入力など）を求めているかを判別する正規表現。
+# English: Regular expression to identify if the user is requesting page actions (e.g. clicking or typing).
 _ACTION_REQUEST_PATTERNS = re.compile(
     r"(?:クリック|タップ|押)して(?:ほしい|くれ|ください|もらえ|みて)?"
     r"|(?:入力|記入|書き込)(?:んで|いて|して)(?:ほしい|くれ|ください|もらえ)?"
@@ -100,12 +104,13 @@ _ACTION_REQUEST_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# 「今いるページ」を指しているパターン
+# 日本語: ユーザーの入力が「この画面」「ここ」など現在開いている画面について言及しているかを判別する正規表現。
+# English: Regular expression to identify if the user is referring to the current page (e.g. "this screen", "here").
 _PAGE_CONTEXT_PATTERNS = re.compile(
     r"このページ|この画面|今のページ|今の画面|今開いている|現在のページ|現在の画面"
-    r"|ここで[はにのを]|ここから|ここに|ここの|ここは"
+    r"|ここで[はにのを]|ここから|ここに|こここ|ここは"
     r"|このフォーム|この入力欄|このボタン|このモーダル|このタブ"
-    r"|どこ[にでから]?(ある|あります|押す|クリック|入力)"
+    r"|どこ[inでから]?(ある|あります|押す|クリック|入力)"
     r"|このアプリの(使い方|操作|機能|画面)",
     re.IGNORECASE,
 )
@@ -115,6 +120,8 @@ _PAGE_CONTEXT_PATTERNS = re.compile(
 # English: Assess if the query refers to the current page/screen context.
 def is_page_specific_query(query: str) -> bool:
     """ユーザーが今開いているページについて質問しているか判定する。"""
+    # 日本語: 入力テキストから、現在表示中の画面に関する表現を検索します。
+    # English: Scan the input text for expressions indicating the current screen context.
     return bool(_PAGE_CONTEXT_PATTERNS.search(query))
 
 
@@ -122,6 +129,8 @@ def is_page_specific_query(query: str) -> bool:
 # English: Assess if the query requests automation actions like clicking or typing.
 def is_action_request(query: str) -> bool:
     """ユーザーがページ上での操作（クリック・入力等）を依頼しているか判定する。"""
+    # 日本語: 入力テキストから、代理操作の要求に一致する表現を検索します。
+    # English: Scan the input text for requests indicating automated actions.
     return bool(_ACTION_REQUEST_PATTERNS.search(query))
 
 
@@ -133,6 +142,8 @@ def _read_file_head(rel_path: str, max_lines: int) -> str:
     if not full_path.exists():
         return ""
     try:
+        # 日本語: ファイルが存在し読み込み可能な場合、指定された最大行数分だけテキストを抽出します。
+        # English: If the file exists and is readable, extract its text up to the specified line limit.
         lines = full_path.read_text(encoding="utf-8").splitlines()
         head = lines[:max_lines]
         text = "\n".join(head)
@@ -151,6 +162,8 @@ def get_page_context(pathname: str) -> str:
     if not pathname:
         return ""
 
+    # 日本語: 定義されたURLマップを検索し、一致するパターンの画面ソースコードを読み込んで結合します。
+    # English: Search the defined URL map and read/combine the source files for the matching route.
     for pattern, page_label, file_specs in _PAGE_MAP:
         if pattern.search(pathname):
             parts = [
@@ -158,6 +171,8 @@ def get_page_context(pathname: str) -> str:
                 f"\n【現在のページ: {page_label}（{pathname}）のソースコード抜粋】",
             ]
             count = 0
+            # 日本語: 該当する各ファイルの先頭部分を読み込み、マークダウンコードブロックとして結合します。
+            # English: Read the top portion of each matching file and append it as a markdown code block.
             for rel_path, max_lines in file_specs:
                 if count >= MAX_FILES_PER_PAGE:
                     break

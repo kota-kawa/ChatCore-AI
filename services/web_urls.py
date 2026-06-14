@@ -54,8 +54,8 @@ def url_for(request: Request, endpoint: str, **values: Any) -> str:
 
 
 def frontend_url(path: str = "", *, query: str | None = None) -> str:
-    # フロントエンドURLを安全に連結して返す
-    # Build an absolute frontend URL with normalized path/query.
+    # フロントエンドURLを安全に連結して返す（定数 FRONTEND_URL を使用）
+    # Build an absolute frontend URL with normalized path/query using FRONTEND_URL.
     return build_frontend_url(FRONTEND_URL, path, query=query)
 
 

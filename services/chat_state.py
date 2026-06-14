@@ -25,6 +25,8 @@ _FORMAT_PATTERN = re.compile(
 )
 
 
+# 記憶事実のテキストを正規化（トリミング、連続スペースの置換、文字数制限）する
+# Normalize memory fact text (trimming, replacing multiple spaces, capping length)
 def _normalize_fact_text(text: str) -> str:
     normalized = text if isinstance(text, str) else str(text)
     normalized = normalized.strip().replace("\r\n", "\n").replace("\r", "\n")
@@ -32,6 +34,8 @@ def _normalize_fact_text(text: str) -> str:
     return normalized[:MAX_MEMORY_FACT_LENGTH].strip(" .")
 
 
+# メッセージから記憶すべき事実（名前、呼び名、好み、回答スタイルなど）を抽出する
+# Extract memory facts (name, call-me name, preference, format preference, etc.) from the message
 def extract_memory_facts(message: str) -> list[str]:
     normalized = message if isinstance(message, str) else str(message)
     facts: list[str] = []
@@ -59,6 +63,8 @@ def extract_memory_facts(message: str) -> list[str]:
     return facts
 
 
+# チャットルームに紐づくアクティブな記憶事実のテキストリストを取得する
+# Retrieve the text list of active memory facts associated with the chat room
 def list_room_memory_facts(chat_room_id: str, *, limit: int = MAX_MEMORY_FACTS_FOR_CONTEXT) -> list[str]:
     conn = None
     cursor = None
@@ -86,6 +92,8 @@ def list_room_memory_facts(chat_room_id: str, *, limit: int = MAX_MEMORY_FACTS_F
             conn.close()
 
 
+# チャットルームに紐づくアクティブな記憶事実のレコード詳細（ID、テキスト、スコープ、更新日時）を取得する
+# Retrieve detailed records of active memory facts (ID, text, scope, updated time) associated with the chat room
 def list_room_memory_fact_records(
     chat_room_id: str,
     *,
@@ -124,6 +132,8 @@ def list_room_memory_fact_records(
             conn.close()
 
 
+# メッセージから記憶事実を抽出してデータベースに保存（既存なら更新）する
+# Extract memory facts from the message and save (or update if existing) them in the database
 def remember_facts_from_message(
     chat_room_id: str,
     user_id: int,
@@ -203,6 +213,8 @@ def remember_facts_from_message(
     return facts
 
 
+# チャットルームの要約情報を取得する
+# Retrieve the summary information of the chat room
 def get_room_summary(chat_room_id: str) -> dict[str, Any] | None:
     conn = None
     cursor = None
@@ -232,6 +244,8 @@ def get_room_summary(chat_room_id: str) -> dict[str, Any] | None:
             conn.close()
 
 
+# メッセージ履歴からチャットルームの要約を再構築してデータベースに保存（または削除）する
+# Rebuild the chat room summary from message history and save (or delete if empty) it in the database
 def rebuild_room_summary(chat_room_id: str, messages: list[dict[str, str]]) -> str:
     summary_text, archived_count = build_room_summary(messages)
 

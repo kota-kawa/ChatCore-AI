@@ -107,6 +107,8 @@ def ensure_default_tasks_seeded() -> int:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 既存のデフォルトタスク名を取得する
+                # Retrieve the names of existing default tasks
                 cursor.execute(
                     """
                     SELECT name
@@ -131,6 +133,8 @@ def ensure_default_tasks_seeded() -> int:
                     output_example,
                     display_order,
                 ) in default_task_rows():
+                    # 既に存在する場合は挿入をスキップする
+                    # Skip insertion if the task already exists
                     if name in existing_names:
                         continue
 
@@ -161,12 +165,16 @@ def ensure_default_tasks_seeded() -> int:
                     )
                     inserted += 1
 
+                # 挿入があった場合はコミットする
+                # Commit the transaction if insertions occurred
                 if inserted > 0:
                     conn.commit()
 
                 return inserted
             except Error as exc:
                 rollback_connection(conn)
+                # 再試行可能なエラーの場合は待機して再試行する
+                # Wait and retry if the error is retryable
                 if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                     time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                     continue

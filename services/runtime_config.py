@@ -3,14 +3,16 @@ import os
 
 logger = logging.getLogger(__name__)
 
+# 日本語: 有効なSameSite属性の設定値セット。
+# English: Set of valid SameSite attribute values.
 VALID_SESSION_SAMESITE_VALUES = {"lax", "strict", "none"}
 
 
-# 現在の実行環境（FASTAPI_ENVまたはFLASK_ENV）を取得し、無効な場合は'development'を返す
-# Get the current runtime environment, prioritizing FASTAPI_ENV, and fallback to 'development'.
+# 日本語: 現在の実行環境（FASTAPI_ENVまたはFLASK_ENV）を取得し、無効な場合は'development'を返します。
+# English: Get the current runtime environment, prioritizing FASTAPI_ENV, and fallback to 'development'.
 def get_runtime_env() -> str:
-    # 新環境変数を優先しつつ、旧変数も後方互換として受け付ける
-    # Prefer the new env var while keeping legacy fallback for compatibility.
+    # 日本語: 新環境変数を優先しつつ、旧変数も後方互換として受け付けます。
+    # English: Prefer the new env var while keeping legacy fallback for compatibility.
     runtime_env = os.getenv("FASTAPI_ENV")
     legacy_env = os.getenv("FLASK_ENV")
 
@@ -29,19 +31,19 @@ def get_runtime_env() -> str:
     return "development"
 
 
-# 現在の実行環境が本番環境（production）であるかどうかを判定する
-# Determine whether the current runtime environment is the production environment.
+# 日本語: 現在の実行環境が本番環境（production）であるかどうかを判定します。
+# English: Determine whether the current runtime environment is the production environment.
 def is_production_env() -> bool:
-    # 環境文字列比較はここに集約して呼び出し側の分岐を簡潔に保つ
-    # Centralize environment check so call sites stay simple.
+    # 日本語: 環境文字列比較はここに集約して呼び出し側の分岐を簡潔に保ちます。
+    # English: Centralize environment check so call sites stay simple.
     return get_runtime_env().lower() == "production"
 
 
-# セッション署名キーを環境変数（FASTAPI_SECRET_KEYまたはFLASK_SECRET_KEY）から取得する
-# Retrieve the session secret key from environment variables.
+# 日本語: セッション署名キーを環境変数（FASTAPI_SECRET_KEYまたはFLASK_SECRET_KEY）から取得します。
+# English: Retrieve the session secret key from environment variables.
 def get_session_secret_key() -> str | None:
-    # セッション署名キーも FASTAPI_* を優先し、FLASK_* はレガシー互換として扱う
-    # Resolve session secret with FASTAPI_* priority and FLASK_* legacy fallback.
+    # 日本語: セッション署名キーも FASTAPI_* を優先し、FLASK_* はレガシー互換として扱います。
+    # English: Resolve session secret with FASTAPI_* priority and FLASK_* legacy fallback.
     fastapi_secret = os.getenv("FASTAPI_SECRET_KEY")
     legacy_secret = os.getenv("FLASK_SECRET_KEY")
 
@@ -62,11 +64,11 @@ def get_session_secret_key() -> str | None:
     return None
 
 
-# クッキーのSameSite属性の設定値を取得・バリデーションする
-# Retrieve and validate the SameSite attribute configuration for cookies.
+# 日本語: クッキーのSameSite属性の設定値を取得・バリデーションします。
+# English: Retrieve and validate the SameSite attribute configuration for cookies.
 def get_session_same_site() -> str:
-    # SameSite=Lax を既定にして、フレーム内やサブリソースのクロスサイト送信を抑える。
-    # Default to SameSite=Lax to avoid cross-site iframe/subresource session sends.
+    # 日本語: SameSite=Lax を既定にして、フレーム内やサブリソースのクロスサイト送信を抑えます。
+    # English: Default to SameSite=Lax to avoid cross-site iframe/subresource session sends.
     configured = (os.getenv("FASTAPI_SESSION_SAMESITE") or "").strip().lower()
     if not configured:
         return "lax"

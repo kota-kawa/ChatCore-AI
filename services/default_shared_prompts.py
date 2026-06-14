@@ -6,6 +6,8 @@ from .db import Error, get_db_connection, is_retryable_db_error, rollback_connec
 SAMPLE_PROMPT_OWNER_EMAIL = "sample-prompts@chat-core.local"
 SAMPLE_PROMPT_OWNER_NAME = "運営サンプル"
 
+# システム既定の共有プロンプト定義のリスト
+# List of default shared prompts defined by the system
 DEFAULT_SHARED_PROMPTS = [
     {
         "title": "会議の議事録を短時間で整理するテンプレート",
@@ -71,6 +73,8 @@ DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
+# DB取得結果の行オブジェクト（辞書またはタプル）からIDフィールドを抽出する
+# Extract the ID field from a database row object (which can be a dict or tuple)
 def _extract_id(
     row: dict[str, Any] | tuple[Any, ...] | None, key_name: str = "id"
 ) -> Any:
@@ -83,6 +87,8 @@ def _extract_id(
     return row[0]
 
 
+# サンプルの所有者ユーザー（運営サンプル）が存在することを保証し、そのIDを返す
+# Ensure the sample owner user exists, creating it if necessary, and return its ID
 def _ensure_sample_owner(cursor: Any) -> int:
     # サンプル投稿者ユーザーを再利用し、未作成なら作成してIDを返す
     # Reuse sample owner user or create it when missing, then return its ID.
@@ -126,6 +132,8 @@ def _ensure_sample_owner(cursor: Any) -> int:
     return owner_id
 
 
+# デフォルトの共有プロンプトがデータベースに存在することを保証（不足分のみシード）する
+# Ensure default shared prompts are seeded into the database, adding only missing ones
 def ensure_default_shared_prompts() -> int:
     # サンプル投稿者配下に標準公開プロンプトを不足分だけ投入する
     # Seed missing public sample prompts under the sample owner account.
