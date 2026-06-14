@@ -194,8 +194,8 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
       </SeoHead>
 
       <div className="shared-chat-page">
+        {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}
         {payload.error ? (
-          {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}
           <div className="shared-chat-error">{payload.error}</div>
         ) : (
           <div className="shared-chat-shell">
@@ -225,7 +225,6 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
                     className={`shared-chat-message shared-chat-message--${normalizedSender}`}
                   >
                     {normalizedSender === "assistant" && parts.length > 0 ? (
-                      {/* アシスタントのメッセージはパーツ単位でレンダリングする / Render assistant messages part-by-part for rich content */}
                       <div className="shared-chat-message__parts">
                         {parts.map((part, partIndex) => {
                           if (part.type === "text") {

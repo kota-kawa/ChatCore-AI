@@ -429,6 +429,9 @@ function MemoMarkdown({ text, className }: { text: string; className?: string })
   // Markdownのテキストが変更されたときにサニタイズして描画する副作用
   // Effect to render sanitized HTML when markdown text changes
   useEffect(() => {
+    if (!containerRef.current) return;
+    renderSanitizedHTML(containerRef.current, formatMemoOutput(text || ""));
+  }, [text]);
   return <div ref={containerRef} className={className}></div>;
 }
 
