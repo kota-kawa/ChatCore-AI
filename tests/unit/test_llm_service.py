@@ -47,8 +47,6 @@ def _mock_tool_call_chunk(*, index=0, call_id=None, name=None, arguments=None):
 # テスト用にイテラブルなモックストリーム（closeメソッド付き）を表すクラス。
 # Mock class representing an iterable stream with a close method for testing.
 class _MockStream(list):
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, *items):
         super().__init__(items)
         self.closed = False

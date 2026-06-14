@@ -12,8 +12,6 @@ from services.attached_files import (
 )
 
 
-# 日本語: zip bytes に関する処理の入口です。
-# English: Entry point for logic related to zip bytes.
 def _zip_bytes(files):
     buffer = io.BytesIO()
     # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -24,14 +22,10 @@ def _zip_bytes(files):
     return buffer.getvalue()
 
 
-# 日本語: as base64 に関する処理の入口です。
-# English: Entry point for logic related to as base64.
 def _as_base64(data):
     return base64.b64encode(data).decode("ascii")
 
 
-# 日本語: make pdf bytes の生成処理を担当します。
-# English: Handle creating for make pdf bytes.
 def _make_pdf_bytes(text="Hello PDF"):
     stream = f"BT /F1 24 Tf 50 150 Td ({text}) Tj ET".encode("ascii")
     objects = [
@@ -48,14 +42,12 @@ def _make_pdf_bytes(text="Hello PDF"):
     pdf = b"%PDF-1.4\n"
     offsets = []
     # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
     for index, obj in enumerate(objects, start=1):
         offsets.append(len(pdf))
         pdf += f"{index} 0 obj\n".encode("ascii") + obj + b"\nendobj\n"
     xref_offset = len(pdf)
     pdf += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii")
     # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
     for offset in offsets:
         pdf += f"{offset:010d} 00000 n \n".encode("ascii")
     pdf += (

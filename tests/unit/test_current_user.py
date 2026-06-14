@@ -8,8 +8,6 @@ from services.users import ACCOUNT_DELETE_CONFIRMATION_TEXT
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(session=None):
     return build_request(method="GET", path="/api/current_user", session=session)
 

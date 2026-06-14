@@ -13,8 +13,6 @@ from tests.helpers.db_helpers import TransactionTrackingConnection
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, *, existing_names=None):
         self.existing_names = set(existing_names or [])
         self.inserted_names = []
@@ -22,8 +20,6 @@ class FakeCursor:
         self._fetchall_result = []
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed_queries.append((normalized, params))
@@ -41,8 +37,6 @@ class FakeCursor:
             self.inserted_names.append(name)
             self.existing_names.add(name)
 
-    # 日本語: テスト用の処理の入口関数fetchallです。
-# English: Entry point helper function fetchall for testing.
     def fetchall(self):
         result = self._fetchall_result
         self._fetchall_result = []
@@ -160,8 +154,6 @@ class DefaultTasksTestCase(unittest.TestCase):
         }
 
         load_default_tasks.cache_clear()
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             tasks = load_default_tasks()
         finally:
@@ -175,8 +167,6 @@ class DefaultTasksTestCase(unittest.TestCase):
     # English: Verify that repository email task uses code block for ready to send body.
     def test_repository_email_task_uses_code_block_for_ready_to_send_body(self):
         load_default_tasks.cache_clear()
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             tasks = load_default_tasks()
         finally:
@@ -193,8 +183,6 @@ class DefaultTasksTestCase(unittest.TestCase):
     # English: Verify that repository reply task uses code blocks for ready to send replies.
     def test_repository_reply_task_uses_code_blocks_for_ready_to_send_replies(self):
         load_default_tasks.cache_clear()
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             tasks = load_default_tasks()
         finally:
@@ -209,8 +197,6 @@ class DefaultTasksTestCase(unittest.TestCase):
     # English: Verify that repository table or format sensitive tasks include examples.
     def test_repository_table_or_format_sensitive_tasks_include_examples(self):
         load_default_tasks.cache_clear()
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             tasks = load_default_tasks()
         finally:
@@ -228,8 +214,6 @@ class DefaultTasksTestCase(unittest.TestCase):
     # English: Verify that repository problem solving task requests concise rationale only.
     def test_repository_problem_solving_task_requests_concise_rationale_only(self):
         load_default_tasks.cache_clear()
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             tasks = load_default_tasks()
         finally:

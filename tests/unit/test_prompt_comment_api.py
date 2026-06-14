@@ -12,8 +12,6 @@ from blueprints.prompt_share.prompt_share_api import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(method, path, payload=None, session=None):
     return build_request(
         method=method,

@@ -8,8 +8,6 @@ from services.memo_share import create_or_get_shared_memo_token
 # PostgreSQLの一意性制約エラー（エラーコード: 23505）をシミュレートする疑似例外クラス。
 # Mock exception class simulating PostgreSQL's unique key violation (error code: 23505).
 class UniqueViolation(Exception):
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self):
         super().__init__("duplicate key")
         self.pgcode = "23505"
@@ -18,8 +16,6 @@ class UniqueViolation(Exception):
 # メモ共有トークン生成ロジック（メモの存在チェック、一意性競合、挿入リトライ等）をテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing shared memo token creation, collision retries, and existence checks.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, *, memo_exists=True, fail_attempts=None, insert_results=None):
         self.memo_exists = memo_exists
         self.fail_attempts = set(fail_attempts or [])
@@ -71,8 +67,6 @@ class FakeCursor:
 # メモ共有トークン生成ロジックをテストするための疑似DBコネクションクラス。
 # Mock database connection class for testing shared memo token creation.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.commit_calls = 0
@@ -99,12 +93,10 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()

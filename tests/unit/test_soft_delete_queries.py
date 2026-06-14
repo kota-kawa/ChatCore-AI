@@ -12,8 +12,6 @@ from blueprints.prompt_share.prompt_share_api import _remove_bookmark_for_user
 # テスト用の疑似DBカーソルクラス。
 # Mock database cursor class for testing.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, *, rowcount=1):
         self.rowcount = rowcount
         self.executed = []
@@ -34,8 +32,6 @@ class FakeCursor:
 # テスト用の疑似DBコネクションクラス。
 # Mock database connection class for testing.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.committed = False
@@ -56,12 +52,10 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()

@@ -7,8 +7,6 @@ from blueprints.chat.rooms import share_chat_room, shared_chat_room
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make share request の生成処理を担当します。
-# English: Handle creating for make share request.
 def make_share_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -18,8 +16,6 @@ def make_share_request(json_body, session=None):
     )
 
 
-# 日本語: make shared read request の生成処理を担当します。
-# English: Handle creating for make shared read request.
 def make_shared_read_request(token: str):
     return build_request(
         method="GET",

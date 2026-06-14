@@ -11,8 +11,6 @@ from tests.helpers.request_helpers import build_request
 # 一括削除処理をテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing bulk deletion of chat rooms.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, rows):
         self.rows = rows
         self.executed = []
@@ -37,8 +35,6 @@ class FakeCursor:
 # 一括削除処理をテストするための疑似DBコネクションクラス。
 # Mock database connection class for testing bulk deletion of chat rooms.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, rows):
         self.cursor_instance = FakeCursor(rows)
         self.committed = False

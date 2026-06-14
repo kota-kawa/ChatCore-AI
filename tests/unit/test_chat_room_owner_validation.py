@@ -8,8 +8,6 @@ from services.chat_service import validate_room_owner
 # チャットルームの所有者検証ロジックをテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing chat room owner validation logic.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, fetchone_result):
         self.fetchone_result = fetchone_result
         self.executed = []
@@ -34,8 +32,6 @@ class FakeCursor:
 # チャットルームの所有者検証ロジックをテストするための疑似DBコネクションクラス。
 # Mock database connection class for testing chat room owner validation logic.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, fetchone_result):
         self._cursor = FakeCursor(fetchone_result)
         self.closed = False
@@ -50,12 +46,10 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()

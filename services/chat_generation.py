@@ -912,25 +912,24 @@ class ChatGenerationJob:
         self._publish("done", done_payload, done=True)
 
 
-# 日本語: build generation key の組み立て処理を担当します。
-# English: Handle building for build generation key.
 def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: str | None = None) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 同じ room_id でもログインユーザーとゲストセッションは別の生成ジョブとして扱う。
+    # これによりゲストの sid とユーザーIDの衝突や、共有 room_id による生成ロックの混線を防ぐ。
     if user_id is not None:
         return f"user:{user_id}:{chat_room_id}"
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if sid is not None:
         return f"guest:{sid}:{chat_room_id}"
     raise ValueError("Either user_id or sid is required to build a generation key.")
 
 
-# 日本語: ChatGenerationService に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatGenerationService.
 class ChatGenerationService:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    """チャット応答生成ジョブを管理し、SSE の再接続・分散配信を吸収する。
+
+    ローカルプロセス内では `_jobs` にジョブを保持し、Redis が使える環境では
+    イベント履歴とアクティブロックを Redis にも書く。これにより、ロードバランサ配下で
+    再接続先プロセスが変わっても、完了済み/実行中イベントを再生できる。
+    """
+
     def __init__(
         self,
         *,
@@ -951,33 +950,22 @@ class ChatGenerationService:
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
 
-    # 日本語: get redis client の取得処理を担当します。
-    # English: Handle fetching for get redis client.
     def _get_redis_client(self) -> Any | None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self._redis_client_getter is not None:
             return self._redis_client_getter()
         return get_redis_client()
 
-    # 日本語: active lock key に関する処理の入口です。
-    # English: Entry point for logic related to active lock key.
     def _active_lock_key(self, job_key: str) -> str:
         return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
 
-    # 日本語: event stream key に関する処理の入口です。
-    # English: Entry point for logic related to event stream key.
     def _event_stream_key(self, job_key: str) -> str:
         return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
 
-    # 日本語: event channel name に関する処理の入口です。
-    # English: Entry point for logic related to event channel name.
     def _event_channel_name(self, job_key: str) -> str:
         return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
 
-    # 日本語: serialize event のシリアライズ処理を担当します。
-    # English: Handle serializing for serialize event.
     def _serialize_event(self, event: ChatGenerationEvent) -> str:
+        # Redis には SSE と同じ最小構造だけを保存する。payload の中身はイベント種別ごとに変わる。
         return json.dumps(
             {
                 "id": event.sequence_id,
@@ -987,17 +975,12 @@ class ChatGenerationService:
             ensure_ascii=False,
         )
 
-    # 日本語: deserialize event のデシリアライズ処理を担当します。
-    # English: Handle deserializing for deserialize event.
     def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
+        # Redis 上の古い/壊れた値はストリーム全体を落とさず読み飛ばす。
         try:
             loaded = json.loads(raw)
         except Exception:
             return None
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not isinstance(loaded, dict):
             return None
         sequence_id = loaded.get("id")
@@ -1015,12 +998,8 @@ class ChatGenerationService:
             payload=payload,
         )
 
-    # 日本語: publish distributed event に関する処理の入口です。
-    # English: Entry point for logic related to publish distributed event.
     def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
         serialized = self._serialize_event(event)
@@ -1031,8 +1010,8 @@ class ChatGenerationService:
             self._job_retention_seconds,
             1,
         )
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
+        # list は再接続時のリプレイ用、pub/sub は今つながっている SSE への即時通知用。
+        # どちらか片方だけでは「取りこぼしなし」と「低遅延」を同時に満たせない。
         try:
             pipeline = redis_client.pipeline()
             pipeline.rpush(stream_key, serialized)
@@ -1042,8 +1021,6 @@ class ChatGenerationService:
         except Exception:
             logger.exception("Failed to publish chat generation event to Redis.")
 
-    # 日本語: read distributed events の読み込み処理を担当します。
-    # English: Handle reading for read distributed events.
     def _read_distributed_events(
         self,
         job_key: str,
@@ -1051,12 +1028,8 @@ class ChatGenerationService:
         after_sequence_id: int = 0,
     ) -> list[ChatGenerationEvent]:
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return []
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             raw_items = redis_client.lrange(self._event_stream_key(job_key), 0, -1)
         except Exception:
@@ -1065,6 +1038,8 @@ class ChatGenerationService:
 
         events: list[ChatGenerationEvent] = []
         for item in raw_items:
+            # Redis クライアント設定により bytes/str が混在しうる。ここでは str だけを扱い、
+            # pub/sub 側の bytes デコードとは分けておく。
             if not isinstance(item, str):
                 continue
             event = self._deserialize_event(item)
@@ -1075,19 +1050,14 @@ class ChatGenerationService:
             events.append(event)
         return events
 
-    # 日本語: try acquire active job lock に関する処理の入口です。
-    # English: Entry point for logic related to try acquire active job lock.
     def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return True, None
 
         lock_key = self._active_lock_key(job_key)
         lock_token = uuid.uuid4().hex
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
+        # NX + TTL でプロセス間の二重生成を防ぐ。TTL はプロセス異常終了時にロックが残り続けないための保険。
         try:
             acquired = redis_client.set(
                 lock_key,
@@ -1105,17 +1075,11 @@ class ChatGenerationService:
             return True, lock_token
         return False, None
 
-    # 日本語: release active job lock に関する処理の入口です。
-    # English: Entry point for logic related to release active job lock.
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not lock_token:
             return
 
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
 
@@ -1127,38 +1091,28 @@ if redis.call('GET', key) == token then
 end
 return 0
 """
+        # 自分が取得したロックだけを消すため、GET と DEL を Lua で不可分に実行する。
+        # TTL 切れ後に別プロセスが取り直したロックを誤って解放しないため。
         try:
             redis_client.eval(lua_script, 1, self._active_lock_key(job_key), lock_token)
         except Exception:
             logger.exception("Redis chat generation lock release failed.")
 
-    # 日本語: has distributed active lock に関する処理の入口です。
-    # English: Entry point for logic related to has distributed active lock.
     def _has_distributed_active_lock(self, job_key: str) -> bool:
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return False
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             return bool(redis_client.exists(self._active_lock_key(job_key)))
         except Exception:
             logger.exception("Redis chat generation lock existence check failed.")
             return False
 
-    # 日本語: supports distributed streaming に関する処理の入口です。
-    # English: Entry point for logic related to supports distributed streaming.
     def supports_distributed_streaming(self) -> bool:
         return self._get_redis_client() is not None
 
-    # 日本語: reset in memory state に関する処理の入口です。
-    # English: Entry point for logic related to reset in memory state.
     def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
         running_jobs: list[ChatGenerationJob] = []
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             if cancel_running:
                 running_jobs = [
@@ -1168,21 +1122,13 @@ return 0
                 ]
             self._jobs.clear()
 
-        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-        # English: Process each target item in order and accumulate the needed result.
         for job in running_jobs:
             job.cancel()
 
-    # 日本語: wait for running jobs に関する処理の入口です。
-    # English: Entry point for logic related to wait for running jobs.
     def wait_for_running_jobs(self, *, timeout: float | None = None) -> bool:
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             running_jobs = [job for job in self._jobs.values() if not job.is_done]
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not running_jobs:
             return True
 
@@ -1198,14 +1144,10 @@ return 0
                 all_done = False
         return all_done
 
-    # 日本語: cleanup expired jobs に関する処理の入口です。
-    # English: Entry point for logic related to cleanup expired jobs.
     def _cleanup_expired_jobs(self, now: float | None = None) -> None:
         current_time = time.monotonic() if now is None else now
         expired_keys: list[str] = []
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             for key, job in self._jobs.items():
                 if not job.is_done or job.finished_at is None:
@@ -1216,47 +1158,31 @@ return 0
             for key in expired_keys:
                 self._jobs.pop(key, None)
 
-    # 日本語: cancel generation job に関する処理の入口です。
-    # English: Entry point for logic related to cancel generation job.
     def cancel_generation_job(self, job_key: str) -> bool:
         """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             job = self._jobs.get(job_key)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if job is None or job.is_done:
             return False
         job.cancel()
         return True
 
-    # 日本語: has active generation に関する処理の入口です。
-    # English: Entry point for logic related to has active generation.
     def has_active_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             job = self._jobs.get(job_key)
             if job is not None:
                 return not job.is_done
         return self._has_distributed_active_lock(job_key)
 
-    # 日本語: has replayable generation に関する処理の入口です。
-    # English: Entry point for logic related to has replayable generation.
     def has_replayable_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             local_job = self._jobs.get(job_key)
             if local_job is not None:
                 return True
 
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return False
         try:
@@ -1265,17 +1191,11 @@ return 0
             logger.exception("Redis chat generation replay-state check failed.")
             return False
 
-    # 日本語: get generation job の取得処理を担当します。
-    # English: Handle fetching for get generation job.
     def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
         self._cleanup_expired_jobs()
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._jobs_lock:
             return self._jobs.get(job_key)
 
-    # 日本語: iter generation events に関する処理の入口です。
-    # English: Entry point for logic related to iter generation events.
     def iter_generation_events(
         self,
         job_key: str,
@@ -1283,15 +1203,13 @@ return 0
         after_sequence_id: int = 0,
     ) -> Iterator[ChatGenerationEvent]:
         job = self.get_generation_job(job_key)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if job is not None:
             yield from job.iter_events(after_sequence_id=after_sequence_id)
             return
 
+        # ローカルにジョブがない場合でも、Redis のイベント履歴があれば再接続として扱う。
+        # これは複数プロセス構成で SSE 接続先が生成元と異なる場合に必要。
         redis_client = self._get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
 
@@ -1315,6 +1233,8 @@ return 0
         try:
             pubsub.subscribe(channel)
 
+            # subscribe 直前に list へ書かれたイベントを先に読む。
+            # pub/sub は購読前のメッセージを保持しないため、この二段読みで取りこぼしを埋める。
             for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
                 cursor = max(cursor, event.sequence_id)
                 if event.event in _TERMINAL_EVENTS:
@@ -1346,6 +1266,8 @@ return 0
                     continue
 
                 if not self.has_active_generation(job_key):
+                    # ロック消滅直後は pub/sub の最後の通知がまだ届かないことがあるため、
+                    # 終了判定の前に list をもう一度読んで終端イベントを回収する。
                     saw_new = False
                     for event in self._read_distributed_events(job_key, after_sequence_id=cursor):
                         saw_new = True
@@ -1374,8 +1296,6 @@ return 0
             except Exception:
                 logger.exception("Failed to close Redis pubsub for chat generation stream.")
 
-    # 日本語: start generation job に関する処理の入口です。
-    # English: Entry point for logic related to start generation job.
     def start_generation_job(
         self,
         job_key: str,
@@ -1388,13 +1308,11 @@ return 0
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not acquired_lock:
             raise ChatGenerationAlreadyRunningError(job_key)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # Redis ロックを先に取り、次にプロセス内の `_jobs` を確認する。
+        # 逆順だと別プロセスとの競合を検出できず、同じ room で二重生成が走りうる。
         with self._jobs_lock:
             existing_job = self._jobs.get(job_key)
             if existing_job is not None and not existing_job.is_done:
@@ -1418,14 +1336,13 @@ return 0
         try:
             job.start()
         except Exception:
+            # start に失敗したジョブはリプレイ対象に残さず、分散ロックも即時解放する。
             with self._jobs_lock:
                 self._jobs.pop(job_key, None)
             self._release_active_job_lock(job_key, lock_token)
             raise
         return job
 
-    # 日本語: finalize job に関する処理の入口です。
-    # English: Entry point for logic related to finalize job.
     def _finalize_job(
         self,
         job_key: str,
@@ -1434,12 +1351,8 @@ return 0
         on_finished: Callable[[], None] | None = None,
     ) -> None:
         self._release_active_job_lock(job_key, lock_token)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if on_finished is None:
             return
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             on_finished()
         except Exception:
@@ -1449,11 +1362,7 @@ return 0
 _default_chat_generation_service = ChatGenerationService()
 
 
-# 日本語: get chat generation service の取得処理を担当します。
-# English: Handle fetching for get chat generation service.
 def get_chat_generation_service(request: Request = None) -> ChatGenerationService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if request is not None:
         app = request.scope.get("app")
         state = getattr(app, "state", None)
@@ -1463,14 +1372,10 @@ def get_chat_generation_service(request: Request = None) -> ChatGenerationServic
     return _default_chat_generation_service
 
 
-# 日本語: clear generation job state の初期化処理を担当します。
-# English: Handle clearing for clear generation job state.
 def clear_generation_job_state(*, cancel_running: bool = False) -> None:
     get_chat_generation_service().reset_in_memory_state(cancel_running=cancel_running)
 
 
-# 日本語: cancel generation job に関する処理の入口です。
-# English: Entry point for logic related to cancel generation job.
 def cancel_generation_job(
     job_key: str,
     *,
@@ -1484,8 +1389,6 @@ def cancel_generation_job(
     return target.cancel_generation_job(job_key)
 
 
-# 日本語: has active generation に関する処理の入口です。
-# English: Entry point for logic related to has active generation.
 def has_active_generation(
     job_key: str,
     *,
@@ -1499,8 +1402,6 @@ def has_active_generation(
     return target.has_active_generation(job_key)
 
 
-# 日本語: get generation job の取得処理を担当します。
-# English: Handle fetching for get generation job.
 def get_generation_job(
     job_key: str,
     *,
@@ -1514,8 +1415,6 @@ def get_generation_job(
     return target.get_generation_job(job_key)
 
 
-# 日本語: has replayable generation に関する処理の入口です。
-# English: Entry point for logic related to has replayable generation.
 def has_replayable_generation(
     job_key: str,
     *,
@@ -1529,8 +1428,6 @@ def has_replayable_generation(
     return target.has_replayable_generation(job_key)
 
 
-# 日本語: iter generation events に関する処理の入口です。
-# English: Entry point for logic related to iter generation events.
 def iter_generation_events(
     job_key: str,
     *,
@@ -1548,8 +1445,6 @@ def iter_generation_events(
     )
 
 
-# 日本語: start generation job に関する処理の入口です。
-# English: Entry point for logic related to start generation job.
 def start_generation_job(
     job_key: str,
     *,

@@ -308,8 +308,6 @@ def frontend_admin_dashboard_url(request: Request, **params) -> str:
 # 管理者セッションが必要なルートを保護するデコレータ
 # Route decorator that enforces an active administrator session before allowing access.
 def admin_required(view_func):
-    # 日本語: wrapper に関する処理の入口です。
-    # English: Entry point for logic related to wrapper.
     @wraps(view_func)
     async def wrapper(*args, **kwargs):
         request = kwargs.get("request")

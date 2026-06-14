@@ -7,8 +7,6 @@ from services.passkeys import update_passkey_usage
 # 日本語: RetryableDeadlockError として扱う例外情報を表します。
 # English: Represent exception details handled as RetryableDeadlockError.
 class RetryableDeadlockError(Exception):
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         super().__init__("deadlock detected")
         self.pgcode = "40P01"
@@ -17,15 +15,11 @@ class RetryableDeadlockError(Exception):
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, *, fail_attempts=None):
         self.fail_attempts = set(fail_attempts or [])
         self.execute_calls = 0
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.execute_calls += 1
         # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -42,8 +36,6 @@ class FakeCursor:
 # 日本語: テスト用の擬似Fake Connectionクラスです。
 # English: Mock Fake Connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.commit_calls = 0
@@ -55,13 +47,9 @@ class FakeConnection:
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: テスト用の処理の入口関数commitです。
-# English: Entry point helper function commit for testing.
     def commit(self):
         self.commit_calls += 1
 
-    # 日本語: テスト用の処理の入口関数rollbackです。
-# English: Entry point helper function rollback for testing.
     def rollback(self):
         self.rollback_calls += 1
 
@@ -70,13 +58,9 @@ class FakeConnection:
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False

@@ -15,14 +15,11 @@ from services.logging_config import (
 # 日本語: Logging Configの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Logging Config.
 class LoggingConfigTestCase(unittest.TestCase):
-    # 日本語: テスト用の処理の入口関数setUpです。
-# English: Entry point helper function setUp for testing.
     def setUp(self):
         self.root_logger = logging.getLogger()
         self.original_level = self.root_logger.level
 
         # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
         for handler in list(self.root_logger.handlers):
             if getattr(handler, "name", "") in {
                 CONSOLE_HANDLER_NAME,
@@ -34,11 +31,8 @@ class LoggingConfigTestCase(unittest.TestCase):
 
         self.original_handlers = list(self.root_logger.handlers)
 
-    # 日本語: テスト用の処理の入口関数tearDownです。
-# English: Entry point helper function tearDown for testing.
     def tearDown(self):
         # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
         for handler in list(self.root_logger.handlers):
             if getattr(handler, "name", "") in {
                 CONSOLE_HANDLER_NAME,

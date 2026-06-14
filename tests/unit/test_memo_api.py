@@ -30,8 +30,6 @@ from services.api_errors import ResourceNotFoundError
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(method="GET", path="/memo/api", json_body=None, session=None, query_string=b""):
     return build_request(
         method=method,
@@ -42,8 +40,6 @@ def make_request(method="GET", path="/memo/api", json_body=None, session=None, q
     )
 
 
-# 日本語: collect streaming body に関する処理の入口です。
-# English: Entry point for logic related to collect streaming body.
 async def collect_streaming_body(response):
     chunks = []
     # 日本語: 非同期の対象データを順番に処理します。
@@ -53,8 +49,6 @@ async def collect_streaming_body(response):
     return b"".join(chunks)
 
 
-# 日本語: run blocking inline の実行処理を非同期で担当します。
-# English: Handle running for run blocking inline asynchronously.
 async def run_blocking_inline(func, *args, **kwargs):
     return func(*args, **kwargs)
 
@@ -62,8 +56,6 @@ async def run_blocking_inline(func, *args, **kwargs):
 # 日本語: テスト用の擬似Fake Bulk Cursorクラスです。
 # English: Mock Fake Bulk Cursor class for testing.
 class FakeBulkCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, *, owned_ids=None, collection_exists=True, rowcount=0):
         self.owned_ids = list(owned_ids or [])
         self.collection_exists = collection_exists
@@ -73,8 +65,6 @@ class FakeBulkCursor:
         self._fetchall_result = []
         self._fetchone_result = None
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed.append((normalized, params))
@@ -89,13 +79,9 @@ class FakeBulkCursor:
             self._fetchone_result = (1,) if self.collection_exists else None
             return
 
-    # 日本語: テスト用の処理の入口関数fetchallです。
-# English: Entry point helper function fetchall for testing.
     def fetchall(self):
         return self._fetchall_result
 
-    # 日本語: テスト用の処理の入口関数fetchoneです。
-# English: Entry point helper function fetchone for testing.
     def fetchone(self):
         return self._fetchone_result
 
@@ -108,8 +94,6 @@ class FakeBulkCursor:
 # 日本語: テスト用の擬似Fake Bulk Connectionクラスです。
 # English: Mock Fake Bulk Connection class for testing.
 class FakeBulkConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.committed = False
@@ -120,8 +104,6 @@ class FakeBulkConnection:
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: テスト用の処理の入口関数commitです。
-# English: Entry point helper function commit for testing.
     def commit(self):
         self.committed = True
 

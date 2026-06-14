@@ -7,8 +7,6 @@ from blueprints.prompt_share.prompt_search import _search_public_prompts
 # テスト用の疑似DBカーソルクラス。
 # Mock database cursor class for testing.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self):
         self.executed = []
         self.closed = False
@@ -73,8 +71,6 @@ class FakeCursor:
 # テスト用の疑似DBコネクションクラス。
 # Mock database connection class for testing.
 class FakeConnection:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False

@@ -12,13 +12,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-# 日本語: resolve database url に関する処理の入口です。
-# English: Entry point for logic related to resolve database url.
 def _resolve_database_url() -> str:
     """Resolve DB URL from env vars used in this project."""
     database_url = os.getenv("DATABASE_URL")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if database_url:
         return database_url
 
@@ -35,8 +31,6 @@ config.set_main_option("sqlalchemy.url", _resolve_database_url())
 target_metadata = None
 
 
-# 日本語: run migrations offline の実行処理を担当します。
-# English: Handle running for run migrations offline.
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
@@ -48,14 +42,10 @@ def run_migrations_offline() -> None:
         compare_type=True,
     )
 
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
     with context.begin_transaction():
         context.run_migrations()
 
 
-# 日本語: run migrations online の実行処理を担当します。
-# English: Handle running for run migrations online.
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     connectable = engine_from_config(
@@ -64,8 +54,6 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 

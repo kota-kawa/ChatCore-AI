@@ -177,8 +177,6 @@ class EphemeralChatStore:
         # Redis では残TTLを再計算して保存し、期限切れなら保存せず削除する
         # Recalculate remaining TTL for Redis; delete instead of saving when expired.
         redis_client = self._get_redis()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is not None:
             key = self._key(sid, room_id)
             ttl = self._remaining_ttl(room)
@@ -191,18 +189,12 @@ class EphemeralChatStore:
         self._memory.setdefault(sid, {})[room_id] = room
         return True
 
-    # 日本語: delete room の削除処理を担当します。
-    # English: Handle deleting for delete room.
     def delete_room(self, sid: str, room_id: str) -> bool:
         redis_client = self._get_redis()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is not None:
             return redis_client.delete(self._key(sid, room_id)) > 0
 
         rooms = self._memory.get(sid)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not rooms or room_id not in rooms:
             return False
         del rooms[room_id]

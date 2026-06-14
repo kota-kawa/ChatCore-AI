@@ -36,12 +36,10 @@ class DummyConnection:
     def close(self):
         return None
 
-    # コンテキスト開始時に必要な準備を行います。
     # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # コンテキスト終了時の後片付けを行います。
     # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()

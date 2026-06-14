@@ -24,8 +24,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# 日本語: upgrade のスキーマ更新処理を担当します。
-# English: Handle upgrading schema for upgrade.
 def upgrade() -> None:
     op.execute(
         """
@@ -139,8 +137,6 @@ def upgrade() -> None:
     )
 
 
-# 日本語: downgrade のスキーマ差し戻し処理を担当します。
-# English: Handle downgrading schema for downgrade.
 def downgrade() -> None:
     # Restore the original (buggy) function bodies — kept only for Alembic
     # chain completeness; these functions should not be deployed.

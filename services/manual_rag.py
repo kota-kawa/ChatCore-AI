@@ -46,13 +46,9 @@ class ManualChunk:
 # English: Strip the YAML frontmatter from the beginning of Markdown text, returning the body and meta dictionary.
 def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
     meta: dict[str, str] = {}
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not text.startswith("---"):
         return text, meta
     end = text.find("\n---", 3)
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if end == -1:
         return text, meta
     for line in text[3:end].splitlines():
@@ -66,8 +62,6 @@ def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
 # English: Split the manual body text into sections (headings) of appropriate character length chunks.
 def _split_into_chunks(body: str, file_title: str) -> list[ManualChunk]:
     chunks: list[ManualChunk] = []
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for section in re.split(r"\n(?=## )", body):
         if not section.strip():
             continue
@@ -108,8 +102,6 @@ def _tokenize(text: str) -> list[str]:
     tokens.extend(re.findall(r"[a-z0-9]+", text))
     cjk_chars = [c for c in text if unicodedata.category(c) in ("Lo", "Ll") and ord(c) > 0x2E7F]
     cjk_str = "".join(cjk_chars)
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for i in range(len(cjk_str) - 1):
         tokens.append(cjk_str[i:i + 2])
     tokens.extend(cjk_chars)
@@ -134,8 +126,6 @@ def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
     api_key = os.environ.get("OPENAI_API_KEY", "")
     client = OpenAI(api_key=api_key)
     all_embeddings: list[list[float]] = []
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
         batch = texts[i:i + EMBEDDING_BATCH_SIZE]
         response = client.embeddings.create(
@@ -170,8 +160,6 @@ class ManualRagIndex:
         self._chunk_embeddings: np.ndarray | None = None  # shape (n, EMBEDDING_DIMS), L2-normalized
 
         chunks = self._load_chunks(manual_dir)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if not chunks:
             logger.warning("No manual chunks loaded from %s", manual_dir)
             return
@@ -194,8 +182,6 @@ class ManualRagIndex:
     @staticmethod
     def _load_chunks(manual_dir: Path) -> list[ManualChunk]:
         chunks: list[ManualChunk] = []
-        # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-        # English: Iterate over the elements sequentially and perform operations.
         for md_file in sorted(manual_dir.glob("*.md")):
             try:
                 text = md_file.read_text(encoding="utf-8")
@@ -214,8 +200,6 @@ class ManualRagIndex:
     # English: Build a BM25Okapi search object using the rank_bm25 library.
     @staticmethod
     def _build_bm25(chunks: list[ManualChunk]):
-        # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-        # English: Execute operations that might raise exceptions and handle them appropriately.
         try:
             from rank_bm25 import BM25Okapi
         except ImportError:
@@ -227,13 +211,9 @@ class ManualRagIndex:
     # 日本語: BM25アルゴリズムを用いてクエリに関連するチャンクを検索します。
     # English: Search manual chunks using the BM25 algorithm.
     def _bm25_search(self, query: str, top_k: int) -> tuple[list[ManualChunk], list[float]]:
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if self._bm25 is None:
             return [], []
         tokens = _tokenize(query)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if not tokens:
             return [], []
         all_scores: list[float] = self._bm25.get_scores(tokens).tolist()
@@ -245,8 +225,6 @@ class ManualRagIndex:
     # English: Assess if BM25 results are too weak/ambiguous based on the ratio of top score to positive mean score.
     def _is_bm25_weak(self, all_scores: list[float]) -> bool:
         top = max(all_scores) if all_scores else 0.0
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if top <= 0:
             return True
         positive = [s for s in all_scores if s > 0]
@@ -261,8 +239,6 @@ class ManualRagIndex:
     # English: Load cached vector embeddings, or build them via OpenAI API and cache them if not present.
     def _load_or_build_embeddings(self, chunks: list[ManualChunk]) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if not api_key:
             logger.info("OPENAI_API_KEY not set; vector search disabled.")
             return None
@@ -270,8 +246,6 @@ class ManualRagIndex:
         chunks_hash = _compute_chunks_hash(chunks)
 
         # Try loading from cache
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if _CACHE_FILE.exists() and _CACHE_HASH_FILE.exists():
             try:
                 cached_hash = _CACHE_HASH_FILE.read_text().strip()
@@ -298,12 +272,8 @@ class ManualRagIndex:
     # English: Convert user search query into an embedding vector via OpenAI API.
     def _embed_query(self, query: str) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if not api_key:
             return None
-        # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-        # English: Execute operations that might raise exceptions and handle them appropriately.
         try:
             from openai import OpenAI
             response = OpenAI(api_key=api_key).embeddings.create(
@@ -321,13 +291,9 @@ class ManualRagIndex:
     # 日本語: コサイン類似度を用いて、クエリベクトルに最も類似するチャンクを検索します。
     # English: Search for chunks most semantically similar to the query vector using cosine similarity.
     def _vector_search(self, query: str, top_k: int) -> list[ManualChunk]:
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if self._chunk_embeddings is None:
             return []
         query_vec = self._embed_query(query)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if query_vec is None:
             return []
         scores = self._chunk_embeddings @ query_vec
@@ -343,16 +309,12 @@ class ManualRagIndex:
     def search(self, query: str, top_k: int = TOP_K) -> list[ManualChunk]:
         bm25_chunks, all_scores = self._bm25_search(query, top_k)
 
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if not self._is_bm25_weak(all_scores):
             logger.debug("RAG method=bm25 query=%s", query[:60])
             return bm25_chunks
 
         logger.debug("RAG BM25 weak → trying vector search. query=%s", query[:60])
         vec_chunks = self._vector_search(query, top_k)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if vec_chunks:
             return vec_chunks
 
@@ -370,8 +332,6 @@ _index: ManualRagIndex | None = None
 # English: Retrieve or initialize the singleton instance of ManualRagIndex.
 def get_manual_rag_index() -> ManualRagIndex:
     global _index
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if _index is None:
         _index = ManualRagIndex()
     return _index
@@ -382,13 +342,9 @@ def get_manual_rag_index() -> ManualRagIndex:
 def search_manual(query: str, top_k: int = TOP_K) -> str:
     """クエリに関連するマニュアルチャンクを検索して文字列で返す。"""
     chunks = get_manual_rag_index().search(query, top_k=top_k)
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not chunks:
         return ""
     parts = ["【操作マニュアル（参考情報）】"]
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for chunk in chunks:
         parts.append(f"\n### {chunk.heading}\n{chunk.content}")
     return "\n".join(parts)
@@ -468,14 +424,10 @@ def needs_manual_search(query: str) -> bool:
     q = query.strip()
 
     # 5文字未満または純粋な会話返答
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if len(q) < 5 or _CONVERSATIONAL_REPLIES.match(q):
         return False
 
     # アプリ固有の語彙が含まれる
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if _APP_TERMS.search(q):
         return True
 

@@ -36,8 +36,6 @@ def _get_limit(env_name: str, default_limit: int) -> int:
     # 環境変数値を整数化し、異常値はデフォルトへフォールバックする
     # Parse limit from env and fallback to default on invalid values.
     raw_limit = os.environ.get(env_name, str(default_limit))
-    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         limit = int(raw_limit)
     except (TypeError, ValueError):
@@ -68,8 +66,6 @@ def _seconds_until_next_month() -> int:
     # 月次クォータのキー期限を「翌月1日の0時」までに合わせる
     # Compute TTL that expires at the first day of the next month.
     now = datetime.now()
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if now.month == 12:
         first_of_next_month = datetime(now.year + 1, 1, 1)
     else:
@@ -108,8 +104,6 @@ class LlmDailyLimitService:
     # 日本語: Redisクライアントを取得します。
     # English: Retrieve the Redis client.
     def _get_redis_client(self) -> Any | None:
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if self._redis_client_getter is not None:
             return self._redis_client_getter()
         return get_redis_client()
@@ -151,8 +145,6 @@ end
 
 return {1, current}
 """
-        # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-        # English: Execute operations that might raise exceptions and handle them appropriately.
         try:
             result = redis_client.eval(
                 lua_script,
@@ -217,14 +209,10 @@ return {1, current}
         # When user_key is provided the quota is scoped per user/session so one
         # caller cannot burn the global daily budget for everyone else.
         daily_limit = _get_limit(env_name, default_limit)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if daily_limit <= 0:
             return False, 0, daily_limit
 
         today = current_date or date.today().isoformat()
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if user_key:
             # Hash to avoid leaking user identifiers into Redis keys and to
             # keep key length bounded regardless of input.
@@ -266,8 +254,6 @@ return {1, current}
         # 月単位キーを作って Redis 優先で消費し、失敗時のみメモリ実装へ切り替える
         # Consume quota using a month-scoped key, preferring Redis and falling back to memory.
         monthly_limit = _get_limit(env_name, default_limit)
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if monthly_limit <= 0:
             return False, 0, monthly_limit
 
@@ -275,8 +261,6 @@ return {1, current}
         quota_key = f"{key_prefix}:{month}"
 
         redis_client = self._get_redis_client()
-        # 日本語: 与えられた条件に基づいて分岐処理を行います。
-        # English: Branch execution flow based on the given conditions.
         if redis_client is not None:
             redis_result = self._consume_with_redis(
                 redis_client,
@@ -400,8 +384,6 @@ _default_llm_daily_limit_service = LlmDailyLimitService()
 # 日本語: Requestオブジェクトのコンテキストからサービスインスタンスを取得します。なければデフォルトインスタンスを返します。
 # English: Retrieve the service instance from the Request context, falling back to the default instance.
 def get_llm_daily_limit_service(request: Request = None) -> LlmDailyLimitService:
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if request is not None:
         app = request.scope.get("app")
         state = getattr(app, "state", None)

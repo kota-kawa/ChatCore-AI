@@ -151,20 +151,14 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         # 日本語: テスト用のCursorクラスです。
 # English: Cursor class for testing.
         class Cursor:
-            # 日本語: インスタンス生成時に必要な初期状態を設定します。
-            # English: Initialize the required instance state when the object is created.
             def __init__(self):
                 self.query = ""
                 self.params = ()
 
-            # 日本語: execute の実行処理を担当します。
-            # English: Handle executing for execute.
             def execute(self, query, params):
                 self.query = query
                 self.params = params
 
-            # 日本語: テスト用の処理の入口関数fetchallです。
-# English: Entry point helper function fetchall for testing.
             def fetchall(self):
                 return [("room-21", "Room 21", "normal", datetime(2026, 4, 19, 10, 0, 0))]
 
@@ -176,8 +170,6 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         # 日本語: テスト用のConnectionクラスです。
 # English: Connection class for testing.
         class Connection:
-            # 日本語: インスタンス生成時に必要な初期状態を設定します。
-            # English: Initialize the required instance state when the object is created.
             def __init__(self):
                 self.cursor_instance = Cursor()
 

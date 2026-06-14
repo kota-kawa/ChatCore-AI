@@ -8,15 +8,11 @@ from tests.helpers.db_helpers import TransactionTrackingConnection
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, fail_on_execute=False):
         self.fail_on_execute = fail_on_execute
         self.executed = []
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.executed.append((query, params))
         # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -33,8 +29,6 @@ class FakeCursor:
 # 日本語: テスト用の擬似Fake Connectionクラスです。
 # English: Mock Fake Connection class for testing.
 class FakeConnection(TransactionTrackingConnection):
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, fail_on_execute=False):
         super().__init__(FakeCursor(fail_on_execute=fail_on_execute))
 

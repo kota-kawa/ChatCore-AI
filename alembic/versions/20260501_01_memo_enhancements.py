@@ -16,20 +16,14 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# 日本語: existing tables に関する処理の入口です。
-# English: Entry point for logic related to existing tables.
 def _existing_tables() -> set[str]:
     inspector = sa.inspect(op.get_bind())
     return set(inspector.get_table_names())
 
 
-# 日本語: upgrade のスキーマ更新処理を担当します。
-# English: Handle upgrading schema for upgrade.
 def upgrade() -> None:
     tables = _existing_tables()
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "memo_collections" not in tables:
         op.execute(
             """
@@ -72,8 +66,6 @@ def upgrade() -> None:
             """
         )
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "memo_entries" in tables:
         op.execute(
             """
@@ -116,8 +108,6 @@ def upgrade() -> None:
         )
 
 
-# 日本語: downgrade のスキーマ差し戻し処理を担当します。
-# English: Handle downgrading schema for downgrade.
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_memo_entries_has_embedding")
     op.execute("DROP INDEX IF EXISTS idx_memo_entries_collection_id")

@@ -8,8 +8,6 @@ from services import llm_daily_limit
 # 日本語: Llm Daily Limitの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Llm Daily Limit.
 class LlmDailyLimitTestCase(unittest.TestCase):
-    # 日本語: テスト用の処理の入口関数setUpです。
-# English: Entry point helper function setUp for testing.
     def setUp(self):
         self.original_limit = os.environ.get("LLM_DAILY_API_LIMIT")
         self.original_auth_email_limit = os.environ.get("AUTH_EMAIL_DAILY_SEND_LIMIT")
@@ -17,8 +15,6 @@ class LlmDailyLimitTestCase(unittest.TestCase):
         self.original_brave_search_limit = os.environ.get("BRAVE_WEB_SEARCH_MONTHLY_LIMIT")
         llm_daily_limit.clear_in_memory_daily_limit_state()
 
-    # 日本語: テスト用の処理の入口関数tearDownです。
-# English: Entry point helper function tearDown for testing.
     def tearDown(self):
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.

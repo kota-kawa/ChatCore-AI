@@ -43,8 +43,6 @@ class ChatTitleTestCase(unittest.TestCase):
     def test_maybe_auto_title_returns_title_only_when_rename_succeeds(self):
         calls = []
 
-        # 日本語: conditional rename に関する処理の入口です。
-        # English: Entry point for logic related to conditional rename.
         def conditional_rename(room_id, title, allowed_current_titles):
             calls.append((room_id, title, allowed_current_titles))
             return True

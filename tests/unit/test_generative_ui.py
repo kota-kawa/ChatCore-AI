@@ -120,7 +120,6 @@ document.getElementById('app').textContent = 'ready';
 
         self.assertGreaterEqual(len(artifact_blocks), 3)
         # 日本語: 各対象データを順に処理し、検証を行います。
-        # English: Process each target item in sequence to perform validation.
         for raw_payload in artifact_blocks:
             payload = json.loads(raw_payload)
             artifact = validate_artifact_payload(payload)

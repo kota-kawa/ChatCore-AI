@@ -58,13 +58,9 @@ _dns_pin_local = threading.local()
 _original_urllib3_create_connection = _urllib3_conn.create_connection
 
 
-# 日本語: pinned create connection に関する処理の入口です。
-# English: Entry point for logic related to pinned create connection.
 def _pinned_create_connection(address, *args, **kwargs):  # type: ignore[no-untyped-def]
     host, port = address[0], address[1]
     mapping: dict[str, str] | None = getattr(_dns_pin_local, "mapping", None)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if mapping and host in mapping:
         address = (mapping[host], port)
     return _original_urllib3_create_connection(address, *args, **kwargs)
@@ -73,22 +69,16 @@ def _pinned_create_connection(address, *args, **kwargs):  # type: ignore[no-unty
 _urllib3_conn.create_connection = _pinned_create_connection
 
 
-# 日本語: pin dns に関する処理の入口です。
-# English: Entry point for logic related to pin dns.
 @contextmanager
 def _pin_dns(host_to_ip: dict[str, str]) -> Iterator[None]:
     previous = getattr(_dns_pin_local, "mapping", None)
     _dns_pin_local.mapping = dict(host_to_ip)
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         yield
     finally:
         _dns_pin_local.mapping = previous
 
 
-# 日本語: TextExtractor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to TextExtractor.
 class _TextExtractor(HTMLParser):
     """Lightweight HTML-to-text extractor using the stdlib html.parser."""
 
@@ -101,41 +91,25 @@ class _TextExtractor(HTMLParser):
         "li", "br", "tr", "article", "section", "blockquote",
     })
 
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self._skip_depth = 0
         self._parts: list[str] = []
 
-    # 日本語: handle starttag のハンドリング処理を担当します。
-    # English: Handle handling for handle starttag.
     def handle_starttag(self, tag: str, attrs: list) -> None:  # type: ignore[override]
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
 
-    # 日本語: handle endtag のハンドリング処理を担当します。
-    # English: Handle handling for handle endtag.
     def handle_endtag(self, tag: str) -> None:  # type: ignore[override]
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if tag in self._SKIP_TAGS:
             self._skip_depth = max(0, self._skip_depth - 1)
         elif tag in self._BLOCK_TAGS:
             self._parts.append("\n")
 
-    # 日本語: handle data のハンドリング処理を担当します。
-    # English: Handle handling for handle data.
     def handle_data(self, data: str) -> None:  # type: ignore[override]
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self._skip_depth == 0 and data.strip():
             self._parts.append(data)
 
-    # 日本語: get text の取得処理を担当します。
-    # English: Handle fetching for get text.
     def get_text(self) -> str:
         raw = "".join(self._parts)
         raw = re.sub(r"[ \t]+", " ", raw)
@@ -143,22 +117,16 @@ class _TextExtractor(HTMLParser):
         return raw.strip()
 
 
-# 日本語: extract text from html に関する処理の入口です。
-# English: Entry point for logic related to extract text from html.
 def _extract_text_from_html(raw_html: str) -> str:
     extractor = _TextExtractor()
     extractor.feed(raw_html)
     return extractor.get_text()
 
 
-# 日本語: extract urls from text に関する処理の入口です。
-# English: Entry point for logic related to extract urls from text.
 def extract_urls_from_text(text: str) -> list[str]:
     """Return up to MAX_URLS_PER_MESSAGE unique http/https URLs found in *text*."""
     seen: set[str] = set()
     result: list[str] = []
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for raw_url in _URL_RE.findall(text):
         url = raw_url.rstrip(".,;:!?)")
         if url not in seen:
@@ -169,8 +137,6 @@ def extract_urls_from_text(text: str) -> list[str]:
     return result
 
 
-# 日本語: resolve safe ip に関する処理の入口です。
-# English: Entry point for logic related to resolve safe ip.
 def _resolve_safe_ip(url: str) -> str | None:
     """Return the resolved IP for *url* if it is safe to fetch, else None.
 
@@ -179,8 +145,6 @@ def _resolve_safe_ip(url: str) -> str | None:
     IP is used to pin DNS resolution during the actual fetch so a rebinding
     attack cannot redirect the TCP connection to a different address.
     """
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
@@ -199,15 +163,11 @@ def _resolve_safe_ip(url: str) -> str | None:
         return None
 
 
-# 日本語: is safe url に関する処理の入口です。
-# English: Entry point for logic related to is safe url.
 def _is_safe_url(url: str) -> bool:
     """Return True when the URL is safe to fetch (not targeting private networks)."""
     return _resolve_safe_ip(url) is not None
 
 
-# 日本語: fetch url content の取得処理を担当します。
-# English: Handle fetching for fetch url content.
 def fetch_url_content(url: str) -> str | None:
     """Fetch a single URL and return its readable plain-text content.
 
@@ -220,8 +180,6 @@ def fetch_url_content(url: str) -> str | None:
     current_url = url
     host_to_ip: dict[str, str] = {}
 
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for _hop in range(MAX_REDIRECT_HOPS + 1):
         ip = _resolve_safe_ip(current_url)
         if ip is None:
@@ -245,6 +203,8 @@ def fetch_url_content(url: str) -> str | None:
                         location = response.headers.get("Location")
                         if not location:
                             return None
+                        # リダイレクト先も次ループで再度 SSRF 検査する。
+                        # requests の自動リダイレクトを使わないのは、各 hop の検査と DNS pinning を挟むため。
                         current_url = urljoin(current_url, location)
                         continue
 
@@ -261,6 +221,8 @@ def fetch_url_content(url: str) -> str | None:
                         chunks.append(chunk)
                         total += len(chunk)
                         if total >= MAX_URL_RESPONSE_BYTES:
+                            # LLM 文脈に入れる抜粋用途なので、巨大ページは先頭だけ読んで打ち切る。
+                            # メモリ消費と応答待ち時間を URL 1 件ごとに固定上限へ収めるため。
                             break
 
                     raw = b"".join(chunks).decode(
@@ -278,13 +240,9 @@ def fetch_url_content(url: str) -> str | None:
     return None
 
 
-# 日本語: fetch urls content の取得処理を担当します。
-# English: Handle fetching for fetch urls content.
 def fetch_urls_content(urls: list[str]) -> dict[str, str]:
     """Fetch content for each URL; return {url: text} for successful fetches only."""
     result: dict[str, str] = {}
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for url in urls:
         content = fetch_url_content(url)
         if content:

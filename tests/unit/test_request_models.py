@@ -17,8 +17,6 @@ from services.request_models import (
 )
 
 
-# 日本語: validate の検証処理を担当します。
-# English: Handle validating for validate.
 def _validate(model_cls, data):
     validate = getattr(model_cls, "model_validate", None)
     # 日本語: 条件に基づいて処理の流れを切り替えます。

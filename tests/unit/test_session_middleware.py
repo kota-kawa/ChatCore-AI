@@ -16,24 +16,16 @@ from services.session_middleware import (
 # 日本語: テスト用の擬似Dummy Redisクラスです。
 # English: Mock Dummy Redis class for testing.
 class DummyRedis:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.store = {}
         self.expiry = {}
 
-    # 日本語: テスト用の処理の入口関数pingです。
-# English: Entry point helper function ping for testing.
     def ping(self):
         return True
 
-    # 日本語: get の取得処理を担当します。
-    # English: Handle fetching for get.
     def get(self, key):
         return self.store.get(key)
 
-    # 日本語: set の設定処理を担当します。
-    # English: Handle setting for set.
     def set(self, key, value, ex=None):
         self.store[key] = value
         # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -42,8 +34,6 @@ class DummyRedis:
             self.expiry[key] = ex
         return True
 
-    # 日本語: delete の削除処理を担当します。
-    # English: Handle deleting for delete.
     def delete(self, key):
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.
@@ -56,14 +46,10 @@ class DummyRedis:
 # 日本語: テスト用のFailing Redisクラスです。
 # English: Failing Redis class for testing.
 class FailingRedis(DummyRedis):
-    # 日本語: set の設定処理を担当します。
-    # English: Handle setting for set.
     def set(self, key, value, ex=None):
         raise RuntimeError("redis down on set")
 
 
-# 日本語: make scope の生成処理を担当します。
-# English: Handle creating for make scope.
 def make_scope(cookie_header=None):
     headers = []
     # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -85,14 +71,10 @@ def make_scope(cookie_header=None):
     }
 
 
-# 日本語: テスト用の処理の入口関数receiveです。
-# English: Entry point helper function receive for testing.
 async def receive():
     return {"type": "http.request", "body": b"", "more_body": False}
 
 
-# 日本語: get session cookie の取得処理を担当します。
-# English: Handle fetching for get session cookie.
 def get_session_cookie(messages):
     header_values = [
         value.decode("latin-1")
@@ -120,8 +102,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         dummy_redis = DummyRedis()
         captured = {}
 
-        # 日本語: テスト用の処理の入口関数appです。
-# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -133,8 +113,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 
@@ -149,8 +127,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         redis_payload = dummy_redis.get(f"session:{session_id}")
         self.assertIn('"foo": "bar"', redis_payload)
 
-        # 日本語: app read に関する処理の入口です。
-        # English: Entry point for logic related to app read.
         async def app_read(scope, receive, send):
             captured["session"] = dict(scope["session"])
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -162,8 +138,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             middleware = PermanentSessionMiddleware(app_read, secret_key="secret", max_age=60)
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 
@@ -174,8 +148,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
     # 日本語: redisunavailableのとき、セッションcookieがclearedことを検証します。
     # English: Verify that session cookie is cleared when redis unavailable.
     def test_session_cookie_is_cleared_when_redis_unavailable(self):
-        # 日本語: テスト用の処理の入口関数appです。
-# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -187,8 +159,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 
@@ -212,8 +182,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
     # 日本語: rediswrite失敗するのとき、セッションcookieがclearedことを検証します。
     # English: Verify that session cookie is cleared when redis write fails.
     def test_session_cookie_is_cleared_when_redis_write_fails(self):
-        # 日本語: テスト用の処理の入口関数appです。
-# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -225,8 +193,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 
@@ -258,8 +224,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
         captured = {}
 
-        # 日本語: テスト用の処理の入口関数appです。
-# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             captured["session"] = dict(scope["session"])
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -271,8 +235,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 
@@ -287,8 +249,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
     # 日本語: secureを使用する場合、セッションcookiecanusesamesitenoneことを検証します。
     # English: Verify that session cookie can use samesite none with secure.
     def test_session_cookie_can_use_samesite_none_with_secure(self):
-        # 日本語: テスト用の処理の入口関数appです。
-# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -306,8 +266,6 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             )
             messages = []
 
-            # 日本語: send の送信処理を非同期で担当します。
-            # English: Handle sending for send asynchronously.
             async def send(message):
                 messages.append(message)
 

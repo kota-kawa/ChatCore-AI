@@ -8,8 +8,6 @@ import services.db as db
 # 日本語: テスト用の擬似Dummy Connectionクラスです。
 # English: Mock Dummy Connection class for testing.
 class DummyConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.cursor_args = None
         self.cursor_kwargs = None
@@ -23,8 +21,6 @@ class DummyConnection:
         self.cursor_kwargs = kwargs
         return "cursor"
 
-    # 日本語: テスト用の処理の入口関数rollbackです。
-# English: Entry point helper function rollback for testing.
     def rollback(self):
         self.rollback_called = True
 
@@ -37,8 +33,6 @@ class DummyConnection:
 # 日本語: テスト用の擬似Dummy Threaded Connection Poolクラスです。
 # English: Mock Dummy Threaded Connection Pool class for testing.
 class DummyThreadedConnectionPool:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, connection, minconn, maxconn, kwargs):
         self._connection = connection
         self.minconn = minconn
@@ -48,14 +42,10 @@ class DummyThreadedConnectionPool:
         self.putconn_calls = []
         self.closeall_calls = 0
 
-    # 日本語: テスト用の処理の入口関数getconnです。
-# English: Entry point helper function getconn for testing.
     def getconn(self):
         self.getconn_calls += 1
         return self._connection
 
-    # 日本語: テスト用の処理の入口関数putconnです。
-# English: Entry point helper function putconn for testing.
     def putconn(self, connection, close=False):
         self.putconn_calls.append((connection, close))
 
@@ -68,14 +58,10 @@ class DummyThreadedConnectionPool:
 # 日本語: テスト用の擬似Dummy Pool Factoryクラスです。
 # English: Mock Dummy Pool Factory class for testing.
 class DummyPoolFactory:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, connection):
         self._connection = connection
         self.instances = []
 
-    # 日本語: テスト用の処理の入口関数callです。
-# English: Entry point helper function call for testing.
     def __call__(self, minconn, maxconn, **kwargs):
         pool = DummyThreadedConnectionPool(self._connection, minconn, maxconn, kwargs)
         self.instances.append(pool)
@@ -94,13 +80,9 @@ class DummyExtras:
 # 日本語: D B Configの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of D B Config.
 class DBConfigTestCase(unittest.TestCase):
-    # 日本語: テスト用の処理の入口関数setUpです。
-# English: Entry point helper function setUp for testing.
     def setUp(self):
         db.close_db_pool()
 
-    # 日本語: テスト用の処理の入口関数tearDownです。
-# English: Entry point helper function tearDown for testing.
     def tearDown(self):
         db.close_db_pool()
 

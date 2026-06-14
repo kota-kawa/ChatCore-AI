@@ -11,8 +11,6 @@ from tests.helpers.db_helpers import TransactionTrackingConnection
 # デフォルト共有プロンプト作成処理をテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing default shared prompt insertion logic.
 class FakeCursor:
-    # インスタンス生成時に必要な初期状態を設定します。
-    # Initialize the required instance state when the object is created.
     def __init__(self, *, owner_id=None, existing_prompt_titles=None):
         self.owner_id = owner_id
         self.existing_prompt_titles = set(existing_prompt_titles or [])

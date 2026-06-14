@@ -465,8 +465,6 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     parts = []
     skill_markdown = prompt.get("skill_markdown") or ""
     skill_python_script = prompt.get("skill_python_script") or ""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if skill_markdown:
         parts.append(skill_markdown)
     if skill_python_script:
@@ -560,8 +558,6 @@ def _add_bookmark_for_user(
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     payload, status_code = _add_prompt_list_entry_for_user(user_id, prompt_id)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "error" in payload:
         return payload, status_code
     return {

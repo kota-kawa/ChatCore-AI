@@ -9,14 +9,10 @@ from tests.helpers.request_helpers import build_request
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.executed = []
         self._fetchone_result = None
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.executed.append((query, params))
         # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -26,8 +22,6 @@ class FakeCursor:
         else:
             self._fetchone_result = None
 
-    # 日本語: テスト用の処理の入口関数fetchoneです。
-# English: Entry point helper function fetchone for testing.
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
@@ -42,8 +36,6 @@ class FakeCursor:
 # 日本語: テスト用の擬似Fake Connectionクラスです。
 # English: Mock Fake Connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.committed = False
         self.closed = False
@@ -56,8 +48,6 @@ class FakeConnection:
         self.cursors.append(cursor)
         return cursor
 
-    # 日本語: テスト用の処理の入口関数commitです。
-# English: Entry point helper function commit for testing.
     def commit(self):
         self.committed = True
 
@@ -67,8 +57,6 @@ class FakeConnection:
         self.closed = True
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",

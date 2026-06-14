@@ -13,8 +13,6 @@ from blueprints.chat.messages import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -103,8 +101,6 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         saved_messages = []
 
-        # 日本語: append message に関する処理の入口です。
-        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
@@ -186,8 +182,6 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {"role": "assistant", "content": "了解しました。"},
         ]
 
-        # 日本語: append message に関する処理の入口です。
-        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
@@ -258,8 +252,6 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         saved_messages = []
         fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 
-        # 日本語: append message に関する処理の入口です。
-        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}

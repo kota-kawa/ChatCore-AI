@@ -7,15 +7,11 @@ from services import email_service
 # 日本語: テスト用の擬似Fake Responseクラスです。
 # English: Mock Fake Response class for testing.
 class FakeResponse:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self, status_code=200, json_payload=None, text=""):
         self.status_code = status_code
         self._json_payload = json_payload
         self.text = text
 
-    # 日本語: テスト用の処理の入口関数jsonです。
-# English: Entry point helper function json for testing.
     def json(self):
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.

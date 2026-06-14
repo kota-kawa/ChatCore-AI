@@ -33,8 +33,6 @@ def _extract_json(raw: str) -> dict[str, Any]:
     # Find first {...}
     start = cleaned.find("{")
     end = cleaned.rfind("}")
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if start != -1 and end != -1 and end > start:
         cleaned = cleaned[start : end + 1]
     return json.loads(cleaned)
@@ -44,8 +42,6 @@ def _extract_json(raw: str) -> dict[str, Any]:
 # English: Extract a simple fallback title from the first non-empty line of AI response.
 def _fallback_suggest(ai_response: str) -> dict[str, Any]:
     """Return a minimal suggestion from the first non-empty line of the AI response."""
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for line in (ai_response or "").splitlines():
         cleaned = re.sub(r"^#+\s*", "", line).strip()
         if cleaned:
@@ -83,8 +79,6 @@ def suggest_title(ai_response: str) -> dict[str, Any]:
         },
     ]
 
-    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
-    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         raw = get_llm_response(messages, MEMO_SUGGEST_MODEL)
         if not raw:
@@ -117,14 +111,10 @@ def generate_embedding(text: str) -> list[float] | None:
 
     Returns ``None`` when embeddings are unavailable or the call fails.
     """
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not embeddings_available():
         return None
 
     normalized = text.strip()[:EMBEDDING_MAX_INPUT_CHARS]
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if not normalized:
         return None
 
@@ -144,12 +134,8 @@ def generate_embedding(text: str) -> list[float] | None:
 def build_memo_embedding_text(title: str, ai_response: str) -> str:
     """Combine memo fields into a single string optimised for embedding."""
     parts: list[str] = []
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if title:
         parts.append(f"タイトル: {title}")
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if ai_response:
         parts.append(ai_response[:EMBEDDING_RESPONSE_SAMPLE_CHARS])
     return "\n".join(parts)
@@ -162,8 +148,6 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     vb = np.asarray(b, dtype=np.float32)
     norm_a = float(np.linalg.norm(va))
     norm_b = float(np.linalg.norm(vb))
-    # 日本語: 与えられた条件に基づいて分岐処理を行います。
-    # English: Branch execution flow based on the given conditions.
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return float(np.dot(va, vb) / (norm_a * norm_b))
@@ -180,8 +164,6 @@ def rank_memos_by_semantic_similarity(
     Memos without an embedding are placed at the end with score 0.
     """
     scored: list[tuple[float, dict[str, Any]]] = []
-    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
-    # English: Iterate over the elements sequentially and perform operations.
     for memo in memos:
         emb_raw = memo.get("embedding")
         score = 0.0

@@ -8,19 +8,13 @@ from services.ephemeral_store import EphemeralChatStore
 # 日本語: テスト用の擬似Dummy Redisクラスです。
 # English: Mock Dummy Redis class for testing.
 class DummyRedis:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(self):
         self.store = {}
         self.expiry = {}
 
-    # 日本語: get の取得処理を担当します。
-    # English: Handle fetching for get.
     def get(self, key):
         return self.store.get(key)
 
-    # 日本語: set の設定処理を担当します。
-    # English: Handle setting for set.
     def set(self, key, value, ex=None):
         self.store[key] = value
         # 日本語: 条件に基づいて処理の流れを切り替えます。
@@ -29,8 +23,6 @@ class DummyRedis:
             self.expiry[key] = ex
         return True
 
-    # 日本語: delete の削除処理を担当します。
-    # English: Handle deleting for delete.
     def delete(self, key):
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.

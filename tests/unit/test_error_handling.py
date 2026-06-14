@@ -9,8 +9,6 @@ from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, log_and_internal_server
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
 def make_request(
     *,
     method: str,

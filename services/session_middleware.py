@@ -21,30 +21,22 @@ REDIS_BACKEND = "redis"
 SESSION_IDS_TO_DELETE_SCOPE_KEY = "_session_ids_to_delete"
 
 
-# 日本語: rotate session identifier に関する処理の入口です。
-# English: Entry point for logic related to rotate session identifier.
 def rotate_session_identifier(request: Request) -> None:
     # ログイン成功時はセッションIDを再発行して fixation を防ぐ
     # Rotate the session identifier after authentication to mitigate session fixation.
     scope = request.scope
     current_session_id = scope.get("session_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(current_session_id, str) and current_session_id:
         pending = scope.setdefault(SESSION_IDS_TO_DELETE_SCOPE_KEY, set())
         pending.add(current_session_id)
     scope["session_id"] = None
 
 
-# 日本語: PermanentSessionMiddleware に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PermanentSessionMiddleware.
 class PermanentSessionMiddleware:
     # セッションは Redis にのみ保存する。Redis に書けない場合はセッションを発行せず Cookie をクリアする
     # Sessions are stored only in Redis. If Redis is unavailable the cookie is cleared
     # rather than written with a signed-but-unencrypted payload that would leak
     # verification codes, admin flags, and OAuth state to anyone who reads the cookie.
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         app: ASGIApp,
@@ -66,17 +58,11 @@ class PermanentSessionMiddleware:
             https_only=https_only,
         )
 
-    # 日本語: call に関する処理の入口です。
-    # English: Entry point for logic related to call.
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         await self.inner(scope, receive, send)
 
 
-# 日本語: HybridSessionMiddleware に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to HybridSessionMiddleware.
 class HybridSessionMiddleware:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         app: ASGIApp,
@@ -96,49 +82,35 @@ class HybridSessionMiddleware:
         self.https_only = https_only
         self.serializer = URLSafeSerializer(secret_key, salt="strike.session")
 
-    # 日本語: call に関する処理の入口です。
-    # English: Entry point for logic related to call.
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
 
         cookie_state = self._load_cookie_state(scope)
         session_data, session_id = await run_blocking(self._restore_session, cookie_state)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if CSRF_SESSION_KEY not in session_data:
             session_data[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
         scope["session"] = session_data
         scope["session_id"] = session_id
 
-        # 日本語: send wrapper の送信処理を非同期で担当します。
-        # English: Handle sending for send wrapper asynchronously.
         async def send_wrapper(message: Message) -> None:
-            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-            # English: Switch the flow according to the current condition.
             if message["type"] == "http.response.start":
+                # レスポンス開始直前に保存することで、endpoint/middleware が最後に変更した
+                # request.session の内容を Cookie 発行と Redis 保存へ反映する。
                 headers = MutableHeaders(scope=message)
                 await run_blocking(self._commit_session, scope, headers)
             await send(message)
 
         return await self.app(scope, receive, send_wrapper)
 
-    # 日本語: load cookie state の読み込み処理を担当します。
-    # English: Handle loading for load cookie state.
     def _load_cookie_state(self, scope: Scope) -> dict[str, Any] | None:
         headers = Headers(scope=scope)
         cookie_header = headers.get("cookie")
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not cookie_header:
             return None
 
         cookies = SimpleCookie()
         cookies.load(cookie_header)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self.session_cookie not in cookies:
             return None
 
@@ -149,6 +121,8 @@ class HybridSessionMiddleware:
             return None
 
         if isinstance(payload, str):
+            # 旧実装の Redis-backed cookie は session_id 文字列だけを署名していた。
+            # dict 形式へ移行後も既存ログインを壊さないため、ここで読み替える。
             return {"backend": REDIS_BACKEND, "id": payload}
         if isinstance(payload, dict):
             # Legacy cookie-backed payloads ({"backend": "cookie", "data": {...}})
@@ -160,18 +134,12 @@ class HybridSessionMiddleware:
             return None
         return None
 
-    # 日本語: restore session に関する処理の入口です。
-    # English: Entry point for logic related to restore session.
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
     ) -> tuple[dict[str, Any], str | None]:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not cookie_state:
             return {}, None
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if cookie_state.get("backend") != REDIS_BACKEND:
             return {}, None
 
@@ -200,16 +168,14 @@ class HybridSessionMiddleware:
             return data, session_id
         return {}, None
 
-    # 日本語: commit session に関する処理の入口です。
-    # English: Entry point for logic related to commit session.
     def _commit_session(self, scope: Scope, headers: MutableHeaders) -> None:
         session = scope.get("session") or {}
         session_id = scope.get("session_id")
         pending_delete_ids = scope.get(SESSION_IDS_TO_DELETE_SCOPE_KEY) or set()
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not session:
+            # 空セッションは「ログアウト/無効化済み」とみなし、現在IDと rotation 前IDの両方を消す。
+            # 古い Redis レコードを残すと、盗まれた古い Cookie が有効なままになる。
             for stale_session_id in pending_delete_ids:
                 self._delete_session(stale_session_id)
             if session_id:
@@ -220,8 +186,6 @@ class HybridSessionMiddleware:
         is_permanent = session.get("_permanent") is True
         cookie_max_age = self.max_age if is_permanent else None
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not session_id:
             session_id = secrets.token_urlsafe(32)
             scope["session_id"] = session_id
@@ -232,6 +196,7 @@ class HybridSessionMiddleware:
         scope[SESSION_IDS_TO_DELETE_SCOPE_KEY] = set()
 
         if self._save_session(session_id, session):
+            # Cookie には Redis の参照IDだけを入れる。セッション本体は Redis 側に置く。
             self._set_cookie(
                 headers,
                 self.serializer.dumps({"backend": REDIS_BACKEND, "id": session_id}),
@@ -253,18 +218,12 @@ class HybridSessionMiddleware:
         scope["session_id"] = None
         self._set_cookie(headers, "", max_age=0)
 
-    # 日本語: save session の保存処理を担当します。
-    # English: Handle saving for save session.
     def _save_session(self, session_id: str, session: dict[str, Any]) -> bool:
         redis_client = get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return False
 
         payload = json.dumps(session, ensure_ascii=False)
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             if self.max_age is not None:
                 redis_client.set(self._redis_key(session_id), payload, ex=self.max_age)
@@ -275,28 +234,18 @@ class HybridSessionMiddleware:
             return False
         return True
 
-    # 日本語: delete session の削除処理を担当します。
-    # English: Handle deleting for delete session.
     def _delete_session(self, session_id: str) -> None:
         redis_client = get_redis_client()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if redis_client is None:
             return
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             redis_client.delete(self._redis_key(session_id))
         except Exception as exc:
             mark_redis_unavailable(exc)
 
-    # 日本語: redis key に関する処理の入口です。
-    # English: Entry point for logic related to redis key.
     def _redis_key(self, session_id: str) -> str:
         return f"session:{session_id}"
 
-    # 日本語: set cookie の設定処理を担当します。
-    # English: Handle setting for set cookie.
     def _set_cookie(
         self, headers: MutableHeaders, value: str, max_age: int | None = None
     ) -> None:
@@ -304,12 +253,8 @@ class HybridSessionMiddleware:
         cookie[self.session_cookie] = value
         cookie[self.session_cookie]["path"] = self.path
         cookie[self.session_cookie]["httponly"] = True
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self.same_site:
             cookie[self.session_cookie]["samesite"] = self.same_site
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self.https_only:
             cookie[self.session_cookie]["secure"] = True
         if max_age is not None:
