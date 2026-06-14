@@ -3,6 +3,8 @@ import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 
+// 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
+// Type for shared prompt data (including skill prompt fields)
 type SharedPrompt = {
   id?: number | string;
   title?: string;
@@ -19,11 +21,15 @@ type SharedPrompt = {
   created_at?: string;
 };
 
+// バックエンドAPIから返されるペイロード
+// Payload returned from the backend API
 type SharedPromptPayload = {
   prompt?: SharedPrompt;
   error?: string;
 };
 
+// ページコンポーネントのプロップス
+// Props for the page component
 type SharedPromptPageProps = {
   payload: SharedPromptPayload;
   pageUrl: string;
@@ -32,21 +38,29 @@ type SharedPromptPageProps = {
 
 type SharedPromptResponse = SharedPromptPayload;
 
+// 日付文字列を表示用フォーマットに変換する
+// Convert date string to display format
 function formatDate(value?: string) {
   return formatDateTime(value) || value || "";
 }
 
+// Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
+// Normalize the Host header value (take the first if it's an array)
 function normalizeHostHeader(header: string | string[] | undefined) {
   if (Array.isArray(header)) return header[0] || "";
   return header || "";
 }
 
+// X-Forwarded-Protoヘッダーを正規化する（カンマ区切りの最初の値を取得）
+// Normalize the X-Forwarded-Proto header (take the first comma-separated value)
 function normalizeProtoHeader(header: string | string[] | undefined) {
   const raw = Array.isArray(header) ? header[0] : header;
   if (!raw) return "";
   return raw.split(",")[0]?.trim() || "";
 }
 
+// OGP description用にMarkdown記法を除去してプレーンテキスト化する
+// Strip Markdown syntax for plain-text OGP description
 function stripPreviewText(value: string) {
   return value
     .replace(/```[\s\S]*?```/g, " ")
@@ -58,11 +72,15 @@ function stripPreviewText(value: string) {
     .trim();
 }
 
+// テキストを最大文字数で切り詰める
+// Truncate text to a maximum character count
 function truncateText(value: string, maxLength = 140) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+// 相対URLをオリジンを付与した絶対URLに変換する
+// Convert relative URL to absolute URL by prepending the origin
 function resolveAbsoluteUrl(value: string | null | undefined, origin: string) {
   if (!value) return "";
   if (/^https?:\/\//i.test(value)) return value;
@@ -71,6 +89,8 @@ function resolveAbsoluteUrl(value: string | null | undefined, origin: string) {
   return `${origin}/${value}`;
 }
 
+// OGP用のmeta descriptionをプロンプト内容から生成する
+// Build the OGP meta description from the prompt content
 function buildMetaDescription(payload: SharedPromptPayload) {
   if (payload.error) {
     return truncateText(payload.error);
@@ -91,6 +111,8 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   return truncateText(normalized);
 }
 
+// プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）
+// Fetch prompt data by ID for SSR (returns 404 if the ID is missing)
 export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = async (context) => {
   const rawId = context.params?.id;
   const promptId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -112,6 +134,8 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   try {
     const res = await fetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`);
     const data: SharedPromptResponse = await res.json().catch(() => ({}));
+    // バックエンドのエラーステータスをフロントのレスポンスコードに伝播させる
+    // Propagate backend error status to the frontend response code
     if (!res.ok) {
       context.res.statusCode = res.status;
     }
@@ -133,16 +157,22 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   };
 };
 
+// 共有プロンプト詳細ページ（スキル・画像・通常プロンプトを型に応じて表示）
+// Shared prompt detail page (renders skill, image, or regular prompt by type)
 export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
   const prompt = payload.prompt;
   const isSkillPrompt = prompt?.prompt_type === "skill";
   const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
+  // プロンプトタイプに応じた表示ラベルを決定する
+  // Determine the display label based on the prompt type
   const promptTypeLabel = (() => {
     if (prompt?.prompt_type === "image") return "画像生成プロンプト";
     if (prompt?.prompt_type === "skill") return "SKILL";
     return "通常プロンプト";
   })();
+  // 参照画像URLがある場合はそれをOG画像に使用し、ない場合はデフォルト画像を使う
+  // Use the reference image as OG image if available, otherwise fall back to the default
   const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, (() => {
     try {
       const parsed = new URL(pageUrl);
@@ -151,6 +181,8 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
       return "";
     }
   })()) || defaultOgImageUrl;
+  // Schema.orgの構造化データ（プロンプトが存在する場合のみ付与）
+  // Schema.org structured data (only included when prompt exists)
   const structuredData = prompt
     ? {
         "@context": "https://schema.org",
@@ -203,12 +235,14 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </div>
             </header>
 
+            {/* 参照画像（画像生成プロンプトの作例など） / Reference image (e.g., example output for image prompts) */}
             {prompt.reference_image_url ? (
               <div className="shared-prompt-image">
                 <img src={prompt.reference_image_url} alt={prompt.title || "共有プロンプトの作例画像"} />
               </div>
             ) : null}
 
+            {/* スキルプロンプト以外はプロンプト本文を表示 / Show prompt content for non-skill prompts */}
             {!isSkillPrompt ? (
               <section className="shared-prompt-section">
                 <h2>内容</h2>
@@ -230,6 +264,7 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </section>
             ) : null}
 
+            {/* スキルプロンプトのMarkdown定義 / Skill prompt Markdown definition */}
             {prompt.skill_markdown ? (
               <section className="shared-prompt-section">
                 <h2>SKILL定義 (Markdown)</h2>
@@ -237,6 +272,7 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </section>
             ) : null}
 
+            {/* スキルプロンプトの追加Pythonスクリプト / Additional Python script for skill prompts */}
             {prompt.skill_python_script ? (
               <section className="shared-prompt-section">
                 <h2>追加 Python スクリプト</h2>

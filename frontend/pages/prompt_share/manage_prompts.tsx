@@ -13,6 +13,8 @@ import {
   type PromptRecord
 } from "../../scripts/user/settings/types";
 
+// プロンプト編集フォームの状態型
+// State type for the prompt edit form
 type PromptEditFormState = {
   id: string;
   title: string;
@@ -22,14 +24,20 @@ type PromptEditFormState = {
   outputExamples: string;
 };
 
+// 一覧カードに表示するタイトル・本文の最大文字数
+// Maximum character counts for title and content shown in list cards
 const TITLE_CHAR_LIMIT = 17;
 const CONTENT_CHAR_LIMIT = 160;
 
+// テキストを指定文字数で切り詰めてサロゲートペアを考慮する
+// Truncate text to specified character count with surrogate pair support
 function truncateText(text: string, limit: number) {
   const chars = Array.from(text || "");
   return chars.length > limit ? `${chars.slice(0, limit).join("")}...` : text;
 }
 
+// 日付文字列を表示用フォーマットに変換する（変換失敗時は元の文字列を返す）
+// Convert date string to display format (return the original string if conversion fails)
 function toDisplayDate(createdAt?: string): string {
   if (!createdAt) {
     return "";
@@ -37,6 +45,8 @@ function toDisplayDate(createdAt?: string): string {
   return formatDateTime(createdAt) || createdAt;
 }
 
+// PromptRecordからフォーム状態を初期化する
+// Initialize form state from a PromptRecord
 function createEditFormState(prompt: PromptRecord): PromptEditFormState {
   return {
     id: asId(prompt.id),
@@ -48,6 +58,8 @@ function createEditFormState(prompt: PromptRecord): PromptEditFormState {
   };
 }
 
+// プロンプト管理ページのヘッダーコンポーネント
+// Header component for the prompt manage page
 function PromptManageHeader() {
   return (
     <header className="main-header">
@@ -58,12 +70,16 @@ function PromptManageHeader() {
   );
 }
 
+// プロンプト一覧カードのプロップス
+// Props for a prompt list card
 type PromptCardProps = {
   prompt: PromptRecord;
   onEdit: (prompt: PromptRecord) => void;
   onDelete: (prompt: PromptRecord) => void;
 };
 
+// プロンプトの概要を表示するカードコンポーネント
+// Card component displaying a prompt summary
 function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   const promptId = asId(prompt.id);
   const truncatedTitle = truncateText(prompt.title, TITLE_CHAR_LIMIT);
@@ -80,6 +96,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
           <span>投稿日: {toDisplayDate(prompt.createdAt)}</span>
         </div>
       </div>
+      {/* 入力例・出力例はスクリーンリーダー等のための非表示テキストとして保持 / Hidden text for input/output examples kept for accessibility */}
       <p className="d-none input-examples">{prompt.inputExamples}</p>
       <p className="d-none output-examples">{prompt.outputExamples}</p>
       <div className="prompt-card__footer">
@@ -106,6 +123,8 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   );
 }
 
+// プロンプト編集モーダルのプロップス
+// Props for the prompt edit modal
 type PromptEditModalProps = {
   isSaving: boolean;
   formState: PromptEditFormState;
@@ -114,6 +133,8 @@ type PromptEditModalProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
+// プロンプト編集モーダルコンポーネント
+// Prompt edit modal component
 function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: PromptEditModalProps) {
   return (
     <div
@@ -124,6 +145,7 @@ function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: P
       aria-modal="true"
       style={{ display: "block", backgroundColor: "rgba(15, 23, 42, 0.5)" }}
       onClick={(event) => {
+        {/* オーバーレイ背景クリックでモーダルを閉じる / Close modal on overlay background click */}
         if (event.target === event.currentTarget) {
           onClose();
         }
@@ -239,6 +261,8 @@ function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: P
   );
 }
 
+// プロンプト管理ページ（一覧表示・編集・削除を提供する）
+// Prompt manage page (provides list view, edit, and delete functionality)
 export default function PromptManagePage() {
   const [prompts, setPrompts] = useState<PromptRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -246,6 +270,8 @@ export default function PromptManagePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editFormState, setEditFormState] = useState<PromptEditFormState | null>(null);
 
+  // 自分のプロンプト一覧をAPIから取得する
+  // Fetch the user's own prompts from the API
   const loadMyPrompts = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -264,6 +290,8 @@ export default function PromptManagePage() {
     }
   }, []);
 
+  // マウント時にbodyクラスを付与し、アンマウント時に除去する
+  // Add body class on mount and remove it on unmount
   useEffect(() => {
     document.body.classList.add("prompt-manage-page");
     void loadMyPrompts();
@@ -273,6 +301,8 @@ export default function PromptManagePage() {
     };
   }, [loadMyPrompts]);
 
+  // 編集モーダルの開閉に応じてbodyのスクロールを制御する
+  // Control body scroll based on edit modal open/close state
   useEffect(() => {
     document.body.classList.toggle("modal-open", Boolean(editFormState));
     return () => {
@@ -280,6 +310,8 @@ export default function PromptManagePage() {
     };
   }, [editFormState]);
 
+  // 編集モーダルが開いている間はEscキーで閉じられるようにする（保存中は除く）
+  // Allow closing the edit modal with Escape key while it's open (disabled while saving)
   useEffect(() => {
     if (!editFormState) {
       return;
@@ -295,14 +327,20 @@ export default function PromptManagePage() {
     };
   }, [editFormState, isSaving]);
 
+  // プロンプト一覧をメモ化して不要な再計算を防ぐ
+  // Memoize the prompt list to prevent unnecessary recalculations
   const sortedPrompts = useMemo(() => {
     return [...prompts];
   }, [prompts]);
 
+  // 編集モーダルを開いてフォームを初期化する
+  // Open the edit modal and initialize the form
   const handleEditOpen = useCallback((prompt: PromptRecord) => {
     setEditFormState(createEditFormState(prompt));
   }, []);
 
+  // 確認ダイアログを表示してからプロンプトを削除する
+  // Delete a prompt after showing a confirmation dialog
   const handleDelete = useCallback(async (prompt: PromptRecord) => {
     const promptId = asId(prompt.id);
     if (!promptId) {
@@ -331,12 +369,16 @@ export default function PromptManagePage() {
       );
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "削除しました。", { variant: "success" });
+      // 削除されたプロンプトをローカルの状態から即座に除去する
+      // Immediately remove the deleted prompt from local state
       setPrompts((prev) => prev.filter((entry) => asId(entry.id) !== promptId));
     } catch (error) {
       showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
     }
   }, []);
 
+  // フォームの各フィールドの変更を編集フォーム状態に反映する
+  // Reflect each form field change into the edit form state
   const handleEditChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
     setEditFormState((prev) => {
@@ -350,6 +392,8 @@ export default function PromptManagePage() {
     });
   }, []);
 
+  // 編集フォームの送信処理（バリデーション→PUT→一覧リロード）
+  // Handle edit form submission (validate → PUT → reload list)
   const handleEditSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editFormState) {
@@ -417,6 +461,7 @@ export default function PromptManagePage() {
             <h2 className="section-title">投稿したプロンプト</h2>
           </div>
 
+          {/* ローディング・エラー・空状態のフィードバック / Loading, error, and empty state feedback */}
           {isLoading ? <p>プロンプトを読み込み中です...</p> : null}
           {!isLoading && loadError ? <p role="alert">{loadError}</p> : null}
           {!isLoading && !loadError && sortedPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
@@ -436,6 +481,7 @@ export default function PromptManagePage() {
           </div>
         </main>
 
+        {/* 編集モーダルはフォーム状態が存在する場合のみレンダリング / Edit modal rendered only when form state is present */}
         {editFormState ? (
           <PromptEditModal
             isSaving={isSaving}
