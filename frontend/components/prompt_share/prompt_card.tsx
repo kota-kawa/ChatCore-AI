@@ -10,11 +10,15 @@ import {
 } from "../../scripts/prompt_share/formatters";
 import type { PromptData } from "../../scripts/prompt_share/types";
 
+// サーバーから受け取ったPromptDataに、クライアント専用の状態を追加した拡張型
+// Extends server-side PromptData with client-only state (local ID and like status)
 export type PromptRecord = PromptData & {
   clientId: string;
   liked: boolean;
 };
 
+// カードが受け取るすべての操作ハンドラと状態をまとめたProps型
+// All action handlers and UI state props passed into the card component
 type PromptCardProps = {
   prompt: PromptRecord;
   isDropdownOpen: boolean;
@@ -50,12 +54,17 @@ function PromptCardComponent({
   onToggleLike,
   onToggleBookmark,
 }: PromptCardProps) {
+  // サーバー値を正規化し、未設定時のフォールバックを確保する
+  // Normalize server values and set safe fallbacks for missing fields
   const promptTypeValue = normalizePromptType(prompt.prompt_type);
   const isBookmarked = Boolean(prompt.bookmarked);
   const promptId = prompt.clientId;
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
+
+  // SKILLタイプはskill_markdownを、それ以外はcontentをプレビューに使う
+  // Show skill_markdown preview for skill-type prompts; fall back to content otherwise
   const cardPreview =
     promptTypeValue === "skill"
       ? truncateContent(prompt.skill_markdown || "SKILLの詳細を開いて内容を確認してください。")
@@ -75,6 +84,8 @@ function PromptCardComponent({
             <i className="bi bi-hash"></i>
             <span>{safeCategory}</span>
           </span>
+          {/* タイプバリアントをCSSクラスに反映し、アイコンとラベルを動的に決定する */}
+          {/* Apply type-variant CSS class and resolve icon/label dynamically */}
           <span className={`prompt-card__type-pill prompt-card__type-pill--${promptTypeValue}`}>
             <i className={`bi ${getPromptTypeIconClass(promptTypeValue)}`}></i>
             <span>{getPromptTypeLabel(promptTypeValue)}</span>
@@ -84,6 +95,8 @@ function PromptCardComponent({
           <i className="bi bi-calendar3"></i>
           {safeCreatedAt}
         </span>
+        {/* クリックがカード本体に伝播しないようにstopPropagationでモーダル誤起動を防ぐ */}
+        {/* Stop propagation so clicking the menu button does not also open the detail modal */}
         <button
           className="meatball-menu"
           type="button"
@@ -101,6 +114,8 @@ function PromptCardComponent({
         </button>
       </div>
 
+      {/* ドロップダウンもカードクリックを遮断し、意図しない詳細モーダルの起動を避ける */}
+      {/* Dropdown also stops propagation to prevent unintended detail modal trigger */}
       <div
         className={`prompt-actions-dropdown${isDropdownOpen ? " is-open" : ""}`}
         role="menu"
@@ -154,6 +169,8 @@ function PromptCardComponent({
         </button>
       </div>
 
+      {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
+      {/* Reference image is optional; lazy loading reduces initial render cost */}
       {prompt.reference_image_url ? (
         <div className="prompt-card__image">
           <img
@@ -184,6 +201,9 @@ function PromptCardComponent({
             <i className="bi bi-chat-dots"></i>
             <span className="prompt-action-count">{commentCount}</span>
           </button>
+
+          {/* isPendingの間は追加クリックを無視してAPIの二重送信を防ぐ */}
+          {/* Guard against double-submission by ignoring clicks while a like request is in flight */}
           <button
             className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}${isLikePending ? " is-pending" : ""}${isLikeEffectActive ? " is-celebrating" : ""}`}
             type="button"
@@ -202,6 +222,9 @@ function PromptCardComponent({
           >
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
           </button>
+
+          {/* ブックマークも同様に二重送信ガードを持つ */}
+          {/* Bookmark button has the same pending guard to prevent duplicate API calls */}
           <button
             className={`prompt-action-btn bookmark-btn${isBookmarked ? " bookmarked" : ""}${isBookmarkPending ? " is-pending" : ""}${isBookmarkEffectActive ? " is-celebrating" : ""}`}
             type="button"
@@ -226,5 +249,7 @@ function PromptCardComponent({
   );
 }
 
+// propsが変わらない限り再レンダリングをスキップし、カードリスト全体のパフォーマンスを保つ
+// Wrap with memo so unchanged cards in a large list are not re-rendered unnecessarily
 export const PromptCard = memo(PromptCardComponent);
 PromptCard.displayName = "PromptCard";
