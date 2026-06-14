@@ -115,14 +115,20 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
 ]
 
 
+# 日本語: collect model schemas に関する処理の入口です。
+# English: Entry point for logic related to collect model schemas.
 def _collect_model_schemas() -> list[tuple[str, dict]]:
     collected: list[tuple[str, dict]] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for symbol, model in MODEL_REGISTRY:
         raw_schema = model.model_json_schema()
         collected.append((symbol, _schema_without_defs(raw_schema)))
     return collected
 
 
+# 日本語: get schema fingerprint の取得処理を担当します。
+# English: Handle fetching for get schema fingerprint.
 def get_schema_fingerprint() -> str:
     model_schemas = {symbol: schema for symbol, schema in _collect_model_schemas()}
     payload = json.dumps(
@@ -134,10 +140,16 @@ def get_schema_fingerprint() -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+# 日本語: schema without defs に関する処理の入口です。
+# English: Entry point for logic related to schema without defs.
 def _schema_without_defs(schema: dict) -> dict:
     defs = schema.get("$defs")
 
+    # 日本語: dereference に関する処理の入口です。
+    # English: Entry point for logic related to dereference.
     def dereference(node):
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if isinstance(node, dict):
             ref = node.get("$ref")
             if isinstance(ref, str) and ref.startswith("#/$defs/"):
@@ -155,6 +167,8 @@ def _schema_without_defs(schema: dict) -> dict:
                 for key, value in node.items()
                 if key != "$defs"
             }
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if isinstance(node, list):
             return [dereference(item) for item in node]
         return node
@@ -162,14 +176,20 @@ def _schema_without_defs(schema: dict) -> dict:
     return dereference(schema)
 
 
+# 日本語: normalize zod export の正規化処理を担当します。
+# English: Handle normalizing for normalize zod export.
 def _normalize_zod_export(code: str, symbol: str) -> str:
     normalized = code.strip()
     prefix = f"const {symbol} = "
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not normalized.startswith(prefix):
         raise RuntimeError(f"Unexpected generator output for {symbol}: {normalized[:120]}")
     return f"export const {symbol}Schema = {normalized[len(prefix):]};"
 
 
+# 日本語: convert schema to zod に関する処理の入口です。
+# English: Entry point for logic related to convert schema to zod.
 def _convert_schema_to_zod(symbol: str, schema: dict) -> str:
     schema_json = json.dumps(schema, ensure_ascii=False)
     proc = subprocess.run(
@@ -193,11 +213,15 @@ def _convert_schema_to_zod(symbol: str, schema: dict) -> str:
         cwd=REPO_ROOT,
         check=False,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to generate Zod schema for {symbol}: {proc.stderr.strip()}")
     return _normalize_zod_export(proc.stdout, symbol)
 
 
+# 日本語: main に関する処理の入口です。
+# English: Entry point for logic related to main.
 def main() -> None:
     FRONTEND_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     model_schemas = _collect_model_schemas()
@@ -213,6 +237,8 @@ def main() -> None:
         "",
     ]
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for symbol, schema in model_schemas:
         lines.append(_convert_schema_to_zod(symbol, schema))
         lines.append(f"export type {symbol} = z.infer<typeof {symbol}Schema>;")

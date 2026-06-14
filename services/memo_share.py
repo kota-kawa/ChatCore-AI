@@ -17,12 +17,18 @@ SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 DEFAULT_SHARE_EXPIRES_DAYS = 30
 
 
+# 日本語: is expired に関する処理の入口です。
+# English: Entry point for logic related to is expired.
 def _is_expired(expires_at: Any) -> bool:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(expires_at, datetime):
         return False
     return expires_at <= datetime.utcnow()
 
 
+# 日本語: serialize share state のシリアライズ処理を担当します。
+# English: Handle serializing for serialize share state.
 def _serialize_share_state(
     share_token: str | None,
     expires_at: datetime | None,
@@ -42,12 +48,18 @@ def _serialize_share_state(
     }
 
 
+# 日本語: resolve expires at に関する処理の入口です。
+# English: Entry point for logic related to resolve expires at.
 def _resolve_expires_at(expires_in_days: int | None) -> datetime | None:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if expires_in_days is None:
         return None
     return datetime.utcnow() + timedelta(days=max(int(expires_in_days), 1))
 
 
+# 日本語: create or get shared memo token の作成処理を担当します。
+# English: Handle creating for create or get shared memo token.
 def create_or_get_shared_memo_token(
     memo_id: int,
     user_id: int,
@@ -57,6 +69,8 @@ def create_or_get_shared_memo_token(
 ) -> dict[str, Any]:
     # メモ所有者を検証した上で共有トークンを作成し、既存があれば再利用する
     # Create a memo share token after owner validation and reuse the existing one.
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
         token = secrets.token_urlsafe(18)
         collision_detected = False
@@ -142,7 +156,11 @@ def create_or_get_shared_memo_token(
     raise RuntimeError("Failed to create shared memo token after collision retries.")
 
 
+# 日本語: get memo share state の取得処理を担当します。
+# English: Handle fetching for get memo share state.
 def get_memo_share_state(memo_id: int, user_id: int) -> dict[str, Any]:
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -174,7 +192,11 @@ def get_memo_share_state(memo_id: int, user_id: int) -> dict[str, Any]:
             cursor.close()
 
 
+# 日本語: revoke shared memo token に関する処理の入口です。
+# English: Entry point for logic related to revoke shared memo token.
 def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -207,9 +229,13 @@ def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
             cursor.close()
 
 
+# 日本語: get shared memo payload の取得処理を担当します。
+# English: Handle fetching for get shared memo payload.
 def get_shared_memo_payload(token: str) -> dict[str, Any]:
     # 共有トークンに対応する公開メモ内容を返す
     # Return publicly viewable memo payload for the given share token.
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:

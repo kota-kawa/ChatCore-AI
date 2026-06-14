@@ -10,7 +10,11 @@ from starlette.responses import StreamingResponse
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: ChatTemporaryModeTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatTemporaryModeTestCase.
 class ChatTemporaryModeTestCase(unittest.TestCase):
+    # 日本語: test new chat room creates temporary authenticated room without db persistence のテスト検証を担当します。
+    # English: Handle verifying test behavior for test new chat room creates temporary authenticated room without db persistence.
     def test_new_chat_room_creates_temporary_authenticated_room_without_db_persistence(self):
         request = build_request(
             method="POST",
@@ -19,6 +23,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 7},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms.create_chat_room_in_db") as create_room:
                 with patch("blueprints.chat.rooms.ephemeral_store.create_room") as create_ephemeral:
@@ -30,6 +36,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         create_room.assert_not_called()
         create_ephemeral.assert_called_once_with("temporary-user:7", "temp-room", "Temp")
 
+    # 日本語: test get chat rooms returns only persisted rooms のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get chat rooms returns only persisted rooms.
     def test_get_chat_rooms_returns_only_persisted_rooms(self):
         request = build_request(
             method="GET",
@@ -46,6 +54,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             }
         ]
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=persisted_rooms):
                 response = asyncio.run(get_chat_rooms(request))
@@ -54,6 +64,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual([room["id"] for room in payload["rooms"]], ["room-normal"])
 
+    # 日本語: test get chat rooms paginates persisted rooms with cursor のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get chat rooms paginates persisted rooms with cursor.
     def test_get_chat_rooms_paginates_persisted_rooms_with_cursor(self):
         request = build_request(
             method="GET",
@@ -72,6 +84,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             for index in range(21)
         ]
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=persisted_rooms) as fetch_rooms:
                 response = asyncio.run(get_chat_rooms(request))
@@ -84,6 +98,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         self.assertNotIn("next_offset", payload["pagination"])
         fetch_rooms.assert_called_once_with(7, limit=21, cursor=None)
 
+    # 日本語: test get chat rooms passes decoded cursor to fetch のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get chat rooms passes decoded cursor to fetch.
     def test_get_chat_rooms_passes_decoded_cursor_to_fetch(self):
         cursor = _encode_room_list_cursor(
             {"id": "room-20", "created_at": "2026-04-20T10:00:00"}
@@ -95,6 +111,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 7},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms._fetch_persisted_user_rooms", return_value=[]) as fetch_rooms:
                 response = asyncio.run(get_chat_rooms(request))
@@ -106,6 +124,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             cursor=(datetime(2026, 4, 20, 10, 0, 0), "room-20"),
         )
 
+    # 日本語: test get chat rooms rejects invalid cursor のテスト検証を担当します。
+    # English: Handle verifying test behavior for test get chat rooms rejects invalid cursor.
     def test_get_chat_rooms_rejects_invalid_cursor(self):
         request = build_request(
             method="GET",
@@ -114,6 +134,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 7},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms._fetch_persisted_user_rooms") as fetch_rooms:
                 response = asyncio.run(get_chat_rooms(request))
@@ -123,35 +145,57 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "invalid cursor")
         fetch_rooms.assert_not_called()
 
+    # 日本語: test fetch persisted user rooms uses stable keyset query のテスト検証を担当します。
+    # English: Handle verifying test behavior for test fetch persisted user rooms uses stable keyset query.
     def test_fetch_persisted_user_rooms_uses_stable_keyset_query(self):
+        # 日本語: Cursor に関するデータや振る舞いをまとめます。
+        # English: Group data and behavior related to Cursor.
         class Cursor:
+            # 日本語: インスタンス生成時に必要な初期状態を設定します。
+            # English: Initialize the required instance state when the object is created.
             def __init__(self):
                 self.query = ""
                 self.params = ()
 
+            # 日本語: execute の実行処理を担当します。
+            # English: Handle executing for execute.
             def execute(self, query, params):
                 self.query = query
                 self.params = params
 
+            # 日本語: fetchall に関する処理の入口です。
+            # English: Entry point for logic related to fetchall.
             def fetchall(self):
                 return [("room-21", "Room 21", "normal", datetime(2026, 4, 19, 10, 0, 0))]
 
+            # 日本語: close に関する処理の入口です。
+            # English: Entry point for logic related to close.
             def close(self):
                 pass
 
+        # 日本語: Connection に関するデータや振る舞いをまとめます。
+        # English: Group data and behavior related to Connection.
         class Connection:
+            # 日本語: インスタンス生成時に必要な初期状態を設定します。
+            # English: Initialize the required instance state when the object is created.
             def __init__(self):
                 self.cursor_instance = Cursor()
 
+            # 日本語: cursor に関する処理の入口です。
+            # English: Entry point for logic related to cursor.
             def cursor(self):
                 return self.cursor_instance
 
+            # 日本語: close に関する処理の入口です。
+            # English: Entry point for logic related to close.
             def close(self):
                 pass
 
         connection = Connection()
         cursor_value = (datetime(2026, 4, 20, 10, 0, 0), "room-20")
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.rooms.get_db_connection", return_value=connection):
             rooms = _fetch_persisted_user_rooms(7, limit=21, cursor=cursor_value)
 
@@ -160,6 +204,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         self.assertIn("ORDER BY created_at DESC, id DESC", connection.cursor_instance.query)
         self.assertEqual(connection.cursor_instance.params, (7, cursor_value[0], "room-20", 21))
 
+    # 日本語: test chat uses ephemeral store for authenticated temporary room のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat uses ephemeral store for authenticated temporary room.
     def test_chat_uses_ephemeral_store_for_authenticated_temporary_room(self):
         request = build_request(
             method="POST",
@@ -168,6 +214,8 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
             session={"user_id": 11},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch("blueprints.chat.messages.cleanup_ephemeral_chats"),
             patch("blueprints.chat.messages.validate_room_owner", return_value="temporary"),

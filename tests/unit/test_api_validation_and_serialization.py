@@ -12,6 +12,8 @@ from services.web_search import WebSearchAugmentation, WebSearchResult, WebSearc
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(
     *,
     method: str,
@@ -29,7 +31,11 @@ def make_request(
     )
 
 
+# 日本語: ApiValidationAndSerializationTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ApiValidationAndSerializationTestCase.
 class ApiValidationAndSerializationTestCase(unittest.TestCase):
+    # 日本語: test chat update tasks order rejects malformed json のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat update tasks order rejects malformed json.
     def test_chat_update_tasks_order_rejects_malformed_json(self):
         request = make_request(
             method="POST",
@@ -44,6 +50,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "JSON形式が不正です。")
 
+    # 日本語: test auth send login code rejects malformed json with fail status のテスト検証を担当します。
+    # English: Handle verifying test behavior for test auth send login code rejects malformed json with fail status.
     def test_auth_send_login_code_rejects_malformed_json_with_fail_status(self):
         request = make_request(
             method="POST",
@@ -58,6 +66,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "JSON形式が不正です。")
 
+    # 日本語: test chat missing ephemeral room returns 404 response のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat missing ephemeral room returns 404 response.
     def test_chat_missing_ephemeral_room_returns_404_response(self):
         request = make_request(
             method="POST",
@@ -66,6 +76,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             session={},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -78,6 +90,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "該当ルームが見つかりません")
 
+    # 日本語: test chat returns 400 when invalid model is requested のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat returns 400 when invalid model is requested.
     def test_chat_returns_400_when_invalid_model_is_requested(self):
         request = make_request(
             method="POST",
@@ -86,6 +100,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             session={},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -104,6 +120,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_quota.assert_not_called()
         mock_llm.assert_not_called()
 
+    # 日本語: test chat json response path includes web search sources のテスト検証を担当します。
+    # English: Handle verifying test behavior for test chat json response path includes web search sources.
     def test_chat_json_response_path_includes_web_search_sources(self):
         request = make_request(
             method="POST",
@@ -130,6 +148,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             ),
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -174,6 +194,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
         mock_augment.assert_called_once()
         self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
 
+    # 日本語: test prompt manage serializes datetime consistently のテスト検証を担当します。
+    # English: Handle verifying test behavior for test prompt manage serializes datetime consistently.
     def test_prompt_manage_serializes_datetime_consistently(self):
         request = make_request(
             method="GET",
@@ -192,6 +214,8 @@ class ApiValidationAndSerializationTestCase(unittest.TestCase):
             }
         ]
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_my_prompts",
             return_value=sample_prompts,

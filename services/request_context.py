@@ -17,6 +17,8 @@ _request_path_var: ContextVar[str | None] = ContextVar("request_path", default=N
 logger = logging.getLogger("chatcore.request")
 
 
+# 日本語: get request context の取得処理を担当します。
+# English: Handle fetching for get request context.
 def get_request_context() -> dict[str, str | None]:
     # ContextVar から現在リクエスト情報を取り出す
     # Read current request metadata from ContextVars.
@@ -27,7 +29,11 @@ def get_request_context() -> dict[str, str | None]:
     }
 
 
+# 日本語: RequestContextFilter に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to RequestContextFilter.
 class RequestContextFilter(logging.Filter):
+    # 日本語: filter に関する処理の入口です。
+    # English: Entry point for logic related to filter.
     def filter(self, record: logging.LogRecord) -> bool:
         context = get_request_context()
         # ログ整形時に未設定項目は "-" を入れて欠損を明示する
@@ -38,11 +44,19 @@ class RequestContextFilter(logging.Filter):
         return True
 
 
+# 日本語: RequestContextMiddleware に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to RequestContextMiddleware.
 class RequestContextMiddleware:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
+    # 日本語: call に関する処理の入口です。
+    # English: Entry point for logic related to call.
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if scope["type"] != "http":
             # HTTP 以外 (websocket/lifespan など) はそのまま委譲する
             # Pass through non-HTTP scopes (websocket/lifespan, etc.).
@@ -62,14 +76,20 @@ class RequestContextMiddleware:
 
         status_code = 500
 
+        # 日本語: send wrapper の送信処理を非同期で担当します。
+        # English: Handle sending for send wrapper asynchronously.
         async def send_wrapper(message: Message) -> None:
             nonlocal status_code
+            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+            # English: Switch the flow according to the current condition.
             if message["type"] == "http.response.start":
                 status_code = int(message["status"])
                 headers = MutableHeaders(scope=message)
                 headers[REQUEST_ID_HEADER] = request_id
             await send(message)
 
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
@@ -89,8 +109,12 @@ class RequestContextMiddleware:
             _request_path_var.reset(path_token)
 
 
+# 日本語: extract request id に関する処理の入口です。
+# English: Entry point for logic related to extract request id.
 def _extract_request_id(scope: Scope) -> str | None:
     headers = scope.get("headers") or []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for key, value in headers:
         if key.lower() == REQUEST_ID_HEADER.lower().encode("latin-1"):
             try:

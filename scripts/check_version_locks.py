@@ -13,12 +13,18 @@ COMPOSE_IMAGE = re.compile(r"^\s*image:\s+(?P<image>\S+)", re.MULTILINE)
 FLOATING_NPM_SPEC = re.compile(r"^(?:[\^~*]|[<>]=?|latest$|x$|X$)", re.IGNORECASE)
 
 
+# 日本語: normalize package name の正規化処理を担当します。
+# English: Handle normalizing for normalize package name.
 def normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+# 日本語: parse requirements の解析処理を担当します。
+# English: Handle parsing for parse requirements.
 def parse_requirements(path: Path) -> dict[str, str]:
     requirements: dict[str, str] = {}
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -30,8 +36,12 @@ def parse_requirements(path: Path) -> dict[str, str]:
     return requirements
 
 
+# 日本語: check python requirements の確認処理を担当します。
+# English: Handle checking for check python requirements.
 def check_python_requirements() -> list[str]:
     errors: list[str] = []
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         runtime = parse_requirements(REPO_ROOT / "requirements.txt")
         build = parse_requirements(REPO_ROOT / "requirements-build.txt")
@@ -40,6 +50,8 @@ def check_python_requirements() -> list[str]:
     except ValueError as exc:
         return [str(exc)]
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for name, version in sorted({**runtime, **dev}.items()):
         if name in dev and name not in runtime:
             continue
@@ -60,13 +72,21 @@ def check_python_requirements() -> list[str]:
     return errors
 
 
+# 日本語: is local image に関する処理の入口です。
+# English: Entry point for logic related to is local image.
 def is_local_image(image: str) -> bool:
     return image.startswith("chat-core-")
 
 
+# 日本語: is pinned image に関する処理の入口です。
+# English: Entry point for logic related to is pinned image.
 def is_pinned_image(image: str) -> bool:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "@sha256:" in image:
         return True
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if ":" not in image:
         return False
     repository, tag = image.rsplit(":", 1)
@@ -79,6 +99,8 @@ def is_pinned_image(image: str) -> bool:
     return re.search(r"\d+\.\d+\.\d+", tag) is not None
 
 
+# 日本語: check container images の確認処理を担当します。
+# English: Handle checking for check container images.
 def check_container_images() -> list[str]:
     errors: list[str] = []
     files = [
@@ -87,6 +109,8 @@ def check_container_images() -> list[str]:
         REPO_ROOT / "docker-compose.yml",
         REPO_ROOT / "deploy" / "docker-compose.bluegreen.yml",
     ]
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for path in files:
         text = path.read_text()
         images = [
@@ -99,6 +123,8 @@ def check_container_images() -> list[str]:
     return errors
 
 
+# 日本語: check frontend manifest の確認処理を担当します。
+# English: Handle checking for check frontend manifest.
 def check_frontend_manifest() -> list[str]:
     errors: list[str] = []
     package_json = REPO_ROOT / "frontend" / "package.json"
@@ -107,6 +133,8 @@ def check_frontend_manifest() -> list[str]:
     lock = json.loads(package_lock.read_text())
     root_lock = lock.get("packages", {}).get("", {})
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for section in ("dependencies", "devDependencies"):
         manifest_deps = package.get(section, {})
         lock_deps = root_lock.get(section, {})
@@ -120,12 +148,16 @@ def check_frontend_manifest() -> list[str]:
     return errors
 
 
+# 日本語: main に関する処理の入口です。
+# English: Entry point for logic related to main.
 def main() -> int:
     errors = [
         *check_python_requirements(),
         *check_container_images(),
         *check_frontend_manifest(),
     ]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

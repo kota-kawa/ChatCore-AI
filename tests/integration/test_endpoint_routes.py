@@ -12,6 +12,8 @@ from services.db import Error
 from tests.helpers.app_helpers import build_session_test_app
 
 
+# 日本語: build test app の組み立て処理を担当します。
+# English: Handle building for build test app.
 def build_test_app():
     return build_session_test_app(
         auth_bp,
@@ -21,10 +23,16 @@ def build_test_app():
     )
 
 
+# 日本語: EndpointRoutesTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to EndpointRoutesTestCase.
 class EndpointRoutesTestCase(unittest.TestCase):
+    # 日本語: setUp に関する処理の入口です。
+    # English: Entry point for logic related to setUp.
     def setUp(self):
         self.app = build_test_app()
 
+    # 日本語: make client の生成処理を担当します。
+    # English: Handle creating for make client.
     def _make_client(self, *, follow_redirects=True) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self.app),
@@ -32,17 +40,27 @@ class EndpointRoutesTestCase(unittest.TestCase):
             follow_redirects=follow_redirects,
         )
 
+    # 日本語: set session の設定処理を非同期で担当します。
+    # English: Handle setting for set session asynchronously.
     async def _set_session(self, client: httpx.AsyncClient, values):
         response = await client.post("/_test/session", json=values)
         self.assertEqual(response.status_code, 200)
 
+    # 日本語: post with csrf に関する処理の入口です。
+    # English: Entry point for logic related to post with csrf.
     async def _post_with_csrf(self, client: httpx.AsyncClient, path, *, json):
         csrf_token = "test-csrf-token"
         await self._set_session(client, {CSRF_SESSION_KEY: csrf_token})
         return await client.post(path, json=json, headers={CSRF_HEADER_NAME: csrf_token})
 
+    # 日本語: test current user endpoint when logged out のテスト検証を担当します。
+    # English: Handle verifying test behavior for test current user endpoint when logged out.
     def test_current_user_endpoint_when_logged_out(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 response = await client.get("/api/current_user")
 
@@ -51,8 +69,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test current user endpoint when logged in のテスト検証を担当します。
+    # English: Handle verifying test behavior for test current user endpoint when logged in.
     def test_current_user_endpoint_when_logged_in(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch(
@@ -69,8 +93,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test logout endpoint clears session and redirects のテスト検証を担当します。
+    # English: Handle verifying test behavior for test logout endpoint clears session and redirects.
     def test_logout_endpoint_clears_session_and_redirects(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client(follow_redirects=False) as client:
                 csrf_token = "logout-csrf-token"
                 await self._set_session(
@@ -95,7 +125,11 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo recent endpoint returns serialized memos のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo recent endpoint returns serialized memos.
     def test_memo_recent_endpoint_returns_serialized_memos(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
             sample = {
                 "id": 1,
@@ -104,6 +138,8 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 "ai_response": "response",
             }
 
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch(
@@ -119,8 +155,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo recent endpoint requires login のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo recent endpoint requires login.
     def test_memo_recent_endpoint_requires_login(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 response = await client.get("/memo/api/recent?limit=5")
 
@@ -129,8 +171,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo create endpoint validates required fields のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo create endpoint validates required fields.
     def test_memo_create_endpoint_validates_required_fields(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 response = await self._post_with_csrf(
@@ -144,8 +192,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo create endpoint success のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo create endpoint success.
     def test_memo_create_endpoint_success(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo._insert_memo", return_value=42):
@@ -165,8 +219,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo create endpoint requires login のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo create endpoint requires login.
     def test_memo_create_endpoint_requires_login(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 response = await self._post_with_csrf(
                     client,
@@ -179,8 +239,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo recent endpoint falls back to empty when db read fails のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo recent endpoint falls back to empty when db read fails.
     def test_memo_recent_endpoint_falls_back_to_empty_when_db_read_fails(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
@@ -191,8 +257,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    # 日本語: test memo recent endpoint db failure is stable under concurrency のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo recent endpoint db failure is stable under concurrency.
     def test_memo_recent_endpoint_db_failure_is_stable_under_concurrency(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo.get_db_connection", side_effect=Error("db down")):
@@ -203,14 +275,22 @@ class EndpointRoutesTestCase(unittest.TestCase):
                         client.get("/memo/api/recent?limit=5"),
                     )
 
+            # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+            # English: Process each target item in order and accumulate the needed result.
             for response in responses:
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json(), {"memos": [], "total": 0})
 
         asyncio.run(scenario())
 
+    # 日本語: test memo create endpoint returns 500 when db transaction fails のテスト検証を担当します。
+    # English: Handle verifying test behavior for test memo create endpoint returns 500 when db transaction fails.
     def test_memo_create_endpoint_returns_500_when_db_transaction_fails(self):
+        # 日本語: scenario に関する処理の入口です。
+        # English: Entry point for logic related to scenario.
         async def scenario():
+            # 日本語: 非同期コンテキスト内で必要なリソースを利用します。
+            # English: Use the required resource inside the asynchronous context.
             async with self._make_client() as client:
                 await self._set_session(client, {"user_id": 7})
                 with patch("blueprints.memo._insert_memo", side_effect=Error("tx failed")):

@@ -3,6 +3,8 @@ import json
 from starlette.requests import Request
 
 
+# 日本語: build request の組み立て処理を担当します。
+# English: Handle building for build request.
 def build_request(
     *,
     method="GET",
@@ -17,9 +19,13 @@ def build_request(
     server_host="testserver",
     server_port=80,
 ):
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if json_body is not None and raw_body is not None:
         raise ValueError("json_body and raw_body are mutually exclusive")
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if raw_body is not None:
         body = raw_body
     elif json_body is not None:
@@ -48,8 +54,12 @@ def build_request(
         "session": session or {},
     }
 
+    # 日本語: receive に関する処理の入口です。
+    # English: Entry point for logic related to receive.
     async def receive():
         nonlocal body
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if body is None:
             return {"type": "http.request", "body": b"", "more_body": False}
         current = body

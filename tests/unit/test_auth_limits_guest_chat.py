@@ -6,6 +6,8 @@ from services import auth_limits
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(*, headers=None, client_host="testclient"):
     request = build_request(
         method="POST",
@@ -17,7 +19,11 @@ def make_request(*, headers=None, client_host="testclient"):
     return request
 
 
+# 日本語: GuestChatLimitTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to GuestChatLimitTestCase.
 class GuestChatLimitTestCase(unittest.TestCase):
+    # 日本語: setUp に関する処理の入口です。
+    # English: Entry point for logic related to setUp.
     def setUp(self):
         self.original_guest_limit = os.environ.get("GUEST_CHAT_DAILY_LIMIT")
         self.original_trusted_proxies = os.environ.get("TRUSTED_PROXY_IPS")
@@ -25,11 +31,17 @@ class GuestChatLimitTestCase(unittest.TestCase):
         os.environ["TRUSTED_PROXY_IPS"] = "127.0.0.1,::1"
         auth_limits.clear_in_memory_rate_limit_state()
 
+    # 日本語: tearDown に関する処理の入口です。
+    # English: Entry point for logic related to tearDown.
     def tearDown(self):
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.original_guest_limit is None:
             os.environ.pop("GUEST_CHAT_DAILY_LIMIT", None)
         else:
             os.environ["GUEST_CHAT_DAILY_LIMIT"] = self.original_guest_limit
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self.original_trusted_proxies is None:
             os.environ.pop("TRUSTED_PROXY_IPS", None)
         else:
@@ -40,6 +52,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = self.original_admin_login_limit
         auth_limits.clear_in_memory_rate_limit_state()
 
+    # 日本語: test guest chat limit blocks after reaching cap のテスト検証を担当します。
+    # English: Handle verifying test behavior for test guest chat limit blocks after reaching cap.
     def test_guest_chat_limit_blocks_after_reaching_cap(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "2"
         request = make_request(
@@ -47,6 +61,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="127.0.0.1",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first = auth_limits.consume_guest_chat_daily_limit(request)
             second = auth_limits.consume_guest_chat_daily_limit(request)
@@ -56,6 +72,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(second, (True, None))
         self.assertEqual(third, (False, "1日2回までです"))
 
+    # 日本語: test guest chat limit invalid env falls back to default のテスト検証を担当します。
+    # English: Handle verifying test behavior for test guest chat limit invalid env falls back to default.
     def test_guest_chat_limit_invalid_env_falls_back_to_default(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "invalid"
         request = make_request(
@@ -63,6 +81,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="127.0.0.1",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             for _ in range(auth_limits.DEFAULT_GUEST_CHAT_DAILY_LIMIT):
                 allowed, message = auth_limits.consume_guest_chat_daily_limit(request)
@@ -76,6 +96,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             (False, f"1日{auth_limits.DEFAULT_GUEST_CHAT_DAILY_LIMIT}回までです"),
         )
 
+    # 日本語: test guest chat limit uses forwarded ip for identifier のテスト検証を担当します。
+    # English: Handle verifying test behavior for test guest chat limit uses forwarded ip for identifier.
     def test_guest_chat_limit_uses_forwarded_ip_for_identifier(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
         request_a = make_request(
@@ -87,6 +109,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="127.0.0.1",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first_a = auth_limits.consume_guest_chat_daily_limit(request_a)
             second_a = auth_limits.consume_guest_chat_daily_limit(request_a)
@@ -96,6 +120,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(second_a, (False, "1日1回までです"))
         self.assertEqual(first_b, (True, None))
 
+    # 日本語: test guest chat limit ignores forwarded for from untrusted client のテスト検証を担当します。
+    # English: Handle verifying test behavior for test guest chat limit ignores forwarded for from untrusted client.
     def test_guest_chat_limit_ignores_forwarded_for_from_untrusted_client(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
         request_a = make_request(
@@ -107,6 +133,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="203.0.113.50",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first = auth_limits.consume_guest_chat_daily_limit(request_a)
             second = auth_limits.consume_guest_chat_daily_limit(request_b)
@@ -114,6 +142,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(first, (True, None))
         self.assertEqual(second, (False, "1日1回までです"))
 
+    # 日本語: test guest chat limit uses rightmost untrusted forwarded ip のテスト検証を担当します。
+    # English: Handle verifying test behavior for test guest chat limit uses rightmost untrusted forwarded ip.
     def test_guest_chat_limit_uses_rightmost_untrusted_forwarded_ip(self):
         os.environ["GUEST_CHAT_DAILY_LIMIT"] = "1"
         request_a = make_request(
@@ -125,6 +155,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="127.0.0.1",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first = auth_limits.consume_guest_chat_daily_limit(request_a)
             second = auth_limits.consume_guest_chat_daily_limit(request_b)
@@ -132,6 +164,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(first, (True, None))
         self.assertEqual(second, (False, "1日1回までです"))
 
+    # 日本語: test verification attempt limit blocks after per email cap のテスト検証を担当します。
+    # English: Handle verifying test behavior for test verification attempt limit blocks after per email cap.
     def test_verification_attempt_limit_blocks_after_per_email_cap(self):
         # Cross-session brute-force: same email submitted from rotating IPs
         # still hits the per-email cap.
@@ -139,6 +173,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
         os.environ["VERIFICATION_ATTEMPT_PER_IP_LIMIT"] = "10000"
         os.environ["VERIFICATION_ATTEMPT_WINDOW_SECONDS"] = "3600"
 
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             with patch("services.auth_limits.get_redis_client", return_value=None):
                 results = []
@@ -163,11 +199,15 @@ class GuestChatLimitTestCase(unittest.TestCase):
         self.assertEqual(results[3][0], False)
         self.assertIn("試行回数", results[3][1] or "")
 
+    # 日本語: test verification attempt limit blocks after per ip cap のテスト検証を担当します。
+    # English: Handle verifying test behavior for test verification attempt limit blocks after per ip cap.
     def test_verification_attempt_limit_blocks_after_per_ip_cap(self):
         os.environ["VERIFICATION_ATTEMPT_PER_EMAIL_LIMIT"] = "10000"
         os.environ["VERIFICATION_ATTEMPT_PER_IP_LIMIT"] = "3"
         os.environ["VERIFICATION_ATTEMPT_WINDOW_SECONDS"] = "3600"
 
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             with patch("services.auth_limits.get_redis_client", return_value=None):
                 results = []
@@ -189,6 +229,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
 
         self.assertEqual([r[0] for r in results], [True, True, True, False])
 
+    # 日本語: test admin login limit ignores spoofed forwarded for のテスト検証を担当します。
+    # English: Handle verifying test behavior for test admin login limit ignores spoofed forwarded for.
     def test_admin_login_limit_ignores_spoofed_forwarded_for(self):
         os.environ["ADMIN_LOGIN_PER_IP_LIMIT"] = "1"
         request_a = make_request(
@@ -200,6 +242,8 @@ class GuestChatLimitTestCase(unittest.TestCase):
             client_host="203.0.113.70",
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("services.auth_limits.get_redis_client", return_value=None):
             first = auth_limits.consume_admin_login_limit(request_a)
             second = auth_limits.consume_admin_login_limit(request_b)

@@ -54,10 +54,16 @@ _DIRECT_GENERATION_HINTS = re.compile(
 )
 
 
+# 日本語: parse intent の解析処理を担当します。
+# English: Handle parsing for parse intent.
 def _parse_intent(text: str) -> Intent | None:
     json_match = re.search(r"\{[^{}]*\}", text)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not json_match:
         return None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         data = json.loads(json_match.group())
         intent = data.get("intent")
@@ -68,13 +74,19 @@ def _parse_intent(text: str) -> Intent | None:
     return None
 
 
+# 日本語: classify intent に関する処理の入口です。
+# English: Entry point for logic related to classify intent.
 def classify_intent(message: str, current_page: str = "") -> Intent:
     """
     ユーザーメッセージの意図をLLMで1回分類して返す。
     失敗時は "direct"（検索なし）にフォールバックする。
     """
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _ACTION_HINTS.search(message):
         return "action" if current_page else "search"
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _PAGE_INFO_HINTS.search(message):
         return "page_info" if current_page else "search"
     if _DIRECT_GENERATION_HINTS.search(message) and not _SEARCH_HINTS.search(message):

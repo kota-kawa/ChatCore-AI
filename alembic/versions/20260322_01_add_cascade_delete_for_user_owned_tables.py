@@ -17,11 +17,15 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+# 日本語: existing tables に関する処理の入口です。
+# English: Entry point for logic related to existing tables.
 def _existing_tables() -> set[str]:
     inspector = sa.inspect(op.get_bind())
     return set(inspector.get_table_names())
 
 
+# 日本語: replace user fk に関する処理の入口です。
+# English: Entry point for logic related to replace user fk.
 def _replace_user_fk(table_name: str, constraint_name: str, *, cascade: bool) -> None:
     desired_delete_action = "CASCADE" if cascade else "NO ACTION"
     orphan_cleanup_sql = f"""
@@ -78,17 +82,29 @@ def _replace_user_fk(table_name: str, constraint_name: str, *, cascade: bool) ->
     )
 
 
+# 日本語: upgrade のスキーマ更新処理を担当します。
+# English: Handle upgrading schema for upgrade.
 def upgrade() -> None:
     tables = _existing_tables()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "chat_rooms" in tables and "users" in tables:
         _replace_user_fk("chat_rooms", "fk_chat_rooms_user", cascade=True)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "prompts" in tables and "users" in tables:
         _replace_user_fk("prompts", "fk_prompts_user", cascade=True)
 
 
+# 日本語: downgrade のスキーマ差し戻し処理を担当します。
+# English: Handle downgrading schema for downgrade.
 def downgrade() -> None:
     tables = _existing_tables()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "chat_rooms" in tables and "users" in tables:
         _replace_user_fk("chat_rooms", "fk_chat_rooms_user", cascade=False)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "prompts" in tables and "users" in tables:
         _replace_user_fk("prompts", "fk_prompts_user", cascade=False)

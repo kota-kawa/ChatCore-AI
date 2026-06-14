@@ -11,11 +11,15 @@ REQUEST_TIMEOUT_SECONDS = 10
 VERIFICATION_CODE_PATTERN = re.compile(r"(?:認証コード|確認コード):\s*(\d{6})")
 
 
+# 日本語: load resend config の読み込み処理を担当します。
+# English: Handle loading for load resend config.
 def _load_resend_config() -> tuple[str, str]:
     # 起動時ではなく送信時に明示的に失敗させる。
     # Fail explicitly at send time instead of import/startup time.
     api_key = (os.getenv(RESEND_API_KEY_ENV) or "").strip()
     from_address = (os.getenv(RESEND_FROM_ADDRESS_ENV) or "").strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not api_key or not from_address:
         raise RuntimeError(
             "Resend email credentials are not configured. "
@@ -24,12 +28,18 @@ def _load_resend_config() -> tuple[str, str]:
     return api_key, from_address
 
 
+# 日本語: extract resend error に関する処理の入口です。
+# English: Entry point for logic related to extract resend error.
 def _extract_resend_error(response: requests.Response) -> str:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         payload = response.json()
     except ValueError:
         payload = None
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(payload, dict):
         message = payload.get("message")
         if isinstance(message, str) and message:
@@ -45,6 +55,8 @@ def _extract_resend_error(response: requests.Response) -> str:
     return response.text[:300]
 
 
+# 日本語: build email html の組み立て処理を担当します。
+# English: Handle building for build email html.
 def _build_email_html(subject: str, body_text: str) -> str:
     code_match = VERIFICATION_CODE_PATTERN.search(body_text)
     code = code_match.group(1) if code_match else ""
@@ -62,6 +74,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
         )
         for line in intro_lines
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not intro_html:
         intro_html = (
             '<p style="margin:0 0 14px;color:#334155;font-size:15px;line-height:1.7;">'
@@ -69,6 +83,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
             "</p>"
         )
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if "ログイン" in subject:
         heading = "ログイン認証コード"
         eyebrow = "Secure sign-in"
@@ -142,6 +158,8 @@ def _build_email_html(subject: str, body_text: str) -> str:
 </html>"""
 
 
+# 日本語: send email の送信処理を担当します。
+# English: Handle sending for send email.
 def send_email(to_address: str, subject: str, body_text: str) -> None:
     # Resend Email API を使って HTML とテキストの両方を送信する。
     # Send both HTML and plain-text email through the Resend Email API.
@@ -163,6 +181,8 @@ def send_email(to_address: str, subject: str, body_text: str) -> None:
         },
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if response.status_code < 200 or response.status_code >= 300:
         detail = _extract_resend_error(response)
         raise RuntimeError(

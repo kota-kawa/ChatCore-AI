@@ -18,13 +18,19 @@ from .helpers import date_end, date_start, ensure_title, resolve_sort_order
 from .serializers import serialize_memo_detail, serialize_memo_summary
 
 
+# 日本語: get db connection の取得処理を担当します。
+# English: Handle fetching for get db connection.
 def _get_db_connection():
     memo_module = sys.modules.get("blueprints.memo")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if memo_module is not None:
         return getattr(memo_module, "get_db_connection", default_get_db_connection)()
     return default_get_db_connection()
 
 
+# 日本語: fetch memo summaries の取得処理を担当します。
+# English: Handle fetching for fetch memo summaries.
 def fetch_memo_summaries(
     user_id: int,
     *,
@@ -42,6 +48,8 @@ def fetch_memo_summaries(
 ) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -159,9 +167,13 @@ def fetch_memo_summaries(
             connection.close()
 
 
+# 日本語: fetch memo detail の取得処理を担当します。
+# English: Handle fetching for fetch memo detail.
 def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -194,6 +206,8 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
             connection.close()
 
 
+# 日本語: validate collection owner の検証処理を担当します。
+# English: Handle validating for validate collection owner.
 def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> bool:
     cursor.execute(
         "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",
@@ -202,6 +216,8 @@ def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> 
     return cursor.fetchone() is not None
 
 
+# 日本語: insert memo の登録処理を担当します。
+# English: Handle inserting for insert memo.
 def insert_memo(
     user_id: int,
     ai_response: str,
@@ -211,6 +227,8 @@ def insert_memo(
 ) -> int | None:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -259,6 +277,8 @@ def insert_memo(
             connection.close()
 
 
+# 日本語: update memo の更新処理を担当します。
+# English: Handle updating for update memo.
 def update_memo(
     user_id: int,
     memo_id: int,
@@ -272,6 +292,8 @@ def update_memo(
 ) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -341,9 +363,13 @@ def update_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
+# 日本語: set memo archive state の設定処理を担当します。
+# English: Handle setting for set memo archive state.
 def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -369,9 +395,13 @@ def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[st
     return fetch_memo_detail(user_id, memo_id)
 
 
+# 日本語: set memo pin state の設定処理を担当します。
+# English: Handle setting for set memo pin state.
 def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -407,12 +437,18 @@ def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, A
     return fetch_memo_detail(user_id, memo_id)
 
 
+# 日本語: decimal order に関する処理の入口です。
+# English: Entry point for logic related to decimal order.
 def _decimal_order(value: Any) -> Decimal:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value or 0))
 
 
+# 日本語: reorder memo に関する処理の入口です。
+# English: Entry point for logic related to reorder memo.
 def reorder_memo(
     user_id: int,
     memo_id: int,
@@ -420,10 +456,14 @@ def reorder_memo(
     before_id: int | None,
     after_id: int | None,
 ) -> dict[str, Any]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if before_id == memo_id or after_id == memo_id:
         raise ApiServiceError("並べ替え位置が不正です。", 400, status="fail")
 
     ordered_ids = [memo_id]
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for candidate in (before_id, after_id):
         if candidate is not None and candidate not in ordered_ids:
             ordered_ids.append(candidate)
@@ -455,10 +495,16 @@ def reorder_memo(
         dragged_is_pinned = dragged.get("pinned_at") is not None
         dragged_is_archived = dragged.get("archived_at") is not None
 
+        # 日本語: neighbor order に関する処理の入口です。
+        # English: Entry point for logic related to neighbor order.
         def neighbor_order(neighbor_id: int | None) -> Decimal | None:
+            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+            # English: Switch the flow according to the current condition.
             if neighbor_id is None:
                 return None
             neighbor = rows.get(neighbor_id)
+            # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+            # English: Switch the flow according to the current condition.
             if neighbor is None:
                 raise ApiServiceError("並べ替え先のメモが見つかりません。", 400, status="fail")
             if (
@@ -512,9 +558,13 @@ def reorder_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
+# 日本語: delete memo の削除処理を担当します。
+# English: Handle deleting for delete memo.
 def delete_memo(user_id: int, memo_id: int) -> None:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -532,6 +582,8 @@ def delete_memo(user_id: int, memo_id: int) -> None:
             connection.close()
 
 
+# 日本語: bulk action に関する処理の入口です。
+# English: Entry point for logic related to bulk action.
 def bulk_action(
     user_id: int,
     action: str,
@@ -539,11 +591,15 @@ def bulk_action(
     *,
     collection_id: int | None,
 ) -> dict[str, Any]:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not memo_ids:
         return {"affected": 0}
 
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
@@ -618,9 +674,13 @@ def bulk_action(
             connection.close()
 
 
+# 日本語: fetch collections の取得処理を担当します。
+# English: Handle fetching for fetch collections.
 def fetch_collections(user_id: int) -> list[dict[str, Any]]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -655,9 +715,13 @@ def fetch_collections(user_id: int) -> list[dict[str, Any]]:
             connection.close()
 
 
+# 日本語: insert collection の登録処理を担当します。
+# English: Handle inserting for insert collection.
 def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -688,9 +752,13 @@ def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
             connection.close()
 
 
+# 日本語: update collection の更新処理を担当します。
+# English: Handle updating for update collection.
 def update_collection(user_id: int, collection_id: int, name: str | None, color: str | None) -> dict[str, Any]:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor(dictionary=True)
@@ -742,9 +810,13 @@ def update_collection(user_id: int, collection_id: int, name: str | None, color:
             connection.close()
 
 
+# 日本語: delete collection の削除処理を担当します。
+# English: Handle deleting for delete collection.
 def delete_collection(user_id: int, collection_id: int) -> None:
     connection = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()

@@ -15,13 +15,19 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 
 # JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
 # Load, cache, and normalize default task definitions from the JSON file.
+# 日本語: load default tasks の読み込み処理を担当します。
+# English: Handle loading for load default tasks.
 @lru_cache(maxsize=1)
 def load_default_tasks() -> list[dict]:
     # JSON からデフォルトタスクを読み込み、型とキーを正規化する
     # Load default tasks from JSON and normalize schema/types.
+    # 日本語: 必要なリソースやコンテキストを限定して利用します。
+    # English: Use the required resource or context within this limited block.
     with DEFAULT_TASKS_JSON.open(encoding="utf-8") as fp:
         tasks = json.load(fp)
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(tasks, list):
         raise ValueError("default_tasks.json must contain a list.")
 
@@ -46,10 +52,14 @@ def load_default_tasks() -> list[dict]:
 
 # APIレスポンス用のペイロード形式に変換したデフォルトタスクのリストを返す
 # Convert and return default tasks formatted as API payloads.
+# 日本語: default task payloads に関する処理の入口です。
+# English: Entry point for logic related to default task payloads.
 def default_task_payloads() -> list[dict]:
     # APIレスポンス向けに is_default を付与した形へ変換する
     # Build API payload objects with is_default metadata.
     payloads = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for task in load_default_tasks():
         payloads.append(
             {
@@ -67,10 +77,14 @@ def default_task_payloads() -> list[dict]:
 
 # データベース挿入用のタプル形式に変換したデフォルトタスクのリストを返す
 # Convert and return default tasks formatted as tuples for database insertion.
+# 日本語: default task rows に関する処理の入口です。
+# English: Entry point for logic related to default task rows.
 def default_task_rows() -> list[tuple]:
     # DB INSERT 用のタプル配列へ変換する
     # Convert normalized tasks into DB insert row tuples.
     rows = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for task in load_default_tasks():
         rows.append(
             (
@@ -88,11 +102,17 @@ def default_task_rows() -> list[tuple]:
 
 # データベース行オブジェクト（辞書またはタプル）から名前フィールドを抽出する
 # Extract the name field from a database row object (which can be a dict or tuple).
+# 日本語: extract name に関する処理の入口です。
+# English: Entry point for logic related to extract name.
 def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
     # dict/tuple どちらの fetch 結果でも name を取り出せるようにする
     # Extract "name" from either dict-based or tuple-based DB rows.
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if row is None:
         return None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(row, dict):
         return row.get("name")
     return row[0]
@@ -100,9 +120,13 @@ def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
 
 # データベースに不足しているデフォルトタスクをインサートし、追加された件数を返す
 # Seed default tasks into the database if they do not already exist, returning the insert count.
+# 日本語: ensure default tasks seeded の保証処理を担当します。
+# English: Handle ensuring for ensure default tasks seeded.
 def ensure_default_tasks_seeded() -> int:
     # 共通タスク（user_id IS NULL）に不足分のみ追加し、追加件数を返す
     # Seed only missing shared tasks (user_id IS NULL) and return inserted count.
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()

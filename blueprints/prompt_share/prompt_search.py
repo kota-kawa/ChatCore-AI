@@ -16,7 +16,11 @@ SEARCH_MAX_PER_PAGE = 100
 SEARCH_PROMPT_TYPES = {"text", "image", "skill"}
 
 
+# 日本語: parse positive int の解析処理を担当します。
+# English: Handle parsing for parse positive int.
 def _parse_positive_int(raw_value: str | None, default: int) -> int:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(str(raw_value or "").strip())
     except (TypeError, ValueError):
@@ -24,12 +28,18 @@ def _parse_positive_int(raw_value: str | None, default: int) -> int:
     return value if value > 0 else default
 
 
+# 日本語: normalize search prompt row の正規化処理を担当します。
+# English: Handle normalizing for normalize search prompt row.
 def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt = dict(row)
     created_at = prompt.get("created_at")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
     normalized_prompt_type = str(prompt.get("prompt_type") or "").strip().lower()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if normalized_prompt_type in {"image", "skill"}:
         prompt["prompt_type"] = normalized_prompt_type
     else:
@@ -44,16 +54,22 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     return prompt
 
 
+# 日本語: normalize prompt type filter の正規化処理を担当します。
+# English: Handle normalizing for normalize prompt type filter.
 def _normalize_prompt_type_filter(value):
     normalized = str(value or "").strip().lower()
     return normalized if normalized in SEARCH_PROMPT_TYPES else None
 
 
+# 日本語: search public prompts に関する処理の入口です。
+# English: Entry point for logic related to search public prompts.
 def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None):
     # 公開プロンプトを title/content/category/author で部分一致検索する
     # Search public prompts with partial matching across multiple columns.
     page = max(int(page), SEARCH_DEFAULT_PAGE)
     per_page = max(1, min(int(per_page), SEARCH_MAX_PER_PAGE))
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not query:
         return {
             "prompts": [],
@@ -69,6 +85,8 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
 
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -185,6 +203,8 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             conn.close()
 
 
+# 日本語: search prompts に関する処理の入口です。
+# English: Entry point for logic related to search prompts.
 @search_bp.get('/prompts', name="search.search_prompts")
 async def search_prompts(request: Request):
     """
@@ -200,6 +220,8 @@ async def search_prompts(request: Request):
     )
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id, prompt_type)
         return jsonify({"status": "success", **payload})

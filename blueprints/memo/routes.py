@@ -45,10 +45,14 @@ memo_bp = APIRouter(prefix="/memo", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger("blueprints.memo")
 
 
+# 日本語: memo attr に関する処理の入口です。
+# English: Entry point for logic related to memo attr.
 def _memo_attr(name: str) -> Any:
     return getattr(sys.modules["blueprints.memo"], name)
 
 
+# 日本語: api recent memos に関する処理の入口です。
+# English: Entry point for logic related to api recent memos.
 @memo_bp.get("/api/recent", name="memo.api_recent")
 async def api_recent_memos(
     request: Request,
@@ -64,6 +68,8 @@ async def api_recent_memos(
     collection_id: int | None = None,
 ):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
@@ -71,6 +77,8 @@ async def api_recent_memos(
     safe_offset = max(0, offset)
 
     semantic_embedding: list[float] | None = None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if sort == "semantic" and q.strip() and _memo_attr("embeddings_available")():
         try:
             semantic_embedding = await run_blocking(_memo_attr("generate_embedding"), q.strip())
@@ -99,13 +107,19 @@ async def api_recent_memos(
         return jsonify({"memos": [], "total": 0})
 
 
+# 日本語: api create memo に関する処理の入口です。
+# English: Entry point for logic related to api create memo.
 @memo_bp.post("/api", name="memo.api_create")
 async def api_create_memo(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data = await get_json(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if data is None:
         form = await request.form()
         data = {key: value for key, value in form.items()}
@@ -139,13 +153,19 @@ async def api_create_memo(request: Request):
         return log_and_internal_server_error(logger, "Failed to create memo entry.", status="fail")
 
 
+# 日本語: api suggest memo に関する処理の入口です。
+# English: Entry point for logic related to api suggest memo.
 @memo_bp.post("/api/suggest", name="memo.api_suggest")
 async def api_suggest_memo(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -168,13 +188,19 @@ async def api_suggest_memo(request: Request):
         return log_and_internal_server_error(logger, "Memo suggestion failed.", status="fail")
 
 
+# 日本語: api bulk memo に関する処理の入口です。
+# English: Entry point for logic related to api bulk memo.
 @memo_bp.post("/api/bulk", name="memo.api_bulk")
 async def api_bulk_memo(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -200,13 +226,19 @@ async def api_bulk_memo(request: Request):
         return log_and_internal_server_error(logger, "Bulk memo action failed.", status="fail")
 
 
+# 日本語: api reorder memo に関する処理の入口です。
+# English: Entry point for logic related to api reorder memo.
 @memo_bp.post("/api/reorder", name="memo.api_reorder")
 async def api_reorder_memo(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -234,6 +266,8 @@ async def api_reorder_memo(request: Request):
         return log_and_internal_server_error(logger, "Failed to reorder memo entry.", status="fail")
 
 
+# 日本語: api export memos に関する処理の入口です。
+# English: Entry point for logic related to api export memos.
 @memo_bp.get("/api/export", name="memo.api_export")
 async def api_export_memos(
     request: Request,
@@ -241,10 +275,14 @@ async def api_export_memos(
     ids: str = "",
 ):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     memo_ids: list[int] | None = None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if ids.strip():
         try:
             memo_ids = [int(x.strip()) for x in ids.split(",") if x.strip()]
@@ -283,12 +321,18 @@ async def api_export_memos(
         return log_and_internal_server_error(logger, "Export failed.", status="fail")
 
 
+# 日本語: api list collections に関する処理の入口です。
+# English: Entry point for logic related to api list collections.
 @memo_bp.get("/api/collections", name="memo.api_collections_list")
 async def api_list_collections(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         collections = await run_blocking(_memo_attr("_fetch_collections"), user_id)
         return jsonify({"status": "success", "collections": collections})
@@ -296,13 +340,19 @@ async def api_list_collections(request: Request):
         return log_and_internal_server_error(logger, "Failed to load collections.", status="fail")
 
 
+# 日本語: api create collection に関する処理の入口です。
+# English: Entry point for logic related to api create collection.
 @memo_bp.post("/api/collections", name="memo.api_collections_create")
 async def api_create_collection(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -329,13 +379,19 @@ async def api_create_collection(request: Request):
         return log_and_internal_server_error(logger, "Failed to create collection.", status="fail")
 
 
+# 日本語: api update collection に関する処理の入口です。
+# English: Entry point for logic related to api update collection.
 @memo_bp.patch("/api/collections/{collection_id:int}", name="memo.api_collections_update")
 async def api_update_collection(request: Request, collection_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -359,12 +415,18 @@ async def api_update_collection(request: Request, collection_id: int):
         return log_and_internal_server_error(logger, "Failed to update collection.", status="fail")
 
 
+# 日本語: api delete collection に関する処理の入口です。
+# English: Entry point for logic related to api delete collection.
 @memo_bp.delete("/api/collections/{collection_id:int}", name="memo.api_collections_delete")
 async def api_delete_collection(request: Request, collection_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         await run_blocking(_memo_attr("_delete_collection"), user_id, collection_id)
         return jsonify({"status": "success"})
@@ -374,13 +436,19 @@ async def api_delete_collection(request: Request, collection_id: int):
         return log_and_internal_server_error(logger, "Failed to delete collection.", status="fail")
 
 
+# 日本語: api share memo に関する処理の入口です。
+# English: Entry point for logic related to api share memo.
 @memo_bp.post("/api/share", name="memo.api_share")
 async def api_share_memo(request: Request):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -411,12 +479,18 @@ async def api_share_memo(request: Request):
         return log_and_internal_server_error(logger, "Failed to create share link for memo entry.", status="fail")
 
 
+# 日本語: api shared memo に関する処理の入口です。
+# English: Entry point for logic related to api shared memo.
 @memo_bp.get("/api/shared", name="memo.api_shared")
 async def api_shared_memo(request: Request):
     token = request.query_params.get("token", "").strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not token:
         return jsonify({"error": ERROR_TOKEN_REQUIRED}, status_code=400)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         payload_result = await run_blocking(_memo_attr("get_shared_memo_payload"), token)
         if isinstance(payload_result, tuple) and len(payload_result) == 2:
@@ -429,12 +503,18 @@ async def api_shared_memo(request: Request):
         return log_and_internal_server_error(logger, "Failed to load shared memo payload.")
 
 
+# 日本語: api memo detail に関する処理の入口です。
+# English: Entry point for logic related to api memo detail.
 @memo_bp.get("/api/{memo_id:int}", name="memo.api_detail")
 async def api_memo_detail(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         memo = await run_blocking(_memo_attr("_fetch_memo_detail"), user_id, memo_id)
         return jsonify({"status": "success", "memo": memo})
@@ -444,13 +524,19 @@ async def api_memo_detail(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to load memo detail.", status="fail")
 
 
+# 日本語: api update memo に関する処理の入口です。
+# English: Entry point for logic related to api update memo.
 @memo_bp.patch("/api/{memo_id:int}", name="memo.api_update")
 async def api_update_memo(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -495,12 +581,18 @@ async def api_update_memo(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to update memo entry.", status="fail")
 
 
+# 日本語: api delete memo に関する処理の入口です。
+# English: Entry point for logic related to api delete memo.
 @memo_bp.delete("/api/{memo_id:int}", name="memo.api_delete")
 async def api_delete_memo(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         await run_blocking(_memo_attr("_delete_memo"), user_id, memo_id)
         return jsonify({"status": "success"})
@@ -510,13 +602,19 @@ async def api_delete_memo(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to delete memo entry.", status="fail")
 
 
+# 日本語: api archive memo に関する処理の入口です。
+# English: Entry point for logic related to api archive memo.
 @memo_bp.post("/api/{memo_id:int}/archive", name="memo.api_archive")
 async def api_archive_memo(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data = await get_json(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(data, dict):
         data = {}
 
@@ -535,13 +633,19 @@ async def api_archive_memo(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to archive memo entry.", status="fail")
 
 
+# 日本語: api pin memo に関する処理の入口です。
+# English: Entry point for logic related to api pin memo.
 @memo_bp.post("/api/{memo_id:int}/pin", name="memo.api_pin")
 async def api_pin_memo(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data = await get_json(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(data, dict):
         data = {}
 
@@ -560,12 +664,18 @@ async def api_pin_memo(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to pin memo entry.", status="fail")
 
 
+# 日本語: api memo share detail に関する処理の入口です。
+# English: Entry point for logic related to api memo share detail.
 @memo_bp.get("/api/{memo_id:int}/share", name="memo.api_share_detail")
 async def api_memo_share_detail(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         share_state = await run_blocking(_memo_attr("get_memo_share_state"), memo_id, user_id)
         return jsonify(_memo_attr("_share_payload")(share_state))
@@ -575,13 +685,19 @@ async def api_memo_share_detail(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to load memo share status.", status="fail")
 
 
+# 日本語: api memo share refresh に関する処理の入口です。
+# English: Entry point for logic related to api memo share refresh.
 @memo_bp.post("/api/{memo_id:int}/share", name="memo.api_share_refresh")
 async def api_memo_share_refresh(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
     data = await get_json(request)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not isinstance(data, dict):
         data = {}
 
@@ -606,12 +722,18 @@ async def api_memo_share_refresh(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to refresh memo share status.", status="fail")
 
 
+# 日本語: api memo share revoke に関する処理の入口です。
+# English: Entry point for logic related to api memo share revoke.
 @memo_bp.post("/api/{memo_id:int}/share/revoke", name="memo.api_share_revoke")
 async def api_memo_share_revoke(request: Request, memo_id: int):
     user_id = user_id_from_session(request.session)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if user_id is None:
         return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         share_state = await run_blocking(_memo_attr("revoke_shared_memo_token"), memo_id, user_id)
         return jsonify(_memo_attr("_share_payload")(share_state))
@@ -621,6 +743,8 @@ async def api_memo_share_revoke(request: Request, memo_id: int):
         return log_and_internal_server_error(logger, "Failed to revoke memo share link.", status="fail")
 
 
+# 日本語: create memo の作成処理を非同期で担当します。
+# English: Handle creating for create memo asynchronously.
 @memo_bp.api_route("", methods=["GET", "POST"], name="memo.create_memo")
 async def create_memo(request: Request):
     status_code = 302 if request.method == "GET" else 303

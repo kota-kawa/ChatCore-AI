@@ -29,6 +29,8 @@ _CACHE_FILE = MANUAL_DIR / ".embeddings.npz"
 _CACHE_HASH_FILE = MANUAL_DIR / ".embeddings_hash.txt"
 
 
+# 日本語: ManualChunk に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ManualChunk.
 @dataclass
 class ManualChunk:
     heading: str
@@ -40,11 +42,17 @@ class ManualChunk:
 # Markdown parsing
 # ---------------------------------------------------------------------------
 
+# 日本語: strip frontmatter に関する処理の入口です。
+# English: Entry point for logic related to strip frontmatter.
 def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
     meta: dict[str, str] = {}
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not text.startswith("---"):
         return text, meta
     end = text.find("\n---", 3)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if end == -1:
         return text, meta
     for line in text[3:end].splitlines():
@@ -54,8 +62,12 @@ def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
     return text[end + 4:].lstrip("\n"), meta
 
 
+# 日本語: split into chunks に関する処理の入口です。
+# English: Entry point for logic related to split into chunks.
 def _split_into_chunks(body: str, file_title: str) -> list[ManualChunk]:
     chunks: list[ManualChunk] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for section in re.split(r"\n(?=## )", body):
         if not section.strip():
             continue
@@ -87,6 +99,8 @@ def _split_into_chunks(body: str, file_title: str) -> list[ManualChunk]:
 # Tokenizer (BM25 用)
 # ---------------------------------------------------------------------------
 
+# 日本語: tokenize に関する処理の入口です。
+# English: Entry point for logic related to tokenize.
 def _tokenize(text: str) -> list[str]:
     """ASCII は単語分割、CJK 文字はバイグラム＋ユニグラムに展開する。"""
     tokens: list[str] = []
@@ -94,6 +108,8 @@ def _tokenize(text: str) -> list[str]:
     tokens.extend(re.findall(r"[a-z0-9]+", text))
     cjk_chars = [c for c in text if unicodedata.category(c) in ("Lo", "Ll") and ord(c) > 0x2E7F]
     cjk_str = "".join(cjk_chars)
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for i in range(len(cjk_str) - 1):
         tokens.append(cjk_str[i:i + 2])
     tokens.extend(cjk_chars)
@@ -104,16 +120,22 @@ def _tokenize(text: str) -> list[str]:
 # Embedding helpers
 # ---------------------------------------------------------------------------
 
+# 日本語: compute chunks hash に関する処理の入口です。
+# English: Entry point for logic related to compute chunks hash.
 def _compute_chunks_hash(chunks: list[ManualChunk]) -> str:
     combined = "\n---\n".join(f"{c.heading}\n{c.content}" for c in chunks)
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+# 日本語: fetch embeddings from api の取得処理を担当します。
+# English: Handle fetching for fetch embeddings from api.
 def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
     from openai import OpenAI
     api_key = os.environ.get("OPENAI_API_KEY", "")
     client = OpenAI(api_key=api_key)
     all_embeddings: list[list[float]] = []
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
         batch = texts[i:i + EMBEDDING_BATCH_SIZE]
         response = client.embeddings.create(
@@ -126,6 +148,8 @@ def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
     return np.array(all_embeddings, dtype=np.float32)
 
 
+# 日本語: normalize rows の正規化処理を担当します。
+# English: Handle normalizing for normalize rows.
 def _normalize_rows(mat: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     return mat / np.maximum(norms, 1e-10)
@@ -135,13 +159,19 @@ def _normalize_rows(mat: np.ndarray) -> np.ndarray:
 # Index
 # ---------------------------------------------------------------------------
 
+# 日本語: ManualRagIndex に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ManualRagIndex.
 class ManualRagIndex:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, manual_dir: Path = MANUAL_DIR) -> None:
         self._chunks: list[ManualChunk] = []
         self._bm25 = None
         self._chunk_embeddings: np.ndarray | None = None  # shape (n, EMBEDDING_DIMS), L2-normalized
 
         chunks = self._load_chunks(manual_dir)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not chunks:
             logger.warning("No manual chunks loaded from %s", manual_dir)
             return
@@ -159,9 +189,13 @@ class ManualRagIndex:
     # Chunk loading
     # ------------------------------------------------------------------
 
+    # 日本語: load chunks の読み込み処理を担当します。
+    # English: Handle loading for load chunks.
     @staticmethod
     def _load_chunks(manual_dir: Path) -> list[ManualChunk]:
         chunks: list[ManualChunk] = []
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for md_file in sorted(manual_dir.glob("*.md")):
             try:
                 text = md_file.read_text(encoding="utf-8")
@@ -176,8 +210,12 @@ class ManualRagIndex:
     # BM25
     # ------------------------------------------------------------------
 
+    # 日本語: build bm25 の組み立て処理を担当します。
+    # English: Handle building for build bm25.
     @staticmethod
     def _build_bm25(chunks: list[ManualChunk]):
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             from rank_bm25 import BM25Okapi
         except ImportError:
@@ -186,10 +224,16 @@ class ManualRagIndex:
         tokenized = [_tokenize(f"{c.heading} {c.content}") for c in chunks]
         return BM25Okapi(tokenized)
 
+    # 日本語: bm25 search に関する処理の入口です。
+    # English: Entry point for logic related to bm25 search.
     def _bm25_search(self, query: str, top_k: int) -> tuple[list[ManualChunk], list[float]]:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._bm25 is None:
             return [], []
         tokens = _tokenize(query)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not tokens:
             return [], []
         all_scores: list[float] = self._bm25.get_scores(tokens).tolist()
@@ -197,8 +241,12 @@ class ManualRagIndex:
         top_chunks = [self._chunks[i] for i in ranked[:top_k] if all_scores[i] > 0]
         return top_chunks, all_scores
 
+    # 日本語: is bm25 weak に関する処理の入口です。
+    # English: Entry point for logic related to is bm25 weak.
     def _is_bm25_weak(self, all_scores: list[float]) -> bool:
         top = max(all_scores) if all_scores else 0.0
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if top <= 0:
             return True
         positive = [s for s in all_scores if s > 0]
@@ -209,8 +257,12 @@ class ManualRagIndex:
     # Vector embeddings
     # ------------------------------------------------------------------
 
+    # 日本語: load or build embeddings の読み込み処理を担当します。
+    # English: Handle loading for load or build embeddings.
     def _load_or_build_embeddings(self, chunks: list[ManualChunk]) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not api_key:
             logger.info("OPENAI_API_KEY not set; vector search disabled.")
             return None
@@ -218,6 +270,8 @@ class ManualRagIndex:
         chunks_hash = _compute_chunks_hash(chunks)
 
         # Try loading from cache
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if _CACHE_FILE.exists() and _CACHE_HASH_FILE.exists():
             try:
                 cached_hash = _CACHE_HASH_FILE.read_text().strip()
@@ -240,10 +294,16 @@ class ManualRagIndex:
             logger.exception("Failed to build embeddings; vector search disabled.")
             return None
 
+    # 日本語: embed query に関する処理の入口です。
+    # English: Entry point for logic related to embed query.
     def _embed_query(self, query: str) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not api_key:
             return None
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             from openai import OpenAI
             response = OpenAI(api_key=api_key).embeddings.create(
@@ -258,10 +318,16 @@ class ManualRagIndex:
             logger.exception("Query embedding failed.")
             return None
 
+    # 日本語: vector search に関する処理の入口です。
+    # English: Entry point for logic related to vector search.
     def _vector_search(self, query: str, top_k: int) -> list[ManualChunk]:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if self._chunk_embeddings is None:
             return []
         query_vec = self._embed_query(query)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if query_vec is None:
             return []
         scores = self._chunk_embeddings @ query_vec
@@ -272,15 +338,21 @@ class ManualRagIndex:
     # Public search
     # ------------------------------------------------------------------
 
+    # 日本語: search に関する処理の入口です。
+    # English: Entry point for logic related to search.
     def search(self, query: str, top_k: int = TOP_K) -> list[ManualChunk]:
         bm25_chunks, all_scores = self._bm25_search(query, top_k)
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not self._is_bm25_weak(all_scores):
             logger.debug("RAG method=bm25 query=%s", query[:60])
             return bm25_chunks
 
         logger.debug("RAG BM25 weak → trying vector search. query=%s", query[:60])
         vec_chunks = self._vector_search(query, top_k)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if vec_chunks:
             return vec_chunks
 
@@ -294,19 +366,29 @@ class ManualRagIndex:
 _index: ManualRagIndex | None = None
 
 
+# 日本語: get manual rag index の取得処理を担当します。
+# English: Handle fetching for get manual rag index.
 def get_manual_rag_index() -> ManualRagIndex:
     global _index
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _index is None:
         _index = ManualRagIndex()
     return _index
 
 
+# 日本語: search manual に関する処理の入口です。
+# English: Entry point for logic related to search manual.
 def search_manual(query: str, top_k: int = TOP_K) -> str:
     """クエリに関連するマニュアルチャンクを検索して文字列で返す。"""
     chunks = get_manual_rag_index().search(query, top_k=top_k)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not chunks:
         return ""
     parts = ["【操作マニュアル（参考情報）】"]
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for chunk in chunks:
         parts.append(f"\n### {chunk.heading}\n{chunk.content}")
     return "\n".join(parts)
@@ -371,6 +453,8 @@ _CONVERSATIONAL_REPLIES = re.compile(
 )
 
 
+# 日本語: needs manual search に関する処理の入口です。
+# English: Entry point for logic related to needs manual search.
 def needs_manual_search(query: str) -> bool:
     """ユーザーのメッセージがアプリ操作マニュアルの検索を必要とするか判定する。
 
@@ -384,10 +468,14 @@ def needs_manual_search(query: str) -> bool:
     q = query.strip()
 
     # 5文字未満または純粋な会話返答
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(q) < 5 or _CONVERSATIONAL_REPLIES.match(q):
         return False
 
     # アプリ固有の語彙が含まれる
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if _APP_TERMS.search(q):
         return True
 

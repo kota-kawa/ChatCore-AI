@@ -15,21 +15,31 @@ from services.web import jsonify
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(path: str, *, json_body=None, session=None):
     return build_request(method="POST", path=path, json_body=json_body, session=session)
 
 
+# 日本語: immediate run blocking に関する処理の入口です。
+# English: Entry point for logic related to immediate run blocking.
 async def immediate_run_blocking(func, *args, **kwargs):
     return func(*args, **kwargs)
 
 
+# 日本語: UnifiedEmailAuthFlowTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to UnifiedEmailAuthFlowTestCase.
 class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
+    # 日本語: test send email code uses login flow for verified user のテスト検証を担当します。
+    # English: Handle verifying test behavior for test send email code uses login flow for verified user.
     def test_send_email_code_uses_login_flow_for_verified_user(self):
         request = make_request(
             "/api/auth/send_email_code",
             json_body={"email": "user@example.com"},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.auth.get_user_by_email", return_value={"id": 1, "is_verified": True}):
             with patch(
                 "blueprints.auth.api_send_login_code",
@@ -40,12 +50,16 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_login.await_count, 1)
 
+    # 日本語: test send email code uses registration flow for unknown user のテスト検証を担当します。
+    # English: Handle verifying test behavior for test send email code uses registration flow for unknown user.
     def test_send_email_code_uses_registration_flow_for_unknown_user(self):
         request = make_request(
             "/api/auth/send_email_code",
             json_body={"email": "new-user@example.com"},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.auth.get_user_by_email", return_value=None):
             with patch(
                 "blueprints.auth.api_send_verification_email",
@@ -56,6 +70,8 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_register.await_count, 1)
 
+    # 日本語: test verify email code uses login verification when login session exists のテスト検証を担当します。
+    # English: Handle verifying test behavior for test verify email code uses login verification when login session exists.
     def test_verify_email_code_uses_login_verification_when_login_session_exists(self):
         request = make_request(
             "/api/auth/verify_email_code",
@@ -66,6 +82,8 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
             },
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.api_verify_login_code",
             new=AsyncMock(return_value=jsonify({"status": "success"})),
@@ -75,6 +93,8 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_verify.await_count, 1)
 
+    # 日本語: test verify email code uses registration verification when registration session exists のテスト検証を担当します。
+    # English: Handle verifying test behavior for test verify email code uses registration verification when registration session exists.
     def test_verify_email_code_uses_registration_verification_when_registration_session_exists(self):
         request = make_request(
             "/api/auth/verify_email_code",
@@ -85,6 +105,8 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
             },
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.api_verify_registration_code",
             new=AsyncMock(return_value=jsonify({"status": "success"})),
@@ -95,10 +117,16 @@ class UnifiedEmailAuthFlowTestCase(unittest.TestCase):
         self.assertEqual(mock_verify.await_count, 1)
 
 
+# 日本語: PasskeyRouteTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to PasskeyRouteTestCase.
 class PasskeyRouteTestCase(unittest.TestCase):
+    # 日本語: test passkey authenticate options returns 429 when rate limited のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey authenticate options returns 429 when rate limited.
     def test_passkey_authenticate_options_returns_429_when_rate_limited(self):
         request = make_request("/api/passkeys/authenticate/options", session={})
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.consume_passkey_auth_options_limit",
             return_value=(False, "too many attempts"),
@@ -111,16 +139,22 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["error"], "too many attempts")
 
+    # 日本語: test passkey register options requires login のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey register options requires login.
     def test_passkey_register_options_requires_login(self):
         request = make_request("/api/passkeys/register/options", session={})
         response = asyncio.run(api_passkey_register_options(request))
         self.assertEqual(response.status_code, 401)
 
+    # 日本語: test passkey register options stores challenge のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey register options stores challenge.
     def test_passkey_register_options_stores_challenge(self):
         session = {"user_id": 7}
         request = make_request("/api/passkeys/register/options", session=session)
         options = SimpleNamespace(challenge=b"raw-challenge")
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.get_user_by_id",
             return_value={"id": 7, "email": "user@example.com", "username": "User"},
@@ -148,6 +182,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertIn("ceremony_id", session["passkey_registration"])
         self.assertEqual(payload["challenge"], "challenge-token")
 
+    # 日本語: test passkey authentication verify logs user in のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey authentication verify logs user in.
     def test_passkey_authentication_verify_logs_user_in(self):
         session = {
             "passkey_authentication": {
@@ -167,6 +203,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
             credential_device_type=SimpleNamespace(value="single_device"),
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.get_passkey_by_credential_id",
             return_value={
@@ -197,6 +235,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
         mock_get_passkey.assert_called_once_with("cred-raw-1")
         self.assertNotIn("passkey_authentication", session)
 
+    # 日本語: test passkey authentication verify rejects expired ceremony のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey authentication verify rejects expired ceremony.
     def test_passkey_authentication_verify_rejects_expired_ceremony(self):
         session = {
             "passkey_authentication": {
@@ -211,6 +251,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
             session=session,
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.auth.consume_passkey_auth_verify_limit", return_value=(True, None)):
             with patch("blueprints.auth.time.time", return_value=1400):
                 response = asyncio.run(api_passkey_authenticate_verify(request))
@@ -220,6 +262,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertIn("有効期限", payload["error"])
         self.assertNotIn("passkey_authentication", session)
 
+    # 日本語: test passkey authentication verify keeps login when usage update fails のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey authentication verify keeps login when usage update fails.
     def test_passkey_authentication_verify_keeps_login_when_usage_update_fails(self):
         session = {
             "passkey_authentication": {
@@ -239,6 +283,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
             credential_device_type=SimpleNamespace(value="single_device"),
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.get_passkey_by_credential_id",
             return_value={
@@ -266,6 +312,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(session["user_id"], 7)
 
+    # 日本語: test passkey authentication verify returns 429 when rate limited のテスト検証を担当します。
+    # English: Handle verifying test behavior for test passkey authentication verify returns 429 when rate limited.
     def test_passkey_authentication_verify_returns_429_when_rate_limited(self):
         session = {
             "passkey_authentication": {
@@ -280,6 +328,8 @@ class PasskeyRouteTestCase(unittest.TestCase):
             session=session,
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch(
             "blueprints.auth.consume_passkey_auth_verify_limit",
             return_value=(False, "too many attempts"),

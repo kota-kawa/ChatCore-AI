@@ -39,10 +39,14 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 BASE_DIR = _BASE_DIR
 
 
+# 日本語: get json の取得処理を非同期で担当します。
+# English: Handle fetching for get json asynchronously.
 async def get_json(request: Request) -> Any | None:
     return await _get_json(request)
 
 
+# 日本語: jsonify に関する処理の入口です。
+# English: Entry point for logic related to jsonify.
 def jsonify(
     payload: Any,
     status_code: int = 200,
@@ -51,6 +55,8 @@ def jsonify(
     return _jsonify(payload, status_code=status_code, headers=headers)
 
 
+# 日本語: jsonify service error に関する処理の入口です。
+# English: Entry point for logic related to jsonify service error.
 def jsonify_service_error(
     error: ApiServiceError,
     *,
@@ -59,6 +65,8 @@ def jsonify_service_error(
     return _jsonify_service_error(error, status=status)
 
 
+# 日本語: jsonify rate limited に関する処理の入口です。
+# English: Entry point for logic related to jsonify rate limited.
 def jsonify_rate_limited(
     message: str,
     *,
@@ -74,6 +82,8 @@ def jsonify_rate_limited(
     )
 
 
+# 日本語: log and internal server error に関する処理の入口です。
+# English: Entry point for logic related to log and internal server error.
 def log_and_internal_server_error(
     logger: logging.Logger,
     context: str,
@@ -91,6 +101,8 @@ def log_and_internal_server_error(
     )
 
 
+# 日本語: require json dict に関する処理の入口です。
+# English: Entry point for logic related to require json dict.
 async def require_json_dict(
     request: Request,
     *,
@@ -104,6 +116,8 @@ async def require_json_dict(
     )
 
 
+# 日本語: validate payload model の検証処理を担当します。
+# English: Handle validating for validate payload model.
 def validate_payload_model(
     data: Dict[str, Any],
     model_class: type[ModelT],
@@ -121,34 +135,48 @@ def validate_payload_model(
     )
 
 
+# 日本語: set session permanent の設定処理を担当します。
+# English: Handle setting for set session permanent.
 def set_session_permanent(session: dict, value: bool) -> None:
     return _set_session_permanent(session, value)
 
 
+# 日本語: flash に関する処理の入口です。
+# English: Entry point for logic related to flash.
 def flash(request: Request, message: str, category: str = "message") -> None:
     return _flash(request, message, category=category)
 
 
+# 日本語: get flashed messages の取得処理を担当します。
+# English: Handle fetching for get flashed messages.
 def get_flashed_messages(
     request: Request, *, with_categories: bool = False
 ) -> List[str] | List[Tuple[str, str]]:
     return _get_flashed_messages(request, with_categories=with_categories)
 
 
+# 日本語: url for に関する処理の入口です。
+# English: Entry point for logic related to url for.
 def url_for(request: Request, endpoint: str, **values: Any) -> str:
     return _url_for(request, endpoint, **values)
 
 
+# 日本語: sanitize next path に関する処理の入口です。
+# English: Entry point for logic related to sanitize next path.
 def sanitize_next_path(next_path: Any, default: str = "/") -> str:
     return _sanitize_next_path(next_path, default=default)
 
 
+# 日本語: frontend url に関する処理の入口です。
+# English: Entry point for logic related to frontend url.
 def frontend_url(path: str = "", *, query: str | None = None) -> str:
     # 既存互換のため、モジュールの FRONTEND_URL を毎回参照してURLを組み立てる
     # Preserve legacy behavior by reading services.web.FRONTEND_URL dynamically.
     return _build_frontend_url(FRONTEND_URL, path, query=query)
 
 
+# 日本語: redirect to frontend に関する処理の入口です。
+# English: Entry point for logic related to redirect to frontend.
 def redirect_to_frontend(
     request: Request, path: str | None = None, *, status_code: int = 302
 ) -> RedirectResponse:
@@ -159,6 +187,8 @@ def redirect_to_frontend(
     return RedirectResponse(frontend_url(target_path, query=query), status_code=status_code)
 
 
+# 日本語: frontend login url に関する処理の入口です。
+# English: Entry point for logic related to frontend login url.
 def frontend_login_url(next_path: str | None = None) -> str:
     # ログイン後遷移先を next クエリに埋め込んだログインURLを組み立てる
     # Build login URL with optional post-login `next` query parameter.

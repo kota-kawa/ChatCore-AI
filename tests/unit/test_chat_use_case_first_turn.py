@@ -10,22 +10,34 @@ from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: ChatUseCaseFirstTurnTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatUseCaseFirstTurnTestCase.
 class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
+    # 日本語: test authenticated first turn skips empty room context queries のテスト検証を担当します。
+    # English: Handle verifying test behavior for test authenticated first turn skips empty room context queries.
     def test_authenticated_first_turn_skips_empty_room_context_queries(self):
         user_message = "【タスク】レビュー\n【状況・作業環境】A&B"
         saved_messages = []
         history_query_message_counts = []
         captured_context = {}
 
+        # 日本語: require json dict に関する処理の入口です。
+        # English: Entry point for logic related to require json dict.
         async def require_json_dict(request):
             return await request.json(), None
 
+        # 日本語: validate payload model の検証処理を担当します。
+        # English: Handle validating for validate payload model.
         def validate_payload_model(data, model_cls, **_kwargs):
             return model_cls(**data), None
 
+        # 日本語: jsonify に関する処理の入口です。
+        # English: Entry point for logic related to jsonify.
         def jsonify(payload, status_code=200):
             return JSONResponse(payload, status_code=status_code)
 
+        # 日本語: save message to db の保存処理を担当します。
+        # English: Handle saving for save message to db.
         def save_message_to_db(room_id, message, sender, attached_file_names=None, parent_id=None):
             saved_messages.append(
                 {
@@ -38,6 +50,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             )
             return len(saved_messages)
 
+        # 日本語: get chat room messages の取得処理を担当します。
+        # English: Handle fetching for get chat room messages.
         def get_chat_room_messages(room_id):
             history_query_message_counts.append(len(saved_messages))
             return [
@@ -49,6 +63,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                 if entry["room_id"] == room_id
             ]
 
+        # 日本語: build context messages の組み立て処理を担当します。
+        # English: Handle building for build context messages.
         def build_context_messages(**kwargs):
             captured_context.update(kwargs)
             return kwargs["recent_messages"]
@@ -120,6 +136,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             session={"user_id": 42},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with (
             patch(
                 "services.chat_use_case.maybe_augment_messages_with_web_search",

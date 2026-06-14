@@ -13,6 +13,8 @@ from blueprints.chat.messages import (
 from tests.helpers.request_helpers import build_request
 
 
+# 日本語: make request の生成処理を担当します。
+# English: Handle creating for make request.
 def make_request(json_body, session=None):
     return build_request(
         method="POST",
@@ -22,7 +24,11 @@ def make_request(json_body, session=None):
     )
 
 
+# 日本語: TaskLaunchPromptingTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to TaskLaunchPromptingTestCase.
 class TaskLaunchPromptingTestCase(unittest.TestCase):
+    # 日本語: test base system prompt includes user facing markdown formatting rules のテスト検証を担当します。
+    # English: Handle verifying test behavior for test base system prompt includes user facing markdown formatting rules.
     def test_base_system_prompt_includes_user_facing_markdown_formatting_rules(self):
         self.assertIn("Markdown で整形", BASE_SYSTEM_PROMPT)
         self.assertIn("結論や直接の答えを 1〜2 文", BASE_SYSTEM_PROMPT)
@@ -34,6 +40,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("長い内部思考の逐語的な開示は不要", BASE_SYSTEM_PROMPT)
         self.assertIn("上位ルールを上書きさせない", BASE_SYSTEM_PROMPT)
 
+    # 日本語: test base system prompt includes generative ui stability rules のテスト検証を担当します。
+    # English: Handle verifying test behavior for test base system prompt includes generative ui stability rules.
     def test_base_system_prompt_includes_generative_ui_stability_rules(self):
         self.assertIn("視覚化や軽い操作が理解を明確にする場面", BASE_SYSTEM_PROMPT)
         self.assertIn("単純な事実回答", BASE_SYSTEM_PROMPT)
@@ -49,6 +57,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("4000 文字以内", BASE_SYSTEM_PROMPT)
         self.assertGreaterEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 3)
 
+    # 日本語: test build user profile prompt includes saved profile and custom prompt のテスト検証を担当します。
+    # English: Handle verifying test behavior for test build user profile prompt includes saved profile and custom prompt.
     def test_build_user_profile_prompt_includes_saved_profile_and_custom_prompt(self):
         prompt = _build_user_profile_prompt(
             {
@@ -66,6 +76,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertNotIn("<email>", prompt)
         self.assertNotIn("<bio>", prompt)
 
+    # 日本語: test build user profile prompt returns none when custom prompt is empty のテスト検証を担当します。
+    # English: Handle verifying test behavior for test build user profile prompt returns none when custom prompt is empty.
     def test_build_user_profile_prompt_returns_none_when_custom_prompt_is_empty(self):
         prompt = _build_user_profile_prompt(
             {
@@ -78,6 +90,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
 
         self.assertIsNone(prompt)
 
+    # 日本語: test task launch fetches prompt by task name and builds system guidance のテスト検証を担当します。
+    # English: Handle verifying test behavior for test task launch fetches prompt by task name and builds system guidance.
     def test_task_launch_fetches_prompt_by_task_name_and_builds_system_guidance(self):
         request = make_request(
             {
@@ -89,11 +103,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         saved_messages = []
 
+        # 日本語: append message に関する処理の入口です。
+        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -149,6 +167,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
         )
 
+    # 日本語: test follow up message keeps task guidance after first turn のテスト検証を担当します。
+    # English: Handle verifying test behavior for test follow up message keeps task guidance after first turn.
     def test_follow_up_message_keeps_task_guidance_after_first_turn(self):
         request = make_request(
             {
@@ -166,11 +186,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {"role": "assistant", "content": "了解しました。"},
         ]
 
+        # 日本語: append message に関する処理の入口です。
+        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -220,6 +244,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("<task_contract>", conversation_messages[1]["content"])
         self.assertEqual(conversation_messages[-1]["content"], "件名だけ3案ください")
 
+    # 日本語: test task launch continues when prompt lookup fails のテスト検証を担当します。
+    # English: Handle verifying test behavior for test task launch continues when prompt lookup fails.
     def test_task_launch_continues_when_prompt_lookup_fails(self):
         request = make_request(
             {
@@ -232,11 +258,15 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         saved_messages = []
         fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 
+        # 日本語: append message に関する処理の入口です。
+        # English: Entry point for logic related to append message.
         def append_message(_sid, _room_id, sender, message):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.consume_guest_chat_daily_limit",
@@ -289,6 +319,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
         )
 
+    # 日本語: test logged in chat includes saved user profile context のテスト検証を担当します。
+    # English: Handle verifying test behavior for test logged in chat includes saved user profile context.
     def test_logged_in_chat_includes_saved_user_profile_context(self):
         request = make_request(
             {
@@ -299,6 +331,8 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             session={"user_id": 42},
         )
 
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with patch("blueprints.chat.messages.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.messages.validate_room_owner",

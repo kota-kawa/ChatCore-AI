@@ -35,6 +35,8 @@ from services.chat_title import (
 )
 
 
+# 日本語: ChatPostUseCaseDependencies に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatPostUseCaseDependencies.
 @dataclass(frozen=True)
 class ChatPostUseCaseDependencies:
     cleanup_ephemeral_chats: Callable[[], Any]
@@ -83,7 +85,11 @@ class ChatPostUseCaseDependencies:
     logger: Any
 
 
+# 日本語: ChatPostUseCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatPostUseCase.
 class ChatPostUseCase:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         dependencies: ChatPostUseCaseDependencies,
@@ -93,6 +99,8 @@ class ChatPostUseCase:
         self.deps = dependencies
         self.default_model = default_model
 
+    # 日本語: execute の実行処理を非同期で担当します。
+    # English: Handle executing for execute asynchronously.
     async def execute(
         self,
         request: Request,
@@ -105,6 +113,8 @@ class ChatPostUseCase:
 
         await run_blocking(deps.cleanup_ephemeral_chats)
         data, error_response = await deps.require_json_dict(request)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if error_response is not None:
             return error_response
 
@@ -113,6 +123,8 @@ class ChatPostUseCase:
             ChatMessageRequest,
             error_message="'message' が必要です。",
         )
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if validation_error is not None:
             return validation_error
 
@@ -370,6 +382,8 @@ class ChatPostUseCase:
                     task_launch_request=active_task_request,
                 )
 
+                # 日本語: persist response に関する処理の入口です。
+                # English: Entry point for logic related to persist response.
                 def persist_response(
                     response: str,
                     *,
@@ -382,11 +396,15 @@ class ChatPostUseCase:
                         None,
                         saved_user_message_id,
                     ]
+                    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+                    # English: Switch the flow according to the current condition.
                     if message_parts:
                         save_args.append(message_parts)
                     deps.save_message_to_db(
                         *save_args,
                     )
+                    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+                    # English: Switch the flow according to the current condition.
                     if not should_auto_title_room:
                         return None
                     generated_title = maybe_auto_title_chat_room(
@@ -401,7 +419,11 @@ class ChatPostUseCase:
                         return {"room_title": generated_title}
                     return None
 
+                # 日本語: on finished に関する処理の入口です。
+                # English: Entry point for logic related to on finished.
                 def on_finished() -> None:
+                    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+                    # English: Run potentially failing work in a form that can be caught.
                     try:
                         updated_messages = deps.get_chat_room_messages(chat_room_id)
                         deps.rebuild_room_summary(chat_room_id, updated_messages)

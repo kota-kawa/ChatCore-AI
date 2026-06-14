@@ -20,7 +20,11 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 
 
+# 日本語: ChatRepository に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatRepository.
 class ChatRepository:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(
         self,
         *,
@@ -36,6 +40,8 @@ class ChatRepository:
         self._sleep = sleep
         self._token_generator = token_generator
 
+    # 日本語: save message の保存処理を担当します。
+    # English: Handle saving for save message.
     def save_message(
         self,
         chat_room_id: str,
@@ -56,6 +62,8 @@ class ChatRepository:
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         message_parts_json = encode_message_parts(message_parts)
         attached_file_contents_json = encode_attached_files_for_storage(attached_file_contents)
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -114,7 +122,11 @@ class ChatRepository:
 
         raise RuntimeError("Failed to save chat message after retry attempts.")
 
+    # 日本語: create room の作成処理を担当します。
+    # English: Handle creating for create room.
     def create_room(self, room_id: str, user_id: int, title: str, mode: str = "normal") -> None:
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -137,7 +149,11 @@ class ChatRepository:
 
         raise RuntimeError("Failed to create chat room after retry attempts.")
 
+    # 日本語: delete room if no assistant messages の削除処理を担当します。
+    # English: Handle deleting for delete room if no assistant messages.
     def delete_room_if_no_assistant_messages(self, room_id: str, user_id: int) -> bool:
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -184,6 +200,8 @@ class ChatRepository:
 
         raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
 
+    # 日本語: delete messages from trailing user count の削除処理を担当します。
+    # English: Handle deleting for delete messages from trailing user count.
     def delete_messages_from_trailing_user_count(self, chat_room_id: str, trailing_user_count: int) -> bool:
         """Delete messages starting from the user message that has `trailing_user_count` user
         messages after it (counting from the newest).  trailing_user_count=0 targets the last
@@ -191,6 +209,8 @@ class ChatRepository:
 
         Returns True if any rows were deleted.
         """
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -224,8 +244,12 @@ class ChatRepository:
                     cursor.close()
         return False
 
+    # 日本語: delete last assistant message の削除処理を担当します。
+    # English: Handle deleting for delete last assistant message.
     def delete_last_assistant_message(self, chat_room_id: str) -> bool:
         """Delete the last assistant message (and any messages after it) from a chat room."""
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -261,7 +285,11 @@ class ChatRepository:
                     cursor.close()
         return False
 
+    # 日本語: rename room に関する処理の入口です。
+    # English: Entry point for logic related to rename room.
     def rename_room(self, room_id: str, new_title: str) -> None:
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -284,6 +312,8 @@ class ChatRepository:
 
         raise RuntimeError("Failed to rename chat room after retry attempts.")
 
+    # 日本語: rename room if current title in に関する処理の入口です。
+    # English: Entry point for logic related to rename room if current title in.
     def rename_room_if_current_title_in(
         self,
         room_id: str,
@@ -291,6 +321,8 @@ class ChatRepository:
         allowed_current_titles: list[str],
     ) -> bool:
         normalized_titles = [title for title in dict.fromkeys(allowed_current_titles) if title]
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not normalized_titles:
             return False
 
@@ -303,6 +335,8 @@ class ChatRepository:
         """
         params = (new_title, room_id, *normalized_titles)
 
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -327,6 +361,8 @@ class ChatRepository:
 
     # ----- Branching helpers -------------------------------------------------
 
+    # 日本語: load room tree の読み込み処理を担当します。
+    # English: Handle loading for load room tree.
     def _load_room_tree(
         self, cursor: Any, chat_room_id: str
     ) -> tuple[dict[int, dict[str, Any]], int | None]:
@@ -349,6 +385,8 @@ class ChatRepository:
             (chat_room_id,),
         )
         nodes: dict[int, dict[str, Any]] = {}
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for (
             message_id,
             message,
@@ -377,15 +415,23 @@ class ChatRepository:
         active_root_id = room_row[0] if room_row else None
         return nodes, active_root_id
 
+    # 日本語: children by parent に関する処理の入口です。
+    # English: Entry point for logic related to children by parent.
     @staticmethod
     def _children_by_parent(nodes: dict[int, dict[str, Any]]) -> dict[int | None, list[int]]:
         children: dict[int | None, list[int]] = defaultdict(list)
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for node in nodes.values():
             children[node["parent_id"]].append(node["id"])
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for sibling_ids in children.values():
             sibling_ids.sort()
         return children
 
+    # 日本語: walk active path に関する処理の入口です。
+    # English: Entry point for logic related to walk active path.
     def _walk_active_path(
         self,
         nodes: dict[int, dict[str, Any]],
@@ -398,6 +444,8 @@ class ChatRepository:
 
         path: list[dict[str, Any]] = []
         visited: set[int] = set()
+        # 日本語: 条件が満たされている間、同じ処理を継続します。
+        # English: Continue the same work while the condition remains true.
         while current is not None and current in nodes and current not in visited:
             visited.add(current)
             node = nodes[current]
@@ -409,9 +457,15 @@ class ChatRepository:
             current = nxt
         return path
 
+    # 日本語: decode file names に関する処理の入口です。
+    # English: Entry point for logic related to decode file names.
     def _decode_file_names(self, file_names_json: Any) -> list[str] | None:
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if not file_names_json:
             return None
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             parsed = json.loads(file_names_json)
         except (json.JSONDecodeError, TypeError):
@@ -421,6 +475,8 @@ class ChatRepository:
             return names or None
         return None
 
+    # 日本語: serialize path node のシリアライズ処理を担当します。
+    # English: Handle serializing for serialize path node.
     def _serialize_path_node(
         self,
         node: dict[str, Any],
@@ -430,6 +486,8 @@ class ChatRepository:
         include_attachment_contents: bool = False,
     ) -> dict[str, Any]:
         sibling_ids = children.get(node["parent_id"], [])
+        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+        # English: Run potentially failing work in a form that can be caught.
         try:
             version_index = sibling_ids.index(node["id"]) + 1
         except ValueError:
@@ -443,6 +501,8 @@ class ChatRepository:
             "version_count": len(sibling_ids) or 1,
             "sibling_ids": list(sibling_ids),
         }
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if include_files:
             file_names = self._decode_file_names(node["attached_file_names"])
             if file_names:
@@ -461,6 +521,8 @@ class ChatRepository:
                 ]
         return entry
 
+    # 日本語: get active path の取得処理を担当します。
+    # English: Handle fetching for get active path.
     def get_active_path(
         self,
         chat_room_id: str,
@@ -468,6 +530,8 @@ class ChatRepository:
         include_attachment_contents: bool = False,
     ) -> list[dict[str, Any]]:
         """Return the active branch as serialized messages with version metadata."""
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -485,8 +549,12 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: get active leaf id の取得処理を担当します。
+    # English: Handle fetching for get active leaf id.
     def get_active_leaf_id(self, chat_room_id: str) -> int | None:
         """Return the id of the last message on the active branch (None if empty)."""
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -497,8 +565,12 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: switch branch に関する処理の入口です。
+    # English: Entry point for logic related to switch branch.
     def switch_branch(self, chat_room_id: str, target_id: int) -> list[dict[str, Any]]:
         """Make ``target_id`` the active sibling and return the new active path."""
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -542,7 +614,11 @@ class ChatRepository:
                     cursor.close()
         raise RuntimeError("Failed to switch chat branch after retry attempts.")
 
+    # 日本語: get room messages for llm の取得処理を担当します。
+    # English: Handle fetching for get room messages for llm.
     def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, str]]:
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -557,12 +633,16 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: validate room owner の検証処理を担当します。
+    # English: Handle validating for validate room owner.
     def validate_room_owner(
         self,
         room_id: str,
         user_id: int,
         forbidden_message: str,
     ) -> str | None:
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -579,7 +659,11 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: create or get shared chat token の作成処理を担当します。
+    # English: Handle creating for create or get shared chat token.
     def create_or_get_shared_chat_token(self, room_id: str, user_id: int) -> str:
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
             token = self._token_generator(18)
             collision_detected = False
@@ -630,7 +714,11 @@ class ChatRepository:
 
         raise RuntimeError("Failed to create shared chat token after collision retries.")
 
+    # 日本語: get shared chat room payload の取得処理を担当します。
+    # English: Handle fetching for get shared chat room payload.
     def get_shared_chat_room_payload(self, token: str) -> dict[str, Any]:
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -675,7 +763,11 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: get task prompt data の取得処理を担当します。
+    # English: Handle fetching for get task prompt data.
     def get_task_prompt_data(self, task: str, user_id: int | None) -> dict[str, Any] | None:
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
@@ -715,6 +807,8 @@ class ChatRepository:
             finally:
                 cursor.close()
 
+    # 日本語: fetch chat history page の取得処理を担当します。
+    # English: Handle fetching for fetch chat history page.
     def fetch_chat_history_page(
         self,
         chat_room_id: str,
@@ -723,6 +817,8 @@ class ChatRepository:
     ) -> dict[str, Any]:
         # History renders the active branch (not every stored message), paginated
         # newest-first by walking back along the active path.
+        # 日本語: 必要なリソースやコンテキストを限定して利用します。
+        # English: Use the required resource or context within this limited block.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:

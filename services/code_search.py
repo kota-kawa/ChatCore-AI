@@ -70,6 +70,8 @@ _JA_TO_EN: dict[str, list[str]] = {
 }
 
 
+# 日本語: CodeSnippet に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to CodeSnippet.
 @dataclass
 class CodeSnippet:
     rel_path: str
@@ -78,20 +80,28 @@ class CodeSnippet:
     match_line: int
     content: str
 
+    # 日本語: lang に関する処理の入口です。
+    # English: Entry point for logic related to lang.
     @property
     def lang(self) -> str:
         return "python" if self.rel_path.endswith(".py") else "typescript"
 
 
+# 日本語: extract search terms に関する処理の入口です。
+# English: Entry point for logic related to extract search terms.
 def _extract_search_terms(query: str) -> list[str]:
     """クエリから grep に使うキーワードを抽出する。ASCII 優先、日本語はマッピング経由。"""
     terms: list[str] = []
 
     # ASCII 英数字の識別子（3文字以上）
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_]{2,}", query):
         terms.append(word.lower())
 
     # 日本語 → 英語マッピング
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for ja, en_list in _JA_TO_EN.items():
         if ja in query:
             terms.extend(en_list)
@@ -106,14 +116,20 @@ def _extract_search_terms(query: str) -> list[str]:
     return result[:5]
 
 
+# 日本語: is excluded に関する処理の入口です。
+# English: Entry point for logic related to is excluded.
 def _is_excluded(path: str) -> bool:
     return any(frag in path for frag in _EXCLUDE_PATH_FRAGMENTS)
 
 
+# 日本語: grep に関する処理の入口です。
+# English: Entry point for logic related to grep.
 def _grep(term: str) -> list[tuple[str, int]]:
     """term を含むファイルパスと行番号のリストを返す。"""
     matches: list[tuple[str, int]] = []
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for rel_dir in _SEARCH_DIRS:
         search_path = PROJECT_ROOT / rel_dir
         if not search_path.exists():
@@ -142,7 +158,11 @@ def _grep(term: str) -> list[tuple[str, int]]:
     return matches
 
 
+# 日本語: read snippet の読み込み処理を担当します。
+# English: Handle reading for read snippet.
 def _read_snippet(file_path: str, match_line: int) -> CodeSnippet | None:
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         path = Path(file_path)
         all_lines = path.read_text(encoding="utf-8").splitlines()
@@ -172,6 +192,8 @@ def _read_snippet(file_path: str, match_line: int) -> CodeSnippet | None:
         return None
 
 
+# 日本語: search codebase に関する処理の入口です。
+# English: Entry point for logic related to search codebase.
 def search_codebase(query: str, max_snippets: int = MAX_SNIPPETS) -> str:
     """クエリに関連するコードスニペットを grep で探して文字列で返す。
 
@@ -179,6 +201,8 @@ def search_codebase(query: str, max_snippets: int = MAX_SNIPPETS) -> str:
     返り値が空文字列の場合は該当なし。
     """
     terms = _extract_search_terms(query)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not terms:
         return ""
 
@@ -186,6 +210,8 @@ def search_codebase(query: str, max_snippets: int = MAX_SNIPPETS) -> str:
     file_scores: dict[str, int] = {}
     file_first_match: dict[str, int] = {}  # ファイルの最初のマッチ行
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for term in terms:
         seen_in_term: set[str] = set()
         for file_path, line_num in _grep(term):

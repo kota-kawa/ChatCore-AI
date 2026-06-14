@@ -47,6 +47,8 @@ AUTH_FAILURE_STATUS_CODE = 401
 
 # セッションから登録・認証用の一時データを削除する
 # Clear temporary registration and verification data from the session.
+# 日本語: clear registration verification session の初期化処理を担当します。
+# English: Handle clearing for clear registration verification session.
 def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code", None)
     session.pop("temp_user_id", None)
@@ -57,10 +59,14 @@ def _clear_registration_verification_session(session: dict) -> None:
 
 # 渡されたAuthLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
 # Helper function to resolve the AuthLimitService from the request if not already provided.
+# 日本語: resolve auth limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve auth limit service.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
@@ -68,16 +74,22 @@ def _resolve_auth_limit_service(
 
 # 渡されたLlmDailyLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
 # Helper function to resolve the LlmDailyLimitService from the request if not already provided.
+# 日本語: resolve llm daily limit service に関する処理の入口です。
+# English: Entry point for logic related to resolve llm daily limit service.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
 
 # ユーザー登録用の認証コードを生成し、メールで送信するエンドポイント
 # Endpoint to generate a registration verification code and send it via email.
+# 日本語: api send verification email に関する処理の入口です。
+# English: Entry point for logic related to api send verification email.
 @verification_bp.post("/api/send_verification_email", name="verification.api_send_verification_email")
 async def api_send_verification_email(
     request: Request,
@@ -96,6 +108,8 @@ async def api_send_verification_email(
     - Temporarily store code and user id in session
     """
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -105,6 +119,8 @@ async def api_send_verification_email(
         error_message="メールアドレスが指定されていません",
         status="fail",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -176,6 +192,8 @@ async def api_send_verification_email(
 
 # ユーザーから送信された認証コードを検証し、成功すればユーザーを有効化してログインさせるエンドポイント
 # Endpoint to verify the submitted registration code, activate the user, and establish a session.
+# 日本語: api verify registration code に関する処理の入口です。
+# English: Entry point for logic related to api verify registration code.
 @verification_bp.post("/api/verify_registration_code", name="verification.api_verify_registration_code")
 async def api_verify_registration_code(
     request: Request,
@@ -192,6 +210,8 @@ async def api_verify_registration_code(
     - Copy default tasks for the verified user
     """
     data, error_response = await require_json_dict(request, status="fail")
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -201,6 +221,8 @@ async def api_verify_registration_code(
         error_message="認証コードが違います。",
         status="fail",
     )
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 

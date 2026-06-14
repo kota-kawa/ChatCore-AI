@@ -25,6 +25,8 @@ _FORMAT_PATTERN = re.compile(
 )
 
 
+# 日本語: normalize fact text の正規化処理を担当します。
+# English: Handle normalizing for normalize fact text.
 def _normalize_fact_text(text: str) -> str:
     normalized = text if isinstance(text, str) else str(text)
     normalized = normalized.strip().replace("\r\n", "\n").replace("\r", "\n")
@@ -32,18 +34,28 @@ def _normalize_fact_text(text: str) -> str:
     return normalized[:MAX_MEMORY_FACT_LENGTH].strip(" .")
 
 
+# 日本語: extract memory facts に関する処理の入口です。
+# English: Entry point for logic related to extract memory facts.
 def extract_memory_facts(message: str) -> list[str]:
     normalized = message if isinstance(message, str) else str(message)
     facts: list[str] = []
 
+    # 日本語: append fact に関する処理の入口です。
+    # English: Entry point for logic related to append fact.
     def _append_fact(value: str) -> None:
         normalized_fact = _normalize_fact_text(value)
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if normalized_fact and normalized_fact not in facts:
             facts.append(normalized_fact)
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in _REMEMBER_PATTERN.finditer(normalized):
         _append_fact(match.group(1))
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for match in _NAME_PATTERN.finditer(normalized):
         _append_fact(f"ユーザー名: {match.group(1).strip()}")
 
@@ -59,9 +71,13 @@ def extract_memory_facts(message: str) -> list[str]:
     return facts
 
 
+# 日本語: list room memory facts の一覧取得処理を担当します。
+# English: Handle listing for list room memory facts.
 def list_room_memory_facts(chat_room_id: str, *, limit: int = MAX_MEMORY_FACTS_FOR_CONTEXT) -> list[str]:
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -86,6 +102,8 @@ def list_room_memory_facts(chat_room_id: str, *, limit: int = MAX_MEMORY_FACTS_F
             conn.close()
 
 
+# 日本語: list room memory fact records の一覧取得処理を担当します。
+# English: Handle listing for list room memory fact records.
 def list_room_memory_fact_records(
     chat_room_id: str,
     *,
@@ -93,6 +111,8 @@ def list_room_memory_fact_records(
 ) -> list[dict[str, Any]]:
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -124,6 +144,8 @@ def list_room_memory_fact_records(
             conn.close()
 
 
+# 日本語: remember facts from message に関する処理の入口です。
+# English: Entry point for logic related to remember facts from message.
 def remember_facts_from_message(
     chat_room_id: str,
     user_id: int,
@@ -132,9 +154,13 @@ def remember_facts_from_message(
     source_message_id: int | None = None,
 ) -> list[str]:
     facts = extract_memory_facts(message)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not facts:
         return []
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         conn = None
         cursor = None
@@ -203,9 +229,13 @@ def remember_facts_from_message(
     return facts
 
 
+# 日本語: get room summary の取得処理を担当します。
+# English: Handle fetching for get room summary.
 def get_room_summary(chat_room_id: str) -> dict[str, Any] | None:
     conn = None
     cursor = None
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -232,9 +262,13 @@ def get_room_summary(chat_room_id: str) -> dict[str, Any] | None:
             conn.close()
 
 
+# 日本語: rebuild room summary に関する処理の入口です。
+# English: Entry point for logic related to rebuild room summary.
 def rebuild_room_summary(chat_room_id: str, messages: list[dict[str, str]]) -> str:
     summary_text, archived_count = build_room_summary(messages)
 
+    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+    # English: Process each target item in order and accumulate the needed result.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         conn = None
         cursor = None

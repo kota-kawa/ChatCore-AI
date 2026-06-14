@@ -7,6 +7,8 @@ from typing import Any, Callable, TypeVar
 T = TypeVar("T")
 
 
+# 日本語: run blocking の実行処理を非同期で担当します。
+# English: Handle running for run blocking asynchronously.
 async def run_blocking(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # 同期I/O関数をスレッドプールへ逃がし、イベントループのブロックを防ぐ
     # Offload blocking sync call to threadpool to keep the event loop responsive.

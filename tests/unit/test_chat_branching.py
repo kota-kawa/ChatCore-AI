@@ -4,9 +4,13 @@ from services.attached_files import PreparedAttachedFile
 from services.repositories.chat_repository import ChatRepository
 
 
+# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to FakeCursor.
 class FakeCursor:
     """Minimal in-memory emulation of the SQL the branching methods issue."""
 
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
         self._result_one = None
@@ -14,6 +18,8 @@ class FakeCursor:
         self.rowcount = 0
         self.closed = False
 
+    # 日本語: execute の実行処理を担当します。
+    # English: Handle executing for execute.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         params = params or ()
@@ -21,6 +27,8 @@ class FakeCursor:
         self._result_all = []
         self.rowcount = 0
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if normalized.startswith("INSERT INTO chat_history"):
             (
                 chat_room_id,
@@ -50,6 +58,8 @@ class FakeCursor:
             self._result_one = (new_id,)
             return
 
+        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+        # English: Switch the flow according to the current condition.
         if normalized.startswith("UPDATE chat_rooms SET active_root_id"):
             active_root_id, room_id = params
             self.store["rooms"].setdefault(room_id, {})["active_root_id"] = active_root_id
@@ -109,37 +119,61 @@ class FakeCursor:
 
         raise AssertionError(f"Unexpected query: {normalized}")
 
+    # 日本語: fetchone に関する処理の入口です。
+    # English: Entry point for logic related to fetchone.
     def fetchone(self):
         return self._result_one
 
+    # 日本語: fetchall に関する処理の入口です。
+    # English: Entry point for logic related to fetchall.
     def fetchall(self):
         return self._result_all
 
+    # 日本語: close に関する処理の入口です。
+    # English: Entry point for logic related to close.
     def close(self):
         self.closed = True
 
 
+# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to FakeConnection.
 class FakeConnection:
+    # 日本語: インスタンス生成時に必要な初期状態を設定します。
+    # English: Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
 
+    # 日本語: コンテキスト開始時に必要な準備を行います。
+    # English: Prepare the object when entering the context.
     def __enter__(self):
         return self
 
+    # 日本語: コンテキスト終了時の後片付けを行います。
+    # English: Clean up when leaving the context.
     def __exit__(self, *exc):
         return False
 
+    # 日本語: cursor に関する処理の入口です。
+    # English: Entry point for logic related to cursor.
     def cursor(self):
         return FakeCursor(self.store)
 
+    # 日本語: commit に関する処理の入口です。
+    # English: Entry point for logic related to commit.
     def commit(self):
         pass
 
+    # 日本語: rollback に関する処理の入口です。
+    # English: Entry point for logic related to rollback.
     def rollback(self):
         pass
 
 
+# 日本語: ChatBranchingTestCase に関するデータや振る舞いをまとめます。
+# English: Group data and behavior related to ChatBranchingTestCase.
 class ChatBranchingTestCase(unittest.TestCase):
+    # 日本語: setUp に関する処理の入口です。
+    # English: Entry point for logic related to setUp.
     def setUp(self):
         self.store = {
             "seq": 1,
@@ -153,22 +187,32 @@ class ChatBranchingTestCase(unittest.TestCase):
             sleep=lambda s: None,
         )
 
+    # 日本語: save の保存処理を担当します。
+    # English: Handle saving for save.
     def _save(self, message, sender, parent_id=None):
         return self.repo.save_message("room-1", message, sender, None, parent_id)
 
+    # 日本語: texts に関する処理の入口です。
+    # English: Entry point for logic related to texts.
     def _texts(self, path):
         return [(node["message"], node["sender"]) for node in path]
 
+    # 日本語: test linear conversation has single versions のテスト検証を担当します。
+    # English: Handle verifying test behavior for test linear conversation has single versions.
     def test_linear_conversation_has_single_versions(self):
         u1 = self._save("hi", "user")
         self._save("hello", "assistant", u1)
 
         path = self.repo.get_active_path("room-1")
         self.assertEqual(self._texts(path), [("hi", "user"), ("hello", "assistant")])
+        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
+        # English: Process each target item in order and accumulate the needed result.
         for node in path:
             self.assertEqual(node["version_count"], 1)
             self.assertEqual(node["version_index"], 1)
 
+    # 日本語: test conditional room rename preserves manual title のテスト検証を担当します。
+    # English: Handle verifying test behavior for test conditional room rename preserves manual title.
     def test_conditional_room_rename_preserves_manual_title(self):
         updated = self.repo.rename_room_if_current_title_in(
             "room-1",
@@ -186,6 +230,8 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertFalse(updated_again)
         self.assertEqual(self.store["rooms"]["room-1"]["title"], "AIタイトル")
 
+    # 日本語: test regenerate creates switchable assistant versions のテスト検証を担当します。
+    # English: Handle verifying test behavior for test regenerate creates switchable assistant versions.
     def test_regenerate_creates_switchable_assistant_versions(self):
         u1 = self._save("hi", "user")
         a1 = self._save("answer one", "assistant", u1)
@@ -205,6 +251,8 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertEqual(self._texts(switched), [("hi", "user"), ("answer one", "assistant")])
         self.assertEqual(switched[-1]["version_index"], 1)
 
+    # 日本語: test edit user message forks branch and preserves original のテスト検証を担当します。
+    # English: Handle verifying test behavior for test edit user message forks branch and preserves original.
     def test_edit_user_message_forks_branch_and_preserves_original(self):
         u1 = self._save("first question", "user")
         self._save("first answer", "assistant", u1)
@@ -229,6 +277,8 @@ class ChatBranchingTestCase(unittest.TestCase):
             [("first question", "user"), ("first answer", "assistant")],
         )
 
+    # 日本語: test active leaf tracks branch tip のテスト検証を担当します。
+    # English: Handle verifying test behavior for test active leaf tracks branch tip.
     def test_active_leaf_tracks_branch_tip(self):
         u1 = self._save("hi", "user")
         a1 = self._save("answer one", "assistant", u1)
@@ -240,6 +290,8 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.repo.switch_branch("room-1", a1)
         self.assertEqual(self.repo.get_active_leaf_id("room-1"), a1)
 
+    # 日本語: test llm context follows active branch のテスト検証を担当します。
+    # English: Handle verifying test behavior for test llm context follows active branch.
     def test_llm_context_follows_active_branch(self):
         u1 = self._save("hi", "user")
         self._save("answer one", "assistant", u1)
@@ -254,6 +306,8 @@ class ChatBranchingTestCase(unittest.TestCase):
             ],
         )
 
+    # 日本語: test attachment contents are internal to explicit active path load のテスト検証を担当します。
+    # English: Handle verifying test behavior for test attachment contents are internal to explicit active path load.
     def test_attachment_contents_are_internal_to_explicit_active_path_load(self):
         self.repo.save_message(
             "room-1",

@@ -17,20 +17,30 @@ _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
+# 日本語: plain text に関する処理の入口です。
+# English: Entry point for logic related to plain text.
 def _plain_text(value: str, *, limit: int = CHAT_ROOM_TITLE_LLM_INPUT_CHARS) -> str:
     normalized = _HTML_BR_PATTERN.sub("\n", value or "")
     normalized = _HTML_TAG_PATTERN.sub("", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip()
 
 
+# 日本語: sanitize title に関する処理の入口です。
+# English: Entry point for logic related to sanitize title.
 def _sanitize_title(raw_title: str) -> str:
     title = str(raw_title or "").strip()
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not title:
         return ""
 
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if title.startswith("{"):
         try:
             payload = json.loads(title)
@@ -47,12 +57,16 @@ def _sanitize_title(raw_title: str) -> str:
     return title[:CHAT_ROOM_TITLE_MAX_CHARS].rstrip()
 
 
+# 日本語: build initial title candidates の組み立て処理を担当します。
+# English: Handle building for build initial title candidates.
 def build_initial_title_candidates(
     user_message: str,
     *,
     task_launch_request: dict[str, str] | None = None,
 ) -> list[str]:
     candidates = [DEFAULT_CHAT_ROOM_TITLE, user_message[:255].strip()]
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if task_launch_request:
         setup_info = str(task_launch_request.get("setup_info") or "").strip()
         task_name = str(task_launch_request.get("task") or "").strip()
@@ -63,6 +77,8 @@ def build_initial_title_candidates(
     return [candidate for candidate in dict.fromkeys(candidates) if candidate]
 
 
+# 日本語: generate chat room title の生成処理を担当します。
+# English: Handle generating for generate chat room title.
 def generate_chat_room_title(
     user_message: str,
     assistant_response: str,
@@ -72,6 +88,8 @@ def generate_chat_room_title(
 ) -> str:
     user_text = _plain_text(user_message)
     assistant_text = _plain_text(assistant_response)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not user_text:
         return ""
 
@@ -99,6 +117,8 @@ def generate_chat_room_title(
         },
     ]
 
+    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
+    # English: Run potentially failing work in a form that can be caught.
     try:
         raw_title = llm_response_getter(messages, model)
     except LlmServiceError as exc:
@@ -111,6 +131,8 @@ def generate_chat_room_title(
     return _sanitize_title(raw_title)
 
 
+# 日本語: maybe auto title chat room に関する処理の入口です。
+# English: Entry point for logic related to maybe auto title chat room.
 def maybe_auto_title_chat_room(
     *,
     chat_room_id: str,
@@ -121,8 +143,12 @@ def maybe_auto_title_chat_room(
     conditional_rename: Callable[[str, str, list[str]], bool],
 ) -> str | None:
     title = generate_chat_room_title(user_message, assistant_response, model)
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if not title:
         return None
+    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
+    # English: Switch the flow according to the current condition.
     if title in allowed_current_titles:
         return None
 
