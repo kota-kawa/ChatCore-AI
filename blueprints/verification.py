@@ -58,6 +58,12 @@ AUTH_FAILURE_STATUS_CODE = 401
 # セッションから登録・認証用の一時データを削除する
 # Clear temporary registration and verification data from the session.
 def _clear_registration_verification_session(session: dict) -> None:
+    """
+    セッションから登録・認証用の一時データをクリアします。
+    Clear temporary registration and verification data from the session.
+    """
+    # 認証コード、仮ユーザーID、仮メールアドレス、発行日時、試行回数をセッションから削除
+    # Remove verification code, temporary user ID, temporary email, issued time, and attempt counts from the session.
     session.pop("verification_code", None)
     session.pop("temp_user_id", None)
     session.pop("temp_email", None)
@@ -71,6 +77,10 @@ def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    """
+    引数のサービスインスタンスが有効ならそれを返し、無効ならリクエストから解決します。
+    Return the provided AuthLimitService instance if it is valid; otherwise, resolve it from the request.
+    """
     # サービスが渡されていればそれを返し、無ければリクエストから取得する
     # If the service instance is provided, return it; otherwise, resolve it from the request.
     if isinstance(service, AuthLimitService):
@@ -84,11 +94,16 @@ def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
+    """
+    引数のサービスインスタンスが有効ならそれを返し、無効ならリクエストから解決します。
+    Return the provided LlmDailyLimitService instance if it is valid; otherwise, resolve it from the request.
+    """
     # サービスが渡されていればそれを返し、無ければリクエストから取得する
     # If the service instance is provided, return it; otherwise, resolve it from the request.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
+
 
 # ユーザー登録用の認証コードを生成し、メールで送信するエンドポイント
 # Endpoint to generate a registration verification code and send it via email.
@@ -99,15 +114,19 @@ async def api_send_verification_email(
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
 ):
     """
+    登録確認メールを生成して送信するAPIエンドポイント。
+    API endpoint to generate and send a registration verification email.
+
     register.html から「確認メール送信」ボタン押下で呼ばれる
     - メールアドレスをDBに登録 (is_verified=False)
     - 6桁のコードを生成し、メールプロバイダ経由で送信
     - コードは session["verification_code"] に一時的に保存 (本番ではDBでもOK)
     - session["temp_user_id"] に仮保存
-    Called by "Send verification email" on register page.
-    - Ensure user exists with is_verified=False
-    - Generate six-digit code and send through the configured email provider
-    - Temporarily store code and user id in session
+
+    Called when the "Send verification email" button is clicked on register.html.
+    - Create/ensure a user exists with is_verified=False
+    - Generate a 6-digit verification code and send it via email provider
+    - Temporarily store the code and temporary user ID in session
     """
     # リクエストボディをJSONとして取得。不正な場合はエラーレスポンスを返却
     # Retrieve the request body as JSON. Return an error response if invalid.
@@ -185,12 +204,16 @@ async def api_send_verification_email(
     request.session["verification_code_issued_at"] = int(time.time())
     request.session["verification_code_attempts"] = 0
 
+    # メールの件名と本文を定義
+    # Define the subject and body text of the email.
     subject = "AIチャットサービス: 認証コード"
     body_text = f"以下の認証コードを登録画面に入力してください。\n\n認証コード: {code}"
     try:
         # メール送信を実行
         # Attempt to send the email with verification code.
         await run_blocking(send_email, to_address=email, subject=subject, body_text=body_text)
+        # 成功レスポンスを返却
+        # Return a success response.
         return jsonify({"status": "success"})
     except Exception:
         # 送信失敗時はログを記録して500エラーを返却
@@ -201,6 +224,7 @@ async def api_send_verification_email(
             status="fail",
         )
 
+
 # ユーザーから送信された認証コードを検証し、成功すればユーザーを有効化してログインさせるエンドポイント
 # Endpoint to verify the submitted registration code, activate the user, and establish a session.
 @verification_bp.post("/api/verify_registration_code", name="verification.api_verify_registration_code")
@@ -209,11 +233,15 @@ async def api_verify_registration_code(
     auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
 ):
     """
+    ユーザーが入力した登録用認証コードを検証するAPIエンドポイント。
+    API endpoint to verify the registration verification code submitted by the user.
+
     register.html の「認証する」ボタンで呼ばれる。
     ・セッション保存の認証コードと照合
     ・一致すればユーザーを is_verified=True にしログイン状態へ
     ・このタイミングで初期タスクをユーザー専用に複製
-    Called by "Verify" action on register page.
+
+    Called by the "Verify" action on register page.
     - Compare submitted code with session code
     - Mark user as verified and log them in
     - Copy default tasks for the verified user
@@ -225,7 +253,7 @@ async def api_verify_registration_code(
         return error_response
 
     # JSONデータを検証し、AuthCodeRequestモデルにマッピング
-    # Validate JSON data and map to AuthCodeRequest model.
+    # Validate JSON data and map to EmailRequest model.
     payload, validation_error = validate_payload_model(
         data,
         AuthCodeRequest,
@@ -235,6 +263,8 @@ async def api_verify_registration_code(
     if validation_error is not None:
         return validation_error
 
+    # リクエストされたコード、セッション情報、仮ユーザーIDを取得
+    # Retrieve the submitted code, session information, and temporary user ID.
     user_code = payload.authCode
     session = request.session
     session_code = session.get("verification_code")
@@ -248,6 +278,8 @@ async def api_verify_registration_code(
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
+    # 認証コードの発行時刻と試行回数を取得
+    # Retrieve code issuance timestamp and verification attempt count.
     issued_at = int(session.get("verification_code_issued_at") or 0)
     attempts = int(session.get("verification_code_attempts") or 0)
 
@@ -293,8 +325,12 @@ async def api_verify_registration_code(
     # Perform a constant-time comparison to securely match the user-provided code with the session code.
     submitted_code = str(user_code or "")
     if not constant_time_compare(submitted_code, str(session_code)):
+        # 不一致の場合は試行回数をインクリメント
+        # Increment the attempt count if the code does not match.
         attempts += 1
         session["verification_code_attempts"] = attempts
+        # 試行回数が上限に達した場合はセッションをクリアしてエラーを返す
+        # If attempt count reaches the maximum limit, clear the session and return an error.
         if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
             _clear_registration_verification_session(session)
             return jsonify(
@@ -310,6 +346,8 @@ async def api_verify_registration_code(
     # Success path starts here.
     user = await run_blocking(get_user_by_id, user_id)
     if not user:
+        # ユーザーが見つからない場合はセッション情報の一部をクリアしてエラーを返す
+        # If the user is not found, clear some session data and return an error.
         _clear_registration_verification_session(session)
         session.pop("user_id", None)
         session.pop("user_email", None)
@@ -334,6 +372,8 @@ async def api_verify_registration_code(
     # Clear temporary registration/verification session data.
     _clear_registration_verification_session(session)
 
+    # パスキー設定をオファーするフラグを付けて成功レスポンスを返却
+    # Return a success response, offering WebAuthn/passkey setup.
     return jsonify(
         {
             "status": "success",
