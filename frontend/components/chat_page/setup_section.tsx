@@ -24,6 +24,8 @@ import {
   useHomePageUiContext,
 } from "../../contexts/chat_page/home_page_context";
 
+// ドラッグ開始と判定するための最小移動距離（ピクセル）
+// Minimum pointer movement in pixels before a drag gesture is recognized
 const POINTER_DRAG_START_THRESHOLD_PX = 8;
 
 type TaskCardProps = {
@@ -46,6 +48,8 @@ type TaskCardProps = {
   onShowDetail: (task: NormalizedTask) => void;
 };
 
+// 未保存チャットモードを示すアイコン（点線の吹き出し）
+// Icon indicating temporary (unsaved) chat mode, rendered as a dashed speech bubble
 function TemporaryChatIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -61,6 +65,8 @@ function TemporaryChatIcon() {
   );
 }
 
+// 未保存チャットモードが有効であることを示すチェックマークアイコン
+// Checkmark icon shown when temporary chat mode is currently active
 function TemporaryChatCheckIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -75,6 +81,8 @@ function TemporaryChatCheckIcon() {
   );
 }
 
+// タスク一覧の各カードを描画するコンポーネント
+// Renders a single task card with drag, edit, delete, and detail interactions
 const TaskCard = memo(function TaskCard({
   task,
   index,
@@ -108,12 +116,14 @@ const TaskCard = memo(function TaskCard({
         data-task={task.name}
         data-is_default={task.is_default ? "true" : "false"}
         onClick={() => {
+          {/* 編集モード中はクリックによるタスク起動を無効化 / Prevent launch when in edit/reorder mode */}
           if (isEditing) return;
           void onLaunch(task);
         }}
       >
         {isEditing && (
           <>
+            {/* 編集モード時のみ削除・編集ボタンを表示 / Delete and edit actions visible only during edit mode */}
             <div className="task-card-action-container task-card-action-container--delete">
               <button
                 type="button"
@@ -172,6 +182,8 @@ const TaskCard = memo(function TaskCard({
 });
 TaskCard.displayName = "TaskCard";
 
+// セットアップ画面全体を管理するメインコンポーネント
+// Main component that manages the setup screen: message input, model selection, and task list
 function SetupSectionComponent() {
   const {
     pageViewState,
@@ -221,8 +233,14 @@ function SetupSectionComponent() {
     attachedFiles,
     setAttachedFiles,
   } = useHomePageSetupChatContext();
+
+  // 文字数制限チェックと送信可否の判定
+  // Determine if the user's message is within limits and ready to send
   const isSetupInfoWithinLimit = setupInfo.length <= MAX_SETUP_INFO_LENGTH;
   const canSendSetupMessage = setupInfo.trim().length > 0 && isSetupInfoWithinLimit && !isChatLaunching;
+
+  // 現在選択中のモデルのインデックスを特定（見つからない場合は先頭）
+  // Resolve the index of the currently selected model, defaulting to the first option
   const selectedModelIndex = Math.max(
     0,
     MODEL_OPTIONS.findIndex((option) => option.value === selectedModel),
@@ -231,6 +249,8 @@ function SetupSectionComponent() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const setupInfoInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // ファイル添付エラーをトースト通知で表示するコールバック
+  // Show attachment errors via toast notifications without importing the module at startup
   const notifyAttachmentError = useCallback((message: string) => {
     import("../../scripts/core/toast").then(({ showToast }) => {
       showToast(message, { variant: "error" });
@@ -249,6 +269,8 @@ function SetupSectionComponent() {
     notifyAttachmentError,
   });
 
+  // ファイル選択後にリストへ追加し、inputの値をリセットして同じファイルの再選択を可能にする
+  // Append selected files and reset the input value so the same file can be picked again
   const handleFileInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
@@ -261,6 +283,8 @@ function SetupSectionComponent() {
     [attachSelectedFiles],
   );
 
+  // 指定されたIDのファイルを添付リストから削除する
+  // Remove a specific attached file from the list by its unique ID
   const handleRemoveAttachedFile = useCallback(
     (fileId: string) => {
       setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
@@ -272,6 +296,9 @@ function SetupSectionComponent() {
   const taskWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const modelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modelOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // タスクオブジェクトとDOMキーの対応を管理（Reactの再レンダリング間でキーを安定させる）
+  // Map task objects to stable DOM keys so drag handles survive React re-renders
   const taskObjectKeyMapRef = useRef<WeakMap<object, string>>(new WeakMap());
   const taskObjectSequenceRef = useRef(0);
 
@@ -290,6 +317,7 @@ function SetupSectionComponent() {
   const justDroppedDomKeyRef = useRef<string | null>(null);
   const isDropCompletingRef = useRef(false);
 
+  // ステートが変わるたびに最新のタスクリストをrefに同期（イベントリスナー内のクロージャ陳腐化を防ぐ）
   // Keep a live ref to tasks to avoid stale closures in callbacks
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
@@ -303,10 +331,14 @@ function SetupSectionComponent() {
     draggingTaskIndexRef.current = draggingTaskIndex;
   }, [draggingTaskIndex]);
 
+  // 選択中モデルが変わったらキーボードフォーカス用のインデックスも更新する
+  // Keep the keyboard-focused model option in sync when the selected model changes externally
   useEffect(() => {
     setActiveModelOptionIndex(selectedModelIndex);
   }, [selectedModelIndex]);
 
+  // モデルメニューが開いたとき、現在アクティブな選択肢に自動フォーカスを当てる
+  // Auto-focus the active model option when the dropdown opens for keyboard accessibility
   useEffect(() => {
     if (!modelMenuOpen) return;
     window.requestAnimationFrame(() => {
@@ -314,8 +346,13 @@ function SetupSectionComponent() {
     });
   }, [activeModelOptionIndex, modelMenuOpen]);
 
+  // 未保存チャットモードが切り替わるたびにフィードバックテキストを一時表示する
+  // Briefly show save-mode feedback text whenever the temporary mode toggle changes
   useEffect(() => {
     if (!storedSetupStateLoaded) return;
+
+    // 初回ロード時はフィードバックを表示しない
+    // Skip the first render so the toast doesn't flash on initial page load
     if (!hasSeenInitialTemporaryModeRef.current) {
       hasSeenInitialTemporaryModeRef.current = true;
       return;
@@ -340,6 +377,8 @@ function SetupSectionComponent() {
     };
   }, [storedSetupStateLoaded, temporaryModeEnabled]);
 
+  // タスクオブジェクトに対して安定したDOMキーを割り当てる（オブジェクト参照が変わっても追跡可能）
+  // Assign a stable DOM key to each task object so drag state survives list mutations
   const getTaskDomKey = useCallback((taskObject: object) => {
     const existing = taskObjectKeyMapRef.current.get(taskObject);
     if (existing) return existing;
@@ -348,6 +387,8 @@ function SetupSectionComponent() {
     return nextKey;
   }, []);
 
+  // タスクカードのDOMノードをMapに登録・解除して、ドラッグ時の位置計算に使えるようにする
+  // Register or unregister task wrapper DOM nodes so their rects are available during drag
   const setTaskWrapperRef = useCallback((taskDomKey: string, node: HTMLDivElement | null) => {
     if (node) {
       taskWrapperRefs.current.set(taskDomKey, node);
@@ -371,7 +412,8 @@ function SetupSectionComponent() {
       if (!wrapper) return;
       if (originalIndex === dragIndex) return; // dragged card handled separately
 
-      // Determine which slot this item shifts to
+      // ドロップ先に応じて各カードがずれるスロットを計算する
+      // Determine which slot this item shifts to based on drag and drop positions
       let shiftedIndex = originalIndex;
       if (dropTarget > dragIndex && originalIndex > dragIndex && originalIndex <= dropTarget) {
         shiftedIndex = originalIndex - 1; // shift back
@@ -398,6 +440,7 @@ function SetupSectionComponent() {
     });
   }, [getTaskDomKey]);
 
+  // ドラッグ中のカードの視覚的中心に最も近いスロットをドロップ先として決定する
   // Find the slot closest to the dragged card's visual center and update transforms
   const updateDropTarget = useCallback(
     (draggedCenterX: number, draggedCenterY: number) => {
@@ -410,6 +453,8 @@ function SetupSectionComponent() {
       let bestIndex = dropTargetIndexRef.current ?? dragIndex;
       let bestDist = Infinity;
 
+      // 各タスクのスロット中心との距離を比較して最近傍を見つける
+      // Compare distances to each slot's center to find the nearest drop target
       currentTasks.forEach((task, i) => {
         const domKey = getTaskDomKey(task);
         const rect = startRects.get(domKey);
@@ -433,6 +478,8 @@ function SetupSectionComponent() {
     [getTaskDomKey, applyDragTransforms],
   );
 
+  // ポインタードラッグを終了し、アニメーション状態をリセットしてReactに結果を通知する
+  // End an in-progress pointer drag, clean up all drag state, and commit the reorder to React
   const finishPointerDrag = useCallback(
     (pointerId?: number) => {
       const activePointerId = activePointerIdRef.current;
@@ -442,6 +489,8 @@ function SetupSectionComponent() {
 
       if (typeof pointerId === "number" && activePointerId !== pointerId) return;
 
+      // ポインターキャプチャを安全に解放する（既に解放済みの場合は無視）
+      // Safely release pointer capture; ignore if it was already released
       if (activePointerId !== null && draggingTaskDomKey) {
         const draggingTaskWrapper = taskWrapperRefs.current.get(draggingTaskDomKey);
         if (draggingTaskWrapper?.hasPointerCapture(activePointerId)) {
@@ -463,6 +512,8 @@ function SetupSectionComponent() {
         isDropCompletingRef.current = true;
       }
 
+      // すべてのドラッグ状態をリセットする
+      // Reset all drag tracking state to its initial values
       activePointerIdRef.current = null;
       dragStartPointRef.current = null;
       dragPointerOffsetRef.current = null;
@@ -488,6 +539,8 @@ function SetupSectionComponent() {
     [handleTaskDragEnd],
   );
 
+  // キーボードでモデル選択肢にフォーカスを移動するヘルパー
+  // Move keyboard focus to a model option, clamped within valid bounds
   const focusModelOption = useCallback((index: number) => {
     const lastIndex = MODEL_OPTIONS.length - 1;
     const nextIndex = Math.min(Math.max(index, 0), lastIndex);
@@ -497,6 +550,8 @@ function SetupSectionComponent() {
     });
   }, []);
 
+  // モデルを選択してドロップダウンを閉じ、トリガーボタンにフォーカスを戻す
+  // Commit a model selection, close the dropdown, and return focus to the trigger
   const selectModelOption = useCallback(
     (index: number) => {
       const option = MODEL_OPTIONS[index];
@@ -508,6 +563,8 @@ function SetupSectionComponent() {
     [setModelMenuOpen, setSelectedModel],
   );
 
+  // 指定インデックスにフォーカスを当てた状態でモデルメニューを開く
+  // Open the model dropdown pre-focused on a specific option index
   const openModelMenuAt = useCallback(
     (index: number) => {
       const lastIndex = MODEL_OPTIONS.length - 1;
@@ -521,6 +578,8 @@ function SetupSectionComponent() {
     [setModelMenuOpen],
   );
 
+  // Enterキーで送信、IME変換中および Shift+Enterは無視する
+  // Submit on Enter but skip during IME composition or when Shift is held (newline intent)
   const handleSetupInfoKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
       if (event.nativeEvent.isComposing || event.key === "Process") return;
@@ -534,6 +593,8 @@ function SetupSectionComponent() {
     [canSendSetupMessage, finishPointerDrag, handleSetupSendMessage],
   );
 
+  // モデルトリガーボタンでの矢印キー操作をドロップダウンナビゲーションにマップする
+  // Map arrow/enter/space keys on the trigger button to open or navigate the dropdown
   const handleModelTriggerKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
       if (event.key === "ArrowDown") {
@@ -554,6 +615,8 @@ function SetupSectionComponent() {
     [activeModelOptionIndex, modelMenuOpen, openModelMenuAt, selectedModelIndex],
   );
 
+  // WAI-ARIAのlistboxパターンに準拠したモデル選択肢のキーボードナビゲーション
+  // Implement WAI-ARIA listbox keyboard navigation for the custom model dropdown
   const handleModelOptionKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
       if (event.key === "ArrowDown") {
@@ -590,11 +653,15 @@ function SetupSectionComponent() {
     [focusModelOption, selectModelOption, setModelMenuOpen],
   );
 
+  // タスクカードへのPointerDownを処理し、ドラッグ操作の前準備を行う
+  // Handle pointer-down on a task card to set up all state needed for a potential drag
   const handleTaskPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>, index: number, taskDomKey: string) => {
       if (!isTaskOrderEditing) return;
       if (event.pointerType !== "touch" && event.button !== 0) return;
 
+      // インタラクティブ要素へのクリックはドラッグとして扱わない
+      // Don't start a drag when the pointer lands on an interactive child element
       const target = event.target as Element | null;
       if (target?.closest("button, a, input, textarea, select, label")) {
         return;
@@ -630,6 +697,8 @@ function SetupSectionComponent() {
         }
       });
 
+      // ドラッグ追跡に必要な全状態を初期化する
+      // Initialize all drag-tracking state from the pointer-down event
       activePointerIdRef.current = event.pointerId;
       dragStartPointRef.current = { x: event.clientX, y: event.clientY };
       dragPointerOffsetRef.current = {
@@ -652,6 +721,8 @@ function SetupSectionComponent() {
     [finishPointerDrag, isTaskOrderEditing],
   );
 
+  // リサイズ・スクロール後にドラッグ中のカードの位置を再計算してUIを正しく更新する
+  // Recapture element rects after resize/scroll so the dragged card and transforms stay accurate
   const refreshDragGeometry = useCallback(() => {
     if (!isPointerDragActiveRef.current) return;
 
@@ -692,6 +763,8 @@ function SetupSectionComponent() {
     applyDragTransforms();
   }, [applyDragTransforms, updateDropTarget]);
 
+  // 編集モードがアクティブな間、ウィンドウレベルのポインターイベントを監視してドラッグを制御する
+  // Attach and clean up window-level pointer event listeners while task reorder editing is active
   useEffect(() => {
     if (!isTaskOrderEditing) {
       finishPointerDrag();
@@ -711,6 +784,9 @@ function SetupSectionComponent() {
       lastPointerPointRef.current = pointerPoint;
       const dragDistance = Math.hypot(pointerPoint.x - dragStartPoint.x, pointerPoint.y - dragStartPoint.y);
       const dragIndex = draggingTaskIndexRef.current;
+
+      // しきい値を超えた移動が検出されて初めてドラッグ開始と判断する
+      // Only activate drag after the pointer moves beyond the threshold to avoid accidental drags
       if (!isPointerDragActiveRef.current) {
         if (dragDistance < POINTER_DRAG_START_THRESHOLD_PX || dragIndex === null) return;
         isPointerDragActiveRef.current = true;
@@ -738,6 +814,8 @@ function SetupSectionComponent() {
       finishPointerDrag(event.pointerId);
     };
 
+    // リサイズ・スクロールイベントをrAFで間引いてパフォーマンスを保護する
+    // Debounce resize/scroll events via requestAnimationFrame to avoid layout thrashing
     let geometryRafId: number | null = null;
     const scheduleRefreshDragGeometry = () => {
       if (geometryRafId !== null) {
@@ -772,12 +850,16 @@ function SetupSectionComponent() {
     };
   }, [finishPointerDrag, handleTaskDragStart, isTaskOrderEditing, refreshDragGeometry, updateDropTarget]);
 
+  // ページ遷移やモーダル表示でセットアップ画面が非表示になったらドラッグを終了する
+  // Abort any ongoing drag when the setup view is hidden or a modal interrupts interaction
   useEffect(() => {
     if (pageViewState !== "setup" || isNewPromptModalOpen) {
       finishPointerDrag();
     }
   }, [finishPointerDrag, isNewPromptModalOpen, pageViewState]);
 
+  // コンポーネントのアンマウント時にドラッグを確実に終了する（メモリリーク防止）
+  // Ensure drag is fully cleaned up when the component unmounts to prevent memory leaks
   useEffect(() => {
     return () => {
       finishPointerDrag();
@@ -807,7 +889,8 @@ function SetupSectionComponent() {
         wrapper.style.transform = "";
       });
 
-      // Animate dropped card snapping to its new natural position
+      // ドロップしたカードをイージングアニメーションで自然な位置にスナップさせる
+      // Animate dropped card snapping to its new natural position with an ease-out curve
       if (droppedDomKey) {
         const droppedWrapper = taskWrapperRefs.current.get(droppedDomKey);
         if (droppedWrapper) {
@@ -838,6 +921,7 @@ function SetupSectionComponent() {
 
         <div className="form-group setup-info-group">
           <label className="form-label" htmlFor="setup-info">やりたいことを入力（任意）</label>
+          {/* ファイルドロップゾーンを兼ねたメッセージ入力エリア / Message input area that also serves as a file drop zone */}
           <div
             className={`setup-info-field-shell chat-attachment-dropzone ${
               isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
@@ -851,6 +935,7 @@ function SetupSectionComponent() {
               <span className="chat-attachment-drop-overlay__text">ファイルをドロップして添付</span>
               <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
             </div>
+            {/* 未保存チャットモードのトグルとフィードバック表示 / Toggle for temporary chat mode with animated feedback label */}
             <div className="chat-save-mode-control">
               <button
                 id="temporary-chat-mode-btn"
@@ -887,6 +972,7 @@ function SetupSectionComponent() {
               </span>
             </div>
 
+            {/* 添付ファイルのチップ一覧（ファイル名・サイズ・削除ボタン）/ Chips showing attached files with name, size, and remove button */}
             {attachedFiles.length > 0 && (
               <div className="setup-attached-files">
                 {attachedFiles.map((file) => (
@@ -896,6 +982,7 @@ function SetupSectionComponent() {
                       aria-hidden="true"
                     ></i>
                     <span className="chat-attached-file-chip__name" title={file.name}>{file.name}</span>
+                    {/* バイト・KB・MBの単位を自動で切り替えて表示 / Dynamically format file size in B, KB, or MB */}
                     <span className="chat-attached-file-chip__size">
                       {file.size < 1024
                         ? `${file.size}B`
@@ -917,6 +1004,7 @@ function SetupSectionComponent() {
             )}
 
             <div className="setup-info-input-area">
+              {/* 非表示のfile inputをボタン経由でプログラム的に開く / Hidden file input triggered programmatically via the attach button */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -971,6 +1059,7 @@ function SetupSectionComponent() {
               </button>
             </div>
           </div>
+          {/* 文字数カウンター：制限超過時はalertロールで警告を通知 / Character counter that switches to alert role when the limit is exceeded */}
           {setupInfo.length > 0 && (
             <div
               id="setup-info-counter"
@@ -987,6 +1076,7 @@ function SetupSectionComponent() {
         <div className="form-group">
           <label className="form-label" htmlFor="ai-model">AIモデル選択</label>
 
+          {/* ネイティブselectはモバイルでのフォールバックとして残す / Native select element kept as a fallback for mobile and accessibility */}
           <select
             id="ai-model"
             className="model-select-native"
@@ -1002,6 +1092,7 @@ function SetupSectionComponent() {
             ))}
           </select>
 
+          {/* カスタムドロップダウンはlistboxロールでWAI-ARIAに準拠 / Custom dropdown implements listbox role for full keyboard and screen reader support */}
           <div ref={modelSelectRef} className={`model-select ${modelMenuOpen ? "is-open" : ""}`.trim()}>
             <button
               ref={modelTriggerRef}
@@ -1054,6 +1145,7 @@ function SetupSectionComponent() {
         <div className="task-selection-header">
           <p id="task-selection-text">実行したいタスクを選択（クリックで即実行）</p>
 
+          {/* ログイン済みユーザーのみ並び替え編集と新規作成ボタンを表示 / Reorder and create buttons only available to authenticated users */}
           {loggedIn && (
             <>
               <button
@@ -1096,6 +1188,7 @@ function SetupSectionComponent() {
           id="task-selection"
           data-launching={launchingTaskName ? "true" : "false"}
         >
+          {/* 編集モード時は全タスク、通常時は上限件数だけ表示 / Show all tasks in edit mode, otherwise limit visible count */}
           {(isTaskOrderEditing ? tasks : tasks.slice(0, taskCollapseLimit)).map((task, index) => {
             const taskDomKey = getTaskDomKey(task);
             return (
@@ -1118,6 +1211,7 @@ function SetupSectionComponent() {
             );
           })}
 
+          {/* 上限を超えるタスクはアニメーション付きの折りたたみエリアに収める / Tasks beyond the collapse limit live in an animated expand/collapse container */}
           {showTaskToggleButton && !isTaskOrderEditing && tasks.length > taskCollapseLimit && (
             <div className={`task-overflow-container${tasksExpanded ? " is-open" : ""}`}>
               <div className="task-overflow-inner">
@@ -1147,6 +1241,7 @@ function SetupSectionComponent() {
             </div>
           )}
 
+          {/* 表示件数テキストを使ってタスク一覧の展開・折りたたみを切り替えるボタン / Toggle button that expands or collapses the overflow task list */}
           {showTaskToggleButton && (
             <button
               type="button"
@@ -1162,6 +1257,7 @@ function SetupSectionComponent() {
           )}
         </div>
 
+        {/* ログイン済みユーザーのみ過去チャット履歴へのアクセスボタンを表示 / Chat history button is only shown to logged-in users */}
         <div className="setup-access-chat">
           {loggedIn && (
             <button
@@ -1182,5 +1278,7 @@ function SetupSectionComponent() {
   );
 }
 
+// パフォーマンス最適化のためReact.memoでラップしてエクスポート
+// Wrap with React.memo to prevent unnecessary re-renders of the heavy setup UI
 export const SetupSection = memo(SetupSectionComponent);
 SetupSection.displayName = "SetupSection";
