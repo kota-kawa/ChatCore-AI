@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass
 
 
-# 日本語: AgentAction に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to AgentAction.
+# 日本語: エージェントアクションを定義するデータクラス
+# English: Dataclass defining an agent action
 @dataclass(frozen=True)
 class AgentAction:
     label: str
@@ -14,8 +14,8 @@ class AgentAction:
     description: str
 
 
-# 日本語: AgentPage に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to AgentPage.
+# 日本語: エージェントページ情報を定義するデータクラス
+# English: Dataclass defining agent page information
 @dataclass(frozen=True)
 class AgentPage:
     label: str
@@ -26,8 +26,8 @@ class AgentPage:
     actions: tuple[AgentAction, ...]
 
 
-# 日本語: AgentTool に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to AgentTool.
+# 日本語: エージェントが実行可能なツール/コマンドを表すデータクラス
+# English: Dataclass representing tools/commands executable by the agent
 @dataclass(frozen=True)
 class AgentTool:
     command: str
@@ -37,6 +37,8 @@ class AgentTool:
     risk: str = "low"
 
 
+# 日本語: 全ページで共通で利用可能なグローバルアクションの定義
+# English: Definition of global actions available across all pages
 GLOBAL_ACTIONS: tuple[AgentAction, ...] = (
     AgentAction("チャットを開く", "navigate", "/", "メインのAIチャット画面へ移動する。"),
     AgentAction("プロンプト共有を開く", "navigate", "/prompt_share", "公開プロンプトの検索・投稿画面へ移動する。"),
@@ -45,6 +47,8 @@ GLOBAL_ACTIONS: tuple[AgentAction, ...] = (
     AgentAction("ログインを開く", "navigate", "/login", "ログイン・登録画面へ移動する。"),
 )
 
+# 日本語: エージェントが実行できるツールのリスト
+# English: List of tools that the agent can execute
 AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("navigation.openPage", "ChatCore内の指定ページへ移動する。", '{"path": "/settings"}', "URLパスが指定値へ移動する。"),
     AgentTool("chat.fillSetupMessage", "チャット開始欄にメッセージを入力する。", '{"text": "相談内容"}', "#setup-info の値が text になる。"),
@@ -61,10 +65,17 @@ AGENT_TOOLS: tuple[AgentTool, ...] = (
     AgentTool("memo.save", "メモを保存する。", "{}", "保存ボタンをクリックできる。", risk="medium"),
 )
 
+# 日本語: 実行可能なエージェントコマンドのセット
+# English: Set of allowed agent commands
 ALLOWED_AGENT_COMMANDS = frozenset(tool.command for tool in AGENT_TOOLS)
+
+# 日本語: エージェントコマンドのリスクレベルのマップ
+# English: Map of risk levels for agent commands
 AGENT_COMMAND_RISKS = {tool.command: tool.risk for tool in AGENT_TOOLS}
 
 
+# 日本語: アプリケーション内の全ページの定義リスト
+# English: Definition list of all pages in the application
 PAGES: tuple[AgentPage, ...] = (
     AgentPage(
         label="チャット",
@@ -169,26 +180,28 @@ PAGES: tuple[AgentPage, ...] = (
 )
 
 
-# 日本語: get page capability の取得処理を担当します。
-# English: Handle fetching for get page capability.
+# 日本語: 指定されたURLパスに一致するエージェントページ情報を取得する
+# English: Retrieve the agent page information that matches the specified URL path
 def get_page_capability(pathname: str) -> AgentPage | None:
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: 登録されたページ定義を走査して、正規表現パターンにマッチするか判定する
+    # English: Iterate through registered page definitions to check if they match the regular expression pattern
     for page in PAGES:
         if page.path_pattern.search(pathname or ""):
             return page
     return None
 
 
-# 日本語: build capability context の組み立て処理を担当します。
-# English: Handle building for build capability context.
+# 日本語: エージェント向けの機能カタログ・コンテキスト文字列を組み立てる
+# English: Construct the capability catalog context string for the agent
 def build_capability_context(pathname: str = "") -> str:
+    # 日本語: 現在のパスに対応するページ情報を取得する
+    # English: Get page information corresponding to the current path
     current = get_page_capability(pathname)
     lines = ["【ChatCore 機能カタログ】"]
     lines.append("全ページ共通: 左下のAIエージェントから、現在ページの説明、機能案内、画面操作の提案/実行ができます。")
     lines.append("主要ページ:")
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: 各ページの情報をテキスト化して追加する
+    # English: Textify and add information for each page
     for page in PAGES:
         marker = "（現在のページ）" if current == page else ""
         lines.append(f"- {page.label} {page.route}{marker}: {page.summary}")
@@ -196,18 +209,22 @@ def build_capability_context(pathname: str = "") -> str:
             lines.append(f"  - {feature}")
 
     lines.append("\n共通ナビゲーション:")
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: グローバルアクションの情報を追加する
+    # English: Add information for global actions
     for action in GLOBAL_ACTIONS:
         lines.append(f"- {action.label}: action={action.action}, target={action.target}, {action.description}")
 
     lines.append("\n型付きアクションAPI（CSSセレクタより優先して使う）:")
+    # 日本語: エージェントツールの情報を追加する
+    # English: Add information for agent tools
     for tool in AGENT_TOOLS:
         lines.append(
             f"- command={tool.command}; args={tool.args}; risk={tool.risk}; "
             f"{tool.description} 検証: {tool.verifies}"
         )
 
+    # 日本語: 現在のページで利用可能な特定アクションを追加する
+    # English: Add specific actions available on the current page
     if current:
         lines.append(f"\n現在ページで優先して使える操作: {current.label}")
         for action in current.actions:

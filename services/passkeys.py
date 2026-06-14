@@ -19,19 +19,19 @@ DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
-# 日本語: get passkey rp name の取得処理を担当します。
-# English: Handle fetching for get passkey rp name.
+# 日本語: パスキー(WebAuthn)のRP(Relying Party)名を取得します。
+# English: Get the Relying Party name for passkey authentication.
 def get_passkey_rp_name() -> str:
     configured_name = (os.getenv("WEBAUTHN_RP_NAME") or os.getenv("PASSKEY_RP_NAME") or "").strip()
     return configured_name or DEFAULT_PASSKEY_RP_NAME
 
 
-# 日本語: get passkey rp id の取得処理を担当します。
-# English: Handle fetching for get passkey rp id.
+# 日本語: パスキー(WebAuthn)のRP ID（ドメイン）を取得します。
+# English: Get the Relying Party ID (domain) for passkey authentication.
 def get_passkey_rp_id(request: Request) -> str:
     configured_rp_id = (os.getenv("WEBAUTHN_RP_ID") or os.getenv("PASSKEY_RP_ID") or "").strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if configured_rp_id:
         return configured_rp_id
 
@@ -40,8 +40,8 @@ def get_passkey_rp_id(request: Request) -> str:
         str(request.base_url),
         str(request.url),
     )
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for candidate in candidates:
         hostname = urlsplit(candidate).hostname
         if isinstance(hostname, str) and hostname:
@@ -50,12 +50,12 @@ def get_passkey_rp_id(request: Request) -> str:
     return "localhost"
 
 
-# 日本語: get passkey origins の取得処理を担当します。
-# English: Handle fetching for get passkey origins.
+# 日本語: WebAuthnで許容されるOrigin(オリジン)の一覧を環境変数またはリクエストから推測して返します。
+# English: Get the list of allowed origins for WebAuthn requests.
 def get_passkey_origins(request: Request) -> list[str]:
     configured_env = (os.getenv("PASSKEY_ORIGINS") or os.getenv("WEBAUTHN_ORIGINS") or "").strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if configured_env:
         explicit = [o.strip() for o in configured_env.split(",") if o.strip()]
         if explicit:
@@ -67,8 +67,8 @@ def get_passkey_origins(request: Request) -> list[str]:
         str(request.base_url),
         str(request.url),
     )
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for candidate in candidates:
         parts = urlsplit(candidate)
         if not parts.scheme or not parts.netloc:
@@ -79,49 +79,49 @@ def get_passkey_origins(request: Request) -> list[str]:
     return origins or ["http://localhost:3000"]
 
 
-# 日本語: clear passkey session の初期化処理を担当します。
-# English: Handle clearing for clear passkey session.
+# 日本語: セッションからパスキー登録・認証途中のチャレンジデータなどをクリアします。
+# English: Clear passkey registration and authentication ceremony states from the session.
 def clear_passkey_session(session: dict[str, Any]) -> None:
     session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
     session.pop(PASSKEY_AUTHENTICATION_SESSION_KEY, None)
 
 
-# 日本語: store passkey registration ceremony に関する処理の入口です。
-# English: Entry point for logic related to store passkey registration ceremony.
+# 日本語: 新規パスキー登録用のチャレンジ（Ceremony）をセッションに格納します。
+# English: Store the passkey registration challenge state in the session.
 def store_passkey_registration_ceremony(
     session: dict[str, Any], challenge: str
 ) -> dict[str, Any]:
     return _store_passkey_ceremony(session, PASSKEY_REGISTRATION_SESSION_KEY, challenge)
 
 
-# 日本語: store passkey authentication ceremony に関する処理の入口です。
-# English: Entry point for logic related to store passkey authentication ceremony.
+# 日本語: パスキーログイン用のチャレンジ（Ceremony）をセッションに格納します。
+# English: Store the passkey authentication challenge state in the session.
 def store_passkey_authentication_ceremony(
     session: dict[str, Any], challenge: str
 ) -> dict[str, Any]:
     return _store_passkey_ceremony(session, PASSKEY_AUTHENTICATION_SESSION_KEY, challenge)
 
 
-# 日本語: get passkey registration ceremony の取得処理を担当します。
-# English: Handle fetching for get passkey registration ceremony.
+# 日本語: セッションからパスキー登録用のチャレンジ情報を取得します。
+# English: Retrieve the passkey registration ceremony from the session.
 def get_passkey_registration_ceremony(session: dict[str, Any]) -> dict[str, Any] | None:
     return _load_passkey_ceremony(session.get(PASSKEY_REGISTRATION_SESSION_KEY))
 
 
-# 日本語: get passkey authentication ceremony の取得処理を担当します。
-# English: Handle fetching for get passkey authentication ceremony.
+# 日本語: セッションからパスキーログイン用のチャレンジ情報を取得します。
+# English: Retrieve the passkey authentication ceremony from the session.
 def get_passkey_authentication_ceremony(session: dict[str, Any]) -> dict[str, Any] | None:
     return _load_passkey_ceremony(session.get(PASSKEY_AUTHENTICATION_SESSION_KEY))
 
 
-# 日本語: passkey ceremony is expired に関する処理の入口です。
-# English: Entry point for logic related to passkey ceremony is expired.
+# 日本語: チャレンジの発行から一定時間(TTL)が経過し、期限切れになっているかを検証します。
+# English: Check whether the passkey challenge ceremony session has expired.
 def passkey_ceremony_is_expired(
     ceremony: dict[str, Any], *, now: int | None = None
 ) -> bool:
     issued_at = int(ceremony.get("issued_at") or 0)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if issued_at <= 0:
         return True
 
@@ -129,26 +129,26 @@ def passkey_ceremony_is_expired(
     return current_time - issued_at > PASSKEY_CHALLENGE_TTL_SECONDS
 
 
-# 日本語: get credential lookup id の取得処理を担当します。
-# English: Handle fetching for get credential lookup id.
+# 日本語: クレデンシャルオブジェクトから、データベース照合用のID文字列を抽出します。
+# English: Extract the raw credential ID for lookup from the client assertion.
 def get_credential_lookup_id(credential: dict[str, Any]) -> str | None:
     raw_id = credential.get("rawId")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if isinstance(raw_id, str) and raw_id:
         return raw_id
 
     credential_id = credential.get("id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if isinstance(credential_id, str) and credential_id:
         return credential_id
 
     return None
 
 
-# 日本語: store passkey ceremony に関する処理の入口です。
-# English: Entry point for logic related to store passkey ceremony.
+# 日本語: 新しいWebAuthnチャレンジオブジェクトをセッションに格納します。
+# English: Store a new WebAuthn challenge metadata in the session.
 def _store_passkey_ceremony(
     session: dict[str, Any], session_key: str, challenge: str
 ) -> dict[str, Any]:
@@ -162,11 +162,11 @@ def _store_passkey_ceremony(
     return ceremony
 
 
-# 日本語: load passkey ceremony の読み込み処理を担当します。
-# English: Handle loading for load passkey ceremony.
+# 日本語: セッションデータから、チャレンジ情報オブジェクトを検証した上で取得します。
+# English: Validate and load the ceremony dict from raw session payload.
 def _load_passkey_ceremony(raw_state: Any) -> dict[str, Any] | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not isinstance(raw_state, dict):
         return None
 
@@ -174,8 +174,8 @@ def _load_passkey_ceremony(raw_state: Any) -> dict[str, Any] | None:
     ceremony_id = raw_state.get("ceremony_id")
     issued_at = raw_state.get("issued_at")
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not isinstance(challenge, str) or not challenge:
         return None
     if not isinstance(ceremony_id, str) or not ceremony_id:
@@ -196,11 +196,11 @@ def _load_passkey_ceremony(raw_state: Any) -> dict[str, Any] | None:
     }
 
 
-# 日本語: list passkeys for user の一覧取得処理を担当します。
-# English: Handle listing for list passkeys for user.
+# 日本語: ユーザーが登録しているすべてのパスキー一覧を取得します。
+# English: Retrieve all registered passkeys for the specified user.
 def list_passkeys_for_user(user_id: int) -> list[dict[str, Any]]:
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
+    # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
+    # English: Secure and clean up the required resource using a context manager.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -227,11 +227,11 @@ def list_passkeys_for_user(user_id: int) -> list[dict[str, Any]]:
             cursor.close()
 
 
-# 日本語: get passkey by credential id の取得処理を担当します。
-# English: Handle fetching for get passkey by credential id.
+# 日本語: 指定されたクレデンシャルIDに合致するパスキー情報をデータベースから取得します。
+# English: Fetch passkey credential record from the database by credential ID.
 def get_passkey_by_credential_id(credential_id: str) -> dict[str, Any] | None:
-    # 日本語: 必要なリソースやコンテキストを限定して利用します。
-    # English: Use the required resource or context within this limited block.
+    # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
+    # English: Secure and clean up the required resource using a context manager.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
@@ -259,8 +259,8 @@ def get_passkey_by_credential_id(credential_id: str) -> dict[str, Any] | None:
             cursor.close()
 
 
-# 日本語: create passkey の作成処理を担当します。
-# English: Handle creating for create passkey.
+# 日本語: 新しく登録されたパスキー情報をデータベースに登録（永続化）します。
+# English: Insert a new passkey credential record into the database.
 def create_passkey(
     user_id: int,
     credential_id: str,
@@ -276,8 +276,8 @@ def create_passkey(
     normalized_aaguid = (aaguid or "").strip() or None
     normalized_device_type = (credential_device_type or "").strip() or None
 
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -335,8 +335,8 @@ def create_passkey(
     raise RuntimeError("Failed to create passkey after retry attempts.")
 
 
-# 日本語: update passkey usage の更新処理を担当します。
-# English: Handle updating for update passkey usage.
+# 日本語: パスキーログイン成功時に、署名カウント(sign_count)や最終使用時刻を更新します。
+# English: Update the sign counter and last used timestamp for the passkey.
 def update_passkey_usage(
     passkey_id: int,
     sign_count: int,
@@ -344,8 +344,8 @@ def update_passkey_usage(
     credential_backed_up: bool | None = None,
     credential_device_type: str | None = None,
 ) -> None:
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -383,11 +383,11 @@ def update_passkey_usage(
     raise RuntimeError("Failed to update passkey usage after retry attempts.")
 
 
-# 日本語: delete passkey の削除処理を担当します。
-# English: Handle deleting for delete passkey.
+# 日本語: 指定されたパスキーをデータベースから削除します。
+# English: Delete the specified passkey credential from the database.
 def delete_passkey(user_id: int, passkey_id: int) -> bool:
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         with get_db_connection() as conn:
             cursor = conn.cursor()

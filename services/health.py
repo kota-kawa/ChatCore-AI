@@ -6,25 +6,21 @@ from services.cache import get_redis_client, is_redis_configured
 from services.db import get_db_connection
 
 
-# サービスの生存（Liveness）状態を示すステータスを返す。基本的に常に "ok" を返す。
-# Return the liveness status of the service. Always returns "ok" as a baseline.
-# 日本語: get liveness status の取得処理を担当します。
-# English: Handle fetching for get liveness status.
+# 日本語: サービスの生存（Liveness）状態を示すステータスを返します。基本的に常に "ok" を返します。
+# English: Return the liveness status of the service. Always returns "ok" as a baseline.
 def get_liveness_status() -> dict[str, Any]:
     return {"status": "ok"}
 
 
-# データベースやRedisの接続状態を確認し、アプリがリクエストを受け入れ可能かを示す準備（Readiness）状態を返す。
-# Check database and Redis connections and return the readiness status of the application.
-# 日本語: get readiness status の取得処理を担当します。
-# English: Handle fetching for get readiness status.
+# 日本語: データベースやRedisの接続状態を確認し、アプリがリクエストを受け入れ可能かを示す準備（Readiness）状態を返します。
+# English: Check database and Redis connections and return the readiness status of the application.
 def get_readiness_status() -> tuple[dict[str, Any], int]:
     components: dict[str, dict[str, Any]] = {}
     overall_ok = True
     degraded = False
 
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: データベースへの接続と単純なクエリ実行(SELECT 1)を試行し、接続状態を確認します。
+    # English: Attempt database connection and a simple query execution (SELECT 1) to verify connection status.
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -42,8 +38,8 @@ def get_readiness_status() -> tuple[dict[str, Any], int]:
             "detail": exc.__class__.__name__,
         }
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: Redisが設定されている場合、Redisへの接続状況を確認します。
+    # English: If Redis is configured, verify the connection status to Redis.
     if is_redis_configured():
         redis_client = get_redis_client()
         if redis_client is None:

@@ -1,3 +1,5 @@
+# 管理者機能（管理画面・DBダッシュボード）のルーター定義と初期化
+# Router definition and initialization for the administrator dashboard and management features.
 from fastapi import APIRouter, Depends
 
 from services.csrf import require_csrf

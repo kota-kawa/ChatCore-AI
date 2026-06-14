@@ -5,8 +5,8 @@ from blueprints.chat.profile import _update_user_profile
 from tests.helpers.db_helpers import TransactionTrackingConnection
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# 日本語: テスト用の擬似Fake Cursorクラスです。
+# English: Mock Fake Cursor class for testing.
 class FakeCursor:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -19,19 +19,19 @@ class FakeCursor:
     # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.executed.append((query, params))
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if self.fail_on_execute:
             raise RuntimeError("db error")
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# 日本語: テスト用の擬似Fake Connectionクラスです。
+# English: Mock Fake Connection class for testing.
 class FakeConnection(TransactionTrackingConnection):
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -39,15 +39,15 @@ class FakeConnection(TransactionTrackingConnection):
         super().__init__(FakeCursor(fail_on_execute=fail_on_execute))
 
 
-# 日本語: ProfileSQLSafetyTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ProfileSQLSafetyTestCase.
+# 日本語: Profile S Q L Safetyの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Profile S Q L Safety.
 class ProfileSQLSafetyTestCase(unittest.TestCase):
-    # 日本語: test update user profile uses parameterized static sql のテスト検証を担当します。
-    # English: Handle verifying test behavior for test update user profile uses parameterized static sql.
+    # 日本語: 更新ユーザープロフィールusesパラメータ化された静的SQLことを検証します。
+    # English: Verify that update user profile uses parameterized static sql.
     def test_update_user_profile_uses_parameterized_static_sql(self):
         fake_connection = FakeConnection()
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.chat.profile.get_db_connection",
             return_value=fake_connection,
@@ -85,12 +85,12 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
         )
         self.assertNotIn("alice@example.com", query)
 
-    # 日本語: test update user profile passes avatar url as parameter のテスト検証を担当します。
-    # English: Handle verifying test behavior for test update user profile passes avatar url as parameter.
+    # 日本語: 更新ユーザープロフィール通過するアバターURLasパラメータことを検証します。
+    # English: Verify that update user profile passes avatar url as parameter.
     def test_update_user_profile_passes_avatar_url_as_parameter(self):
         fake_connection = FakeConnection()
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.chat.profile.get_db_connection",
             return_value=fake_connection,
@@ -118,12 +118,12 @@ class ProfileSQLSafetyTestCase(unittest.TestCase):
             ),
         )
 
-    # 日本語: test update user profile rolls back on failure のテスト検証を担当します。
-    # English: Handle verifying test behavior for test update user profile rolls back on failure.
+    # 日本語: 失敗における、更新ユーザープロフィールロールバックことを検証します。
+    # English: Verify that update user profile rolls back on failure.
     def test_update_user_profile_rolls_back_on_failure(self):
         fake_connection = FakeConnection(fail_on_execute=True)
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.chat.profile.get_db_connection",
             return_value=fake_connection,

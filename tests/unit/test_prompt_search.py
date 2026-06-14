@@ -4,29 +4,31 @@ from unittest.mock import patch
 from blueprints.prompt_share.prompt_search import _search_public_prompts
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# テスト用の疑似DBカーソルクラス。
+# Mock database cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self):
         self.executed = []
         self.closed = False
         self._fetchone_result = None
         self._fetchall_result = []
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、クエリ内容に応じたダミーの戻り値をセットします。
+    # Execute a query and set dummy return values based on the query contents.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed.append((normalized, params))
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+
+        # レコードカウント取得クエリ用のダミーカウント値
+        # Dummy count value for record count queries
         if "SELECT COUNT(*) AS total" in normalized:
             self._fetchone_result = {"total": 55}
             return
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+
+        # プロンプト取得クエリ用のダミープロンプト一覧
+        # Dummy prompt list for prompt retrieval queries
         if "FROM prompts" in normalized and "LIMIT %s OFFSET %s" in normalized:
             self._fetchall_result = [
                 {
@@ -48,57 +50,57 @@ class FakeCursor:
                 }
             ]
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # クエリの実行結果から1レコード分を取得します。
+    # Fetch a single record result.
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
         return result
 
-    # 日本語: fetchall に関する処理の入口です。
-    # English: Entry point for logic related to fetchall.
+    # クエリの実行結果から全レコードを取得します。
+    # Fetch all record results.
     def fetchall(self):
         result = self._fetchall_result
         self._fetchall_result = []
         return result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# テスト用の疑似DBコネクションクラス。
+# Mock database connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
 
-# 日本語: PromptSearchTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptSearchTestCase.
+# 公開プロンプト検索ロジックのパラメータ指定、フィルタリング、ページネーションなどを検証するテストクラス。
+# Test class to verify parameter handling, filtering, and pagination in public prompt search logic.
 class PromptSearchTestCase(unittest.TestCase):
-    # 日本語: test search public prompts applies limit offset and returns metadata のテスト検証を担当します。
-    # English: Handle verifying test behavior for test search public prompts applies limit offset and returns metadata.
+    # 検索クエリ、ページ番号、件数制限を指定したときに、適切なSQLパラメータ（LIMIT/OFFSETなど）が渡されメタデータが得られることを検証します。
+    # Verify that appropriate SQL parameters (LIMIT/OFFSET) and metadata are returned when passing search parameters.
     def test_search_public_prompts_applies_limit_offset_and_returns_metadata(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 検索関数をモックされたDB接続を利用して呼び出し
+        # Call search function with mocked DB connection
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             payload = _search_public_prompts("sample", 2, 20, 9)
 
@@ -127,14 +129,14 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 
-    # 日本語: test search public prompts filters by prompt type のテスト検証を担当します。
-    # English: Handle verifying test behavior for test search public prompts filters by prompt type.
+    # プロンプトの種別（prompt_type）によるフィルタリングがSQL条件に正しく反映されることを検証します。
+    # Verify that filtering by prompt_type is correctly reflected in the SQL query conditions.
     def test_search_public_prompts_filters_by_prompt_type(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # プロンプト種別を指定して検索関数を実行
+        # Call search function specifying a prompt type
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             _search_public_prompts("sample", 1, 10, 9, "image")
 
@@ -147,8 +149,8 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertEqual(search_params[:3], (9, 9, "image"))
         self.assertEqual(search_params[-2:], (10, 0))
 
-    # 日本語: test search public prompts returns empty payload when query is blank のテスト検証を担当します。
-    # English: Handle verifying test behavior for test search public prompts returns empty payload when query is blank.
+    # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
+    # Verify that search returns an empty payload immediately without query execution when search query is blank.
     def test_search_public_prompts_returns_empty_payload_when_query_is_blank(self):
         payload = _search_public_prompts("", 1, 20)
 

@@ -13,8 +13,8 @@ from services.session_middleware import (
 )
 
 
-# 日本語: DummyRedis に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to DummyRedis.
+# 日本語: テスト用の擬似Dummy Redisクラスです。
+# English: Mock Dummy Redis class for testing.
 class DummyRedis:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -22,8 +22,8 @@ class DummyRedis:
         self.store = {}
         self.expiry = {}
 
-    # 日本語: ping に関する処理の入口です。
-    # English: Entry point for logic related to ping.
+    # 日本語: テスト用の処理の入口関数pingです。
+# English: Entry point helper function ping for testing.
     def ping(self):
         return True
 
@@ -36,8 +36,8 @@ class DummyRedis:
     # English: Handle setting for set.
     def set(self, key, value, ex=None):
         self.store[key] = value
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if ex is not None:
             self.expiry[key] = ex
         return True
@@ -45,16 +45,16 @@ class DummyRedis:
     # 日本語: delete の削除処理を担当します。
     # English: Handle deleting for delete.
     def delete(self, key):
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if key in self.store:
             del self.store[key]
             return 1
         return 0
 
 
-# 日本語: FailingRedis に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FailingRedis.
+# 日本語: テスト用のFailing Redisクラスです。
+# English: Failing Redis class for testing.
 class FailingRedis(DummyRedis):
     # 日本語: set の設定処理を担当します。
     # English: Handle setting for set.
@@ -66,8 +66,8 @@ class FailingRedis(DummyRedis):
 # English: Handle creating for make scope.
 def make_scope(cookie_header=None):
     headers = []
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
     if cookie_header:
         headers.append((b"cookie", cookie_header.encode("latin-1")))
     return {
@@ -85,8 +85,8 @@ def make_scope(cookie_header=None):
     }
 
 
-# 日本語: receive に関する処理の入口です。
-# English: Entry point for logic related to receive.
+# 日本語: テスト用の処理の入口関数receiveです。
+# English: Entry point helper function receive for testing.
 async def receive():
     return {"type": "http.request", "body": b"", "more_body": False}
 
@@ -101,8 +101,8 @@ def get_session_cookie(messages):
         for key, value in message["headers"]
         if key.lower() == b"set-cookie"
     ]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
     if not header_values:
         raise AssertionError("session cookie was not set")
 
@@ -114,21 +114,21 @@ def get_session_cookie(messages):
 # 日本語: RedisSessionMiddlewareTest のテストケースをまとめます。
 # English: Group test cases for RedisSessionMiddlewareTest.
 class RedisSessionMiddlewareTest(unittest.TestCase):
-    # 日本語: test session roundtrip via redis のテスト検証を担当します。
-    # English: Handle verifying test behavior for test session roundtrip via redis.
+    # 日本語: セッションroundtripviaredisことを検証します。
+    # English: Verify that session roundtrip via redis.
     def test_session_roundtrip_via_redis(self):
         dummy_redis = DummyRedis()
         captured = {}
 
-        # 日本語: app に関する処理の入口です。
-        # English: Entry point for logic related to app.
+        # 日本語: テスト用の処理の入口関数appです。
+# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=dummy_redis):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
@@ -156,8 +156,8 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=dummy_redis):
             middleware = PermanentSessionMiddleware(app_read, secret_key="secret", max_age=60)
             messages = []
@@ -171,18 +171,18 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
         self.assertEqual(captured["session"]["foo"], "bar")
 
-    # 日本語: test session cookie is cleared when redis unavailable のテスト検証を担当します。
-    # English: Handle verifying test behavior for test session cookie is cleared when redis unavailable.
+    # 日本語: redisunavailableのとき、セッションcookieがclearedことを検証します。
+    # English: Verify that session cookie is cleared when redis unavailable.
     def test_session_cookie_is_cleared_when_redis_unavailable(self):
-        # 日本語: app に関する処理の入口です。
-        # English: Entry point for logic related to app.
+        # 日本語: テスト用の処理の入口関数appです。
+# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=None):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
@@ -209,18 +209,18 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertEqual(cookie["session"].value, "")
         self.assertEqual(cookie["session"]["max-age"], "0")
 
-    # 日本語: test session cookie is cleared when redis write fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test session cookie is cleared when redis write fails.
+    # 日本語: rediswrite失敗するのとき、セッションcookieがclearedことを検証します。
+    # English: Verify that session cookie is cleared when redis write fails.
     def test_session_cookie_is_cleared_when_redis_write_fails(self):
-        # 日本語: app に関する処理の入口です。
-        # English: Entry point for logic related to app.
+        # 日本語: テスト用の処理の入口関数appです。
+# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=FailingRedis()):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
@@ -245,8 +245,8 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertEqual(cookie["session"].value, "")
         self.assertEqual(cookie["session"]["max-age"], "0")
 
-    # 日本語: test legacy cookie backed session is rejected のテスト検証を担当します。
-    # English: Handle verifying test behavior for test legacy cookie backed session is rejected.
+    # 日本語: legacycookiebackedセッションがrejectedことを検証します。
+    # English: Verify that legacy cookie backed session is rejected.
     def test_legacy_cookie_backed_session_is_rejected(self):
         # A cookie minted by the old cookie-fallback path must be ignored: its
         # contents (verification codes, is_admin, etc.) are signed but not
@@ -258,15 +258,15 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
 
         captured = {}
 
-        # 日本語: app に関する処理の入口です。
-        # English: Entry point for logic related to app.
+        # 日本語: テスト用の処理の入口関数appです。
+# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             captured["session"] = dict(scope["session"])
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=DummyRedis()):
             middleware = PermanentSessionMiddleware(app, secret_key="secret", max_age=60)
             messages = []
@@ -284,18 +284,18 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertNotIn("verification_code", captured["session"])
         self.assertNotIn("is_admin", captured["session"])
 
-    # 日本語: test session cookie can use samesite none with secure のテスト検証を担当します。
-    # English: Handle verifying test behavior for test session cookie can use samesite none with secure.
+    # 日本語: secureを使用する場合、セッションcookiecanusesamesitenoneことを検証します。
+    # English: Verify that session cookie can use samesite none with secure.
     def test_session_cookie_can_use_samesite_none_with_secure(self):
-        # 日本語: app に関する処理の入口です。
-        # English: Entry point for logic related to app.
+        # 日本語: テスト用の処理の入口関数appです。
+# English: Entry point helper function app for testing.
         async def app(scope, receive, send):
             scope["session"]["foo"] = "bar"
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=None):
             middleware = PermanentSessionMiddleware(
                 app,
@@ -325,8 +325,8 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
         self.assertIn("samesite=none", cookie_header)
         self.assertIn("secure", cookie_header)
 
-    # 日本語: test commit session deletes rotated session id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test commit session deletes rotated session id.
+    # 日本語: commitセッション削除するrotatedセッションidことを検証します。
+    # English: Verify that commit session deletes rotated session id.
     def test_commit_session_deletes_rotated_session_id(self):
         dummy_redis = DummyRedis()
         dummy_redis.set("session:old-session", '{"foo": "stale"}')
@@ -339,8 +339,8 @@ class RedisSessionMiddlewareTest(unittest.TestCase):
             SESSION_IDS_TO_DELETE_SCOPE_KEY: {"old-session"},
         }
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.session_middleware.get_redis_client", return_value=dummy_redis):
             middleware.inner._commit_session(scope, headers)
 

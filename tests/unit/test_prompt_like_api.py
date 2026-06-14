@@ -7,8 +7,8 @@ from blueprints.prompt_share.prompt_share_api import add_like, remove_like
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
+# いいね操作のAPIテスト用のHTTPリクエストを構築します。
+# Build a mock HTTP request for testing prompt like API endpoints.
 def make_request(method, payload, session=None):
     return build_request(
         method=method,
@@ -18,11 +18,11 @@ def make_request(method, payload, session=None):
     )
 
 
-# 日本語: PromptLikeApiTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptLikeApiTestCase.
+# プロンプトに対する「いいね」の追加や削除（解除）に関するAPIエンドポイントをテストするクラス。
+# Test class to check the API endpoints for adding and removing likes on prompts.
 class PromptLikeApiTestCase(unittest.TestCase):
-    # 日本語: test add like requires login のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add like requires login.
+    # ログインしていない状態で「いいね」を追加しようとすると、401エラー（未認証）になることを検証します。
+    # Verify that adding a like returns a 401 status when the user is not logged in.
     def test_add_like_requires_login(self):
         request = make_request("POST", {"prompt_id": 10}, session={})
 
@@ -32,13 +32,13 @@ class PromptLikeApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "ログインしていません")
 
-    # 日本語: test add like rejects missing prompt id のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add like rejects missing prompt id.
+    # リクエストボディにprompt_idが不足している場合、400エラーで拒否されることを検証します。
+    # Verify that adding a like returns a 400 status when the prompt_id is missing from the payload.
     def test_add_like_rejects_missing_prompt_id(self):
         request = make_request("POST", {}, session={"user_id": 5})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # いいね追加処理が呼び出されないことをモックで確認
+        # Verify that the DB helper is not called using mocks
         with patch("blueprints.prompt_share.prompt_share_api._add_prompt_like_for_user") as mock_add:
             response = asyncio.run(add_like(request))
 
@@ -47,13 +47,13 @@ class PromptLikeApiTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "必要なフィールドが不足しています")
         mock_add.assert_not_called()
 
-    # 日本語: test add like returns created payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test add like returns created payload.
+    # 正常に「いいね」を追加できた場合に、201ステータスと更新されたステータス情報を返すことを検証します。
+    # Verify that successfully adding a like returns a 201 status and the updated status payload.
     def test_add_like_returns_created_payload(self):
         request = make_request("POST", {"prompt_id": 10}, session={"user_id": 5})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # いいね登録の戻り値をモック
+        # Mock the helper response for adding a like
         with patch(
             "blueprints.prompt_share.prompt_share_api._add_prompt_like_for_user",
             return_value=({"message": "いいねしました。", "liked": True}, 201),
@@ -66,13 +66,13 @@ class PromptLikeApiTestCase(unittest.TestCase):
         self.assertEqual(payload["message"], "いいねしました。")
         mock_add.assert_called_once_with(5, 10)
 
-    # 日本語: test remove like returns success payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test remove like returns success payload.
+    # 「いいね」を正常に解除できた場合に、200ステータスと解除成功情報を返すことを検証します。
+    # Verify that successfully removing a like returns a 200 status and the updated status payload.
     def test_remove_like_returns_success_payload(self):
         request = make_request("DELETE", {"prompt_id": 10}, session={"user_id": 5})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # いいね削除処理をモック
+        # Mock the helper for removing a like
         with patch("blueprints.prompt_share.prompt_share_api._remove_prompt_like_for_user") as mock_remove:
             response = asyncio.run(remove_like(request))
 

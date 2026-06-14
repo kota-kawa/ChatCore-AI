@@ -5,21 +5,21 @@ from services.api_errors import ResourceNotFoundError
 from services.memo_share import create_or_get_shared_memo_token
 
 
-# 日本語: UniqueViolation に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to UniqueViolation.
+# PostgreSQLの一意性制約エラー（エラーコード: 23505）をシミュレートする疑似例外クラス。
+# Mock exception class simulating PostgreSQL's unique key violation (error code: 23505).
 class UniqueViolation(Exception):
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self):
         super().__init__("duplicate key")
         self.pgcode = "23505"
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# メモ共有トークン生成ロジック（メモの存在チェック、一意性競合、挿入リトライ等）をテストするための疑似DBカーソルクラス。
+# Mock database cursor class for testing shared memo token creation, collision retries, and existence checks.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, *, memo_exists=True, fail_attempts=None, insert_results=None):
         self.memo_exists = memo_exists
         self.fail_attempts = set(fail_attempts or [])
@@ -28,22 +28,25 @@ class FakeCursor:
         self.closed = False
         self._fetchone_result = None
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、引数および状態の変化を追跡・記録します。
+    # Execute a query and track/log the database state changes.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+
+        # メモの存在確認クエリのモック
+        # Mocking check for memo existence and ownership
         if normalized == "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s":
             self._fetchone_result = (1,) if self.memo_exists else None
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 既存の共有エントリ取得クエリのモック
+        # Mocking retrieval of existing shared memo entry
         if "SELECT share_token, expires_at, revoked_at FROM shared_memo_entries" in normalized:
             self._fetchone_result = None
             return
 
+        # 新規共有エントリ追加クエリのモック（一意性競合テスト用に例外スローを制御）
+        # Mocking insertion of shared memo entry (raise UniqueViolation if configured)
         if "INSERT INTO shared_memo_entries" in normalized:
             self.insert_attempts += 1
             if self.insert_attempts in self.fail_attempts:
@@ -54,71 +57,71 @@ class FakeCursor:
 
         raise AssertionError(f"Unexpected query: {normalized}")
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # レコードの取得結果を返します。
+    # Return fetch result.
     def fetchone(self):
         return self._fetchone_result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# メモ共有トークン生成ロジックをテストするための疑似DBコネクションクラス。
+# Mock database connection class for testing shared memo token creation.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.commit_calls = 0
         self.rollback_calls = 0
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # コミットされた回数を記録します。
+    # Record commit execution count.
     def commit(self):
         self.commit_calls += 1
 
-    # 日本語: rollback に関する処理の入口です。
-    # English: Entry point for logic related to rollback.
+    # ロールバックされた回数を記録します。
+    # Record rollback execution count.
     def rollback(self):
         self.rollback_calls += 1
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
 
-# 日本語: MemoShareTokenTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to MemoShareTokenTestCase.
+# メモ共有用のURL安全トークン生成において、一意性制約違反（同一トークンの重複衝突）時のリトライやリトライ上限、およびメモが見つからない場合のエラーをテストするクラス。
+# Test class to check URL-safe token generation for shared memos, including collision retries, retry limits, and missing memo errors.
 class MemoShareTokenTestCase(unittest.TestCase):
-    # 日本語: test create or get shared memo token retries unique collision のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared memo token retries unique collision.
+    # トークン追加時に一意性競合（重複衝突）が発生した場合、新しいトークンを再生成して自動的にインサートをリトライし、成功することを検証します。
+    # Verify that unique key collisions during token insertion trigger regenerating the token and retrying the operation successfully.
     def test_create_or_get_shared_memo_token_retries_unique_collision(self):
         fake_cursor = FakeCursor(fail_attempts={1}, insert_results=["fresh-token"])
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # モックされたDB接続を利用し、一回目に競合が発生し二回目に成功する設定で呼び出し
+        # Run token generator, expecting a collision on the first try and success on the second try
         with patch("services.memo_share.Error", Exception):
             with patch("services.memo_share.get_db_connection", return_value=fake_connection):
                 with patch(
@@ -136,14 +139,14 @@ class MemoShareTokenTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_connection.closed)
 
-    # 日本語: test create or get shared memo token raises after collision retry limit のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared memo token raises after collision retry limit.
+    # 一意性競合が規定の最大リトライ回数連続して発生した場合、無限ループを防ぐため処理を中断しエラーをスローすることを検証します。
+    # Verify that a RuntimeError is raised after exceeding the maximum number of token collision retries to prevent infinite loops.
     def test_create_or_get_shared_memo_token_raises_after_collision_retry_limit(self):
         fake_cursor = FakeCursor(fail_attempts={1, 2, 3, 4, 5})
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # すべての試行で競合が発生する設定で呼び出し
+        # Run token generator with collisions occurring on all retries, expecting failure
         with patch("services.memo_share.Error", Exception):
             with patch("services.memo_share.get_db_connection", return_value=fake_connection):
                 with patch(
@@ -157,14 +160,14 @@ class MemoShareTokenTestCase(unittest.TestCase):
         self.assertEqual(fake_connection.rollback_calls, 5)
         self.assertEqual(fake_connection.commit_calls, 0)
 
-    # 日本語: test create or get shared memo token raises not found for missing memo のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create or get shared memo token raises not found for missing memo.
+    # 共有しようとしたメモIDが存在しない、または現在のユーザーの所有物でない場合に、ResourceNotFoundErrorがスローされることを検証します。
+    # Verify that a ResourceNotFoundError is raised if the memo ID is missing or not owned by the requesting user.
     def test_create_or_get_shared_memo_token_raises_not_found_for_missing_memo(self):
         fake_cursor = FakeCursor(memo_exists=False)
         fake_connection = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 存在しないメモIDを指定して呼び出し
+        # Run token generator for a missing memo, expecting 404 Error
         with patch("services.memo_share.get_db_connection", return_value=fake_connection):
             with self.assertRaises(ResourceNotFoundError):
                 create_or_get_shared_memo_token(99, 20)

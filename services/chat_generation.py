@@ -56,17 +56,13 @@ _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 
-# 日本語: build streaming parts update の組み立て処理を担当します。
-# English: Handle building for build streaming parts update.
+# ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
+# Parse UI parts like Artifacts from streaming response text and build the update payload
 def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "chatcore-artifact" not in raw_text and "chatcore-buttons" not in raw_text:
         return None
 
     normalized_response = normalize_response_with_artifacts(raw_text, allow_fallback=False)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if normalized_response.validation_errors or not normalized_response.parts:
         return None
 
@@ -79,16 +75,12 @@ def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
     }
 
 
-# 日本語: get chat agent max steps の取得処理を担当します。
-# English: Handle fetching for get chat agent max steps.
+# 環境変数からチャットエージェントの最大実行ステップ数を取得する
+# Retrieve the maximum step count for the chat agent from environment variables
 def _get_chat_agent_max_steps() -> int:
     raw = os.environ.get("CHAT_AGENT_MAX_STEPS")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw is None:
         return DEFAULT_CHAT_AGENT_MAX_STEPS
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -96,16 +88,12 @@ def _get_chat_agent_max_steps() -> int:
     return min(max(value, 1), CHAT_AGENT_MAX_STEPS_LIMIT)
 
 
-# 日本語: get llm stream max retries の取得処理を担当します。
-# English: Handle fetching for get llm stream max retries.
+# 環境変数からLLMストリーミング接続の最大再試行回数を取得する
+# Retrieve the maximum retry limit for the LLM stream from environment variables
 def _get_llm_stream_max_retries() -> int:
     raw = os.environ.get("LLM_STREAM_MAX_RETRIES")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw is None:
         return DEFAULT_LLM_STREAM_MAX_RETRIES
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -113,30 +101,24 @@ def _get_llm_stream_max_retries() -> int:
     return max(value, 0)
 
 
-# 日本語: llm stream retry delay に関する処理の入口です。
-# English: Entry point for logic related to llm stream retry delay.
+# LLMストリーミング再試行時の遅延時間を計算する（指数バックオフ）
+# Calculate the delay duration for LLM stream retries (exponential backoff)
 def _llm_stream_retry_delay(exc: BaseException, attempt: int) -> float:
     # サーバー指定のretry_afterを優先し、なければ指数バックオフ（上限あり）を用いる
     # Prefer server-provided retry_after, otherwise use capped exponential backoff.
     retry_after = getattr(exc, "retry_after_seconds", None)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(retry_after, int) and retry_after > 0:
         return min(float(retry_after), LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
     delay = LLM_STREAM_RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
     return min(delay, LLM_STREAM_RETRY_MAX_DELAY_SECONDS)
 
 
-# 日本語: parse tool calls chunk の解析処理を担当します。
-# English: Handle parsing for parse tool calls chunk.
+# ストリームのチャンク文字列からツール呼び出し（JSON形式）を解析する
+# Parse tool calls (JSON format) from a stream chunk string
 def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     stripped = chunk.strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not stripped.startswith("[") or '"function"' not in stripped:
         return None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         loaded = json.loads(stripped)
     except Exception:
@@ -156,16 +138,16 @@ def _parse_tool_calls_chunk(chunk: str) -> list[dict[str, Any]] | None:
     return tool_calls or None
 
 
-# 日本語: normalized search key に関する処理の入口です。
-# English: Entry point for logic related to normalized search key.
+# 検索クエリと日付フィルタ（freshness）を正規化したキーを生成する
+# Generate a normalized key from the search query and freshness parameter
 def _normalized_search_key(query: Any, freshness: Any = "") -> tuple[str, str]:
     normalized_query = " ".join(str(query or "").split())
     normalized_freshness = str(freshness or "").strip()
     return (normalized_query.casefold(), normalized_freshness)
 
 
-# 日本語: normalize tool call の正規化処理を担当します。
-# English: Handle normalizing for normalize tool call.
+# ツール呼び出しオブジェクトに必要なIDやデフォルト値などを設定して正規化する
+# Normalize a tool call object by setting required IDs and default values
 def _normalize_tool_call(tool_call: dict[str, Any], *, step: int, index: int) -> dict[str, Any]:
     normalized = dict(tool_call)
     function = dict(normalized.get("function") or {})
@@ -177,11 +159,9 @@ def _normalize_tool_call(tool_call: dict[str, Any], *, step: int, index: int) ->
     return normalized
 
 
-# 日本語: tool result message に関する処理の入口です。
-# English: Entry point for logic related to tool result message.
+# ツール実行結果を表すメッセージオブジェクトを構築する
+# Construct a message object representing the tool execution result
 def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | str) -> dict[str, Any]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(content, str):
         content = json.dumps(content, ensure_ascii=False)
     return {
@@ -192,18 +172,14 @@ def _tool_result_message(tool_call: dict[str, Any], content: dict[str, Any] | st
     }
 
 
-# 日本語: page read trace step に関する処理の入口です。
-# English: Entry point for logic related to page read trace step.
+# 精読できたWeb検索ソースの情報からトレースステップログ用のオブジェクトを生成する
+# Generate a trace step log object from successfully read Web search sources
 def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | None:
     # 検索結果から重要なページ本文を取得できた場合に、回答ステップとして可視化する
     # Surface a trace step when full page text was successfully read from result URLs.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if result is None:
         return None
     read_count = sum(1 for source in result.sources if source.page_text)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not read_count:
         return None
     return {
@@ -212,8 +188,8 @@ def _page_read_trace_step(result: WebSearchResult | None) -> dict[str, str] | No
     }
 
 
-# 日本語: web search result tool payload に関する処理の入口です。
-# English: Entry point for logic related to web search result tool payload.
+# ツールへ返却するWeb検索結果ペイロードを整形する
+# Format the Web search result payload returned to the tool
 def _web_search_result_tool_payload(
     result: WebSearchResult,
     *,
@@ -239,17 +215,17 @@ def _web_search_result_tool_payload(
     }
 
 
-# 日本語: ChatGenerationAlreadyRunningError として扱う例外情報を表します。
-# English: Represent exception details handled as ChatGenerationAlreadyRunningError.
+# 同一の部屋・ユーザーで既に生成ジョブが実行中である場合に投げられる例外クラス
+# Exception class raised when a generation job is already running for the same room/user
 class ChatGenerationAlreadyRunningError(RuntimeError):
     pass
 
 
-# 日本語: ChatGenerationStreamTimeoutError として扱う例外情報を表します。
-# English: Represent exception details handled as ChatGenerationStreamTimeoutError.
+# チャット生成イベントの待機中にタイムアウトが発生したことを表す例外クラス
+# Exception class representing a timeout during waiting for chat generation events
 class ChatGenerationStreamTimeoutError(RuntimeError):
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # 例外を初期化する
+    # Initialize the exception
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.payload = {
@@ -258,8 +234,8 @@ class ChatGenerationStreamTimeoutError(RuntimeError):
         }
 
 
-# 日本語: ChatGenerationEvent に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatGenerationEvent.
+# チャット応答生成中に発生する各種イベントを表すデータクラス
+# Dataclass representing various events occurring during chat response generation
 @dataclass(frozen=True)
 class ChatGenerationEvent:
     sequence_id: int
@@ -267,11 +243,11 @@ class ChatGenerationEvent:
     payload: dict[str, Any]
 
 
-# 日本語: ChatGenerationJob に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatGenerationJob.
+# 個別のチャット応答生成のバックグラウンドタスクおよびイベントを管理するクラス
+# Class that manages the background task and events for a single chat response generation
 class ChatGenerationJob:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # ジョブを初期化する
+    # Initialize the job
     def __init__(
         self,
         *,
@@ -300,15 +276,13 @@ class ChatGenerationJob:
         self.finished_at: float | None = None
         self.is_done = False
 
-    # 日本語: persist generated response に関する処理の入口です。
-    # English: Entry point for logic related to persist generated response.
+    # 生成された最終応答とUIパーツ情報を永続化（データベース等へ保存）する
+    # Persist the final generated response and UI parts info (save to database, etc.)
     def _persist_generated_response(
         self,
         response: str,
         message_parts: list[dict[str, Any]] | None,
     ) -> dict[str, Any] | None:
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             signature = inspect.signature(self._persist_response)
             accepts_message_parts = (
@@ -321,42 +295,32 @@ class ChatGenerationJob:
         except (TypeError, ValueError):
             accepts_message_parts = False
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if accepts_message_parts:
             return self._persist_response(response, message_parts=message_parts)
         return self._persist_response(response)
 
-    # 日本語: start に関する処理の入口です。
-    # English: Entry point for logic related to start.
+    # ジョブの非同期処理をスレッドプール上で開始する
+    # Start the job's asynchronous processing in the thread pool
     def start(self) -> None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self._future is not None:
             return
         self._future = submit_background_task(self._run)
 
-    # 日本語: cancel に関する処理の入口です。
-    # English: Entry point for logic related to cancel.
+    # ジョブの実行をキャンセルし、abortedイベントを発行する
+    # Cancel the job's execution and publish an aborted event
     def cancel(self) -> None:
         """生成をキャンセルし、aborted イベントを発行して完了とする."""
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self.is_done:
             return
         self._cancelled = True
         self._publish("aborted", {}, done=True)
 
-    # 日本語: wait に関する処理の入口です。
-    # English: Entry point for logic related to wait.
+    # ジョブスレッドの完了を待機する
+    # Wait for the job thread to complete
     def wait(self, timeout: float | None = None) -> bool:
         future = self._future
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if future is None:
             return self.is_done
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             future.result(timeout=timeout)
         except TimeoutError:
@@ -365,12 +329,10 @@ class ChatGenerationJob:
             return self.is_done
         return self.is_done
 
-    # 日本語: iter events に関する処理の入口です。
-    # English: Entry point for logic related to iter events.
+    # 生成中のイベントを発生順にストリーミング（イテレート）する
+    # Stream (iterate) generation events in chronological order
     def iter_events(self, *, after_sequence_id: int = 0) -> Iterator[ChatGenerationEvent]:
         cursor = 0
-        # 日本語: 条件が満たされている間、同じ処理を継続します。
-        # English: Continue the same work while the condition remains true.
         while True:
             with self._condition:
                 while (
@@ -392,14 +354,12 @@ class ChatGenerationJob:
 
             yield event
 
-    # 日本語: publish に関する処理の入口です。
-    # English: Entry point for logic related to publish.
+    # 新しいイベントを発行し、待機スレッドおよび分散イベントチャネルに通知する
+    # Publish a new event, notifying waiting threads and distributed event channels
     def _publish(self, event: str, payload: dict[str, Any], *, done: bool = False) -> None:
         callback: Callable[[], None] | None = None
         event_callback = self._on_event
         published_event: ChatGenerationEvent | None = None
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
         with self._condition:
             if self.is_done:
                 return
@@ -414,8 +374,6 @@ class ChatGenerationJob:
             if done:
                 callback = self._mark_done()
             self._condition.notify_all()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if event_callback is not None and published_event is not None:
             try:
                 event_callback(published_event)
@@ -424,24 +382,20 @@ class ChatGenerationJob:
         if callback is not None:
             callback()
 
-    # 日本語: mark done に関する処理の入口です。
-    # English: Entry point for logic related to mark done.
+    # ジョブの状態を「完了」にマークする
+    # Mark the job status as done
     def _mark_done(self) -> Callable[[], None] | None:
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self.is_done:
             return None
         self.is_done = True
         self.finished_at = time.monotonic()
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self._on_finished_called or self._on_finished is None:
             return None
         self._on_finished_called = True
         return self._on_finished
 
-    # 日本語: handle error のハンドリング処理を担当します。
-    # English: Handle handling for handle error.
+    # エラー情報を設定し、errorイベントを発行してジョブを終了する
+    # Set error details, publish an error event, and terminate the job
     def _handle_error(
         self,
         message: str,
@@ -451,33 +405,25 @@ class ChatGenerationJob:
     ) -> None:
         self.error_message = message
         self._publish("error", payload, done=True)
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if not invoke_error_callback or self._on_error is None:
             return
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             self._on_error()
         except Exception:
             logger.exception("Failed to run chat generation error callback.")
 
-    # 日本語: sleep with cancel に関する処理の入口です。
-    # English: Entry point for logic related to sleep with cancel.
+    # キャンセルを監視しながら、指定された秒数待機（スリープ）する
+    # Sleep for a specified duration while monitoring for cancellation
     def _sleep_with_cancel(self, delay: float) -> bool:
-        # キャンセルを監視しつつ待機し、キャンセルされた場合は True を返す
-        # Sleep while watching for cancellation; return True if cancelled.
         deadline = time.monotonic() + max(delay, 0.0)
-        # 日本語: 条件が満たされている間、同じ処理を継続します。
-        # English: Continue the same work while the condition remains true.
         while time.monotonic() < deadline:
             if self._cancelled:
                 return True
             time.sleep(min(0.1, max(deadline - time.monotonic(), 0.0)))
         return self._cancelled
 
-    # 日本語: iter llm stream with retry に関する処理の入口です。
-    # English: Entry point for logic related to iter llm stream with retry.
+    # 一時的な障害時に再試行しつつ、LLMからの応答ストリームのチャンクをイテレートする
+    # Iterate LLM response stream chunks, retrying on transient provider failures
     def _iter_llm_stream_with_retry(
         self,
         current_messages: list[dict[str, Any]],
@@ -490,8 +436,6 @@ class ChatGenerationJob:
         # been emitted, to avoid duplicated or garbled output.
         max_retries = _get_llm_stream_max_retries()
         attempt = 0
-        # 日本語: 条件が満たされている間、同じ処理を継続します。
-        # English: Continue the same work while the condition remains true.
         while True:
             emitted = False
             try:
@@ -502,8 +446,6 @@ class ChatGenerationJob:
                     yield chunk
                 return
             except LlmRetryableProviderError as exc:
-                # レート制限はサーバー指定の待機を尊重するため別ハンドラに委ねる
-                # Rate limits are handled separately to honor server-provided backoff.
                 if (
                     emitted
                     or isinstance(exc, LlmRateLimitError)
@@ -525,8 +467,8 @@ class ChatGenerationJob:
                 if self._sleep_with_cancel(delay):
                     raise
 
-    # 日本語: run の実行処理を担当します。
-    # English: Handle running for run.
+    # バックグラウンドスレッドで実行されるチャット応答生成のメインループ
+    # The main loop for chat response generation executed in the background thread
     def _run(self) -> None:
         chunks: list[str] = []
         last_streaming_parts_signature: str | None = None
@@ -538,8 +480,6 @@ class ChatGenerationJob:
         max_steps = _get_chat_agent_max_steps()
         step_count = 0
 
-        # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-        # English: Run potentially failing work in a form that can be caught.
         try:
             augmentation = maybe_augment_messages_with_web_search(
                 current_messages,
@@ -919,8 +859,6 @@ class ChatGenerationJob:
             )
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
         if self._cancelled:
             return
 

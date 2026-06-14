@@ -11,11 +11,11 @@ from blueprints.prompt_share.prompt_manage_api import (
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: PromptManageApiTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptManageApiTestCase.
+# 保存済みプロンプトリストAPIのエンドポイントの挙動や、プロンプトリスト要素のシリアライズ処理をテストするクラス。
+# Test class to check the behavior of the saved prompt list API endpoint and the serialization of prompt list entries.
 class PromptManageApiTestCase(unittest.TestCase):
-    # 日本語: test prompt list returns normalized entry shape のテスト検証を担当します。
-    # English: Handle verifying test behavior for test prompt list returns normalized entry shape.
+    # 保存済みプロンプトリスト取得APIが、正規化されたエントリ形式のJSONレスポンスを返すことを検証します。
+    # Verify that the saved prompt list API returns a JSON response containing normalized entry shapes.
     def test_prompt_list_returns_normalized_entry_shape(self):
         request = build_request(
             method="GET",
@@ -40,8 +40,8 @@ class PromptManageApiTestCase(unittest.TestCase):
             }
         ]
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # エントリ一覧取得ヘルパー関数をモックしてAPI呼び出し
+        # Mock the helper function fetching prompt list entries and run the API handler
         with patch(
             "blueprints.prompt_share.prompt_manage_api._fetch_prompt_list",
             return_value=sample_entries,
@@ -57,8 +57,8 @@ class PromptManageApiTestCase(unittest.TestCase):
         self.assertEqual(entry["prompt"]["id"], 34)
         self.assertEqual(entry["prompt"]["title"], "title")
 
-    # 日本語: test serialize prompt list entry keeps entry and prompt timestamps separate のテスト検証を担当します。
-    # English: Handle verifying test behavior for test serialize prompt list entry keeps entry and prompt timestamps separate.
+    # プロンプトリスト項目のシリアライズ処理が、保存された日時(saved_at)とプロンプトが作成された日時(prompt_created_at)を混同せず正しくシリアライズすることを検証します。
+    # Verify that the prompt list entry serialization correctly keeps saved_at and prompt_created_at timestamps separate.
     def test_serialize_prompt_list_entry_keeps_entry_and_prompt_timestamps_separate(self):
         serialized = _serialize_prompt_list_entry(
             {

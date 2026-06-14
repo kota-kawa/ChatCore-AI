@@ -6,8 +6,8 @@ from blueprints.chat.tasks import edit_task
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# 日本語: テスト用の擬似Fake Cursorクラスです。
+# English: Mock Fake Cursor class for testing.
 class FakeCursor:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -19,28 +19,28 @@ class FakeCursor:
     # English: Handle executing for execute.
     def execute(self, query, params=None):
         self.executed.append((query, params))
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # 日本語: 条件に基づいて処理の流れを切り替えます。
+        # English: Switch the execution flow based on the condition.
         if "SELECT 1" in query:
             self._fetchone_result = (1,)
         else:
             self._fetchone_result = None
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # 日本語: テスト用の処理の入口関数fetchoneです。
+# English: Entry point helper function fetchone for testing.
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
         return result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         pass
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# 日本語: テスト用の擬似Fake Connectionクラスです。
+# English: Mock Fake Connection class for testing.
 class FakeConnection:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -49,20 +49,20 @@ class FakeConnection:
         self.closed = False
         self.cursors = []
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def cursor(self, dictionary=False):
         cursor = FakeCursor()
         self.cursors.append(cursor)
         return cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # 日本語: テスト用の処理の入口関数commitです。
+# English: Entry point helper function commit for testing.
     def commit(self):
         self.committed = True
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
@@ -78,11 +78,11 @@ def make_request(json_body, session=None):
     )
 
 
-# 日本語: EditDefaultTaskTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to EditDefaultTaskTestCase.
+# 日本語: Edit Default Taskの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Edit Default Task.
 class EditDefaultTaskTestCase(unittest.TestCase):
-    # 日本語: test editing copied default task is allowed のテスト検証を担当します。
-    # English: Handle verifying test behavior for test editing copied default task is allowed.
+    # 日本語: editingcopiedデフォルトタスクがallowedことを検証します。
+    # English: Verify that editing copied default task is allowed.
     def test_editing_copied_default_task_is_allowed(self):
         fake_connection = FakeConnection()
         request = make_request(
@@ -98,8 +98,8 @@ class EditDefaultTaskTestCase(unittest.TestCase):
             session={"user_id": 123},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.tasks.get_db_connection", return_value=fake_connection):
             response = asyncio.run(edit_task(request))
 

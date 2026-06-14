@@ -87,8 +87,8 @@ ACTION_SYSTEM_PROMPT = """
 """.strip()
 
 
-# 日本語: build action messages の組み立て処理を担当します。
-# English: Handle building for build action messages.
+# 日本語: DOMや操作可能カタログをシステムプロンプトに統合し、会話履歴と結合してLLM入力用のメッセージリストを構築します。
+# English: Combine system prompts (with DOM/capability context) and chat history into message payloads for LLM.
 def build_action_messages(
     page_context: str,
     conversation_messages: list[dict[str, str]],
@@ -102,29 +102,29 @@ def build_action_messages(
     return [{"role": "system", "content": system_content}, *conversation_messages]
 
 
-# 日本語: strip legacy value に関する処理の入口です。
-# English: Entry point for logic related to strip legacy value.
+# 日本語: テキスト値の周囲にある引用符や改行等の不要な文字を除去します。
+# English: Clean up surrounding quotes and separators from a legacy action attribute value.
 def _strip_legacy_value(value: str) -> str:
     value = value.strip().strip(",;")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
         return value[1:-1].strip()
     return value
 
 
-# 日本語: parse legacy action line の解析処理を担当します。
-# English: Handle parsing for parse legacy action line.
+# 日本語: レガシー形式の「キー=値」で書かれたアクション行を解析し、辞書型ステップに変換します。
+# English: Parse a single legacy key=value line into an action step dictionary.
 def _parse_legacy_action_line(line: str) -> dict[str, Any] | None:
     matches = list(_LEGACY_ACTION_KEY_RE.finditer(line))
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not matches or not any(match.group(1).lower() == "action" for match in matches):
         return None
 
     values: dict[str, str] = {}
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for index, match in enumerate(matches):
         key = match.group(1).lower()
         start = match.end()
@@ -143,12 +143,12 @@ def _parse_legacy_action_line(line: str) -> dict[str, Any] | None:
     return step
 
 
-# 日本語: extract legacy description に関する処理の入口です。
-# English: Entry point for logic related to extract legacy description.
+# 日本語: レガシー応答のテキストブロックから、ユーザー向けの説明テキストを抽出します。
+# English: Extract the user-facing explanation from legacy prose lines prior to the actions list.
 def _extract_legacy_description(lines: list[str], first_action_line_index: int) -> str:
     ignored = {"実行アクション", "コピー", "```", "```json"}
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for line in reversed(lines[:first_action_line_index]):
         stripped = line.strip()
         if stripped and stripped not in ignored:
@@ -156,15 +156,15 @@ def _extract_legacy_description(lines: list[str], first_action_line_index: int) 
     return "操作を実行します"
 
 
-# 日本語: is safe internal path に関する処理の入口です。
-# English: Entry point for logic related to is safe internal path.
+# 日本語: 遷移先パスがアプリの内部パスかつ安全なもの（外部URLや危険なスキーマを含まない）か検証します。
+# English: Validate whether the target navigation path is a safe internal application path.
 def _is_safe_internal_path(path: Any) -> bool:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not isinstance(path, str):
         return False
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not path.startswith("/") or path.startswith("//"):
         return False
     if any(ord(ch) < 32 for ch in path):
@@ -172,35 +172,35 @@ def _is_safe_internal_path(path: Any) -> bool:
     return not re.match(r"^/[a-z][a-z0-9+.-]*:", path, re.IGNORECASE)
 
 
-# 日本語: is allowed navigation path に関する処理の入口です。
-# English: Entry point for logic related to is allowed navigation path.
+# 日本語: 遷移先パスが機能カタログに登録されているアプリ内画面かどうかを検証します。
+# English: Check whether the path exists in the registered application capability catalog.
 def _is_allowed_navigation_path(path: Any) -> bool:
     """Allow navigation only to known app pages from the capability catalog.
 
     This blocks side-effecting GET endpoints (e.g. /logout, /google-login) and any path
     outside the application, which the bare "is internal" check would otherwise permit.
     """
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not _is_safe_internal_path(path):
         return False
     pathname = str(path).split("?", 1)[0].split("#", 1)[0]
     return get_page_capability(pathname) is not None
 
 
-# 日本語: stronger risk に関する処理の入口です。
-# English: Entry point for logic related to stronger risk.
+# 日本語: 複数のリスク評価（low/medium/high）から、最も高いリスク度合いを返します。
+# English: Determine the highest risk level among the provided risk values.
 def _stronger_risk(*risks: str | None) -> str | None:
     valid = [risk for risk in risks if risk in _RISK_ORDER]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not valid:
         return None
     return max(valid, key=lambda risk: _RISK_ORDER[risk])
 
 
-# 日本語: clean action step に関する処理の入口です。
-# English: Entry point for logic related to clean action step.
+# 日本語: アクションステップを検証・正規化し、カタログにない不正操作や危険な遷移を遮断します。
+# English: Clean and validate an action step, stripping unauthorized commands or dangerous paths.
 def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> dict[str, Any] | None:
     action = step.get("action", "")
     selector = step.get("selector") or step.get("target") or ""
@@ -208,8 +208,8 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
     command = step.get("command", "")
     args = step.get("args", {})
     timeout_ms = step.get("timeout_ms")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if action not in _VALID_ACTIONS:
         return None
 
@@ -217,8 +217,8 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
         "action": action,
         "description": str(step.get("description") or fallback_description or "操作を実行します"),
     }
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if action == "app_action":
         if command not in ALLOWED_AGENT_COMMANDS:
             return None
@@ -268,21 +268,21 @@ def _clean_action_step(step: dict[str, Any], fallback_description: str = "") -> 
     return clean
 
 
-# 日本語: parse legacy action response の解析処理を担当します。
-# English: Handle parsing for parse legacy action response.
+# 日本語: レガシーなテキスト形式のアクション応答（行ごとにaction=xxxと列挙されたもの）を解析して操作計画オブジェクトに変換します。
+# English: Parse text-based legacy actions list response into a structured operation plan.
 def _parse_legacy_action_response(text: str) -> dict[str, Any] | None:
     """action=click, target=... 形式の旧レスポンスを操作計画に変換する。"""
     lines = text.splitlines()
     parsed_steps: list[tuple[int, dict[str, Any]]] = []
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # 日本語: イテレータから要素を順に取得し、反復処理を行います。
+    # English: Iterate over the elements sequentially and perform operations.
     for index, line in enumerate(lines):
         step = _parse_legacy_action_line(line)
         if step:
             parsed_steps.append((index, step))
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not parsed_steps:
         return None
 
@@ -301,12 +301,12 @@ def _parse_legacy_action_response(text: str) -> dict[str, Any] | None:
     }
 
 
-# 日本語: parse action response の解析処理を担当します。
-# English: Handle parsing for parse action response.
+# 日本語: LLMから返却された応答（JSONまたはフォールバックとしてレガシーテキスト形式）をパースし、安全性を検証した操作計画を構築します。
+# English: Extract, parse, and validate the JSON/legacy operation steps from the AI response.
 def parse_action_response(text: str) -> dict[str, Any] | None:
     """AIレスポンスからJSON操作計画を抽出して検証する。"""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not text:
         return None
 
@@ -315,8 +315,8 @@ def parse_action_response(text: str) -> dict[str, Any] | None:
     candidate = code_block.group(1) if code_block else text
 
     json_match = re.search(r"\{.*\}", candidate, re.DOTALL)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not json_match:
         return _parse_legacy_action_response(text)
 

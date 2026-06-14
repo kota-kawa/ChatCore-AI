@@ -5,14 +5,14 @@ from services.llm import LlmProviderError
 from services.prompt_assist import create_prompt_assist_payload
 
 
-# 日本語: PromptAssistServiceTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptAssistServiceTestCase.
+# 日本語: Prompt Assist Serviceの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Prompt Assist Service.
 class PromptAssistServiceTestCase(unittest.TestCase):
-    # 日本語: test create prompt assist payload parses json response のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt assist payload parses json response.
+    # 日本語: createプロンプトアシストペイロードparsesjsonレスポンスことを検証します。
+    # English: Verify that create prompt assist payload parses json response.
     def test_create_prompt_assist_payload_parses_json_response(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "services.prompt_assist.get_llm_response",
             return_value="""```json
@@ -34,11 +34,11 @@ class PromptAssistServiceTestCase(unittest.TestCase):
         self.assertIn("prompt_content", result["suggested_fields"])
         self.assertEqual(result["suggestion_modes"]["title"], "refine")
 
-    # 日本語: test create prompt assist payload filters out unchanged fields のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt assist payload filters out unchanged fields.
+    # 日本語: createプロンプトアシストペイロードfiltersoutunchangedfieldsことを検証します。
+    # English: Verify that create prompt assist payload filters out unchanged fields.
     def test_create_prompt_assist_payload_filters_out_unchanged_fields(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "services.prompt_assist.get_llm_response",
             return_value='{"summary":"タイトルを整えました。","warnings":[],"suggested_fields":{"title":"旅行計画","content":"週末旅行の計画を立ててください。"}}',
@@ -59,11 +59,11 @@ class PromptAssistServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(result["suggestion_modes"]["content"], "create")
 
-    # 日本語: test create prompt assist payload raises for invalid response のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt assist payload raises for invalid response.
+    # 日本語: 無効なレスポンスに対して、createプロンプトアシストペイロード送出することを検証します。
+    # English: Verify that create prompt assist payload raises for invalid response.
     def test_create_prompt_assist_payload_raises_for_invalid_response(self):
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "services.prompt_assist.get_llm_response",
             return_value="not-json",

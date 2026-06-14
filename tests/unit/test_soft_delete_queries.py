@@ -9,76 +9,76 @@ from blueprints.prompt_share.prompt_manage_api import (
 from blueprints.prompt_share.prompt_share_api import _remove_bookmark_for_user
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# テスト用の疑似DBカーソルクラス。
+# Mock database cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, *, rowcount=1):
         self.rowcount = rowcount
         self.executed = []
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、実行されたクエリとパラメータを記録します。
+    # Execute a query and record the query string and params.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed.append((normalized, params))
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# テスト用の疑似DBコネクションクラス。
+# Mock database connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.committed = False
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # コミットされたことを記録します。
+    # Commit the current mock transaction.
     def commit(self):
         self.committed = True
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
 
-# 日本語: SoftDeleteQueryTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to SoftDeleteQueryTestCase.
+# 物理削除(Hard Delete)ではなく論理削除(Soft Delete)が行われているかを検証するテストクラス。
+# Test class to verify that soft deletes are performed instead of hard deletes.
 class SoftDeleteQueryTestCase(unittest.TestCase):
-    # 日本語: test delete task marks row deleted instead of hard deleting のテスト検証を担当します。
-    # English: Handle verifying test behavior for test delete task marks row deleted instead of hard deleting.
+    # タスクの削除処理において、DELETE文ではなくUPDATE文でdeleted_atカラムを更新することを確認します。
+    # Verify that deleting a task updates the deleted_at column using UPDATE instead of DELETE.
     def test_delete_task_marks_row_deleted_instead_of_hard_deleting(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # タスク削除関数をモックされたDB接続を利用して呼び出し
+        # Call the delete task function using the mocked DB connection
         with patch("blueprints.chat.tasks.get_db_connection", return_value=fake_conn):
             _delete_task_for_user(5, "Task A")
 
@@ -88,14 +88,14 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         self.assertEqual(params, ("Task A", 5))
         self.assertTrue(fake_conn.committed)
 
-    # 日本語: test delete saved prompt marks task row deleted のテスト検証を担当します。
-    # English: Handle verifying test behavior for test delete saved prompt marks task row deleted.
+    # 保存されたプロンプト（タスク）の削除処理において、UPDATE文でdeleted_atが更新されることを確認します。
+    # Verify that deleting a saved prompt updates the deleted_at column of the task using UPDATE.
     def test_delete_saved_prompt_marks_task_row_deleted(self):
         fake_cursor = FakeCursor(rowcount=1)
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 保存プロンプト削除関数をモックされたDB接続を利用して呼び出し
+        # Call the delete saved prompt function using the mocked DB connection
         with patch("blueprints.prompt_share.prompt_manage_api.get_db_connection", return_value=fake_conn):
             deleted = _delete_saved_prompt_for_user(8, 99)
 
@@ -104,14 +104,14 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         self.assertIn("UPDATE task_with_examples SET deleted_at = CURRENT_TIMESTAMP", query)
         self.assertEqual(params, (99, 8))
 
-    # 日本語: test delete prompt marks prompt row deleted のテスト検証を担当します。
-    # English: Handle verifying test behavior for test delete prompt marks prompt row deleted.
+    # 共有プロンプトの削除処理において、DELETE文ではなくUPDATE文でdeleted_atが更新されることを確認します。
+    # Verify that deleting a shared prompt updates the deleted_at column of the prompt using UPDATE instead of DELETE.
     def test_delete_prompt_marks_prompt_row_deleted(self):
         fake_cursor = FakeCursor(rowcount=1)
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # プロンプト削除関数をモックされたDB接続を利用して呼び出し
+        # Call the delete prompt function using the mocked DB connection
         with patch("blueprints.prompt_share.prompt_manage_api.get_db_connection", return_value=fake_conn):
             deleted = _delete_prompt_for_user(8, 77)
 
@@ -121,14 +121,14 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         self.assertNotIn("DELETE FROM prompts", query)
         self.assertEqual(params, (77, 8))
 
-    # 日本語: test remove bookmark deletes prompt list entry のテスト検証を担当します。
-    # English: Handle verifying test behavior for test remove bookmark deletes prompt list entry.
+    # ブックマークの削除（解除）処理においては、論理削除ではなく物理的な削除（DELETE文）が行われることを確認します。
+    # Verify that removing a bookmark executes a hard delete (DELETE statement) in prompt_list_entries.
     def test_remove_bookmark_deletes_prompt_list_entry(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ブックマーク削除関数をモックされたDB接続を利用して呼び出し
+        # Call the remove bookmark function using the mocked DB connection
         with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
             _remove_bookmark_for_user(3, 42)
 

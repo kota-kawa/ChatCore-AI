@@ -58,42 +58,42 @@ PROMPT_COMMENT_MAX_URLS = 3
 PROMPT_COMMENT_LINK_PATTERN = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
 
 
-# 日本語: extract id に関する処理の入口です。
-# English: Entry point for logic related to extract id.
+# レコード辞書またはタプルからIDフィールド値を安全に抽出する関数
+# Safely extract the ID field from a record dictionary, tuple, or None.
 def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 入力が空の場合はNoneを返します
+    # Return None if the input is None.
     if row is None:
         return None
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 辞書の場合はキー指定で、タプルの場合はインデックスでIDを取得します
+    # Retrieve ID by key for dictionaries or by index for tuples.
     if isinstance(row, dict):
         return row.get("id")
     return row[0]
 
 
-# 日本語: normalize prompt type の正規化処理を担当します。
-# English: Handle normalizing for normalize prompt type.
+# 入力されたプロンプトタイプを定義済みの3つ(text, image, skill)のいずれかに標準化する関数
+# Standardize the input prompt type to one of the defined categories (text, image, skill).
 def _normalize_prompt_type(value: Any) -> str:
     normalized = str(value or "").strip().lower()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # "skill"系の各エイリアスに対応
+    # Support various "skill" alias variations.
     if normalized in {PROMPT_TYPE_SKILL, "skill_prompt", "claude_skill", "codex_skill"}:
         return PROMPT_TYPE_SKILL
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # "image"系の各エイリアスに対応
+    # Support various "image" alias variations.
     if normalized in {PROMPT_TYPE_IMAGE, "image_prompt", "image-generation", "image_generation"}:
         return PROMPT_TYPE_IMAGE
     return PROMPT_TYPE_TEXT
 
 
-# 日本語: serialize prompt row のシリアライズ処理を担当します。
-# English: Handle serializing for serialize prompt row.
+# プロンプトのDBレコードをJSONレスポンス用にシリアライズ・整形する関数
+# Serialize and format a prompt DB record row for the JSON response payload.
 def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt = dict(row)
     created_at = prompt.get("created_at")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 作成日時が datetime の場合、ISO フォーマット文字列に変換
+    # Format created_at to ISO string if it is a datetime object.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
     prompt["prompt_type"] = _normalize_prompt_type(prompt.get("prompt_type"))
@@ -104,14 +104,16 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     return prompt
 
 
-# 日本語: serialize prompt comment row のシリアライズ処理を担当します。
-# English: Handle serializing for serialize prompt comment row.
+# コメントのDBレコード行をシリアライズし、削除権限フラグ等を付与する関数
+# Serialize a comment DB row and append contextual flags (ownership, delete permission).
 def _serialize_prompt_comment_row(row: dict[str, Any], actor_user_id: int | None) -> dict[str, Any]:
     created_at = row.get("created_at")
     user_id = row.get("user_id")
     prompt_owner_id = row.get("prompt_owner_id")
     actor_is_admin = bool(row.get("actor_is_admin"))
     mine = actor_user_id is not None and user_id == actor_user_id
+    # 管理者、本人、またはプロンプト投稿者自身である場合に削除可能とする
+    # Allowed to delete if admin, comment author, or prompt author.
     can_delete = bool(
         actor_is_admin
         or mine
@@ -129,28 +131,28 @@ def _serialize_prompt_comment_row(row: dict[str, Any], actor_user_id: int | None
     }
 
 
-# 日本語: contains too many links に関する処理の入口です。
-# English: Entry point for logic related to contains too many links.
+# コメント本文に大量のURLリンク（閾値超え）が含まれているか判定する関数
+# Determine if comment content contains more link patterns than the allowed threshold.
 def _contains_too_many_links(content: str) -> bool:
     return len(PROMPT_COMMENT_LINK_PATTERN.findall(content or "")) > PROMPT_COMMENT_MAX_URLS
 
 
-# 日本語: consume prompt comment create limits に関する処理の入口です。
-# English: Entry point for logic related to consume prompt comment create limits.
+# コメント投稿に対するレート制限を判定・消費する関数
+# Evaluate and consume rate limits/cooldowns for comment submissions.
 def _consume_prompt_comment_create_limits(
     request: Request,
     user_id: int,
 ) -> tuple[bool, str | None, int | None]:
     client_ip = get_request_client_ip(request)
 
+    # IP単位での短期レート制限をチェック
+    # Check rate limit per client IP address.
     allowed, _, retry_after = consume_rate_limit(
         "prompt_comment:create:ip",
         client_ip,
         limit=PROMPT_COMMENT_PER_IP_LIMIT,
         window_seconds=PROMPT_COMMENT_RATE_WINDOW_SECONDS,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -161,14 +163,14 @@ def _consume_prompt_comment_create_limits(
             retry_after,
         )
 
+    # ユーザーID単位でのレート制限をチェック
+    # Check rate limit per user ID.
     allowed, _, retry_after = consume_rate_limit(
         "prompt_comment:create:user",
         str(user_id),
         limit=PROMPT_COMMENT_PER_USER_LIMIT,
         window_seconds=PROMPT_COMMENT_RATE_WINDOW_SECONDS,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not allowed:
         return (
             False,
@@ -179,6 +181,8 @@ def _consume_prompt_comment_create_limits(
             retry_after,
         )
 
+    # 連続投稿防止クールダウンをチェック
+    # Enforce continuous post submission cooldown.
     allowed, _, retry_after = consume_rate_limit(
         "prompt_comment:create:cooldown",
         str(user_id),
@@ -198,16 +202,12 @@ def _consume_prompt_comment_create_limits(
     return True, None, None
 
 
-# 日本語: delete prompt reference image の削除処理を担当します。
-# English: Handle deleting for delete prompt reference image.
+# プロンプトに関連付けられた参照画像ファイルをストレージから物理削除する関数
+# Permanently delete the stored reference image file from filesystem.
 def _delete_prompt_reference_image(image_url: str | None) -> None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not image_url or not image_url.startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
         return
     filename = image_url.rsplit("/", 1)[-1].strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not filename:
         return
     filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, filename)
@@ -215,18 +215,14 @@ def _delete_prompt_reference_image(image_url: str | None) -> None:
         os.remove(filepath)
 
 
-# 日本語: save prompt reference image の保存処理を担当します。
-# English: Handle saving for save prompt reference image.
+# アップロードされた参照画像を保存し、保存されたURLを返却する関数
+# Save uploaded reference image and return its public URL path.
 def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     filename = secure_filename(getattr(upload_file, "filename", "") or "")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not filename:
         raise ValueError("画像ファイル名が不正です。")
 
     extension = os.path.splitext(filename)[1].lower()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if extension not in PROMPT_IMAGE_ALLOWED_EXTENSIONS:
         raise ValueError("画像は PNG / JPG / WebP / GIF のいずれかを指定してください。")
 
@@ -267,13 +263,11 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     return f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}"
 
 
-# 日本語: get prompts with flags の取得処理を担当します。
-# English: Handle fetching for get prompts with flags.
+# 共有中プロンプトの一覧を、各種リアクション・ブックマーク状態フラグを含めてDBから取得する関数
+# Fetch public shared prompts including contextual engagement states (liked, bookmarked).
 def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -336,13 +330,11 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             conn.close()
 
 
-# 日本語: get public prompt by id の取得処理を担当します。
-# English: Handle fetching for get public prompt by id.
+# 指定された公開プロンプトIDの詳細情報を取得する関数
+# Fetch public shared prompt detail info by ID.
 def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -390,8 +382,8 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
             conn.close()
 
 
-# 日本語: create prompt for user の作成処理を担当します。
-# English: Handle creating for create prompt for user.
+# 新規プロンプト共有レコードをDBに登録・保存する関数
+# Insert a new public shared prompt record into the database.
 def _create_prompt_for_user(
     user_id: int,
     title: str,
@@ -407,8 +399,6 @@ def _create_prompt_for_user(
 ) -> Any:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -465,12 +455,10 @@ def _create_prompt_for_user(
             conn.close()
 
 
-# 日本語: compose task prompt template に関する処理の入口です。
-# English: Entry point for logic related to compose task prompt template.
+# プロンプトタイプに応じたタスク用テンプレートテキストを構築する関数
+# Construct a task prompt template string according to prompt types (special handling for skill type).
 def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     prompt_type = _normalize_prompt_type(prompt.get("prompt_type"))
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if prompt_type != PROMPT_TYPE_SKILL:
         return prompt.get("content") or ""
 
@@ -486,16 +474,14 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     return "\n\n".join(parts) or (prompt.get("content") or "")
 
 
-# 日本語: add prompt as task for user の追加処理を担当します。
-# English: Handle adding for add prompt as task for user.
+# 公開プロンプトをユーザー自身の個人用タスクテンプレートとして追加・複製保存する関数
+# Duplicate a public shared prompt as a user's private task template.
 def _add_prompt_as_task_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -567,8 +553,8 @@ def _add_prompt_as_task_for_user(
             conn.close()
 
 
-# 日本語: add bookmark for user の追加処理を担当します。
-# English: Handle adding for add bookmark for user.
+# プロンプトをユーザーのお気に入り/ブックマークリストに登録するラッパー関数
+# Bookmark a prompt for a user (wrapper around prompt list insertion).
 def _add_bookmark_for_user(
     user_id: int,
     prompt_id: int,
@@ -585,13 +571,11 @@ def _add_bookmark_for_user(
     }, status_code
 
 
-# 日本語: remove bookmark for user の削除処理を担当します。
-# English: Handle removing for remove bookmark for user.
+# ユーザーのブックマークリストからプロンプトを削除する関数
+# Remove a prompt from a user's bookmark list.
 def _remove_bookmark_for_user(user_id: int, prompt_id: int) -> int:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -612,16 +596,14 @@ def _remove_bookmark_for_user(user_id: int, prompt_id: int) -> int:
             conn.close()
 
 
-# 日本語: add prompt list entry for user の追加処理を担当します。
-# English: Handle adding for add prompt list entry for user.
+# ブックマーク保存リストにプロンプトを追加するDB関数
+# Database implementation to add a prompt to user's bookmark list.
 def _add_prompt_list_entry_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -674,16 +656,14 @@ def _add_prompt_list_entry_for_user(
             conn.close()
 
 
-# 日本語: add prompt like for user の追加処理を担当します。
-# English: Handle adding for add prompt like for user.
+# プロンプトに対してユーザーから「いいね」を登録する関数
+# Add a "like" to a public prompt for a user.
 def _add_prompt_like_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -726,13 +706,11 @@ def _add_prompt_like_for_user(
             conn.close()
 
 
-# 日本語: remove prompt like for user の削除処理を担当します。
-# English: Handle removing for remove prompt like for user.
+# プロンプトからユーザーの「いいね」を解除する関数
+# Remove a "like" from a public prompt for a user.
 def _remove_prompt_like_for_user(user_id: int, prompt_id: int) -> int:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -753,8 +731,8 @@ def _remove_prompt_like_for_user(user_id: int, prompt_id: int) -> int:
             conn.close()
 
 
-# 日本語: count visible prompt comments に関する処理の入口です。
-# English: Entry point for logic related to count visible prompt comments.
+# 有効な（論理削除や通報非表示されていない）プロンプトコメント件数をカウントする関数
+# Count non-deleted and non-hidden comments for a specific prompt.
 def _count_visible_prompt_comments(cursor: Any, prompt_id: int) -> int:
     cursor.execute(
         """
@@ -767,15 +745,13 @@ def _count_visible_prompt_comments(cursor: Any, prompt_id: int) -> int:
         (prompt_id,),
     )
     row = cursor.fetchone() or {}
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(row, dict):
         return int(row.get("total") or 0)
     return int(row[0] or 0)
 
 
-# 日本語: fetch prompt comments の取得処理を担当します。
-# English: Handle fetching for fetch prompt comments.
+# プロンプトに関連付けられたコメント一覧を取得する関数
+# Retrieve all visible comments for a specific prompt.
 def _fetch_prompt_comments(
     prompt_id: int,
     actor_user_id: int | None,
@@ -783,8 +759,6 @@ def _fetch_prompt_comments(
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -841,8 +815,8 @@ def _fetch_prompt_comments(
             conn.close()
 
 
-# 日本語: add prompt comment for user の追加処理を担当します。
-# English: Handle adding for add prompt comment for user.
+# 新規コメントを登録する関数。同一内容の連投重複チェックも行う。
+# Insert a new comment for a prompt. Prevents duplicate submissions in a short window.
 def _add_prompt_comment_for_user(
     user_id: int,
     prompt_id: int,
@@ -851,8 +825,6 @@ def _add_prompt_comment_for_user(
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -933,8 +905,8 @@ def _add_prompt_comment_for_user(
             conn.close()
 
 
-# 日本語: delete prompt comment for actor の削除処理を担当します。
-# English: Handle deleting for delete prompt comment for actor.
+# 自身のコメント、あるいはプロンプト投稿者/管理者権限によってコメントを論理削除する関数
+# Soft delete a comment if authorized (author of comment, owner of prompt, or admin).
 def _delete_prompt_comment_for_actor(
     actor_user_id: int,
     comment_id: int,
@@ -942,8 +914,6 @@ def _delete_prompt_comment_for_actor(
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1006,8 +976,8 @@ def _delete_prompt_comment_for_actor(
             conn.close()
 
 
-# 日本語: report prompt comment for user に関する処理の入口です。
-# English: Entry point for logic related to report prompt comment for user.
+# コメントを通報・報告し、報告数が閾値に達した場合は自動的に非表示にする関数
+# Report a comment and automatically hide it if the report count reaches the threshold.
 def _report_prompt_comment_for_user(
     reporter_user_id: int,
     comment_id: int,
@@ -1016,8 +986,6 @@ def _report_prompt_comment_for_user(
 ) -> tuple[dict[str, Any], int]:
     conn = None
     cursor = None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1125,15 +1093,13 @@ def _report_prompt_comment_for_user(
             conn.close()
 
 
-# 日本語: get prompts の取得処理を非同期で担当します。
-# English: Handle fetching for get prompts asynchronously.
+# 保存されている全プロンプトを取得するエンドポイント
+# Endpoint to retrieve all public prompts.
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
 async def get_prompts(request: Request):
     """保存されている全プロンプトを取得するエンドポイント"""
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         prompts = await run_blocking(_get_prompts_with_flags, user_id)
         return jsonify({"status": "success", "prompts": prompts})
@@ -1144,12 +1110,10 @@ async def get_prompts(request: Request):
         )
 
 
-# 日本語: get prompt detail の取得処理を非同期で担当します。
-# English: Handle fetching for get prompt detail asynchronously.
+# プロンプト詳細を取得するエンドポイント
+# Endpoint to retrieve details of a specific public prompt.
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
 async def get_prompt_detail(prompt_id: int):
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         prompt = await run_blocking(_get_public_prompt_by_id, prompt_id)
         if not prompt:
@@ -1162,8 +1126,8 @@ async def get_prompt_detail(prompt_id: int):
         )
 
 
-# 日本語: get prompt comments の取得処理を非同期で担当します。
-# English: Handle fetching for get prompt comments asynchronously.
+# プロンプトのコメント一覧を取得するエンドポイント
+# Endpoint to retrieve list of comments for a specific prompt.
 @prompt_share_api_bp.get(
     "/prompts/{prompt_id}/comments",
     name="prompt_share_api.get_prompt_comments",
@@ -1172,8 +1136,6 @@ async def get_prompt_comments(prompt_id: int, request: Request):
     session = getattr(request, "session", {}) or {}
     actor_user_id = session.get("user_id")
     actor_is_admin = bool(session.get("is_admin"))
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         response_payload, status_code = await run_blocking(
             _fetch_prompt_comments,
@@ -1189,15 +1151,13 @@ async def get_prompt_comments(prompt_id: int, request: Request):
         )
 
 
-# 日本語: create prompt comment の作成処理を非同期で担当します。
-# English: Handle creating for create prompt comment asynchronously.
+# コメントを作成・投稿するエンドポイント
+# Endpoint to submit/create a new comment for a public prompt.
 @prompt_share_api_bp.post(
     "/prompts/{prompt_id}/comments",
     name="prompt_share_api.create_prompt_comment",
 )
 async def create_prompt_comment(prompt_id: int, request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = int(request.session["user_id"])
@@ -1208,8 +1168,6 @@ async def create_prompt_comment(prompt_id: int, request: Request):
         request,
         user_id,
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not allowed:
         return jsonify_rate_limited(
             limit_message or "コメント投稿の試行回数が多すぎます。時間をおいて再試行してください。",
@@ -1246,22 +1204,18 @@ async def create_prompt_comment(prompt_id: int, request: Request):
         )
 
 
-# 日本語: delete prompt comment の削除処理を非同期で担当します。
-# English: Handle deleting for delete prompt comment asynchronously.
+# コメントを削除するエンドポイント
+# Endpoint to delete a specific comment.
 @prompt_share_api_bp.delete(
     "/comments/{comment_id}",
     name="prompt_share_api.delete_prompt_comment",
 )
 async def delete_prompt_comment(comment_id: int, request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 
     actor_user_id = int(request.session["user_id"])
     actor_is_admin = bool(request.session.get("is_admin"))
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         response_payload, status_code = await run_blocking(
             _delete_prompt_comment_for_actor,
@@ -1277,21 +1231,17 @@ async def delete_prompt_comment(comment_id: int, request: Request):
         )
 
 
-# 日本語: report prompt comment に関する処理の入口です。
-# English: Entry point for logic related to report prompt comment.
+# コメントを通報するエンドポイント
+# Endpoint to report a specific comment.
 @prompt_share_api_bp.post(
     "/comments/{comment_id}/report",
     name="prompt_share_api.report_prompt_comment",
 )
 async def report_prompt_comment(comment_id: int, request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1319,21 +1269,17 @@ async def report_prompt_comment(comment_id: int, request: Request):
         )
 
 
-# 日本語: create prompt の作成処理を非同期で担当します。
-# English: Handle creating for create prompt asynchronously.
+# 新しいプロンプトを投稿・共有するエンドポイント
+# Endpoint to publish and share a new prompt.
 @prompt_share_api_bp.post("/prompts", name="prompt_share_api.create_prompt")
 async def create_prompt(request: Request):
     """新しいプロンプトを投稿するエンドポイント"""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     content_type = request.headers.get("content-type", "")
     image_file = None
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
         image_candidate = form.get("reference_image")
@@ -1403,19 +1349,15 @@ async def create_prompt(request: Request):
         )
 
 
-# 日本語: add bookmark の追加処理を非同期で担当します。
-# English: Handle adding for add bookmark asynchronously.
+# プロンプトをお気に入りブックマークするエンドポイント
+# Endpoint to add a prompt to user's bookmark list.
 @prompt_share_api_bp.post("/bookmark", name="prompt_share_api.add_bookmark")
 async def add_bookmark(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1441,19 +1383,15 @@ async def add_bookmark(request: Request):
         )
 
 
-# 日本語: remove bookmark の削除処理を非同期で担当します。
-# English: Handle removing for remove bookmark asynchronously.
+# ブックマークを解除・削除するエンドポイント
+# Endpoint to remove a prompt from user's bookmark list.
 @prompt_share_api_bp.delete("/bookmark", name="prompt_share_api.remove_bookmark")
 async def remove_bookmark(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1481,19 +1419,15 @@ async def remove_bookmark(request: Request):
         )
 
 
-# 日本語: add prompt as task の追加処理を非同期で担当します。
-# English: Handle adding for add prompt as task asynchronously.
+# 公開プロンプトをタスクに追加するエンドポイント
+# Endpoint to duplicate a public prompt as a user's task template.
 @prompt_share_api_bp.post("/task", name="prompt_share_api.add_prompt_as_task")
 async def add_prompt_as_task(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1519,19 +1453,15 @@ async def add_prompt_as_task(request: Request):
         )
 
 
-# 日本語: add like の追加処理を非同期で担当します。
-# English: Handle adding for add like asynchronously.
+# プロンプトに「いいね」を追加するエンドポイント
+# Endpoint to add a "like" to a public prompt.
 @prompt_share_api_bp.post("/like", name="prompt_share_api.add_like")
 async def add_like(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1557,19 +1487,15 @@ async def add_like(request: Request):
         )
 
 
-# 日本語: remove like の削除処理を非同期で担当します。
-# English: Handle removing for remove like asynchronously.
+# プロンプトの「いいね」を解除するエンドポイント
+# Endpoint to remove a "like" from a public prompt.
 @prompt_share_api_bp.delete("/like", name="prompt_share_api.remove_like")
 async def remove_like(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1591,19 +1517,15 @@ async def remove_like(request: Request):
         )
 
 
-# 日本語: add prompt to list の追加処理を非同期で担当します。
-# English: Handle adding for add prompt to list asynchronously.
+# ブックマーク保存リストにプロンプトを追加するエンドポイント
+# Endpoint to add a prompt to user's bookmark list.
 @prompt_share_api_bp.post("/prompt_list", name="prompt_share_api.add_prompt_to_list")
 async def add_prompt_to_list(request: Request):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 

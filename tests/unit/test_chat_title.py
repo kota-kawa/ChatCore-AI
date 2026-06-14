@@ -8,11 +8,11 @@ from services.chat_title import (
 )
 
 
-# 日本語: ChatTitleTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatTitleTestCase.
+# 日本語: Chat Titleの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Chat Title.
 class ChatTitleTestCase(unittest.TestCase):
-    # 日本語: test generate chat room title parses json response のテスト検証を担当します。
-    # English: Handle verifying test behavior for test generate chat room title parses json response.
+    # 日本語: generateチャットroomタイトルparsesjsonレスポンスことを検証します。
+    # English: Verify that generate chat room title parses json response.
     def test_generate_chat_room_title_parses_json_response(self):
         title = generate_chat_room_title(
             "Pythonの学習計画を作って",
@@ -23,8 +23,8 @@ class ChatTitleTestCase(unittest.TestCase):
 
         self.assertEqual(title, "Python学習計画")
 
-    # 日本語: test build initial title candidates includes task setup のテスト検証を担当します。
-    # English: Handle verifying test behavior for test build initial title candidates includes task setup.
+    # 日本語: ビルドinitialタイトルcandidates含むタスクsetupことを検証します。
+    # English: Verify that build initial title candidates includes task setup.
     def test_build_initial_title_candidates_includes_task_setup(self):
         candidates = build_initial_title_candidates(
             "【タスク】メール返信\n【状況・作業環境】採用面接の日程調整",
@@ -38,8 +38,8 @@ class ChatTitleTestCase(unittest.TestCase):
         self.assertIn("採用面接の日程調整", candidates)
         self.assertIn("メール返信", candidates)
 
-    # 日本語: test maybe auto title returns title only when rename succeeds のテスト検証を担当します。
-    # English: Handle verifying test behavior for test maybe auto title returns title only when rename succeeds.
+    # 日本語: renamesucceedsのとき、maybeautoタイトル返却するタイトルonlyことを検証します。
+    # English: Verify that maybe auto title returns title only when rename succeeds.
     def test_maybe_auto_title_returns_title_only_when_rename_succeeds(self):
         calls = []
 
@@ -49,8 +49,8 @@ class ChatTitleTestCase(unittest.TestCase):
             calls.append((room_id, title, allowed_current_titles))
             return True
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("services.chat_title.generate_chat_room_title", return_value="相談の整理"):
             title = maybe_auto_title_chat_room(
                 chat_room_id="room-1",

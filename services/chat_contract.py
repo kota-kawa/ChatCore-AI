@@ -15,15 +15,11 @@ _DEFAULT_FRONTEND_INTERNAL_CASE = "camelCase"
 _DEFAULT_DATETIME_SERIALIZATION = "iso-8601"
 
 
-# 日本語: to positive int に関する処理の入口です。
-# English: Entry point for logic related to to positive int.
+# 値を正の整数値に変換するヘルパー関数
+# Helper function to convert a value to a positive integer
 def _to_positive_int(value: Any, fallback: int) -> int:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(value, bool):
         return fallback
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -31,17 +27,17 @@ def _to_positive_int(value: Any, fallback: int) -> int:
     return parsed if parsed > 0 else fallback
 
 
-# 日本語: load chat contract の読み込み処理を担当します。
-# English: Handle loading for load chat contract.
+# フロントエンドと共通定義の chat_contract.json ファイルをロードする
+# Load the chat_contract.json file shared with the frontend
 def _load_chat_contract() -> dict[str, Any]:
+    # コントラクトファイルの絶対パスを決定する
+    # Determine the absolute path of the contract file
     contract_path = (
         Path(__file__).resolve().parent.parent
         / "frontend"
         / "data"
         / "chat_contract.json"
     )
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         raw = contract_path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -51,8 +47,8 @@ def _load_chat_contract() -> dict[str, Any]:
         logger.exception("Failed to read chat contract file: %s", contract_path)
         return {}
 
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # JSON 文字列をパースする
+    # Parse the JSON string
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
@@ -65,6 +61,8 @@ def _load_chat_contract() -> dict[str, Any]:
     return parsed
 
 
+# 定義ファイルの読み込みとグローバル定数値の設定
+# Load definitions file and set global constant values
 _CHAT_CONTRACT = _load_chat_contract()
 _CHAT_HISTORY = _CHAT_CONTRACT.get("chat_history")
 if not isinstance(_CHAT_HISTORY, dict):
@@ -74,6 +72,8 @@ _API = _CHAT_CONTRACT.get("api")
 if not isinstance(_API, dict):
     _API = {}
 
+# 最終的な外部公開用定数群
+# Final exported constants
 CHAT_HISTORY_PAGE_SIZE_DEFAULT: Final[int] = _to_positive_int(
     _CHAT_HISTORY.get("page_size_default"),
     _DEFAULT_CHAT_HISTORY_PAGE_SIZE,

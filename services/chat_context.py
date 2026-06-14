@@ -18,21 +18,23 @@ ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 
 
-# 日本語: estimate token count に関する処理の入口です。
-# English: Entry point for logic related to estimate token count.
+# テキストのトークン数を概算（簡易見積もり）する
+# Roughly estimate the token count of a given text
 def estimate_token_count(text: str) -> int:
     normalized = text if isinstance(text, str) else str(text)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not normalized:
         return 0
+    # 4文字あたり約1トークンとして計算
+    # Calculate roughly as 1 token per 4 characters
     return max(1, math.ceil(len(normalized) / 4))
 
 
-# 日本語: normalize message text の正規化処理を担当します。
-# English: Handle normalizing for normalize message text.
+# メッセージテキストをクレンジングして正規化する
+# Clean and normalize the message text
 def normalize_message_text(text: str) -> str:
     normalized = text if isinstance(text, str) else str(text)
+    # HTML実体参照のデコードと改行・空白の整理
+    # Decode HTML entities and organize newlines/spaces
     normalized = html.unescape(normalized)
     normalized = _HTML_BR_PATTERN.sub("\n", normalized)
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
@@ -41,36 +43,34 @@ def normalize_message_text(text: str) -> str:
     return normalized.strip()
 
 
-# 日本語: trim text to token budget に関する処理の入口です。
-# English: Entry point for logic related to trim text to token budget.
+# トークン上限に収まるようにテキストを切り詰める
+# Trim the text to fit within the specified token budget
 def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if max_tokens <= 0:
         return ""
     normalized = normalize_message_text(text)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 既に予算内に収まっていればそのまま返す
+    # Return directly if it is already within the budget
     if estimate_token_count(normalized) <= max_tokens:
         return normalized
 
+    # 切り詰め後の文字数を算出して末尾に省略記号を付与する
+    # Calculate truncated character count and append ellipsis
     max_chars = max_tokens * 4
     if max_chars <= 3:
         return normalized[:max_chars]
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
-# 日本語: build room summary の組み立て処理を担当します。
-# English: Handle building for build room summary.
+# 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
+# Build a summary (XML format) from the older messages in the conversation history
 def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 直近のメッセージ数以下の場合は要約を行わない
+    # Do not summarize if history size is below the recent message count threshold
     if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT:
         return "", 0
 
     archived_messages = messages[:-ARCHIVE_RECENT_MESSAGE_COUNT]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not archived_messages:
         return "", 0
 
@@ -78,6 +78,8 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
     user_points: list[str] = []
     assistant_points: list[str] = []
 
+    # 古いメッセージを走査して主要なポイントを抽出する
+    # Iterate through archived messages and extract main points
     for message in archived_messages:
         role = str(message.get("role", "user"))
         content = trim_text_to_token_budget(
@@ -98,6 +100,8 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
     user_points = user_points[-ARCHIVE_SUMMARY_MAX_ITEMS:]
     assistant_points = assistant_points[-ARCHIVE_SUMMARY_MAX_ITEMS:]
 
+    # XML形式で要約コンテキストを構築する
+    # Build the summary context in XML format
     sections: list[str] = ["<conversation_summary>"]
     sections.append(
         f"<archived_message_count>{len(archived_messages)}</archived_message_count>"
@@ -128,29 +132,29 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
     return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET), len(archived_messages)
 
 
-# 日本語: select recent messages に関する処理の入口です。
-# English: Entry point for logic related to select recent messages.
+# トークン予算と上限メッセージ数に収まる範囲で、直近のメッセージを後ろから順に選択する
+# Select recent messages from the end, fitting within the token budget and maximum message limit
 def select_recent_messages(
     messages: list[dict[str, str]],
     token_budget: int,
     *,
     max_messages: int = RECENT_HISTORY_MAX_MESSAGES,
 ) -> list[dict[str, str]]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if token_budget <= 0:
         return []
 
     selected_reversed: list[dict[str, str]] = []
     remaining_tokens = token_budget
 
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # メッセージ履歴を後ろから前に向かって走査する
+    # Iterate through the message history backwards from the end
     for message in reversed(messages):
         normalized_content = normalize_message_text(message.get("content", ""))
         if not normalized_content:
             continue
 
+        # 最初のメッセージ（一番新しいもの）は、切り詰めてでも必ず含める
+        # Always include the first message (most recent one) even if it needs trimming
         if not selected_reversed:
             trimmed_content = trim_text_to_token_budget(normalized_content, remaining_tokens)
             if not trimmed_content:
@@ -164,6 +168,8 @@ def select_recent_messages(
             remaining_tokens -= estimate_token_count(trimmed_content)
             continue
 
+        # メッセージ数制限またはトークン制限に達した場合は走査を終了する
+        # Terminate traversal if limits on message count or token budget are met
         if len(selected_reversed) >= max_messages or remaining_tokens <= 0:
             break
 
@@ -182,16 +188,12 @@ def select_recent_messages(
     return list(reversed(selected_reversed))
 
 
-# 日本語: build summary system message の組み立て処理を担当します。
-# English: Handle building for build summary system message.
+# 会話の古い要約をシステムプロンプトのフォーマットで構築する
+# Build the system message containing the archived summary
 def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not summary_text:
         return None
     trimmed = trim_text_to_token_budget(summary_text, SUMMARY_TOKEN_BUDGET)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not trimmed:
         return None
     return {
@@ -205,16 +207,14 @@ def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
     }
 
 
-# 日本語: build memory system message の組み立て処理を担当します。
-# English: Handle building for build memory system message.
+# メモリ・ファクトリストをシステムメッセージの形式で構築する
+# Build the system message representing the memory facts list
 def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | None:
     normalized_facts = [
         trim_text_to_token_budget(fact, 80)
         for fact in memory_facts
         if trim_text_to_token_budget(fact, 80)
     ]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not normalized_facts:
         return None
 
@@ -222,8 +222,8 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
         "<memory_facts>",
         "以下はこの会話で継続的に守るべきユーザー情報または設定です。",
     ]
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
+    # ファクト項目を箇条書きで追加する
+    # Append fact entries as bullet points
     for fact in normalized_facts:
         sections.append(f"- {fact}")
     sections.append("</memory_facts>")
@@ -234,8 +234,8 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     }
 
 
-# 日本語: build context messages の組み立て処理を担当します。
-# English: Handle building for build context messages.
+# ベース指示、ユーザー定義、タスク指示、要約、メモリ、直近履歴を統合したLLM送信用メッセージリストを構築する
+# Build the list of messages for LLM request by integrating base instruction, user info, task context, summary, memory, and recent history
 def build_context_messages(
     *,
     base_system_prompt: str,
@@ -247,24 +247,30 @@ def build_context_messages(
 ) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": base_system_prompt}]
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # ユーザープロフィールプロンプトを追加
+    # Add user profile prompt if specified
     if user_profile_prompt:
         messages.append({"role": "system", "content": user_profile_prompt})
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # タスクテンプレートプロンプトを追加
+    # Add task template prompt if specified
     if task_prompt:
         messages.append({"role": "system", "content": task_prompt})
 
+    # 履歴要約メッセージを追加
+    # Add history summary message if it exists
     summary_message = build_summary_system_message(room_summary)
     if summary_message is not None:
         messages.append(summary_message)
 
+    # 永続メモリファクトメッセージを追加
+    # Add persistent memory facts message if it exists
     memory_message = build_memory_system_message(memory_facts)
     if memory_message is not None:
         messages.append(memory_message)
 
+    # システムメッセージ群で使用されたトークン数を算出して直近履歴に使えるトークン予算を決定する
+    # Calculate tokens used by system messages to determine the remaining budget for recent history
     reserved_tokens = sum(
         estimate_token_count(str(message.get("content", "")))
         for message in messages
@@ -276,5 +282,7 @@ def build_context_messages(
     if remaining_tokens < 0:
         remaining_tokens = 0
 
+    # 予算内で直近のメッセージを追加する
+    # Extend the messages with recent items within the calculated budget
     messages.extend(select_recent_messages(recent_messages, remaining_tokens))
     return messages

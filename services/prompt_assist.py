@@ -70,24 +70,24 @@ PROMPT_ASSIST_SYSTEM_PROMPT = (
 )
 
 
-# 日本語: normalize field value の正規化処理を担当します。
-# English: Handle normalizing for normalize field value.
+# 日本語: 入力フィールドの値を安全な文字列形式にトリム・正規化します。
+# English: Clean and normalize a field value into a stripped string.
 def _normalize_field_value(value: Any) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if value is None:
         return ""
     return str(value).strip()
 
 
-# 日本語: normalize fields の正規化処理を担当します。
-# English: Handle normalizing for normalize fields.
+# 日本語: モーダルの種類に合わせて入力値を一括正規化します。
+# English: Normalize input fields according to modal requirements.
 def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
     target_config = PROMPT_ASSIST_TARGETS[target]
     normalized = {key: _normalize_field_value(fields.get(key, "")) for key in target_config["context_fields"]}
     normalized_prompt_type = normalized.get("prompt_type")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if normalized_prompt_type in {"image", "skill"}:
         normalized["prompt_type"] = normalized_prompt_type
     else:
@@ -95,16 +95,16 @@ def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
     return normalized
 
 
-# 日本語: resolve target config に関する処理の入口です。
-# English: Entry point for logic related to resolve target config.
+# 日本語: 補助対象（タスク、プロンプト、SKILL等）に合わせて設定（許可フィールド、主キー）を決定します。
+# English: Resolve the assist configuration settings based on the target type and metadata.
 def _resolve_target_config(target: str, fields: dict[str, str]) -> dict[str, Any]:
     target_config = PROMPT_ASSIST_TARGETS[target]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if target != "shared_prompt_modal":
         return target_config
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if fields.get("prompt_type") != "skill":
         return target_config
     return {
@@ -115,8 +115,8 @@ def _resolve_target_config(target: str, fields: dict[str, str]) -> dict[str, Any
     }
 
 
-# 日本語: validate prompt assist request の検証処理を担当します。
-# English: Handle validating for validate prompt assist request.
+# 日本語: プロンプトAIアシストの実行前提条件（文字入力状況など）をチェックし、満たさない場合は例外を送出します。
+# English: Validate prompt assist request pre-conditions, throwing a ValueError on validation errors.
 def _validate_prompt_assist_request(
     target: str,
     action: str,
@@ -128,13 +128,13 @@ def _validate_prompt_assist_request(
     primary_value = fields.get(primary_field, "")
     is_skill_prompt = target == "shared_prompt_modal" and fields.get("prompt_type") == "skill"
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if is_skill_prompt and action == "generate_examples":
         raise ValueError("SKILL投稿では入出力例の生成は利用できません。")
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if action in {"improve", "shorten", "expand"} and not primary_value:
         if is_skill_prompt:
             raise ValueError("SKILL定義を入力してからAI補助を実行してください。")
@@ -151,8 +151,8 @@ def _validate_prompt_assist_request(
             raise ValueError("作りたいプロンプトの内容を入力してから「AIで作成」を押してください。")
 
 
-# 日本語: build prompt assist messages の組み立て処理を担当します。
-# English: Handle building for build prompt assist messages.
+# 日本語: プロンプト補助アクションに応じたシステム指示およびユーザー要求のLLMメッセージリストを構築します。
+# English: Construct LLM system and user prompt assist message context.
 def _build_prompt_assist_messages(
     target: str,
     action: str,
@@ -173,8 +173,8 @@ def _build_prompt_assist_messages(
         "suggested_fields": {"field_name": "提案文"},
     }
     user_brief_block = ""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if instruction:
         user_brief_block = f"<user_brief>\n{instruction}\n</user_brief>\n"
     rules = [
@@ -184,8 +184,8 @@ def _build_prompt_assist_messages(
         "user_brief があれば、それをユーザーの作りたいプロンプトの意図として最優先で反映する。",
         "generate_draft で本文が既にある場合は、それを土台に整理・加筆して作り込む。本文が空の場合は user_brief や title をもとに新規作成する。",
     ]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if target == "shared_prompt_modal" and fields.get("prompt_type") == "skill":
         rules.extend(
             [
@@ -238,18 +238,18 @@ def _build_prompt_assist_messages(
     ]
 
 
-# 日本語: extract json text に関する処理の入口です。
-# English: Entry point for logic related to extract json text.
+# 日本語: LLM応答からJSONのプレーンテキストを抽出します。
+# English: Extract raw JSON string from the LLM response text.
 def _extract_json_text(raw_response: str) -> str:
     stripped = raw_response.strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not stripped:
         raise LlmProviderError("AI assist response was empty.")
 
     fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", stripped, re.DOTALL)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if fenced_match:
         return fenced_match.group(1)
 
@@ -261,27 +261,27 @@ def _extract_json_text(raw_response: str) -> str:
     raise LlmProviderError("AI assist response did not contain JSON.")
 
 
-# 日本語: parse prompt assist response の解析処理を担当します。
-# English: Handle parsing for parse prompt assist response.
+# 日本語: LLMのJSONレスポンスをデコードしてパースします。
+# English: Parse the raw LLM response as JSON into a dictionary.
 def _parse_prompt_assist_response(raw_response: str) -> dict[str, Any]:
     json_text = _extract_json_text(raw_response)
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: エラー（例外）発生の可能性がある処理を実行し、適切に捕捉します。
+    # English: Execute operations that might raise exceptions and handle them appropriately.
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError as exc:
         raise LlmProviderError("AI assist response was invalid JSON.") from exc
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not isinstance(parsed, dict):
         raise LlmProviderError("AI assist response was not an object.")
 
     return parsed
 
 
-# 日本語: normalize prompt assist response の正規化処理を担当します。
-# English: Handle normalizing for normalize prompt assist response.
+# 日本語: LLMからの提案結果をフィルタし、安全かつ実用的な形式に変換します。
+# English: Clean, filter, and normalize the suggested fields returned by the LLM.
 def _normalize_prompt_assist_response(
     target: str,
     parsed_response: dict[str, Any],
@@ -293,8 +293,8 @@ def _normalize_prompt_assist_response(
     raw_suggested_fields = parsed_response.get("suggested_fields", {})
     suggested_fields: dict[str, str] = {}
     suggestion_modes: dict[str, str] = {}
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if isinstance(raw_suggested_fields, dict):
         for field_name in allowed_fields:
             value = raw_suggested_fields.get(field_name)
@@ -307,8 +307,8 @@ def _normalize_prompt_assist_response(
                     "create" if not current_fields.get(field_name, "") else "refine"
                 )
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if not suggested_fields:
         raise LlmProviderError("AI assist response did not contain usable suggestions.")
 
@@ -331,20 +331,20 @@ def _normalize_prompt_assist_response(
     }
 
 
-# 日本語: create prompt assist payload の作成処理を担当します。
-# English: Handle creating for create prompt assist payload.
+# 日本語: パラメータのバリデーション、LLM要求の送信、および応答解析を行い、プロンプト作成補助結果を返します。
+# English: Orchestrate prompt assist execution: validate inputs, call LLM, parse and return normalized payload.
 def create_prompt_assist_payload(
     target: str,
     action: str,
     fields: dict[str, Any],
     instruction: str = "",
 ) -> dict[str, Any]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if target not in PROMPT_ASSIST_TARGETS:
         raise ValueError("サポートされていないAI補助対象です。")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 与えられた条件に基づいて分岐処理を行います。
+    # English: Branch execution flow based on the given conditions.
     if action not in PROMPT_ASSIST_ACTION_LABELS:
         raise ValueError("サポートされていないAI補助アクションです。")
 

@@ -4,13 +4,13 @@ from services.attached_files import PreparedAttachedFile
 from services.repositories.chat_repository import ChatRepository
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# チャット履歴の分岐操作(ブランチング)のSQL挙動をメモリ上でシミュレートするための最小限のインメモリ疑似カーソルクラス。
+# Minimal in-memory emulation cursor class to mock SQL queries issued by chat branching methods.
 class FakeCursor:
     """Minimal in-memory emulation of the SQL the branching methods issue."""
 
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
         self._result_one = None
@@ -18,8 +18,8 @@ class FakeCursor:
         self.rowcount = 0
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、インメモリのストア内のデータを更新・抽出します。
+    # Execute a query, modifying or fetching from the in-memory data store.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         params = params or ()
@@ -27,8 +27,8 @@ class FakeCursor:
         self._result_all = []
         self.rowcount = 0
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # メッセージの新規追加(インサート)処理をシミュレート
+        # Simulate inserting a new chat message
         if normalized.startswith("INSERT INTO chat_history"):
             (
                 chat_room_id,
@@ -58,14 +58,16 @@ class FakeCursor:
             self._result_one = (new_id,)
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # ルームのアクティブルート更新をシミュレート
+        # Simulate updating the active root message of a room
         if normalized.startswith("UPDATE chat_rooms SET active_root_id"):
             active_root_id, room_id = params
             self.store["rooms"].setdefault(room_id, {})["active_root_id"] = active_root_id
             self.rowcount = 1
             return
 
+        # ルームのタイトル変更をシミュレート
+        # Simulate updating the chat room title
         if normalized.startswith("UPDATE chat_rooms SET title"):
             new_title, room_id, *allowed_titles = params
             room = self.store["rooms"].get(room_id)
@@ -74,6 +76,8 @@ class FakeCursor:
                 self.rowcount = 1
             return
 
+        # メッセージのアクティブな子メッセージ(子ブランチ)IDの更新をシミュレート
+        # Simulate updating the active child message ID of a parent message
         if normalized.startswith("UPDATE chat_history SET active_child_id"):
             active_child_id, target_id, room_id = params
             for row in self.store["history"]:
@@ -82,6 +86,8 @@ class FakeCursor:
                     self.rowcount = 1
             return
 
+        # ルームの全履歴(全世代・全分岐含む)の取得をシミュレート
+        # Simulate fetching the entire chat history for a room
         if normalized.startswith("SELECT id, message, sender, parent_id, active_child_id"):
             (room_id,) = params
             rows = [r for r in self.store["history"] if r["chat_room_id"] == room_id]
@@ -102,12 +108,16 @@ class FakeCursor:
             ]
             return
 
+        # アクティブルートIDの取得をシミュレート
+        # Simulate retrieving the active root message ID
         if normalized.startswith("SELECT active_root_id FROM chat_rooms"):
             (room_id,) = params
             room = self.store["rooms"].get(room_id)
             self._result_one = (room.get("active_root_id"),) if room else None
             return
 
+        # 親メッセージIDの取得をシミュレート
+        # Simulate retrieving the parent message ID of a message
         if normalized.startswith("SELECT parent_id FROM chat_history"):
             target_id, room_id = params
             for row in self.store["history"]:
@@ -119,61 +129,61 @@ class FakeCursor:
 
         raise AssertionError(f"Unexpected query: {normalized}")
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # クエリの実行結果から1レコード取得します。
+    # Fetch a single query result.
     def fetchone(self):
         return self._result_one
 
-    # 日本語: fetchall に関する処理の入口です。
-    # English: Entry point for logic related to fetchall.
+    # クエリの実行結果から全レコードを取得します。
+    # Fetch all query results.
     def fetchall(self):
         return self._result_all
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# テスト用の疑似DBコネクションクラス。
+# Mock database connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, store):
         self.store = store
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, *exc):
         return False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self):
         return FakeCursor(self.store)
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # コミット処理（テスト用のためパス）
+    # Commit transaction (no-op for mock)
     def commit(self):
         pass
 
-    # 日本語: rollback に関する処理の入口です。
-    # English: Entry point for logic related to rollback.
+    # ロールバック処理（テスト用のためパス）
+    # Rollback transaction (no-op for mock)
     def rollback(self):
         pass
 
 
-# 日本語: ChatBranchingTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatBranchingTestCase.
+# チャットの会話履歴における分岐、メッセージの編集、再生成、アクティブパスの切り替えを検証するテストクラス。
+# Test class to verify branching, editing messages, regenerating, and switching active paths in chat history.
 class ChatBranchingTestCase(unittest.TestCase):
-    # 日本語: setUp に関する処理の入口です。
-    # English: Entry point for logic related to setUp.
+    # テストケースの実行前にインメモリのデータストアとリポジトリインスタンスを初期化します。
+    # Initialize the in-memory store and the ChatRepository instance before each test.
     def setUp(self):
         self.store = {
             "seq": 1,
@@ -187,32 +197,30 @@ class ChatBranchingTestCase(unittest.TestCase):
             sleep=lambda s: None,
         )
 
-    # 日本語: save の保存処理を担当します。
-    # English: Handle saving for save.
+    # 指定されたメッセージ、送信者、親メッセージIDを使用して、チャット履歴にメッセージを保存します。
+    # Save a message to the chat history with the given content, sender, and parent message ID.
     def _save(self, message, sender, parent_id=None):
         return self.repo.save_message("room-1", message, sender, None, parent_id)
 
-    # 日本語: texts に関する処理の入口です。
-    # English: Entry point for logic related to texts.
+    # パス情報ノードのリストからメッセージ本文と送信者のペアのリストを抽出して返します。
+    # Extract and return a list of (message, sender) tuples from the list of path nodes.
     def _texts(self, path):
         return [(node["message"], node["sender"]) for node in path]
 
-    # 日本語: test linear conversation has single versions のテスト検証を担当します。
-    # English: Handle verifying test behavior for test linear conversation has single versions.
+    # 分岐のない一本道の会話履歴において、バージョン数が1となりインデックスも1であることを検証します。
+    # Verify that a linear conversation without branching has version_count=1 and version_index=1 for all nodes.
     def test_linear_conversation_has_single_versions(self):
         u1 = self._save("hi", "user")
         self._save("hello", "assistant", u1)
 
         path = self.repo.get_active_path("room-1")
         self.assertEqual(self._texts(path), [("hi", "user"), ("hello", "assistant")])
-        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-        # English: Process each target item in order and accumulate the needed result.
         for node in path:
             self.assertEqual(node["version_count"], 1)
             self.assertEqual(node["version_index"], 1)
 
-    # 日本語: test conditional room rename preserves manual title のテスト検証を担当します。
-    # English: Handle verifying test behavior for test conditional room rename preserves manual title.
+    # チャットルームのタイトル変更処理で、現在のタイトルが対象リストに含まれている場合のみ変更されることを検証します。
+    # Verify that the chat room title is only renamed if the current title is matched in the allowed titles list.
     def test_conditional_room_rename_preserves_manual_title(self):
         updated = self.repo.rename_room_if_current_title_in(
             "room-1",
@@ -230,15 +238,17 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertFalse(updated_again)
         self.assertEqual(self.store["rooms"]["room-1"]["title"], "AIタイトル")
 
-    # 日本語: test regenerate creates switchable assistant versions のテスト検証を担当します。
-    # English: Handle verifying test behavior for test regenerate creates switchable assistant versions.
+    # アシスタントメッセージの再生成により並列（シブリング）な回答バージョンが作成され、アクティブブランチを切り替えられることを検証します。
+    # Verify that regenerating assistant responses creates sibling versions and allows switching between them.
     def test_regenerate_creates_switchable_assistant_versions(self):
         u1 = self._save("hi", "user")
         a1 = self._save("answer one", "assistant", u1)
+        # 再生成：同じユーザーメッセージの下にアシスタントメッセージの兄弟を追加
         # Regeneration: a sibling assistant under the same user message.
         a2 = self._save("answer two", "assistant", u1)
 
         path = self.repo.get_active_path("room-1")
+        # アクティブなブランチの末尾は最新の回答になる
         # Active branch now ends with the newest answer.
         self.assertEqual(self._texts(path), [("hi", "user"), ("answer two", "assistant")])
         answer = path[-1]
@@ -246,16 +256,18 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertEqual(answer["version_index"], 2)
         self.assertEqual(answer["sibling_ids"], [a1, a2])
 
+        # 最初の回答にブランチを切り替える
         # Switch back to the first answer.
         switched = self.repo.switch_branch("room-1", a1)
         self.assertEqual(self._texts(switched), [("hi", "user"), ("answer one", "assistant")])
         self.assertEqual(switched[-1]["version_index"], 1)
 
-    # 日本語: test edit user message forks branch and preserves original のテスト検証を担当します。
-    # English: Handle verifying test behavior for test edit user message forks branch and preserves original.
+    # 過去のユーザーメッセージの編集によってブランチが分岐し、以前の会話ブランチに戻る（切り替える）ことができることを検証します。
+    # Verify that editing an earlier user message forks a new branch, and the user can switch back to the original branch.
     def test_edit_user_message_forks_branch_and_preserves_original(self):
         u1 = self._save("first question", "user")
         self._save("first answer", "assistant", u1)
+        # 最初のユーザーメッセージの編集により、新しいルートの兄弟ブランチに分岐
         # Editing the first user message forks a sibling root.
         u2 = self._save("edited question", "user")
         self._save("edited answer", "assistant", u2)
@@ -270,6 +282,7 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.assertEqual(user_node["version_index"], 2)
         self.assertEqual(user_node["sibling_ids"], [u1, u2])
 
+        # 切り替えによって元の質問と回答が復元される
         # Switching back restores the original question and its answer.
         switched = self.repo.switch_branch("room-1", u1)
         self.assertEqual(
@@ -277,8 +290,8 @@ class ChatBranchingTestCase(unittest.TestCase):
             [("first question", "user"), ("first answer", "assistant")],
         )
 
-    # 日本語: test active leaf tracks branch tip のテスト検証を担当します。
-    # English: Handle verifying test behavior for test active leaf tracks branch tip.
+    # アクティブな末端（リーフ）メッセージIDが、再生成やブランチの切り替えに追従して正しく更新されることを検証します。
+    # Verify that the active leaf ID correctly tracks the tip of the active branch during regeneration or switching.
     def test_active_leaf_tracks_branch_tip(self):
         u1 = self._save("hi", "user")
         a1 = self._save("answer one", "assistant", u1)
@@ -290,8 +303,8 @@ class ChatBranchingTestCase(unittest.TestCase):
         self.repo.switch_branch("room-1", a1)
         self.assertEqual(self.repo.get_active_leaf_id("room-1"), a1)
 
-    # 日本語: test llm context follows active branch のテスト検証を担当します。
-    # English: Handle verifying test behavior for test llm context follows active branch.
+    # LLMに渡すコンテキストメッセージ一覧が、現在のアクティブなブランチに沿ったものであることを検証します。
+    # Verify that the message history formatted for LLM follows the currently active branch.
     def test_llm_context_follows_active_branch(self):
         u1 = self._save("hi", "user")
         self._save("answer one", "assistant", u1)
@@ -306,8 +319,8 @@ class ChatBranchingTestCase(unittest.TestCase):
             ],
         )
 
-    # 日本語: test attachment contents are internal to explicit active path load のテスト検証を担当します。
-    # English: Handle verifying test behavior for test attachment contents are internal to explicit active path load.
+    # 添付ファイルのコンテンツが、明示的に取得フラグを指定した場合のみ読み込まれ、通常は除外されることを検証します。
+    # Verify that attached file contents are only loaded when explicitly requested, otherwise excluded from the path metadata.
     def test_attachment_contents_are_internal_to_explicit_active_path_load(self):
         self.repo.save_message(
             "room-1",

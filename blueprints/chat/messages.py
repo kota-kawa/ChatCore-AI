@@ -108,81 +108,67 @@ LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
 LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
 
 
-# 日本語: get chat repository の取得処理を担当します。
-# English: Handle fetching for get chat repository.
+# チャット用リポジトリを取得するヘルパー関数
+# Helper function to retrieve the chat repository instance.
 def _get_chat_repository() -> ChatRepository:
     return ChatRepository()
 
 
-# 日本語: resolve auth limit service に関する処理の入口です。
-# English: Entry point for logic related to resolve auth limit service.
+# リクエストから認証制限サービスを解決するヘルパー関数
+# Helper function to resolve the AuthLimitService instance from the request.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
 
 
-# 日本語: resolve llm daily limit service に関する処理の入口です。
-# English: Entry point for logic related to resolve llm daily limit service.
+# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
+# Helper function to resolve the LlmDailyLimitService instance from the request.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
 
 
-# 日本語: build llm quota user key の組み立て処理を担当します。
-# English: Handle building for build llm quota user key.
+# ユーザーIDまたはセッションIDに基づいてLLMクォータ制限キーを組み立てる関数
+# Construct the LLM quota limit key using the user ID or session ID.
 def _build_llm_quota_user_key(user_id: int | None, sid: str | None) -> str | None:
     # Per-caller key used to scope the LLM daily quota. Without this, one
     # user could burn the global per-day cap and DoS every other user.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if user_id is not None:
         return f"user:{user_id}"
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if sid:
         return f"sid:{sid}"
     return None
 
 
-# 日本語: resolve chat generation service に関する処理の入口です。
-# English: Entry point for logic related to resolve chat generation service.
+# リクエストからチャット生成サービスを解決するヘルパー関数
+# Helper function to resolve the ChatGenerationService instance from the request.
 def _resolve_chat_generation_service(
     request: Request,
     service: ChatGenerationService | None,
 ) -> ChatGenerationService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(service, ChatGenerationService):
         return service
     return get_chat_generation_service(request)
 
 
-# 日本語: validate guest room access の検証処理を非同期で担当します。
-# English: Handle validating for validate guest room access asynchronously.
+# ゲストユーザー用のチャットルームアクセス権を検証する非同期関数
+# Asynchronously validate the guest session's access privileges to the specified room.
 async def _validate_guest_room_access(session: dict, chat_room_id: str):
     sid = get_session_id(session)
     registered_room_ids = get_guest_room_ids(session)
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if registered_room_ids and chat_room_id not in registered_room_ids:
         return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
     room_exists = await run_blocking(ephemeral_store.room_exists, sid, chat_room_id)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not room_exists:
         unregister_guest_room(session, chat_room_id)
         return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
@@ -278,8 +264,8 @@ BASE_SYSTEM_PROMPT = """
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 
-# 日本語: build base system prompt の組み立て処理を担当します。
-# English: Handle building for build base system prompt.
+# 現在日時情報などを埋め込んだベースのシステムプロンプトを組み立てる関数
+# Construct the base system prompt containing contextual runtime information like datetime.
 def _build_base_system_prompt(current_time: datetime | None = None) -> str:
     resolved_time = current_time or datetime.now().astimezone()
     current_datetime_text = resolved_time.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
@@ -312,17 +298,13 @@ def _build_base_system_prompt(current_time: datetime | None = None) -> str:
     return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{runtime_context}"
 
 
-# 日本語: build user profile prompt の組み立て処理を担当します。
-# English: Handle building for build user profile prompt.
+# ユーザー設定からLLM向けプロフィール用カスタムプロンプトを組み立てる関数
+# Build custom LLM instructions based on user's configuration profile.
 def _build_user_profile_prompt(user: dict[str, Any] | None) -> str | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(user, dict):
         return None
 
     llm_profile_context = str(user.get("llm_profile_context") or "").strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not llm_profile_context:
         return None
 
@@ -345,8 +327,8 @@ def _build_user_profile_prompt(user: dict[str, Any] | None) -> str | None:
     return "\n".join(sections)
 
 
-# 日本語: sse event に関する処理の入口です。
-# English: Entry point for logic related to sse event.
+# 引数データをJSONシリアライズして Server-Sent Event (SSE) フォーマットのバイトデータに変換する関数
+# Construct a Server-Sent Event (SSE) formatted byte sequence from event data.
 def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None = None) -> bytes:
     # SSE 形式で JSON ペイロードを1イベントとして返す
     # Encode one JSON payload as an SSE event.
@@ -355,8 +337,8 @@ def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None =
     return f"{id_line}event: {event}\ndata: {body}\n\n".encode("utf-8")
 
 
-# 日本語: iter llm stream events に関する処理の入口です。
-# English: Entry point for logic related to iter llm stream events.
+# バックグラウンドの生成ジョブイベントを Server-Sent Event (SSE) ペイロードとして反復取得するジェネレータ
+# Generator that iterates and yields SSE byte sequences from a background generation job.
 def _iter_llm_stream_events(
     job: ChatGenerationJob,
     *,
@@ -364,19 +346,15 @@ def _iter_llm_stream_events(
 ) -> Iterator[bytes]:
     # 生成ジョブのイベント列を SSE として配信する
     # Convert background generation job events into SSE payloads.
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for event in job.iter_events(after_sequence_id=after_sequence_id):
         yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
 
 
-# 日本語: iter serialized stream events に関する処理の入口です。
-# English: Entry point for logic related to iter serialized stream events.
+# シリアライズされた生成ストリームイベントを Server-Sent Event (SSE) として送出するジェネレータ
+# Yield serialized generation events formatted as SSE byte streams.
 def _iter_serialized_stream_events(
     events: Iterator[ChatGenerationEvent],
 ) -> Iterator[bytes]:
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         for event in events:
             yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
@@ -384,8 +362,8 @@ def _iter_serialized_stream_events(
         yield _sse_event("error", exc.payload)
 
 
-# 日本語: build llm stream response の組み立て処理を担当します。
-# English: Handle building for build llm stream response.
+# SSEストリーミングイベントのリストを StreamingResponse インスタンスに変換する関数
+# Construct a StreamingResponse object from a sequence of SSE stream events.
 def _build_llm_stream_response(
     events: Iterator[bytes],
 ) -> StreamingResponse:
@@ -403,8 +381,8 @@ def _build_llm_stream_response(
     )
 
 
-# 日本語: discard room without assistant response に関する処理の入口です。
-# English: Entry point for logic related to discard room without assistant response.
+# アシスタントからの返答が無い（空の）チャットルームを破棄・削除する関数
+# Permanently discard/delete a chat room if no assistant messages exist in it.
 def _discard_room_without_assistant_response(
     chat_room_id: str,
     *,
@@ -412,27 +390,21 @@ def _discard_room_without_assistant_response(
     sid: str | None = None,
 ) -> bool:
     deleted = False
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if user_id is not None:
         deleted = delete_chat_room_if_no_assistant_messages(chat_room_id, user_id) or deleted
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if sid is not None:
         deleted = ephemeral_store.delete_room_if_no_assistant_messages(sid, chat_room_id) or deleted
     return deleted
 
 
-# 日本語: cleanup failed room without assistant response に関する処理の入口です。
-# English: Entry point for logic related to cleanup failed room without assistant response.
+# エラー等で生成失敗した際、アシスタント返答の無いチャットルームを安全に破棄クリーンアップする関数
+# Safely discard a newly created room that has no assistant responses after a failed generation.
 def _cleanup_failed_room_without_assistant_response(
     chat_room_id: str,
     *,
     user_id: int | None = None,
     sid: str | None = None,
 ) -> None:
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         deleted = _discard_room_without_assistant_response(
             chat_room_id,
@@ -451,16 +423,12 @@ def _cleanup_failed_room_without_assistant_response(
         )
 
 
-# 日本語: parse last event id の解析処理を担当します。
-# English: Handle parsing for parse last event id.
+# リクエストヘッダーまたはパラメータから直近 of SSEイベントIDをパース取得する関数
+# Extract and parse the last SSE event ID from request headers or query parameters.
 def _parse_last_event_id(request: Request) -> int:
     raw_value = request.headers.get("last-event-id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw_value is None:
         raw_value = request.query_params.get("last_event_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw_value is None:
         return 0
     try:
@@ -470,19 +438,15 @@ def _parse_last_event_id(request: Request) -> int:
     return parsed if parsed > 0 else 0
 
 
-# 日本語: parse task launch message の解析処理を担当します。
-# English: Handle parsing for parse task launch message.
+# ユーザーメッセージからタスク名と状況設定情報を抽出するパース関数
+# Parse and extract task launch parameters from a user message content.
 def _parse_task_launch_message(message: str) -> dict[str, str] | None:
     # 初回タスク起動メッセージからタスク名と状況情報を抽出する
     # Extract task name and setup info from the initial task-launch payload.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not message:
         return None
 
     task_match = re.search(r"^【タスク】(?P<task>[^\n]+)", message, re.MULTILINE)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not task_match:
         return None
 
@@ -494,29 +458,25 @@ def _parse_task_launch_message(message: str) -> dict[str, str] | None:
     }
 
 
-# 日本語: fetch prompt data の取得処理を担当します。
-# English: Handle fetching for fetch prompt data.
+# 特定タスク用のプロンプト定義をDBから取得する関数
+# Fetch prompt-template data for a specific task from the repository.
 def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
     # タスク名に対応するプロンプト定義を取得する
     # Fetch prompt-template metadata for the selected task.
     return _get_chat_repository().get_task_prompt_data(task, user_id)
 
 
-# 日本語: load task prompt data の読み込み処理を非同期で担当します。
-# English: Handle loading for load task prompt data asynchronously.
+# 特定タスクのプロンプトデータをDBから非同期に読み込む関数
+# Asynchronously load prompt data for a specific task.
 async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
     # タスク補助情報の取得失敗ではチャット全体を止めず、ベースプロンプトのみで続行する
     # Do not fail the whole chat request when task metadata lookup fails.
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         prompt_data = await run_blocking(_fetch_prompt_data, task, user_id)
     except Exception:
         logger.exception("Failed to load task prompt metadata for task launch: %s", task)
         return None
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if prompt_data is None:
         return None
     if not isinstance(prompt_data, dict):
@@ -525,19 +485,15 @@ async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, An
     return prompt_data
 
 
-# 日本語: parse example list の解析処理を担当します。
-# English: Handle parsing for parse example list.
+# サンプルリスト文字列（JSON形式含む）をリスト型配列にパース標準化する関数
+# Parse and normalize example instructions into a list of strings.
 def _parse_example_list(examples: str | None) -> list[str]:
     # JSON配列または単一文字列の両方に対応して例を配列化する
     # Normalize example payloads into a list of strings.
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not examples:
         return []
 
     examples = examples.strip()
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not examples:
         return []
 
@@ -553,24 +509,20 @@ def _parse_example_list(examples: str | None) -> list[str]:
     return [examples]
 
 
-# 日本語: normalize message content for llm の正規化処理を担当します。
-# English: Handle normalizing for normalize message content for llm.
+# LLMに入力するメッセージコンテンツ（HTMLタグなど）を正規化する関数
+# Normalize message text representation for LLM ingestion (such as converting <br> to newlines).
 def _normalize_message_content_for_llm(content: str, role: str) -> str:
     normalized = content if isinstance(content, str) else str(content)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if role == "user":
         normalized = html.unescape(normalized)
         normalized = _HTML_BR_PATTERN.sub("\n", normalized)
     return normalized
 
 
-# 日本語: normalize messages for llm の正規化処理を担当します。
-# English: Handle normalizing for normalize messages for llm.
+# LLM送信用に履歴メッセージリスト全体を正規化・整形する関数
+# Format and normalize a list of message objects for LLM consumption.
 def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized_messages: list[dict[str, Any]] = []
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for message in messages:
         role = str(message.get("role", "user"))
         normalized_message: dict[str, Any] = {
@@ -584,13 +536,11 @@ def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str
     return normalized_messages
 
 
-# 日本語: prepend attached files to latest user message に関する処理の入口です。
-# English: Entry point for logic related to prepend attached files to latest user message.
+# 最新のユーザーメッセージの先頭に添付ファイルテキスト情報を埋め込む関数
+# Prepend formatted representations of attached files to the most recent user message.
 def _prepend_attached_files_to_latest_user_message(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
         if str(message.get("role", "")) != "user":
@@ -609,11 +559,9 @@ def _prepend_attached_files_to_latest_user_message(
     return messages
 
 
-# 日本語: find latest task launch request に関する処理の入口です。
-# English: Entry point for logic related to find latest task launch request.
+# メッセージ履歴から最も新しいタスク起動リクエストを検索抽出する関数
+# Search and extract the most recent task launch request from conversation history.
 def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, str] | None:
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for message in reversed(messages):
         if str(message.get("role", "")) != "user":
             continue
@@ -623,8 +571,8 @@ def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str
     return None
 
 
-# 日本語: build task prompt の組み立て処理を担当します。
-# English: Handle building for build task prompt.
+# タスクの制約や入出力例を含むLLM向けタスク指示プロンプトを組み立てる関数
+# Construct the system instruction block containing task contracts and input/output examples.
 def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
     # タスク定義から system 用の追加指示を組み立てる
     # Build a system prompt fragment from task metadata.
@@ -636,12 +584,8 @@ def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
     output_skeleton = str(prompt_data.get("output_skeleton", "")).strip()
 
     contract_lines = ["<task_contract>"]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if task_name:
         contract_lines.extend(["<task_name>", task_name, "</task_name>"])
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if prompt_template:
         contract_lines.extend(["<task_instruction>", prompt_template, "</task_instruction>"])
     if response_rules:
@@ -687,15 +631,11 @@ def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
     return "\n\n".join(section for section in sections if section)
 
 
-# 日本語: parse page size の解析処理を担当します。
-# English: Handle parsing for parse page size.
+# クエリ値から履歴取得件数をパースし制限値内にクランプする関数
+# Parse limit query parameter and clamp to standard bounds for history paging.
 def _parse_page_size(raw_value: str | None) -> int:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw_value is None:
         return CHAT_HISTORY_PAGE_SIZE_DEFAULT
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = int(raw_value)
     except (TypeError, ValueError):
@@ -705,15 +645,11 @@ def _parse_page_size(raw_value: str | None) -> int:
     return min(parsed, CHAT_HISTORY_PAGE_SIZE_MAX)
 
 
-# 日本語: parse before message id の解析処理を担当します。
-# English: Handle parsing for parse before message id.
+# 履歴取得時の上限基準点となるメッセージIDをパースする関数
+# Parse message ID parameter serving as paging bounds for history retrieval.
 def _parse_before_message_id(raw_value: str | None) -> int | None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if raw_value is None or raw_value == "":
         return None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
     try:
         parsed = int(raw_value)
     except (TypeError, ValueError):
@@ -723,16 +659,12 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
     return parsed
 
 
-# 日本語: legacy error response に関する処理の入口です。
-# English: Entry point for logic related to legacy error response.
+# レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
+# Format a legacy error response payload into a FastAPI-compatible response.
 def _legacy_error_response(result: Any):
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not (isinstance(result, tuple) and len(result) == 2):
         return None
     payload, status_code = result
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if payload is None:
         return None
     if isinstance(payload, dict) and isinstance(status_code, int):
@@ -740,43 +672,35 @@ def _legacy_error_response(result: Any):
     return None
 
 
-# 日本語: resolved room mode に関する処理の入口です。
-# English: Entry point for logic related to resolved room mode.
+# 認証結果からチャットルームのモード("normal" または "temporary")を判定する関数
+# Resolve room mode ("normal" or "temporary") based on ownership resolution.
 def _resolved_room_mode(owner_result: Any) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if isinstance(owner_result, str) and owner_result in {"normal", "temporary"}:
         return owner_result
     return "normal"
 
 
-# 日本語: ensure ephemeral room の保証処理を担当します。
-# English: Handle ensuring for ensure ephemeral room.
+# ゲスト用の一時チャットルームがEphemeralStoreに存在することを保証する関数
+# Ensure that a guest ephemeral chat room is properly initialized in storage.
 def _ensure_ephemeral_room(sid: str, chat_room_id: str, title: str = "新規チャット") -> None:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if ephemeral_store.room_exists(sid, chat_room_id):
         return
     ephemeral_store.create_room(sid, chat_room_id, title)
 
 
-# 日本語: resolve authenticated room target に関する処理の入口です。
-# English: Entry point for logic related to resolve authenticated room target.
+# 認証されたユーザーの対象チャットルームとその所有権・モードを解決する関数
+# Resolve the chat room details, ownership, and mode for authenticated requests.
 def _resolve_authenticated_room_target(
     chat_room_id: str,
     user_id: int,
     forbidden_message: str,
 ) -> tuple[str | None, str | None, Any]:
     temporary_sid = get_temporary_user_store_key(user_id)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if ephemeral_store.room_exists(temporary_sid, chat_room_id):
         return "temporary", temporary_sid, None
 
     owner_result = validate_room_owner(chat_room_id, user_id, forbidden_message)
     legacy_response = _legacy_error_response(owner_result)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if legacy_response is not None:
         return None, None, legacy_response
 
@@ -786,35 +710,27 @@ def _resolve_authenticated_room_target(
     return room_mode, None, None
 
 
-# 日本語: trim message content for budget に関する処理の入口です。
-# English: Entry point for logic related to trim message content for budget.
+# トークン予算内に収まるようメッセージコンテンツの文字数を切り詰める関数
+# Trim message text size to stay within budget constraints.
 def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if char_budget <= 0:
         return ""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if len(content) <= char_budget:
         return content
     return content[-char_budget:]
 
 
-# 日本語: truncate conversation for llm に関する処理の入口です。
-# English: Entry point for logic related to truncate conversation for llm.
+# LLMに送信可能なコンテキスト制限を超えないよう、過去ログ会話履歴を切り詰める関数
+# Prune conversation history to fit context limits before sending to LLM.
 def _truncate_conversation_for_llm(
     messages: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not messages:
         return []
 
     system_messages: list[dict[str, str]] = []
     non_system_messages: list[dict[str, str]] = []
     system_prefix_active = True
-    # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-    # English: Process each target item in order and accumulate the needed result.
     for message in messages:
         role = message.get("role", "")
         if system_prefix_active and role == "system":
@@ -861,8 +777,8 @@ def _truncate_conversation_for_llm(
     return system_messages + selected_history
 
 
-# 日本語: fetch chat history の取得処理を担当します。
-# English: Handle fetching for fetch chat history.
+# 指定されたルームIDのチャット履歴（メッセージ配列）を取得する関数
+# Fetch chat messages history for the specified room.
 def _fetch_chat_history(
     chat_room_id: str,
     limit: int,
@@ -877,8 +793,8 @@ def _fetch_chat_history(
     )
 
 
-# 日本語: paginate ephemeral chat history に関する処理の入口です。
-# English: Entry point for logic related to paginate ephemeral chat history.
+# ゲストの一時チャット履歴をページング形式で取得する関数
+# Paginate history from guest ephemeral chat store.
 def _paginate_ephemeral_chat_history(
     rows: list[dict[str, str]],
     limit: int,
@@ -896,8 +812,6 @@ def _paginate_ephemeral_chat_history(
         }
         for index, row in enumerate(rows)
     ]
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if before_message_id is not None:
         normalized_messages = [
             message for message in normalized_messages if message["id"] < before_message_id
@@ -916,8 +830,8 @@ def _paginate_ephemeral_chat_history(
     }
 
 
-# 日本語: build chat post use case の組み立て処理を担当します。
-# English: Handle building for build chat post use case.
+# チャットメッセージ投稿ユースケースクラスの依存関係を満たしたインスタンスを生成する関数
+# Factory function to build ChatPostUseCase instance with resolved dependencies.
 def _build_chat_post_use_case() -> ChatPostUseCase:
     return ChatPostUseCase(
         ChatPostUseCaseDependencies(
@@ -972,8 +886,8 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
     )
 
 
-# 日本語: chat に関する処理の入口です。
-# English: Entry point for logic related to chat.
+# ユーザーから新規メッセージを投稿し、非同期でAIの応答を開始するAPIエンドポイント
+# API endpoint to post a new chat message and start asynchronous AI response generation.
 @chat_bp.post("/api/chat", name="chat.chat")
 async def chat(
     request: Request,
@@ -998,8 +912,8 @@ async def chat(
     )
 
 
-# 日本語: chat regenerate に関する処理の入口です。
-# English: Entry point for logic related to chat regenerate.
+# 指定されたAIメッセージに対する再生成処理を開始するAPIエンドポイント
+# API endpoint to regenerate the response for a specific assistant message.
 @chat_bp.post("/api/chat_regenerate", name="chat.chat_regenerate")
 async def chat_regenerate(
     request: Request,
@@ -1011,16 +925,12 @@ async def chat_regenerate(
 
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     chat_room_id_raw = data.get("chat_room_id")
     model_raw = data.get("model") or GEMINI_DEFAULT_MODEL
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
@@ -1150,25 +1060,21 @@ async def chat_regenerate(
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
-            # 日本語: persist response に関する処理の入口です。
-            # English: Entry point for logic related to persist response.
+            # 生成された回答テキストをDBまたは一時ストアに保存する内部ヘルパー
+            # Save generated response text into DB or ephemeral store.
             def persist_response(
                 response: str,
                 *,
                 message_parts: list[dict[str, Any]] | None = None,
             ) -> None:
                 save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
-                # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-                # English: Switch the flow according to the current condition.
                 if message_parts:
                     save_args.append(message_parts)
                 save_message_to_db(*save_args)
 
-            # 日本語: on finished に関する処理の入口です。
-            # English: Entry point for logic related to on finished.
+            # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
+            # Internal callback executed upon generation completion to update summary/memory.
             def on_finished() -> None:
-                # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-                # English: Run potentially failing work in a form that can be caught.
                 try:
                     updated_messages = get_chat_room_messages(chat_room_id)
                     rebuild_room_summary(chat_room_id, updated_messages)
@@ -1253,8 +1159,8 @@ async def chat_regenerate(
     return jsonify(response_payload)
 
 
-# 日本語: chat edit and regenerate に関する処理の入口です。
-# English: Entry point for logic related to chat edit and regenerate.
+# 過去のユーザーメッセージを編集し、それに続く新しいブランチで再生成を開始するAPIエンドポイント
+# API endpoint to edit a previous user message and generate a new conversation branch.
 @chat_bp.post("/api/chat_edit_and_regenerate", name="chat.chat_edit_and_regenerate")
 async def chat_edit_and_regenerate(
     request: Request,
@@ -1266,8 +1172,6 @@ async def chat_edit_and_regenerate(
 
     await run_blocking(cleanup_ephemeral_chats)
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
@@ -1276,8 +1180,6 @@ async def chat_edit_and_regenerate(
     model_raw = data.get("model") or GEMINI_DEFAULT_MODEL
     trailing_user_count_raw = data.get("trailing_user_count")
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
@@ -1508,25 +1410,21 @@ async def chat_edit_and_regenerate(
     if is_streaming_model(model):
         on_finished = None
         if user_id is not None and room_mode == "normal":
-            # 日本語: persist response に関する処理の入口です。
-            # English: Entry point for logic related to persist response.
+            # 生成された回答テキストをDBまたは一時ストアに保存する内部ヘルパー
+            # Save generated response text into DB or ephemeral store.
             def persist_response(
                 response: str,
                 *,
                 message_parts: list[dict[str, Any]] | None = None,
             ) -> None:
                 save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
-                # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-                # English: Switch the flow according to the current condition.
                 if message_parts:
                     save_args.append(message_parts)
                 save_message_to_db(*save_args)
 
-            # 日本語: on finished に関する処理の入口です。
-            # English: Entry point for logic related to on finished.
+            # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
+            # Internal callback executed upon generation completion to update summary/memory.
             def on_finished() -> None:
-                # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-                # English: Run potentially failing work in a form that can be caught.
                 try:
                     updated_messages = get_chat_room_messages(chat_room_id)
                     rebuild_room_summary(chat_room_id, updated_messages)
@@ -1611,23 +1509,19 @@ async def chat_edit_and_regenerate(
     return jsonify(response_payload)
 
 
-# 日本語: chat switch branch に関する処理の入口です。
-# English: Entry point for logic related to chat switch branch.
+# チャット会話内の指定されたアクティブなブランチ（メッセージ分岐）を切り替えるAPIエンドポイント
+# API endpoint to switch the active branch in a message conversation tree.
 @chat_bp.post("/api/chat_switch_branch", name="chat.chat_switch_branch")
 async def chat_switch_branch(request: Request):
     # Switch the active branch (a regenerated answer or an edited message version)
     # for a DB-backed chat room and return the resulting active conversation path.
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     chat_room_id_raw = data.get("chat_room_id")
     message_id_raw = data.get("message_id")
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
     chat_room_id = chat_room_id_raw.strip()
@@ -1682,8 +1576,8 @@ async def chat_switch_branch(request: Request):
     return jsonify({"messages": messages})
 
 
-# 日本語: chat stop に関する処理の入口です。
-# English: Entry point for logic related to chat stop.
+# 進行中のAI回答生成処理を強制停止するAPIエンドポイント
+# API endpoint to abort an active AI response generation job.
 @chat_bp.post("/api/chat_stop", name="chat.chat_stop")
 async def chat_stop(
     request: Request,
@@ -1692,14 +1586,10 @@ async def chat_stop(
     # 生成中ジョブを停止する前に、対象ルームのアクセス権を再検証する
     # Re-validate room access before cancelling in-flight generation jobs.
     data, error_response = await require_json_dict(request)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
     chat_room_id = data.get("chat_room_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not chat_room_id:
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
 
@@ -1743,24 +1633,20 @@ async def chat_stop(
     return jsonify({"cancelled": cancelled})
 
 
-# 日本語: get chat history の取得処理を非同期で担当します。
-# English: Handle fetching for get chat history asynchronously.
+# 指定チャットルームの履歴をページネーション付きで取得するAPIエンドポイント
+# API endpoint to retrieve paginated conversation history for a chat room.
 @chat_bp.get("/api/get_chat_history", name="chat.get_chat_history")
 async def get_chat_history(request: Request):
     # 履歴取得は常にページング形式で返し、クライアント側の遅延読み込みに合わせる
     # Always return paginated history payloads for client-side incremental loading.
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
     limit = _parse_page_size(request.query_params.get("limit"))
     before_message_id = _parse_before_message_id(request.query_params.get("before_id"))
 
     session = request.session
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if "user_id" in session:
         room_mode = "normal"
         try:
@@ -1813,8 +1699,8 @@ async def get_chat_history(request: Request):
         return jsonify(payload)
 
 
-# 日本語: chat generation stream に関する処理の入口です。
-# English: Entry point for logic related to chat generation stream.
+# 進行中のAI回答テキスト生成ストリームを Server-Sent Events (SSE) で配信するAPIエンドポイント
+# API endpoint to stream the active generation tokens via Server-Sent Events (SSE).
 @chat_bp.get("/api/chat_generation_stream", name="chat.chat_generation_stream")
 async def chat_generation_stream(
     request: Request,
@@ -1824,8 +1710,6 @@ async def chat_generation_stream(
     # SSE endpoint for reconnecting to an existing generation job.
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
 
@@ -1838,8 +1722,6 @@ async def chat_generation_stream(
     user_id = session.get("user_id")
     room_mode = "temporary"
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if user_id is not None:
         try:
             room_mode, sid, legacy_response = await run_blocking(
@@ -1894,8 +1776,8 @@ async def chat_generation_stream(
     return _build_llm_stream_response(_iter_serialized_stream_events(distributed_events))
 
 
-# 日本語: chat generation status に関する処理の入口です。
-# English: Entry point for logic related to chat generation status.
+# 現在進行中のAI生成処理ステータスを取得するAPIエンドポイント
+# API endpoint to check status of an ongoing generation job.
 @chat_bp.get("/api/chat_generation_status", name="chat.chat_generation_status")
 async def chat_generation_status(
     request: Request,
@@ -1903,8 +1785,6 @@ async def chat_generation_status(
 ):
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if not chat_room_id:
         return jsonify({"error": "room_id is required"}, status_code=400)
 
@@ -1917,8 +1797,6 @@ async def chat_generation_status(
     user_id = session.get("user_id")
     room_mode = "temporary"
 
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if user_id is not None:
         try:
             room_mode, sid, legacy_response = await run_blocking(

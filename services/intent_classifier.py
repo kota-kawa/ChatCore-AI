@@ -54,16 +54,16 @@ _DIRECT_GENERATION_HINTS = re.compile(
 )
 
 
-# 日本語: parse intent の解析処理を担当します。
-# English: Handle parsing for parse intent.
+# 日本語: LLMの応答テキストからJSONをパースし、分類された意図(Intent)を抽出します。
+# English: Parse JSON from the LLM response text and extract the classified intent.
 def _parse_intent(text: str) -> Intent | None:
     json_match = re.search(r"\{[^{}]*\}", text)
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: テキスト内にJSON文字列が見つからない場合は None を返します。
+    # English: Return None if no JSON object is found in the text.
     if not json_match:
         return None
-    # 日本語: 失敗する可能性がある処理を捕捉できる形で実行します。
-    # English: Run potentially failing work in a form that can be caught.
+    # 日本語: JSONのデコードを試み、有効な意図カテゴリに含まれているか検証します。
+    # English: Attempt to decode JSON and validate if it matches one of the valid intent categories.
     try:
         data = json.loads(json_match.group())
         intent = data.get("intent")
@@ -74,19 +74,19 @@ def _parse_intent(text: str) -> Intent | None:
     return None
 
 
-# 日本語: classify intent に関する処理の入口です。
-# English: Entry point for logic related to classify intent.
+# 日本語: ユーザーメッセージから意図を判定します。まずヒューリスティクスによるパターンマッチングを行い、マッチしない場合はLLMを用いて分類します。
+# English: Classify the user's intent. First performs heuristic pattern matching, and falls back to LLM classification if no match is found.
 def classify_intent(message: str, current_page: str = "") -> Intent:
     """
     ユーザーメッセージの意図をLLMで1回分類して返す。
     失敗時は "direct"（検索なし）にフォールバックする。
     """
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: 具体的なアクション操作（クリック等）を示唆するキーワードが含まれているか判定します。
+    # English: Check if the message contains keywords suggesting specific user actions (e.g., clicking).
     if _ACTION_HINTS.search(message):
         return "action" if current_page else "search"
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 日本語: ページ構成や使い方を示唆するキーワードが含まれているか判定します。
+    # English: Check if the message contains keywords suggesting page layout or usage info.
     if _PAGE_INFO_HINTS.search(message):
         return "page_info" if current_page else "search"
     if _DIRECT_GENERATION_HINTS.search(message) and not _SEARCH_HINTS.search(message):

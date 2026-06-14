@@ -22,11 +22,11 @@ VALID_ARTIFACT = {
 }
 
 
-# 日本語: GenerativeUiTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to GenerativeUiTestCase.
+# 日本語: Generative Uiの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Generative Ui.
 class GenerativeUiTestCase(unittest.TestCase):
-    # 日本語: test normalize response extracts valid artifact block のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response extracts valid artifact block.
+    # 日本語: normalizeレスポンスextracts有効なartifactblockことを検証します。
+    # English: Verify that normalize response extracts valid artifact block.
     def test_normalize_response_extracts_valid_artifact_block(self):
         raw = (
             "以下の図で整理しました。\n\n"
@@ -44,16 +44,16 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
 
-    # 日本語: test normalize response keeps plain text unchanged のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response keeps plain text unchanged.
+    # 日本語: normalizeレスポンス保持するplaintextunchangedことを検証します。
+    # English: Verify that normalize response keeps plain text unchanged.
     def test_normalize_response_keeps_plain_text_unchanged(self):
         normalized = normalize_response_with_artifacts("通常の回答です。")
 
         self.assertEqual(normalized.text, "通常の回答です。")
         self.assertIsNone(normalized.parts)
 
-    # 日本語: test normalize response extracts bare json artifact のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response extracts bare json artifact.
+    # 日本語: normalizeレスポンスextractsbarejsonartifactことを検証します。
+    # English: Verify that normalize response extracts bare json artifact.
     def test_normalize_response_extracts_bare_json_artifact(self):
         raw = (
             "表示します。\n\n"
@@ -66,8 +66,8 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertIsNotNone(normalized.parts)
         self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
 
-    # 日本語: test normalize response extracts generic json fence artifact のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response extracts generic json fence artifact.
+    # 日本語: normalizeレスポンスextractsgenericjsonfenceartifactことを検証します。
+    # English: Verify that normalize response extracts generic json fence artifact.
     def test_normalize_response_extracts_generic_json_fence_artifact(self):
         raw = (
             "表示します。\n\n"
@@ -82,8 +82,8 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertIsNotNone(normalized.parts)
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
 
-    # 日本語: test normalize response extracts split source code blocks のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response extracts split source code blocks.
+    # 日本語: normalizeレスポンスextractssplitsourceコードブロックすることを検証します。
+    # English: Verify that normalize response extracts split source code blocks.
     def test_normalize_response_extracts_split_source_code_blocks(self):
         raw = """表示します。
 
@@ -110,8 +110,8 @@ document.getElementById('app').textContent = 'ready';
         self.assertIn("#app{padding", artifact["css"])
         self.assertIn("textContent", artifact["js"])
 
-    # 日本語: test base prompt few shot artifacts are valid and compact のテスト検証を担当します。
-    # English: Handle verifying test behavior for test base prompt few shot artifacts are valid and compact.
+    # 日本語: およびcompact、ベースプロンプトfewshotartifactsが有効なことを検証します。
+    # English: Verify that base prompt few shot artifacts are valid and compact.
     def test_base_prompt_few_shot_artifacts_are_valid_and_compact(self):
         artifact_blocks = re.findall(
             r"```chatcore-artifact\s*(\{[\s\S]*?\})\s*```",
@@ -119,8 +119,8 @@ document.getElementById('app').textContent = 'ready';
         )
 
         self.assertGreaterEqual(len(artifact_blocks), 3)
-        # 日本語: 対象データを順番に処理し、必要な結果を積み上げます。
-        # English: Process each target item in order and accumulate the needed result.
+        # 日本語: 各対象データを順に処理し、検証を行います。
+        # English: Process each target item in sequence to perform validation.
         for raw_payload in artifact_blocks:
             payload = json.loads(raw_payload)
             artifact = validate_artifact_payload(payload)
@@ -132,8 +132,8 @@ document.getElementById('app').textContent = 'ready';
             )
             self.assertLessEqual(artifact.get("height", 0), 720)
 
-    # 日本語: test normalize response creates fallback for short display intent のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response creates fallback for short display intent.
+    # 日本語: shortdisplayintentに対して、normalizeレスポンス作成するfallbackことを検証します。
+    # English: Verify that normalize response creates fallback for short display intent.
     def test_normalize_response_creates_fallback_for_short_display_intent(self):
         normalized = normalize_response_with_artifacts("表示します。")
 
@@ -143,8 +143,8 @@ document.getElementById('app').textContent = 'ready';
         self.assertEqual(artifact["title"], "表示します。")
         self.assertIn("fallback-ui", artifact["html"])
 
-    # 日本語: test normalize response accepts line continuation jsonish artifact のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response accepts line continuation jsonish artifact.
+    # 日本語: normalizeレスポンスacceptslinecontinuationjsonishartifactことを検証します。
+    # English: Verify that normalize response accepts line continuation jsonish artifact.
     def test_normalize_response_accepts_line_continuation_jsonish_artifact(self):
         raw = r'''表示します。
 
@@ -178,30 +178,30 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIn("const steps", artifact["js"])
         self.assertIn("style='font-family:sans-serif;padding:10px;'", artifact["html"])
 
-    # 日本語: test validate artifact rejects network javascript のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact rejects network javascript.
+    # 日本語: validateartifact拒否するnetworkjavascriptことを検証します。
+    # English: Verify that validate artifact rejects network javascript.
     def test_validate_artifact_rejects_network_javascript(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["js"] = "fetch('https://example.com')"
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with self.assertRaises(GenerativeUiValidationError):
             validate_artifact_payload(artifact)
 
-    # 日本語: test validate artifact rejects worker constructor のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact rejects worker constructor.
+    # 日本語: validateartifact拒否するworkerconstructorことを検証します。
+    # English: Verify that validate artifact rejects worker constructor.
     def test_validate_artifact_rejects_worker_constructor(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["js"] = "new Worker('data:,')"
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with self.assertRaises(GenerativeUiValidationError):
             validate_artifact_payload(artifact)
 
-    # 日本語: test validate artifact allows safe html event handlers のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact allows safe html event handlers.
+    # 日本語: validateartifact許可するsafehtmleventhandlersことを検証します。
+    # English: Verify that validate artifact allows safe html event handlers.
     def test_validate_artifact_allows_safe_html_event_handlers(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["html"] = '<button id="b" onclick="this.textContent = \'Done\'">Click</button>'
@@ -210,8 +210,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIn("onclick", normalized["html"])
 
-    # 日本語: test validate artifact removes unsafe html event handlers のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact removes unsafe html event handlers.
+    # 日本語: validateartifactremovesunsafehtmleventhandlersことを検証します。
+    # English: Verify that validate artifact removes unsafe html event handlers.
     def test_validate_artifact_removes_unsafe_html_event_handlers(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["html"] = '<button onclick="parent.postMessage({type: \'x\'}, \'*\')">Click</button>'
@@ -221,8 +221,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertNotIn("onclick", normalized["html"].lower())
         self.assertIn("Click", normalized["html"])
 
-    # 日本語: test validate artifact allows style top assignment のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact allows style top assignment.
+    # 日本語: validateartifact許可するstyletopassignmentことを検証します。
+    # English: Verify that validate artifact allows style top assignment.
     def test_validate_artifact_allows_style_top_assignment(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["js"] = "document.getElementById('app').style.top = '8px';"
@@ -231,8 +231,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIn("style.top", normalized["js"])
 
-    # 日本語: test validate artifact accepts common aliases and embedded code のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact accepts common aliases and embedded code.
+    # 日本語: およびembeddedコード、validateartifactacceptscommonaliasesことを検証します。
+    # English: Verify that validate artifact accepts common aliases and embedded code.
     def test_validate_artifact_accepts_common_aliases_and_embedded_code(self):
         artifact = {
             "name": "Alias UI",
@@ -248,8 +248,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIn("#app{color:red;}", normalized["css"])
         self.assertIn("textContent='ok'", normalized["js"])
 
-    # 日本語: test normalize response uses fallback when artifact validation fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test normalize response uses fallback when artifact validation fails.
+    # 日本語: artifact検証失敗するのとき、normalizeレスポンスusesfallbackことを検証します。
+    # English: Verify that normalize response uses fallback when artifact validation fails.
     def test_normalize_response_uses_fallback_when_artifact_validation_fails(self):
         raw = (
             "短い説明です。\n\n"
@@ -267,8 +267,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertNotIn("安全検証", normalized.text)
         self.assertTrue(normalized.validation_errors)
 
-    # 日本語: test validate artifact adds default app root for empty html のテスト検証を担当します。
-    # English: Handle verifying test behavior for test validate artifact adds default app root for empty html.
+    # 日本語: 空htmlに対して、validateartifactaddsデフォルトapprootことを検証します。
+    # English: Verify that validate artifact adds default app root for empty html.
     def test_validate_artifact_adds_default_app_root_for_empty_html(self):
         artifact = dict(VALID_ARTIFACT)
         artifact["html"] = ""
@@ -278,8 +278,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIn('id="app"', normalized["html"])
 
-    # 日本語: test recovers truncated artifact cut off inside string のテスト検証を担当します。
-    # English: Handle verifying test behavior for test recovers truncated artifact cut off inside string.
+    # 日本語: recoverstruncatedartifactcutoffinsidestringことを検証します。
+    # English: Verify that recovers truncated artifact cut off inside string.
     def test_recovers_truncated_artifact_cut_off_inside_string(self):
         raw = (
             "ツリーを表示します。\n\n"
@@ -302,8 +302,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertNotIn("chatcore-artifact", normalized.text)
         self.assertNotIn('"version"', normalized.text)
 
-    # 日本語: test recovers complete artifact missing closing fence のテスト検証を担当します。
-    # English: Handle verifying test behavior for test recovers complete artifact missing closing fence.
+    # 日本語: recoverscompleteartifactmissingclosingfenceことを検証します。
+    # English: Verify that recovers complete artifact missing closing fence.
     def test_recovers_complete_artifact_missing_closing_fence(self):
         raw = (
             "表示します。\n\n"
@@ -318,8 +318,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
         self.assertNotIn("chatcore-artifact", normalized.text)
 
-    # 日本語: test unrepairable truncation strips broken block from text のテスト検証を担当します。
-    # English: Handle verifying test behavior for test unrepairable truncation strips broken block from text.
+    # 日本語: textから、unrepairabletruncationstripsbrokenblockことを検証します。
+    # English: Verify that unrepairable truncation strips broken block from text.
     def test_unrepairable_truncation_strips_broken_block_from_text(self):
         raw = (
             "ツリーを表示します。\n\n"
@@ -334,8 +334,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertNotIn('"version"', normalized.text)
         self.assertEqual(normalized.text, "ツリーを表示します。")
 
-    # 日本語: test streaming pass does not synthesize fallback のテスト検証を担当します。
-    # English: Handle verifying test behavior for test streaming pass does not synthesize fallback.
+    # 日本語: streamingpassdoes〜しないsynthesizefallbackことを検証します。
+    # English: Verify that streaming pass does not synthesize fallback.
     def test_streaming_pass_does_not_synthesize_fallback(self):
         raw = (
             "ツリーを表示します。\n\n"
@@ -347,8 +347,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
 
         self.assertIsNone(normalized.parts)
 
-    # 日本語: test long prose mentioning chart keyword stays plain text のテスト検証を担当します。
-    # English: Handle verifying test behavior for test long prose mentioning chart keyword stays plain text.
+    # 日本語: longprosementioningchartkeywordstaysplaintextことを検証します。
+    # English: Verify that long prose mentioning chart keyword stays plain text.
     def test_long_prose_mentioning_chart_keyword_stays_plain_text(self):
         raw = (
             "藤沢市の天気の概要です。" + "詳細な気温や降水確率を説明します。" * 12 +
@@ -360,8 +360,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(normalized.text, raw)
         self.assertIsNone(normalized.parts)
 
-    # 日本語: test web search trace block is not dumped into fallback のテスト検証を担当します。
-    # English: Handle verifying test behavior for test web search trace block is not dumped into fallback.
+    # 日本語: Web検索traceblockが〜しないdumpedintofallbackことを検証します。
+    # English: Verify that web search trace block is not dumped into fallback.
     def test_web_search_trace_block_is_not_dumped_into_fallback(self):
         trace_block = (
             '<details class="web-search-sources web-search-sources--trace">'
@@ -387,8 +387,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # トレースブロックは可視テキストには残り、フロントで参照リンクとして描画される。
         self.assertTrue(normalized.text.startswith(trace_block))
 
-    # 日本語: test decode message parts drops invalid artifacts のテスト検証を担当します。
-    # English: Handle verifying test behavior for test decode message parts drops invalid artifacts.
+    # 日本語: decodemessagepartsdrops無効なartifactsことを検証します。
+    # English: Verify that decode message parts drops invalid artifacts.
     def test_decode_message_parts_drops_invalid_artifacts(self):
         parts = [
             {"type": "text", "text": "hello"},

@@ -37,18 +37,26 @@ from services.web import (
     validate_payload_model,
 )
 
+# CSRF保護を依存関係として設定した FastAPI ルーターの初期化
+# Initialize FastAPI router with CSRF protection enabled as dependencies.
 verification_bp = APIRouter(dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
+# 認証コードの有効期限（秒）
+# Time-To-Live (TTL) in seconds for the verification code.
 VERIFICATION_CODE_TTL_SECONDS = 300
+
+# 認証コード入力の最大試行回数
+# Maximum number of attempts allowed for entering the verification code.
 VERIFICATION_CODE_MAX_ATTEMPTS = 5
+
+# 認証失敗時の HTTP ステータスコード (401 Unauthorized)
+# HTTP status code for authentication failure (401 Unauthorized).
 AUTH_FAILURE_STATUS_CODE = 401
 
 
 # セッションから登録・認証用の一時データを削除する
 # Clear temporary registration and verification data from the session.
-# 日本語: clear registration verification session の初期化処理を担当します。
-# English: Handle clearing for clear registration verification session.
 def _clear_registration_verification_session(session: dict) -> None:
     session.pop("verification_code", None)
     session.pop("temp_user_id", None)
@@ -59,14 +67,12 @@ def _clear_registration_verification_session(session: dict) -> None:
 
 # 渡されたAuthLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
 # Helper function to resolve the AuthLimitService from the request if not already provided.
-# 日本語: resolve auth limit service に関する処理の入口です。
-# English: Entry point for logic related to resolve auth limit service.
 def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # サービスが渡されていればそれを返し、無ければリクエストから取得する
+    # If the service instance is provided, return it; otherwise, resolve it from the request.
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
@@ -74,22 +80,18 @@ def _resolve_auth_limit_service(
 
 # 渡されたLlmDailyLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
 # Helper function to resolve the LlmDailyLimitService from the request if not already provided.
-# 日本語: resolve llm daily limit service に関する処理の入口です。
-# English: Entry point for logic related to resolve llm daily limit service.
 def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # サービスが渡されていればそれを返し、無ければリクエストから取得する
+    # If the service instance is provided, return it; otherwise, resolve it from the request.
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
 
 # ユーザー登録用の認証コードを生成し、メールで送信するエンドポイント
 # Endpoint to generate a registration verification code and send it via email.
-# 日本語: api send verification email に関する処理の入口です。
-# English: Entry point for logic related to api send verification email.
 @verification_bp.post("/api/send_verification_email", name="verification.api_send_verification_email")
 async def api_send_verification_email(
     request: Request,
@@ -107,23 +109,25 @@ async def api_send_verification_email(
     - Generate six-digit code and send through the configured email provider
     - Temporarily store code and user id in session
     """
+    # リクエストボディをJSONとして取得。不正な場合はエラーレスポンスを返却
+    # Retrieve the request body as JSON. Return an error response if invalid.
     data, error_response = await require_json_dict(request, status="fail")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
+    # JSONデータを検証し、EmailRequestモデルにマッピング
+    # Validate JSON data and map to EmailRequest model.
     payload, validation_error = validate_payload_model(
         data,
         EmailRequest,
         error_message="メールアドレスが指定されていません",
         status="fail",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
+    # 各種制限確認サービスを解決
+    # Resolve rate limit and daily quota limit services.
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
         request,
@@ -131,6 +135,8 @@ async def api_send_verification_email(
     )
 
     email = payload.email
+    # メール送信制限（短時間での連続送信防止）を確認・消費
+    # Check and consume the rate limit for sending authentication emails.
     allowed, limit_error = consume_auth_email_send_limits(
         request,
         email,
@@ -146,6 +152,8 @@ async def api_send_verification_email(
             status="fail",
         )
 
+    # 1日のメール送信制限（クォータ）を確認・消費
+    # Check and consume the daily email quota.
     can_send_email, _, daily_limit = await run_blocking(
         consume_auth_email_daily_quota,
         service=resolved_llm_daily_limit_service,
@@ -176,14 +184,17 @@ async def api_send_verification_email(
     request.session["temp_email"] = email  # rate-limit key (cross-session)
     request.session["verification_code_issued_at"] = int(time.time())
     request.session["verification_code_attempts"] = 0
-    # Link verification flow to this user id.
 
     subject = "AIチャットサービス: 認証コード"
     body_text = f"以下の認証コードを登録画面に入力してください。\n\n認証コード: {code}"
     try:
+        # メール送信を実行
+        # Attempt to send the email with verification code.
         await run_blocking(send_email, to_address=email, subject=subject, body_text=body_text)
         return jsonify({"status": "success"})
     except Exception:
+        # 送信失敗時はログを記録して500エラーを返却
+        # Log error and return 500 server error response on failure.
         return log_and_internal_server_error(
             logger,
             "Failed to send registration verification email.",
@@ -192,8 +203,6 @@ async def api_send_verification_email(
 
 # ユーザーから送信された認証コードを検証し、成功すればユーザーを有効化してログインさせるエンドポイント
 # Endpoint to verify the submitted registration code, activate the user, and establish a session.
-# 日本語: api verify registration code に関する処理の入口です。
-# English: Entry point for logic related to api verify registration code.
 @verification_bp.post("/api/verify_registration_code", name="verification.api_verify_registration_code")
 async def api_verify_registration_code(
     request: Request,
@@ -209,20 +218,20 @@ async def api_verify_registration_code(
     - Mark user as verified and log them in
     - Copy default tasks for the verified user
     """
+    # リクエストボディをJSONとして取得。不正な場合はエラーレスポンスを返却
+    # Retrieve the request body as JSON. Return an error response if invalid.
     data, error_response = await require_json_dict(request, status="fail")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if error_response is not None:
         return error_response
 
+    # JSONデータを検証し、AuthCodeRequestモデルにマッピング
+    # Validate JSON data and map to AuthCodeRequest model.
     payload, validation_error = validate_payload_model(
         data,
         AuthCodeRequest,
         error_message="認証コードが違います。",
         status="fail",
     )
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if validation_error is not None:
         return validation_error
 
@@ -231,6 +240,8 @@ async def api_verify_registration_code(
     session_code = session.get("verification_code")
     user_id = session.get("temp_user_id")
 
+    # セッション内に認証情報が存在するか確認
+    # Verify that session verification information exists.
     if not session_code or not user_id:
         return jsonify(
             {"status": "fail", "error": "セッション情報がありません。最初からやり直してください"},
@@ -240,6 +251,8 @@ async def api_verify_registration_code(
     issued_at = int(session.get("verification_code_issued_at") or 0)
     attempts = int(session.get("verification_code_attempts") or 0)
 
+    # 認証コードの有効期限（TTL）を確認
+    # Verify the code expiration (TTL).
     if issued_at <= 0 or int(time.time()) - issued_at > VERIFICATION_CODE_TTL_SECONDS:
         _clear_registration_verification_session(session)
         return jsonify(
@@ -247,6 +260,8 @@ async def api_verify_registration_code(
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
+    # 試行回数がセッション上限を超えているか確認
+    # Check if the attempt count has reached the maximum limit in the current session.
     if attempts >= VERIFICATION_CODE_MAX_ATTEMPTS:
         _clear_registration_verification_session(session)
         return jsonify(
@@ -254,10 +269,8 @@ async def api_verify_registration_code(
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
-    # Cross-session brute-force defence: the in-session attempts counter above
-    # is bypassable by opening a new session per attempt, so we additionally
-    # enforce a per-email/per-IP rolling-window cap that survives session
-    # resets. The email was captured into the session when the code was sent.
+    # メールアドレス・IP単位での認証コード試行制限を適用
+    # Apply verification attempt rate limits per email/IP (cross-session).
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     email_for_limit = str(session.get("temp_email") or "")
     allowed, limit_error = await run_blocking(
@@ -276,6 +289,8 @@ async def api_verify_registration_code(
             status="fail",
         )
 
+    # ユーザーが入力したコードとセッションのコードを定数時間比較で安全に照合
+    # Perform a constant-time comparison to securely match the user-provided code with the session code.
     submitted_code = str(user_code or "")
     if not constant_time_compare(submitted_code, str(session_code)):
         attempts += 1
@@ -303,17 +318,20 @@ async def api_verify_registration_code(
             status_code=AUTH_FAILURE_STATUS_CODE,
         )
 
+    # ユーザーを認証済みに更新
+    # Set the user status to verified.
     await run_blocking(set_user_verified, user_id)                 # ユーザーを認証済みに
-    # Mark user as verified.
+    
+    # 共通の初期タスクを新規ユーザー用に複製
+    # Copy shared default tasks to this newly verified user.
     await run_blocking(copy_default_tasks_for_user, user_id)       # ★ 共通タスクを複製 ★
-    # Copy shared default tasks to this user.
 
-    # ログイン状態にセット
-    # Set authenticated session fields.
+    # 認証済みセッションの確立（ログイン状態に移行）
+    # Establish an authenticated session (transitioning to logged-in state).
     establish_authenticated_session(request, int(user_id), user["email"])
 
-    # 一時セッション情報のクリア
-    # Clear temporary verification session data.
+    # 登録・認証用の一時セッション情報をクリーンアップ
+    # Clear temporary registration/verification session data.
     _clear_registration_verification_session(session)
 
     return jsonify(

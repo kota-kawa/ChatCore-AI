@@ -29,16 +29,16 @@ def make_shared_read_request(token: str):
     )
 
 
-# 日本語: ChatRoomSharingTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ChatRoomSharingTestCase.
+# 日本語: Chat Room Sharingの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Chat Room Sharing.
 class ChatRoomSharingTestCase(unittest.TestCase):
-    # 日本語: test share chat room requires login のテスト検証を担当します。
-    # English: Handle verifying test behavior for test share chat room requires login.
+    # 日本語: shareチャットroom要求するログインことを検証します。
+    # English: Verify that share chat room requires login.
     def test_share_chat_room_requires_login(self):
         request = make_share_request({"room_id": "room-1"}, session={})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             response = asyncio.run(share_chat_room(request))
 
@@ -46,13 +46,13 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "ログインが必要です")
 
-    # 日本語: test share chat room returns 403 when not owner のテスト検証を担当します。
-    # English: Handle verifying test behavior for test share chat room returns 403 when not owner.
+    # 日本語: 〜しないownerのとき、shareチャットroom返却する403ことを検証します。
+    # English: Verify that share chat room returns 403 when not owner.
     def test_share_chat_room_returns_403_when_not_owner(self):
         request = make_share_request({"room_id": "room-1"}, session={"user_id": 10})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.rooms.validate_room_owner",
@@ -64,13 +64,13 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "他ユーザーのチャットルームは共有できません")
 
-    # 日本語: test share chat room returns share url on success のテスト検証を担当します。
-    # English: Handle verifying test behavior for test share chat room returns share url on success.
+    # 日本語: 成功するにおける、shareチャットroom返却するshareURLことを検証します。
+    # English: Verify that share chat room returns share url on success.
     def test_share_chat_room_returns_share_url_on_success(self):
         request = make_share_request({"room_id": "room-42"}, session={"user_id": 3})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch("blueprints.chat.rooms.validate_room_owner", return_value=(None, None)):
                 with patch(
@@ -88,8 +88,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         self.assertEqual(payload["share_token"], "abc123token")
         self.assertEqual(payload["share_url"], "https://chatcore-ai.com/shared/abc123token")
 
-    # 日本語: test shared chat room requires token のテスト検証を担当します。
-    # English: Handle verifying test behavior for test shared chat room requires token.
+    # 日本語: sharedチャットroom要求するトークンことを検証します。
+    # English: Verify that shared chat room requires token.
     def test_shared_chat_room_requires_token(self):
         request = build_request(
             method="GET",
@@ -97,8 +97,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
             query_string=b"",
             session={},
         )
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             response = asyncio.run(shared_chat_room(request))
 
@@ -106,8 +106,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "token is required")
 
-    # 日本語: test shared chat room returns payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test shared chat room returns payload.
+    # 日本語: sharedチャットroom返却するペイロードことを検証します。
+    # English: Verify that shared chat room returns payload.
     def test_shared_chat_room_returns_payload(self):
         request = make_shared_read_request("share-token-1")
         expected = (
@@ -128,8 +128,8 @@ class ChatRoomSharingTestCase(unittest.TestCase):
             200,
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.rooms.get_shared_chat_room_payload",
@@ -142,12 +142,12 @@ class ChatRoomSharingTestCase(unittest.TestCase):
         self.assertEqual(payload["room"]["id"], "room-1")
         self.assertEqual(payload["messages"][0]["message"], "こんにちは")
 
-    # 日本語: test shared chat room returns not found のテスト検証を担当します。
-    # English: Handle verifying test behavior for test shared chat room returns not found.
+    # 日本語: sharedチャットroom返却する〜しないfoundことを検証します。
+    # English: Verify that shared chat room returns not found.
     def test_shared_chat_room_returns_not_found(self):
         request = make_shared_read_request("missing")
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.chat.rooms.cleanup_ephemeral_chats"):
             with patch(
                 "blueprints.chat.rooms.get_shared_chat_room_payload",

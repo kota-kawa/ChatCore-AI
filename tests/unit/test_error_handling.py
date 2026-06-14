@@ -26,11 +26,11 @@ def make_request(
     )
 
 
-# 日本語: ErrorHandlingTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to ErrorHandlingTestCase.
+# 日本語: Error Handlingの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Error Handling.
 class ErrorHandlingTestCase(unittest.TestCase):
-    # 日本語: test log and internal server error returns generic payload and logs のテスト検証を担当します。
-    # English: Handle verifying test behavior for test log and internal server error returns generic payload and logs.
+    # 日本語: およびinternalserverエラー返却するgenericペイロード、および記録する、logことを検証します。
+    # English: Verify that log and internal server error returns generic payload and logs.
     def test_log_and_internal_server_error_returns_generic_payload_and_logs(self):
         mock_logger = Mock()
 
@@ -46,8 +46,8 @@ class ErrorHandlingTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], DEFAULT_INTERNAL_ERROR_MESSAGE)
         mock_logger.exception.assert_called_once_with("operation failed")
 
-    # 日本語: test send login code does not leak internal exception message のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send login code does not leak internal exception message.
+    # 日本語: 送信ログインコードdoes〜しないleakinternal例外messageことを検証します。
+    # English: Verify that send login code does not leak internal exception message.
     def test_send_login_code_does_not_leak_internal_exception_message(self):
         request = make_request(
             method="POST",
@@ -55,8 +55,8 @@ class ErrorHandlingTestCase(unittest.TestCase):
             json_body={"email": "user@example.com"},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.auth.get_user_by_email",
             return_value={"id": 1, "email": "user@example.com", "is_verified": True},
@@ -79,8 +79,8 @@ class ErrorHandlingTestCase(unittest.TestCase):
         self.assertNotIn("smtp auth failed", payload["error"])
         mock_log.assert_called_once()
 
-    # 日本語: test prompt manage does not leak internal exception message のテスト検証を担当します。
-    # English: Handle verifying test behavior for test prompt manage does not leak internal exception message.
+    # 日本語: プロンプトmanagedoes〜しないleakinternal例外messageことを検証します。
+    # English: Verify that prompt manage does not leak internal exception message.
     def test_prompt_manage_does_not_leak_internal_exception_message(self):
         request = make_request(
             method="GET",
@@ -88,8 +88,8 @@ class ErrorHandlingTestCase(unittest.TestCase):
             session={"user_id": 1},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_manage_api.run_blocking",
             side_effect=RuntimeError("sensitive-db-error"),

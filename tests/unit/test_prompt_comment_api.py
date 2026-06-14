@@ -23,11 +23,11 @@ def make_request(method, path, payload=None, session=None):
     )
 
 
-# 日本語: PromptCommentApiTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptCommentApiTestCase.
+# 日本語: Prompt Comment Apiの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Prompt Comment Api.
 class PromptCommentApiTestCase(unittest.TestCase):
-    # 日本語: test get prompt comments returns payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test get prompt comments returns payload.
+    # 日本語: getプロンプトcomments返却するペイロードことを検証します。
+    # English: Verify that get prompt comments returns payload.
     def test_get_prompt_comments_returns_payload(self):
         request = make_request(
             "GET",
@@ -36,8 +36,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         )
         expected_payload = {"comments": [{"id": 1, "content": "hello"}], "comment_count": 1}
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._fetch_prompt_comments",
             return_value=(expected_payload, 200),
@@ -50,8 +50,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["comments"][0]["id"], 1)
         mock_fetch.assert_called_once_with(10, 7, False)
 
-    # 日本語: test create prompt comment requires login のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt comment requires login.
+    # 日本語: createプロンプトコメント要求するログインことを検証します。
+    # English: Verify that create prompt comment requires login.
     def test_create_prompt_comment_requires_login(self):
         request = make_request(
             "POST",
@@ -66,8 +66,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "ログインしていません")
 
-    # 日本語: test create prompt comment returns rate limited のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt comment returns rate limited.
+    # 日本語: createプロンプトコメント返却するレート制限ことを検証します。
+    # English: Verify that create prompt comment returns rate limited.
     def test_create_prompt_comment_returns_rate_limited(self):
         request = make_request(
             "POST",
@@ -76,8 +76,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 2},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._consume_prompt_comment_create_limits",
             return_value=(False, "試行回数が多すぎます。15秒ほど待ってから再試行してください。", 15),
@@ -90,8 +90,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertIn("試行回数", payload["error"])
         mock_add.assert_not_called()
 
-    # 日本語: test create prompt comment rejects too many links のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt comment rejects too many links.
+    # 日本語: createプロンプトコメント拒否するtoomanylinksことを検証します。
+    # English: Verify that create prompt comment rejects too many links.
     def test_create_prompt_comment_rejects_too_many_links(self):
         request = make_request(
             "POST",
@@ -105,8 +105,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 2},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._consume_prompt_comment_create_limits",
             return_value=(True, None, None),
@@ -118,8 +118,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "URLを含むコメントは3件までにしてください。")
         mock_add.assert_not_called()
 
-    # 日本語: test create prompt comment returns created payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test create prompt comment returns created payload.
+    # 日本語: createプロンプトコメント返却するcreatedペイロードことを検証します。
+    # English: Verify that create prompt comment returns created payload.
     def test_create_prompt_comment_returns_created_payload(self):
         request = make_request(
             "POST",
@@ -128,8 +128,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 5},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._consume_prompt_comment_create_limits",
             return_value=(True, None, None),
@@ -152,8 +152,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["comment_count"], 3)
         mock_add.assert_called_once_with(5, 10, "とても参考になりました", False)
 
-    # 日本語: test delete prompt comment returns payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test delete prompt comment returns payload.
+    # 日本語: deleteプロンプトコメント返却するペイロードことを検証します。
+    # English: Verify that delete prompt comment returns payload.
     def test_delete_prompt_comment_returns_payload(self):
         request = make_request(
             "DELETE",
@@ -161,8 +161,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 4},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._delete_prompt_comment_for_actor",
             return_value=({"message": "コメントを削除しました。", "comment_count": 2, "prompt_id": 10}, 200),
@@ -174,8 +174,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["comment_count"], 2)
         mock_delete.assert_called_once_with(4, 88, False)
 
-    # 日本語: test report prompt comment requires json object のテスト検証を担当します。
-    # English: Handle verifying test behavior for test report prompt comment requires json object.
+    # 日本語: reportプロンプトコメント要求するjsonobjectことを検証します。
+    # English: Verify that report prompt comment requires json object.
     def test_report_prompt_comment_requires_json_object(self):
         request = build_request(
             method="POST",
@@ -185,8 +185,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             headers=[(b"content-type", b"application/json")],
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.prompt_share.prompt_share_api._report_prompt_comment_for_user") as mock_report:
             response = asyncio.run(report_prompt_comment(12, request))
 
@@ -195,8 +195,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "JSON形式が不正です。")
         mock_report.assert_not_called()
 
-    # 日本語: test report prompt comment returns payload のテスト検証を担当します。
-    # English: Handle verifying test behavior for test report prompt comment returns payload.
+    # 日本語: reportプロンプトコメント返却するペイロードことを検証します。
+    # English: Verify that report prompt comment returns payload.
     def test_report_prompt_comment_returns_payload(self):
         request = make_request(
             "POST",
@@ -205,8 +205,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 4},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._report_prompt_comment_for_user",
             return_value=(
@@ -228,8 +228,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
         self.assertEqual(payload["comment_count"], 8)
         mock_report.assert_called_once_with(4, 12, "abuse", "")
 
-    # 日本語: test report prompt comment returns already reported context のテスト検証を担当します。
-    # English: Handle verifying test behavior for test report prompt comment returns already reported context.
+    # 日本語: reportプロンプトコメント返却するalreadyreportedコンテキストことを検証します。
+    # English: Verify that report prompt comment returns already reported context.
     def test_report_prompt_comment_returns_already_reported_context(self):
         request = make_request(
             "POST",
@@ -238,8 +238,8 @@ class PromptCommentApiTestCase(unittest.TestCase):
             session={"user_id": 4},
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch(
             "blueprints.prompt_share.prompt_share_api._report_prompt_comment_for_user",
             return_value=(

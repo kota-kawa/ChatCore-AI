@@ -4,31 +4,31 @@ from unittest.mock import patch
 from services.users import update_user_profile_from_google_if_unset
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# テスト用の疑似DBカーソルクラス。
+# Mock database cursor class for testing.
 class FakeCursor:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # 現在のユーザープロファイル情報を保持して初期化します。
+    # Initialize the fake cursor with the current user profile.
     def __init__(self, current_profile):
         self.current_profile = dict(current_profile)
         self.executed = []
         self._fetchone_result = None
         self.closed = False
 
-    # 日本語: execute の実行処理を担当します。
-    # English: Handle executing for execute.
+    # クエリを実行し、クエリ内容に応じて結果の設定やプロファイルの更新を疑似的に行います。
+    # Simulate query execution, setting query results or updating profile accordingly.
     def execute(self, query, params=None):
         normalized = " ".join(query.split())
         self.executed.append((normalized, params))
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # ユーザー取得クエリの場合、現在のプロファイルをセット
+        # Set current profile if it is a user retrieval query
         if "SELECT username, avatar_url FROM users WHERE id = %s" in normalized:
             self._fetchone_result = dict(self.current_profile)
             return
 
-        # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-        # English: Switch the flow according to the current condition.
+        # プロファイル更新クエリの場合、現在のプロファイルを引数の値で更新
+        # Update current profile with parameters if it is an update query
         if "UPDATE users SET username = %s, avatar_url = %s WHERE id = %s" in normalized:
             self.current_profile["username"] = params[0]
             self.current_profile["avatar_url"] = params[1]
@@ -37,69 +37,69 @@ class FakeCursor:
 
         self._fetchone_result = None
 
-    # 日本語: fetchone に関する処理の入口です。
-    # English: Entry point for logic related to fetchone.
+    # クエリの実行結果から1レコード分（疑似的）を取得します。
+    # Fetch the mock single record result of the query.
     def fetchone(self):
         result = self._fetchone_result
         self._fetchone_result = None
         return result
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # カーソルを閉じます。
+    # Close the cursor.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# テスト用の疑似DBコネクションクラス。
+# Mock database connection class for testing.
 class FakeConnection:
-    # 日本語: インスタンス生成時に必要な初期状態を設定します。
-    # English: Initialize the required instance state when the object is created.
+    # インスタンス生成時に必要な初期状態を設定します。
+    # Initialize the required instance state when the object is created.
     def __init__(self, cursor):
         self._cursor = cursor
         self.committed = False
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # カーソルを返却します。
+    # Return the cursor.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: commit に関する処理の入口です。
-    # English: Entry point for logic related to commit.
+    # コミットされたことを記録します。
+    # Commit the current mock transaction.
     def commit(self):
         self.committed = True
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # コネクションを閉じます。
+    # Close the connection.
     def close(self):
         self.closed = True
 
-    # 日本語: コンテキスト開始時に必要な準備を行います。
-    # English: Prepare the object when entering the context.
+    # コンテキスト開始時に必要な準備を行います。
+    # Prepare the object when entering the context.
     def __enter__(self):
         return self
 
-    # 日本語: コンテキスト終了時の後片付けを行います。
-    # English: Clean up when leaving the context.
+    # コンテキスト終了時の後片付けを行います。
+    # Clean up when leaving the context.
     def __exit__(self, exc_type, exc, tb):
         self.close()
         return False
 
 
-# 日本語: GoogleProfileSyncTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to GoogleProfileSyncTestCase.
+# Googleログイン時に、デフォルトのプロファイル情報をGoogleのプロフィール情報で更新する処理のテスト。
+# Test class to check user profile sync with Google profile details on Google login.
 class GoogleProfileSyncTestCase(unittest.TestCase):
-    # 日本語: test updates default username and avatar from google のテスト検証を担当します。
-    # English: Handle verifying test behavior for test updates default username and avatar from google.
+    # ユーザー名とアバター画像がデフォルト状態の場合、Googleの情報で更新されることを検証します。
+    # Verify that default username and avatar are updated using Google profile data.
     def test_updates_default_username_and_avatar_from_google(self):
         fake_cursor = FakeCursor(
             {"username": "ユーザー", "avatar_url": "/static/user-icon.png"}
         )
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # DB接続をモックして同期処理を実行
+        # Mock the DB connection and run sync logic
         with patch("services.users.get_db_connection", return_value=fake_conn):
             update_user_profile_from_google_if_unset(
                 7,
@@ -116,16 +116,16 @@ class GoogleProfileSyncTestCase(unittest.TestCase):
             "https://example.com/alice.png",
         )
 
-    # 日本語: test preserves existing custom profile values のテスト検証を担当します。
-    # English: Handle verifying test behavior for test preserves existing custom profile values.
+    # すでにカスタムされたプロフィールが設定されている場合、Googleの情報で上書きされないことを検証します。
+    # Verify that custom user profile details are preserved and not overwritten by Google profile data.
     def test_preserves_existing_custom_profile_values(self):
         fake_cursor = FakeCursor(
             {"username": "Custom Name", "avatar_url": "/static/uploads/custom.png"}
         )
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # DB接続をモックして同期処理を実行
+        # Mock the DB connection and run sync logic
         with patch("services.users.get_db_connection", return_value=fake_conn):
             update_user_profile_from_google_if_unset(
                 8,

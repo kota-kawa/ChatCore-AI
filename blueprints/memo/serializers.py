@@ -11,33 +11,37 @@ from .constants import DEFAULT_EXCERPT_LENGTH
 from .helpers import parse_memo_text
 
 
-# 日本語: frontend url に関する処理の入口です。
-# English: Entry point for logic related to frontend url.
+# パスからフロントエンドのURLを解決するヘルパー関数
+# Helper function to resolve the frontend URL from a given path.
 def _frontend_url(path: str) -> str:
+    # メモモジュールのカスタムURL解決関数があれば使用し、無ければデフォルトを使用
+    # Use the memo module's custom URL resolver if defined; otherwise, fallback to the default.
     memo_module = sys.modules.get("blueprints.memo")
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
     if memo_module is not None:
         return getattr(memo_module, "frontend_url", default_frontend_url)(path)
     return default_frontend_url(path)
 
 
-# 日本語: is expired に関する処理の入口です。
-# English: Entry point for logic related to is expired.
+# 有効期限が切れているか判定する関数
+# Determine whether the expiration datetime has passed.
 def is_expired(expires_at: Any) -> bool:
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 期限が datetime 型でない場合は未期限とみなす
+    # If the expiration date is not a datetime object, consider it not expired.
     if not isinstance(expires_at, datetime):
         return False
+    # 現在のUTC時刻と比較して期限切れ判定
+    # Compare with the current UTC datetime to check expiration.
     return expires_at <= datetime.utcnow()
 
 
-# 日本語: serialize share meta のシリアライズ処理を担当します。
-# English: Handle serializing for serialize share meta.
+# メモの共有メタデータをシリアライズする関数
+# Serialize the sharing metadata of a memo.
 def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     share_token = memo.get("share_token") or ""
     expires_at = memo.get("expires_at")
     revoked_at = memo.get("revoked_at")
+    # トークンが存在し、無効化されておらず、有効期限内である場合にアクティブと判定
+    # Considered active if token exists, is not revoked, and is not expired.
     is_active = bool(share_token) and revoked_at is None and not is_expired(expires_at)
     return {
         "share_token": share_token,
@@ -50,9 +54,11 @@ def serialize_share_meta(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# 日本語: serialize memo summary のシリアライズ処理を担当します。
-# English: Handle serializing for serialize memo summary.
+# メモの概要情報をシリアライズする関数（一覧表示用）
+# Serialize summary details of a memo (for list views).
 def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
+    # メモ本文からテキスト部分を抽出してプレビュー用にパース
+    # Parse the memo text structure to extract preview text.
     preview_source = parse_memo_text(memo.get("preview_response") or "")
     share_meta = serialize_share_meta(memo)
     return {
@@ -64,6 +70,8 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
         "pinned_at": serialize_datetime_iso(memo.get("pinned_at")),
         "is_archived": memo.get("archived_at") is not None,
         "is_pinned": memo.get("pinned_at") is not None,
+        # 本文の抜粋を指定の長さで切り出し
+        # Extract a preview excerpt up to the configured limit.
         "excerpt": preview_source[:DEFAULT_EXCERPT_LENGTH],
         "collection_id": memo.get("collection_id"),
         "collection_name": memo.get("collection_name"),
@@ -73,8 +81,8 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# 日本語: serialize memo detail のシリアライズ処理を担当します。
-# English: Handle serializing for serialize memo detail.
+# メモの詳細情報をシリアライズする関数
+# Serialize full details of a memo.
 def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
     share_meta = serialize_share_meta(memo)
     return {
@@ -95,13 +103,13 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# 日本語: share payload に関する処理の入口です。
-# English: Entry point for logic related to share payload.
+# 共有状態を表すレスポンス用ペイロードを作成する関数
+# Construct the response payload for a memo sharing state.
 def share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
     share_token = str(share_state.get("share_token") or "")
     share_url = ""
-    # 日本語: 現在の条件に合わせて処理の流れを切り替えます。
-    # English: Switch the flow according to the current condition.
+    # 有効なトークンがあり、共有状態がアクティブであれば共有URLを設定
+    # Set the share URL if the token is present and the share state is active.
     if share_token and bool(share_state.get("is_active")):
         share_url = _frontend_url(f"/shared/memo/{share_token}")
     return {"status": "success", **share_state, "share_url": share_url}

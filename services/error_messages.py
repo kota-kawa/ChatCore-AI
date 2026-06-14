@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-# API error messages are centralized here so services/routes can reuse the same text.
+# 日本語: APIエラーメッセージの共通定義ファイルです。各サービスやルートで再利用可能なテキストを一元管理します。
+# English: Centralized API error message definitions to allow reuse across services and routes.
 ERROR_LOGIN_REQUIRED = "ログインが必要です"
 ERROR_INVALID_JSON = "JSON形式が不正です。"
 ERROR_TOKEN_REQUIRED = "token is required"

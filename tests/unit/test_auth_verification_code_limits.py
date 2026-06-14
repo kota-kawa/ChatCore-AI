@@ -8,17 +8,17 @@ from blueprints.verification import api_send_verification_email, api_verify_regi
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
+# 会員登録やログイン時のコード検証用APIテスト向けHTTPリクエストを構築します。
+# Build a mock HTTP request for testing registration/login verification code APIs.
 def make_request(path, json_body, session=None):
     return build_request(method="POST", path=path, json_body=json_body, session=session)
 
 
-# 日本語: VerificationCodeLimitsTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to VerificationCodeLimitsTestCase.
+# 登録確認メールやログインコードの有効期限、試行回数上限（ブルートフォース保護）、セッションIDローテーションなどの挙動を検証するテストクラス。
+# Test class to check verification/login code limits, expiration, maximum attempts, and session ID rotation.
 class VerificationCodeLimitsTestCase(unittest.TestCase):
-    # 日本語: test send verification email stores issued at and attempts のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send verification email stores issued at and attempts.
+    # 新規登録メール送信時に、セッション内にコード、発行時刻(issued_at)、および初期試行回数(attempts)が記録されることを検証します。
+    # Verify that sending a registration email records the generated code, issued_at timestamp, and attempts count in the session.
     def test_send_verification_email_stores_issued_at_and_attempts(self):
         session = {"_seed": True}
         request = make_request(
@@ -27,8 +27,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             session=session,
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 各種処理をモックして登録メール送信APIを実行
+        # Mock limits, user checks, code generation, and sending to run the registration email API
         with patch("blueprints.verification.consume_auth_email_send_limits", return_value=(True, None)):
             with patch("blueprints.verification.consume_auth_email_daily_quota", return_value=(True, 1, 50)):
                 with patch("blueprints.verification.get_user_by_email", return_value=None):
@@ -43,8 +43,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertEqual(session["verification_code_issued_at"], 1000)
         self.assertEqual(session["verification_code_attempts"], 0)
 
-    # 日本語: test verify registration code fails when expired and clears session のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify registration code fails when expired and clears session.
+    # 登録確認コードの有効期限が切れた場合に、検証が拒否されセッションから認証情報がクリアされることを検証します。
+    # Verify that registration verification fails if the code has expired, clearing temporary verification data from the session.
     def test_verify_registration_code_fails_when_expired_and_clears_session(self):
         session = {
             "verification_code": "111111",
@@ -58,8 +58,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             session=session,
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 有効期限が切れた時間（1000秒後）をモックして検証を実行
+        # Mock time elapsed beyond expiration window (1000 seconds later) to run verification
         with patch("blueprints.verification.time.time", return_value=2000):
             response = asyncio.run(api_verify_registration_code(request))
 
@@ -70,8 +70,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("verification_code_issued_at", session)
         self.assertNotIn("verification_code_attempts", session)
 
-    # 日本語: test verify registration code blocks when attempt limit reached のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify registration code blocks when attempt limit reached.
+    # 登録確認コードの誤入力試行回数が上限に達した場合、検証がブロックされ認証情報がクリアされることを検証します。
+    # Verify that registration verification is blocked after reaching the max attempt limit, clearing temporary data from the session.
     def test_verify_registration_code_blocks_when_attempt_limit_reached(self):
         session = {
             "verification_code": "111111",
@@ -85,8 +85,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             session=session,
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 最大試行回数に到達した直後の検証実行
+        # Run verification when the attempts count is already at the limit
         with patch("blueprints.verification.time.time", return_value=1001):
             response = asyncio.run(api_verify_registration_code(request))
 
@@ -97,8 +97,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("verification_code_issued_at", session)
         self.assertNotIn("verification_code_attempts", session)
 
-    # 日本語: test send login code stores issued at and attempts のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send login code stores issued at and attempts.
+    # ログインコード送信時に、セッション内にログインコード、発行時刻(issued_at)、および初期試行回数(attempts)が記録されることを検証します。
+    # Verify that sending a login code records the generated login code, issued_at timestamp, and attempts count in the session.
     def test_send_login_code_stores_issued_at_and_attempts(self):
         session = {"_seed": True}
         request = make_request(
@@ -107,8 +107,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
             session=session,
         )
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ログインコード送信APIのモック実行
+        # Mock necessary components and run send login code API
         with patch("blueprints.auth.consume_auth_email_send_limits", return_value=(True, None)):
             with patch(
                 "blueprints.auth.get_user_by_email",
@@ -125,8 +125,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertEqual(session["login_verification_code_issued_at"], 3000)
         self.assertEqual(session["login_verification_code_attempts"], 0)
 
-    # 日本語: test verify login code fails when expired and clears session のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify login code fails when expired and clears session.
+    # ログインコードの有効期限が切れた場合に、検証が拒否されセッションから認証情報がクリアされることを検証します。
+    # Verify that login verification fails if the code has expired, clearing temporary login data from the session.
     def test_verify_login_code_fails_when_expired_and_clears_session(self):
         session = {
             "login_verification_code": "222222",
@@ -136,8 +136,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         }
         request = make_request("/api/verify_login_code", {"authCode": "222222"}, session=session)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 有効期限が切れた時間（1000秒後）をモックして検証を実行
+        # Mock time elapsed beyond expiration window (1000 seconds later) to run verification
         with patch("blueprints.auth.time.time", return_value=2000):
             response = asyncio.run(api_verify_login_code(request))
 
@@ -148,8 +148,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("login_verification_code_issued_at", session)
         self.assertNotIn("login_verification_code_attempts", session)
 
-    # 日本語: test verify login code blocks when attempt limit reached のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify login code blocks when attempt limit reached.
+    # ログインコードの誤入力試行回数が上限に達した場合、検証がブロックされ認証情報がクリアされることを検証します。
+    # Verify that login verification is blocked after reaching the max attempt limit, clearing temporary data from the session.
     def test_verify_login_code_blocks_when_attempt_limit_reached(self):
         session = {
             "login_verification_code": "222222",
@@ -159,8 +159,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         }
         request = make_request("/api/verify_login_code", {"authCode": "000000"}, session=session)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 最大試行回数に到達した直後の検証実行
+        # Run verification when the attempts count is already at the limit
         with patch("blueprints.auth.time.time", return_value=1001):
             response = asyncio.run(api_verify_login_code(request))
 
@@ -171,8 +171,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("login_verification_code_issued_at", session)
         self.assertNotIn("login_verification_code_attempts", session)
 
-    # 日本語: test verify login code rotates session and sets permanent on success のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify login code rotates session and sets permanent on success.
+    # ログインコード検証成功時に、セッションIDがローテーションされ、セッションが永続化（permanent）されることを検証します。
+    # Verify that successful login code verification rotates the session ID and sets the session as permanent.
     def test_verify_login_code_rotates_session_and_sets_permanent_on_success(self):
         session = {
             "login_verification_code": "222222",
@@ -184,8 +184,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         request = make_request("/api/verify_login_code", {"authCode": "222222"}, session=session)
         request.scope["session_id"] = "old-login-session"
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ログインコード検証の成功時のDB呼び出しやタスク複製をモック
+        # Mock user lookup, default tasks copy, and verify successful response
         with patch("blueprints.auth.time.time", return_value=1001):
             with patch(
                 "blueprints.auth.get_user_by_id",
@@ -206,8 +206,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertIsNone(request.scope["session_id"])
         self.assertEqual(request.scope["_session_ids_to_delete"], {"old-login-session"})
 
-    # 日本語: test verify login code fails when user is missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify login code fails when user is missing.
+    # ログインコードが正しくても対象ユーザーが存在しない場合に、エラー（401）となり認証情報が破棄されることを検証します。
+    # Verify that login verification fails if the user is no longer found in the database, clearing temporary login data.
     def test_verify_login_code_fails_when_user_is_missing(self):
         session = {
             "login_verification_code": "222222",
@@ -217,8 +217,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         }
         request = make_request("/api/verify_login_code", {"authCode": "222222"}, session=session)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ユーザーが存在しないケースをモックして検証
+        # Mock missing user and verify response
         with patch("blueprints.auth.time.time", return_value=1001):
             with patch("blueprints.auth.get_user_by_id", return_value=None):
                 response = asyncio.run(api_verify_login_code(request))
@@ -229,8 +229,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertNotIn("login_verification_code", session)
         self.assertNotIn("login_temp_user_id", session)
 
-    # 日本語: test verify login code keeps success when copy default tasks fails のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify login code keeps success when copy default tasks fails.
+    # ログイン処理時のデフォルトタスク複製処理でエラーが発生した場合でも、ユーザーのログイン処理自体は成功（堅牢性）と扱われることを検証します。
+    # Verify that a failure in copying default tasks does not block the user from logging in successfully (resilience).
     def test_verify_login_code_keeps_success_when_copy_default_tasks_fails(self):
         session = {
             "login_verification_code": "222222",
@@ -240,8 +240,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         }
         request = make_request("/api/verify_login_code", {"authCode": "222222"}, session=session)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # デフォルトタスク複製時のRuntimeErrorをモック
+        # Mock a RuntimeError during default tasks copy and verify successful login
         with patch("blueprints.auth.time.time", return_value=1001):
             with patch(
                 "blueprints.auth.get_user_by_id",
@@ -260,8 +260,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertFalse(payload["offer_passkey_setup"])
         self.assertEqual(session["user_id"], 12)
 
-    # 日本語: test verify registration code sets permanent and rotates session のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify registration code sets permanent and rotates session.
+    # 登録確認コード検証成功時に、ユーザーが確認済み(is_verified)となり、セッションIDがローテーションされることを検証します。
+    # Verify that successful registration code verification marks the user as verified, rotates the session ID, and sets the session as permanent.
     def test_verify_registration_code_sets_permanent_and_rotates_session(self):
         session = {
             "verification_code": "111111",
@@ -273,8 +273,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         request = make_request("/api/verify_registration_code", {"authCode": "111111"}, session=session)
         request.scope["session_id"] = "old-registration-session"
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 登録確認コードの成功時のDB呼び出しやタスク複製をモック
+        # Mock user lookup, verification update, and default tasks copy on registration success
         with patch("blueprints.verification.time.time", return_value=1001):
             with patch(
                 "blueprints.verification.get_user_by_id",
@@ -296,8 +296,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         self.assertIsNone(request.scope["session_id"])
         self.assertEqual(request.scope["_session_ids_to_delete"], {"old-registration-session"})
 
-    # 日本語: test verify registration code fails when user is missing のテスト検証を担当します。
-    # English: Handle verifying test behavior for test verify registration code fails when user is missing.
+    # 登録確認コードが正しくても対象ユーザーが存在しない場合に、エラー（401）となり認証情報が破棄されることを検証します。
+    # Verify that registration verification fails if the temporary user is missing from the database.
     def test_verify_registration_code_fails_when_user_is_missing(self):
         session = {
             "verification_code": "111111",
@@ -307,8 +307,8 @@ class VerificationCodeLimitsTestCase(unittest.TestCase):
         }
         request = make_request("/api/verify_registration_code", {"authCode": "111111"}, session=session)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # ユーザーが存在しないケースをモックして検証
+        # Mock missing user and verify response
         with patch("blueprints.verification.time.time", return_value=1001):
             with patch("blueprints.verification.get_user_by_id", return_value=None):
                 response = asyncio.run(api_verify_registration_code(request))

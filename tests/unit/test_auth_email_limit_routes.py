@@ -8,8 +8,8 @@ from blueprints.verification import api_send_verification_email
 from tests.helpers.request_helpers import build_request
 
 
-# 日本語: make request の生成処理を担当します。
-# English: Handle creating for make request.
+# テスト用のHTTP POSTリクエストを構築します。
+# Build a mock HTTP POST request for testing.
 def make_request(path, json_body, session=None):
     return build_request(
         method="POST",
@@ -19,16 +19,16 @@ def make_request(path, json_body, session=None):
     )
 
 
-# 日本語: AuthEmailLimitRoutesTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to AuthEmailLimitRoutesTestCase.
+# メール送信制限（短時間制限・日次制限）に関するエンドポイントの振る舞いをテストするクラス。
+# Test class to verify endpoints handling email sending limits (per-email and daily limits).
 class AuthEmailLimitRoutesTestCase(unittest.TestCase):
-    # 日本語: test send login code returns 429 when per email limit exceeded のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send login code returns 429 when per email limit exceeded.
+    # 短時間でのメール送信制限を超えた場合に、ログインコード送信APIが429ステータスを返すことを検証します。
+    # Verify that the login code sending API returns a 429 status when the short-term per-email sending limit is exceeded.
     def test_send_login_code_returns_429_when_per_email_limit_exceeded(self):
         request = make_request("/api/send_login_code", {"email": "user@example.com"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 送信制限エラーをモックし、メール送信処理が呼ばれないことを確認
+        # Mock limit exhaustion and verify that the send email function is not called
         with patch(
             "blueprints.auth.consume_auth_email_send_limits",
             return_value=(False, "too many attempts"),
@@ -43,13 +43,13 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "too many attempts")
         mock_send_email.assert_not_called()
 
-    # 日本語: test send login code returns 429 when daily limit exceeded のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send login code returns 429 when daily limit exceeded.
+    # 1日のメール送信制限を超えた場合に、ログインコード送信APIが429ステータスを返すことを検証します。
+    # Verify that the login code sending API returns a 429 status when the daily email sending limit is exceeded.
     def test_send_login_code_returns_429_when_daily_limit_exceeded(self):
         request = make_request("/api/send_login_code", {"email": "user@example.com"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 短時間制限はパスし、日次制限およびユーザー取得などをモック
+        # Pass the per-email limit, but mock daily quota limit and user lookup
         with patch(
             "blueprints.auth.consume_auth_email_send_limits",
             return_value=(True, None),
@@ -72,13 +72,13 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
         self.assertIn("上限", payload["error"])
         mock_send_email.assert_not_called()
 
-    # 日本語: test send verification email returns 429 when per email limit exceeded のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send verification email returns 429 when per email limit exceeded.
+    # 短時間でのメール送信制限を超えた場合に、確認メール送信APIが429ステータスを返すことを検証します。
+    # Verify that the verification email sending API returns a 429 status when the short-term per-email sending limit is exceeded.
     def test_send_verification_email_returns_429_when_per_email_limit_exceeded(self):
         request = make_request("/api/send_verification_email", {"email": "new-user@example.com"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 送信制限エラーをモックし、メール送信処理が呼ばれないことを確認
+        # Mock limit exhaustion and verify that the send email function is not called
         with patch(
             "blueprints.verification.consume_auth_email_send_limits",
             return_value=(False, "too many attempts"),
@@ -93,13 +93,13 @@ class AuthEmailLimitRoutesTestCase(unittest.TestCase):
         self.assertEqual(payload["error"], "too many attempts")
         mock_send_email.assert_not_called()
 
-    # 日本語: test send verification email returns 429 when daily limit exceeded のテスト検証を担当します。
-    # English: Handle verifying test behavior for test send verification email returns 429 when daily limit exceeded.
+    # 1日のメール送信制限を超えた場合に、確認メール送信APIが429ステータスを返すことを検証します。
+    # Verify that the verification email sending API returns a 429 status when the daily email sending limit is exceeded.
     def test_send_verification_email_returns_429_when_daily_limit_exceeded(self):
         request = make_request("/api/send_verification_email", {"email": "new-user@example.com"})
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 短時間制限はパスし、日次制限制限エラーをモック
+        # Pass the per-email limit, but mock daily quota limit exhaustion
         with patch(
             "blueprints.verification.consume_auth_email_send_limits",
             return_value=(True, None),

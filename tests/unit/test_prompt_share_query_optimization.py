@@ -4,8 +4,8 @@ from unittest.mock import patch
 from blueprints.prompt_share.prompt_share_api import _get_prompts_with_flags
 
 
-# 日本語: FakeCursor に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeCursor.
+# 日本語: テスト用の擬似Fake Cursorクラスです。
+# English: Mock Fake Cursor class for testing.
 class FakeCursor:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -19,19 +19,19 @@ class FakeCursor:
     def execute(self, query, params=None):
         self.executed.append((" ".join(query.split()), params))
 
-    # 日本語: fetchall に関する処理の入口です。
-    # English: Entry point for logic related to fetchall.
+    # 日本語: テスト用の処理の入口関数fetchallです。
+# English: Entry point helper function fetchall for testing.
     def fetchall(self):
         return self.rows
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
 
-# 日本語: FakeConnection に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to FakeConnection.
+# 日本語: テスト用の擬似Fake Connectionクラスです。
+# English: Mock Fake Connection class for testing.
 class FakeConnection:
     # 日本語: インスタンス生成時に必要な初期状態を設定します。
     # English: Initialize the required instance state when the object is created.
@@ -39,22 +39,22 @@ class FakeConnection:
         self._cursor = cursor
         self.closed = False
 
-    # 日本語: cursor に関する処理の入口です。
-    # English: Entry point for logic related to cursor.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def cursor(self, *args, **kwargs):
         return self._cursor
 
-    # 日本語: close に関する処理の入口です。
-    # English: Entry point for logic related to close.
+    # 日本語: 後処理を実行します。
+# English: Perform cleanup operations.
     def close(self):
         self.closed = True
 
 
-# 日本語: PromptShareQueryOptimizationTestCase に関するデータや振る舞いをまとめます。
-# English: Group data and behavior related to PromptShareQueryOptimizationTestCase.
+# 日本語: Prompt Share Query Optimizationの機能や仕様を検証するテストクラスです。
+# English: Test case class to verify the functionality and specifications of Prompt Share Query Optimization.
 class PromptShareQueryOptimizationTestCase(unittest.TestCase):
-    # 日本語: test get prompts with flags uses single join query のテスト検証を担当します。
-    # English: Handle verifying test behavior for test get prompts with flags uses single join query.
+    # 日本語: flagsusessinglejoinクエリを使用する場合、getpromptsことを検証します。
+    # English: Verify that get prompts with flags uses single join query.
     def test_get_prompts_with_flags_uses_single_join_query(self):
         fake_cursor = FakeCursor(
             [
@@ -78,8 +78,8 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         )
         fake_conn = FakeConnection(fake_cursor)
 
-        # 日本語: 必要なリソースやコンテキストを限定して利用します。
-        # English: Use the required resource or context within this limited block.
+        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
+        # English: Mock dependencies or context to configure the test environment.
         with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
             prompts = _get_prompts_with_flags(7)
 
