@@ -1,3 +1,5 @@
+// メール認証コード入力ステップのprops型定義
+// Props type definition for the email authentication code input step
 type AuthCodeStepProps = {
   authCode: string;
   verifyingCode: boolean;
@@ -6,6 +8,8 @@ type AuthCodeStepProps = {
   onVerifyCode: () => void;
 };
 
+// メールに届いた認証コードを入力・送信するUIコンポーネント
+// UI component for entering and submitting the authentication code received by email
 export function AuthCodeStep({
   authCode,
   verifyingCode,
@@ -29,6 +33,7 @@ export function AuthCodeStep({
         autoComplete="one-time-code"
         disabled={verifyingCode}
       />
+      {/* 認証コードを送信するボタン / Button to submit the authentication code */}
       <button
         type="button"
         className="submit-btn"
@@ -37,12 +42,14 @@ export function AuthCodeStep({
       >
         {verifyingCode ? "認証コードを確認中..." : "認証して続ける"}
       </button>
+      {/* 認証中のステータス表示 / Status display while verifying */}
       {verifyingCode ? (
         <div className="code-status" role="status" aria-live="polite">
           <span className="code-status-pulse" aria-hidden="true" />
           <span>ログインの準備をしています。このままお待ちください。</span>
         </div>
       ) : null}
+      {/* メールアドレス入力画面に戻るボタン / Button to go back to email input */}
       <button
         type="button"
         className="ghost-btn"

@@ -1,8 +1,12 @@
+// 回答再生成ボタンのprops型定義
+// Props type definition for the response regenerate button
 type RegenerateActionButtonProps = {
   onRegenerate: () => void;
   disabled?: boolean;
 };
 
+// AIの回答を再生成するアクションボタン
+// Action button to regenerate the AI's response
 export function RegenerateActionButton({ onRegenerate, disabled }: RegenerateActionButtonProps) {
   return (
     <button

@@ -1,3 +1,5 @@
+// 認証エントリーステップのprops型定義
+// Props type definition for the authentication entry step
 type AuthEntryStepProps = {
   email: string;
   passkeyPending: boolean;
@@ -9,6 +11,8 @@ type AuthEntryStepProps = {
   onSendCode: () => void;
 };
 
+// ログイン方法（パスキー / Google / メール）を選択する最初のステップコンポーネント
+// First-step component for selecting the login method (passkey / Google / email)
 export function AuthEntryStep({
   email,
   passkeyPending,
@@ -21,6 +25,7 @@ export function AuthEntryStep({
 }: AuthEntryStepProps) {
   return (
     <>
+      {/* デバイスがパスキーをサポートしている場合のみ表示 / Shown only when device supports passkeys */}
       {supportsPasskeys ? (
         <button
           type="button"
@@ -32,6 +37,7 @@ export function AuthEntryStep({
         </button>
       ) : null}
 
+      {/* Googleログインボタン / Google login button */}
       <div className="google-container">
         <button
           type="button"
@@ -70,6 +76,7 @@ export function AuthEntryStep({
 
       <div className="divider"><span>またはメール</span></div>
 
+      {/* メールアドレス入力フォーム / Email address input form */}
       <label htmlFor="email" className="email-label">メールアドレス</label>
       <input
         type="email"
@@ -82,6 +89,7 @@ export function AuthEntryStep({
         onChange={(event) => onEmailChange(event.target.value)}
         autoComplete="email webauthn"
       />
+      {/* メールで認証コードを送信するボタン / Button to send authentication code by email */}
       <button
         type="button"
         className="submit-btn"

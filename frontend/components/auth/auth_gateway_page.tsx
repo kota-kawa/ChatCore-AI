@@ -21,22 +21,32 @@ import { AuthGatewayGlobalStyles } from "./auth_gateway_modules/styles/auth_gate
 import type { AuthStep, EmailAuthFlow, PasskeySetupProvider } from "./auth_gateway_modules/types";
 import { buildGoogleLoginUrl, getPostAuthRedirectPath, getSearchParams } from "./auth_gateway_modules/url_utils";
 
+// 認証ページで使用するフォントの設定（Google Fonts）
+// Font configuration for the auth page (Google Fonts)
 const authHeadingFont = Outfit({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   display: "swap"
 });
 
+// パスキー・Google・メール認証の3方式に対応した認証ゲートウェイページのメインコンポーネント
+// Main component for the auth gateway page supporting passkey, Google, and email authentication
 export default function AuthGatewayPage() {
+  // 現在の認証ステップ（エントリー → コード入力 → パスキー設定）
+  // Current authentication step (entry → code input → passkey setup)
   const [step, setStep] = useState<AuthStep>("entry");
   const [email, setEmail] = useState("");
   const [authCode, setAuthCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  // 各非同期処理の進行中フラグ
+  // Flags indicating each async operation is in progress
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [redirectingAfterAuth, setRedirectingAfterAuth] = useState(false);
   const [passkeyPending, setPasskeyPending] = useState(false);
   const [supportsPasskeys, setSupportsPasskeys] = useState(false);
+  // メール認証フローの種別（ログイン / 新規登録）とパスキープロバイダー
+  // Email auth flow type (login / register) and passkey provider
   const [emailAuthFlow, setEmailAuthFlow] = useState<EmailAuthFlow>(null);
   const [passkeySetupProvider, setPasskeySetupProvider] = useState<PasskeySetupProvider>(null);
 
@@ -49,6 +59,8 @@ export default function AuthGatewayPage() {
 
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // タイマーをクリアしてrefをリセットするユーティリティ
+  // Utility to clear a timer and reset its ref
   const clearTimer = (timerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>) => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -56,6 +68,8 @@ export default function AuthGatewayPage() {
     }
   };
 
+  // 認証完了後に指定パスへ遅延リダイレクトをスケジュールする
+  // Schedule a delayed redirect to the specified path after authentication completes
   const scheduleRedirect = (targetPath: string = getPostAuthRedirectPath()) => {
     clearTimer(redirectTimerRef);
     setRedirectingAfterAuth(true);
@@ -64,6 +78,8 @@ export default function AuthGatewayPage() {
     }, REDIRECT_DELAY_MS);
   };
 
+  // 現在の処理状態に応じてローディングオーバーレイのメッセージを決定する
+  // Determine the loading overlay message based on the current processing state
   const loadingState = (() => {
     if (redirectingAfterAuth) {
       return {
@@ -92,6 +108,8 @@ export default function AuthGatewayPage() {
     return null;
   })();
 
+  // マウント時にCSRF保護を有効化し、パスキーサポートを確認する
+  // On mount, enable CSRF protection and check for passkey support
   useEffect(() => {
     ensureCsrfProtection();
     document.body.classList.add("auth-page");
@@ -102,6 +120,8 @@ export default function AuthGatewayPage() {
     };
   }, []);
 
+  // マウント時にログイン済みか確認し、パスキー設定が必要な場合はそのステップへ遷移する
+  // On mount, check if already logged in and transition to passkey setup step if needed
   useEffect(() => {
     let cancelled = false;
 
@@ -121,6 +141,8 @@ export default function AuthGatewayPage() {
 
         if (!cancelled && data.logged_in) {
           if (shouldOfferPasskeySetup) {
+            // パスキー設定ステップを表示する
+            // Show the passkey setup step
             setEmailAuthFlow(queryFlow);
             setPasskeySetupProvider(provider);
             setStep("passkey");
@@ -148,6 +170,8 @@ export default function AuthGatewayPage() {
     };
   }, []);
 
+  // メールアドレスに認証コードを送信する処理
+  // Handle sending the authentication code to the email address
   const handleSendCode = async () => {
     const trimmedEmail = email.trim();
     setErrorMessage("");
@@ -182,6 +206,8 @@ export default function AuthGatewayPage() {
     }
   };
 
+  // 入力された認証コードをサーバーで検証する処理
+  // Handle verifying the entered authentication code on the server
   const handleVerifyCode = async () => {
     const trimmedCode = authCode.trim();
     setErrorMessage("");
@@ -207,6 +233,8 @@ export default function AuthGatewayPage() {
         setPasskeySetupProvider("email");
 
         if (shouldOfferPasskeySetup) {
+          // 新規登録かつパスキー対応デバイスの場合はパスキー設定へ進む
+          // Proceed to passkey setup for new registrations on supported devices
           setStep("passkey");
           showModalMessage("アカウントを作成しました。必要ならこのままPasskeyを追加できます。");
         } else {
@@ -223,6 +251,8 @@ export default function AuthGatewayPage() {
     }
   };
 
+  // パスキーを使ってログインする処理
+  // Handle authentication using a passkey
   const handlePasskeyLogin = async () => {
     setErrorMessage("");
     setRedirectingAfterAuth(false);
@@ -231,6 +261,8 @@ export default function AuthGatewayPage() {
       await authenticateWithPasskey();
       window.location.href = getPostAuthRedirectPath();
     } catch (error) {
+      // ユーザーがキャンセルした場合はエラー表示しない
+      // Don't show an error when the user cancelled
       if (error instanceof PasskeyCancelledError) {
         return;
       }
@@ -240,6 +272,8 @@ export default function AuthGatewayPage() {
     }
   };
 
+  // パスキーをデバイスに登録する処理
+  // Handle registering a passkey on the device
   const handlePasskeyRegistration = async () => {
     setErrorMessage("");
     setRedirectingAfterAuth(false);
@@ -266,12 +300,14 @@ export default function AuthGatewayPage() {
         <div className="chat-background" />
 
         <div className="auth-container">
+          {/* 処理中のローディングオーバーレイ / Loading overlay during processing */}
           <LoadingSpinnerOverlay
             message={loadingState?.message}
             title={loadingState?.title}
             visible={loadingState !== null}
           />
 
+          {/* ステップに応じてアイコンを切り替える / Switch icon based on current step */}
           <div className="bot-icon">{step === "passkey" ? "🔐" : supportsPasskeys ? "🌿" : "✉️"}</div>
           <h1 className="title">アカウントに続ける</h1>
           <p className="subtitle">
@@ -282,6 +318,7 @@ export default function AuthGatewayPage() {
 
           <div className="error-message" role="alert">{errorMessage}</div>
 
+          {/* エントリーステップ：ログイン方法の選択 / Entry step: select login method */}
           {step === "entry" ? (
             <AuthEntryStep
               email={email}
@@ -301,6 +338,7 @@ export default function AuthGatewayPage() {
             />
           ) : null}
 
+          {/* コードステップ：認証コードの入力 / Code step: enter authentication code */}
           {step === "code" ? (
             <AuthCodeStep
               authCode={authCode}
@@ -317,6 +355,7 @@ export default function AuthGatewayPage() {
             />
           ) : null}
 
+          {/* パスキーステップ：パスキーの登録 / Passkey step: register passkey */}
           {step === "passkey" ? (
             <AuthPasskeyStep
               emailAuthFlow={emailAuthFlow}

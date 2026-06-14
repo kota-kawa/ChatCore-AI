@@ -2,10 +2,14 @@ import { memo } from "react";
 
 import type { NormalizedTask } from "../../lib/chat_page/types";
 
+// タスクプロンプト折り畳みコンポーネントのprops型定義
+// Props type definition for the task prompt disclosure component
 type TaskPromptDisclosureProps = {
   task?: NormalizedTask;
 };
 
+// タスクプロンプトの各セクション（ラベルと内容）の型
+// Type for each section of the task prompt (label and content)
 type TaskPromptSection = {
   label: string;
   value: string;
@@ -23,6 +27,8 @@ function buildTaskPromptSections(task: NormalizedTask): TaskPromptSection[] {
     { label: "入力例", value: task.input_examples },
     { label: "出力例", value: task.output_examples },
   ];
+  // 空のセクションは除外する
+  // Filter out empty sections
   return candidates.filter((section) => section.value && section.value.trim().length > 0);
 }
 
@@ -55,5 +61,7 @@ function TaskPromptDisclosureComponent({ task }: TaskPromptDisclosureProps) {
   );
 }
 
+// 不要な再レンダリングを防ぐためにメモ化する
+// Memoized to prevent unnecessary re-renders
 export const TaskPromptDisclosure = memo(TaskPromptDisclosureComponent);
 TaskPromptDisclosure.displayName = "TaskPromptDisclosure";
