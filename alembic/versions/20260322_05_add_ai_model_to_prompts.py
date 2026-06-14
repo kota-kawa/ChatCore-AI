@@ -17,6 +17,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """
+    [JP] prompts テーブルに ai_model カラムを追加します。
+    [EN] Add ai_model column to prompts table.
+    """
+    # [JP] ai_model カラムの追加 (推奨されるAIモデル名の格納用)
+    # [EN] Add ai_model column (for storing recommended AI model name)
     op.execute(
         """
         ALTER TABLE prompts
@@ -26,6 +32,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] prompts テーブルから ai_model カラムを削除します。
+    [EN] Drop ai_model column from prompts table.
+    """
+    # [JP] ai_model カラムの削除
+    # [EN] Drop ai_model column
     op.execute(
         """
         ALTER TABLE prompts

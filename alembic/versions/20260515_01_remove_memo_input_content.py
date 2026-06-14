@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Remove the 'input_content' column from 'memo_entries' table
+    # memo_entries テーブルから 'input_content' カラムを削除する
     op.execute(
         """
         ALTER TABLE memo_entries
@@ -25,6 +27,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Add back the 'input_content' column to 'memo_entries' table with a default empty string
+    # memo_entries テーブルに 'input_content' カラムをデフォルト空文字で再度追加する
     op.execute(
         """
         ALTER TABLE memo_entries

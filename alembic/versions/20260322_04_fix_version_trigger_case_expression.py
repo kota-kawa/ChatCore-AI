@@ -25,6 +25,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """
+    [JP] バージョン記録トリガー内の不適切なCASE式を修正し、明示的な searched CASE に置き換えます。
+    [EN] Fix the invalid CASE expression in the version trigger functions, replacing it with a searched CASE.
+    """
+    # [JP] record_task_version トリガー関数の修正版作成
+    # [EN] Create the corrected version of the record_task_version trigger function
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_task_version()
@@ -80,6 +86,8 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql
         """
     )
+    # [JP] record_prompt_version トリガー関数の修正版作成
+    # [EN] Create the corrected version of the record_prompt_version trigger function
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_prompt_version()
@@ -138,8 +146,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restore the original (buggy) function bodies — kept only for Alembic
-    # chain completeness; these functions should not be deployed.
+    """
+    [JP] バグが存在していたオリジナルの単純CASE式トリガー関数に書き戻します。
+    [EN] Restore the original (buggy) simple CASE trigger functions.
+    """
+    # [JP] 旧 record_task_version トリガー関数の書き戻し
+    # [EN] Revert to old record_task_version trigger function
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_task_version()
@@ -194,6 +206,8 @@ def downgrade() -> None:
         $$ LANGUAGE plpgsql
         """
     )
+    # [JP] 旧 record_prompt_version トリガー関数の書き戻し
+    # [EN] Revert to old record_prompt_version trigger function
     op.execute(
         """
         CREATE OR REPLACE FUNCTION record_prompt_version()

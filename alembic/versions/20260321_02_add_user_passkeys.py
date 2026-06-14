@@ -18,14 +18,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _existing_tables() -> set[str]:
+    """
+    [JP] 現在データベース内に存在するテーブル名のセットを返します。
+    [EN] Return a set of table names existing in the database.
+    """
     inspector = sa.inspect(op.get_bind())
     return set(inspector.get_table_names())
 
 
 def upgrade() -> None:
+    """
+    [JP] WebAuthn クレデンシャル用の user_passkeys テーブルとインデックスを作成します。
+    [EN] Create the user_passkeys table and its index for WebAuthn credentials.
+    """
+    # [JP] users テーブルが存在しない場合は何も行わない
+    # [EN] Do nothing if users table does not exist
     if "users" not in _existing_tables():
         return
 
+    # [JP] user_passkeys テーブルの作成
+    # [EN] Create user_passkeys table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS user_passkeys (
@@ -47,6 +59,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] ユーザーIDと作成日時のインデックス作成
+    # [EN] Create index on user_id and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_user_passkeys_user_created_at
@@ -56,5 +70,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] user_passkeys テーブルとインデックスを削除します。
+    [EN] Drop the user_passkeys table and its index.
+    """
+    # [JP] インデックスの削除
+    # [EN] Drop the index
     op.execute("DROP INDEX IF EXISTS idx_user_passkeys_user_created_at")
+    # [JP] テーブルの削除
+    # [EN] Drop the table
     op.execute("DROP TABLE IF EXISTS user_passkeys")

@@ -14,8 +14,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Merge migration branches; no database schema changes are required here
+    # 移行ブランチをマージします。ここではデータベーススキーマの変更は不要です
     pass
 
 
 def downgrade() -> None:
+    # Reverting a merge point is a no-op
+    # マージポイントのロールバックは何も行いません
     pass

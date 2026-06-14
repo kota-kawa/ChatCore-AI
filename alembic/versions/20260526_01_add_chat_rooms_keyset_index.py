@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create a composite index on chat_rooms to optimize keyset-based pagination sorting by user_id and created_at/id descending
+    # user_id および作成日時の降順・IDの降順でソートするキーセット型ページネーションを最適化するため、chat_rooms テーブルに複合インデックスを作成する
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_created_at_id
@@ -25,4 +27,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop the keyset pagination index from chat_rooms
+    # chat_rooms テーブルからキーセットページネーション用のインデックスを削除する
     op.execute("DROP INDEX IF EXISTS idx_chat_rooms_user_created_at_id")

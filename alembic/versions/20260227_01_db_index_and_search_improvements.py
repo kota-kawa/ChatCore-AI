@@ -17,8 +17,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """
+    [JP] データベースのコアスキーマをブートストラップし、検索およびインデックスの改善を適用します。
+    [EN] Bootstrap the core database schema and apply index and search improvements.
+    """
+    # [JP] pg_trgm 拡張機能の作成 (トリグラム検索用)
+    # [EN] Create pg_trgm extension for trigram search
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
+    # [JP] users テーブルの作成
+    # [EN] Create users table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -35,6 +43,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] 外部プロバイダー連携用のユニークインデックス
+    # [EN] Unique index for external auth provider integration
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS uq_users_provider_identity
@@ -43,6 +53,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] user_passkeys テーブルの作成
+    # [EN] Create user_passkeys table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS user_passkeys (
@@ -64,6 +76,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] パスキーのユーザーIDおよび作成日時インデックス
+    # [EN] Index for user_passkeys by user_id and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_user_passkeys_user_created_at
@@ -71,6 +85,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] chat_rooms テーブルの作成
+    # [EN] Create chat_rooms table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -85,6 +101,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] チャットルームのユーザーIDおよび作成日時インデックス
+    # [EN] Index for chat_rooms by user_id and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_chat_rooms_user_created_at
@@ -92,6 +110,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] chat_history テーブルの作成
+    # [EN] Create chat_history table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_history (
@@ -107,6 +127,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] チャット履歴のルームIDおよびIDインデックス
+    # [EN] Index for chat_history by chat_room_id and id
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_chat_history_room_id_id
@@ -114,6 +136,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] shared_chat_rooms テーブルの作成
+    # [EN] Create shared_chat_rooms table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS shared_chat_rooms (
@@ -128,6 +152,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] 共有チャットのトークンおよび作成日時インデックス
+    # [EN] Index for shared_chat_rooms by share_token and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_shared_chat_rooms_token_created_at
@@ -135,6 +161,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] task_with_examples テーブルの作成
+    # [EN] Create task_with_examples table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS task_with_examples (
@@ -156,18 +184,24 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] タスクのユーザーIDおよび名前インデックス
+    # [EN] Index for task_with_examples by user_id and name
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_with_examples_user_name
             ON task_with_examples (user_id, name)
         """
     )
+    # [JP] タスクの表示順序インデックス
+    # [EN] Index for task_with_examples by display_order
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_with_examples_user_order
             ON task_with_examples (user_id, display_order, id)
         """
     )
+    # [JP] タスクの作成日時インデックス
+    # [EN] Index for task_with_examples by created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_task_with_examples_user_created_at
@@ -175,6 +209,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] prompts テーブルの作成
+    # [EN] Create prompts table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompts (
@@ -195,18 +231,24 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] 公開プロンプトインデックス
+    # [EN] Index for public prompts by created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompts_public_created_at
             ON prompts (is_public, created_at DESC)
         """
     )
+    # [JP] ユーザーのプロンプトインデックス
+    # [EN] Index for user prompts by created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompts_user_created_at
             ON prompts (user_id, created_at DESC)
         """
     )
+    # [JP] タイトル、コンテンツ、カテゴリ、作者に対する pg_trgm GIN インデックス (部分一致検索高速化)
+    # [EN] GIN indexes on title, content, category, and author using pg_trgm for fast text search
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompts_public_title_trgm
@@ -236,6 +278,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] prompt_list_entries テーブルの作成
+    # [EN] Create prompt_list_entries table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_list_entries (
@@ -260,18 +304,24 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] プロンプト登録項目のタイトルインデックス
+    # [EN] Index for prompt list entries by user_id and title
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_list_user_title
             ON prompt_list_entries (user_id, title)
         """
     )
+    # [JP] プロンプト登録項目の作成日時インデックス
+    # [EN] Index for prompt list entries by user_id and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_list_user_created_at
             ON prompt_list_entries (user_id, created_at DESC, id DESC)
         """
     )
+    # [JP] prompt_id が NULL の場合、ユーザーごとにタイトルが一意であることを担保する部分インデックス
+    # [EN] Unique partial index ensuring unique title per user when prompt_id is NULL
     op.execute(
         """
         DO $$
@@ -300,6 +350,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] memo_entries テーブルの作成
+    # [EN] Create memo_entries table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS memo_entries (
@@ -318,12 +370,16 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] メモの作成日時インデックス
+    # [EN] Index for memo_entries by created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_memo_entries_created_at
             ON memo_entries (created_at DESC)
         """
     )
+    # [JP] ユーザー別のメモ作成日時インデックス
+    # [EN] Index for memo_entries by user_id and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_memo_entries_user_created_at
@@ -331,6 +387,8 @@ def upgrade() -> None:
         """
     )
 
+    # [JP] updated_at カラムを自動更新する共通関数の作成
+    # [EN] Create helper function to update updated_at timestamp automatically
     op.execute(
         """
         CREATE OR REPLACE FUNCTION set_updated_at()
@@ -342,6 +400,8 @@ def upgrade() -> None:
         $$ LANGUAGE plpgsql
         """
     )
+    # [JP] task_with_examples テーブルに対する updated_at トリガーの設定
+    # [EN] Set up trigger for task_with_examples table to update updated_at
     op.execute(
         """
         DO $$
@@ -360,6 +420,8 @@ def upgrade() -> None:
         END $$;
         """
     )
+    # [JP] memo_entries テーブルに対する updated_at トリガーの設定
+    # [EN] Set up trigger for memo_entries table to update updated_at
     op.execute(
         """
         DO $$
@@ -381,6 +443,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] データベースのコアスキーマを削除し、bootstrap前の状態に戻します。
+    [EN] Drop the core database schema and revert to the state before bootstrapping.
+    """
+    # [JP] 各トリガー、関数、テーブルおよびインデックスの削除
+    # [EN] Drop triggers, functions, tables, and indexes in reverse order of creation
     op.execute("DROP TRIGGER IF EXISTS trg_memo_entries_updated_at ON memo_entries")
     op.execute("DROP TRIGGER IF EXISTS trg_task_with_examples_updated_at ON task_with_examples")
     op.execute("DROP FUNCTION IF EXISTS set_updated_at()")

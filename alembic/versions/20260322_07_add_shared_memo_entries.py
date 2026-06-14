@@ -17,6 +17,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """
+    [JP] 共有メモ機能用の shared_memo_entries テーブルとインデックスを作成します。
+    [EN] Create the shared_memo_entries table and its index for shared memo feature.
+    """
+    # [JP] shared_memo_entries テーブルの作成
+    # [EN] Create shared_memo_entries table
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS shared_memo_entries (
@@ -31,6 +37,8 @@ def upgrade() -> None:
         )
         """
     )
+    # [JP] シェアトークンと作成日付に関するインデックス作成
+    # [EN] Create index on share_token and created_at
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_shared_memo_entries_token_created_at
@@ -40,5 +48,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """
+    [JP] shared_memo_entries テーブルとインデックスを削除します。
+    [EN] Drop the shared_memo_entries table and its index.
+    """
+    # [JP] インデックスの削除
+    # [EN] Drop the index
     op.execute("DROP INDEX IF EXISTS idx_shared_memo_entries_token_created_at")
+    # [JP] テーブルの削除
+    # [EN] Drop the table
     op.execute("DROP TABLE IF EXISTS shared_memo_entries")

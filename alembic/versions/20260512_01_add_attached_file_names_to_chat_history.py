@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add attached_file_names column to chat_history table.
+    # chat_historyテーブルにattached_file_names列を追加します。
     op.execute(
         """
         ALTER TABLE chat_history
@@ -25,6 +27,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop attached_file_names column from chat_history table.
+    # chat_historyテーブルからattached_file_names列を削除します。
     op.execute(
         """
         ALTER TABLE chat_history

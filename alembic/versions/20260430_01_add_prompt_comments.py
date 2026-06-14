@@ -23,10 +23,14 @@ def _existing_tables() -> set[str]:
 
 
 def upgrade() -> None:
+    # Check if dependent tables exist before proceeding.
+    # 処理を進める前に依存先テーブルが存在することを確認します。
     tables = _existing_tables()
     if "users" not in tables or "prompts" not in tables:
         return
 
+    # Create prompt_comments table.
+    # prompt_commentsテーブルを作成します。
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_comments (
@@ -49,6 +53,8 @@ def upgrade() -> None:
         )
         """
     )
+    # Create indexes on prompt_comments table.
+    # prompt_commentsテーブルにインデックスを作成します。
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_comments_prompt_visible_created_at
@@ -64,6 +70,8 @@ def upgrade() -> None:
         """
     )
 
+    # Create prompt_comment_reports table.
+    # prompt_comment_reportsテーブルを作成します。
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS prompt_comment_reports (
@@ -86,6 +94,8 @@ def upgrade() -> None:
         )
         """
     )
+    # Create indexes on prompt_comment_reports table.
+    # prompt_comment_reportsテーブルにインデックスを作成します。
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_prompt_comment_reports_comment_created_at
@@ -101,5 +111,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop prompt_comment_reports table.
+    # prompt_comment_reportsテーブルを削除します。
     op.execute("DROP TABLE IF EXISTS prompt_comment_reports")
+    # Drop prompt_comments table.
+    # prompt_commentsテーブルを削除します。
     op.execute("DROP TABLE IF EXISTS prompt_comments")

@@ -16,6 +16,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add 'message_parts' column (JSONB) to 'chat_history' table to store structured rich/multi-part message contents
+    # 構造化されたマルチパートメッセージコンテンツを保存するため、chat_history テーブルに 'message_parts' カラム (JSONB) を追加する
     op.execute(
         """
         ALTER TABLE chat_history
@@ -25,6 +27,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Remove 'message_parts' column from 'chat_history' table
+    # chat_history テーブルから 'message_parts' カラムを削除する
     op.execute(
         """
         ALTER TABLE chat_history

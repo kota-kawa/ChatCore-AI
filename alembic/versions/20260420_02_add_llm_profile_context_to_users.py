@@ -17,6 +17,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Add llm_profile_context column to users table.
+    # usersテーブルにllm_profile_context列を追加します。
     op.execute(
         """
         ALTER TABLE users
@@ -26,6 +28,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop llm_profile_context column from users table.
+    # usersテーブルからllm_profile_context列を削除します。
     op.execute(
         """
         ALTER TABLE users
