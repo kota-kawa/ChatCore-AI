@@ -15,18 +15,32 @@ from services.memo_ai import (
 logger = logging.getLogger("blueprints.memo")
 
 
-# メモモジュールから動的にDB接続取得関数を解決するヘルパー（循環参照防止）
-# Helper to dynamically retrieve the DB connection function to avoid circular imports.
 def _get_db_connection():
+    """
+    メモモジュールから動的にDB接続取得関数を解決するヘルパー（循環参照防止）
+    Helper to dynamically retrieve the DB connection function to avoid circular imports.
+
+    Returns:
+        Connection: データベース接続オブジェクト / The database connection object.
+    """
     memo_module = sys.modules.get("blueprints.memo")
     if memo_module is not None:
         return getattr(memo_module, "get_db_connection", default_get_db_connection)()
     return default_get_db_connection()
 
 
-# 生成された埋め込みベクトルをデータベースに保存する関数
-# Save the generated embedding vector into the database.
 def store_embedding(memo_id: int, embedding: list[float]) -> None:
+    """
+    生成された埋め込みベクトルをデータベースに保存する関数
+    Save the generated embedding vector into the database.
+
+    Args:
+        memo_id (int): 対象メモのID / The target memo ID.
+        embedding (list[float]): 生成された埋め込みベクトルの配列 / The generated embedding vector array.
+
+    Returns:
+        None
+    """
     connection = None
     cursor = None
     try:
@@ -50,9 +64,19 @@ def store_embedding(memo_id: int, embedding: list[float]) -> None:
             connection.close()
 
 
-# 指定されたメモの埋め込みベクトル生成処理を非同期でバックグラウンド実行するスケジュール関数
-# Schedule a background task to generate and store the vector embedding for a memo.
 def schedule_embedding(memo_id: int, title: str, ai_response: str) -> None:
+    """
+    指定されたメモの埋め込みベクトル生成処理を非同期でバックグラウンド実行するスケジュール関数
+    Schedule a background task to generate and store the vector embedding for a memo.
+
+    Args:
+        memo_id (int): 対象メモのID / The target memo ID.
+        title (str): メモのタイトル / The title of the memo.
+        ai_response (str): AIの回答本文 / The AI response text content.
+
+    Returns:
+        None
+    """
     # 埋め込みモデル/APIが有効でない場合は何もしない
     # Do nothing if embeddings support is not available.
     if not embeddings_available():
@@ -64,11 +88,11 @@ def schedule_embedding(memo_id: int, title: str, ai_response: str) -> None:
         # 埋め込み用の結合テキストを作成
         # Construct the unified text sequence for embedding.
         text = build_memo_embedding_text(title, ai_response)
-        
+
         # 埋め込みベクトルを生成
         # Generate embedding vector.
         embedding = generate_embedding(text)
-        
+
         # ベクトルが正常生成できればDBに保存
         # If successfully generated, store in database.
         if embedding:
