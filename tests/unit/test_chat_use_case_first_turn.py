@@ -59,6 +59,8 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
                     "role": entry["sender"],
                     "content": entry["message"],
                 }
+                for entry in saved_messages
+                if entry["room_id"] == room_id
             ]
 
         # プロンプト用コンテキストメッセージ構築をフック
