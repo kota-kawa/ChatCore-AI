@@ -12,6 +12,8 @@ from .api_errors import ApiServiceError
 from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
 from .error_messages import ERROR_INVALID_JSON
 
+# モデルの型変数
+# TypeVar for Pydantic models
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
@@ -42,6 +44,8 @@ def jsonify_service_error(
     *,
     status: str | None = None,
 ) -> JSONResponse:
+    # サービスレイヤーのエラーをJSONレスポンスへシリアライズする
+    # Serialize service layer errors into a JSON response.
     payload = error.to_payload()
     if status is not None:
         payload["status"] = status
@@ -59,6 +63,8 @@ def jsonify_rate_limited(
     status: str | None = None,
     error_key: str = "error",
 ) -> JSONResponse:
+    # レートリミット制限のエラーレスポンスを生成し、Retry-Afterヘッダーを付与する
+    # Generate a rate-limit error response and apply the Retry-After header.
     payload: Dict[str, Any] = {error_key: message}
     if status is not None:
         payload["status"] = status

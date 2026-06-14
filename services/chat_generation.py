@@ -104,7 +104,7 @@ def _get_llm_stream_max_retries() -> int:
 # LLMストリーミング再試行時の遅延時間を計算する（指数バックオフ）
 # Calculate the delay duration for LLM stream retries (exponential backoff)
 def _llm_stream_retry_delay(exc: BaseException, attempt: int) -> float:
-    # サーバー指定のretry_afterを優先し、なければ指数バックオフ（上限あり）を用いる
+    # サーバー指定 of retry_afterを優先し、なければ指数バックオフ（上限あり）を用いる
     # Prefer server-provided retry_after, otherwise use capped exponential backoff.
     retry_after = getattr(exc, "retry_after_seconds", None)
     if isinstance(retry_after, int) and retry_after > 0:
@@ -309,7 +309,8 @@ class ChatGenerationJob:
     # ジョブの実行をキャンセルし、abortedイベントを発行する
     # Cancel the job's execution and publish an aborted event
     def cancel(self) -> None:
-        """生成をキャンセルし、aborted イベントを発行して完了とする."""
+        # 生成をキャンセルし、aborted イベントを発行して完了とする。
+        # Cancel generation, publish the aborted event, and mark as completed.
         if self.is_done:
             return
         self._cancelled = True
@@ -481,6 +482,8 @@ class ChatGenerationJob:
         step_count = 0
 
         try:
+            # ウェブ検索によるコンテキスト拡張の判定
+            # Determine context augmentation using web search
             augmentation = maybe_augment_messages_with_web_search(
                 current_messages,
                 self._model,
@@ -530,6 +533,8 @@ class ChatGenerationJob:
 
             web_search_tool = get_web_search_tool_definition()
 
+            # 生成ループ（エージェントステップ）
+            # Generation loop (agent steps)
             while step_count < max_steps:
                 if self._cancelled:
                     return
@@ -603,6 +608,8 @@ class ChatGenerationJob:
                 current_messages.append(assistant_tool_call_msg)
 
                 for tc in normalized_tool_calls:
+                    # ツールごとの実行と結果の追加
+                    # Execute each tool and append results
                     func_name = tc.get("function", {}).get("name")
                     if func_name != "web_search":
                         current_messages.append(
@@ -797,6 +804,8 @@ class ChatGenerationJob:
                             )
                         )
 
+        # エラーハンドリング
+        # Error handling
         except LlmConfigurationError as exc:
             if self._cancelled:
                 return
@@ -912,9 +921,13 @@ class ChatGenerationJob:
         self._publish("done", done_payload, done=True)
 
 
+# ジェネレーションキーをビルドする関数
+# Function to build the generation key
 def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: str | None = None) -> str:
     # 同じ room_id でもログインユーザーとゲストセッションは別の生成ジョブとして扱う。
     # これによりゲストの sid とユーザーIDの衝突や、共有 room_id による生成ロックの混線を防ぐ。
+    # Treat logged-in users and guest sessions as different generation jobs even for the same room_id.
+    # This prevents collisions between guest sids and user IDs, or crosstalk on generation locks due to shared room_ids.
     if user_id is not None:
         return f"user:{user_id}:{chat_room_id}"
     if sid is not None:
@@ -922,14 +935,21 @@ def build_generation_key(*, chat_room_id: str, user_id: int | None = None, sid: 
     raise ValueError("Either user_id or sid is required to build a generation key.")
 
 
+# チャット生成サービスを定義するクラス
+# Class defining the Chat Generation Service
 class ChatGenerationService:
-    """チャット応答生成ジョブを管理し、SSE の再接続・分散配信を吸収する。
+    # チャット応答生成ジョブを管理し、SSE の再接続・分散配信を吸収する。
+    # ローカルプロセス内では `_jobs` にジョブを保持し、Redis が使える環境では
+    # イベント履歴とアクティブロックを Redis にも書く。これにより、ロードバランサ配下で
+    # 再接続先プロセスが変わっても、完了済み/実行中イベントを再生できる。
+    #
+    # Manages chat response generation jobs, smoothing over SSE reconnections and distributed delivery.
+    # Keeps jobs in `_jobs` in the local process, and also writes event history and active locks to Redis
+    # when available. This allows replaying completed/in-progress events even if the reconnected process
+    # changes behind a load balancer.
 
-    ローカルプロセス内では `_jobs` にジョブを保持し、Redis が使える環境では
-    イベント履歴とアクティブロックを Redis にも書く。これにより、ロードバランサ配下で
-    再接続先プロセスが変わっても、完了済み/実行中イベントを再生できる。
-    """
-
+    # サービスを初期化する
+    # Initialize the service
     def __init__(
         self,
         *,
@@ -950,20 +970,30 @@ class ChatGenerationService:
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
 
+    # Redis クライアントを取得する
+    # Retrieve the Redis client
     def _get_redis_client(self) -> Any | None:
         if self._redis_client_getter is not None:
             return self._redis_client_getter()
         return get_redis_client()
 
+    # アクティブジョブの Redis ロックキーを生成する
+    # Generate the Redis lock key for the active job
     def _active_lock_key(self, job_key: str) -> str:
         return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
 
+    # Redis に保存するイベントストリームのキーを生成する
+    # Generate the Redis event stream key
     def _event_stream_key(self, job_key: str) -> str:
         return f"{_EVENT_STREAM_KEY_PREFIX}:{job_key}"
 
+    # Redis Pub/Sub のイベントチャネル名を生成する
+    # Generate the Redis Pub/Sub event channel name
     def _event_channel_name(self, job_key: str) -> str:
         return f"{_EVENT_CHANNEL_KEY_PREFIX}:{job_key}"
 
+    # イベントオブジェクトを JSON 文字列にシリアライズする
+    # Serialize the event object to a JSON string
     def _serialize_event(self, event: ChatGenerationEvent) -> str:
         # Redis には SSE と同じ最小構造だけを保存する。payload の中身はイベント種別ごとに変わる。
         return json.dumps(
@@ -975,6 +1005,8 @@ class ChatGenerationService:
             ensure_ascii=False,
         )
 
+    # JSON 文字列をイベントオブジェクトにデシリアライズする
+    # Deserialize a JSON string to an event object
     def _deserialize_event(self, raw: str) -> ChatGenerationEvent | None:
         # Redis 上の古い/壊れた値はストリーム全体を落とさず読み飛ばす。
         try:
@@ -998,6 +1030,8 @@ class ChatGenerationService:
             payload=payload,
         )
 
+    # Redis 経由で分散イベントを配信する（リストへの追記および Pub/Sub 発行）
+    # Publish a distributed event via Redis (append to list and publish via Pub/Sub)
     def _publish_distributed_event(self, job_key: str, event: ChatGenerationEvent) -> None:
         redis_client = self._get_redis_client()
         if redis_client is None:
@@ -1021,6 +1055,8 @@ class ChatGenerationService:
         except Exception:
             logger.exception("Failed to publish chat generation event to Redis.")
 
+    # Redis のイベントストリームから指定されたシーケンスIDより後のイベントを読み出す
+    # Read events from the Redis event stream after the specified sequence ID
     def _read_distributed_events(
         self,
         job_key: str,
@@ -1050,6 +1086,8 @@ class ChatGenerationService:
             events.append(event)
         return events
 
+    # 指定したジョブキーに対して Redis アクティブジョブロックの取得を試みる
+    # Attempt to acquire the Redis active job lock for the specified job key
     def _try_acquire_active_job_lock(self, job_key: str) -> tuple[bool, str | None]:
         redis_client = self._get_redis_client()
         if redis_client is None:
@@ -1075,6 +1113,8 @@ class ChatGenerationService:
             return True, lock_token
         return False, None
 
+    # 自分が取得した Redis アクティブジョブロックを解放する
+    # Release the Redis active job lock that was acquired by this instance
     def _release_active_job_lock(self, job_key: str, lock_token: str | None) -> None:
         if not lock_token:
             return
@@ -1098,6 +1138,8 @@ return 0
         except Exception:
             logger.exception("Redis chat generation lock release failed.")
 
+    # 指定したジョブキーに対して Redis アクティブジョブロックが存在するか確認する
+    # Check if a Redis active job lock exists for the specified job key
     def _has_distributed_active_lock(self, job_key: str) -> bool:
         redis_client = self._get_redis_client()
         if redis_client is None:
@@ -1108,9 +1150,13 @@ return 0
             logger.exception("Redis chat generation lock existence check failed.")
             return False
 
+    # Redis が有効で分散ストリーミングに対応しているかを確認する
+    # Check if Redis is enabled and supports distributed streaming
     def supports_distributed_streaming(self) -> bool:
         return self._get_redis_client() is not None
 
+    # メモリ上のジョブ状態をリセットし、必要に応じて実行中ジョブをキャンセルする
+    # Reset the in-memory job state and optionally cancel running jobs
     def reset_in_memory_state(self, *, cancel_running: bool = False) -> None:
         running_jobs: list[ChatGenerationJob] = []
         with self._jobs_lock:
@@ -1125,6 +1171,8 @@ return 0
         for job in running_jobs:
             job.cancel()
 
+    # 実行中のすべてのジョブが完了するのを待機する
+    # Wait for all running jobs to complete
     def wait_for_running_jobs(self, *, timeout: float | None = None) -> bool:
         with self._jobs_lock:
             running_jobs = [job for job in self._jobs.values() if not job.is_done]
@@ -1144,6 +1192,8 @@ return 0
                 all_done = False
         return all_done
 
+    # 保存期間を過ぎて期限切れとなった完了済みジョブをメモリから削除する
+    # Remove expired completed jobs from memory based on retention time
     def _cleanup_expired_jobs(self, now: float | None = None) -> None:
         current_time = time.monotonic() if now is None else now
         expired_keys: list[str] = []
@@ -1158,8 +1208,9 @@ return 0
             for key in expired_keys:
                 self._jobs.pop(key, None)
 
+    # 指定ジョブをキャンセルし、キャンセルできたか否かを返す
+    # Cancel the specified job and return whether the cancellation succeeded
     def cancel_generation_job(self, job_key: str) -> bool:
-        """指定ジョブをキャンセルし、キャンセルできたか否かを返す."""
         with self._jobs_lock:
             job = self._jobs.get(job_key)
         if job is None or job.is_done:
@@ -1167,6 +1218,8 @@ return 0
         job.cancel()
         return True
 
+    # 指定したジョブキーで現在生成処理が実行中であるか確認する
+    # Check if a generation process is currently running for the specified job key
     def has_active_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
         with self._jobs_lock:
@@ -1175,6 +1228,8 @@ return 0
                 return not job.is_done
         return self._has_distributed_active_lock(job_key)
 
+    # 再生可能な生成処理（メモリ上または Redis 上にイベントがある）が存在するか確認する
+    # Check if a replayable generation process (with events in-memory or Redis) exists
     def has_replayable_generation(self, job_key: str) -> bool:
         self._cleanup_expired_jobs()
         with self._jobs_lock:
@@ -1191,11 +1246,15 @@ return 0
             logger.exception("Redis chat generation replay-state check failed.")
             return False
 
+    # 指定したジョブキーに対応するローカルジョブオブジェクトを取得する
+    # Retrieve the local job object corresponding to the specified job key
     def get_generation_job(self, job_key: str) -> ChatGenerationJob | None:
         self._cleanup_expired_jobs()
         with self._jobs_lock:
             return self._jobs.get(job_key)
 
+    # メモリまたは Redis Pub/Sub から生成イベントをイテレートして呼び出し元にストリームする
+    # Iterate and stream generation events to the caller from memory or Redis Pub/Sub
     def iter_generation_events(
         self,
         job_key: str,
@@ -1296,6 +1355,8 @@ return 0
             except Exception:
                 logger.exception("Failed to close Redis pubsub for chat generation stream.")
 
+    # 新しいチャット応答生成ジョブを開始する
+    # Start a new chat response generation job
     def start_generation_job(
         self,
         job_key: str,
@@ -1343,6 +1404,8 @@ return 0
             raise
         return job
 
+    # ジョブを正常またはエラー終了後にクリーンアップ（ロック解放やコールバック実行）する
+    # Clean up the job after normal or error completion (release lock, run callbacks)
     def _finalize_job(
         self,
         job_key: str,
@@ -1362,6 +1425,8 @@ return 0
 _default_chat_generation_service = ChatGenerationService()
 
 
+# アプリケーション状態またはデフォルトから ChatGenerationService のインスタンスを取得する
+# Retrieve the ChatGenerationService instance from the application state or default
 def get_chat_generation_service(request: Request = None) -> ChatGenerationService:
     if request is not None:
         app = request.scope.get("app")
@@ -1372,10 +1437,14 @@ def get_chat_generation_service(request: Request = None) -> ChatGenerationServic
     return _default_chat_generation_service
 
 
+# メモリ上のすべての生成ジョブの状態をクリアする
+# Clear the state of all in-memory generation jobs
 def clear_generation_job_state(*, cancel_running: bool = False) -> None:
     get_chat_generation_service().reset_in_memory_state(cancel_running=cancel_running)
 
 
+# 指定したジョブをキャンセルする
+# Cancel the specified job
 def cancel_generation_job(
     job_key: str,
     *,
@@ -1389,6 +1458,8 @@ def cancel_generation_job(
     return target.cancel_generation_job(job_key)
 
 
+# 指定したジョブで生成が進行中であるかを判定する
+# Determine if a generation is currently active for the specified job
 def has_active_generation(
     job_key: str,
     *,
@@ -1402,6 +1473,8 @@ def has_active_generation(
     return target.has_active_generation(job_key)
 
 
+# 指定したジョブを取得する
+# Retrieve the specified generation job
 def get_generation_job(
     job_key: str,
     *,
@@ -1415,6 +1488,8 @@ def get_generation_job(
     return target.get_generation_job(job_key)
 
 
+# 指定したジョブがリプレイ可能であるかを判定する
+# Determine if the specified job is replayable
 def has_replayable_generation(
     job_key: str,
     *,
@@ -1428,6 +1503,8 @@ def has_replayable_generation(
     return target.has_replayable_generation(job_key)
 
 
+# 指定したジョブのイベントストリームをイテレートする
+# Iterate the event stream of the specified generation job
 def iter_generation_events(
     job_key: str,
     *,
@@ -1445,6 +1522,8 @@ def iter_generation_events(
     )
 
 
+# 指定したパラメータで新しいチャット生成ジョブを開始する
+# Start a new chat generation job with the specified parameters
 def start_generation_job(
     job_key: str,
     *,

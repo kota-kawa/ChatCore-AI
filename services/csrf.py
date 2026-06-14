@@ -37,11 +37,17 @@ async def require_csrf(request: Request) -> None:
     expected_token = request.session.get(CSRF_SESSION_KEY)
     provided_token = request.headers.get(CSRF_HEADER_NAME)
 
+    # セッションに期待されるトークンが存在するか検証する
+    # Validate whether the expected token exists in the session
     if not isinstance(expected_token, str) or not expected_token:
         raise HTTPException(status_code=403, detail="CSRF token is missing in session")
 
+    # リクエストヘッダーにトークンが提供されているか検証する
+    # Validate whether the token is provided in the request headers
     if not isinstance(provided_token, str) or not provided_token:
         raise HTTPException(status_code=403, detail="CSRF token is missing")
 
+    # 提供されたトークンと期待されるトークンが一致するか、定数時間比較で検証する
+    # Validate whether the provided token matches the expected token using constant-time comparison
     if not constant_time_compare(provided_token, expected_token):
         raise HTTPException(status_code=403, detail="CSRF token mismatch")

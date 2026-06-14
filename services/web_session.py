@@ -15,8 +15,8 @@ def set_session_permanent(session: dict, value: bool) -> None:
 
 
 def flash(request: Request, message: str, category: str = "message") -> None:
-    # セッションに一時メッセージを積む
-    # Push a flash message into session storage.
+    # セッションに一時メッセージ（フラッシュメッセージ）を積む
+    # Push a temporary flash message into session storage.
     flashes: List[Tuple[str, str]] = request.session.setdefault("_flashes", [])
     flashes.append((category, message))
 
@@ -24,8 +24,8 @@ def flash(request: Request, message: str, category: str = "message") -> None:
 def get_flashed_messages(
     request: Request, *, with_categories: bool = False
 ) -> List[str] | List[Tuple[str, str]]:
-    # 1回読み取りで消費されるフラッシュメッセージを取得する
-    # Pop one-time flash messages from session.
+    # 1回読み取りで消費されるフラッシュメッセージを取得してセッションから消去する
+    # Pop one-time flash messages from session and clear them from storage.
     flashes = request.session.pop("_flashes", [])
     if with_categories:
         return flashes

@@ -15,8 +15,12 @@ from services.async_utils import run_blocking
 from services.cache import get_redis_client, mark_redis_unavailable
 from services.csrf import CSRF_SESSION_KEY
 
+# ロガーの設定
+# Configure logger
 logger = logging.getLogger(__name__)
 
+# 定数の定義
+# Define constants
 REDIS_BACKEND = "redis"
 SESSION_IDS_TO_DELETE_SCOPE_KEY = "_session_ids_to_delete"
 
@@ -48,6 +52,8 @@ class PermanentSessionMiddleware:
         same_site: str = "lax",
         https_only: bool = False,
     ) -> None:
+        # 内部でハイブリッドミドルウェアを初期化する
+        # Initialize the HybridSessionMiddleware internally
         self.inner = HybridSessionMiddleware(
             app,
             secret_key=secret_key,
@@ -59,10 +65,14 @@ class PermanentSessionMiddleware:
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # ASGI呼び出しをラップして内部ミドルウェアに委譲する
+        # Wrap the ASGI call and delegate to the inner middleware
         await self.inner(scope, receive, send)
 
 
 class HybridSessionMiddleware:
+    # Redisベースのセッション管理を行うハイブリッドミドルウェアクラス
+    # Hybrid middleware class that performs Redis-based session management
     def __init__(
         self,
         app: ASGIApp,
@@ -74,6 +84,8 @@ class HybridSessionMiddleware:
         same_site: str = "lax",
         https_only: bool = False,
     ) -> None:
+        # ミドルウェア設定の初期化
+        # Initialize middleware configurations
         self.app = app
         self.session_cookie = session_cookie
         self.max_age = max_age
@@ -83,20 +95,30 @@ class HybridSessionMiddleware:
         self.serializer = URLSafeSerializer(secret_key, salt="strike.session")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # HTTPリクエスト以外のタイプはスルーする
+        # Skip non-HTTP request types
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
 
+        # Cookieからセッション状態をロードし、Redisからデータを復元する
+        # Load session state from cookie and restore data from Redis
         cookie_state = self._load_cookie_state(scope)
         session_data, session_id = await run_blocking(self._restore_session, cookie_state)
+        # CSRFトークンが存在しない場合は新規生成してセッションに格納する
+        # Generate and store a CSRF token in the session if it doesn't exist
         if CSRF_SESSION_KEY not in session_data:
             session_data[CSRF_SESSION_KEY] = secrets.token_urlsafe(32)
         scope["session"] = session_data
         scope["session_id"] = session_id
 
+        # レスポンス送信時にセッションコミット処理を挟むためのラッパー
+        # Wrapper to intercept response start and commit the session
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 # レスポンス開始直前に保存することで、endpoint/middleware が最後に変更した
-                # request.session の内容を Cookie 発行と Redis 保存へ反映する。
+                # request.session の内容を Cookie 発行と Redis保存へ反映する。
+                # Save session right before starting response to reflect any changes
+                # to request.session in cookies and Redis storage.
                 headers = MutableHeaders(scope=message)
                 await run_blocking(self._commit_session, scope, headers)
             await send(message)
@@ -104,6 +126,8 @@ class HybridSessionMiddleware:
         return await self.app(scope, receive, send_wrapper)
 
     def _load_cookie_state(self, scope: Scope) -> dict[str, Any] | None:
+        # Cookieから署名された値を読み込んでデシリアライズする
+        # Load signed value from Cookie and deserialize it
         headers = Headers(scope=scope)
         cookie_header = headers.get("cookie")
         if not cookie_header:
@@ -123,12 +147,15 @@ class HybridSessionMiddleware:
         if isinstance(payload, str):
             # 旧実装の Redis-backed cookie は session_id 文字列だけを署名していた。
             # dict 形式へ移行後も既存ログインを壊さないため、ここで読み替える。
+            # The old implementation signed only the session_id string.
+            # Handle this case to avoid breaking existing logins.
             return {"backend": REDIS_BACKEND, "id": payload}
         if isinstance(payload, dict):
             # Legacy cookie-backed payloads ({"backend": "cookie", "data": {...}})
             # are intentionally ignored here: they used to embed sensitive session
             # data directly in the cookie, so we treat any such cookie as expired
             # to force the user to re-authenticate against the Redis-backed flow.
+            # レガシーなクッキー保存型のセッションデータは意図的に無視する。
             if payload.get("backend") == REDIS_BACKEND:
                 return payload
             return None
@@ -137,6 +164,8 @@ class HybridSessionMiddleware:
     def _restore_session(
         self, cookie_state: dict[str, Any] | None
     ) -> tuple[dict[str, Any], str | None]:
+        # Redisからセッションデータを取得してロードする
+        # Fetch and load session data from Redis
         if not cookie_state:
             return {}, None
 
@@ -169,6 +198,8 @@ class HybridSessionMiddleware:
         return {}, None
 
     def _commit_session(self, scope: Scope, headers: MutableHeaders) -> None:
+        # セッションの変更内容をコミットし、必要に応じてCookieやRedisを更新する
+        # Commit session changes and update cookies or Redis as necessary
         session = scope.get("session") or {}
         session_id = scope.get("session_id")
         pending_delete_ids = scope.get(SESSION_IDS_TO_DELETE_SCOPE_KEY) or set()
@@ -176,6 +207,8 @@ class HybridSessionMiddleware:
         if not session:
             # 空セッションは「ログアウト/無効化済み」とみなし、現在IDと rotation 前IDの両方を消す。
             # 古い Redis レコードを残すと、盗まれた古い Cookie が有効なままになる。
+            # Empty sessions are treated as logged-out. Remove both current and pre-rotation IDs
+            # to prevent stolen old cookies from remaining valid.
             for stale_session_id in pending_delete_ids:
                 self._delete_session(stale_session_id)
             if session_id:
@@ -197,6 +230,7 @@ class HybridSessionMiddleware:
 
         if self._save_session(session_id, session):
             # Cookie には Redis の参照IDだけを入れる。セッション本体は Redis 側に置く。
+            # Store only the Redis reference ID in the cookie. The session body is kept in Redis.
             self._set_cookie(
                 headers,
                 self.serializer.dumps({"backend": REDIS_BACKEND, "id": session_id}),
@@ -211,6 +245,7 @@ class HybridSessionMiddleware:
         # anyone who could read the cookie. Clearing the cookie forces the
         # user to re-authenticate once Redis comes back, which is the safe
         # failure mode.
+        # Redisが利用不可の場合は、セッション維持を拒否してCookieをクリアする。
         logger.warning(
             "Session not persisted because Redis is unavailable; clearing session cookie."
         )
@@ -219,6 +254,8 @@ class HybridSessionMiddleware:
         self._set_cookie(headers, "", max_age=0)
 
     def _save_session(self, session_id: str, session: dict[str, Any]) -> bool:
+        # セッションデータをRedisに保存する
+        # Save session data to Redis
         redis_client = get_redis_client()
         if redis_client is None:
             return False
@@ -235,6 +272,8 @@ class HybridSessionMiddleware:
         return True
 
     def _delete_session(self, session_id: str) -> None:
+        # 指定されたセッションIDのデータをRedisから削除する
+        # Delete the data of the specified session ID from Redis
         redis_client = get_redis_client()
         if redis_client is None:
             return
@@ -244,11 +283,15 @@ class HybridSessionMiddleware:
             mark_redis_unavailable(exc)
 
     def _redis_key(self, session_id: str) -> str:
+        # Redisのセッションキーを作成する
+        # Create a Redis session key
         return f"session:{session_id}"
 
     def _set_cookie(
         self, headers: MutableHeaders, value: str, max_age: int | None = None
     ) -> None:
+        # レスポンスヘッダーにセッションCookieを設定する
+        # Set the session cookie in response headers
         cookie = SimpleCookie()
         cookie[self.session_cookie] = value
         cookie[self.session_cookie]["path"] = self.path

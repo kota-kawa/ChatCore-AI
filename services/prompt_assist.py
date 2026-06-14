@@ -73,6 +73,8 @@ PROMPT_ASSIST_SYSTEM_PROMPT = (
 # 日本語: 入力フィールドの値を安全な文字列形式にトリム・正規化します。
 # English: Clean and normalize a field value into a stripped string.
 def _normalize_field_value(value: Any) -> str:
+    # 日本語: 値が None の場合は空文字を返し、それ以外は前後の空白を除去した文字列に変換します。
+    # English: Return an empty string if the value is None, otherwise convert to a stripped string.
     if value is None:
         return ""
     return str(value).strip()
@@ -81,6 +83,8 @@ def _normalize_field_value(value: Any) -> str:
 # 日本語: モーダルの種類に合わせて入力値を一括正規化します。
 # English: Normalize input fields according to modal requirements.
 def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
+    # 日本語: 定義されているコンテキスト用フィールドの値を取得して一括で正規化し、prompt_type を正規化します。
+    # English: Retrieve and normalize values for configured context fields, and normalize the prompt_type.
     target_config = PROMPT_ASSIST_TARGETS[target]
     normalized = {key: _normalize_field_value(fields.get(key, "")) for key in target_config["context_fields"]}
     normalized_prompt_type = normalized.get("prompt_type")
@@ -94,6 +98,8 @@ def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
 # 日本語: 補助対象（タスク、プロンプト、SKILL等）に合わせて設定（許可フィールド、主キー）を決定します。
 # English: Resolve the assist configuration settings based on the target type and metadata.
 def _resolve_target_config(target: str, fields: dict[str, str]) -> dict[str, Any]:
+    # 日本語: 共有プロンプトかつ投稿タイプが skill の場合、SKILL専用の対象設定を決定して返します。
+    # English: Resolve and return the SKILL-specific configuration if it is a shared prompt with prompt_type 'skill'.
     target_config = PROMPT_ASSIST_TARGETS[target]
     if target != "shared_prompt_modal":
         return target_config
@@ -115,6 +121,8 @@ def _validate_prompt_assist_request(
     fields: dict[str, str],
     instruction: str = "",
 ) -> None:
+    # 日本語: 指定されたアクションと入力値の組み合わせをチェックし、実行に必要な条件を満たしているか検証します。
+    # English: Validate the combination of action and input values to verify they meet the execution requirements.
     target_config = _resolve_target_config(target, fields)
     primary_field = target_config["primary_field"]
     primary_value = fields.get(primary_field, "")
@@ -147,6 +155,8 @@ def _build_prompt_assist_messages(
     fields: dict[str, str],
     instruction: str = "",
 ) -> list[dict[str, str]]:
+    # 日本語: ターゲット設定やルールを組み立て、ユーザー要求とシステムプロンプトのメッセージリストを作成します。
+    # English: Compose target settings, rules, user request, and system prompt into a message list.
     target_config = _resolve_target_config(target, fields)
     allowed_fields = list(target_config["allowed_fields"])
     target_label = target_config["target_label"]
@@ -225,6 +235,8 @@ def _build_prompt_assist_messages(
 # 日本語: LLM応答からJSONのプレーンテキストを抽出します。
 # English: Extract raw JSON string from the LLM response text.
 def _extract_json_text(raw_response: str) -> str:
+    # 日本語: 応答テキストからコードフェンス（```json ... ```）や中括弧 {...} を探して JSON 文字列を取り出します。
+    # English: Search for code fences or curly braces in the response text to extract the JSON substring.
     stripped = raw_response.strip()
     if not stripped:
         raise LlmProviderError("AI assist response was empty.")
@@ -244,6 +256,8 @@ def _extract_json_text(raw_response: str) -> str:
 # 日本語: LLMのJSONレスポンスをデコードしてパースします。
 # English: Parse the raw LLM response as JSON into a dictionary.
 def _parse_prompt_assist_response(raw_response: str) -> dict[str, Any]:
+    # 日本語: JSONの抽出とデコードを行い、正しい辞書オブジェクトであるかを検証します。
+    # English: Extract and decode the JSON substring, validating that it is a proper dictionary object.
     json_text = _extract_json_text(raw_response)
     try:
         parsed = json.loads(json_text)
@@ -263,6 +277,8 @@ def _normalize_prompt_assist_response(
     parsed_response: dict[str, Any],
     current_fields: dict[str, str],
 ) -> dict[str, Any]:
+    # 日本語: 提案されたフィールドの中から許可されている項目のみを抽出し、提案モード（作成・改善）や警告などを整理して返します。
+    # English: Filter and retain only allowed suggested fields, organizing proposal modes (create/refine) and warnings.
     target_config = _resolve_target_config(target, current_fields)
     allowed_fields = target_config["allowed_fields"]
 
@@ -311,6 +327,8 @@ def create_prompt_assist_payload(
     fields: dict[str, Any],
     instruction: str = "",
 ) -> dict[str, Any]:
+    # 日本語: 引数の検証、メッセージの構築、LLMプロバイダの呼び出し、および応答の正規化を順次行い、最終的なアシスト結果を取得します。
+    # English: Run inputs validation, message construction, LLM provider invocation, and response normalization to get final assist results.
     if target not in PROMPT_ASSIST_TARGETS:
         raise ValueError("サポートされていないAI補助対象です。")
     if action not in PROMPT_ASSIST_ACTION_LABELS:

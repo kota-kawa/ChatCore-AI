@@ -132,30 +132,30 @@ _JS_BANNED_TOKEN_RE = re.compile(
     r"(?<![\w$])location\s*(?:=|\.|\[))",
     re.IGNORECASE,
 )
-# 日本語: 生成UIのバリデーションエラーを表すカスタム例外クラスです。
-# English: Custom exception class representing a validation error for generative UI.
+# 生成UIのバリデーションエラーを表すカスタム例外クラスです。
+# Custom exception class representing a validation error for generative UI.
 class GenerativeUiValidationError(ValueError):
     pass
 
 
-# 日本語: 応答から抽出された、生成UIアーティファクトの候補となる生JSONと位置情報を保持するデータクラスです。
-# English: Data class holding raw JSON and span position of extracted sandbox UI artifact candidates.
+# 応答から抽出された、生成UIアーティファクトの候補となる生JSONと位置情報を保持するデータクラスです。
+# Data class holding raw JSON and span position of extracted sandbox UI artifact candidates.
 @dataclass(frozen=True)
 class _ArtifactCandidate:
     raw_json: str
     span: tuple[int, int]
 
 
-# 日本語: バージョン1のインタラクティブボタン（Yes/No、複数選択など）のスキーマを定義するPydanticモデルクラスです。
-# English: Pydantic model class defining the schema for version 1 interactive buttons.
+# バージョン1のインタラクティブボタン（Yes/No、複数選択など）のスキーマを定義するPydanticモデルクラスです。
+# Pydantic model class defining the schema for version 1 interactive buttons.
 class InteractiveButtonsV1(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     type: Literal["yes_no", "multiple_choice"]
     question: str = Field(min_length=1, max_length=500)
     options: list[str] | None = Field(default=None, max_length=10)
 
-    # 日本語: 選択タイプが「複数選択」の場合に、optionsリストが空でないことを検証します。
-    # English: Validate that options are provided and non-empty when the button type is multiple_choice.
+    # 選択タイプが「複数選択」の場合に、optionsリストが空でないことを検証します。
+    # Validate that options are provided and non-empty when the button type is multiple_choice.
     @model_validator(mode="after")
     def _validate_options(self) -> "InteractiveButtonsV1":
         if self.type == "multiple_choice" and not self.options:
@@ -165,8 +165,8 @@ class InteractiveButtonsV1(BaseModel):
         return self
 
 
-# 日本語: 生成UIのサンドボックスアーティファクト（HTML、CSS、JS）のスキーマを定義し、検証するPydanticモデルクラスです。
-# English: Pydantic model class defining and validating sandbox artifact fields (HTML, CSS, JS) for version 1.
+# 生成UIのサンドボックスアーティファクト（HTML、CSS、JS）のスキーマを定義し、検証するPydanticモデルクラスです。
+# Pydantic model class defining and validating sandbox artifact fields (HTML, CSS, JS) for version 1.
 class GenerativeUiArtifactV1(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
@@ -178,8 +178,8 @@ class GenerativeUiArtifactV1(BaseModel):
     css: str = Field(default="", max_length=MAX_ARTIFACT_CSS_CHARS)
     js: str = Field(default="", max_length=MAX_ARTIFACT_JS_CHARS)
 
-    # 日本語: HTMLコンテンツ内のサニタイズ処理および、scriptやiframeなどの禁止タグが含まれていないかを検証します。
-    # English: Validate and sanitize HTML content, ensuring no prohibited tags (e.g. script, iframe) are present.
+    # HTMLコンテンツ内のサニタイズ処理および、scriptやiframeなどの禁止タグが含まれていないかを検証します。
+    # Validate and sanitize HTML content, ensuring no prohibited tags (e.g. script, iframe) are present.
     @field_validator("html")
     @classmethod
     def _validate_html(cls, value: str) -> str:
@@ -188,15 +188,15 @@ class GenerativeUiArtifactV1(BaseModel):
             raise ValueError("HTML contains a forbidden tag.")
         return sanitized
 
-    # 日本語: CSS定義をサニタイズし、危険なURLインポートや@importルールを除去します。
-    # English: Sanitize CSS content to remove hazardous URL schemes or @import rules.
+    # CSS定義をサニタイズし、危険なURLインポートや@importルールを除去します。
+    # Sanitize CSS content to remove hazardous URL schemes or @import rules.
     @field_validator("css")
     @classmethod
     def _validate_css(cls, value: str) -> str:
         return _sanitize_css(value)
 
-    # 日本語: JavaScriptコード内の安全性を検証し、不完全なscriptタグ終了をクリーンアップします。
-    # English: Validate the safety of JavaScript fragments and sanitize unclosed script tag remnants.
+    # JavaScriptコード内の安全性を検証し、不完全なscriptタグ終了をクリーンアップします。
+    # Validate the safety of JavaScript fragments and sanitize unclosed script tag remnants.
     @field_validator("js")
     @classmethod
     def _validate_js(cls, value: str) -> str:
@@ -204,8 +204,8 @@ class GenerativeUiArtifactV1(BaseModel):
         _validate_javascript_safety(sanitized)
         return sanitized
 
-    # 日本語: HTML、CSS、JavaScript of the total character length.
-    # English: Validate that the combined character length of HTML, CSS, and JS does not exceed the limit.
+    # HTML、CSS、JavaScript of the total character length.
+    # Validate that the combined character length of HTML, CSS, and JS does not exceed the limit.
     @model_validator(mode="after")
     def _validate_total_size(self) -> "GenerativeUiArtifactV1":
         if len(self.html) + len(self.css) + len(self.js) > MAX_ARTIFACT_TOTAL_CHARS:
@@ -213,8 +213,8 @@ class GenerativeUiArtifactV1(BaseModel):
         return self
 
 
-# 日本語: 生成UI要素やボタンをパース・抽出した後の、正規化されたLLM応答データを保持するデータクラスです。
-# English: Data class holding the normalized LLM response data after parsing and extracting UI artifacts.
+# 生成UI要素やボタンをパース・抽出した後の、正規化されたLLM応答データを保持するデータクラスです。
+# Data class holding the normalized LLM response data after parsing and extracting UI artifacts.
 @dataclass(frozen=True)
 class NormalizedGenerativeResponse:
     text: str
@@ -222,16 +222,16 @@ class NormalizedGenerativeResponse:
     validation_errors: list[str]
 
 
-# 日本語: 値を安全に文字列型に変換します。Noneの場合は空文字を返します。
-# English: Safely coerce the given value into a string, returning an empty string if None.
+# 値を安全に文字列型に変換します。Noneの場合は空文字を返します。
+# Safely coerce the given value into a string, returning an empty string if None.
 def _coerce_string(value: Any) -> str:
     if value is None:
         return ""
     return value if isinstance(value, str) else str(value)
 
 
-# 日本語: 値をピクセル単位の高さ(整数)にパースし、既定の最小値〜最大値の範囲にクランプします。
-# English: Coerce and clamp the height value to be within the allowed minimum and maximum pixel boundaries.
+# 値をピクセル単位の高さ(整数)にパースし、既定の最小値〜最大値の範囲にクランプします。
+# Coerce and clamp the height value to be within the allowed minimum and maximum pixel boundaries.
 def _coerce_height(value: Any) -> int | None:
     if value is None or value == "":
         return None
@@ -245,8 +245,8 @@ def _coerce_height(value: Any) -> int | None:
     return None
 
 
-# 日本語: 各コード（HTML、CSS、JS）が制限文字数を超えている場合に、優先順位に従って切り詰めます。
-# English: Trim HTML, CSS, and JS contents sequentially to enforce the maximum aggregate limit.
+# 各コード（HTML、CSS、JS）が制限文字数を超えている場合に、優先順位に従って切り詰めます。
+# Trim HTML, CSS, and JS contents sequentially to enforce the maximum aggregate limit.
 def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]:
     html = html[:MAX_ARTIFACT_HTML_CHARS]
     css = css[:MAX_ARTIFACT_CSS_CHARS]
@@ -271,8 +271,8 @@ def _trim_artifact_sources(html: str, css: str, js: str) -> tuple[str, str, str]
     return html, css, js
 
 
-# 日本語: HTML本文が空の場合に、JavaScriptからDOM操作ができるようデフォルトのコンテナ要素を挿入します。
-# English: Inject a default fallback container element if the HTML body is empty but JS refers to #app.
+# HTML本文が空の場合に、JavaScriptからDOM操作ができるようデフォルトのコンテナ要素を挿入します。
+# Inject a default fallback container element if the HTML body is empty but JS refers to #app.
 def _ensure_artifact_has_body(html: str, js: str) -> str:
     if html.strip():
         return html
@@ -281,15 +281,16 @@ def _ensure_artifact_has_body(html: str, js: str) -> str:
     return '<div id="app" class="chatcore-generated-root"></div>'
 
 
-# 日本語: JSON文字列から、C言語風の1行コメント(//)およびブロックコメント(/* */)を除去します。
-# English: Strip single-line and multi-line comments from the JSON-like source string.
+# JSON文字列から、C言語風の1行コメント(//)およびブロックコメント(/* */)を除去します。
+# Strip single-line and multi-line comments from the JSON-like source string.
 def _strip_json_comments(source: str) -> str:
     output: list[str] = []
     in_string = False
     quote = ""
     escaped = False
     index = 0
-    # 文字列リテラル内の // や /* */ はコンテンツとして残し、JSON 外側のコメントだけを削る。
+    # 文字列リテラル内の // や /* */ はコンテンツとして残し、JSON 外側のコメントだけを削ります。
+    # Keep // or /* */ within string literals as content, stripping only comments outside JSON structures.
     while index < len(source):
         char = source[index]
         next_char = source[index + 1] if index + 1 < len(source) else ""
@@ -325,27 +326,27 @@ def _strip_json_comments(source: str) -> str:
     return "".join(output)
 
 
-# 日本語: JSONの末尾にある不要なカンマ（配列やオブジェクトの閉じ括弧の前）を除去します。
-# English: Remove trailing commas before closing braces/brackets in the JSON string.
+# JSONの末尾にある不要なカンマ（配列やオブジェクトの閉じ括弧の前）を除去します。
+# Remove trailing commas before closing braces/brackets in the JSON string.
 def _remove_trailing_json_commas(source: str) -> str:
     return re.sub(r",(\s*[}\]])", r"\1", source)
 
 
-# 日本語: JSON文字列に含まれるバックスラッシュによる行継続文字を除去します。
-# English: Strip backslash line continuation sequences from the JSON source.
+# JSON文字列に含まれるバックスラッシュによる行継続文字を除去します。
+# Strip backslash line continuation sequences from the JSON source.
 def _remove_json_line_continuations(source: str) -> str:
     return re.sub(r"\\[ \t]*(?:\r\n|\r|\n)[ \t]*", "", source)
 
 
-# 日本語: JSON文字列リテラル内の生改行コードを、エスケープされた改行シーケンス(\n)に置換します。
-# English: Escape raw newlines inside JSON string literals into escaped newline sequences (\n).
+# JSON文字列リテラル内の生改行コードを、エスケープされた改行シーケンス(\n)に置換します。
+# Escape raw newlines inside JSON string literals into escaped newline sequences (\n).
 def _escape_json_string_newlines(source: str) -> str:
     output: list[str] = []
     in_string = False
     escaped = False
     index = 0
-    # モデル出力では JSON 文字列内に生改行が混ざることがあるため、
-    # 文字列の外側は触らず、内側の改行だけを JSON として読める形に変換する。
+    # モデル出力では JSON 文字列内に生改行が混ざることがあるため、文字列の外側は触らず、内側の改行だけを JSON として読める形に変換します。
+    # Since raw newlines might be mixed in JSON strings in model outputs, convert only internal newlines into a format readable as JSON without touching the outside of strings.
     while index < len(source):
         char = source[index]
         if in_string:
@@ -377,8 +378,8 @@ def _escape_json_string_newlines(source: str) -> str:
     return "".join(output)
 
 
-# 日本語: JSON形式のテキストを正規化して、標準的なJSONパーサでパースできるように前処理を行います。
-# English: Pre-process and normalize a JSON-like source string to make it compliant with standard JSON parsers.
+# JSON形式のテキストを正規化して、標準的なJSONパーサでパースできるように前処理を行います。
+# Pre-process and normalize a JSON-like source string to make it compliant with standard JSON parsers.
 def _normalize_jsonish_source(source: str) -> str:
     return _remove_trailing_json_commas(
         _strip_json_comments(
@@ -389,8 +390,8 @@ def _normalize_jsonish_source(source: str) -> str:
     )
 
 
-# 日本語: テキストをJSONオブジェクトとしてロードします。パース失敗時は正規化を施した上で再試行します。
-# English: Load JSON object from text, retrying with normalized source on initial parsing failure.
+# テキストをJSONオブジェクトとしてロードします。パース失敗時は正規化を施した上で再試行します。
+# Load JSON object from text, retrying with normalized source on initial parsing failure.
 def _loads_artifact_json(raw_json: str) -> Any:
     try:
         return json.loads(raw_json)
@@ -398,27 +399,27 @@ def _loads_artifact_json(raw_json: str) -> Any:
         return json.loads(_normalize_jsonish_source(raw_json))
 
 
-# 日本語: 2つの文字列スパンが重複しているかどうかを判定します。
-# English: Check whether two character spans overlap with each other.
+# 2つの文字列スパンが重複しているかどうかを判定します。
+# Check whether two character spans overlap with each other.
 def _spans_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
     return left[0] < right[1] and right[0] < left[1]
 
 
-# 日本語: 対象のスパンが、既に登録済みのスパンリストのいずれかと重複しているかを判定します。
-# English: Check whether the target span overlaps with any of the registered spans.
+# 対象のスパンが、既に登録済みのスパンリストのいずれかと重複しているかを判定します。
+# Check whether the target span overlaps with any of the registered spans.
 def _span_overlaps_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
     return any(_spans_overlap(span, existing) for existing in spans)
 
 
-# 日本語: テキストが生成UIアーティファクト定義のJSONであるらしい特徴（特定のキーの有無）を備えているかをチェックします。
-# English: Inspect if the text looks like a valid sandbox artifact JSON by verifying key characteristics.
+# テキストが生成UIアーティファクト定義のJSONであるらしい特徴（特定のキーの有無）を備えているかをチェックします。
+# Inspect if the text looks like a valid sandbox artifact JSON by verifying key characteristics.
 def _looks_like_artifact_json(source: str) -> bool:
     source_keys = {match.group("key").lower() for match in _ARTIFACT_SOURCE_KEY_RE.finditer(source)}
     return bool(source_keys) and (len(source_keys) >= 2 or bool(_ARTIFACT_CONTEXT_KEY_RE.search(source)))
 
 
-# 日本語: 本文から、ネストを含むWeb検索結果ソースのdetailsタグブロックをすべて除去します。
-# English: Strip nested Web search source details blocks from the raw text.
+# 本文から、ネストを含むWeb検索結果ソースのdetailsタグブロックをすべて除去します。
+# Strip nested Web search source details blocks from the raw text.
 def _strip_web_search_sources_html(text: str) -> str:
     if "web-search-sources" not in text:
         return text
@@ -427,7 +428,8 @@ def _strip_web_search_sources_html(text: str) -> str:
     # Remove the innermost blocks first and repeat until stable so nested trace
     # blocks are stripped safely as well.
     current = text
-    # 正規表現だけではネスト全体を一度に消せないため、内側から消して安定するまで繰り返す。
+    # 正規表現だけではネスト全体を一度に消せないため、内側から消して安定するまで繰り返します。
+    # Since regular expressions alone cannot remove the entire nest at once, repeat removing from the inside until it stabilizes.
     while True:
         stripped = _WEB_SEARCH_SOURCES_BLOCK_RE.sub("", current)
         if stripped == current:
@@ -435,8 +437,8 @@ def _strip_web_search_sources_html(text: str) -> str:
         current = stripped
 
 
-# 日本語: 本文の最初の空でない行などから、アーティファクトのタイトルを推測します。
-# English: Infer a title for the sandbox artifact from the surrounding prose.
+# 本文の最初の空でない行などから、アーティファクトのタイトルを推測します。
+# Infer a title for the sandbox artifact from the surrounding prose.
 def _infer_artifact_title(text: str) -> str:
     cleaned = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
     for line in cleaned.splitlines():
@@ -446,8 +448,8 @@ def _infer_artifact_title(text: str) -> str:
     return "生成UI"
 
 
-# 日本語: 本文のテキストから、モデルが明示的または暗示的に生成UIを作成しようとしていた意図があるかを判定します。
-# English: Infer whether the model intended to produce a visual UI block from the text content.
+# 本文のテキストから、モデルが明示的または暗示的に生成UIを作成しようとしていた意図があるかを判定します。
+# Infer whether the model intended to produce a visual UI block from the text content.
 def _has_artifact_intent(text: str) -> bool:
     stripped = FENCED_BLOCK_RE.sub("", _strip_web_search_sources_html(text)).strip()
     if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
@@ -460,15 +462,16 @@ def _has_artifact_intent(text: str) -> bool:
     )
 
 
-# 日本語: 開き括弧 { に対応する閉じ括弧 } のペアをパースし、JSONオブジェクトの終端インデックスを返します。
-# English: Parse matched brackets to find the end position of a JSON object string.
+# 開き括弧 { に対応する閉じ括弧 } のペアをパースし、JSONオブジェクトの終端インデックスを返します。
+# Parse matched brackets to find the end position of a JSON object string.
 def _find_balanced_object_end(source: str, start: int) -> int | None:
     depth = 0
     in_string = False
     quote = ""
     escaped = False
     index = start
-    # raw JSON 候補を本文から拾うため、文字列内の波括弧を無視しながら対応する閉じ括弧を探す。
+    # raw JSON 候補を本文から拾うため、文字列内の波括弧を無視しながら対応する閉じ括弧を探します。
+    # Search for the matching closing bracket while ignoring braces inside strings to collect raw JSON candidates from the text.
     while index < len(source):
         char = source[index]
         if in_string:
@@ -496,15 +499,16 @@ def _find_balanced_object_end(source: str, start: int) -> int | None:
     return None
 
 
-# 日本語: テキストから、フェンスで囲まれていない生のJSON型アーティファクト定義の候補を検出します。
-# English: Scan text to locate un-fenced raw JSON object candidates of sandbox artifacts.
+# テキストから、フェンスで囲まれていない生のJSON型アーティファクト定義の候補を検出します。
+# Scan text to locate un-fenced raw JSON object candidates of sandbox artifacts.
 def _find_raw_artifact_candidates(
     text: str,
     excluded_spans: list[tuple[int, int]],
     ) -> list[_ArtifactCandidate]:
     candidates: list[_ArtifactCandidate] = []
     index = 0
-    # fenced code block と重なる波括弧は除外し、本文中に直接貼られた artifact JSON だけを候補にする。
+    # fenced code block と重なる波括弧は除外し、本文中に直接貼られた artifact JSON だけを候補にします。
+    # Exclude braces that overlap with fenced code blocks, and only consider artifact JSON directly embedded in the prose as candidates.
     while index < len(text):
         start = text.find("{", index)
         if start == -1:
@@ -524,8 +528,8 @@ def _find_raw_artifact_candidates(
     return candidates
 
 
-# 日本語: html, css, js 等の通常のソースコードブロックを合成し、生成UIアーティファクトに統合します。
-# English: Extract and merge markdown source blocks (html/css/js) into a unified sandbox candidate.
+# html, css, js 等の通常のソースコードブロックを合成し、生成UIアーティファクトに統合します。
+# Extract and merge markdown source blocks (html/css/js) into a unified sandbox candidate.
 def _extract_source_code_artifact_candidates(
     text: str,
     occupied_spans: list[tuple[int, int]],
@@ -571,8 +575,8 @@ def _extract_source_code_artifact_candidates(
     return [_ArtifactCandidate(raw_json=json.dumps(payload, ensure_ascii=False), span=span)]
 
 
-# 日本語: 不完全なJSONの末尾から、途切れたトークンを1つ削ります。
-# English: Remove the last incomplete token from a truncated JSON string.
+# 不完全なJSONの末尾から、途切れたトークンを1つ削ります。
+# Remove the last incomplete token from a truncated JSON string.
 def _drop_trailing_json_token(source: str) -> str:
     # 末尾の不完全なトークン（文字列・数値・リテラル）を1つ取り除く。
     # Drop one trailing JSON token (string / number / literal) so a truncated
@@ -586,8 +590,8 @@ def _drop_trailing_json_token(source: str) -> str:
     return source[:-1].rstrip()
 
 
-# 日本語: 出力が途中で途切れたJSONオブジェクトを、括弧を自動的に閉じるなどして復元を試みます。
-# English: Best-effort recovery of a JSON object that was truncated mid-stream by closing unclosed brackets.
+# 出力が途中で途切れたJSONオブジェクトを、括弧を自動的に閉じるなどして復元を試みます。
+# Best-effort recovery of a JSON object that was truncated mid-stream by closing unclosed brackets.
 def _repair_truncated_json(source: str) -> str | None:
     # 出力が途中で打ち切られたJSONオブジェクトを最大限復元する。開いた文字列・括弧を
     # 閉じ、末尾の不完全なトークンや区切り文字を削ってから検証する。
@@ -661,8 +665,8 @@ def _repair_truncated_json(source: str) -> str | None:
     return None
 
 
-# 日本語: 途中で途切れて閉じられていないアーティファクトブロックを検出し、復元を試みます。
-# English: Detect and attempt to restore unclosed artifact code blocks.
+# 途中で途切れて閉じられていないアーティファクトブロックを検出し、復元を試みます。
+# Detect and attempt to restore unclosed artifact code blocks.
 def _extract_truncated_artifact_candidates(
     text: str,
     occupied_spans: list[tuple[int, int]],
@@ -697,8 +701,8 @@ def _extract_truncated_artifact_candidates(
     return candidates
 
 
-# 日本語: 応答テキスト全体から、生成UIアーティファクトの候補スパンをすべて抽出してソートしたリストを返します。
-# English: Extract all potential sandbox artifact candidates from the response prose.
+# 応答テキスト全体から、生成UIアーティファクトの候補スパンをすべて抽出してソートしたリストを返します。
+# Extract all potential sandbox artifact candidates from the response prose.
 def _extract_artifact_candidates(
     text: str,
     *,
@@ -737,8 +741,8 @@ def _extract_artifact_candidates(
     return sorted(candidates, key=lambda candidate: candidate.span)
 
 
-# 日本語: 応答テキストから抽出されたアーティファクトの定義ブロック部分を除去（非表示化）します。
-# English: Strip the JSON/code block sections of identified candidates from the visible prose.
+# 応答テキストから抽出されたアーティファクトの定義ブロック部分を除去（非表示化）します。
+# Strip the JSON/code block sections of identified candidates from the visible prose.
 def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> str:
     if not candidates:
         return text.strip()
@@ -754,8 +758,8 @@ def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> 
     return "".join(pieces).strip()
 
 
-# 日本語: イテレータの中で、真と評価される最初の要素を返します。すべて偽なら None を返します。
-# English: Find and return the first element in the iterator that evaluates to true.
+# イテレータの中で、真と評価される最初の要素を返します。すべて偽なら None を返します。
+# Find and return the first element in the iterator that evaluates to true.
 def _first_present(payload: dict[str, Any], *keys: str) -> Any:
     for key in keys:
         if key in payload:
@@ -763,8 +767,8 @@ def _first_present(payload: dict[str, Any], *keys: str) -> Any:
     return None
 
 
-# 日本語: 属性値の前後に存在する引用符を除去します。
-# English: Strip surrounding single or double quotes from HTML attribute values.
+# 属性値の前後に存在する引用符を除去します。
+# Strip surrounding single or double quotes from HTML attribute values.
 def _strip_attribute_quotes(raw_value: str) -> str:
     value = raw_value.strip()
     if len(value) >= 2 and value[0] in {"'", '"'} and value[-1] == value[0]:
@@ -772,18 +776,19 @@ def _strip_attribute_quotes(raw_value: str) -> str:
     return value
 
 
-# 日本語: JavaScriptコード内に現れる script 閉じタグの不要な文字列を無効化します。
-# English: Sanitize and deactivate literal closing script tags inside JavaScript blocks.
+# JavaScriptコード内に現れる script 閉じタグの不要な文字列を無効化します。
+# Sanitize and deactivate literal closing script tags inside JavaScript blocks.
 def _sanitize_script_end(value: str) -> str:
     return re.sub(r"</\s*script", r"<\\/script", value, flags=re.IGNORECASE)
 
 
-# 日本語: JavaScriptコードからコメントおよび文字列リテラルを除去し、安全性の解析用テキストを作成します。
-# English: Strip comments and string literals from JavaScript to facilitate code structure safety checks.
+# JavaScriptコードからコメントおよび文字列リテラルを除去し、安全性の解析用テキストを作成します。
+# Strip comments and string literals from JavaScript to facilitate code structure safety checks.
 def _strip_javascript_literals_and_comments(value: str) -> str:
     output: list[str] = []
     index = 0
-    # 危険構文の検査前に、コメントや文字列中の単語をコード本体として誤検出しないよう潰す。
+    # 危険構文の検査前に、コメントや文字列中の単語をコード本体として誤検出しないよう除去します。
+    # Strip comments and words inside strings to avoid false positives as code body before scanning for hazardous syntax.
     while index < len(value):
         char = value[index]
         next_char = value[index + 1] if index + 1 < len(value) else ""
@@ -849,15 +854,15 @@ def _strip_javascript_literals_and_comments(value: str) -> str:
     return "".join(output)
 
 
-# 日本語: JavaScriptコードに危険なトークン（Cookieアクセス、外部接続、eval等）が含まれていないかチェックします。
-# English: Ensure JavaScript is safe by looking for prohibited tokens (e.g., cookie access, network requests).
+# JavaScriptコードに危険なトークン（Cookieアクセス、外部接続、eval等）が含まれていないかチェックします。
+# Ensure JavaScript is safe by looking for prohibited tokens (e.g., cookie access, network requests).
 def _validate_javascript_safety(value: str) -> None:
     if _JS_BANNED_TOKEN_RE.search(_strip_javascript_literals_and_comments(value)):
         raise ValueError("JavaScript uses an API that is not allowed in sandbox artifacts.")
 
 
-# 日本語: 小規模なJSフラグメントの安全性を判定し、例外が発生しなければ True を返します。
-# English: Assess if a small JS fragment is safe, returning True if no validation exceptions are raised.
+# 小規模なJSフラグメントの安全性を判定し、例外が発生しなければ True を返します。
+# Assess if a small JS fragment is safe, returning True if no validation exceptions are raised.
 def _is_safe_javascript_fragment(value: str) -> bool:
     try:
         _validate_javascript_safety(value)
@@ -866,8 +871,8 @@ def _is_safe_javascript_fragment(value: str) -> bool:
     return True
 
 
-# 日本語: URLやリソースのURLが、安全なプロトコル（http, https等）で始まっているかを検証します。
-# English: Validate that resource URLs use safe, allowed protocol schemes.
+# URLやリソースのURLが、安全なプロトコル（http, https等）で始まっているかを検証します。
+# Validate that resource URLs use safe, allowed protocol schemes.
 def _is_safe_resource_url(value: str) -> bool:
     url = value.strip()
     if not url:
@@ -879,15 +884,15 @@ def _is_safe_resource_url(value: str) -> bool:
     )
 
 
-# 日本語: CSS定義から危険な @import や url() 表現を除去・サニタイズします。
-# English: Clean CSS by removing dangerous @import rules and checking url() schemes.
+# CSS定義から危険な @import や url() 表現を除去・サニタイズします。
+# Clean CSS by removing dangerous @import rules and checking url() schemes.
 def _sanitize_css(value: str) -> str:
     sanitized = _coerce_string(value)
     sanitized = re.sub(r"</\s*style", r"<\\/style", sanitized, flags=re.IGNORECASE)
     sanitized = _CSS_IMPORT_RE.sub("", sanitized)
 
-    # 日本語: CSS内の url(...) 定義に含まれる危険な外部リソースを検出し、置換します。
-    # English: Inspect and replace url() references in CSS blocks with safe values.
+    # CSS内の url(...) 定義に含まれる危険な外部リソースを検出し、置換します。
+    # Inspect and replace url() references in CSS blocks with safe values.
     def replace_url(match: re.Match[str]) -> str:
         url = match.group("value").strip()
         if url.startswith("data:") or url.startswith("blob:") or url.startswith("#"):
@@ -897,8 +902,8 @@ def _sanitize_css(value: str) -> str:
     return _CSS_URL_RE.sub(replace_url, sanitized)
 
 
-# 日本語: HTMLコンテンツ内のイベント属性（onclick等）や、href等に指定されたjavascript:スキームを無効化します。
-# English: Strip inline event handlers and sanitize resource paths inside HTML tags.
+# HTMLコンテンツ内のイベント属性（onclick等）や、href等に指定されたjavascript:スキームを無効化します。
+# Strip inline event handlers and sanitize resource paths inside HTML tags.
 def _sanitize_html(value: str) -> str:
     sanitized = _coerce_string(value)
     sanitized = _BLOCKED_ELEMENT_RE.sub("", sanitized)
@@ -927,8 +932,8 @@ def _sanitize_html(value: str) -> str:
     return sanitized
 
 
-# 日本語: アーティファクト定義の辞書型データを整形し、各コードソース（HTML、CSS、JS）を適切にセットします。
-# English: Coerce and format raw artifact dictionary fields into a standard structure.
+# アーティファクト定義の辞書型データを整形し、各コードソース（HTML、CSS、JS）を適切にセットします。
+# Coerce and format raw artifact dictionary fields into a standard structure.
 def _prepare_artifact_payload(payload: Any) -> Any:
     if isinstance(payload, list):
         payload = next((item for item in payload if isinstance(item, dict)), payload)
@@ -979,8 +984,8 @@ def _prepare_artifact_payload(payload: Any) -> Any:
     return prepared
 
 
-# 日本語: アーティファクトデータの値をパース・検証し、バリデーション済みの辞書型を返します。
-# English: Validate raw dictionary properties of the sandbox artifact against version 1 schema.
+# アーティファクトデータの値をパース・検証し、バリデーション済みの辞書型を返します。
+# Validate raw dictionary properties of the sandbox artifact against version 1 schema.
 def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     try:
         artifact = GenerativeUiArtifactV1.model_validate(_prepare_artifact_payload(payload))
@@ -991,8 +996,8 @@ def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     return artifact.model_dump(exclude_none=True)
 
 
-# 日本語: インタラクティブボタンの定義データをバリデーションして返します。
-# English: Validate interactive buttons structure using Pydantic model.
+# インタラクティブボタンの定義データをバリデーションして返します。
+# Validate interactive buttons structure using Pydantic model.
 def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
     try:
         buttons = InteractiveButtonsV1.model_validate(payload)
@@ -1003,8 +1008,8 @@ def validate_interactive_buttons_payload(payload: Any) -> dict[str, Any]:
     return buttons.model_dump(exclude_none=True)
 
 
-# 日本語: メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。
-# English: Parse and decode structured message parts from JSON or raw payloads.
+# メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。
+# Parse and decode structured message parts from JSON or raw payloads.
 def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     if not raw_parts:
         return None
@@ -1041,14 +1046,14 @@ def _decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     return parts or None
 
 
-# 日本語: メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。
-# English: Parse and decode structured message parts from JSON or raw payloads.
+# メッセージパーツのリスト（テキスト、生成UI、ボタン等）をデコード・検証して返します。
+# Parse and decode structured message parts from JSON or raw payloads.
 def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     return _decode_message_parts(raw_parts)
 
 
-# 日本語: メッセージパーツのリストをJSON文字列にシリアライズします。
-# English: Serialize the list of message parts to a JSON string.
+# メッセージパーツのリストをJSON文字列にシリアライズします。
+# Serialize the list of message parts to a JSON string.
 def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
     normalized = _decode_message_parts(parts)
     if not normalized:
@@ -1056,8 +1061,8 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
     return json.dumps(normalized, ensure_ascii=False)
 
 
-# 日本語: モデルがアーティファクト出力に失敗した際、本文中に埋め込まれたHTMLコード等を回収してフォールバック用のUIを組み立てます。
-# English: Recover un-fenced markup or scripts from prose to synthesize a fallback sandbox UI card.
+# モデルがアーティファクト出力に失敗した際、本文中に埋め込まれたHTMLコード等を回収してフォールバック用のUIを組み立てます。
+# Recover un-fenced markup or scripts from prose to synthesize a fallback sandbox UI card.
 def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]:
     title = _infer_artifact_title(visible_text or raw_text)
     # Web検索のトレースブロックHTMLがエスケープされてカード本文に流れ込むのを防ぐ。
@@ -1103,8 +1108,8 @@ def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]
     return validate_artifact_payload(payload)
 
 
-# 日本語: 応答テキストから生成UIとボタンの構成要素を抽出・分離し、ユーザーに見せるテキストと構造化パーツリストに分割します。
-# English: Parse the raw response prose to isolate UI blocks and buttons, returning a normalized text and parts list.
+# 応答テキストから生成UIとボタンの構成要素を抽出・分離し、ユーザーに見せるテキストと構造化パーツリストに分割します。
+# Parse the raw response prose to isolate UI blocks and buttons, returning a normalized text and parts list.
 def normalize_response_with_artifacts(
     raw_text: str,
     *,

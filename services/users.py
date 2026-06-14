@@ -3,6 +3,8 @@ from typing import Any
 from .db import get_db_connection
 from .default_tasks import default_task_rows
 
+# 定数定義
+# Define constants
 DEFAULT_USERNAME = "ユーザー"
 DEFAULT_AVATAR_URL = "/static/user-icon.png"
 LEGACY_AVATAR_URL_MAX_LENGTH = 255
@@ -19,9 +21,13 @@ def _normalize_provider_metadata(
     provider_user_id: str | None,
     provider_email: str | None,
 ) -> tuple[str | None, str | None]:
+    # 空文字や前後の空白を除去して正規化
+    # Trim and normalize empty strings and surrounding spaces
     normalized_provider_user_id = (provider_user_id or "").strip() or None
     normalized_provider_email = (provider_email or "").strip() or None
 
+    # Eメールプロバイダの場合はメールアドレスをデフォルト値に設定
+    # Default to user email for the email provider type
     if auth_provider == EMAIL_AUTH_PROVIDER:
         normalized_provider_user_id = normalized_provider_user_id or email
         normalized_provider_email = normalized_provider_email or email
@@ -120,7 +126,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
 # 指定されたメールアドレスを持つユーザーを取得する
 # Retrieve a user by their email address.
 def get_user_by_email(email: str) -> dict[str, Any] | None:
-    # メールアドレス一致のユーザー1件を返す
+    # メールアドレス一致 of user を返す
     # Fetch a single user by email.
     """メールアドレスでユーザーを取得"""
     with get_db_connection() as conn:
@@ -342,6 +348,8 @@ def update_user_profile_from_google_if_unset(
 # ユーザーに関連する全データとアカウント自体をデータベースから削除する
 # Delete all data associated with a user and remove their account from the database.
 def delete_user_account(user_id: int) -> bool:
+    # 外部キーのCASCADE制約などで完全にカバーされないユーザー所有のレコードを削除し、
+    # その後同じトランザクションでユーザー行を削除する。
     # Delete user-owned records that are not fully covered by cascading FKs,
     # then remove the user row in the same transaction.
     with get_db_connection() as conn:

@@ -29,8 +29,12 @@ from services.llm_daily_limit import (
 )
 from services.url_fetcher import fetch_url_content
 
+# ロガーの設定
+# Configure logger
 logger = logging.getLogger(__name__)
 
+# 定数定義
+# Define constants
 BRAVE_LLM_CONTEXT_URL = "https://api.search.brave.com/res/v1/llm/context"
 WEB_SEARCH_CACHE_TTL_SECONDS = 300
 WEB_SEARCH_DEFAULT_TIMEOUT_SECONDS = 12.0
@@ -134,6 +138,8 @@ WebSearchEventPublisher = Callable[[str, dict[str, Any]], None]
 
 @dataclass(frozen=True)
 class WebSearchDecision:
+    # Web検索が必要かどうかの判断結果を表すクラス
+    # Represents the decision on whether a web search is needed.
     should_search: bool
     query: str = ""
     freshness: str = ""
@@ -142,6 +148,8 @@ class WebSearchDecision:
 
 @dataclass(frozen=True)
 class WebSearchSource:
+    # Web検索で得られた個々のソースの情報を表すクラス
+    # Represents the information of an individual source from web search.
     url: str
     title: str
     hostname: str
@@ -154,6 +162,8 @@ class WebSearchSource:
 
 @dataclass(frozen=True)
 class WebSearchResult:
+    # Web検索の全体結果を表すクラス
+    # Represents the overall result of a web search.
     query: str
     searched_at: str
     sources: tuple[WebSearchSource, ...]
@@ -161,17 +171,23 @@ class WebSearchResult:
 
     @property
     def has_sources(self) -> bool:
+        # ソースが存在するかどうかを返すプロパティ
+        # Property indicating if any sources are present.
         return bool(self.sources)
 
 
 @dataclass(frozen=True)
 class WebSearchAugmentation:
+    # Web検索結果によって拡張されたメッセージ情報を表すクラス
+    # Represents message information augmented with web search results.
     messages: list[dict[str, str]]
     result: WebSearchResult | None = None
     status: str = ""
 
 
 class WebSearchQuotaExceeded(RuntimeError):
+    # Brave Web検索の月間制限クォータを超過した際のエラークラス
+    # Exception raised when the Brave web search monthly quota is exceeded.
     def __init__(self, limit: int, retry_after_seconds: int) -> None:
         super().__init__(f"Brave web search monthly limit exceeded: {limit}")
         self.limit = limit
@@ -182,6 +198,8 @@ _search_cache: dict[str, tuple[float, WebSearchResult]] = {}
 
 
 def _web_search_enabled() -> bool:
+    # 環境変数からWeb検索が有効かどうかを取得する
+    # Retrieve whether web search is enabled from the environment variable.
     return os.environ.get("CHAT_WEB_SEARCH_ENABLED", "1").strip().lower() not in {
         "0",
         "false",
@@ -191,10 +209,14 @@ def _web_search_enabled() -> bool:
 
 
 def is_web_search_enabled() -> bool:
+    # 外部からWeb検索が有効か確認するための公開関数
+    # Public function to check if web search is enabled externally.
     return _web_search_enabled()
 
 
 def _get_positive_int_env(name: str, default: int, *, minimum: int = 1, maximum: int = 100) -> int:
+    # 環境変数から正の整数値を取得し、範囲内に収めて返す
+    # Retrieve a positive integer value from an environment variable, clamped to a range.
     raw = os.environ.get(name)
     if raw is None:
         return default
@@ -206,6 +228,8 @@ def _get_positive_int_env(name: str, default: int, *, minimum: int = 1, maximum:
 
 
 def _get_positive_float_env(name: str, default: float) -> float:
+    # 環境変数から正の実数値を取得して返す
+    # Retrieve a positive float value from an environment variable.
     raw = os.environ.get(name)
     if raw is None:
         return default
@@ -229,12 +253,16 @@ _CONTEXT_DELIMITER_RE = re.compile(
 
 
 def _neutralize_context_delimiters(value: str) -> str:
+    # コンテキスト制御タグの偽装を防止するために対象のタグを無害化する
+    # Neutralize control tags to prevent indirect prompt injection.
     if not value:
         return value
     return _CONTEXT_DELIMITER_RE.sub("[removed]", value)
 
 
 def _normalize_text(value: Any, *, max_chars: int | None = None) -> str:
+    # 文字列の空白を正規化し、必要に応じて最大文字数で切り詰める
+    # Normalize string whitespace and truncate to max characters if specified.
     text = value if isinstance(value, str) else str(value or "")
     text = " ".join(text.split())
     if max_chars is not None and len(text) > max_chars:
@@ -243,11 +271,15 @@ def _normalize_text(value: Any, *, max_chars: int | None = None) -> str:
 
 
 def _looks_sensitive(value: str) -> bool:
+    # 文字列にAPIキーやパスワードなどの機密情報が含まれるか確認する
+    # Check if a string contains sensitive info like API keys or passwords.
     lowered = value.lower()
     return any(marker in lowered for marker in _SENSITIVE_MARKERS)
 
 
 def _redact_secretish_text(value: str) -> str:
+    # 文字列中の機密情報と思われるトークンをマスク処理する
+    # Mask tokens in the string that look like sensitive credentials.
     if not value:
         return ""
     redacted_tokens: list[str] = []
@@ -257,6 +289,8 @@ def _redact_secretish_text(value: str) -> str:
 
 
 def _latest_user_message(conversation_messages: list[dict[str, str]]) -> str:
+    # 会話履歴から最新のユーザーメッセージを抽出する
+    # Extract the latest user message from conversation history.
     for message in reversed(conversation_messages):
         if message.get("role") == "user":
             return str(message.get("content", ""))
@@ -264,6 +298,8 @@ def _latest_user_message(conversation_messages: list[dict[str, str]]) -> str:
 
 
 def _planner_context_excerpt(conversation_messages: list[dict[str, str]]) -> str:
+    # Web検索プランナー用の会話履歴の抜粋を作成する
+    # Create an excerpt of conversation history for the web search planner.
     recent = conversation_messages[-WEB_SEARCH_PLANNER_MAX_MESSAGES:]
     lines: list[str] = []
     for message in recent:
@@ -293,12 +329,16 @@ def _planner_context_excerpt(conversation_messages: list[dict[str, str]]) -> str
 
 
 def _fallback_decision(user_message: str) -> WebSearchDecision:
+    # プランナーが利用できない場合のデフォルトの判断結果を返す
+    # Return default decision when the planner is unavailable.
     if not user_message.strip():
         return WebSearchDecision(False)
     return WebSearchDecision(False, reason="web search planner unavailable")
 
 
 def _strip_markdown_code_fence(text: str) -> str:
+    # レスポンスに含まれるMarkdownのコードフェンスを取り除く
+    # Strip markdown code fences from the response.
     stripped = text.strip()
     if not stripped.startswith("```"):
         return stripped
@@ -312,6 +352,8 @@ def _strip_markdown_code_fence(text: str) -> str:
 
 
 def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
+    # レスポンスからJSONオブジェクトを抽出し、辞書としてパースする
+    # Extract and parse a JSON object from raw response text.
     text = _strip_markdown_code_fence((raw_response or "").strip())
     if not text:
         return None
@@ -320,6 +362,7 @@ def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
     except Exception:
         # LLM が説明文つきで JSON を返すことがあるため、最外の JSON object だけを救出する。
         # それでも壊れている場合は planner repair に回す。
+        # Extract the outermost JSON block if parsing the entire string fails.
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:
@@ -332,6 +375,8 @@ def _extract_json_object(raw_response: str) -> dict[str, Any] | None:
 
 
 def _coerce_search_flag(value: Any) -> bool | None:
+    # 様々な形式で表現された検索フラグの真偽値を論理値に変換する
+    # Coerce various search flag formats into a boolean value.
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -373,6 +418,8 @@ def _coerce_search_flag(value: Any) -> bool | None:
 
 
 def _is_valid_date_range(value: str) -> bool:
+    # 期間指定形式が ISO日付 TO ISO日付 (例: 2026-01-01to2026-01-02) であるか検証する
+    # Validate if the date range format is ISOdate to ISOdate.
     if len(value) != 22:
         return False
     if value[10:12] != "to":
@@ -383,6 +430,8 @@ def _is_valid_date_range(value: str) -> bool:
 
 
 def _is_iso_date(value: str) -> bool:
+    # 文字列が YYYY-MM-DD 形式のISO日付であるか検証する
+    # Check if the string format is YYYY-MM-DD.
     if len(value) != 10:
         return False
     if value[4] != "-" or value[7] != "-":
@@ -392,6 +441,8 @@ def _is_iso_date(value: str) -> bool:
 
 
 def _parse_decision(raw_response: str, user_message: str) -> WebSearchDecision:
+    # プランナーレスポンスからWeb検索の要否判断結果を解析する
+    # Parse decision on whether to search from raw planner response.
     loaded = _extract_json_object(raw_response)
     if loaded is None:
         return _fallback_decision(user_message)
@@ -402,6 +453,8 @@ def _parse_decision_payload(
     loaded: dict[str, Any],
     user_message: str,
 ) -> WebSearchDecision:
+    # 解析済みのペイロードから判断データを取り出し、クエリなどの検証を行う
+    # Extract and validate decision details from the parsed payload.
     should_search = _coerce_search_flag(loaded.get("decision"))
     if should_search is None:
         should_search = _coerce_search_flag(loaded.get("should_search"))
@@ -434,6 +487,8 @@ class _PlannerCandidate:
 
 
 def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
+    # 利用可能な環境変数に応じて、優先順にプランナーのLLM候補リストを作成する
+    # Build a list of planner LLM candidates in priority order based on available keys.
     candidates: list[_PlannerCandidate] = []
     seen: set[str] = set()
 
@@ -503,6 +558,8 @@ _PLANNER_REPAIR_SYSTEM_PROMPT = (
 def _build_planner_messages(
     conversation_messages: list[dict[str, str]],
 ) -> list[dict[str, str]]:
+    # プランナーLLM向けに会話文脈とシステムプロンプトのメッセージリストを構築する
+    # Construct message list for the planner LLM with prompt and context excerpt.
     current_date = datetime.now().astimezone().date().isoformat()
     return [
         {"role": "system", "content": _PLANNER_SYSTEM_PROMPT},
@@ -522,6 +579,8 @@ def _invoke_planner(
     candidate: _PlannerCandidate,
     planner_messages: list[dict[str, str]],
 ) -> dict[str, Any] | None:
+    # 選択したLLM候補に対してプランナーメッセージを送信し、結果のJSONを取得する
+    # Invoke the planner LLM, trying repair logic if the response is malformed.
     for attempt_index in range(WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL):
         raw_response = ""
         try:
@@ -564,6 +623,8 @@ def _repair_planner_output(
     planner_messages: list[dict[str, str]],
     raw_response: str,
 ) -> dict[str, Any] | None:
+    # 壊れたプランナーの出力を修復するためにLLMを呼び出す
+    # Call the LLM to repair and correct malformed planner outputs.
     repair_messages = [
         {"role": "system", "content": _PLANNER_REPAIR_SYSTEM_PROMPT},
         {
@@ -606,6 +667,8 @@ def decide_web_search(
     conversation_messages: list[dict[str, str]],
     model: str,
 ) -> WebSearchDecision:
+    # 会話履歴をもとにWeb検索を実行するか判断し、クエリを作成するメイン決定フロー
+    # Main decision flow to determine if a web search is needed based on conversation.
     user_message = _latest_user_message(conversation_messages)
     if not user_message.strip():
         return WebSearchDecision(False)
@@ -624,6 +687,8 @@ def decide_web_search(
 
 
 def _cache_key(query: str, freshness: str, language: str, country: str) -> str:
+    # 検索クエリやパラメータに基づくキャッシュキーの文字列を生成する
+    # Generate a cache key string based on the search query and parameters.
     return json.dumps(
         {
             "query": query,
@@ -637,6 +702,8 @@ def _cache_key(query: str, freshness: str, language: str, country: str) -> str:
 
 
 def _get_cached_search(key: str) -> WebSearchResult | None:
+    # キャッシュから有効期限内の検索結果を取得する
+    # Retrieve valid search results from cache if not expired.
     cached = _search_cache.get(key)
     if cached is None:
         return None
@@ -648,6 +715,8 @@ def _get_cached_search(key: str) -> WebSearchResult | None:
 
 
 def _set_cached_search(key: str, result: WebSearchResult) -> None:
+    # キャッシュに検索結果を保存し、上限を超えた場合は古いキャッシュを整理する
+    # Save search results to cache and evict old entries if capacity limit is reached.
     if len(_search_cache) > 128:
         now = time.monotonic()
         expired_keys = [cache_key for cache_key, (expires_at, _) in _search_cache.items() if expires_at <= now]
@@ -660,6 +729,8 @@ def _set_cached_search(key: str, result: WebSearchResult) -> None:
 
 
 def _infer_search_language(query: str) -> str:
+    # 検索クエリの内容から言語を判定する
+    # Infer search language based on query content.
     configured = os.environ.get("BRAVE_SEARCH_LANG", "").strip()
     if configured:
         return _normalize_brave_search_lang(configured)
@@ -667,12 +738,16 @@ def _infer_search_language(query: str) -> str:
 
 
 def _normalize_brave_search_lang(value: str) -> str:
+    # 言語コードをBrave Search APIが受け付ける形式に正規化する
+    # Normalize language code to the format accepted by Brave Search API.
     normalized = str(value or "").strip().lower()
     normalized = _BRAVE_SEARCH_LANG_ALIASES.get(normalized, normalized)
     return normalized if normalized in _BRAVE_SEARCH_LANG_VALUES else "en"
 
 
 def _contains_japanese(value: str) -> bool:
+    # 文字列に日本語（ひらがな、カタカナ、漢字）が含まれているか判定する
+    # Check if the string contains Japanese characters.
     return any(
         ("\u3040" <= char <= "\u30ff") or ("\u3400" <= char <= "\u9fff")
         for char in value
@@ -680,12 +755,16 @@ def _contains_japanese(value: str) -> bool:
 
 
 def _source_age_text(raw_age: Any) -> str:
+    # ソースの掲載時期を表す情報を整形する
+    # Format publication age metadata.
     if isinstance(raw_age, list):
         return ", ".join(_normalize_text(item, max_chars=120) for item in raw_age if item)
     return _normalize_text(raw_age, max_chars=160)
 
 
 def _extract_grounding_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    # Brave APIレスポンスから根拠データ（generic, poi, map）を抽出する
+    # Extract grounding items (generic, poi, map) from Brave API response.
     grounding = payload.get("grounding")
     if not isinstance(grounding, dict):
         return []
@@ -712,6 +791,8 @@ def _parse_brave_context_response(
     *,
     freshness: str = "",
 ) -> WebSearchResult:
+    # Brave LLM Context APIからのレスポンスをWebSearchResultにパースする
+    # Parse Brave LLM Context API response into WebSearchResult.
     raw_sources = payload.get("sources")
     sources_metadata: dict[str, dict[str, Any]] = {}
     if isinstance(raw_sources, dict):
@@ -771,6 +852,8 @@ def _parse_brave_context_response(
 
 
 def _web_search_page_fetch_enabled() -> bool:
+    # 検索結果ページの本文取得機能が有効であるか判定する
+    # Check if page body fetching is enabled.
     return os.environ.get("CHAT_WEB_SEARCH_FETCH_PAGES", "1").strip().lower() not in {
         "0",
         "false",
@@ -783,8 +866,8 @@ def _select_sources_for_page_fetch(
     result: WebSearchResult,
     limit: int,
 ) -> list[WebSearchSource]:
-    # Braveのランキング順を尊重しつつ、スニペットがある（=本文が関連する）ソースを優先する。
-    # Honor Brave's ranking but prefer sources that already have snippets (more likely relevant).
+    # 検索結果から本文取得を行う対象ソースを選択する
+    # Select target sources from search results to perform page body fetching.
     with_snippets: list[WebSearchSource] = []
     without_snippets: list[WebSearchSource] = []
     for source in result.sources:
@@ -889,6 +972,8 @@ def enrich_sources_with_page_content(result: WebSearchResult) -> WebSearchResult
 
 
 def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchResult:
+    # Brave LLM Context APIを使用して検索を実行し、結果を加工して返す
+    # Perform Brave Search and enrich results.
     api_key = os.environ.get("BRAVE_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("BRAVE_API_KEY is not configured.")
@@ -957,6 +1042,8 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
 
 
 def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResult | None:
+    # 複数のWeb検索結果を結合して1つの結果にまとめる
+    # Combine multiple web search results into a single result.
     combined_sources: list[WebSearchSource] = []
     seen_urls: set[str] = set()
     queries: list[str] = []
@@ -986,6 +1073,8 @@ def combine_web_search_results(results: list[WebSearchResult]) -> WebSearchResul
 
 
 def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] | None:
+    # Web検索結果をLLMの文脈に挿入するためのシステムメッセージを構築する
+    # Construct a system message to insert web search results into the LLM context.
     if not result.has_sources:
         return None
 
@@ -1033,6 +1122,8 @@ def _insert_system_context(
     conversation_messages: list[dict[str, str]],
     context_message: dict[str, str],
 ) -> list[dict[str, str]]:
+    # 既存のシステムメッセージ群の直後に検索文脈メッセージを挿入する
+    # Insert search context message right after existing system messages.
     insert_at = 0
     # 既存の system prompt 群の直後に検索文脈を入れる。
     # 最初の user message より後ろに入れると、モデルによっては通常会話として扱われやすい。
@@ -1048,6 +1139,8 @@ def _insert_system_context(
 
 
 def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]]:
+    # イベントログ送信用にソース一覧をシリアライズする
+    # Serialize source list for event publication.
     return [
         {
             "url": source.url,
@@ -1059,6 +1152,8 @@ def _serialize_sources_for_event(result: WebSearchResult) -> list[dict[str, str]
 
 
 def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
+    # 検索ソースのHTMLリンク表現をビルドする
+    # Build HTML list item strings representing the search sources.
     if result is None:
         return []
     sources_lines: list[str] = []
@@ -1094,6 +1189,8 @@ def _build_web_search_source_lines(result: WebSearchResult | None) -> list[str]:
 
 
 def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
+    # 参照したソース一覧を表示するためのMarkdown/HTML要素を構築する
+    # Build markdown/HTML element to display the list of referenced sources.
     sources_lines = _build_web_search_source_lines(result)
     if not sources_lines:
         return ""
@@ -1118,10 +1215,14 @@ def build_web_search_sources_markdown(result: WebSearchResult | None) -> str:
 
 
 def _is_source_reveal_step(title: str) -> bool:
+    # 実行トレースのステップ名がソース表示を伴うものか判定する
+    # Check if a trace step title indicates revealing source details.
     return title.startswith(("Web検索:", "追加検索:", "検索結果を再利用:"))
 
 
 def _build_trace_source_body(sources_lines: list[str]) -> list[str]:
+    # トレース詳細内のソース一覧セクションのHTMLを構築する
+    # Build the HTML content body for sources section in the trace.
     return [
         '<div class="web-search-sources__section-title">参照したWebサイト</div>',
         '<ul class="web-search-sources__links">',
@@ -1134,6 +1235,8 @@ def _build_trace_source_fallback_details(
     result: WebSearchResult | None,
     sources_lines: list[str],
 ) -> list[str]:
+    # トレースステップ内にソースが埋め込まれなかった場合の代替表示用HTML詳細要素を構築する
+    # Build fallback HTML details elements for sources if not embedded in a step.
     query = (result.query if result is not None else "").strip()
     summary_title = f"Web検索: {query}" if query else "Web検索結果"
     return [
@@ -1155,6 +1258,8 @@ def build_web_search_trace_markdown(
     *,
     steps: list[dict[str, Any]] | None = None,
 ) -> str:
+    # 回答生成プロセスのトレースと検索ソースを表示するMarkdown/HTMLを構築する
+    # Build markdown/HTML to display the response generation process trace and search sources.
     sources_lines = _build_web_search_source_lines(result)
     normalized_steps: list[tuple[str, str]] = []
     for step in steps or []:
@@ -1243,6 +1348,8 @@ def build_web_search_trace_markdown(
 
 
 def get_web_search_tool_definition() -> dict[str, Any]:
+    # LLMに提供するWeb検索ツールの定義スキーマを取得する
+    # Retrieve the tool definition schema for web search provided to the LLM.
     return {
         "type": "function",
         "function": {
@@ -1274,6 +1381,8 @@ def maybe_augment_messages_with_web_search(
     *,
     publish_event: WebSearchEventPublisher | None = None,
 ) -> WebSearchAugmentation:
+    # 必要に応じてWeb検索を実行し、会話履歴に検索コンテキストを挿入・拡張する
+    # Conditionally execute web search and augment conversation messages with search context.
     if not _web_search_enabled():
         return WebSearchAugmentation(messages=conversation_messages)
 

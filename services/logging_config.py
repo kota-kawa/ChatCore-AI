@@ -26,8 +26,8 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 logger = logging.getLogger(__name__)
 
 
-# 日本語: ログレコードを構造化されたJSON形式に変換するためのカスタムログフォーマッタクラス。
-# English: Custom log formatter class to structure log records into JSON strings.
+# ログレコードを構造化されたJSON形式に変換するためのカスタムログフォーマッタクラス。
+# Custom log formatter class to structure log records into JSON strings.
 class JsonLogFormatter(logging.Formatter):
     RESERVED_KEYS = {
         "args",
@@ -56,10 +56,10 @@ class JsonLogFormatter(logging.Formatter):
         "threadName",
     }
 
-    # ログレコードをJSON文字列形式にフォーマットする
+    # ログレコードをJSON文字列形式にフォーマットします。
     # Format the log record into a JSON-serialized string.
-    # 日本語: ログレコードの内容（タイムスタンプ、レベル、メッセージ、リクエストID等）をJSON形式にフォーマットします。
-    # English: Format the log record (timestamp, level, message, request ID, etc.) into a JSON-serialized string.
+    # ログレコードの内容（タイムスタンプ、レベル、メッセージ、リクエストID等）をJSON形式にフォーマットします。
+    # Format the log record (timestamp, level, message, request ID, etc.) into a JSON-serialized string.
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -87,10 +87,10 @@ class JsonLogFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
-# 環境変数から正の整数値を安全に解析し、無効な場合はデフォルト値を返すヘルパー関数
+# 環境変数から正の整数値を安全に解析し、無効な場合はデフォルト値を返すヘルパー関数です。
 # Safely parse a positive integer from environment variables or fallback to a default value.
-# 日本語: 環境変数から正の整数値を安全にパースします。無効な場合はデフォルト値にフォールバックします。
-# English: Safely parse a positive integer from environment variables, falling back to a default value if invalid.
+# 環境変数から正の整数値を安全にパースします。無効な場合はデフォルト値にフォールバックします。
+# Safely parse a positive integer from environment variables, falling back to a default value if invalid.
 def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     raw_value = os.getenv(env_name, str(default_value))
     try:
@@ -115,10 +115,10 @@ def _parse_positive_int_env(env_name: str, default_value: int) -> int:
     return parsed_value
 
 
-# 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズする
+# 指定された名前を持つ既存のログハンドラをルートロガーから削除してクローズします。
 # Remove and close an existing log handler with the specified name from the root logger.
-# 日本語: ルートロガーから指定された名前を持つ既存のログハンドラを削除し、クローズします。
-# English: Remove and close an existing log handler with the specified name from the root logger.
+# ルートロガーから指定された名前を持つ既存のログハンドラを削除し、クローズします。
+# Remove and close an existing log handler with the specified name from the root logger.
 def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> None:
     for existing_handler in list(root_logger.handlers):
         if getattr(existing_handler, "name", "") == handler_name:
@@ -126,20 +126,20 @@ def _replace_named_handler(root_logger: logging.Logger, handler_name: str) -> No
             existing_handler.close()
 
 
-# ログ出力形式の設定（plainかjson）に基づいてフォーマッタを構築する
+# ログ出力形式の設定（plainかjson）に基づいてフォーマッタを構築します。
 # Build a log formatter based on the log output format setting (plain or json).
-# 日本語: ログ出力設定（"plain" または "json"）に基づいてログフォーマッタオブジェクトを構築します。
-# English: Build a log formatter object based on the output configuration ("plain" or "json").
+# ログ出力設定（"plain" または "json"）に基づいてログフォーマッタオブジェクトを構築します。
+# Build a log formatter object based on the output configuration ("plain" or "json").
 def _build_formatter(log_output: str) -> logging.Formatter:
     if log_output == "plain":
         return logging.Formatter(LOG_FORMAT)
     return JsonLogFormatter()
 
 
-# ローテーションログファイル用ハンドラ（RotatingFileHandler）を構築する
+# ローテーションログファイル用ハンドラ（RotatingFileHandler）を構築します。
 # Build a RotatingFileHandler to write logs to a file with size rotation.
-# 日本語: サイズ制限および世代管理を指定してファイルローテーション用のハンドラを構築します。
-# English: Build a RotatingFileHandler with size rotation and backup configurations.
+# サイズ制限および世代管理を指定してファイルローテーション用のハンドラを構築します。
+# Build a RotatingFileHandler with size rotation and backup configurations.
 def _build_rotating_handler(
     *,
     file_path: Path,
@@ -162,10 +162,10 @@ def _build_rotating_handler(
     return handler
 
 
-# コンソール（標準出力）用ハンドラ（StreamHandler）を構築する
+# コンソール（標準出力）用ハンドラ（StreamHandler）を構築します。
 # Build a StreamHandler to output logs to the console (stdout/stderr).
-# 日本語: 標準出力用のコンソールハンドラ（StreamHandler）を構築します。
-# English: Build a StreamHandler to output logs to the console.
+# 標準出力用のコンソールハンドラ（StreamHandler）を構築します。
+# Build a StreamHandler to output logs to the console.
 def _build_console_handler(
     *,
     level: int,
@@ -179,10 +179,10 @@ def _build_console_handler(
     return handler
 
 
-# 環境変数等に基づいてアプリケーション全体のロギング設定を適用する
+# 環境変数等に基づいてアプリケーション全体のロギング設定を適用します。
 # Apply application-wide logging configuration based on environment variables and defaults.
-# 日本語: 環境変数やデフォルト値に基づいて、アプリケーション全体のロギング設定を適用します。
-# English: Configure and apply the application-wide logging settings based on environment variables and defaults.
+# 環境変数やデフォルト値に基づいて、アプリケーション全体のロギング設定を適用します。
+# Configure and apply the application-wide logging settings based on environment variables and defaults.
 def configure_logging() -> None:
     log_level_name = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
     resolved_log_level = getattr(logging, log_level_name, logging.INFO)

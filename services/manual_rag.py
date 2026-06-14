@@ -29,8 +29,8 @@ _CACHE_FILE = MANUAL_DIR / ".embeddings.npz"
 _CACHE_HASH_FILE = MANUAL_DIR / ".embeddings_hash.txt"
 
 
-# 日本語: マニュアルデータ内の1つのテキストチャンクを表すデータクラス。
-# English: Data class representing a single text chunk extracted from the manual docs.
+# マニュアルデータ内の1つのテキストチャンクを表すデータクラス。
+# Data class representing a single text chunk extracted from the manual docs.
 @dataclass
 class ManualChunk:
     heading: str
@@ -42,8 +42,8 @@ class ManualChunk:
 # Markdown parsing
 # ---------------------------------------------------------------------------
 
-# 日本語: Markdownファイルの先頭にあるFrontmatter(メタデータ)部分を取り除き、メタ情報辞書と本文テキストを返します。
-# English: Strip the YAML frontmatter from the beginning of Markdown text, returning the body and meta dictionary.
+# Markdownファイルの先頭にあるFrontmatter(メタデータ)部分を取り除き、メタ情報辞書と本文テキストを返します。
+# Strip the YAML frontmatter from the beginning of Markdown text, returning the body and meta dictionary.
 def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
     meta: dict[str, str] = {}
     if not text.startswith("---"):
@@ -58,8 +58,8 @@ def _strip_frontmatter(text: str) -> tuple[str, dict[str, str]]:
     return text[end + 4:].lstrip("\n"), meta
 
 
-# 日本語: マニュアルの本文テキストをセクション（見出し）ごとに適切な文字数でチャンク分割します。
-# English: Split the manual body text into sections (headings) of appropriate character length chunks.
+# マニュアルの本文テキストをセクション（見出し）ごとに適切な文字数でチャンク分割します。
+# Split the manual body text into sections (headings) of appropriate character length chunks.
 def _split_into_chunks(body: str, file_title: str) -> list[ManualChunk]:
     chunks: list[ManualChunk] = []
     for section in re.split(r"\n(?=## )", body):
@@ -93,9 +93,11 @@ def _split_into_chunks(body: str, file_title: str) -> list[ManualChunk]:
 # Tokenizer (BM25 用)
 # ---------------------------------------------------------------------------
 
-# 日本語: BM25検索用に、テキストを単語（ASCII）や文字バイグラム＋ユニグラム（CJK）にトークナイズします。
-# English: Tokenize text for BM25 search, splitting ASCII into words and CJK into bigrams/unigrams.
+# BM25検索用に、テキストを単語（ASCII）や文字バイグラム＋ユニグラム（CJK）にトークナイズします。
+# Tokenize text for BM25 search, splitting ASCII into words and CJK into bigrams/unigrams.
 def _tokenize(text: str) -> list[str]:
+    # ASCII文字は単語で分割し、CJK文字はバイグラム＋ユニグラムに展開します。
+    # Tokenize ASCII text into words and CJK text into bigrams and unigrams.
     """ASCII は単語分割、CJK 文字はバイグラム＋ユニグラムに展開する。"""
     tokens: list[str] = []
     text = text.lower()
@@ -112,15 +114,15 @@ def _tokenize(text: str) -> list[str]:
 # Embedding helpers
 # ---------------------------------------------------------------------------
 
-# 日本語: 全チャンクの見出しと本文から一意のハッシュ値を計算します（キャッシュの変更検知用）。
-# English: Compute a unique SHA256 hash of all chunks content to detect cache staleness.
+# 全チャンクの見出しと本文から一意のハッシュ値を計算します（キャッシュの変更検知用）。
+# Compute a unique SHA256 hash of all chunks content to detect cache staleness.
 def _compute_chunks_hash(chunks: list[ManualChunk]) -> str:
     combined = "\n---\n".join(f"{c.heading}\n{c.content}" for c in chunks)
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
-# 日本語: OpenAI APIを利用して、バッチ処理でテキストの埋め込みベクトルを取得します。
-# English: Retrieve text embedding vectors in batches using the OpenAI API.
+# OpenAI APIを利用して、バッチ処理でテキストの埋め込みベクトルを取得します。
+# Retrieve text embedding vectors in batches using the OpenAI API.
 def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
     from openai import OpenAI
     api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -138,8 +140,8 @@ def _fetch_embeddings_from_api(texts: list[str]) -> np.ndarray:
     return np.array(all_embeddings, dtype=np.float32)
 
 
-# 日本語: 埋め込みベクトルの行方向のノルムを1に正規化（L2正規化）します（コサイン類似度計算用）。
-# English: Normalize embedding matrix rows to unit length (L2 normalization) for cosine similarity.
+# 埋め込みベクトルの行方向のノルムを1に正規化（L2正規化）します（コサイン類似度計算用）。
+# Normalize embedding matrix rows to unit length (L2 normalization) for cosine similarity.
 def _normalize_rows(mat: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     return mat / np.maximum(norms, 1e-10)
@@ -149,11 +151,11 @@ def _normalize_rows(mat: np.ndarray) -> np.ndarray:
 # Index
 # ---------------------------------------------------------------------------
 
-# 日本語: 操作マニュアルデータに対するインデックス管理クラス。BM25検索とベクトル検索を組み合わせたハイブリッドRAGをサポートします。
-# English: Index class for managing operation manuals. Supports hybrid RAG combining BM25 and vector search.
+# 操作マニュアルデータに対するインデックス管理クラス。BM25検索とベクトル検索を組み合わせたハイブリッドRAGをサポートします。
+# Index class for managing operation manuals. Supports hybrid RAG combining BM25 and vector search.
 class ManualRagIndex:
-    # 日本語: マニュアルファイルを読み込み、BM25インデックスと埋め込みベクトルを構築して初期化します。
-    # English: Load manual files and initialize BM25 and embedding vector indexes.
+    # マニュアルファイルを読み込み、BM25インデックスと埋め込みベクトルを構築して初期化します。
+    # Load manual files and initialize BM25 and embedding vector indexes.
     def __init__(self, manual_dir: Path = MANUAL_DIR) -> None:
         self._chunks: list[ManualChunk] = []
         self._bm25 = None
@@ -177,8 +179,8 @@ class ManualRagIndex:
     # Chunk loading
     # ------------------------------------------------------------------
 
-    # 日本語: マニュアルディレクトリ配下のすべてのMarkdownファイルを読み込み、チャンク化します。
-    # English: Read and chunk all Markdown files in the manual directory.
+    # マニュアルディレクトリ配下のすべてのMarkdownファイルを読み込み、チャンク化します。
+    # Read and chunk all Markdown files in the manual directory.
     @staticmethod
     def _load_chunks(manual_dir: Path) -> list[ManualChunk]:
         chunks: list[ManualChunk] = []
@@ -196,8 +198,8 @@ class ManualRagIndex:
     # BM25
     # ------------------------------------------------------------------
 
-    # 日本語: rank_bm25ライブラリを用いてBM25検索オブジェクトを構築します。
-    # English: Build a BM25Okapi search object using the rank_bm25 library.
+    # rank_bm25ライブラリを用いてBM25検索オブジェクトを構築します。
+    # Build a BM25Okapi search object using the rank_bm25 library.
     @staticmethod
     def _build_bm25(chunks: list[ManualChunk]):
         try:
@@ -208,8 +210,8 @@ class ManualRagIndex:
         tokenized = [_tokenize(f"{c.heading} {c.content}") for c in chunks]
         return BM25Okapi(tokenized)
 
-    # 日本語: BM25アルゴリズムを用いてクエリに関連するチャンクを検索します。
-    # English: Search manual chunks using the BM25 algorithm.
+    # BM25アルゴリズムを用いてクエリに関連するチャンクを検索します。
+    # Search manual chunks using the BM25 algorithm.
     def _bm25_search(self, query: str, top_k: int) -> tuple[list[ManualChunk], list[float]]:
         if self._bm25 is None:
             return [], []
@@ -221,8 +223,8 @@ class ManualRagIndex:
         top_chunks = [self._chunks[i] for i in ranked[:top_k] if all_scores[i] > 0]
         return top_chunks, all_scores
 
-    # 日本語: BM25検索結果の最高スコアと平均スコアの比率をもとに、BM25の検索精度が不十分かどうかを判定します。
-    # English: Assess if BM25 results are too weak/ambiguous based on the ratio of top score to positive mean score.
+    # BM25検索結果の最高スコアと平均スコアの比率をもとに、BM25の検索精度が不十分かどうかを判定します。
+    # Assess if BM25 results are too weak/ambiguous based on the ratio of top score to positive mean score.
     def _is_bm25_weak(self, all_scores: list[float]) -> bool:
         top = max(all_scores) if all_scores else 0.0
         if top <= 0:
@@ -235,8 +237,8 @@ class ManualRagIndex:
     # Vector embeddings
     # ------------------------------------------------------------------
 
-    # 日本語: 埋め込みベクトルのキャッシュを読み込みます。ない場合はOpenAI APIを使用して新規作成して保存します。
-    # English: Load cached vector embeddings, or build them via OpenAI API and cache them if not present.
+    # 埋め込みベクトルのキャッシュを読み込みます。ない場合はOpenAI APIを使用して新規作成して保存します。
+    # Load cached vector embeddings, or build them via OpenAI API and cache them if not present.
     def _load_or_build_embeddings(self, chunks: list[ManualChunk]) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
@@ -268,8 +270,8 @@ class ManualRagIndex:
             logger.exception("Failed to build embeddings; vector search disabled.")
             return None
 
-    # 日本語: OpenAI APIを使用して、ユーザーの検索クエリを埋め込みベクトルに変換します。
-    # English: Convert user search query into an embedding vector via OpenAI API.
+    # OpenAI APIを使用して、ユーザーの検索クエリを埋め込みベクトルに変換します。
+    # Convert user search query into an embedding vector via OpenAI API.
     def _embed_query(self, query: str) -> np.ndarray | None:
         api_key = os.environ.get("OPENAI_API_KEY", "")
         if not api_key:
@@ -288,8 +290,8 @@ class ManualRagIndex:
             logger.exception("Query embedding failed.")
             return None
 
-    # 日本語: コサイン類似度を用いて、クエリベクトルに最も類似するチャンクを検索します。
-    # English: Search for chunks most semantically similar to the query vector using cosine similarity.
+    # コサイン類似度を用いて、クエリベクトルに最も類似するチャンクを検索します。
+    # Search for chunks most semantically similar to the query vector using cosine similarity.
     def _vector_search(self, query: str, top_k: int) -> list[ManualChunk]:
         if self._chunk_embeddings is None:
             return []
@@ -304,8 +306,8 @@ class ManualRagIndex:
     # Public search
     # ------------------------------------------------------------------
 
-    # 日本語: BM25検索を実行し、精度が不十分な場合（または弱い場合）はベクトル検索を併用して類似チャンクを返します。
-    # English: Perform BM25 search, falling back to semantic vector search if BM25 results are weak.
+    # BM25検索を実行し、精度が不十分な場合（または弱い場合）はベクトル検索を併用して類似チャンクを返します。
+    # Perform BM25 search, falling back to semantic vector search if BM25 results are weak.
     def search(self, query: str, top_k: int = TOP_K) -> list[ManualChunk]:
         bm25_chunks, all_scores = self._bm25_search(query, top_k)
 
@@ -328,8 +330,8 @@ class ManualRagIndex:
 _index: ManualRagIndex | None = None
 
 
-# 日本語: マニュアルRAGインデックスのシングルトンインスタンスを取得・初期化します。
-# English: Retrieve or initialize the singleton instance of ManualRagIndex.
+# マニュアルRAGインデックスのシングルトンインスタンスを取得・初期化します。
+# Retrieve or initialize the singleton instance of ManualRagIndex.
 def get_manual_rag_index() -> ManualRagIndex:
     global _index
     if _index is None:
@@ -337,9 +339,11 @@ def get_manual_rag_index() -> ManualRagIndex:
     return _index
 
 
-# 日本語: クエリに類似するマニュアル情報を検索し、プロンプト挿入用のフォーマットテキストとして返します。
-# English: Search the manual index and return formatted text of matching sections for LLM context.
+# クエリに類似するマニュアル情報を検索し、プロンプト挿入用のフォーマットテキストとして返します。
+# Search the manual index and return formatted text of matching sections for LLM context.
 def search_manual(query: str, top_k: int = TOP_K) -> str:
+    # クエリに関連するマニュアルチャンクを検索し、フォーマットされた文字列として返します。
+    # Search for manual chunks relevant to the query and return them as a formatted string.
     """クエリに関連するマニュアルチャンクを検索して文字列で返す。"""
     chunks = get_manual_rag_index().search(query, top_k=top_k)
     if not chunks:
@@ -409,9 +413,11 @@ _CONVERSATIONAL_REPLIES = re.compile(
 )
 
 
-# 日本語: ユーザーのメッセージが「アプリ操作方法に関する質問」であるか判定し、マニュアル検索の要否を返します。
-# English: Determine whether the user's query asks for application usage help and requires manual search.
+# ユーザーのメッセージが「アプリ操作方法に関する質問」であるか判定し、マニュアル検索の要否を返します。
+# Determine whether the user's query asks for application usage help and requires manual search.
 def needs_manual_search(query: str) -> bool:
+    # ユーザーのメッセージがアプリ操作マニュアルの検索を必要とするか判定します。
+    # Determine whether the user's message requires searching the application operation manual.
     """ユーザーのメッセージがアプリ操作マニュアルの検索を必要とするか判定する。
 
     判定フロー:

@@ -34,6 +34,8 @@ def _serialize_share_state(
     *,
     is_reused: bool = False,
 ) -> dict[str, Any]:
+    # 日本語: トークンが存在し、失効しておらず、期限切れでもない場合に有効と判定します。
+    # English: Active if the token exists, is not revoked, and is not expired.
     is_active = bool(share_token) and revoked_at is None and not _is_expired(expires_at)
     return {
         "share_token": share_token or "",
@@ -63,17 +65,21 @@ def create_or_get_shared_memo_token(
     force_refresh: bool = False,
     expires_in_days: int | None = DEFAULT_SHARE_EXPIRES_DAYS,
 ) -> dict[str, Any]:
-    # メモ所有者を検証した上で共有トークンを作成し、既存があれば再利用する
-    # Create a memo share token after owner validation and reuse the existing one.
+    # 日本語: トークン衝突時にリトライを行うループ処理。
+    # English: Retry loop in case of token collision.
     for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
         token = secrets.token_urlsafe(18)
         collision_detected = False
         expires_at = _resolve_expires_at(expires_in_days)
 
+        # 日本語: DB書き込み試行ループ。一時的なDBエラー時に再試行します。
+        # English: Database write attempt loop. Retries on transient DB errors.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 try:
+                    # 日本語: メモの存在と所有権を確認します。
+                    # English: Verify existence and ownership of the memo.
                     cursor.execute(
                         "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
                         (memo_id, user_id),
@@ -81,6 +87,8 @@ def create_or_get_shared_memo_token(
                     if not cursor.fetchone():
                         raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
 
+                    # 日本語: 強制リフレッシュでない場合は、既存の有効な共有情報を再利用します。
+                    # English: If not forced to refresh, reuse the existing active share information.
                     if not force_refresh:
                         cursor.execute(
                             """
@@ -102,6 +110,8 @@ def create_or_get_shared_memo_token(
                             if serialized_existing["is_active"]:
                                 return serialized_existing
 
+                    # 日本語: 共有情報を挿入または更新します。
+                    # English: Insert or update the sharing information.
                     cursor.execute(
                         """
                         INSERT INTO shared_memo_entries (memo_entry_id, share_token, expires_at, revoked_at, created_at)
@@ -131,9 +141,13 @@ def create_or_get_shared_memo_token(
                     raise
                 except Error as exc:
                     rollback_connection(conn)
+                    # 日本語: ユニークキー制約違反を検出した場合、トークンを再生成してリトライします。
+                    # English: If a unique constraint violation is detected, regenerate the token and retry.
                     if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
                         collision_detected = True
                         break
+                    # 日本語: リトライ可能なDBエラーの場合は待機後に再試行します。
+                    # English: In case of a retryable DB error, wait and retry.
                     if is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         time.sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -158,6 +172,8 @@ def get_memo_share_state(memo_id: int, user_id: int) -> dict[str, Any]:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
+            # 日本語: メモの存在と所有権を確認します。
+            # English: Verify existence and ownership of the memo.
             cursor.execute(
                 "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
                 (memo_id, user_id),
@@ -165,6 +181,8 @@ def get_memo_share_state(memo_id: int, user_id: int) -> dict[str, Any]:
             if not cursor.fetchone():
                 raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
 
+            # 日本語: 共有情報を取得します。
+            # English: Retrieve the share information.
             cursor.execute(
                 """
                 SELECT share_token, expires_at, revoked_at
@@ -194,6 +212,8 @@ def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
+            # 日本語: メモの存在と所有権を確認します。
+            # English: Verify existence and ownership of the memo.
             cursor.execute(
                 "SELECT 1 FROM memo_entries WHERE id = %s AND user_id = %s",
                 (memo_id, user_id),
@@ -201,6 +221,8 @@ def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
             if not cursor.fetchone():
                 raise ResourceNotFoundError(ERROR_MEMO_NOT_FOUND_FOR_SHARE)
 
+            # 日本語: 共有情報を無効化し、現在時刻を失効日時として記録します。
+            # English: Invalidate the sharing info and record current timestamp as the revocation time.
             cursor.execute(
                 """
                 UPDATE shared_memo_entries
@@ -226,13 +248,13 @@ def revoke_shared_memo_token(memo_id: int, user_id: int) -> dict[str, Any]:
 # 日本語: 共有トークンに紐づく、一般公開されているメモの内容を取得して返します。
 # English: Retrieve the publicly shared memo content by its unique share token.
 def get_shared_memo_payload(token: str) -> dict[str, Any]:
-    # 共有トークンに対応する公開メモ内容を返す
-    # Return publicly viewable memo payload for the given share token.
     # 日本語: コンテキストマネージャを使用して、必要なリソースの確保とクリーンアップを制御します。
     # English: Secure and clean up the required resource using a context manager.
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
+            # 日本語: トークンに対応するアクティブな共有メモを取得します。有効期限や失効状態も確認します。
+            # English: Fetch the active shared memo corresponding to the token. Checks expiration and revocation.
             cursor.execute(
                 """
                 SELECT

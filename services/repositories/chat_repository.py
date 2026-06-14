@@ -21,11 +21,13 @@ SHARED_TOKEN_MAX_COLLISION_RETRIES = 5
 
 
 class ChatRepository:
-    """chat_rooms/chat_history の永続化をまとめる境界。
-
-    テストでは connection_getter や sleep を差し替え、DB 再試行や一意制約衝突を
-    実 DB なしで検証できるようにしている。
-    """
+    # chat_rooms/chat_history の永続化をまとめる境界。
+    # Testでは connection_getter や sleep を差し替え、DB 再試行や一意制約衝突を
+    # 実 DB なしで検証できるようにしている。
+    # 
+    # Boundary class coordinating persistence for chat_rooms/chat_history.
+    # In tests, connection_getter or sleep can be mocked to verify DB retries
+    # and unique constraint collisions without an actual database.
 
     def __init__(
         self,
@@ -36,6 +38,8 @@ class ChatRepository:
         sleep: Callable[[float], Any] = time.sleep,
         token_generator: Callable[[int], str] = secrets.token_urlsafe,
     ) -> None:
+        # リポジトリの初期化と依存関係の設定
+        # Initialize repository and set dependencies
         self._connection_getter = connection_getter
         self._is_retryable_db_error = retryable_error_checker
         self._rollback = rollback
@@ -52,13 +56,16 @@ class ChatRepository:
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
     ) -> int | None:
-        """Insert a message and make it the active branch tip.
-
-        When ``parent_id`` is given, the new message becomes a child of that
-        message and the parent's ``active_child_id`` is repointed at it (creating
-        or switching a branch). When ``parent_id`` is ``None`` the new message
-        becomes the active root of the room.
-        """
+        # メッセージを挿入し、それをアクティブなブランチの先端にする
+        # Insert a message and make it the active branch tip.
+        #
+        # When ``parent_id`` is given, the new message becomes a child of that
+        # message and the parent's ``active_child_id`` is repointed at it (creating
+        # or switching a branch). When ``parent_id`` is ``None`` the new message
+        # becomes the active root of the room.
+        
+        # 添付ファイル名、メッセージパーツ、ファイル内容をJSON文字列にエンコード
+        # Encode attached file names, message parts, and file contents to JSON strings
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         message_parts_json = encode_message_parts(message_parts)
         attached_file_contents_json = encode_attached_files_for_storage(attached_file_contents)
@@ -96,6 +103,8 @@ class ChatRepository:
                     if new_id is not None:
                         # chat_history は木構造で全バージョンを保持し、active_root_id /
                         # active_child_id だけを動かして現在表示中の枝を切り替える。
+                        # chat_history keeps all versions in a tree structure.
+                        # Move only active_root_id / active_child_id to switch the branch.
                         if parent_id is None:
                             cursor.execute(
                                 "UPDATE chat_rooms SET active_root_id = %s WHERE id = %s",
@@ -110,6 +119,8 @@ class ChatRepository:
                     return new_id
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -123,6 +134,8 @@ class ChatRepository:
         raise RuntimeError("Failed to save chat message after retry attempts.")
 
     def create_room(self, room_id: str, user_id: int, title: str, mode: str = "normal") -> None:
+        # 新しいチャットルームを作成する
+        # Create a new chat room.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -133,6 +146,8 @@ class ChatRepository:
                     return
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -146,6 +161,8 @@ class ChatRepository:
         raise RuntimeError("Failed to create chat room after retry attempts.")
 
     def delete_room_if_no_assistant_messages(self, room_id: str, user_id: int) -> bool:
+        # アシスタントからの応答がまだ存在しない場合に限り、チャットルームを削除する
+        # Delete the chat room only if there are no assistant messages yet.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -173,6 +190,8 @@ class ChatRepository:
 
                     # assistant 応答がまだない部屋だけを消す。生成失敗・quota 超過時の掃除用で、
                     # 会話済みの部屋を誤って消さないためのガード。
+                    # Only delete rooms without assistant responses. This guards against
+                    # deleting rooms with conversations, used for cleanup on failures.
                     cursor.execute("DELETE FROM chat_history WHERE chat_room_id = %s", (room_id,))
                     cursor.execute(
                         "DELETE FROM chat_rooms WHERE id = %s AND user_id = %s",
@@ -182,6 +201,8 @@ class ChatRepository:
                     return cursor.rowcount > 0
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -195,12 +216,12 @@ class ChatRepository:
         raise RuntimeError("Failed to delete chat room without assistant messages after retry attempts.")
 
     def delete_messages_from_trailing_user_count(self, chat_room_id: str, trailing_user_count: int) -> bool:
-        """Delete messages starting from the user message that has `trailing_user_count` user
-        messages after it (counting from the newest).  trailing_user_count=0 targets the last
-        user message; trailing_user_count=1 targets the second-to-last, etc.
-
-        Returns True if any rows were deleted.
-        """
+        # 末尾のユーザーメッセージから指定された件数分を起点としてメッセージを削除する
+        # Delete messages starting from the user message that has `trailing_user_count` user
+        # messages after it (counting from the newest). trailing_user_count=0 targets the last
+        # user message; trailing_user_count=1 targets the second-to-last, etc.
+        #
+        # Returns True if any rows were deleted.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -223,6 +244,8 @@ class ChatRepository:
                     return cursor.rowcount > 0
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -235,7 +258,8 @@ class ChatRepository:
         return False
 
     def delete_last_assistant_message(self, chat_room_id: str) -> bool:
-        """Delete the last assistant message (and any messages after it) from a chat room."""
+        # 最後のアシスタントのメッセージとそれ以降のメッセージを削除する
+        # Delete the last assistant message (and any messages after it) from a chat room.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -260,6 +284,8 @@ class ChatRepository:
                     return cursor.rowcount > 0
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -272,6 +298,8 @@ class ChatRepository:
         return False
 
     def rename_room(self, room_id: str, new_title: str) -> None:
+        # チャットルームのタイトルを変更する
+        # Rename the chat room title.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -282,6 +310,8 @@ class ChatRepository:
                     return
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -300,8 +330,13 @@ class ChatRepository:
         new_title: str,
         allowed_current_titles: list[str],
     ) -> bool:
+        # 現在のタイトルが指定されたリストに含まれる場合のみ、条件付きでタイトルを変更する
+        # Conditionally rename the chat room only if the current title is in the allowed list.
+        #
         # 自動タイトル生成は初期タイトルのままの部屋だけを更新する。
         # ユーザーが手動で改名済みなら WHERE title IN (...) が外れて上書きしない。
+        # Auto title generation only updates rooms that still have their initial titles.
+        # If the user has manually renamed the room, WHERE title IN (...) will prevent overwriting.
         normalized_titles = [title for title in dict.fromkeys(allowed_current_titles) if title]
         if not normalized_titles:
             return False
@@ -325,6 +360,8 @@ class ChatRepository:
                     return updated
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -342,7 +379,8 @@ class ChatRepository:
     def _load_room_tree(
         self, cursor: Any, chat_room_id: str
     ) -> tuple[dict[int, dict[str, Any]], int | None]:
-        """Load every message of a room plus the room's active root pointer."""
+        # チャットルーム内の全メッセージとアクティブなルートポインタを取得する
+        # Load every message of a room plus the room's active root pointer.
         cursor.execute(
             """
             SELECT id,
@@ -391,6 +429,8 @@ class ChatRepository:
 
     @staticmethod
     def _children_by_parent(nodes: dict[int, dict[str, Any]]) -> dict[int | None, list[int]]:
+        # メッセージIDを親IDに基づいてグループ化し、兄弟ノードをソートして取得する
+        # Group message IDs by their parent ID and sort sibling lists.
         children: dict[int | None, list[int]] = defaultdict(list)
         for node in nodes.values():
             children[node["parent_id"]].append(node["id"])
@@ -404,14 +444,18 @@ class ChatRepository:
         active_root_id: int | None,
         children: dict[int | None, list[int]],
     ) -> list[dict[str, Any]]:
-        """Follow active_child pointers from the active root down to a leaf."""
+        # アクティブなルートから葉ノード（最新メッセージ）に向かって active_child ポインタをたどる
+        # Follow active_child pointers from the active root down to a leaf.
+        #
+        # 壊れた active_child_id や循環があっても履歴取得を止めない。
+        # ポインタが欠けた場合は最後に作られた子を暫定的な active path として返す。
+        # Keep loading history even if active_child_id is broken or cyclic.
+        # Fallback to the latest child if pointers are missing.
         root_siblings = children.get(None, [])
         current = active_root_id if active_root_id in nodes else (root_siblings[-1] if root_siblings else None)
 
         path: list[dict[str, Any]] = []
         visited: set[int] = set()
-        # 壊れた active_child_id や循環があっても履歴取得を止めない。
-        # ポインタが欠けた場合は最後に作られた子を暫定的な active path として返す。
         while current is not None and current in nodes and current not in visited:
             visited.add(current)
             node = nodes[current]
@@ -424,6 +468,8 @@ class ChatRepository:
         return path
 
     def _decode_file_names(self, file_names_json: Any) -> list[str] | None:
+        # JSON形式のファイル名リストをデコードする
+        # Decode list of file names from JSON.
         if not file_names_json:
             return None
         try:
@@ -443,6 +489,8 @@ class ChatRepository:
         include_files: bool = True,
         include_attachment_contents: bool = False,
     ) -> dict[str, Any]:
+        # パス上のノードをシリアライズし、バージョン管理などのメタデータを追加する
+        # Serialize path node and append version metadata.
         sibling_ids = children.get(node["parent_id"], [])
         try:
             version_index = sibling_ids.index(node["id"]) + 1
@@ -481,7 +529,8 @@ class ChatRepository:
         *,
         include_attachment_contents: bool = False,
     ) -> list[dict[str, Any]]:
-        """Return the active branch as serialized messages with version metadata."""
+        # バージョンメタデータを含むシリアライズされたメッセージリストとして、アクティブなブランチを返す
+        # Return the active branch as serialized messages with version metadata.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -500,7 +549,8 @@ class ChatRepository:
                 cursor.close()
 
     def get_active_leaf_id(self, chat_room_id: str) -> int | None:
-        """Return the id of the last message on the active branch (None if empty)."""
+        # アクティブなブランチの最新メッセージのIDを返す
+        # Return the id of the last message on the active branch (None if empty).
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -512,7 +562,8 @@ class ChatRepository:
                 cursor.close()
 
     def switch_branch(self, chat_room_id: str, target_id: int) -> list[dict[str, Any]]:
-        """Make ``target_id`` the active sibling and return the new active path."""
+        # 指定されたIDのメッセージをアクティブにし、新しいアクティブブランチを返す
+        # Make ``target_id`` the active sibling and return the new active path.
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -545,6 +596,8 @@ class ChatRepository:
                     raise
                 except Error as exc:
                     self._rollback(conn)
+                    # 再試行可能なエラーの場合はスリープを挟んで再試行
+                    # If the error is retryable, sleep and retry
                     if self._is_retryable_db_error(exc) and attempt < DB_WRITE_MAX_ATTEMPTS:
                         self._sleep(DB_RETRY_BACKOFF_SECONDS * attempt)
                         continue
@@ -557,6 +610,8 @@ class ChatRepository:
         raise RuntimeError("Failed to switch chat branch after retry attempts.")
 
     def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, str]]:
+        # LLMに入力するための形式でアクティブパスの全メッセージを取得する
+        # Get all messages on the active path in a format suitable for the LLM.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -577,6 +632,8 @@ class ChatRepository:
         user_id: int,
         forbidden_message: str,
     ) -> str | None:
+        # 指定されたチャットルームの所有者がユーザーと一致しているか検証する
+        # Validate that the owner of the chat room matches the user.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -594,6 +651,8 @@ class ChatRepository:
                 cursor.close()
 
     def create_or_get_shared_chat_token(self, room_id: str, user_id: int) -> str:
+        # チャットルームの共有用トークンを生成または取得する
+        # Create or retrieve a token for sharing the chat room.
         for _ in range(SHARED_TOKEN_MAX_COLLISION_RETRIES):
             token = self._token_generator(18)
             collision_detected = False
@@ -645,6 +704,8 @@ class ChatRepository:
         raise RuntimeError("Failed to create shared chat token after collision retries.")
 
     def get_shared_chat_room_payload(self, token: str) -> dict[str, Any]:
+        # 共有トークンに紐付くチャットルームとメッセージデータを取得する
+        # Fetch the chat room and message data associated with the share token.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -690,6 +751,8 @@ class ChatRepository:
                 cursor.close()
 
     def get_task_prompt_data(self, task: str, user_id: int | None) -> dict[str, Any] | None:
+        # タスク名とユーザーIDに基づいてタスクプロンプトのデータを取得する
+        # Retrieve task prompt data based on task name and user ID.
         with self._connection_getter() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
@@ -735,6 +798,9 @@ class ChatRepository:
         limit: int,
         before_message_id: int | None = None,
     ) -> dict[str, Any]:
+        # チャット履歴を指定された制限件数に基づいてページング取得する
+        # Fetch the chat history for a page based on a limit.
+        #
         # History renders the active branch (not every stored message), paginated
         # newest-first by walking back along the active path.
         with self._connection_getter() as conn:

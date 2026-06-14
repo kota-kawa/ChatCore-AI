@@ -54,16 +54,16 @@ _DIRECT_GENERATION_HINTS = re.compile(
 )
 
 
-# 日本語: LLMの応答テキストからJSONをパースし、分類された意図(Intent)を抽出します。
-# English: Parse JSON from the LLM response text and extract the classified intent.
+# LLMの応答テキストからJSONをパースし、分類された意図(Intent)を抽出します。
+# Parse JSON from the LLM response text and extract the classified intent.
 def _parse_intent(text: str) -> Intent | None:
     json_match = re.search(r"\{[^{}]*\}", text)
-    # 日本語: テキスト内にJSON文字列が見つからない場合は None を返します。
-    # English: Return None if no JSON object is found in the text.
+    # テキスト内にJSON文字列が見つからない場合は None を返します。
+    # Return None if no JSON object is found in the text.
     if not json_match:
         return None
-    # 日本語: JSONのデコードを試み、有効な意図カテゴリに含まれているか検証します。
-    # English: Attempt to decode JSON and validate if it matches one of the valid intent categories.
+    # JSONのデコードを試み、有効な意図カテゴリに含まれているか検証します。
+    # Attempt to decode JSON and validate if it matches one of the valid intent categories.
     try:
         data = json.loads(json_match.group())
         intent = data.get("intent")
@@ -74,24 +74,31 @@ def _parse_intent(text: str) -> Intent | None:
     return None
 
 
-# 日本語: ユーザーメッセージから意図を判定します。まずヒューリスティクスによるパターンマッチングを行い、マッチしない場合はLLMを用いて分類します。
-# English: Classify the user's intent. First performs heuristic pattern matching, and falls back to LLM classification if no match is found.
+# ユーザーメッセージから意図を判定します。まずヒューリスティクスによるパターンマッチングを行い、マッチしない場合はLLMを用いて分類します。
+# Classify the user's intent. First performs heuristic pattern matching, and falls back to LLM classification if no match is found.
 def classify_intent(message: str, current_page: str = "") -> Intent:
+    # ユーザーメッセージの意図をLLMで1回分類して返します。失敗時は "direct"（検索なし）にフォールバックします。
+    # Classifies the user message intent once with the LLM. Falls back to "direct" (no search) on failure.
     """
     ユーザーメッセージの意図をLLMで1回分類して返す。
     失敗時は "direct"（検索なし）にフォールバックする。
     """
-    # 日本語: 具体的なアクション操作（クリック等）を示唆するキーワードが含まれているか判定します。
-    # English: Check if the message contains keywords suggesting specific user actions (e.g., clicking).
+    # 具体的なアクション操作（クリック等）を示唆するキーワードが含まれているか判定します。
+    # Check if the message contains keywords suggesting specific user actions (e.g., clicking).
     if _ACTION_HINTS.search(message):
         return "action" if current_page else "search"
-    # 日本語: ページ構成や使い方を示唆するキーワードが含まれているか判定します。
-    # English: Check if the message contains keywords suggesting page layout or usage info.
+    # ページ構成や使い方を示唆するキーワードが含まれているか判定します。
+    # Check if the message contains keywords suggesting page layout or usage info.
     if _PAGE_INFO_HINTS.search(message):
         return "page_info" if current_page else "search"
+    
+    # 直接回答の生成を促すキーワードが含まれ、かつ機能検索のキーワードが無い場合は "direct" を返します。
+    # Return "direct" if direct answer keywords are present and search keywords are absent.
     if _DIRECT_GENERATION_HINTS.search(message) and not _SEARCH_HINTS.search(message):
         return "direct"
 
+    # ユーザーメッセージとコンテキスト情報（現在のページ、エージェント機能等）を元に、LLMへ送信するプロンプトを構築します。
+    # Construct prompt messages to send to the LLM, including user message and context details (current page, capabilities).
     page_line = f"現在のページURL: {current_page}" if current_page else "現在のページ: 不明"
     capability_context = build_capability_context(current_page)
     messages = [
@@ -101,6 +108,8 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
             "content": f"{page_line}\n\n{capability_context}\n\nメッセージ: {message}",
         },
     ]
+    # LLMにリクエストを送信し、応答テキストをパースして意図を抽出します。
+    # Send the request to the LLM and parse the response text to extract the classified intent.
     try:
         response = get_llm_response(messages, GPT_OSS_20B_LEGACY_MODEL)
         intent = _parse_intent(response or "")
@@ -111,3 +120,4 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
     except Exception:
         logger.warning("Intent classification failed, falling back to 'direct'")
     return "direct"
+

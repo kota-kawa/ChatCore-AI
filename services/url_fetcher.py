@@ -13,16 +13,23 @@ from urllib.parse import urljoin, urlparse
 import requests
 import urllib3.util.connection as _urllib3_conn
 
+# ロガーの設定
+# Configure logger
 logger = logging.getLogger(__name__)
 
+# 定数定義
+# Define constants
 MAX_URLS_PER_MESSAGE = 3
 MAX_URL_RESPONSE_BYTES = 300_000   # 300 KB raw cap before decoding
 MAX_URL_TEXT_CHARS = 30_000        # chars of plain text kept per URL
 URL_FETCH_TIMEOUT = 10             # seconds
 MAX_REDIRECT_HOPS = 5
 
+# URL抽出用の正規表現
+# Regular expression to extract URLs
 _URL_RE = re.compile(r"https?://[^\s<>\"'`()\[\]{}|\\^]+", re.IGNORECASE)
 
+# SSRF対策用：ループバック、プライベート、リンクローカル等のアドレス範囲をブロックする
 # SSRF protection: block requests to loopback, private, and link-local ranges.
 _BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
     ipaddress.ip_network("127.0.0.0/8"),
@@ -39,6 +46,8 @@ _BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
 _BLOCKED_HOSTNAMES = frozenset({"localhost"})
 _REDIRECT_STATUS_CODES = frozenset({301, 302, 303, 307, 308})
 
+# リクエストヘッダー
+# Request headers
 _FETCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; ChatBot/1.0)",
     "Accept": "text/html,text/plain,application/xhtml+xml;q=0.9,*/*;q=0.5",
@@ -59,6 +68,8 @@ _original_urllib3_create_connection = _urllib3_conn.create_connection
 
 
 def _pinned_create_connection(address, *args, **kwargs):  # type: ignore[no-untyped-def]
+    # 検証済みホスト名に対するDNSピン留めを考慮したコネクション作成
+    # Create connection respecting DNS pinning for verified hostnames
     host, port = address[0], address[1]
     mapping: dict[str, str] | None = getattr(_dns_pin_local, "mapping", None)
     if mapping and host in mapping:
@@ -71,6 +82,8 @@ _urllib3_conn.create_connection = _pinned_create_connection
 
 @contextmanager
 def _pin_dns(host_to_ip: dict[str, str]) -> Iterator[None]:
+    # DNSピン留めを一時的に適用するコンテキストマネージャ
+    # Context manager to temporarily apply DNS pinning
     previous = getattr(_dns_pin_local, "mapping", None)
     _dns_pin_local.mapping = dict(host_to_ip)
     try:
@@ -80,7 +93,10 @@ def _pin_dns(host_to_ip: dict[str, str]) -> Iterator[None]:
 
 
 class _TextExtractor(HTMLParser):
-    """Lightweight HTML-to-text extractor using the stdlib html.parser."""
+    """stdlib html.parserを使用した軽量なHTMLからテキストへの抽出器。
+
+    Lightweight HTML-to-text extractor using the stdlib html.parser.
+    """
 
     _SKIP_TAGS = frozenset({
         "script", "style", "noscript", "nav", "footer",
@@ -92,25 +108,35 @@ class _TextExtractor(HTMLParser):
     })
 
     def __init__(self) -> None:
+        # 抽出器の初期化
+        # Initialize the extractor
         super().__init__(convert_charrefs=True)
         self._skip_depth = 0
         self._parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list) -> None:  # type: ignore[override]
+        # 無視対象のタグの開始時の処理
+        # Handle the start of skip tags
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
 
     def handle_endtag(self, tag: str) -> None:  # type: ignore[override]
+        # タグ終了時の処理。ブロック要素の場合は改行を挿入する
+        # Handle the end of tags; insert newlines for block tags
         if tag in self._SKIP_TAGS:
             self._skip_depth = max(0, self._skip_depth - 1)
         elif tag in self._BLOCK_TAGS:
             self._parts.append("\n")
 
     def handle_data(self, data: str) -> None:  # type: ignore[override]
+        # テキストデータをパーツに追加する処理（スキップ対象外の場合）
+        # Add text data to parts if not inside skip tags
         if self._skip_depth == 0 and data.strip():
             self._parts.append(data)
 
     def get_text(self) -> str:
+        # 抽出されたテキストを結合して余分な空白や改行をクリーンアップする
+        # Combine extracted text and clean up redundant spaces or newlines
         raw = "".join(self._parts)
         raw = re.sub(r"[ \t]+", " ", raw)
         raw = re.sub(r"\n{3,}", "\n\n", raw)
@@ -118,13 +144,18 @@ class _TextExtractor(HTMLParser):
 
 
 def _extract_text_from_html(raw_html: str) -> str:
+    # HTML文字列からプレーンテキストを抽出する
+    # Extract plain text from an HTML string
     extractor = _TextExtractor()
     extractor.feed(raw_html)
     return extractor.get_text()
 
 
 def extract_urls_from_text(text: str) -> list[str]:
-    """Return up to MAX_URLS_PER_MESSAGE unique http/https URLs found in *text*."""
+    """テキスト内から最大 MAX_URLS_PER_MESSAGE 件のユニークな http/https URL を返す。
+
+    Return up to MAX_URLS_PER_MESSAGE unique http/https URLs found in *text*.
+    """
     seen: set[str] = set()
     result: list[str] = []
     for raw_url in _URL_RE.findall(text):
@@ -138,7 +169,9 @@ def extract_urls_from_text(text: str) -> list[str]:
 
 
 def _resolve_safe_ip(url: str) -> str | None:
-    """Return the resolved IP for *url* if it is safe to fetch, else None.
+    """URLが安全に取得可能であれば解決されたIPを返し、そうでなければ None を返す。
+
+    Return the resolved IP for *url* if it is safe to fetch, else None.
 
     Performs the SSRF check: rejects non-http(s) schemes, deny-listed
     hostnames, and IPs in private/loopback/link-local ranges. The returned
@@ -164,12 +197,17 @@ def _resolve_safe_ip(url: str) -> str | None:
 
 
 def _is_safe_url(url: str) -> bool:
-    """Return True when the URL is safe to fetch (not targeting private networks)."""
+    """URLが安全（プライベートネットワークを対象としていない）な場合に True を返す。
+
+    Return True when the URL is safe to fetch (not targeting private networks).
+    """
     return _resolve_safe_ip(url) is not None
 
 
 def fetch_url_content(url: str) -> str | None:
-    """Fetch a single URL and return its readable plain-text content.
+    """単一のURLを取得し、その可読なプレーンテキストコンテンツを返す。
+
+    Fetch a single URL and return its readable plain-text content.
 
     Redirects are followed manually (up to MAX_REDIRECT_HOPS) and every hop
     is re-validated against the SSRF deny list so an attacker-controlled
@@ -205,6 +243,7 @@ def fetch_url_content(url: str) -> str | None:
                             return None
                         # リダイレクト先も次ループで再度 SSRF 検査する。
                         # requests の自動リダイレクトを使わないのは、各 hop の検査と DNS pinning を挟むため。
+                        # Redirects are manually validated and resolved in the next iteration.
                         current_url = urljoin(current_url, location)
                         continue
 
@@ -223,6 +262,7 @@ def fetch_url_content(url: str) -> str | None:
                         if total >= MAX_URL_RESPONSE_BYTES:
                             # LLM 文脈に入れる抜粋用途なので、巨大ページは先頭だけ読んで打ち切る。
                             # メモリ消費と応答待ち時間を URL 1 件ごとに固定上限へ収めるため。
+                            # Truncate large pages to keep memory usage and latency bounded.
                             break
 
                     raw = b"".join(chunks).decode(
@@ -241,7 +281,10 @@ def fetch_url_content(url: str) -> str | None:
 
 
 def fetch_urls_content(urls: list[str]) -> dict[str, str]:
-    """Fetch content for each URL; return {url: text} for successful fetches only."""
+    """各URLの内容を取得し、成功した結果のみを {url: text} の形式で返す。
+
+    Fetch content for each URL; return {url: text} for successful fetches only.
+    """
     result: dict[str, str] = {}
     for url in urls:
         content = fetch_url_content(url)

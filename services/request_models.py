@@ -21,6 +21,8 @@ EMAIL_ADDRESS_MAX_LENGTH = 254
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 
 
+# 日本語: メールアドレスの文字列長、改行コードなどの無効文字、正規表現パターンを検証し、小文字化して返します。
+# English: Validate email address length, invalid characters (e.g. CR/LF), regex pattern, and return it lowercased.
 def _validate_email_address(value: str) -> str:
     cleaned = (value or "").strip()
     if not cleaned:
@@ -32,6 +34,7 @@ def _validate_email_address(value: str) -> str:
     if not _EMAIL_RE.match(cleaned):
         raise ValueError("メールアドレスの形式が正しくありません")
     return cleaned.lower()
+
 # Keep backend validation aligned with the frontend chat input limit.
 MAX_CHAT_MESSAGE_LENGTH = 30000
 MAX_CHAT_ROOM_ID_LENGTH = 128
@@ -47,12 +50,16 @@ ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_L
 ModelNameStr = Annotated[str, Field(min_length=1, max_length=MAX_MODEL_NAME_LENGTH)]
 
 
+# 日本語: すべてのAPIリクエストペイロードモデルの共通基底クラス。余分なフィールドを無視し、文字列の空白をトリムします。
+# English: Common base class for all request payload models. Ignores extra fields and strips whitespaces.
 class RequestPayloadModel(BaseModel):
     # 余分なキーを無視しつつ文字列の前後空白を自動で除去する共通ベース
     # Common base model that strips string whitespace and ignores extra fields.
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
 
+# 日本語: メールアドレス登録またはログイン用のリクエストペイロード。
+# English: Request payload for email address registration or login.
 class EmailRequest(RequestPayloadModel):
     # メールアドレス入力用ペイロード
     # Payload for email address input.
@@ -64,6 +71,8 @@ class EmailRequest(RequestPayloadModel):
         return self
 
 
+# 日本語: 新しいメールアドレスへの変更を要求するリクエストペイロード。
+# English: Request payload to change to a new email address.
 class EmailChangeRequest(RequestPayloadModel):
     # メールアドレス変更APIの入力（新しいメールアドレス）
     # Payload for the email-change request endpoint.
@@ -75,18 +84,24 @@ class EmailChangeRequest(RequestPayloadModel):
         return self
 
 
+# 日本語: メールアドレス変更の確認用コードを含むリクエストペイロード。
+# English: Request payload confirming email change with a verification code.
 class EmailChangeConfirmRequest(RequestPayloadModel):
     # メールアドレス変更確認APIの入力（受信した6桁コード）
     # Payload to confirm an email change with the verification code.
     auth_code: NonEmptyStr
 
 
+# 日本語: ログイン認証コード入力用リクエストペイロード。
+# English: Request payload containing the authentication code for verification.
 class AuthCodeRequest(RequestPayloadModel):
     # 認証コード送信用ペイロード
     # Payload for verification/login code input.
     authCode: str | None = None
 
 
+# 日本語: 新しいチャットルームを作成する際のリクエストペイロード。
+# English: Request payload for creating a new chat room.
 class NewChatRoomRequest(RequestPayloadModel):
     # チャットルーム新規作成APIの入力
     # Input payload for chat room creation.
@@ -95,23 +110,33 @@ class NewChatRoomRequest(RequestPayloadModel):
     mode: Literal["normal", "temporary"] = "normal"
 
 
+# 日本語: 特定のチャットルームIDを対象とする操作のリクエストペイロード。
+# English: Request payload targetting a single chat room ID.
 class ChatRoomIdRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
 
 
+# 日本語: 複数のチャットルームIDを一括操作する際のリクエストペイロード。
+# English: Request payload containing a list of chat room IDs for bulk actions.
 class ChatRoomIdsRequest(RequestPayloadModel):
     room_ids: list[ChatRoomIdStr] = Field(min_length=1, max_length=100)
 
 
+# 日本語: チャットルームのタイトルを変更する際のリクエストペイロード。
+# English: Request payload for renaming a chat room.
 class RenameChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
     new_title: NonEmptyStr
 
 
+# 日本語: チャットルームの共有リンクを生成する際のリクエストペイロード。
+# English: Request payload for sharing a chat room.
 class ShareChatRoomRequest(RequestPayloadModel):
     room_id: ChatRoomIdStr
 
 
+# 日本語: チャットに添付された個々のファイルを表現するデータモデル。
+# English: Data model representing an individual file attached to a chat.
 class AttachedFileItem(RequestPayloadModel):
     name: str = Field(min_length=1, max_length=256)
     content: str = Field(default="", max_length=MAX_ATTACHED_FILE_CONTENT_LENGTH)
@@ -119,6 +144,8 @@ class AttachedFileItem(RequestPayloadModel):
     data_base64: str = Field(default="", max_length=MAX_ATTACHED_FILE_BASE64_LENGTH)
 
 
+# 日本語: 新しいチャットメッセージと添付ファイルを含むリクエストペイロード。
+# English: Request payload for sending a chat message with optional attachments.
 class ChatMessageRequest(RequestPayloadModel):
     message: ChatMessageStr
     chat_room_id: ChatRoomIdStr = "default"
@@ -126,14 +153,20 @@ class ChatMessageRequest(RequestPayloadModel):
     attached_files: list[AttachedFileItem] = Field(default_factory=list, max_length=MAX_ATTACHED_FILES)
 
 
+# 日本語: 定型タスクの並び順（IDリスト）を更新するリクエストペイロード。
+# English: Request payload to update the ordering of preset tasks.
 class UpdateTasksOrderRequest(RequestPayloadModel):
     order: list[NonEmptyStr] = Field(min_length=1)
 
 
+# 日本語: 特定のタスクを削除する際のリクエストペイロード。
+# English: Request payload for deleting a specific task.
 class DeleteTaskRequest(RequestPayloadModel):
     task: NonEmptyStr
 
 
+# 日本語: 既存のタスク定義を編集する際のリクエストペイロード。
+# English: Request payload for editing an existing task definition.
 class EditTaskRequest(RequestPayloadModel):
     old_task: NonEmptyStr
     new_task: NonEmptyStr
@@ -144,6 +177,8 @@ class EditTaskRequest(RequestPayloadModel):
     output_examples: str | None = None
 
 
+# 日本語: 新しいカスタムタスクを追加する際のリクエストペイロード。
+# English: Request payload for adding a new custom task.
 class AddTaskRequest(RequestPayloadModel):
     title: NonEmptyStr
     prompt_content: NonEmptyStr
@@ -153,6 +188,8 @@ class AddTaskRequest(RequestPayloadModel):
     output_examples: str = ""
 
 
+# 日本語: プロンプトAIアシストに入力される、各フォームフィールドの値を表すモデル。
+# English: Model representing values of input fields passed to the prompt AI assist.
 class PromptAssistFields(RequestPayloadModel):
     title: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
@@ -167,6 +204,8 @@ class PromptAssistFields(RequestPayloadModel):
     ai_model: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
 
 
+# 日本語: プロンプトAIアシスト（下書き・改善など）を実行するリクエストペイロード。
+# English: Request payload for executing the prompt AI assist actions.
 class PromptAssistRequest(RequestPayloadModel):
     target: Literal["task_modal", "shared_prompt_modal"]
     action: Literal["generate_draft", "improve", "shorten", "expand", "generate_examples"]
@@ -174,11 +213,15 @@ class PromptAssistRequest(RequestPayloadModel):
     fields: PromptAssistFields = Field(default_factory=PromptAssistFields)
 
 
+# 日本語: AIエージェント（画面操作エージェント）に渡す会話メッセージ履歴のデータモデル。
+# English: Data model for chat history messages passed to the UI-operating AI agent.
 class AiAgentMessage(RequestPayloadModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4000)
 
 
+# 日本語: AIエージェントに画面操作などのアクションプランを算出させるリクエストペイロード。
+# English: Request payload for prompting the AI agent to plan screen execution actions.
 class AiAgentRequest(RequestPayloadModel):
     messages: list[AiAgentMessage] = Field(min_length=1, max_length=20)
     current_page: str | None = Field(default=None, max_length=256)
@@ -186,6 +229,8 @@ class AiAgentRequest(RequestPayloadModel):
     memo_id: int | None = Field(default=None, ge=1)
 
 
+# 日本語: 共有プロンプト（またはSKILL）を新しく投稿する際のリクエストペイロード。
+# English: Request payload for posting a new shared prompt or SKILL.
 class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: str = ""
@@ -199,6 +244,8 @@ class SharedPromptCreateRequest(RequestPayloadModel):
 
     @model_validator(mode="after")
     def validate_skill_fields(self) -> "SharedPromptCreateRequest":
+        # 日本語: SKILLと通常のプロンプトでそれぞれ必須フィールドを検証します。
+        # English: Validate required fields respectively for SKILL and standard prompt types.
         if self.prompt_type == "skill":
             if not self.skill_markdown:
                 raise ValueError("SKILL投稿では skill_markdown が必須です。")
@@ -208,35 +255,51 @@ class SharedPromptCreateRequest(RequestPayloadModel):
         return self
 
 
+# 日本語: プロンプトをブックマーク登録する際のリクエストペイロード。
+# English: Request payload for bookmarking a prompt.
 class BookmarkCreateRequest(RequestPayloadModel):
     prompt_id: int
 
 
+# 日本語: プロンプトのブックマークを解除する際のリクエストペイロード。
+# English: Request payload for removing a bookmark from a prompt.
 class BookmarkDeleteRequest(RequestPayloadModel):
     prompt_id: int
 
 
+# 日本語: 共有プロンプトからマイスペースのタスクとしてコピー登録する際のリクエストペイロード。
+# English: Request payload for importing a shared prompt into my space tasks.
 class PromptTaskCreateRequest(RequestPayloadModel):
     prompt_id: int
 
 
+# 日本語: 共有プロンプトの一覧用レコードを内部登録する際のリクエストペイロード。
+# English: Request payload for creating a prompt list entry internally.
 class PromptListEntryCreateRequest(RequestPayloadModel):
     prompt_id: int
 
 
+# 日本語: プロンプトに「いいね」を付与・解除する際のリクエストペイロード。
+# English: Request payload for toggling/submitting a "like" on a prompt.
 class PromptLikeRequest(RequestPayloadModel):
     prompt_id: int
 
 
+# 日本語: プロンプトに対して新しいコメントを投稿する際のリクエストペイロード。
+# English: Request payload for posting a comment on a prompt.
 class PromptCommentCreateRequest(RequestPayloadModel):
     content: str = Field(min_length=1, max_length=MAX_PROMPT_COMMENT_LENGTH)
 
 
+# 日本語: 不適切なコメントを通報する際のリクエストペイロード。
+# English: Request payload for reporting an inappropriate comment.
 class PromptCommentReportRequest(RequestPayloadModel):
     reason: Literal["spam", "harassment", "abuse", "other"] = "abuse"
     details: str = Field(default="", max_length=MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH)
 
 
+# 日本語: 投稿済みの共有プロンプトの内容を更新する際のリクエストペイロード。
+# English: Request payload for updating an already posted shared prompt.
 class PromptUpdateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: NonEmptyStr
@@ -245,6 +308,8 @@ class PromptUpdateRequest(RequestPayloadModel):
     output_examples: str = ""
 
 
+# 日本語: 新しいメモを作成し、指定のコレクションや配色で保存する際のリクエストペイロード。
+# English: Request payload for creating a new memo with options like collections and colors.
 class MemoCreateRequest(RequestPayloadModel):
     # メモ保存APIの入力
     # Input payload for memo creation API.
@@ -255,15 +320,21 @@ class MemoCreateRequest(RequestPayloadModel):
 
     @model_validator(mode="after")
     def _require_content(self) -> "MemoCreateRequest":
+        # 日本語: 保存する回答内容が空でないことを確認します。
+        # English: Ensure that the response text is not empty before saving.
         if not self.ai_response.strip():
             raise ValueError("AIの回答を入力してください。")
         return self
 
 
+# 日本語: メモの共有トークンを作成する際のリクエストペイロード。
+# English: Request payload for initiating a memo share.
 class ShareMemoRequest(RequestPayloadModel):
     memo_id: int
 
 
+# 日本語: メモのタイトル、本文、配色、所属コレクションを更新する際のリクエストペイロード。
+# English: Request payload for updating memo title, content, color, or collection.
 class MemoUpdateRequest(RequestPayloadModel):
     title: str | None = None
     ai_response: str | None = None
@@ -273,21 +344,29 @@ class MemoUpdateRequest(RequestPayloadModel):
     clear_background_color: bool = False
 
 
+# 日本語: メモの有効化/無効化（アーカイブ状態等）を切り替える際のリクエストペイロード。
+# English: Request payload for toggling the enabled/disabled state of a memo.
 class MemoToggleRequest(RequestPayloadModel):
     enabled: bool = True
 
 
+# 日本語: メモの共有期間や更新フラグを指定して共有リンクを生成する際のリクエストペイロード。
+# English: Request payload for generating a shared link with expiration and refresh configurations.
 class MemoShareCreateRequest(RequestPayloadModel):
     force_refresh: bool = False
     expires_in_days: int | None = Field(default=30, ge=1, le=3650)
 
 
+# 日本語: 保存した回答テキストから、AIにタイトルやタグの提案を求める際のリクエストペイロード。
+# English: Request payload for asking AI to suggest titles and tags from the response body.
 class MemoSuggestRequest(RequestPayloadModel):
     # AI タイトル・タグ提案APIの入力
     # Input payload for AI-powered title/tag suggestion.
     ai_response: NonEmptyStr
 
 
+# 日本語: 複数のメモを一括して削除、アーカイブ、コレクション設定する際のリクエストペイロード。
+# English: Request payload for executing bulk actions (delete, archive, collections) on multiple memos.
 class MemoBulkActionRequest(RequestPayloadModel):
     # 一括操作APIの入力
     # Input payload for bulk memo operations.
@@ -296,6 +375,8 @@ class MemoBulkActionRequest(RequestPayloadModel):
     collection_id: int | None = None
 
 
+# 日本語: メモカードのドラッグ＆ドロップによる並べ替え（挿入位置）を指定するリクエストペイロード。
+# English: Request payload specifying destination bounds for dragging and dropping a memo card.
 class MemoReorderRequest(RequestPayloadModel):
     # メモカードのドラッグ並べ替え入力
     # Input payload for drag-and-drop memo card reordering.
@@ -304,6 +385,8 @@ class MemoReorderRequest(RequestPayloadModel):
     after_id: int | None = None
 
 
+# 日本語: メモ整理用のコレクション（フォルダ）を新規作成する際のリクエストペイロード。
+# English: Request payload for creating a new memo collection folder.
 class MemoCollectionCreateRequest(RequestPayloadModel):
     # コレクション作成APIの入力
     # Input payload for memo collection creation.
@@ -311,6 +394,8 @@ class MemoCollectionCreateRequest(RequestPayloadModel):
     color: str = Field(default="#6b7280", max_length=20)
 
 
+# 日本語: メモコレクションの表示名やカラーコードを更新する際のリクエストペイロード。
+# English: Request payload for updating the name or color code of a memo collection.
 class MemoCollectionUpdateRequest(RequestPayloadModel):
     # コレクション更新APIの入力
     # Input payload for memo collection update.
