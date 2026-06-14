@@ -23,17 +23,23 @@ import { readSessionJson, writeSessionJson } from "../../lib/utils";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import MarkdownContent from "../MarkdownContent";
 
+// アクション実行中の進捗状態を追跡する型定義
+// Tracks which step is currently running and which steps have already completed
 type ExecutionProgress = {
   messageId: string;
   currentStepIndex: number | null;
   completedStepIndexes: number[];
 };
 
+// ページ遷移をまたぐ操作計画の一時保存状態
+// Holds action steps and optional target path to resume after a page reload
 type PendingActionState = {
   steps: ActionStep[];
   expectedPath?: string;
 };
 
+// ナビゲーション試行の結果を統一的に表すための型
+// Unifies the result of router.push and window.location assignments for callers
 type NavigationOutcome = {
   ok: boolean;
   message?: string;
@@ -42,10 +48,16 @@ type NavigationOutcome = {
   needsReplan?: boolean;
 };
 
+// ページ遷移を抽象化したコールバック型 — 呼び出し元はクライアント/ハードの違いを意識しない
+// Abstracted navigation callback so callers don't need to decide between client and hard navigation
 type NavigateInternal = (path: string) => Promise<NavigationOutcome>;
 
+// beforeunload イベントで保存する残ステップのコンテキスト
+// Context persisted to sessionStorage when an undetected unload tears down the page mid-plan
 type UnloadContext = { remaining: ActionStep[]; expectedPath?: string } | null;
 
+// MiniChat コンポーネントの外部 API (props の型定義)
+// Public API surface for the MiniChat component
 type MiniChatProps = {
   memoId?: number | string | null;
   storageScope?: string;
@@ -57,12 +69,16 @@ type MiniChatProps = {
   persistConversation?: boolean;
 };
 
+// 実行オプション — ナビゲーション関数とアンロードコンテキスト更新を受け取る
+// Options injected into the step executor to decouple navigation strategy from execution logic
 type ExecuteOptions = {
   navigateInternal: NavigateInternal;
   setUnloadContext: (context: UnloadContext) => void;
   onStepProgress?: (stepIndex: number, status: "current" | "complete") => void;
 };
 
+// デフォルトの候補プロンプト — ユーザーが何を聞けるかをすぐに把握できるように
+// Default quick prompts that demonstrate the agent's capabilities to new users
 const QUICK_PROMPTS = [
   "このサービスはどんなことができる？",
   "この画面の使い方を教えて",
@@ -70,6 +86,8 @@ const QUICK_PROMPTS = [
   "プロンプト共有を開いてメール返信を検索して"
 ];
 
+// sessionStorage のキー定数 — コンポーネント外の関数からも同じキーを参照できるように集約
+// Centralized storage key constants shared between the component and helper functions
 const PENDING_ACTION_STEPS_KEY = "globalAiAgent.pendingActionSteps";
 const AI_AGENT_OPEN_STATE_KEY = "globalAiAgent.isOpen";
 const MESSAGES_STORAGE_KEY = "globalAiAgent.messages";
@@ -77,6 +95,8 @@ const MESSAGES_TIMESTAMP_KEY = "globalAiAgent.messagesTimestamp";
 const EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIds";
 const LEGACY_EXECUTED_STORAGE_KEY = "globalAiAgent.executedMessageIndexes";
 
+// スコープ付きストレージキーをまとめた型
+// Groups related storage keys so they travel together and don't get mixed up
 type MessageStorageKeys = {
   messages: string;
   timestamp: string;
@@ -84,6 +104,8 @@ type MessageStorageKeys = {
   legacyExecuted: string;
 };
 
+// セッション有効期限と入力制限の定数
+// Session and input size limits that prevent stale data and oversized API payloads
 const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const PENDING_ACTION_EXPIRY_MS = 10 * 60 * 1000;
 const MAX_SEND_MESSAGES = 20;
@@ -101,9 +123,13 @@ const CLIENT_NAVIGABLE_ROUTES = new Set([
   "/settings",
 ]);
 
+// ログインリダイレクト検出時とナビゲーション未完了時のユーザー向けメッセージ
+// User-facing messages for auth redirect detection and navigation timeout
 const AUTH_REDIRECT_MESSAGE = "ログインが必要なため、ログイン画面を開きました。ログイン後にもう一度お試しください。";
 const NAVIGATION_NOT_READY_MESSAGE = "移動先ページの表示を確認できませんでした。";
 
+// sessionStorage に保存されたメッセージが有効な Message 型かを検証する
+// Type guard to safely deserialize messages from sessionStorage without trusting raw JSON
 function isPersistedMessage(value: unknown): value is Message {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<Message>;
@@ -115,6 +141,8 @@ function isPersistedMessage(value: unknown): value is Message {
   );
 }
 
+// storageScope が指定されていれば専用キー、なければグローバルキーを返す
+// Returns scoped keys when a storageScope is provided so multiple instances don't share state
 function getMessageStorageKeys(storageScope?: string): MessageStorageKeys {
   if (!storageScope) {
     return {
@@ -132,6 +160,8 @@ function getMessageStorageKeys(storageScope?: string): MessageStorageKeys {
   };
 }
 
+// セッションストレージから会話履歴を復元する — 有効期限切れなら自動クリア
+// Restores conversation history from sessionStorage, clearing it if the session has expired
 function readStoredMessages(storageKeys: MessageStorageKeys): Message[] {
   const timestamp = readSessionJson<number>(storageKeys.timestamp, 0);
   if (timestamp > 0 && Date.now() - timestamp > SESSION_EXPIRY_MS) {
@@ -151,12 +181,16 @@ function readStoredMessages(storageKeys: MessageStorageKeys): Message[] {
   }));
 }
 
+// 実行済みメッセージIDを復元する — 旧形式（インデックス配列）への後方互換も維持
+// Reads executed message IDs, migrating from the legacy index-based format if needed
 function readStoredExecutedIds(messages: Message[], storageKeys: MessageStorageKeys): string[] {
   const raw = readSessionJson<unknown>(storageKeys.executed, []);
   if (Array.isArray(raw)) {
     return raw.filter((value): value is string => typeof value === "string");
   }
 
+  // インデックス形式の旧データが残っている場合はID形式に変換して返す
+  // Migrate legacy index-based executed list to ID-based format on first read
   const legacyRaw = readSessionJson<unknown>(storageKeys.legacyExecuted, []);
   if (!Array.isArray(legacyRaw)) return [];
   return legacyRaw
@@ -165,6 +199,8 @@ function readStoredExecutedIds(messages: Message[], storageKeys: MessageStorageK
     .filter((value): value is string => typeof value === "string");
 }
 
+// 会話履歴を sessionStorage からすべて削除する
+// Wipes all conversation-related keys from sessionStorage to start fresh
 function clearStoredConversation(storageKeys: MessageStorageKeys) {
   if (typeof window === "undefined") return;
   try {
@@ -177,10 +213,14 @@ function clearStoredConversation(storageKeys: MessageStorageKeys) {
   }
 }
 
+// 指定ミリ秒だけ待機する汎用ユーティリティ — UI の更新を React に委ねるために使用
+// General-purpose delay utility used to yield to the event loop between DOM operations
 function wait(ms = 180) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+// 次のアニメーションフレームまで待機して React のコミットを確認する
+// Waits for one animation frame so React can commit pending state before querying the DOM
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof requestAnimationFrame === "function") {
@@ -191,10 +231,14 @@ function nextFrame(): Promise<void> {
   });
 }
 
+// パスが Next.js のクライアントサイドルーターで遷移できるかを判定する
+// Returns true if the pathname is in the set of routes handled by the Next.js router
 function isClientNavigableRoute(pathname: string): boolean {
   return CLIENT_NAVIGABLE_ROUTES.has(pathname);
 }
 
+// 指定セレクタの要素が可視になるまでポーリングし、タイムアウト後に失敗を返す
+// Polls until the element matching the selector becomes visible or the timeout elapses
 async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepExecutionResult> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
@@ -206,6 +250,8 @@ async function waitForElement(selector: string, timeoutMs = 1200): Promise<StepE
   return { ok: false, message: `${selector} の表示を確認できませんでした。` };
 }
 
+// sessionStorage からページリロードをまたいで保存された未完了ステップを読み込む
+// Reads cross-reload pending action steps, discarding them if they have expired
 function readPendingActionState(): PendingActionState {
   if (typeof window === "undefined") return { steps: [] };
   try {
@@ -232,6 +278,8 @@ function readPendingActionState(): PendingActionState {
   }
 }
 
+// ページ遷移前に残りステップを永続化し、チャットパネルを開いた状態でリロード後に再開できるようにする
+// Persists remaining steps before navigation so the panel can resume execution after reload
 function writePendingActionSteps(steps: ActionStep[], expectedPath?: string) {
   if (typeof window === "undefined") return;
   try {
@@ -247,6 +295,8 @@ function writePendingActionSteps(steps: ActionStep[], expectedPath?: string) {
   }
 }
 
+// 完了または失敗した操作計画のセッションストレージエントリを削除する
+// Removes the pending action steps entry once a plan finishes or fails
 function clearPendingActionSteps() {
   if (typeof window === "undefined") return;
   try {
@@ -256,6 +306,8 @@ function clearPendingActionSteps() {
   }
 }
 
+// ステップが navigate または openPage コマンドの場合に目標パスを取得する
+// Extracts the navigation destination path from a step, handling both action types
 function getStepNavigationPath(step: ActionStep) {
   if (step.action === "navigate") return step.path || "";
   if (step.action === "app_action" && step.command === "navigation.openPage") {
@@ -264,6 +316,8 @@ function getStepNavigationPath(step: ActionStep) {
   return "";
 }
 
+// 内部パスを URL オブジェクト経由でパス名に正規化する
+// Normalizes an internal path to its pathname so comparisons are origin-independent
 function getInternalPathname(path: string | undefined) {
   if (!isSafeInternalPath(path) || typeof window === "undefined") return "";
   try {
@@ -273,6 +327,8 @@ function getInternalPathname(path: string | undefined) {
   }
 }
 
+// app_action ステップごとに「ページが準備できた」とみなすセレクタを返す
+// Maps each app_action command to the DOM selectors that confirm the target UI is ready
 function getAppActionReadySelectors(step: ActionStep) {
   const command = step.command || "";
   if (command === "chat.fillSetupMessage") return ["[data-agent-id='chat.setup-message']"];
@@ -299,12 +355,16 @@ function getAppActionReadySelectors(step: ActionStep) {
   return [];
 }
 
+// ステップ種別に応じて「実行前に可視確認すべきセレクタ」を返す
+// Returns the selectors to await before executing a step, based on its action type
 function getStepReadySelectors(step: ActionStep) {
   if (step.action === "app_action") return getAppActionReadySelectors(step);
   if (step.selector) return [step.selector];
   return [];
 }
 
+// 複数セレクタのいずれかが可視になるまで待つ — ページの準備確認に使用
+// Waits until at least one of the given selectors becomes visible on the page
 async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_TIMEOUT_MS): Promise<StepExecutionResult> {
   if (!selectors.length) return { ok: true };
   const startedAt = Date.now();
@@ -317,6 +377,8 @@ async function waitForAnyElement(selectors: string[], timeoutMs = RESUME_READY_T
   return { ok: false, message: `${selectors[0]} の表示を確認できませんでした。` };
 }
 
+// URL のパス名が期待値と一致するまでポーリングし、認証リダイレクトも検出する
+// Polls until location.pathname matches the expected destination or an auth redirect is detected
 async function waitForPagePath(
   expectedPath: string | undefined,
   timeoutMs = RESUME_READY_TIMEOUT_MS,
@@ -345,11 +407,15 @@ async function waitForPagePath(
 async function waitForRouteSettled(expectedPath: string): Promise<StepExecutionResult> {
   const outcome = await waitForPagePath(expectedPath);
   if (!outcome.ok) return outcome;
+  // React のコミットが完了するまで 2 フレーム待機する
+  // Wait two frames to ensure React has committed the new page's effects before proceeding
   await nextFrame();
   await nextFrame();
   return { ok: true };
 }
 
+// リロード後の再開前にページとターゲット要素の準備完了を確認する
+// Waits for both the correct URL and the first step's target element before resuming after reload
 async function waitForPendingResumeReady(state: PendingActionState): Promise<StepExecutionResult> {
   const pathReady = await waitForPagePath(state.expectedPath);
   if (!pathReady.ok) return pathReady;
@@ -366,11 +432,15 @@ async function waitForPendingResumeReady(state: PendingActionState): Promise<Ste
   return ready.ok ? ready : { ...ready, needsReplan: true };
 }
 
+// step.args から指定キーの文字列値を安全に取得する
+// Safely extracts a string argument from step.args, returning "" when missing or non-string
 function getArg(args: Record<string, unknown> | undefined, key: string) {
   const value = args?.[key];
   return typeof value === "string" ? value : "";
 }
 
+// document.querySelector のラッパー — 無効なセレクタや非 HTMLElement を安全に処理する
+// Wrapper around querySelector that handles invalid selectors and non-HTMLElement matches safely
 function getElement<T extends HTMLElement = HTMLElement>(selector: string): T | null {
   try {
     const element = document.querySelector(selector);
@@ -380,6 +450,8 @@ function getElement<T extends HTMLElement = HTMLElement>(selector: string): T | 
   }
 }
 
+// React が管理する入力値をバイパスして値を設定し、onChange イベントを発火させる
+// Bypasses React's synthetic event system to set a native input value and trigger React handlers
 function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const proto = el instanceof HTMLTextAreaElement
     ? HTMLTextAreaElement.prototype
@@ -394,6 +466,8 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+// セレクタで指定した input/textarea に値を設定し、結果を返す
+// Sets a value on the matched input or textarea and returns whether it was applied
 function setInputValue(selector: string, value: string): StepExecutionResult {
   const el = getElement<HTMLInputElement | HTMLTextAreaElement>(selector);
   if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) {
@@ -403,6 +477,8 @@ function setInputValue(selector: string, value: string): StepExecutionResult {
   return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に入力値を反映できませんでした。` };
 }
 
+// セレクタで指定した select 要素の値を変更し、input/change イベントを発火する
+// Sets a select element's value and dispatches events so React state updates
 function setSelectValue(selector: string, value: string): StepExecutionResult {
   const el = getElement<HTMLSelectElement>(selector);
   if (!(el instanceof HTMLSelectElement)) {
@@ -414,6 +490,8 @@ function setSelectValue(selector: string, value: string): StepExecutionResult {
   return { ok: el.value === value, message: el.value === value ? undefined : `${selector} に選択値を反映できませんでした。` };
 }
 
+// チェックボックス・ラジオボタンのチェック状態を設定し、イベントを発火する
+// Updates a checkbox or radio button's checked state and fires events for React
 function setCheckedValue(selector: string, checked: boolean): StepExecutionResult {
   const el = getElement<HTMLInputElement>(selector);
   if (!(el instanceof HTMLInputElement) || !/^(checkbox|radio)$/.test(el.type)) {
@@ -425,6 +503,8 @@ function setCheckedValue(selector: string, checked: boolean): StepExecutionResul
   return { ok: el.checked === checked, message: el.checked === checked ? undefined : `${selector} のチェック状態を反映できませんでした。` };
 }
 
+// 要素を取得してクリックし、無効化されている場合は失敗を返す
+// Finds the element and clicks it, returning a failure if it's disabled or missing
 function clickElement(selector: string): StepExecutionResult {
   const el = getElement(selector);
   if (!el) return { ok: false, message: `${selector} が見つかりませんでした。` };
@@ -433,6 +513,8 @@ function clickElement(selector: string): StepExecutionResult {
   return { ok: true };
 }
 
+// 要素をスムーズスクロールで画面中央に表示する
+// Scrolls the matched element into view so the user can see the context of the action
 function scrollElement(selector: string): StepExecutionResult {
   const el = getElement(selector);
   if (!el) return { ok: false, message: `${selector} が見つかりませんでした。` };
@@ -440,6 +522,8 @@ function scrollElement(selector: string): StepExecutionResult {
   return { ok: true };
 }
 
+// app_action コマンドを解釈してページ内操作を実行する
+// Dispatches each app_action command to the corresponding page-level DOM operation
 function executeAppAction(step: ActionStep): StepExecutionResult {
   const command = step.command || "";
   const args = step.args || {};
@@ -486,6 +570,8 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
   }
 
   if (command === "memo.fillForm") {
+    // フォームフィールドを data-agent-id でマッピングして一括入力する
+    // Maps each memo field to its data-agent-id selector and fills them in sequence
     const fieldMap: Record<string, string> = {
       ai_response: "[data-agent-id='memo.ai-response']",
       title: "[data-agent-id='memo.title']",
@@ -506,6 +592,8 @@ function executeAppAction(step: ActionStep): StepExecutionResult {
   return { ok: false, message: `未対応の操作コマンドです: ${command}` };
 }
 
+// ステップ実行後に期待する状態が実現されているか DOM を検査する
+// Inspects the DOM after execution to confirm the action took visible effect
 async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
   await wait();
 
@@ -557,6 +645,8 @@ async function verifyStep(step: ActionStep): Promise<StepExecutionResult> {
   return { ok: true };
 }
 
+// ページ遷移ステップを処理し、クライアントサイドとハードナビゲーションを統一的に扱う
+// Handles navigate and navigation.openPage steps with a single consistent code path
 async function executeNavigation(
   step: ActionStep,
   navigateInternal: NavigateInternal,
@@ -577,6 +667,8 @@ async function executeNavigation(
   };
 }
 
+// ステップ種別を判別して対応する操作関数にディスパッチする
+// Dispatches a single step to the appropriate DOM operation based on its action type
 function performActionStep(step: ActionStep): StepExecutionResult | Promise<StepExecutionResult> {
   if (step.action === "app_action") {
     return executeAppAction(step);
@@ -635,6 +727,8 @@ function isDestructiveStep(step: ActionStep): boolean {
   if (!el) return false;
   if (el instanceof HTMLButtonElement && el.type === "submit") return true;
   if (el instanceof HTMLInputElement && (el.type === "submit" || el.type === "image")) return true;
+  // ボタンのラベルテキストや属性をまとめて検査して破壊的操作かを判定する
+  // Collects all visible label sources and delegates the destructive check to the shared utility
   const haystack = [
     el.getAttribute("aria-label"),
     el.textContent,
@@ -645,6 +739,8 @@ function isDestructiveStep(step: ActionStep): boolean {
   return isDestructiveActionLabel(haystack);
 }
 
+// 1 ステップを実行する — ナビゲーション・確認ダイアログ・リトライを含む完全なライフサイクル
+// Executes a single step through its full lifecycle: navigate, confirm, perform, verify
 async function executeActionStep(
   step: ActionStep,
   navigateInternal: NavigateInternal,
@@ -682,6 +778,8 @@ async function executeActionStep(
   return lastResult;
 }
 
+// 操作計画のステップ列を順に実行し、ナビゲーションによるページ消失も安全に処理する
+// Executes a sequence of steps, persisting the remainder before any navigation that reloads the page
 async function executeActionSteps(
   steps: ActionStep[],
   options: ExecuteOptions,
@@ -727,6 +825,8 @@ async function executeActionSteps(
   return { ok: true };
 }
 
+// アクション種別を日本語ラベルに変換するマッピング — UI のステップ一覧に使用
+// Maps action type identifiers to Japanese display labels shown in the step list
 const ACTION_LABELS: Record<ActionStep["action"], string> = {
   app_action: "操作",
   click: "クリック",
@@ -739,8 +839,12 @@ const ACTION_LABELS: Record<ActionStep["action"], string> = {
   wait: "待機",
 };
 
+// 送信直後に表示する初期ステータステキスト
+// Initial status shown while the request is in flight before the first SSE progress event
 const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
 
+// MiniChat — AI エージェントとの会話 UI コンポーネント
+// MiniChat — embeddable chat panel that lets users interact with the AI agent
 export function MiniChat({
   memoId = null,
   storageScope,
@@ -752,7 +856,11 @@ export function MiniChat({
   persistConversation = true,
 }: MiniChatProps = {}) {
   const router = useRouter();
+  // storageScope が変わったときだけキーを再計算する
+  // Recompute storage keys only when storageScope changes to avoid unnecessary object churn
   const storageKeys = useMemo(() => getMessageStorageKeys(storageScope), [storageScope]);
+  // memoId を数値に正規化する — 無効値は null にフォールバック
+  // Normalizes memoId to a positive integer or null so the API always receives a clean value
   const numericMemoId = useMemo(() => {
     if (memoId === null || memoId === undefined || memoId === "") return null;
     const parsed = Number(memoId);
@@ -766,10 +874,14 @@ export function MiniChat({
   const [executingMessageId, setExecutingMessageId] = useState<string | null>(null);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedSet, setExecutedSet] = useState<Set<string>>(new Set());
+  // ハイドレーション完了フラグ — SSR とクライアント状態の不一致を防ぐ
+  // Hydration flag prevents rendering stale server-side state before client storage is read
   const [hydrated, setHydrated] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // 非同期ハンドラが最新のメッセージを参照できるように ref で同期させる
+  // Keeps a ref in sync so async callbacks always see the latest messages without stale closures
   const messagesRef = useRef<Message[]>([]);
   const unloadContextRef = useRef<UnloadContext>(null);
   const routerRef = useRef(router);
@@ -794,6 +906,8 @@ export function MiniChat({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
+  // クライアントサイドを優先し、失敗した場合はフルロードにフォールバックする
+  // Prefers client-side navigation for smooth UX and falls back to hard navigation when needed
   const navigateInternal = useCallback<NavigateInternal>(async (path) => {
     if (!isSafeInternalPath(path) || !isAllowedNavigationPath(path)) {
       return { ok: false, message: "この遷移は許可されていません。", clientSide: false, needsReplan: false };
@@ -822,6 +936,8 @@ export function MiniChat({
     messagesRef.current = messages;
   }, [messages]);
 
+  // 重複する進捗メッセージを除去してステップリストに追加する
+  // Appends a progress step, skipping it if it's identical to the last entry to avoid duplicates
   const appendProgressStep = (message: string) => {
     setStatusText(message);
     setProgressSteps((prev) => (
@@ -829,6 +945,8 @@ export function MiniChat({
     ));
   };
 
+  // AI エージェント API を呼び出し、SSE ストリームから最終応答を構築する
+  // Calls the AI agent API and parses the SSE stream to build the assistant message
   const requestAiAgentMessage = async (
     nextMessages: Message[],
     signal: AbortSignal,
@@ -838,6 +956,8 @@ export function MiniChat({
       signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // 直近 MAX_SEND_MESSAGES 件に絞ってペイロードサイズを制限する
+        // Limits history to MAX_SEND_MESSAGES to keep the API payload manageable
         messages: nextMessages.slice(-MAX_SEND_MESSAGES).map((m) => ({ role: m.sender, content: m.text })),
         current_page: typeof window !== "undefined" ? window.location.pathname : null,
         current_dom: enableActions ? collectVisiblePageDom().slice(0, MAX_DOM_LENGTH) : "",
@@ -853,6 +973,8 @@ export function MiniChat({
     let actionPlan: ActionPlan | undefined;
     let isError = false;
 
+    // SSE イベントを逐次処理してプログレスと最終応答を分離する
+    // Processes SSE events incrementally, separating progress updates from the final response
     for await (const event of readSseStream(response)) {
       if (event.type === "progress") {
         appendProgressStep(event.message);
@@ -873,6 +995,8 @@ export function MiniChat({
     return { id: createAiAgentMessageId(), sender: "assistant", text: assistantText, actionPlan, isError };
   };
 
+  // ユーザーのメッセージを送信し、AI 応答を受け取ってチャットに追加する
+  // Sends the user's input to the AI agent and appends the response to the conversation
   const handleSend = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     if (!trimmedInput || isGenerating) return;
@@ -892,6 +1016,8 @@ export function MiniChat({
       const assistantMessage = await requestAiAgentMessage(nextMessages, controller.signal);
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
+      // AbortError はユーザーが意図的に停止したため静かに無視する
+      // AbortError is intentional (user clicked stop), so suppress it silently
       if (error instanceof DOMException && error.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
@@ -910,10 +1036,14 @@ export function MiniChat({
     }
   };
 
+  // 進行中の AI 応答を中断する
+  // Aborts the in-flight API request so generation stops immediately
   const handleStop = () => {
     abortControllerRef.current?.abort();
   };
 
+  // エラーメッセージを除いて直前の会話状態に戻し、再送信する
+  // Removes the error message and retries the request from the last valid conversation state
   const handleRetry = async (errorMsgIndex: number) => {
     const messagesBeforeError = messages.slice(0, errorMsgIndex);
     setMessages(messagesBeforeError);
@@ -947,6 +1077,8 @@ export function MiniChat({
     }
   };
 
+  // テキストをクリップボードにコピーし、2 秒後にアイコンを元に戻す
+  // Copies text to the clipboard and resets the copied state after 2 seconds
   const handleCopy = async (text: string, index: number) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -963,6 +1095,8 @@ export function MiniChat({
     const failedStepText = typeof failedStepIndex === "number"
       ? `失敗ステップ: ${failedStepIndex + 1}`
       : "";
+    // 最新の DOM 状態を含む再計画プロンプトを構築する
+    // Builds a replan prompt that includes the failure reason so the model can adapt its plan
     const replanPrompt = [
       "前回の操作計画は実行中に失敗しました。",
       failedStepText,
@@ -1013,6 +1147,8 @@ export function MiniChat({
     }
   };
 
+  // アクション計画を実行し、進捗状態を更新し、失敗時は再計画を試みる
+  // Runs an action plan, tracks per-step progress, and triggers replanning on failure
   const handleExecuteActions = async (steps: ActionStep[], messageId: string) => {
     setExecutingMessageId(messageId);
     setExecutionProgress({
@@ -1024,6 +1160,8 @@ export function MiniChat({
       const result = await executeActionSteps(steps, {
         navigateInternal,
         setUnloadContext,
+        // ステップの current/complete 遷移ごとに UI の進捗表示を更新する
+        // Updates the step-level progress indicator as each step transitions to current or complete
         onStepProgress: (stepIndex, status) => {
           setExecutionProgress((current) => {
             if (!current || current.messageId !== messageId) {
@@ -1049,6 +1187,8 @@ export function MiniChat({
       });
       if (result.ok) {
         setExecutedSet((prev) => new Set([...prev, messageId]));
+        // ページ遷移が発生した場合は実行済み ID をストレージに先行保存する
+        // Eagerly persists the executed ID when navigation is pending so it survives the reload
         if (persistConversation && result.pendingNavigation) {
           const merged = Array.from(new Set([...readStoredExecutedIds(messagesRef.current, storageKeys), messageId]));
           writeSessionJson(storageKeys.executed, merged);
@@ -1084,6 +1224,8 @@ export function MiniChat({
     }
   };
 
+  // 初回マウント時にセッションストレージから会話・実行済みセット・未完了ステップを復元する
+  // On mount, restores conversation history and resumes any cross-reload pending action steps
   useEffect(() => {
     if (!persistConversation) {
       clearStoredConversation(storageKeys);
@@ -1108,6 +1250,8 @@ export function MiniChat({
     let timer: number | undefined;
     setMessages((prev) => {
       const pendingMessageId = createAiAgentMessageId();
+      // ページ準備完了を確認してから再開実行を開始する
+      // Defers execution until waitForPendingResumeReady confirms the page is ready
       timer = window.setTimeout(async () => {
         const ready = await waitForPendingResumeReady(pendingActionState);
         if (!ready.ok) {
@@ -1149,6 +1293,8 @@ export function MiniChat({
     };
   }, [enableActions, persistConversation, storageKeys]);
 
+  // メッセージが変わるたびにセッションストレージを更新して会話を永続化する
+  // Syncs messages to sessionStorage on every change so the conversation survives page reloads
   useEffect(() => {
     if (!hydrated || !persistConversation) return;
     writeSessionJson(
@@ -1158,11 +1304,15 @@ export function MiniChat({
     writeSessionJson(storageKeys.timestamp, messages.length > 0 ? Date.now() : 0);
   }, [hydrated, messages, persistConversation, storageKeys]);
 
+  // 実行済みセットが変わるたびにストレージを更新する
+  // Persists executed message IDs whenever the set changes so they survive reloads
   useEffect(() => {
     if (!hydrated || !persistConversation) return;
     writeSessionJson(storageKeys.executed, Array.from(executedSet));
   }, [hydrated, executedSet, persistConversation, storageKeys]);
 
+  // 新しいメッセージや進捗テキストが追加されたら最下部にスクロールする
+  // Scrolls the message list to the bottom whenever content changes so the latest reply is visible
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -1172,6 +1322,8 @@ export function MiniChat({
   return (
     <div className="mini-chat-container">
       <div className="mini-chat-messages" ref={scrollRef}>
+        {/* メッセージがない場合はプレースホルダーと候補プロンプトを表示する */}
+        {/* Show placeholder content and quick prompt suggestions when the conversation is empty */}
         {messages.length === 0 && (
           <div className="mini-chat-placeholder">
             <span className="mini-chat-robot-icon" aria-hidden="true">
@@ -1193,6 +1345,8 @@ export function MiniChat({
             </div>
           </div>
         )}
+        {/* 各メッセージをアバターとコンテンツエリアで描画する */}
+        {/* Renders each message with its avatar and content area, using sender-specific styles */}
         {messages.map((msg, i) => (
           <div key={msg.id} className={`mini-chat-message mini-chat-message--${msg.sender}`}>
             <span className="mini-chat-avatar" aria-hidden="true">
@@ -1204,6 +1358,8 @@ export function MiniChat({
               ) : (
                 <div className="mini-chat-text">{msg.text}</div>
               )}
+              {/* アクション計画が含まれている場合、ステップ一覧と実行ボタンを表示する */}
+              {/* Renders the action plan step list and execute button when an action plan is attached */}
               {enableActions && msg.actionPlan && (
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
@@ -1250,6 +1406,8 @@ export function MiniChat({
                   </button>
                 </div>
               )}
+              {/* アシスタントのメッセージにはコピーボタンとエラー時の再試行ボタンを表示する */}
+              {/* Shows copy and (on error) retry actions beneath each assistant message */}
               {msg.sender === "assistant" && (
                 <div className="mini-chat-message-toolbar">
                   <button
@@ -1278,6 +1436,8 @@ export function MiniChat({
             </div>
           </div>
         ))}
+        {/* 生成中はタイピングインジケーターまたは SSE 進捗ステップを表示する */}
+        {/* Shows a typing indicator or SSE progress list while the AI response is streaming */}
         {isGenerating ? (
           <div className="mini-chat-message mini-chat-message--assistant mini-chat-message--typing" aria-live="polite">
             <span className="mini-chat-avatar" aria-hidden="true">
@@ -1325,6 +1485,8 @@ export function MiniChat({
             maxLength={MAX_INPUT_LENGTH}
             disabled={isGenerating}
           />
+          {/* 生成中は停止ボタン、それ以外は送信ボタンを表示する */}
+          {/* Toggles between stop and send buttons based on whether generation is in progress */}
           {isGenerating ? (
             <button
               type="button"
@@ -1345,6 +1507,8 @@ export function MiniChat({
             </button>
           )}
         </div>
+        {/* 会話履歴をクリアするボタン — メッセージがないか生成中は無効化 */}
+        {/* Clears the conversation history; disabled while generating or when there's nothing to clear */}
         <button
           type="button"
           className="mini-chat-action-btn"
