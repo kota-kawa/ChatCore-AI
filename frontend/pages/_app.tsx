@@ -12,6 +12,8 @@ import { GoogleAnalytics } from "../components/GoogleAnalytics";
 import { GlobalAiAgent } from "../components/GlobalAiAgent";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 
+// アプリ全体のサンセリフフォント設定（CSS変数として提供）
+// App-wide sans-serif font configuration (provided as a CSS variable)
 const appSansFont = Noto_Sans_JP({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
@@ -19,6 +21,8 @@ const appSansFont = Noto_Sans_JP({
   variable: "--font-app-sans"
 });
 
+// グローバルエラーバウンダリーのprops・state型定義
+// Props and state type definitions for the global error boundary
 type GlobalErrorBoundaryProps = {
   children: ReactNode;
 };
@@ -28,6 +32,8 @@ type GlobalErrorBoundaryState = {
   message: string;
 };
 
+// ReactのレンダリングエラーをキャッチしてフォールバックUIを表示するクラスコンポーネント
+// Class component that catches React rendering errors and displays a fallback UI
 class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErrorBoundaryState> {
   public constructor(props: GlobalErrorBoundaryProps) {
     super(props);
@@ -37,6 +43,8 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
     };
   }
 
+  // エラー発生時にエラーメッセージをstateに保存する（staticメソッドのため副作用なし）
+  // Save the error message to state when an error occurs (no side effects as it's a static method)
   public static getDerivedStateFromError(error: unknown): GlobalErrorBoundaryState {
     return {
       hasError: true,
@@ -44,6 +52,8 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
     };
   }
 
+  // エラーをコンソールに記録する（モニタリングサービスへの送信もここで行う）
+  // Log the error to the console (also send to monitoring service here if needed)
   public componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
     console.error("Unhandled React rendering error:", error, errorInfo);
   }
@@ -53,6 +63,8 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
       return this.props.children;
     }
 
+    // エラー発生時はリロードボタン付きのエラー画面を表示する
+    // Display an error screen with a reload button when an error occurs
     return (
       <main className="global-error-boundary" role="alert" aria-live="assertive">
         <div className="global-error-boundary__card">
@@ -71,24 +83,42 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
   }
 }
 
+// 認証ページ（グローバルAIエージェントを非表示にするページ）のセット
+// Set of auth pages (pages that hide the global AI agent)
 const AUTH_PAGES = new Set(["/login", "/register"]);
+// メニューナビゲーション対象のパス一覧
+// Paths that are targets for menu navigation
 const MENU_NAVIGATION_PATHS = ["/", "/memo", "/prompt_share"] as const;
 const MENU_NAVIGATION_PATH_SET = new Set<string>(MENU_NAVIGATION_PATHS);
+// ルートごとに遅延ロードするCSSのマッピング
+// Mapping of CSS files to lazy-load per route
 const ROUTE_STYLESHEETS_BY_PATH: Record<string, string[]> = {
   "/": ["/static/css/pages/chat/page.css"],
   "/memo": ["/memo/static/css/memo_form.css"],
   "/prompt_share": ["/prompt_share/static/css/pages/prompt_share.css"]
 };
+// ルート遷移後にコンテンツを表示するまでの最小遅延（スタイルシートが揃うまで待つ）
+// Minimum delay before showing content after route transition (wait for stylesheets)
 const ROUTE_REVEAL_DELAY_MS = 220;
+// メニューナビゲーション時の最小遅延（ちらつきを防ぐ）
+// Minimum delay for menu navigation (prevents flickering)
 const MENU_NAVIGATION_MIN_DELAY_MS = 120;
+// スタイルシートのプリロードタイムアウト（ネットワークが遅い環境でもブロックしない）
+// Stylesheet preload timeout (to avoid blocking in slow network environments)
 const STYLESHEET_PRELOAD_TIMEOUT_MS = 2200;
+// プリロード中・適用中のスタイルシートをキャッシュするMap（重複リクエストを防ぐ）
+// Maps caching in-progress preload/apply promises (prevents duplicate requests)
 const stylesheetPreloadPromises = new Map<string, Promise<void>>();
 const stylesheetApplyPromises = new Map<string, Promise<void>>();
 
+// メニューナビゲーションカスタムイベントの型定義
+// Type definition for the menu navigation custom event
 type ChatCoreNavigationEvent = CustomEvent<{
   href?: string;
 }>;
 
+// メニューナビゲーションのターゲットパスを検証して返す（不正なオリジンや対象外パスはnull）
+// Validate and return the menu navigation target path (returns null for invalid origins or non-target paths)
 function getMenuNavigationTarget(rawHref: string | undefined) {
   if (!rawHref || typeof window === "undefined") return null;
 
@@ -104,12 +134,16 @@ function getMenuNavigationTarget(rawHref: string | undefined) {
   }
 }
 
+// 指定時間後に解決するPromiseを返すユーティリティ
+// Utility that returns a Promise that resolves after the specified duration
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
   });
 }
 
+// ルートURLからpathnameを抽出するユーティリティ
+// Utility to extract the pathname from a route URL
 function getPathnameFromRouteUrl(rawUrl: string | undefined) {
   if (!rawUrl || typeof window === "undefined") return "";
 
@@ -120,10 +154,14 @@ function getPathnameFromRouteUrl(rawUrl: string | undefined) {
   }
 }
 
+// CSSのhrefを絶対URLに正規化する
+// Normalize a CSS href to an absolute URL
 function normalizeStylesheetHref(href: string) {
   return new URL(href, window.location.origin).href;
 }
 
+// 指定のスタイルシートがすでにDOMに適用済みかどうかを確認する
+// Check if the specified stylesheet is already applied in the DOM
 function isStylesheetApplied(absoluteHref: string) {
   const links = document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet']");
   return Array.from(links).some((link) => (
@@ -131,12 +169,16 @@ function isStylesheetApplied(absoluteHref: string) {
   ));
 }
 
+// スタイルシートをpreloadリンクとして先読みする（適用はしない）
+// Preload a stylesheet as a preload link (does not apply it yet)
 function ensureStylesheetPreloaded(href: string) {
   if (typeof window === "undefined") return Promise.resolve();
 
   const absoluteHref = normalizeStylesheetHref(href);
   if (isStylesheetApplied(absoluteHref)) return Promise.resolve();
 
+  // すでにプリロード中なら同じPromiseを返す
+  // Return the same Promise if already preloading
   const cachedPromise = stylesheetPreloadPromises.get(absoluteHref);
   if (cachedPromise) return cachedPromise;
 
@@ -159,6 +201,8 @@ function ensureStylesheetPreloaded(href: string) {
       resolve();
     };
 
+    // タイムアウトを設定してネットワークエラー時でも解決する
+    // Set timeout to resolve even on network error
     window.setTimeout(handleLoad, STYLESHEET_PRELOAD_TIMEOUT_MS);
     link.addEventListener("load", handleLoad, { once: true });
     link.addEventListener("error", handleLoad, { once: true });
@@ -176,6 +220,8 @@ function ensureStylesheetPreloaded(href: string) {
   return promise;
 }
 
+// スタイルシートをDOMに適用する（未適用の場合は<link rel="stylesheet">を追加する）
+// Apply a stylesheet to the DOM (add <link rel="stylesheet"> if not already applied)
 function ensureStylesheetApplied(href: string) {
   if (typeof window === "undefined") return Promise.resolve();
 
@@ -225,6 +271,8 @@ function ensureStylesheetApplied(href: string) {
   return promise;
 }
 
+// 指定パスに必要なすべてのスタイルシートをプリロードする
+// Preload all stylesheets required for the specified path
 function ensureRouteStylesheetsPreloaded(pathname: string) {
   const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
   if (stylesheetHrefs.length === 0) return Promise.resolve();
@@ -232,6 +280,8 @@ function ensureRouteStylesheetsPreloaded(pathname: string) {
   return Promise.all(stylesheetHrefs.map(ensureStylesheetPreloaded)).then(() => undefined);
 }
 
+// 指定パスに必要なすべてのスタイルシートをDOMに適用する
+// Apply all stylesheets required for the specified path to the DOM
 function ensureRouteStylesheetsApplied(pathname: string) {
   const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
   if (stylesheetHrefs.length === 0) return Promise.resolve();
@@ -239,12 +289,20 @@ function ensureRouteStylesheetsApplied(pathname: string) {
   return Promise.all(stylesheetHrefs.map(ensureStylesheetApplied)).then(() => undefined);
 }
 
+// Next.jsのカスタムAppコンポーネント（テーマ管理・ルート遷移・スタイルシート先読みを統括する）
+// Next.js custom App component (manages theme, route transitions, and stylesheet preloading)
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
+  // 認証ページではグローバルAIエージェントを非表示にする
+  // Hide the global AI agent on auth pages
   const showAiAgent = !AUTH_PAGES.has(router.pathname);
   const [isRouteTransitioning, setIsRouteTransitioning] = useState(false);
+  // 並行したナビゲーションリクエストを識別するIDのref（古いリクエストを無視するため）
+  // Ref for identifying concurrent navigation requests (to ignore stale requests)
   const navigationRequestIdRef = useRef(0);
 
+  // テーマの初期化とストレージ変更・ページ表示イベントへの同期
+  // Initialize the theme and sync on storage changes and page show events
   useEffect(() => {
     const reapplyTheme = () => {
       applyTheme(resolveTheme(getStoredThemePreference()));
@@ -254,11 +312,15 @@ export default function App({ Component, pageProps }: AppProps) {
     watchSystemTheme();
 
     const onPageShow = (event: PageTransitionEvent) => {
+      // bfcacheから復元した場合もテーマを再適用する
+      // Re-apply the theme when restored from bfcache
       if (event.persisted) {
         reapplyTheme();
       }
     };
     const onStorage = (event: StorageEvent) => {
+      // 別タブでテーマが変更されたらこのタブにも反映する
+      // Reflect theme changes from other tabs to this tab
       if (event.key === null || event.key === "chatcore-theme") {
         reapplyTheme();
       }
@@ -273,6 +335,8 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, []);
 
+  // ルーターイベントに応じてルート遷移状態を管理し、スタイルシートが揃うまで待機する
+  // Manage route transition state based on router events and wait until stylesheets are ready
   useEffect(() => {
     let finishTimerId: number | null = null;
     let finishRequestId = 0;
@@ -282,11 +346,15 @@ export default function App({ Component, pageProps }: AppProps) {
       window.clearTimeout(finishTimerId);
       finishTimerId = null;
     };
+    // 遷移開始：ローディング状態に設定する
+    // Transition start: set to loading state
     const startTransition = () => {
       clearFinishTimer();
       finishRequestId += 1;
       setIsRouteTransitioning(true);
     };
+    // 遷移完了：スタイルシートの適用と最小遅延を待ってからローディングを解除する
+    // Transition complete: wait for stylesheet application and minimum delay before releasing loading state
     const finishTransition = (url?: string) => {
       clearFinishTimer();
       const currentFinishRequestId = ++finishRequestId;
@@ -298,6 +366,8 @@ export default function App({ Component, pageProps }: AppProps) {
         setIsRouteTransitioning(false);
       });
     };
+    // 遷移キャンセル：短い遅延後にローディングを解除する
+    // Transition cancel: release loading state after a short delay
     const cancelTransition = () => {
       clearFinishTimer();
       finishRequestId += 1;
@@ -319,6 +389,8 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [router.events]);
 
+  // メニューナビゲーション対象のルートをプリフェッチとスタイルシートプリロードで事前準備する
+  // Pre-fetch and pre-load stylesheets for menu navigation target routes
   useEffect(() => {
     MENU_NAVIGATION_PATHS.forEach((path) => {
       void router.prefetch(path).catch(() => {
@@ -328,12 +400,16 @@ export default function App({ Component, pageProps }: AppProps) {
     });
   }, [router]);
 
+  // カスタムイベント「chatcore:navigate」を処理し、スタイルシートが揃ってからナビゲーションを実行する
+  // Handle the custom event "chatcore:navigate" and navigate after stylesheets are ready
   useEffect(() => {
     const handleMenuNavigation = async (event: Event) => {
       const target = getMenuNavigationTarget((event as ChatCoreNavigationEvent).detail?.href);
       if (!target) return;
 
       event.preventDefault();
+      // 同じパスへの遷移は無視する
+      // Ignore navigation to the same path
       if (target === router.asPath) return;
 
       const currentNavigationRequestId = navigationRequestIdRef.current + 1;
@@ -343,6 +419,8 @@ export default function App({ Component, pageProps }: AppProps) {
         ensureRouteStylesheetsPreloaded(getPathnameFromRouteUrl(target)),
         wait(MENU_NAVIGATION_MIN_DELAY_MS)
       ]);
+      // 後続のナビゲーションリクエストによって上書きされた場合は無視する
+      // Ignore if overridden by a subsequent navigation request
       if (currentNavigationRequestId !== navigationRequestIdRef.current) return;
 
       void router.push(target).catch(() => {
@@ -360,12 +438,14 @@ export default function App({ Component, pageProps }: AppProps) {
     <div className={`${appSansFont.variable}${isRouteTransitioning ? " is-route-transitioning" : ""}`}>
       <GlobalErrorBoundary>
         <GoogleAnalytics />
+        {/* ルート遷移アニメーション中にオーバーレイを表示する / Show overlay during route transition animation */}
         <div className="cc-route-frame">
           <Component {...pageProps} />
         </div>
         <div className="cc-route-transition-overlay" aria-hidden="true">
           <div className="cc-route-transition-overlay__bar"></div>
         </div>
+        {/* 認証ページ以外でグローバルAIエージェントを表示する / Show global AI agent on non-auth pages */}
         {showAiAgent && <GlobalAiAgent />}
       </GlobalErrorBoundary>
     </div>
