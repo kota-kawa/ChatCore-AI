@@ -8,12 +8,14 @@ from services.chat_title import (
 )
 
 
-# 日本語: Chat Titleの機能や仕様を検証するテストクラスです。
-# English: Test case class to verify the functionality and specifications of Chat Title.
+# 日本語: チャットルームタイトルの自動生成ロジックをテストするクラス。
+# English: Test class for automatic chat room title generation logic.
 class ChatTitleTestCase(unittest.TestCase):
-    # 日本語: generateチャットroomタイトルparsesjsonレスポンスことを検証します。
-    # English: Verify that generate chat room title parses json response.
+    # 日本語: LLMから返ってきたJSONレスポンスが正しくパースされてタイトルとして取得されることを検証します。
+    # English: Verify that the LLM JSON response is correctly parsed and returned as the room title.
     def test_generate_chat_room_title_parses_json_response(self):
+        # 日本語: LLMがJSONタイトルを返すケースをシミュレート
+        # English: Simulate the LLM returning a JSON title string
         title = generate_chat_room_title(
             "Pythonの学習計画を作って",
             "3週間の計画を提案します。",
@@ -23,8 +25,8 @@ class ChatTitleTestCase(unittest.TestCase):
 
         self.assertEqual(title, "Python学習計画")
 
-    # 日本語: ビルドinitialタイトルcandidates含むタスクsetupことを検証します。
-    # English: Verify that build initial title candidates includes task setup.
+    # 日本語: タスク起動リクエストのセットアップ情報（タスク名・状況）が初期タイトル候補リストに含まれることを検証します。
+    # English: Verify that task setup info (task name and context) is included in the initial title candidates list.
     def test_build_initial_title_candidates_includes_task_setup(self):
         candidates = build_initial_title_candidates(
             "【タスク】メール返信\n【状況・作業環境】採用面接の日程調整",
@@ -34,21 +36,25 @@ class ChatTitleTestCase(unittest.TestCase):
             },
         )
 
+        # 日本語: デフォルトタイトル・タスク名・状況がすべて候補として含まれることを確認
+        # English: Confirm that default title, task name, and context are all included as candidates
         self.assertIn("新規チャット", candidates)
         self.assertIn("採用面接の日程調整", candidates)
         self.assertIn("メール返信", candidates)
 
-    # 日本語: renamesucceedsのとき、maybeautoタイトル返却するタイトルonlyことを検証します。
-    # English: Verify that maybe auto title returns title only when rename succeeds.
+    # 日本語: ルームのリネームが成功した場合に、生成されたタイトルが返却されることを検証します。
+    # English: Verify that the generated title is returned when the conditional room rename succeeds.
     def test_maybe_auto_title_returns_title_only_when_rename_succeeds(self):
         calls = []
 
+        # 日本語: リネームの成功状況を記録するモック関数
+        # English: Mock rename function that records calls and returns True (success)
         def conditional_rename(room_id, title, allowed_current_titles):
             calls.append((room_id, title, allowed_current_titles))
             return True
 
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
+        # 日本語: タイトル生成LLM呼び出しをモックして期待されるタイトルを返す
+        # English: Mock the title generation LLM call to return the expected title
         with patch("services.chat_title.generate_chat_room_title", return_value="相談の整理"):
             title = maybe_auto_title_chat_room(
                 chat_room_id="room-1",
@@ -59,6 +65,8 @@ class ChatTitleTestCase(unittest.TestCase):
                 conditional_rename=conditional_rename,
             )
 
+        # 日本語: 返却されたタイトルが正しく、リネームが正しい引数で呼ばれていることを確認
+        # English: Confirm the returned title is correct and rename was called with expected arguments
         self.assertEqual(title, "相談の整理")
         self.assertEqual(calls, [("room-1", "相談の整理", ["新規チャット", "相談したい"])])
 

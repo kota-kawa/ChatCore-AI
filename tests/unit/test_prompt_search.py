@@ -7,6 +7,8 @@ from blueprints.prompt_share.prompt_search import _search_public_prompts
 # テスト用の疑似DBカーソルクラス。
 # Mock database cursor class for testing.
 class FakeCursor:
+    # 状態を記録する変数を初期化します。
+    # Initialize variables to track execution state.
     def __init__(self):
         self.executed = []
         self.closed = False
@@ -16,6 +18,8 @@ class FakeCursor:
     # クエリを実行し、クエリ内容に応じたダミーの戻り値をセットします。
     # Execute a query and set dummy return values based on the query contents.
     def execute(self, query, params=None):
+        # クエリ内の改行や余分なスペースを正規化して記録
+        # Normalize whitespace in the query and record it with parameters
         normalized = " ".join(query.split())
         self.executed.append((normalized, params))
 
@@ -71,6 +75,8 @@ class FakeCursor:
 # テスト用の疑似DBコネクションクラス。
 # Mock database connection class for testing.
 class FakeConnection:
+    # 疑似コネクションを初期化します。
+    # Initialize the fake connection.
     def __init__(self, cursor):
         self._cursor = cursor
         self.closed = False
@@ -100,6 +106,8 @@ class PromptSearchTestCase(unittest.TestCase):
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             payload = _search_public_prompts("sample", 2, 20, 9)
 
+        # 検索結果データとメタデータが仕様通りに設定されていることを検証
+        # Verify that search result data and metadata are set according to specifications
         self.assertEqual(payload["prompts"][0]["id"], 11)
         self.assertTrue(payload["prompts"][0]["liked"])
         self.assertFalse(payload["prompts"][0]["bookmarked"])
@@ -112,10 +120,14 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertTrue(payload["pagination"]["has_next"])
         self.assertTrue(payload["pagination"]["has_prev"])
 
+        # 件数取得クエリとそのパラメータの妥当性を検証
+        # Verify validation of count query and its parameter list
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("SELECT COUNT(*) AS total", count_query)
         self.assertEqual(count_params, ("%sample%", "%sample%", "%sample%", "%sample%"))
 
+        # 本文検索クエリの各種条件とLIMIT / OFFSET指定を検証
+        # Verify search query conditions and LIMIT / OFFSET values
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("LEFT JOIN prompt_likes AS pl", search_query)
         self.assertIn("LEFT JOIN prompt_list_entries AS ple", search_query)
@@ -136,10 +148,14 @@ class PromptSearchTestCase(unittest.TestCase):
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             _search_public_prompts("sample", 1, 10, 9, "image")
 
+        # 件数カウント用のクエリ条件に COALESCE(prompt_type) が含まれ、パラメータが設定されているか検証
+        # Verify that COALESCE(prompt_type) is in count query conditions and parameters are set
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("COALESCE(prompt_type, 'text') = %s", count_query)
         self.assertEqual(count_params, ("image", "%sample%", "%sample%", "%sample%", "%sample%"))
 
+        # データ取得用の検索クエリ条件とパラメータを検証
+        # Verify data retrieval query conditions and parameters
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("COALESCE(p.prompt_type, 'text') = %s", search_query)
         self.assertEqual(search_params[:3], (9, 9, "image"))
@@ -148,8 +164,12 @@ class PromptSearchTestCase(unittest.TestCase):
     # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
     # Verify that search returns an empty payload immediately without query execution when search query is blank.
     def test_search_public_prompts_returns_empty_payload_when_query_is_blank(self):
+        # 空文字のクエリを渡して検索関数を実行
+        # Run search function with empty query string
         payload = _search_public_prompts("", 1, 20)
 
+        # 空配列および件数 0 が返り、次ページが存在しないことを検証
+        # Verify that empty list, 0 count are returned and no next page is available
         self.assertEqual(payload["prompts"], [])
         self.assertEqual(payload["pagination"]["total"], 0)
         self.assertFalse(payload["pagination"]["has_next"])
