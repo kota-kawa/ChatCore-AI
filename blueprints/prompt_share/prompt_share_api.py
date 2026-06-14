@@ -31,11 +31,19 @@ from services.web import (
     validate_payload_model,
 )
 
+# CSRF保護を設定したプロンプト共有用APIRouterの初期化
+# Initialize FastAPI APIRouter for prompt sharing with CSRF protection.
 prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
+
+# プロンプトタイプの定数定義
+# Constants defining prompt types.
 PROMPT_TYPE_TEXT = "text"
 PROMPT_TYPE_IMAGE = "image"
 PROMPT_TYPE_SKILL = "skill"
+
+# プロンプトの画像アップロード先ディレクトリの設定
+# Directory path for prompt image uploads.
 PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
     BASE_DIR,
     "frontend",
@@ -44,9 +52,21 @@ PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
     "uploads",
     "prompt_share",
 )
+
+# アップロードした画像を参照するためのURL接頭辞
+# URL prefix for accessing uploaded prompt images.
 PROMPT_IMAGE_URL_PREFIX = "/static/uploads/prompt_share"
+
+# プロンプト画像アップロードの最大ファイルサイズ（5MB）
+# Maximum file size allowed for prompt image uploads (5MB).
 PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+# アップロード可能な画像ファイルの拡張子
+# Permitted image file extensions.
 PROMPT_IMAGE_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+# コメント投稿制限用の設定値
+# Comment rate limit and cooldown settings.
 PROMPT_COMMENT_RATE_WINDOW_SECONDS = 300
 PROMPT_COMMENT_PER_IP_LIMIT = 20
 PROMPT_COMMENT_PER_USER_LIMIT = 12
@@ -55,12 +75,19 @@ PROMPT_COMMENT_DUPLICATE_WINDOW_SECONDS = 60
 PROMPT_COMMENT_LIST_LIMIT = 200
 PROMPT_COMMENT_AUTO_HIDE_REPORT_THRESHOLD = 3
 PROMPT_COMMENT_MAX_URLS = 3
+
+# コメント内のURL検知用正規表現パターン
+# Regular expression pattern to detect URLs inside comments.
 PROMPT_COMMENT_LINK_PATTERN = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
 
 
 # レコード辞書またはタプルからIDフィールド値を安全に抽出する関数
 # Safely extract the ID field from a record dictionary, tuple, or None.
 def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
+    """
+    クエリ結果オブジェクト（dict、tuple、またはNone）から一意のIDフィールド値を安全に取得する。
+    Safely extract the primary ID value from a query result database row.
+    """
     # 入力が空の場合はNoneを返します
     # Return None if the input is None.
     if row is None:
@@ -75,6 +102,10 @@ def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
 # 入力されたプロンプトタイプを定義済みの3つ(text, image, skill)のいずれかに標準化する関数
 # Standardize the input prompt type to one of the defined categories (text, image, skill).
 def _normalize_prompt_type(value: Any) -> str:
+    """
+    入力されたプロンプトタイプ文字列をトリム・小文字化し、定義済みの標準タイプ（text/image/skill）へマッピングする。
+    Normalize the input prompt type string and resolve aliases to standard categories.
+    """
     normalized = str(value or "").strip().lower()
     # "skill"系の各エイリアスに対応
     # Support various "skill" alias variations.
@@ -90,12 +121,18 @@ def _normalize_prompt_type(value: Any) -> str:
 # プロンプトのDBレコードをJSONレスポンス用にシリアライズ・整形する関数
 # Serialize and format a prompt DB record row for the JSON response payload.
 def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
+    """
+    DBのプロンプトレコードを辞書から取り出し、作成日時のISO文字列化やオプショナルなフィールドの初期値補正を行う。
+    Convert database prompt attributes into a clean API response dictionary structure.
+    """
     prompt = dict(row)
     created_at = prompt.get("created_at")
     # 作成日時が datetime の場合、ISO フォーマット文字列に変換
     # Format created_at to ISO string if it is a datetime object.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
+    # プロンプトタイプの正規化
+    # Normalize the prompt type field.
     prompt["prompt_type"] = _normalize_prompt_type(prompt.get("prompt_type"))
     prompt["reference_image_url"] = prompt.get("reference_image_url") or None
     prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
@@ -107,6 +144,10 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
 # コメントのDBレコード行をシリアライズし、削除権限フラグ等を付与する関数
 # Serialize a comment DB row and append contextual flags (ownership, delete permission).
 def _serialize_prompt_comment_row(row: dict[str, Any], actor_user_id: int | None) -> dict[str, Any]:
+    """
+    DBのコメントレコードを整形し、現在アクセスしているユーザー(actor_user_id)に応じた削除権限フラグ等を設定する。
+    Format a database comment record and calculate ownership and permission flags relative to the active actor.
+    """
     created_at = row.get("created_at")
     user_id = row.get("user_id")
     prompt_owner_id = row.get("prompt_owner_id")
@@ -134,6 +175,10 @@ def _serialize_prompt_comment_row(row: dict[str, Any], actor_user_id: int | None
 # コメント本文に大量のURLリンク（閾値超え）が含まれているか判定する関数
 # Determine if comment content contains more link patterns than the allowed threshold.
 def _contains_too_many_links(content: str) -> bool:
+    """
+    コメント本文に含まれるリンク（http/https/www等）の数が許容限度数を超えているか判定する。
+    Check if the number of URLs or link syntax strings in the comment text exceeds the allowed max limit.
+    """
     return len(PROMPT_COMMENT_LINK_PATTERN.findall(content or "")) > PROMPT_COMMENT_MAX_URLS
 
 
@@ -143,6 +188,10 @@ def _consume_prompt_comment_create_limits(
     request: Request,
     user_id: int,
 ) -> tuple[bool, str | None, int | None]:
+    """
+    接続IPアドレスおよびユーザーIDをベースに、一定時間内のコメント投稿制限（IP制限、ユーザー制限、連投クールダウン）を判定する。
+    Check and update comment rate limiting for both user ID and client IP to prevent spamming.
+    """
     client_ip = get_request_client_ip(request)
 
     # IP単位での短期レート制限をチェック
@@ -205,6 +254,10 @@ def _consume_prompt_comment_create_limits(
 # プロンプトに関連付けられた参照画像ファイルをストレージから物理削除する関数
 # Permanently delete the stored reference image file from filesystem.
 def _delete_prompt_reference_image(image_url: str | None) -> None:
+    """
+    指定された画像URLに該当する物理ファイルをローカルストレージ（アップロードディレクトリ）から削除する。
+    Delete the actual image file on the filesystem that corresponds to the given reference image URL.
+    """
     if not image_url or not image_url.startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
         return
     filename = image_url.rsplit("/", 1)[-1].strip()
@@ -218,6 +271,10 @@ def _delete_prompt_reference_image(image_url: str | None) -> None:
 # アップロードされた参照画像を保存し、保存されたURLを返却する関数
 # Save uploaded reference image and return its public URL path.
 def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
+    """
+    アップロードされたファイルを検証（拡張子、MIMEタイプ、ファイルサイズ）し、問題なければ一意のファイル名で保存する。
+    Validate and save the uploaded reference image, enforcing limits on size and file format.
+    """
     filename = secure_filename(getattr(upload_file, "filename", "") or "")
     if not filename:
         raise ValueError("画像ファイル名が不正です。")
@@ -230,6 +287,8 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     if content_type and not content_type.startswith("image/"):
         raise ValueError("画像ファイルのみアップロードできます。")
 
+    # 保存ディレクトリを自動生成
+    # Automatically create directory structure if not exists.
     os.makedirs(PROMPT_IMAGE_UPLOAD_DIR, exist_ok=True)
     stored_filename = f"user_{user_id}_{uuid4().hex}{extension}"
     filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, stored_filename)
@@ -240,6 +299,8 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
         if hasattr(file_obj, "seek"):
             file_obj.seek(0)
 
+        # ファイルをチャンクごとに分割して保存し、サイズ閾値超えを判定
+        # Write chunks to disk and check file size.
         with open(filepath, "wb") as out_f:
             while True:
                 chunk = file_obj.read(1024 * 1024)
@@ -250,6 +311,8 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
                     raise ValueError("画像サイズは5MB以下にしてください。")
                 out_f.write(chunk)
     except Exception:
+        # 途中での失敗時には作成途中の物理ファイルを削除
+        # Delete broken file on failure.
         if os.path.exists(filepath):
             os.remove(filepath)
         raise
@@ -266,11 +329,17 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
 # 共有中プロンプトの一覧を、各種リアクション・ブックマーク状態フラグを含めてDBから取得する関数
 # Fetch public shared prompts including contextual engagement states (liked, bookmarked).
 def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
+    """
+    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーのLike状態やブックマーク状態と結合して取得する。
+    Fetch all public, non-deleted prompts joined with interact states (likes/bookmarks) for the optional user ID.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # 公開プロンプトとユーザーごとのLikeや保存リスト登録状況をJOINで取得
+        # Execute query to select public prompts with flags joined with the specific user ID.
         cursor.execute(
             """
             SELECT
@@ -315,6 +384,8 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             (user_id, user_id),
         )
         prompts = []
+        # 結果の整形・真偽値キャストを実行
+        # Normalize and serialize each result row.
         for row in cursor.fetchall():
             prompt = _serialize_prompt_row(dict(row))
             prompt["liked"] = bool(prompt.get("liked"))
@@ -333,11 +404,17 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
 # 指定された公開プロンプトIDの詳細情報を取得する関数
 # Fetch public shared prompt detail info by ID.
 def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
+    """
+    指定されたIDに一致する公開かつ未削除のプロンプト情報を、有効コメント数とともにDBから取得する。
+    Retrieve details of a single public prompt matching the specified ID from the database.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # サブクエリで有効コメント数を含めてプロンプト詳細を1行取得
+        # Query details and count comments.
         cursor.execute(
             """
             SELECT
@@ -397,6 +474,10 @@ def _create_prompt_for_user(
     skill_markdown: str,
     skill_python_script: str,
 ) -> Any:
+    """
+    投稿ユーザー情報と指定された属性値を用いて、新規プロンプトデータをデータベースに挿入する。
+    Create and store a new public shared prompt record in the database for the active user.
+    """
     conn = None
     cursor = None
     try:
@@ -447,6 +528,8 @@ def _create_prompt_for_user(
             ),
         )
         conn.commit()
+        # 新規作成されたレコードのIDを抽出して返却
+        # Extract and return the ID of the inserted prompt record.
         return _extract_id(cursor.fetchone())
     finally:
         if cursor is not None:
@@ -458,10 +541,18 @@ def _create_prompt_for_user(
 # プロンプトタイプに応じたタスク用テンプレートテキストを構築する関数
 # Construct a task prompt template string according to prompt types (special handling for skill type).
 def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
+    """
+    プロンプトのタイプ（通常テキストか、スキル開発用か）に応じて、タスク登録用のテンプレート文字列を組み立てる。
+    Generate a template string based on whether the prompt is standard text or a code/skill integration.
+    """
     prompt_type = _normalize_prompt_type(prompt.get("prompt_type"))
+    # 通常プロンプトまたは画像生成の場合はコンテンツをそのまま返す
+    # Return content as is if not a skill prompt.
     if prompt_type != PROMPT_TYPE_SKILL:
         return prompt.get("content") or ""
 
+    # スキルプロンプトの場合はマークダウン解説とPythonスクリプトを連結
+    # If it's a skill, combine markdown text and Python scripts.
     parts = []
     skill_markdown = prompt.get("skill_markdown") or ""
     skill_python_script = prompt.get("skill_python_script") or ""
@@ -478,11 +569,17 @@ def _add_prompt_as_task_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
+    """
+    公開中のプロンプトの複製を取得し、指定ユーザー自身のタスクテンプレート(task_with_examples)として新規登録・インポートする。
+    Copy attributes from a public prompt and register it as a user's private task template.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # 対象公開プロンプト情報のロード
+        # Load prompt columns.
         cursor.execute(
             """
             SELECT title,
@@ -504,10 +601,14 @@ def _add_prompt_as_task_for_user(
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
         title = prompt.get("title") or ""
+        # テンプレート文字列の構築
+        # Build the final prompt template.
         prompt_template = _compose_task_prompt_template(dict(prompt))
         if not prompt_template:
             return {"error": "タスクとして追加できる本文がありません。"}, 400
 
+        # すでに同一タイトルかつ削除されていないタスクが登録済みかチェック
+        # Check if the task template has already been added under this title.
         cursor.execute(
             """
             SELECT id
@@ -522,6 +623,8 @@ def _add_prompt_as_task_for_user(
         if existing:
             return {"message": "すでにタスクとして追加されています。", "saved_id": existing["id"]}, 200
 
+        # タスクテンプレートテーブルへレコード挿入
+        # Perform SQL insert into task_with_examples.
         cursor.execute(
             """
             INSERT INTO task_with_examples
@@ -551,12 +654,16 @@ def _add_prompt_as_task_for_user(
             conn.close()
 
 
-# プロンプトをユーザーのお気に入り/ブックマークリストに登録するラッパー関数
+# プロンプトをお気に入りブックマークするエンドポイント（ラッパー）
 # Bookmark a prompt for a user (wrapper around prompt list insertion).
 def _add_bookmark_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
+    """
+    お気に入りリスト追加処理(_add_prompt_list_entry_for_user)を呼び出し、レスポンスメッセージをブックマーク用にラップする。
+    Execute bookmark helper and format custom success/failure messaging.
+    """
     payload, status_code = _add_prompt_list_entry_for_user(user_id, prompt_id)
     if "error" in payload:
         return payload, status_code
@@ -570,6 +677,10 @@ def _add_bookmark_for_user(
 # ユーザーのブックマークリストからプロンプトを削除する関数
 # Remove a prompt from a user's bookmark list.
 def _remove_bookmark_for_user(user_id: int, prompt_id: int) -> int:
+    """
+    指定されたユーザーIDとお気に入りプロンプトIDの一致するお気に入りエントリレコードを削除する。
+    Hard delete a prompt bookmark list entry matching the given user ID and prompt ID.
+    """
     conn = None
     cursor = None
     try:
@@ -598,11 +709,17 @@ def _add_prompt_list_entry_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
+    """
+    指定されたプロンプトが公開かつ未削除であることを検証し、ユーザーのお気に入り（保存リスト）テーブルにエントリを挿入する。
+    Validate prompt visibility and insert it into prompt_list_entries for the specified user.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # プロンプトの存在と公開状態を確認
+        # Check target prompt exists and is public.
         cursor.execute(
             """
             SELECT id
@@ -617,6 +734,8 @@ def _add_prompt_list_entry_for_user(
         if not prompt:
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
+        # 既に同一ユーザーがお気に入りに登録しているか確認
+        # Prevent duplicate insertion of the same bookmark.
         cursor.execute(
             """
             SELECT id
@@ -629,6 +748,8 @@ def _add_prompt_list_entry_for_user(
         if existing:
             return {"message": "すでに保存されています。", "saved_id": existing["id"]}, 200
 
+        # 保存エントリを追加
+        # Insert the bookmark row.
         cursor.execute(
             """
             INSERT INTO prompt_list_entries
@@ -658,11 +779,17 @@ def _add_prompt_like_for_user(
     user_id: int,
     prompt_id: int,
 ) -> tuple[dict[str, Any], int]:
+    """
+    指定されたプロンプトが公開かつ未削除であることを検証し、いいねテーブルにレコードを挿入する。
+    Create a new row in prompt_likes for the active user if the target prompt is valid.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # プロンプトの存在と公開状態を確認
+        # Verify prompt exists and is public.
         cursor.execute(
             """
             SELECT id
@@ -677,6 +804,8 @@ def _add_prompt_like_for_user(
         if not prompt:
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
+        # ユニーク制約エラー防止のためのON CONFLICT句を用いてインサート
+        # Insert the like record, avoiding constraint collisions.
         cursor.execute(
             """
             INSERT INTO prompt_likes (user_id, prompt_id)
@@ -705,6 +834,10 @@ def _add_prompt_like_for_user(
 # プロンプトからユーザーの「いいね」を解除する関数
 # Remove a "like" from a public prompt for a user.
 def _remove_prompt_like_for_user(user_id: int, prompt_id: int) -> int:
+    """
+    ユーザーIDとプロンプトIDの一致するいいねレコードをDBから物理削除する。
+    Delete a like record matching user ID and prompt ID from database.
+    """
     conn = None
     cursor = None
     try:
@@ -730,6 +863,10 @@ def _remove_prompt_like_for_user(user_id: int, prompt_id: int) -> int:
 # 有効な（論理削除や通報非表示されていない）プロンプトコメント件数をカウントする関数
 # Count non-deleted and non-hidden comments for a specific prompt.
 def _count_visible_prompt_comments(cursor: Any, prompt_id: int) -> int:
+    """
+    論理削除および通報による非表示状態になっていない、アクティブなコメント件数をカウントする。
+    Retrieve count of active, visible comments for a specific prompt ID.
+    """
     cursor.execute(
         """
         SELECT COUNT(*) AS total
@@ -753,11 +890,17 @@ def _fetch_prompt_comments(
     actor_user_id: int | None,
     actor_is_admin: bool,
 ) -> tuple[dict[str, Any], int]:
+    """
+    特定のプロンプトに紐づく有効なコメント一覧を、投稿者名、プロンプト所有者IDなどを含めてDBからロードする。
+    Fetch list of visible comments for prompt_id and format them with permissions.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # 公開対象プロンプトであることを確認
+        # Confirm prompt exists and is public.
         cursor.execute(
             """
             SELECT id
@@ -773,6 +916,8 @@ def _fetch_prompt_comments(
         if not prompt:
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
+        # コメント一覧とそれに関連するユーザー/プロンプト所有者情報をロード
+        # Fetch active comments associated with the target prompt.
         cursor.execute(
             """
             SELECT
@@ -798,10 +943,14 @@ def _fetch_prompt_comments(
             """,
             (actor_is_admin, prompt_id, PROMPT_COMMENT_LIST_LIMIT),
         )
+        # 各コメントレコードに対し削除権限などの付加・整形を実行
+        # Build comment payloads list.
         comments = [
             _serialize_prompt_comment_row(dict(row), actor_user_id)
             for row in cursor.fetchall()
         ]
+        # 総コメント数の再取得
+        # Retrieve total comments count.
         comment_count = _count_visible_prompt_comments(cursor, prompt_id)
         return {"comments": comments, "comment_count": comment_count}, 200
     finally:
@@ -819,11 +968,17 @@ def _add_prompt_comment_for_user(
     content: str,
     actor_is_admin: bool,
 ) -> tuple[dict[str, Any], int]:
+    """
+    対象プロンプトの存在と公開状態を検証し、同一内容の重複コメント送信(連投)を防ぎつつ、新規コメントをDBへ登録する。
+    Verify public status, check duplicate window, and insert comment row into prompt_comments.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # 対象公開プロンプト存在チェック
+        # Check target prompt.
         cursor.execute(
             """
             SELECT id, user_id
@@ -839,6 +994,8 @@ def _add_prompt_comment_for_user(
         if not prompt:
             return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
 
+        # 重複・連投コメントチェック(同一ユーザー、同一コンテンツ、同一プロンプト、直近数秒間)
+        # Prevent identical comments in the defined window.
         cursor.execute(
             """
             SELECT id
@@ -858,6 +1015,8 @@ def _add_prompt_comment_for_user(
         if duplicated:
             return {"error": "同じ内容のコメントは時間をおいて投稿してください。"}, 409
 
+        # コメント行をインサート
+        # Insert the comment.
         cursor.execute(
             """
             INSERT INTO prompt_comments (prompt_id, user_id, content)
@@ -867,6 +1026,9 @@ def _add_prompt_comment_for_user(
             (prompt_id, user_id, content),
         )
         inserted = dict(cursor.fetchone() or {})
+        
+        # 投稿したユーザー名を取得
+        # Fetch the posting username.
         cursor.execute(
             """
             SELECT COALESCE(username, 'ユーザー') AS username
@@ -880,6 +1042,9 @@ def _add_prompt_comment_for_user(
         inserted["prompt_owner_id"] = prompt.get("user_id")
         inserted["actor_is_admin"] = actor_is_admin
         comment = _serialize_prompt_comment_row(inserted, user_id)
+        
+        # 最新のコメント総数をカウント
+        # Count current visible comments count.
         comment_count = _count_visible_prompt_comments(cursor, prompt_id)
         conn.commit()
         return (
@@ -908,11 +1073,17 @@ def _delete_prompt_comment_for_actor(
     comment_id: int,
     actor_is_admin: bool,
 ) -> tuple[dict[str, Any], int]:
+    """
+    指定されたコメントIDが未削除であることを確認し、権限を検証（管理者、投稿者、プロンプト所有者）した上で論理削除する。
+    Check deletion authority and soft delete the specified comment.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # コメントレコードと関連プロンプトの作成者IDを取得
+        # Fetch comment and prompt owner details.
         cursor.execute(
             """
             SELECT
@@ -934,6 +1105,8 @@ def _delete_prompt_comment_for_actor(
         if not comment:
             return {"error": "対象コメントが見つかりませんでした。"}, 404
 
+        # 権限チェック
+        # Check permissions.
         can_delete = actor_is_admin or actor_user_id in {
             comment.get("user_id"),
             comment.get("prompt_owner_id"),
@@ -941,6 +1114,8 @@ def _delete_prompt_comment_for_actor(
         if not can_delete:
             return {"error": "このコメントを削除する権限がありません。"}, 403
 
+        # コメント削除(論理削除)を実行
+        # Update comment deleted_at column.
         cursor.execute(
             """
             UPDATE prompt_comments
@@ -980,11 +1155,17 @@ def _report_prompt_comment_for_user(
     reason: str,
     details: str,
 ) -> tuple[dict[str, Any], int]:
+    """
+    ユーザーから対象コメントへの通報（理由、詳細）をDBに登録し、通報数が閾値以上であれば自動で非表示に切り替える。
+    Insert a new report record. Check if the report threshold is crossed; if so, soft hide the comment.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        # コメントレコードが有効(未削除、未非表示)かチェック
+        # Verify comment is active.
         cursor.execute(
             """
             SELECT
@@ -1005,9 +1186,13 @@ def _report_prompt_comment_for_user(
         comment = cursor.fetchone()
         if not comment:
             return {"error": "対象コメントが見つかりませんでした。"}, 404
+        # 自分自身のコメントは通報不可とする
+        # Prevent self-reporting.
         if int(comment.get("user_id") or 0) == reporter_user_id:
             return {"error": "自分のコメントは報告できません。"}, 400
 
+        # 通報データを挿入(同一ユーザーによる同一コメントへの重複通報は無効)
+        # Insert comment report record.
         cursor.execute(
             """
             INSERT INTO prompt_comment_reports (
@@ -1038,6 +1223,8 @@ def _report_prompt_comment_for_user(
                 200,
             )
 
+        # 該当コメントの累積通報件数をカウント
+        # Count total reports on this comment.
         cursor.execute(
             """
             SELECT COUNT(*) AS total
@@ -1049,6 +1236,9 @@ def _report_prompt_comment_for_user(
         report_row = cursor.fetchone() or {}
         report_count = int(report_row.get("total") or 0)
         hidden = False
+        
+        # 閾値（3件など）以上の場合、hidden_by_reports_at をセットして非表示化
+        # Auto-hide comment if threshold is reached.
         if report_count >= PROMPT_COMMENT_AUTO_HIDE_REPORT_THRESHOLD:
             cursor.execute(
                 """
@@ -1062,6 +1252,8 @@ def _report_prompt_comment_for_user(
             )
             hidden = cursor.rowcount > 0
 
+        # 最新コメント総数のカウント
+        # Recalculate visible comments.
         comment_count = _count_visible_prompt_comments(cursor, prompt_id)
         conn.commit()
         return (
@@ -1093,13 +1285,20 @@ def _report_prompt_comment_for_user(
 # Endpoint to retrieve all public prompts.
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
 async def get_prompts(request: Request):
-    """保存されている全プロンプトを取得するエンドポイント"""
+    """
+    保存されているすべての公開プロンプト一覧を取得して返却するエンドポイント。
+    GET API endpoint to retrieve all shared public prompts with interaction flags.
+    """
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
     try:
+        # 非ブロッキングスレッドプールでDB検索処理を実行
+        # Run database operation in a separate thread.
         prompts = await run_blocking(_get_prompts_with_flags, user_id)
         return jsonify({"status": "success", "prompts": prompts})
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to load shared prompts.",
@@ -1110,12 +1309,20 @@ async def get_prompts(request: Request):
 # Endpoint to retrieve details of a specific public prompt.
 @prompt_share_api_bp.get("/prompts/{prompt_id}", name="prompt_share_api.get_prompt_detail")
 async def get_prompt_detail(prompt_id: int):
+    """
+    特定のプロンプト詳細情報を取得して返却するエンドポイント。
+    GET API endpoint to retrieve details of a specific public prompt by prompt_id.
+    """
     try:
+        # 非ブロッキングスレッドプールでDB検索処理を実行
+        # Run database query in a separate thread.
         prompt = await run_blocking(_get_public_prompt_by_id, prompt_id)
         if not prompt:
             return jsonify({"error": "プロンプトが見つかりません"}, status_code=404)
         return jsonify({"status": "success", "prompt": prompt})
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to load public prompt detail.",
@@ -1129,10 +1336,16 @@ async def get_prompt_detail(prompt_id: int):
     name="prompt_share_api.get_prompt_comments",
 )
 async def get_prompt_comments(prompt_id: int, request: Request):
+    """
+    指定されたプロンプトに対するコメントの一覧を時系列順で取得するエンドポイント。
+    GET API endpoint to fetch list of active comments on a public prompt.
+    """
     session = getattr(request, "session", {}) or {}
     actor_user_id = session.get("user_id")
     actor_is_admin = bool(session.get("is_admin"))
     try:
+        # 非ブロッキングスレッドプールでDB検索処理を実行
+        # Run database retrieval in a separate thread.
         response_payload, status_code = await run_blocking(
             _fetch_prompt_comments,
             prompt_id,
@@ -1141,6 +1354,8 @@ async def get_prompt_comments(prompt_id: int, request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to load prompt comments.",
@@ -1154,11 +1369,19 @@ async def get_prompt_comments(prompt_id: int, request: Request):
     name="prompt_share_api.create_prompt_comment",
 )
 async def create_prompt_comment(prompt_id: int, request: Request):
+    """
+    ログイン中のユーザーが指定されたプロンプトに対して新規コメントを書き込むエンドポイント。
+    POST API endpoint to post a new comment on a public prompt.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = int(request.session["user_id"])
     actor_is_admin = bool(request.session.get("is_admin"))
 
+    # レートリミット、連投クールダウン制限の検証
+    # Consume rate limit tokens.
     allowed, limit_message, retry_after = await run_blocking(
         _consume_prompt_comment_create_limits,
         request,
@@ -1170,10 +1393,14 @@ async def create_prompt_comment(prompt_id: int, request: Request):
             retry_after=retry_after,
         )
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate payload formatting.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # 送信パラメーターをPromptCommentCreateRequestモデルでバリデーション
+    # Check payload against request schema model.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptCommentCreateRequest,
@@ -1181,10 +1408,15 @@ async def create_prompt_comment(prompt_id: int, request: Request):
     )
     if validation_error is not None:
         return validation_error
+        
+    # スパム防止のためURLの最大埋め込みリンク数超過をチェック
+    # Block comments containing too many links.
     if _contains_too_many_links(request_payload.content):
         return jsonify({"error": "URLを含むコメントは3件までにしてください。"}, status_code=400)
 
     try:
+        # 非ブロッキングスレッドプールで新規コメントDB登録を実行
+        # Perform database insertion in a separate thread.
         response_payload, status_code = await run_blocking(
             _add_prompt_comment_for_user,
             user_id,
@@ -1194,6 +1426,8 @@ async def create_prompt_comment(prompt_id: int, request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to create prompt comment.",
@@ -1207,12 +1441,20 @@ async def create_prompt_comment(prompt_id: int, request: Request):
     name="prompt_share_api.delete_prompt_comment",
 )
 async def delete_prompt_comment(comment_id: int, request: Request):
+    """
+    ログイン中のユーザー自身、あるいは権限のあるユーザーがコメントを削除するエンドポイント。
+    DELETE API endpoint to remove a comment by comment_id.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 
     actor_user_id = int(request.session["user_id"])
     actor_is_admin = bool(request.session.get("is_admin"))
     try:
+        # 非ブロッキングスレッドプールでコメント削除を実行
+        # Run DB soft deletion in a separate thread.
         response_payload, status_code = await run_blocking(
             _delete_prompt_comment_for_actor,
             actor_user_id,
@@ -1221,6 +1463,8 @@ async def delete_prompt_comment(comment_id: int, request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to delete prompt comment.",
@@ -1234,13 +1478,23 @@ async def delete_prompt_comment(comment_id: int, request: Request):
     name="prompt_share_api.report_prompt_comment",
 )
 async def report_prompt_comment(comment_id: int, request: Request):
+    """
+    ログイン中のユーザーが指定された不適切なコメントを通報・報告するエンドポイント。
+    POST API endpoint to report a comment by comment_id.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
 
+    # リクエストデータがJSON辞書形式か検証
+    # Retrieve and validate JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # 送信パラメータを通報用リクエストモデルで検証
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptCommentReportRequest,
@@ -1250,6 +1504,8 @@ async def report_prompt_comment(comment_id: int, request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールで通報処理を実行
+        # Run DB report operation in a separate thread.
         response_payload, status_code = await run_blocking(
             _report_prompt_comment_for_user,
             int(request.session["user_id"]),
@@ -1259,6 +1515,8 @@ async def report_prompt_comment(comment_id: int, request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to report prompt comment.",
@@ -1269,11 +1527,18 @@ async def report_prompt_comment(comment_id: int, request: Request):
 # Endpoint to publish and share a new prompt.
 @prompt_share_api_bp.post("/prompts", name="prompt_share_api.create_prompt")
 async def create_prompt(request: Request):
-    """新しいプロンプトを投稿するエンドポイント"""
+    """
+    新しいプロンプトを投稿・公開共有するエンドポイント（JSONおよびマルチパートフォームに対応）。
+    POST API endpoint to publish and share a new prompt with optional reference image upload.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # コンテンツタイプに応じてフォームデータ、またはJSONを取得
+    # Determine the payload source based on request headers.
     content_type = request.headers.get("content-type", "")
     image_file = None
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
@@ -1296,6 +1561,8 @@ async def create_prompt(request: Request):
         if error_response is not None:
             return error_response
 
+    # リクエストデータモデルによるバリデーション
+    # Validate payload properties.
     payload, validation_error = validate_payload_model(
         data,
         SharedPromptCreateRequest,
@@ -1304,6 +1571,8 @@ async def create_prompt(request: Request):
     if validation_error is not None:
         return validation_error
 
+    # 画像アップロード機能は画像生成プロンプトのみ許可する制限を確認
+    # Confirm prompt type is allowed to have an image.
     normalized_prompt_type = _normalize_prompt_type(payload.prompt_type)
     if normalized_prompt_type != PROMPT_TYPE_IMAGE and image_file is not None:
         return jsonify(
@@ -1315,8 +1584,12 @@ async def create_prompt(request: Request):
     skill_markdown = payload.skill_markdown if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
     skill_python_script = payload.skill_python_script if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
     try:
+        # 画像ファイルがある場合、ディスクに保存してURLを取得
+        # Save upload reference image file to static folder.
         if image_file is not None:
             reference_image_url = await run_blocking(_save_prompt_reference_image, image_file, user_id)
+        # プロンプトレコードをDBに新規作成
+        # Create new prompt row in DB.
         prompt_id = await run_blocking(
             _create_prompt_for_user,
             user_id,
@@ -1333,10 +1606,14 @@ async def create_prompt(request: Request):
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
     except ValueError as exc:
+        # ファイルバリデーションなどのエラー時は、アップロード済みの画像を削除して差し戻し
+        # Clean up any written file on valuation failures.
         if reference_image_url:
             await run_blocking(_delete_prompt_reference_image, reference_image_url)
         return jsonify({"error": str(exc)}, status_code=400)
     except Exception:
+        # その他エラー発生時はアップロードした画像を削除し、500内部サーバーエラーを返却
+        # Clean up files and return 500 on unexpected exceptions.
         if reference_image_url:
             await run_blocking(_delete_prompt_reference_image, reference_image_url)
         return log_and_internal_server_error(
@@ -1349,14 +1626,24 @@ async def create_prompt(request: Request):
 # Endpoint to add a prompt to user's bookmark list.
 @prompt_share_api_bp.post("/bookmark", name="prompt_share_api.add_bookmark")
 async def add_bookmark(request: Request):
+    """
+    ログイン中のユーザーがお気に入りプロンプトとしてブックマーク登録するエンドポイント。
+    POST API endpoint to bookmark a public prompt.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         BookmarkCreateRequest,
@@ -1366,6 +1653,8 @@ async def add_bookmark(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールでブックマーク追加を実行
+        # Run DB bookmark addition in a separate thread.
         response_payload, status_code = await run_blocking(
             _add_bookmark_for_user,
             user_id,
@@ -1373,6 +1662,8 @@ async def add_bookmark(request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to add bookmark.",
@@ -1383,14 +1674,24 @@ async def add_bookmark(request: Request):
 # Endpoint to remove a prompt from user's bookmark list.
 @prompt_share_api_bp.delete("/bookmark", name="prompt_share_api.remove_bookmark")
 async def remove_bookmark(request: Request):
+    """
+    ログイン中のユーザーがお気に入りからブックマーク登録を解除・削除するエンドポイント。
+    DELETE API endpoint to remove a prompt bookmark.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         BookmarkDeleteRequest,
@@ -1400,6 +1701,8 @@ async def remove_bookmark(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールでブックマーク解除を実行
+        # Run DB bookmark deletion in a separate thread.
         deleted = await run_blocking(_remove_bookmark_for_user, user_id, request_payload.prompt_id)
         status_code = 200 if deleted else 404
         payload = (
@@ -1409,6 +1712,8 @@ async def remove_bookmark(request: Request):
         )
         return jsonify(payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to remove bookmark.",
@@ -1419,14 +1724,24 @@ async def remove_bookmark(request: Request):
 # Endpoint to duplicate a public prompt as a user's task template.
 @prompt_share_api_bp.post("/task", name="prompt_share_api.add_prompt_as_task")
 async def add_prompt_as_task(request: Request):
+    """
+    公開プロンプトを複製し、ログイン中のユーザー個人のタスクテンプレートとして追加インポートするエンドポイント。
+    POST API endpoint to import a public prompt as a user's personal task template.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptTaskCreateRequest,
@@ -1436,6 +1751,8 @@ async def add_prompt_as_task(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールでタスク追加処理を実行
+        # Run task duplication logic in a separate thread.
         response_payload, status_code = await run_blocking(
             _add_prompt_as_task_for_user,
             user_id,
@@ -1443,6 +1760,8 @@ async def add_prompt_as_task(request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to add prompt as task.",
@@ -1453,14 +1772,24 @@ async def add_prompt_as_task(request: Request):
 # Endpoint to add a "like" to a public prompt.
 @prompt_share_api_bp.post("/like", name="prompt_share_api.add_like")
 async def add_like(request: Request):
+    """
+    ログイン中のユーザーが指定されたプロンプトに対して「いいね」を送信するエンドポイント。
+    POST API endpoint to like a public prompt.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptLikeRequest,
@@ -1470,6 +1799,8 @@ async def add_like(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールでいいね追加を実行
+        # Run DB like addition in a separate thread.
         response_payload, status_code = await run_blocking(
             _add_prompt_like_for_user,
             user_id,
@@ -1477,6 +1808,8 @@ async def add_like(request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to add prompt like.",
@@ -1487,14 +1820,24 @@ async def add_like(request: Request):
 # Endpoint to remove a "like" from a public prompt.
 @prompt_share_api_bp.delete("/like", name="prompt_share_api.remove_like")
 async def remove_like(request: Request):
+    """
+    ログイン中のユーザーが指定されたプロンプトに対する「いいね」を取り消すエンドポイント。
+    DELETE API endpoint to unlike a public prompt.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptLikeRequest,
@@ -1504,9 +1847,13 @@ async def remove_like(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールでいいね解除を実行
+        # Run DB like deletion in a separate thread.
         await run_blocking(_remove_prompt_like_for_user, user_id, request_payload.prompt_id)
         return jsonify({"message": "いいねを解除しました。", "liked": False})
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to remove prompt like.",
@@ -1517,14 +1864,24 @@ async def remove_like(request: Request):
 # Endpoint to add a prompt to user's bookmark list.
 @prompt_share_api_bp.post("/prompt_list", name="prompt_share_api.add_prompt_to_list")
 async def add_prompt_to_list(request: Request):
+    """
+    ログイン中のユーザーがお気に入り保存リストにプロンプトを追加するエンドポイント。
+    POST API endpoint to add a public prompt to the user's saved list.
+    """
+    # ログイン認証チェック
+    # Verify authentication state.
     if "user_id" not in request.session:
         return jsonify({"error": "ログインしていません"}, status_code=401)
     user_id = request.session["user_id"]
 
+    # リクエストデータがJSON辞書形式か検証
+    # Validate and retrieve JSON payload.
     data, error_response = await require_json_dict(request)
     if error_response is not None:
         return error_response
 
+    # リクエストボディモデルによるバリデーション
+    # Validate payload properties.
     request_payload, validation_error = validate_payload_model(
         data,
         PromptListEntryCreateRequest,
@@ -1534,6 +1891,8 @@ async def add_prompt_to_list(request: Request):
         return validation_error
 
     try:
+        # 非ブロッキングスレッドプールで保存リスト追加処理を実行
+        # Run DB prompt list entry creation in a separate thread.
         response_payload, status_code = await run_blocking(
             _add_prompt_list_entry_for_user,
             user_id,
@@ -1541,6 +1900,8 @@ async def add_prompt_to_list(request: Request):
         )
         return jsonify(response_payload, status_code=status_code)
     except Exception:
+        # エラー発生時はログに記録し、500内部サーバーエラーを返却
+        # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
             "Failed to add prompt to prompt list.",

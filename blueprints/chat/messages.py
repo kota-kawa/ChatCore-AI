@@ -111,6 +111,10 @@ LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
 # チャット用リポジトリを取得するヘルパー関数
 # Helper function to retrieve the chat repository instance.
 def _get_chat_repository() -> ChatRepository:
+    """
+    チャットリポジトリのインスタンスを取得します。
+    Retrieves the chat repository instance.
+    """
     return ChatRepository()
 
 
@@ -120,6 +124,10 @@ def _resolve_auth_limit_service(
     request: Request,
     service: AuthLimitService | None,
 ) -> AuthLimitService:
+    """
+    リクエストまたは依存注入された値から、認証制限サービスを取得・解決します。
+    Resolves the AuthLimitService instance from the request context or dependency.
+    """
     if isinstance(service, AuthLimitService):
         return service
     return get_auth_limit_service(request)
@@ -131,6 +139,10 @@ def _resolve_llm_daily_limit_service(
     request: Request,
     service: LlmDailyLimitService | None,
 ) -> LlmDailyLimitService:
+    """
+    リクエストまたは依存注入された値から、LLMの1日あたり制限サービスを取得・解決します。
+    Resolves the LlmDailyLimitService instance from the request context or dependency.
+    """
     if isinstance(service, LlmDailyLimitService):
         return service
     return get_llm_daily_limit_service(request)
@@ -139,6 +151,11 @@ def _resolve_llm_daily_limit_service(
 # ユーザーIDまたはセッションIDに基づいてLLMクォータ制限キーを組み立てる関数
 # Construct the LLM quota limit key using the user ID or session ID.
 def _build_llm_quota_user_key(user_id: int | None, sid: str | None) -> str | None:
+    """
+    ユーザーIDまたはセッションIDに基づき、LLMクォータ制限キーを組み立てます。
+    Constructs the LLM quota limit key based on user ID or session ID.
+    """
+    # 呼び出し元ごとにキーを区切り、1日のLLMクォータ制限を適用します
     # Per-caller key used to scope the LLM daily quota. Without this, one
     # user could burn the global per-day cap and DoS every other user.
     if user_id is not None:
@@ -154,6 +171,10 @@ def _resolve_chat_generation_service(
     request: Request,
     service: ChatGenerationService | None,
 ) -> ChatGenerationService:
+    """
+    リクエストまたは依存注入された値から、チャット生成サービスを取得・解決します。
+    Resolves the ChatGenerationService instance from the request context or dependency.
+    """
     if isinstance(service, ChatGenerationService):
         return service
     return get_chat_generation_service(request)
@@ -162,18 +183,29 @@ def _resolve_chat_generation_service(
 # ゲストユーザー用のチャットルームアクセス権を検証する非同期関数
 # Asynchronously validate the guest session's access privileges to the specified room.
 async def _validate_guest_room_access(session: dict, chat_room_id: str):
+    """
+    ゲストセッションの指定ルームへのアクセス権を検証します。
+    Validates access rights of the guest session for the specified room.
+    """
     sid = get_session_id(session)
     registered_room_ids = get_guest_room_ids(session)
 
+    # セッションに登録されていないルームIDへのアクセスは404エラー
+    # If room ID is not in session registration, return 404
     if registered_room_ids and chat_room_id not in registered_room_ids:
         return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
+    # エフェメラルストアにルームが存在するか確認
+    # Verify the room exists in the ephemeral store
     room_exists = await run_blocking(ephemeral_store.room_exists, sid, chat_room_id)
     if not room_exists:
+        # 存在しない場合はセッションから除外して404エラー
+        # Clean up registration and return 404 if not found
         unregister_guest_room(session, chat_room_id)
         return sid, jsonify({"error": ERROR_CHAT_ROOM_NOT_FOUND}, status_code=404)
 
     if not registered_room_ids:
+        # 以前の古いセッション情報をマイグレート
         # Migrate legacy guest sessions that predate explicit room ownership tracking.
         register_guest_room(session, chat_room_id)
 
@@ -267,6 +299,10 @@ _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 # 現在日時情報などを埋め込んだベースのシステムプロンプトを組み立てる関数
 # Construct the base system prompt containing contextual runtime information like datetime.
 def _build_base_system_prompt(current_time: datetime | None = None) -> str:
+    """
+    現在時刻やWeb検索などの動的な実行時コンテキストを埋め込んだベースシステムプロンプトを組み立てます。
+    Constructs the base system prompt containing contextual runtime information.
+    """
     resolved_time = current_time or datetime.now().astimezone()
     current_datetime_text = resolved_time.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
 
@@ -301,6 +337,10 @@ def _build_base_system_prompt(current_time: datetime | None = None) -> str:
 # ユーザー設定からLLM向けプロフィール用カスタムプロンプトを組み立てる関数
 # Build custom LLM instructions based on user's configuration profile.
 def _build_user_profile_prompt(user: dict[str, Any] | None) -> str | None:
+    """
+    ユーザーのプロフィール設定内容から、LLM向けのプロフィール用カスタムプロンプトを組み立てます。
+    Builds custom LLM instructions based on user profile settings.
+    """
     if not isinstance(user, dict):
         return None
 
@@ -330,6 +370,10 @@ def _build_user_profile_prompt(user: dict[str, Any] | None) -> str | None:
 # 引数データをJSONシリアライズして Server-Sent Event (SSE) フォーマットのバイトデータに変換する関数
 # Construct a Server-Sent Event (SSE) formatted byte sequence from event data.
 def _sse_event(event: str, payload: dict[str, Any], *, sequence_id: int | None = None) -> bytes:
+    """
+    引数データをJSONシリアライズして Server-Sent Event (SSE) フォーマットのバイトデータに変換します。
+    Constructs a Server-Sent Event (SSE) formatted byte sequence from event data.
+    """
     # SSE 形式で JSON ペイロードを1イベントとして返す
     # Encode one JSON payload as an SSE event.
     body = json.dumps(payload, ensure_ascii=False)
@@ -344,6 +388,10 @@ def _iter_llm_stream_events(
     *,
     after_sequence_id: int = 0,
 ) -> Iterator[bytes]:
+    """
+    バックグラウンドの生成ジョブイベントを Server-Sent Event (SSE) ペイロードとして順次読み込みます。
+    Generator that iterates and yields SSE byte sequences from a background generation job.
+    """
     # 生成ジョブのイベント列を SSE として配信する
     # Convert background generation job events into SSE payloads.
     for event in job.iter_events(after_sequence_id=after_sequence_id):
@@ -355,6 +403,10 @@ def _iter_llm_stream_events(
 def _iter_serialized_stream_events(
     events: Iterator[ChatGenerationEvent],
 ) -> Iterator[bytes]:
+    """
+    シリアライズされた生成ストリームイベントを Server-Sent Event (SSE) ペイロードとして送出します。
+    Yields serialized generation events formatted as SSE byte streams.
+    """
     try:
         for event in events:
             yield _sse_event(event.event, event.payload, sequence_id=event.sequence_id)
@@ -367,6 +419,10 @@ def _iter_serialized_stream_events(
 def _build_llm_stream_response(
     events: Iterator[bytes],
 ) -> StreamingResponse:
+    """
+    ストリーミングイベントシーケンスから text/event-stream 形式の StreamingResponse を生成します。
+    Constructs a StreamingResponse object from a sequence of SSE stream events.
+    """
     # バックグラウンド生成ジョブを StreamingResponse へ変換して SSE 配信する
     # Wrap the background generation job with StreamingResponse for SSE delivery.
 
@@ -389,6 +445,10 @@ def _discard_room_without_assistant_response(
     user_id: int | None = None,
     sid: str | None = None,
 ) -> bool:
+    """
+    アシスタントからの返答がない空のチャットルームを破棄（削除）します。
+    Permanently discards a chat room if no assistant messages exist in it.
+    """
     deleted = False
     if user_id is not None:
         deleted = delete_chat_room_if_no_assistant_messages(chat_room_id, user_id) or deleted
@@ -405,6 +465,10 @@ def _cleanup_failed_room_without_assistant_response(
     user_id: int | None = None,
     sid: str | None = None,
 ) -> None:
+    """
+    エラーなどで生成に失敗した際、アシスタント返答がない空ルームを安全に破棄クリーンアップします。
+    Safely discards a newly created room with no assistant responses after a failed generation.
+    """
     try:
         deleted = _discard_room_without_assistant_response(
             chat_room_id,
@@ -426,6 +490,10 @@ def _cleanup_failed_room_without_assistant_response(
 # リクエストヘッダーまたはパラメータから直近 of SSEイベントIDをパース取得する関数
 # Extract and parse the last SSE event ID from request headers or query parameters.
 def _parse_last_event_id(request: Request) -> int:
+    """
+    リクエストヘッダーまたはパラメータから直近のSSEイベントIDをパース・取得します。
+    Extracts and parses the last SSE event ID from request headers or query parameters.
+    """
     raw_value = request.headers.get("last-event-id")
     if raw_value is None:
         raw_value = request.query_params.get("last_event_id")
@@ -441,6 +509,10 @@ def _parse_last_event_id(request: Request) -> int:
 # ユーザーメッセージからタスク名と状況設定情報を抽出するパース関数
 # Parse and extract task launch parameters from a user message content.
 def _parse_task_launch_message(message: str) -> dict[str, str] | None:
+    """
+    ユーザーメッセージから「【タスク】」や「【状況・作業環境】」の定義を検索・パースします。
+    Parses and extracts task launch parameters from a user message content.
+    """
     # 初回タスク起動メッセージからタスク名と状況情報を抽出する
     # Extract task name and setup info from the initial task-launch payload.
     if not message:
@@ -461,6 +533,10 @@ def _parse_task_launch_message(message: str) -> dict[str, str] | None:
 # 特定タスク用のプロンプト定義をDBから取得する関数
 # Fetch prompt-template data for a specific task from the repository.
 def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+    """
+    特定タスク用のプロンプト定義をDBから取得します。
+    Fetches prompt-template data for a specific task from the repository.
+    """
     # タスク名に対応するプロンプト定義を取得する
     # Fetch prompt-template metadata for the selected task.
     return _get_chat_repository().get_task_prompt_data(task, user_id)
@@ -469,6 +545,10 @@ def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
 # 特定タスクのプロンプトデータをDBから非同期に読み込む関数
 # Asynchronously load prompt data for a specific task.
 async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+    """
+    特定タスクのプロンプト定義データを非同期でロードします。
+    Asynchronously loads prompt data for a specific task.
+    """
     # タスク補助情報の取得失敗ではチャット全体を止めず、ベースプロンプトのみで続行する
     # Do not fail the whole chat request when task metadata lookup fails.
     try:
@@ -488,6 +568,10 @@ async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, An
 # サンプルリスト文字列（JSON形式含む）をリスト型配列にパース標準化する関数
 # Parse and normalize example instructions into a list of strings.
 def _parse_example_list(examples: str | None) -> list[str]:
+    """
+    JSON形式または単純テキストのサンプル例をリスト形式にパース・平滑化します。
+    Parses and normalizes example instructions into a list of strings.
+    """
     # JSON配列または単一文字列の両方に対応して例を配列化する
     # Normalize example payloads into a list of strings.
     if not examples:
@@ -512,6 +596,10 @@ def _parse_example_list(examples: str | None) -> list[str]:
 # LLMに入力するメッセージコンテンツ（HTMLタグなど）を正規化する関数
 # Normalize message text representation for LLM ingestion (such as converting <br> to newlines).
 def _normalize_message_content_for_llm(content: str, role: str) -> str:
+    """
+    メッセージ内のHTML改行タグや実体参照を通常改行にデコード・正規化します。
+    Normalizes message text representation for LLM ingestion.
+    """
     normalized = content if isinstance(content, str) else str(content)
     if role == "user":
         normalized = html.unescape(normalized)
@@ -522,6 +610,10 @@ def _normalize_message_content_for_llm(content: str, role: str) -> str:
 # LLM送信用に履歴メッセージリスト全体を正規化・整形する関数
 # Format and normalize a list of message objects for LLM consumption.
 def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    会話履歴全体のロールやテキストデータをLLM送信用にデコード・標準化します。
+    Formats and normalizes a list of message objects for LLM consumption.
+    """
     normalized_messages: list[dict[str, Any]] = []
     for message in messages:
         role = str(message.get("role", "user"))
@@ -541,6 +633,10 @@ def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str
 def _prepend_attached_files_to_latest_user_message(
     messages: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    """
+    履歴内の最新のユーザーメッセージに対し、添付ファイルのテキスト表現をプレフィックスとして挿入します。
+    Prepends formatted representations of attached files to the most recent user message.
+    """
     for index in range(len(messages) - 1, -1, -1):
         message = messages[index]
         if str(message.get("role", "")) != "user":
@@ -562,6 +658,10 @@ def _prepend_attached_files_to_latest_user_message(
 # メッセージ履歴から最も新しいタスク起動リクエストを検索抽出する関数
 # Search and extract the most recent task launch request from conversation history.
 def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, str] | None:
+    """
+    会話履歴を逆順でスキャンし、最も新しいユーザーメッセージからタスク起動情報を抽出します。
+    Searches and extracts the most recent task launch request from conversation history.
+    """
     for message in reversed(messages):
         if str(message.get("role", "")) != "user":
             continue
@@ -574,6 +674,10 @@ def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str
 # タスクの制約や入出力例を含むLLM向けタスク指示プロンプトを組み立てる関数
 # Construct the system instruction block containing task contracts and input/output examples.
 def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
+    """
+    タスク定義のテンプレートや出力スケルトン、入出力例をマージしてシステムプロンプト用の指示文を生成します。
+    Constructs the system instruction block containing task contracts and input/output examples.
+    """
     # タスク定義から system 用の追加指示を組み立てる
     # Build a system prompt fragment from task metadata.
     sections: list[str] = []
@@ -634,6 +738,10 @@ def _build_task_prompt(prompt_data: dict[str, Any]) -> str:
 # クエリ値から履歴取得件数をパースし制限値内にクランプする関数
 # Parse limit query parameter and clamp to standard bounds for history paging.
 def _parse_page_size(raw_value: str | None) -> int:
+    """
+    クエリパラメータから履歴取得件数をパースし、既定の上限と下限の範囲内に制限します。
+    Parses limit query parameter and clamps to standard bounds for history paging.
+    """
     if raw_value is None:
         return CHAT_HISTORY_PAGE_SIZE_DEFAULT
     try:
@@ -648,6 +756,10 @@ def _parse_page_size(raw_value: str | None) -> int:
 # 履歴取得時の上限基準点となるメッセージIDをパースする関数
 # Parse message ID parameter serving as paging bounds for history retrieval.
 def _parse_before_message_id(raw_value: str | None) -> int | None:
+    """
+    ページングの基準点となるメッセージIDをクエリ値からパースします。
+    Parses message ID parameter serving as paging bounds for history retrieval.
+    """
     if raw_value is None or raw_value == "":
         return None
     try:
@@ -662,6 +774,10 @@ def _parse_before_message_id(raw_value: str | None) -> int | None:
 # レガシーなエラーレスポンス形式を FastAPI 互換の JSONResponse に整形するヘルパー関数
 # Format a legacy error response payload into a FastAPI-compatible response.
 def _legacy_error_response(result: Any):
+    """
+    レガシーな検証結果のタプル (payload, status_code) を、FastAPI 互換のJSONResponseに整形します。
+    Formats a legacy error response payload into a FastAPI-compatible response.
+    """
     if not (isinstance(result, tuple) and len(result) == 2):
         return None
     payload, status_code = result
@@ -675,6 +791,10 @@ def _legacy_error_response(result: Any):
 # 認証結果からチャットルームのモード("normal" または "temporary")を判定する関数
 # Resolve room mode ("normal" or "temporary") based on ownership resolution.
 def _resolved_room_mode(owner_result: Any) -> str:
+    """
+    所有権検証結果から対象ルームのモード("normal" または "temporary")を特定します。
+    Resolves room mode ("normal" or "temporary") based on ownership resolution.
+    """
     if isinstance(owner_result, str) and owner_result in {"normal", "temporary"}:
         return owner_result
     return "normal"
@@ -683,6 +803,10 @@ def _resolved_room_mode(owner_result: Any) -> str:
 # ゲスト用の一時チャットルームがEphemeralStoreに存在することを保証する関数
 # Ensure that a guest ephemeral chat room is properly initialized in storage.
 def _ensure_ephemeral_room(sid: str, chat_room_id: str, title: str = "新規チャット") -> None:
+    """
+    一時ストアにゲスト用のチャットルームが確実に初期化されていることを保証します。
+    Ensures that a guest ephemeral chat room is properly initialized in storage.
+    """
     if ephemeral_store.room_exists(sid, chat_room_id):
         return
     ephemeral_store.create_room(sid, chat_room_id, title)
@@ -695,6 +819,10 @@ def _resolve_authenticated_room_target(
     user_id: int,
     forbidden_message: str,
 ) -> tuple[str | None, str | None, Any]:
+    """
+    ユーザーIDに基づき、指定ルームのモード("normal"/"temporary")、一時ストアキーを検証・解決します。
+    Resolves the chat room details, ownership, and mode for authenticated requests.
+    """
     temporary_sid = get_temporary_user_store_key(user_id)
     if ephemeral_store.room_exists(temporary_sid, chat_room_id):
         return "temporary", temporary_sid, None
@@ -713,6 +841,10 @@ def _resolve_authenticated_room_target(
 # トークン予算内に収まるようメッセージコンテンツの文字数を切り詰める関数
 # Trim message text size to stay within budget constraints.
 def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
+    """
+    トークン/文字数予算の上限に収まるよう、メッセージテキストの末尾部分を切り詰めます。
+    Trims message text size to stay within budget constraints.
+    """
     if char_budget <= 0:
         return ""
     if len(content) <= char_budget:
@@ -725,6 +857,10 @@ def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
 def _truncate_conversation_for_llm(
     messages: list[dict[str, str]],
 ) -> list[dict[str, str]]:
+    """
+    LLMが受信可能な最大トークン（文字数）制限および件数制限を超えないよう、過去の会話履歴を古いものから切り詰めます。
+    Prunes conversation history to fit context limits before sending to LLM.
+    """
     if not messages:
         return []
 
@@ -784,6 +920,10 @@ def _fetch_chat_history(
     limit: int,
     before_message_id: int | None = None,
 ) -> dict[str, Any]:
+    """
+    リポジトリから指定されたルームIDの永続化チャット履歴をページネーション付きで取得します。
+    Fetch chat messages history for the specified room.
+    """
     # API返却向けにチャット履歴をページ単位で整形する
     # Fetch and format paginated chat history for API response.
     return _get_chat_repository().fetch_chat_history_page(
@@ -800,6 +940,10 @@ def _paginate_ephemeral_chat_history(
     limit: int,
     before_message_id: int | None = None,
 ) -> dict[str, Any]:
+    """
+    ゲスト用の一時チャット履歴リストを、永続チャット履歴APIと同様のスキーマ形式にページング整形します。
+    Paginates history from guest ephemeral chat store.
+    """
     # 一時チャット履歴も同じAPI形式で返し、将来の拡張に備える
     # Shape guest chat history with the same pagination payload as persisted chats.
     normalized_messages = [
@@ -833,6 +977,10 @@ def _paginate_ephemeral_chat_history(
 # チャットメッセージ投稿ユースケースクラスの依存関係を満たしたインスタンスを生成する関数
 # Factory function to build ChatPostUseCase instance with resolved dependencies.
 def _build_chat_post_use_case() -> ChatPostUseCase:
+    """
+    チャットメッセージ投稿ユースケースクラスの依存関係を満たしたインスタンスを生成します。
+    Factory function to build ChatPostUseCase instance with resolved dependencies.
+    """
     return ChatPostUseCase(
         ChatPostUseCaseDependencies(
             cleanup_ephemeral_chats=cleanup_ephemeral_chats,
@@ -895,6 +1043,10 @@ async def chat(
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    新規のチャットメッセージを投稿し、AIの回答生成プロセスを起動します。
+    Posts a new user message and triggers AI response generation.
+    """
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
         request,
@@ -920,6 +1072,10 @@ async def chat_regenerate(
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    指定されたAI返答メッセージに対する再生成を開始します。DB保存ルームの場合、新たなメッセージブランチを作成します。
+    Initiates regeneration of the assistant response for the target message.
+    """
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
@@ -1167,6 +1323,10 @@ async def chat_edit_and_regenerate(
     llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    過去のユーザーメッセージを編集し、そこからの分岐（ブランチ）で新しいAI応答の生成を開始します。
+    Edits a previous user message and spawns a new branch with a regenerated AI response.
+    """
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(request, llm_daily_limit_service)
     resolved_chat_generation_service = _resolve_chat_generation_service(request, chat_generation_service)
 
@@ -1513,6 +1673,10 @@ async def chat_edit_and_regenerate(
 # API endpoint to switch the active branch in a message conversation tree.
 @chat_bp.post("/api/chat_switch_branch", name="chat.chat_switch_branch")
 async def chat_switch_branch(request: Request):
+    """
+    チャット履歴内の指定されたメッセージ分岐（編集履歴や再生成回答）へアクティブな会話ツリーパスを切り替えます。
+    Switches the active conversation path to the specified message branch.
+    """
     # Switch the active branch (a regenerated answer or an edited message version)
     # for a DB-backed chat room and return the resulting active conversation path.
     data, error_response = await require_json_dict(request)
@@ -1583,6 +1747,10 @@ async def chat_stop(
     request: Request,
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    進行中のAI回答生成ジョブ（ストリーミング含む）をキャンセルし、停止します。
+    Aborts the active AI response generation job.
+    """
     # 生成中ジョブを停止する前に、対象ルームのアクセス権を再検証する
     # Re-validate room access before cancelling in-flight generation jobs.
     data, error_response = await require_json_dict(request)
@@ -1637,6 +1805,10 @@ async def chat_stop(
 # API endpoint to retrieve paginated conversation history for a chat room.
 @chat_bp.get("/api/get_chat_history", name="chat.get_chat_history")
 async def get_chat_history(request: Request):
+    """
+    指定チャットルームの会話メッセージ履歴をページネーション付きで取得します。
+    Retrieves the paginated message list for a specific chat room.
+    """
     # 履歴取得は常にページング形式で返し、クライアント側の遅延読み込みに合わせる
     # Always return paginated history payloads for client-side incremental loading.
     await run_blocking(cleanup_ephemeral_chats)
@@ -1706,6 +1878,10 @@ async def chat_generation_stream(
     request: Request,
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    進行中のAI回答生成ジョブに接続し、生成されるトークンをSSE (Server-Sent Events) 形式でストリーミングします。
+    Connects to the active generation job to stream response tokens via SSE.
+    """
     # 既存生成ジョブへ再接続するためのSSEエンドポイント
     # SSE endpoint for reconnecting to an existing generation job.
     await run_blocking(cleanup_ephemeral_chats)
@@ -1783,6 +1959,10 @@ async def chat_generation_status(
     request: Request,
     chat_generation_service: ChatGenerationService | None = Depends(get_chat_generation_service),
 ):
+    """
+    対象チャットルームで現在AI回答が生成中であるかどうかのステータスを取得します。
+    Checks the status of an ongoing generation job for the room.
+    """
     await run_blocking(cleanup_ephemeral_chats)
     chat_room_id = request.query_params.get("room_id")
     if not chat_room_id:

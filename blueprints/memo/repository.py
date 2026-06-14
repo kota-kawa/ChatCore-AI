@@ -18,17 +18,20 @@ from .helpers import date_end, date_start, ensure_title, resolve_sort_order
 from .serializers import serialize_memo_detail, serialize_memo_summary
 
 
-# メモモジュールから動的にDB接続取得関数を解決するヘルパー（循環参照防止）
-# Helper to dynamically retrieve the DB connection function to avoid circular imports.
 def _get_db_connection():
+    """
+    メモモジュールから動的にDB接続取得関数を解決するヘルパー（循環参照防止）
+    Helper to dynamically retrieve the DB connection function to avoid circular imports.
+
+    Returns:
+        Connection: データベース接続オブジェクト / The database connection object.
+    """
     memo_module = sys.modules.get("blueprints.memo")
     if memo_module is not None:
         return getattr(memo_module, "get_db_connection", default_get_db_connection)()
     return default_get_db_connection()
 
 
-# 条件フィルターおよびソート設定に基づき、メモの概要リストを取得する関数
-# Retrieve a list of memo summaries based on filters and sorting criteria.
 def fetch_memo_summaries(
     user_id: int,
     *,
@@ -44,6 +47,27 @@ def fetch_memo_summaries(
     collection_id: int | None,
     semantic_query_embedding: list[float] | None,
 ) -> dict[str, Any]:
+    """
+    条件フィルターおよびソート設定に基づき、メモの概要リストを取得する関数
+    Retrieve a list of memo summaries based on filters and sorting criteria.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        limit (int): 取得上限件数 / Pagination limit.
+        offset (int): 取得オフセット / Pagination offset.
+        query (str): テキスト検索クエリ / Text search keyword.
+        date_from (str): 開始日付 / Start date filter.
+        date_to (str): 終了日付 / End date filter.
+        sort (str): ソート方法 / Sorting algorithm key.
+        include_archived (bool): アーカイブ済みメモを含めるか / Whether to include archived memos.
+        only_archived (bool): アーカイブ済みメモのみ対象とするか / Whether to load only archived memos.
+        pinned_first (bool): ピン留めメモを優先的に先頭に配置するか / Whether to display pinned memos first.
+        collection_id (int | None): コレクションIDによる絞り込み / Optional collection ID to filter by.
+        semantic_query_embedding (list[float] | None): セマンティック検索用のクエリ埋め込みベクトル / Optional query embedding vector for semantic search.
+
+    Returns:
+        dict[str, Any]: 総件数とメモ概要のリスト / Dictionary containing total count and lists of serialized memo summaries.
+    """
     connection = None
     cursor = None
     try:
@@ -127,11 +151,11 @@ def fetch_memo_summaries(
             """
             cursor.execute(sem_sql, tuple([*filter_params, SEMANTIC_SEARCH_MAX_MEMOS]))
             rows = list(cursor.fetchall())
-            
+
             # コサイン類似度を用いてランキングを算出
             # Rank and sort memos based on cosine similarity.
             ranked = rank_memos_by_semantic_similarity(semantic_query_embedding, rows)
-            
+
             # ページネーションを適用
             # Apply offset and limit pagination.
             paginated = ranked[offset : offset + limit]
@@ -190,9 +214,18 @@ def fetch_memo_summaries(
             connection.close()
 
 
-# 指定されたメモの詳細情報を取得する関数
-# Retrieve the detailed data for a specific memo entry.
 def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
+    """
+    指定されたメモの詳細情報を取得する関数
+    Retrieve the detailed data for a specific memo entry.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): メモID / Memo ID.
+
+    Returns:
+        dict[str, Any]: シリアライズされたメモ詳細データ / Serialized memo detailed dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -229,9 +262,19 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
             connection.close()
 
 
-# 指定されたコレクションがユーザー所有のものか検証する関数
-# Validate whether the specified collection belongs to the user.
 def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> bool:
+    """
+    指定されたコレクションがユーザー所有のものか検証する関数
+    Validate whether the specified collection belongs to the user.
+
+    Args:
+        cursor (Any): データベースカーソル / The database cursor.
+        user_id (int): ユーザーID / User ID.
+        collection_id (int): コレクションID / Collection ID.
+
+    Returns:
+        bool: 所有している場合はTrue、それ以外はFalse / True if owned by user, False otherwise.
+    """
     cursor.execute(
         "SELECT 1 FROM memo_collections WHERE id = %s AND user_id = %s",
         (collection_id, user_id),
@@ -239,8 +282,6 @@ def validate_collection_owner(cursor: Any, user_id: int, collection_id: int) -> 
     return cursor.fetchone() is not None
 
 
-# メモをDBに新規挿入・保存する関数
-# Insert and save a new memo entry in the database.
 def insert_memo(
     user_id: int,
     ai_response: str,
@@ -248,6 +289,20 @@ def insert_memo(
     collection_id: int | None,
     background_color: str | None = None,
 ) -> int | None:
+    """
+    メモをDBに新規挿入・保存する関数
+    Insert and save a new memo entry in the database.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        ai_response (str): AIの回答本文 / The AI response text content.
+        resolved_title (str): 決定されたタイトル / The memo title.
+        collection_id (int | None): 所属させるコレクションのID / Collection ID or None.
+        background_color (str | None): 背景色の指定 / The CSS background color.
+
+    Returns:
+        int | None: 挿入されたメモのID / The inserted memo ID, or None on failure.
+    """
     connection = None
     cursor = None
     try:
@@ -302,8 +357,6 @@ def insert_memo(
             connection.close()
 
 
-# メモの属性情報（タイトル、コンテンツ、コレクション等）を更新する関数
-# Update metadata or content attributes of a memo entry.
 def update_memo(
     user_id: int,
     memo_id: int,
@@ -315,6 +368,23 @@ def update_memo(
     background_color: str | None = None,
     clear_background_color: bool = False,
 ) -> dict[str, Any]:
+    """
+    メモの属性情報（タイトル、コンテンツ、コレクション等）を更新する関数
+    Update metadata or content attributes of a memo entry.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): 対象メモID / Target memo ID.
+        title (str | None): 新しいタイトル / New title or None to keep existing.
+        ai_response (str | None): 新しい回答コンテンツ / New content or None to keep existing.
+        collection_id (int | None): コレクションID / Collection ID or None to keep existing.
+        clear_collection (bool): コレクション紐付けを解除するかどうか / Whether to clear the collection association.
+        background_color (str | None): 新しい背景色 / New background color or None.
+        clear_background_color (bool): 背景色指定をクリアするかどうか / Whether to clear the background color.
+
+    Returns:
+        dict[str, Any]: 更新後のメモ詳細 / The updated memo detail dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -366,7 +436,7 @@ def update_memo(
                 if background_color is not None
                 else existing.get("background_color")
             )
-        
+
         # データベースに更新を書き込み
         # Write updates to the database.
         cursor.execute(
@@ -397,9 +467,19 @@ def update_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
-# メモのアーカイブ状態を設定する関数
-# Set the archived state (archived_at timestamp) of a memo.
 def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
+    """
+    メモのアーカイブ状態を設定する関数
+    Set the archived state (archived_at timestamp) of a memo.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): 対象メモID / Target memo ID.
+        enabled (bool): アーカイブに設定するかどうか / True to archive, False to unarchive.
+
+    Returns:
+        dict[str, Any]: 更新後のメモ詳細 / The updated memo detail dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -427,9 +507,19 @@ def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[st
     return fetch_memo_detail(user_id, memo_id)
 
 
-# メモのピン留め状態を設定する関数
-# Set the pinned state (pinned_at timestamp) and adjust manual sort order.
 def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, Any]:
+    """
+    メモのピン留め状態を設定する関数
+    Set the pinned state (pinned_at timestamp) and adjust manual sort order.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): 対象メモID / Target memo ID.
+        enabled (bool): ピン留めを設定するかどうか / True to pin, False to unpin.
+
+    Returns:
+        dict[str, Any]: 更新後のメモ詳細 / The updated memo detail dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -467,16 +557,22 @@ def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, A
     return fetch_memo_detail(user_id, memo_id)
 
 
-# 値を安全にDecimal型に変換する内部ヘルパー
-# Internal helper to safely cast a value to Decimal.
 def _decimal_order(value: Any) -> Decimal:
+    """
+    値を安全にDecimal型に変換する内部ヘルパー
+    Internal helper to safely cast a value to Decimal.
+
+    Args:
+        value (Any): 変換対象の値 / The value to convert.
+
+    Returns:
+        Decimal: 変換されたDecimalオブジェクト / Decimal representation of the value.
+    """
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value or 0))
 
 
-# メモの表示順（並び順）をドラッグ＆ドロップ先の近隣要素情報から再計算して更新する関数
-# Update manual sorting order based on target neighbors.
 def reorder_memo(
     user_id: int,
     memo_id: int,
@@ -484,6 +580,19 @@ def reorder_memo(
     before_id: int | None,
     after_id: int | None,
 ) -> dict[str, Any]:
+    """
+    メモの表示順（並び順）をドラッグ＆ドロップ先の近隣要素情報から再計算して更新する関数
+    Update manual sorting order based on target neighbors.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): 移動対象のメモID / Target memo ID to move.
+        before_id (int | None): 移動先で直前に位置するメモのID / The memo ID positioned before this after move.
+        after_id (int | None): 移動先で直後に位置するメモのID / The memo ID positioned after this after move.
+
+    Returns:
+        dict[str, Any]: 更新されたメモ詳細情報 / The reordered memo details.
+    """
     # 移動先と自身のIDが重複している場合はエラー
     # Error out if neighbors match the moving memo ID.
     if before_id == memo_id or after_id == memo_id:
@@ -588,9 +697,18 @@ def reorder_memo(
     return fetch_memo_detail(user_id, memo_id)
 
 
-# メモをDBから完全に削除する関数
-# Permanently delete a memo entry from the database.
 def delete_memo(user_id: int, memo_id: int) -> None:
+    """
+    メモをDBから完全に削除する関数
+    Permanently delete a memo entry from the database.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        memo_id (int): メモID / The memo ID.
+
+    Returns:
+        None
+    """
     connection = None
     cursor = None
     try:
@@ -610,8 +728,6 @@ def delete_memo(user_id: int, memo_id: int) -> None:
             connection.close()
 
 
-# 複数メモに対して一括操作（アーカイブ、削除、ピン留め、コレクション割当等）を行う関数
-# Perform bulk action (delete, archive, pin, unpin, assign collection) on multiple memos.
 def bulk_action(
     user_id: int,
     action: str,
@@ -619,6 +735,19 @@ def bulk_action(
     *,
     collection_id: int | None,
 ) -> dict[str, Any]:
+    """
+    複数メモに対して一括操作（アーカイブ、削除、ピン留め、コレクション割当等）を行う関数
+    Perform bulk action (delete, archive, pin, unpin, assign collection) on multiple memos.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        action (str): アクション種別 / Action type.
+        memo_ids (list[int]): 対象メモIDの一覧 / List of memo IDs.
+        collection_id (int | None): コレクションID（コレクション設定時のみ使用） / Collection ID.
+
+    Returns:
+        dict[str, Any]: 影響を受けた行数を含む辞書 / Affected row counts.
+    """
     if not memo_ids:
         return {"affected": 0}
 
@@ -704,9 +833,17 @@ def bulk_action(
             connection.close()
 
 
-# 所有するコレクションの一覧および各所属メモ数を取得する関数
-# Fetch all memo collections of a user including active memo count in each.
 def fetch_collections(user_id: int) -> list[dict[str, Any]]:
+    """
+    所有するコレクションの一覧および各所属メモ数を取得する関数
+    Fetch all memo collections of a user including active memo count in each.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+
+    Returns:
+        list[dict[str, Any]]: 各コレクションの情報のリスト / List of serialized collections.
+    """
     connection = None
     cursor = None
     try:
@@ -743,9 +880,19 @@ def fetch_collections(user_id: int) -> list[dict[str, Any]]:
             connection.close()
 
 
-# コレクションを新規作成してDBに挿入する関数
-# Create and insert a new memo collection.
 def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
+    """
+    コレクションを新規作成してDBに挿入する関数
+    Create and insert a new memo collection.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        name (str): コレクション名 / Name of the collection.
+        color (str): コレクションの表示色 (CSS形式等) / Color hex or string representation.
+
+    Returns:
+        dict[str, Any]: 作成されたコレクション情報 / The created collection dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -778,9 +925,20 @@ def insert_collection(user_id: int, name: str, color: str) -> dict[str, Any]:
             connection.close()
 
 
-# コレクションの名前または色情報を更新する関数
-# Update collection attributes (name and/or color).
 def update_collection(user_id: int, collection_id: int, name: str | None, color: str | None) -> dict[str, Any]:
+    """
+    コレクションの名前または色情報を更新する関数
+    Update collection attributes (name and/or color).
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        collection_id (int): コレクションID / Target collection ID.
+        name (str | None): 新しい名前 / Optional new name.
+        color (str | None): 新しい色 / Optional new color.
+
+    Returns:
+        dict[str, Any]: 更新されたコレクション情報 / The updated collection dictionary.
+    """
     connection = None
     cursor = None
     try:
@@ -836,9 +994,18 @@ def update_collection(user_id: int, collection_id: int, name: str | None, color:
             connection.close()
 
 
-# コレクションを削除する関数
-# Delete a memo collection.
 def delete_collection(user_id: int, collection_id: int) -> None:
+    """
+    コレクションを削除する関数
+    Delete a memo collection.
+
+    Args:
+        user_id (int): ユーザーID / User ID.
+        collection_id (int): コレクションID / Target collection ID.
+
+    Returns:
+        None
+    """
     connection = None
     cursor = None
     try:
