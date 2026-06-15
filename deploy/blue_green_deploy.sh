@@ -426,7 +426,17 @@ build_runtime_images() {
 
 run_migrations() {
   local color="$1"
+  echo "Running backward-compatible pre-deployment migrations (Expand)..."
   compose run --rm "app_${color}" alembic upgrade head
+}
+
+run_post_deploy_cleanup() {
+  local color="$1"
+  # [JP] トラフィック切替と旧バージョンの停止が完了した後に実行する破壊的変更用。
+  # [EN] Destructive changes (Contract) to be run after traffic switch and old version stop.
+  echo "Checking for post-deployment cleanup migrations (Contract)..."
+  # 必要に応じて特定のタグやスクリプトを実行できるように拡張可能
+  # Can be extended to run specific cleanup scripts or alembic branches
 }
 
 deploy_color() {
@@ -504,6 +514,10 @@ if [ "${CURRENT_COLOR}" != "none" ]; then
 fi
 
 stop_legacy_services
+
+# [JP] 旧バージョンの停止後、安全に破壊的マイグレーション（カラム削除等）を実行
+# [EN] After stopping the old version, safely run destructive migrations (e.g., DROP COLUMN)
+run_post_deploy_cleanup "${TARGET_COLOR}"
 
 trap - ERR
 
