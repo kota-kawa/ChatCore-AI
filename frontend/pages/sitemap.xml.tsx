@@ -31,8 +31,64 @@ function xmlEscape(value: string) {
 export const PUBLIC_SITEMAP_ROUTES = [
   { path: "/", changefreq: "daily", priority: "1.0" },
   { path: "/prompt_share", changefreq: "daily", priority: "0.9" },
-  { path: "/memo", changefreq: "weekly", priority: "0.8" }
+  { path: "/memo", changefreq: "weekly", priority: "0.5" }
 ] as const;
+
+// 動的に追加するサイトマップ項目（個別の公開プロンプトページなど）の型
+// Type for dynamically appended sitemap entries (e.g. individual public prompt pages)
+export type SitemapRoute = {
+  path: string;
+  changefreq: string;
+  priority: string;
+  lastmod?: string;
+};
+
+// サイトマップに含める公開プロンプトの最大件数（巨大化を防ぐ上限）
+// Maximum number of public prompts to include in the sitemap (cap to avoid bloat)
+const MAX_PROMPT_ENTRIES = 5000;
+
+// created_atをW3C準拠のISO8601文字列に正規化する（不正な値はundefinedにしてグローバルlastmodへフォールバック）
+// Normalize created_at into a W3C-compliant ISO 8601 string (invalid values become undefined and fall back to the global lastmod)
+function normalizeLastmod(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+// バックエンドから公開プロンプト一覧を取得し、個別共有ページのサイトマップ項目を組み立てる
+// Fetch the public prompt list from the backend and build sitemap entries for each shared page
+async function fetchPublicPromptRoutes(): Promise<SitemapRoute[]> {
+  const backendUrl = (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
+  try {
+    const response = await fetch(`${backendUrl}/prompt_share/api/prompts`, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as { prompts?: Array<{ id?: string | number; created_at?: string }> };
+    if (!Array.isArray(data.prompts)) return [];
+
+    const routes: SitemapRoute[] = [];
+    for (const prompt of data.prompts) {
+      if (prompt.id === undefined || prompt.id === null || prompt.id === "") continue;
+      // 末尾のスラッシュやXMLエスケープはbuildSitemapXml側で処理されるため、ここではパスのみ生成する
+      // Only build the path here; trailing-slash handling and XML escaping happen in buildSitemapXml
+      routes.push({
+        path: `/shared/prompt/${encodeURIComponent(String(prompt.id))}`,
+        changefreq: "weekly",
+        priority: "0.6",
+        lastmod: normalizeLastmod(prompt.created_at)
+      });
+      if (routes.length >= MAX_PROMPT_ENTRIES) break;
+    }
+    return routes;
+  } catch {
+    // 取得に失敗しても静的ルートのみでサイトマップを返す
+    // Fall back to static routes only if fetching fails
+    return [];
+  }
+}
 
 // リクエストコンテキストからサイトのオリジンURLを解決する
 // Resolve the site origin URL from the request context
@@ -56,17 +112,24 @@ function resolveOrigin(context: Parameters<GetServerSideProps>[0]) {
 
 // オリジンと最終更新日時からsitemap.xmlのXML文字列を組み立てる
 // Build the sitemap.xml XML string from the origin and last modification date
-export function buildSitemapXml(origin: string, lastmod: string) {
+export function buildSitemapXml(origin: string, lastmod: string, extraRoutes: readonly SitemapRoute[] = []) {
   const normalizedOrigin = origin.replace(/\/+$/, "");
-  const urls = PUBLIC_SITEMAP_ROUTES
-    .map(({ path, changefreq, priority }) => {
-      const loc = normalizedOrigin ? `${normalizedOrigin}${path}` : path;
+  const routes: readonly (SitemapRoute | (typeof PUBLIC_SITEMAP_ROUTES)[number])[] = [
+    ...PUBLIC_SITEMAP_ROUTES,
+    ...extraRoutes
+  ];
+  const urls = routes
+    .map((route) => {
+      const loc = normalizedOrigin ? `${normalizedOrigin}${route.path}` : route.path;
+      // 個別ルートにlastmodが指定されていればそれを優先する
+      // Prefer a route-specific lastmod when provided
+      const routeLastmod = ("lastmod" in route && route.lastmod) ? route.lastmod : lastmod;
       return [
         "  <url>",
         `    <loc>${xmlEscape(loc)}</loc>`,
-        `    <lastmod>${lastmod}</lastmod>`,
-        `    <changefreq>${changefreq}</changefreq>`,
-        `    <priority>${priority}</priority>`,
+        `    <lastmod>${xmlEscape(routeLastmod)}</lastmod>`,
+        `    <changefreq>${route.changefreq}</changefreq>`,
+        `    <priority>${route.priority}</priority>`,
         "  </url>"
       ].join("\n");
     })
@@ -86,7 +149,10 @@ export function buildSitemapXml(origin: string, lastmod: string) {
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const origin = resolveOrigin(context);
   const lastmod = new Date().toISOString();
-  const body = buildSitemapXml(origin, lastmod);
+  // 公開プロンプトの個別ページを動的に取得してサイトマップに追加する
+  // Dynamically fetch individual public prompt pages and append them to the sitemap
+  const promptRoutes = await fetchPublicPromptRoutes();
+  const body = buildSitemapXml(origin, lastmod, promptRoutes);
 
   context.res.setHeader("Content-Type", "application/xml; charset=utf-8");
   context.res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");

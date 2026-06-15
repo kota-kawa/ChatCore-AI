@@ -919,6 +919,14 @@ function SetupSectionComponent() {
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
         <h2 className="setup-form-title">Chat Core</h2>
 
+        {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
+        {/* Short feature intro shown only when logged out (provides crawlable public content) */}
+        {!loggedIn && (
+          <p className="setup-form-subtitle">
+            ChatCore-AIは、日本語対応のAIチャットでの調べ物・文章作成・コード相談に加え、プロンプト共有やメモ保存をまとめて使えるAIワークスペースです。下の入力欄からそのまま試せます。
+          </p>
+        )}
+
         <div className="form-group setup-info-group">
           <label className="form-label" htmlFor="setup-info">やりたいことを入力（任意）</label>
           {/* ファイルドロップゾーンを兼ねたメッセージ入力エリア / Message input area that also serves as a file drop zone */}
