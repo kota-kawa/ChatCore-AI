@@ -19,12 +19,18 @@ def get_readiness_status() -> tuple[dict[str, Any], int]:
     overall_ok = True
     degraded = False
 
-    # データベースへの接続と単純なクエリ実行(SELECT 1)を試行し、接続状態を確認します。
-    # Attempt database connection and a simple query execution (SELECT 1) to verify connection status.
+    # データベースへの接続と基本的なテーブルへのアクセスを試行し、接続状態とスキーマの健全性を確認します。
+    # Attempt database connection and verify access to key tables to ensure schema health.
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 単純な接続確認に加え、主要なテーブルが読み取り可能か確認
+                # In addition to a basic ping, verify that core tables are readable.
+                cursor.execute("SELECT COUNT(*) FROM users")
+                cursor.fetchone()
+                
+                # 必要に応じて他の重要テーブルもチェック
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
             finally:
