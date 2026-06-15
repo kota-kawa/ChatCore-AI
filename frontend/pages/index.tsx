@@ -117,6 +117,9 @@ export default function HomePage() {
 
       <HomePageContextProvider controller={controller}>
         <div className="chat-page-shell cc-page-rise">
+          {/* 検索エンジン・支援技術向けのページ見出し（視覚的には非表示） */}
+          {/* Page heading for search engines and assistive tech (visually hidden) */}
+          <h1 className="sr-only">ChatCore-AI ― 日本語AIチャット・プロンプト共有・メモ管理</h1>
           <action-menu></action-menu>
 
           <div

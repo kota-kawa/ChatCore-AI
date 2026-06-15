@@ -94,6 +94,17 @@
   margin-bottom: var(--setup-title-margin-bottom) !important;
 }
 
+/* 未ログイン時にタイトル直下へ表示する機能紹介テキスト（控えめなリード文として既存デザインに馴染ませる） */
+/* Feature intro shown under the title when logged out; styled as a subtle lead paragraph to match the design */
+.setup-form-subtitle {
+  margin: -0.35rem auto 0;
+  max-width: 34rem;
+  text-align: center;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.7;
+  color: var(--text-secondary, #6b7280);
+}
+
 .form-group {
   position: relative;
   display: flex;

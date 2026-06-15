@@ -450,6 +450,18 @@ body.memo-page.modal-open {
   gap: 1rem;
 }
 
+/* 未ログイン時に表示する機能紹介テキスト（控えめなトーンで既存デザインに馴染ませる） */
+/* Feature intro shown to logged-out visitors; kept subtle to blend with the existing design */
+.memo-guest-intro {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 14px);
+  background: var(--surface-tertiary, #f2f5f3);
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: 1.7;
+}
+
 @media (max-width: 1024px) {
   .memo-sidebar {
     display: none;
@@ -610,7 +622,7 @@ body.memo-page.modal-open {
   min-width: 0;
 }
 
-.memo-toolbar__title h1 {
+.memo-toolbar__title :is(h1, h2) {
   margin: 0;
   font-size: clamp(1.45rem, 1vw + 1rem, 1.9rem);
   line-height: 1.1;
@@ -4518,7 +4530,7 @@ textarea.memo-control {
     linear-gradient(180deg, #0f172a 0%, #020617 100%);
 }
 
-[data-theme="dark"] .memo-toolbar__title h1,
+[data-theme="dark"] .memo-toolbar__title :is(h1, h2),
 [data-theme="dark"] .memo-crawl-summary h2,
 [data-theme="dark"] .memo-panel__header h2,
 [data-theme="dark"] .memo-item__title,
@@ -4949,7 +4961,7 @@ body.memo-page {
   gap: 0.35rem;
 }
 
-.memo-toolbar__title h1 {
+.memo-toolbar__title :is(h1, h2) {
   color: #2b2017;
   font-size: 1.3rem;
   font-weight: 700;
@@ -6030,7 +6042,7 @@ body.memo-page {
     padding-right: 3.2rem;
   }
 
-  .memo-toolbar__title h1 {
+  .memo-toolbar__title :is(h1, h2) {
     font-size: 1.18rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6138,7 +6150,7 @@ body.memo-page {
       font-size: 1rem;
     }
 
-    .memo-toolbar__title h1 {
+    .memo-toolbar__title :is(h1, h2) {
       font-size: 1.05rem;
     }
 
@@ -6242,7 +6254,7 @@ body.memo-page {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-[data-theme="dark"] .memo-toolbar__title h1,
+[data-theme="dark"] .memo-toolbar__title :is(h1, h2),
 [data-theme="dark"] .memo-quick-capture__title-input,
 [data-theme="dark"] .memo-form--quick textarea.memo-control--response,
 [data-theme="dark"] .memo-modal__header h3,
@@ -6408,7 +6420,7 @@ body.memo-page {
   color: #3a2a00;
 }
 
-[data-theme="dark"] .memo-toolbar__title h1,
+[data-theme="dark"] .memo-toolbar__title :is(h1, h2),
 [data-theme="dark"] .memo-crawl-summary h2,
 [data-theme="dark"] .memo-panel__header h2,
 [data-theme="dark"] .memo-item__title,

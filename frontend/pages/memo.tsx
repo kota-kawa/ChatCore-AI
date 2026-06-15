@@ -1713,6 +1713,9 @@ export default function MemoPage() {
       </SeoHead>
 
       <div className="memo-page-shell cc-page-rise">
+        {/* 検索エンジン・支援技術向けの説明的なページ見出し（視覚的には非表示） */}
+        {/* Descriptive page heading for search engines and assistive tech (visually hidden) */}
+        <h1 className="sr-only">Chat Core メモ ― AIの回答や作業メモを保存・整理・共有</h1>
         <action-menu></action-menu>
 
         <div
@@ -1828,12 +1831,19 @@ export default function MemoPage() {
           </aside>
 
           <div className="memo-container">
+            {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
+            {/* Short feature intro shown only when logged out (provides crawlable public content) */}
+            {!isLoggedIn && (
+              <p className="memo-guest-intro">
+                Chat Core のメモは、AIとのやり取りや調べ物のメモを保存・検索・整理し、リンクで共有できるノート機能です。ログインするとどの端末からでもメモを残せます。
+              </p>
+            )}
             {/* ── Toolbar ── */}
             <header className="memo-toolbar memo-card">
               <div className="memo-toolbar__top-row">
                 <div className="memo-toolbar__brand">
                   <div className="memo-toolbar__title">
-                    <h1>{activeCollection ? activeCollection.name : archiveScope === "archived" ? "アーカイブ" : "メモ"}</h1>
+                    <h2>{activeCollection ? activeCollection.name : archiveScope === "archived" ? "アーカイブ" : "メモ"}</h2>
                     <span className="memo-toolbar__count">
                       {totalMemoCount}件
                     </span>

@@ -12,6 +12,20 @@ body {
   color: var(--text-dark, #1a1a1a);
 }
 
+/* スクリーンリーダーと検索エンジン向けに視覚的には隠すが読み上げ・解析は可能にするユーティリティ */
+/* Utility that hides content visually while keeping it available to screen readers and search engines */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .cc-route-frame {
   min-height: 100dvh;
   transition:
