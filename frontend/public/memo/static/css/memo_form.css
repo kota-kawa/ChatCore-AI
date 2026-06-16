@@ -6803,3 +6803,238 @@ body.memo-page {
   background: linear-gradient(135deg, rgba(251, 188, 4, 0.18), rgba(249, 171, 0, 0.1));
   color: #fcd34d;
 }
+
+/* ============================================================
+   Modern interaction layer
+   ------------------------------------------------------------
+   Adds tactile micro-interactions, springy motion and clear
+   keyboard focus to the existing surfaces. Appended last so it
+   complements — and where needed wins over — the rules above
+   WITHOUT changing the established visual design (colours,
+   spacing and layout are left untouched).
+   ============================================================ */
+
+:root {
+  --memo-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --memo-press: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- Card entrance: gentle staggered rise on mount ----
+   Cards keep a stable React key per memo, so this fires only when a
+   card first appears (initial load, a newly-saved memo, or a pin
+   toggle that moves it between sections) — never on every keystroke
+   while filtering. */
+@keyframes memo-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.memo-history__list > li {
+  animation: memo-card-rise 0.36s var(--memo-spring) both;
+}
+
+.memo-history__list > li:nth-child(1)  { animation-delay: 0ms; }
+.memo-history__list > li:nth-child(2)  { animation-delay: 30ms; }
+.memo-history__list > li:nth-child(3)  { animation-delay: 60ms; }
+.memo-history__list > li:nth-child(4)  { animation-delay: 90ms; }
+.memo-history__list > li:nth-child(5)  { animation-delay: 120ms; }
+.memo-history__list > li:nth-child(6)  { animation-delay: 150ms; }
+.memo-history__list > li:nth-child(7)  { animation-delay: 180ms; }
+.memo-history__list > li:nth-child(8)  { animation-delay: 210ms; }
+.memo-history__list > li:nth-child(9)  { animation-delay: 240ms; }
+.memo-history__list > li:nth-child(n + 10) { animation-delay: 270ms; }
+
+/* ---- Cards: hint cursor + smoother hover, keep the existing lift ---- */
+.memo-item {
+  will-change: transform;
+}
+
+/* ---- Sidebar nav & collections: subtle nudge + press ---- */
+.memo-sidebar-nav__item {
+  transition: background 0.15s, color 0.15s, transform 0.18s var(--memo-spring);
+}
+.memo-sidebar-nav__item:hover {
+  transform: translateX(2px);
+}
+.memo-sidebar-nav__item:active {
+  transform: translateX(2px) scale(0.98);
+}
+.memo-sidebar-nav__item.is-active::before {
+  transition: transform 0.22s var(--memo-spring);
+}
+
+.memo-sidebar-collection-item {
+  transition: background 0.15s, color 0.15s, transform 0.18s var(--memo-spring);
+}
+.memo-sidebar-collection-item:hover {
+  transform: translateX(2px);
+}
+.memo-sidebar-collection-item:active {
+  transform: scale(0.98);
+}
+
+.memo-sidebar-toggle:active,
+.memo-sidebar-manage-btn:active {
+  transform: scale(0.94);
+}
+
+/* ---- Toolbar icon buttons: lift on hover, press down on click ---- */
+.memo-toolbar__icon-btn {
+  transition: background 0.15s, border-color 0.15s, color 0.15s,
+    transform 0.18s var(--memo-spring), box-shadow 0.18s var(--memo-spring);
+}
+.memo-toolbar__icon-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -8px rgba(180, 83, 9, 0.45);
+}
+.memo-toolbar__icon-btn:active {
+  transform: translateY(0) scale(0.93);
+}
+.memo-toolbar__icon-btn.is-active {
+  box-shadow: 0 8px 18px -8px rgba(217, 119, 6, 0.55);
+}
+
+/* ---- Filter chips & collection chips: lift + press ---- */
+.memo-filter-chip {
+  transition: background 0.15s, border-color 0.15s, color 0.15s,
+    transform 0.18s var(--memo-spring), box-shadow 0.18s var(--memo-spring);
+}
+.memo-filter-chip:hover {
+  transform: translateY(-1px);
+}
+.memo-filter-chip:active {
+  transform: scale(0.95);
+}
+.memo-filter-chip.is-active {
+  box-shadow: 0 8px 18px -8px rgba(217, 119, 6, 0.5);
+}
+
+.memo-collection-chip {
+  transition: background 0.15s, border-color 0.15s,
+    transform 0.18s var(--memo-spring), box-shadow 0.18s var(--memo-spring);
+}
+.memo-collection-chip:hover {
+  transform: translateY(-1px);
+}
+.memo-collection-chip:active {
+  transform: scale(0.95);
+}
+
+/* ---- Pin button: pop when pinned, springy press ---- */
+@keyframes memo-pin-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.35) rotate(-8deg); }
+  100% { transform: scale(1); }
+}
+.memo-item__pin.is-pinned {
+  animation: memo-pin-pop 0.34s var(--memo-spring);
+}
+.memo-item__pin:active {
+  transform: scale(0.82);
+}
+
+/* ---- Card row action buttons: press feedback ---- */
+.memo-item__action {
+  transition: background 0.12s ease, color 0.12s ease, transform 0.14s var(--memo-spring);
+}
+.memo-item__action:active:not(:disabled) {
+  transform: scale(0.82);
+}
+
+/* ---- Primary / CTA buttons: lift, brighten, press ---- */
+.primary-button {
+  transition: transform 0.18s var(--memo-spring), box-shadow 0.25s var(--memo-spring),
+    filter 0.18s ease;
+}
+.primary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 30px rgba(217, 119, 6, 0.32);
+  filter: brightness(1.03);
+}
+.primary-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 8px 16px rgba(217, 119, 6, 0.24);
+}
+
+/* ---- Small round/clear buttons: snappy press ---- */
+.memo-toolbar__search-clear,
+.memo-toolbar__clear,
+.memo-item__pin {
+  transition-property: background, border-color, color, transform, box-shadow, opacity;
+  transition-duration: 0.15s;
+  transition-timing-function: var(--memo-spring);
+}
+.memo-toolbar__search-clear:active,
+.memo-toolbar__clear:active {
+  transform: scale(0.9);
+}
+
+/* ---- Select trigger: tiny press acknowledgement ---- */
+.memo-select__trigger:active {
+  transform: scale(0.99);
+}
+
+/* ---- Unified, accessible keyboard focus ring ----
+   Mouse clicks keep the original look (no ring); only keyboard
+   navigation reveals the amber outline. */
+.memo-page-shell button:focus-visible,
+.memo-page-shell a:focus-visible,
+.memo-page-shell [role="button"]:focus-visible,
+.memo-select__trigger:focus-visible,
+.memo-select__option:focus-visible {
+  outline: 2px solid rgba(217, 119, 6, 0.6);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+[data-theme="dark"] .memo-page-shell button:focus-visible,
+[data-theme="dark"] .memo-page-shell a:focus-visible,
+[data-theme="dark"] .memo-page-shell [role="button"]:focus-visible {
+  outline-color: rgba(251, 188, 4, 0.7);
+}
+
+/* ---- Respect users who prefer reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .memo-history__list > li {
+    animation: none;
+  }
+  .memo-item__pin.is-pinned {
+    animation: none;
+  }
+  .memo-sidebar-nav__item,
+  .memo-sidebar-collection-item,
+  .memo-toolbar__icon-btn,
+  .memo-filter-chip,
+  .memo-collection-chip,
+  .memo-item__action,
+  .primary-button {
+    transition-property: background, border-color, color, box-shadow;
+  }
+  .memo-sidebar-nav__item:hover,
+  .memo-sidebar-nav__item:active,
+  .memo-sidebar-collection-item:hover,
+  .memo-sidebar-collection-item:active,
+  .memo-toolbar__icon-btn:hover,
+  .memo-toolbar__icon-btn:active,
+  .memo-filter-chip:hover,
+  .memo-filter-chip:active,
+  .memo-collection-chip:hover,
+  .memo-collection-chip:active,
+  .memo-item__action:active:not(:disabled),
+  .primary-button:hover:not(:disabled),
+  .primary-button:active:not(:disabled),
+  .memo-sidebar-toggle:active,
+  .memo-sidebar-manage-btn:active,
+  .memo-toolbar__search-clear:active,
+  .memo-toolbar__clear:active,
+  .memo-select__trigger:active,
+  .memo-item__pin:active {
+    transform: none;
+  }
+}
