@@ -48,6 +48,7 @@ import {
   fetchJsonOrThrow,
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
 import {
@@ -73,7 +74,7 @@ const buildChatRoomsPageUrl = (cursor?: string | null): string => {
 };
 
 const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
-  const response = await fetch(url, { credentials: "same-origin" });
+  const response = await resilientFetch(url, { credentials: "same-origin" });
   const rawPayload = await readJsonBodySafe(response);
   const payload = normalizeChatRoomsPayload(rawPayload);
 
@@ -739,7 +740,7 @@ export function useHomePageController() {
 
     let cancelled = false;
 
-    fetch("/api/current_user", { credentials: "same-origin" })
+    resilientFetch("/api/current_user", { credentials: "same-origin" })
       .then(readCurrentUserLoggedIn)
       .then((nextLoggedIn) => {
         if (cancelled) return;

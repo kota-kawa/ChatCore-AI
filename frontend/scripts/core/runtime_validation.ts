@@ -6,9 +6,14 @@ type FetchJsonResult<TPayload> = {
   payload: TPayload;
 };
 
+type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 type FetchJsonOrThrowOptions<TPayload> = {
   defaultMessage?: string;
   hasApplicationError?: (payload: TPayload) => boolean;
+  // 読み取り系リクエストでタイムアウト・リトライ付きの fetch 実装を差し込むための任意フック。
+  // Optional hook to inject a fetch implementation (e.g. with timeout/retry) for read requests.
+  fetchImpl?: FetchImpl;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,9 +39,10 @@ async function readJsonBodySafe(response: Response, fallback: unknown = {}): Pro
 
 async function fetchJson<TPayload = JsonLikeRecord>(
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit,
+  fetchImpl: FetchImpl = fetch
 ): Promise<FetchJsonResult<TPayload>> {
-  const response = await fetch(input, init);
+  const response = await fetchImpl(input, init);
   const payload = (await readJsonBodySafe(response, {})) as TPayload;
   return { response, payload };
 }
@@ -51,7 +57,7 @@ async function fetchJsonOrThrow<TPayload = JsonLikeRecord>(
   init?: RequestInit,
   options?: FetchJsonOrThrowOptions<TPayload>
 ): Promise<FetchJsonResult<TPayload>> {
-  const { response, payload } = await fetchJson<TPayload>(input, init);
+  const { response, payload } = await fetchJson<TPayload>(input, init, options?.fetchImpl);
   const fallbackMessage = options?.defaultMessage || "操作に失敗しました。";
   const hasApplicationError = options?.hasApplicationError
     ? options.hasApplicationError(payload)

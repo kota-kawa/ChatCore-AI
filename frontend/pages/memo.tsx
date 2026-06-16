@@ -22,6 +22,7 @@ import { formatLLMOutput, formatMemoOutput } from "../scripts/chat/chat_ui";
 import { copyTextToClipboard, renderSanitizedHTML } from "../scripts/chat/message_utils";
 import { setLoggedInState } from "../scripts/core/app_state";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
+import { resilientFetch } from "../scripts/core/resilient_fetch";
 import { showConfirmModal } from "../scripts/core/alert_modal";
 import { absoluteUrl } from "../lib/seo";
 
@@ -384,7 +385,7 @@ function setMemoDragImage(event: DragEvent<HTMLElement>) {
 // 指定されたURLからメモ一覧を読み込む非同期関数
 // Async function to load the memo list from the specified URL
 const loadMemoList = async (url: string): Promise<MemoListState> => {
-  const res = await fetch(url, { credentials: "same-origin" });
+  const res = await resilientFetch(url, { credentials: "same-origin" });
   const data: MemoListPayload = await res.json().catch(() => ({}));
   if (res.status === 401) return { memos: [], total: 0 };
   if (!res.ok) {
@@ -401,7 +402,7 @@ const loadMemoList = async (url: string): Promise<MemoListState> => {
 // メモのコレクション（タグ/フォルダ）一覧を読み込む非同期関数
 // Async function to load the list of memo collections (tags/folders)
 const loadCollections = async (): Promise<Collection[]> => {
-  const res = await fetch("/memo/api/collections", { credentials: "same-origin" });
+  const res = await resilientFetch("/memo/api/collections", { credentials: "same-origin" });
   const data: CollectionListPayload = await res.json().catch(() => ({}));
   if (!res.ok) return [];
   return Array.isArray(data.collections) ? data.collections : [];

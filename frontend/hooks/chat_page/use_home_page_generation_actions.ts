@@ -49,6 +49,7 @@ import type {
 } from "../../lib/chat_page/generation_guard";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
 import { showToast } from "../../scripts/core/toast";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import {
   extractApiErrorMessage,
   readJsonBodySafe,
@@ -324,7 +325,7 @@ export function useHomePageGenerationActions({
       params.set("before_id", String(beforeId));
     }
 
-    const response = await fetch(`/api/get_chat_history?${params.toString()}`, {
+    const response = await resilientFetch(`/api/get_chat_history?${params.toString()}`, {
       credentials: "same-origin",
     });
     const rawPayload = await readJsonBodySafe(response);
