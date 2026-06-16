@@ -21,6 +21,7 @@ from services.api_errors import (
 )
 from services.async_utils import run_blocking
 from services.agent_capabilities import build_capability_context
+from services.cache import cache_get_json, cache_set_json
 from services.db import get_db_connection
 from services.default_tasks import default_task_payloads
 from services.llm import (
@@ -65,6 +66,13 @@ from services.web import (
 from . import chat_bp, get_session_id
 
 logger = logging.getLogger(__name__)
+
+# ゲスト共通のデフォルトタスク一覧キャッシュキーとTTL（秒）。
+# 全ゲストで共有され、変更は管理者操作/シードのみのため短いTTLでDB読み取りを肩代わりさせる。
+# Cache key/TTL (seconds) for the shared guest default-task list. It is identical for every
+# guest and only changes via admin edits/seeding, so a short TTL safely offloads DB reads.
+GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v1"
+GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS = 30
 
 # プロンプト支援APIのIP/ユーザーあたりのレート制限ウインドウ秒数
 # Rate limit window (seconds) for prompt assist calls.
@@ -345,6 +353,13 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
     """
     # ログイン時はユーザー個別タスク、未ログイン時は共通タスクを取得する
     # Fetch user-specific tasks when logged in, otherwise shared default tasks.
+    # ゲスト共通のデフォルトタスクは全員同一なので、まずキャッシュを参照してDB負荷を下げる。
+    # The shared guest default-task list is identical for everyone, so check the cache first.
+    if not user_id:
+        cached = cache_get_json(GUEST_DEFAULT_TASKS_CACHE_KEY)
+        if isinstance(cached, list):
+            return cached
+
     conn = None
     cursor = None
     try:
@@ -390,7 +405,17 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
             """
             )
 
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        # RealDictRow を素の dict に正規化し、ゲスト共通分のみキャッシュへ書き込む。
+        # Normalize RealDictRow to plain dicts and cache only the shared guest list.
+        tasks = [dict(row) for row in rows]
+        if not user_id:
+            cache_set_json(
+                GUEST_DEFAULT_TASKS_CACHE_KEY,
+                tasks,
+                GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS,
+            )
+        return tasks
     finally:
         if cursor is not None:
             cursor.close()

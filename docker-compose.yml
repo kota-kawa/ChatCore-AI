@@ -38,6 +38,13 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - DB_POOL_MIN_CONN=${DB_POOL_MIN_CONN:-1}
       - DB_POOL_MAX_CONN=${DB_POOL_MAX_CONN:-10}
+      - DB_POOL_ACQUIRE_TIMEOUT_SECONDS=${DB_POOL_ACQUIRE_TIMEOUT_SECONDS:-10}
+      # uvicorn ワーカー数。WEB_CONCURRENCY * DB_POOL_MAX_CONN < Postgres max_connections を維持すること。
+      # uvicorn workers. Keep WEB_CONCURRENCY * DB_POOL_MAX_CONN < Postgres max_connections.
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      # 1ワーカーあたりのブロッキングI/O同時実行上限（同期DB・外部HTTPなど）。
+      # Per-worker concurrency budget for blocking I/O (sync DB, outbound HTTP, etc.).
+      - RUN_BLOCKING_MAX_WORKERS=${RUN_BLOCKING_MAX_WORKERS:-64}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_DB=0
@@ -109,6 +116,26 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # マルチワーカー化で増える同時接続に備えた基本チューニング。
+    # max_connections は (ワーカー数 * DB_POOL_MAX_CONN) + 予備を満たすように設定する。
+    # 値はホストのメモリに合わせて調整可能（環境変数で上書き）。
+    # Baseline tuning for the higher concurrency that multi-worker brings.
+    # max_connections must cover (workers * DB_POOL_MAX_CONN) + headroom.
+    # Sizing is overridable via env to match the host's memory.
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-150}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-1536MB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}
+      - -c
+      - log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -124,10 +151,14 @@ services:
     container_name: redis_cache
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+    # volatile-lru: TTL付きキーのみ退避対象とし、セッション等のキーが
+    # メモリ逼迫時に巻き込まれて消えるのを防ぐ（キャッシュ系キーには必ずTTLを付ける）。
+    # volatile-lru evicts only keys with a TTL, so sessions are not silently dropped under
+    # memory pressure (cache-style keys must always be written with an expiry).
     command: >
       redis-server
-      --maxmemory 4gb
-      --maxmemory-policy allkeys-lru
+      --maxmemory ${REDIS_MAXMEMORY:-4gb}
+      --maxmemory-policy volatile-lru
       --appendonly yes
       --appendfsync everysec
       --save ""

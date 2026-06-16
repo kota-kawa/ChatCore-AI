@@ -4,6 +4,8 @@ import re
 
 import requests
 
+from services import http_client
+
 RESEND_API_URL = "https://api.resend.com/emails"
 RESEND_API_KEY_ENV = "RESEND_API_KEY"
 RESEND_FROM_ADDRESS_ENV = "RESEND_FROM_ADDRESS"
@@ -169,7 +171,9 @@ def send_email(to_address: str, subject: str, body_text: str) -> None:
     # Send both HTML and plain-text email through the Resend Email API.
     """指定アドレスにメール送信"""
     api_key, from_address = _load_resend_config()
-    response = requests.post(
+    # 共有セッション経由でコネクションを再利用する（自動リトライ無し＝二重送信を避ける）
+    # Reuse pooled connections via the shared session (no auto-retry to avoid duplicate sends).
+    response = http_client.post(
         RESEND_API_URL,
         headers={
             "Authorization": f"Bearer {api_key}",

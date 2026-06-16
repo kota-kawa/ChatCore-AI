@@ -1,8 +1,10 @@
+import json
 import logging
 import os
 import queue
 import threading
 import time
+import uuid
 from typing import Any
 
 try:
@@ -141,3 +143,63 @@ def get_redis_client() -> Any | None:
     _redis_retry_after = 0.0
     _redis_client = candidate
     return _redis_client
+
+
+# 複数ワーカー間で「一度きり実行」を保証するための分散ロックを取得する。
+# Redis 未設定・接続不可の場合は True を返し、単一プロセス前提の処理を妨げない。
+# Acquire a best-effort distributed single-flight lock so only one worker runs a job per window.
+# Returns True when Redis is unavailable so single-process deployments still proceed.
+def try_acquire_single_flight(name: str, ttl_seconds: int) -> bool:
+    client = get_redis_client()
+    if client is None:
+        return True
+    try:
+        # SET key value NX EX ttl: 最初に獲得したワーカーのみ True を得る
+        # SET ... NX EX grants the lock to whichever worker writes the key first.
+        acquired = client.set(
+            f"single_flight:{name}",
+            uuid.uuid4().hex,
+            nx=True,
+            ex=max(int(ttl_seconds), 1),
+        )
+        return bool(acquired)
+    except Exception as exc:
+        # ロック調整に失敗したらフェイルオープン（実行する側に倒す）
+        # Fail open on coordination errors so the work is not silently skipped.
+        mark_redis_unavailable(exc)
+        return True
+
+
+# キャッシュから JSON 値を取得する。未ヒット・障害時は None を返す。
+# Read a JSON-encoded value from the cache. Returns None on miss or any failure.
+def cache_get_json(key: str) -> Any | None:
+    client = get_redis_client()
+    if client is None:
+        return None
+    try:
+        raw = client.get(key)
+    except Exception as exc:
+        mark_redis_unavailable(exc)
+        return None
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+# JSON シリアライズ可能な値を TTL 付きでキャッシュへ書き込む。障害時は黙って諦める。
+# Write a JSON-serializable value with a TTL. Silently gives up on any failure.
+def cache_set_json(key: str, value: Any, ttl_seconds: int) -> None:
+    client = get_redis_client()
+    if client is None:
+        return
+    try:
+        serialized = json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return
+    try:
+        client.set(key, serialized, ex=max(int(ttl_seconds), 1))
+    except Exception as exc:
+        mark_redis_unavailable(exc)

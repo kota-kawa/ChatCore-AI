@@ -80,7 +80,7 @@ class EmailServiceConfigTestCase(unittest.TestCase):
             clear=True,
         ):
             with patch(
-                "services.email_service.requests.post",
+                "services.email_service.http_client.post",
                 return_value=fake_response,
             ) as mock_post:
                 email_service.send_email(
@@ -124,7 +124,7 @@ class EmailServiceConfigTestCase(unittest.TestCase):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict("os.environ", {}, clear=True):
-            with patch("services.email_service.requests.post") as mock_post:
+            with patch("services.email_service.http_client.post") as mock_post:
                 with self.assertRaises(RuntimeError):
                     email_service.send_email(
                         to_address="receiver@example.com",
@@ -152,7 +152,7 @@ class EmailServiceConfigTestCase(unittest.TestCase):
             clear=True,
         ):
             with patch(
-                "services.email_service.requests.post",
+                "services.email_service.http_client.post",
                 return_value=fake_response,
             ):
                 with self.assertRaisesRegex(RuntimeError, "403: invalid api key"):
@@ -181,7 +181,7 @@ class EmailServiceConfigTestCase(unittest.TestCase):
             clear=True,
         ):
             with patch(
-                "services.email_service.requests.post",
+                "services.email_service.http_client.post",
                 return_value=fake_response,
             ):
                 with self.assertRaisesRegex(RuntimeError, "500: upstream failed"):
