@@ -125,7 +125,9 @@
 }
 
 #promptDetailModal .post-modal-content {
-  width: min(92%, 620px);
+  /* Match the memo page modal's generous, wide panel feel on both
+     desktop and mobile (memo uses width: min(980px, 100%)). */
+  width: min(96%, 980px);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--page-scrollbar-thumb) transparent;
