@@ -1,6 +1,7 @@
 // components/user_icon.ts
 // ────────────────────────────────────────────────
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
+import { resilientFetch } from "../core/resilient_fetch";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username を取得
 //  - カスタム画像がある場合はデフォルト画像を先に出さない
@@ -284,7 +285,7 @@ class UserIcon extends HTMLElement {
 
   private async loadProfileInternal(requestVersion: number) {
     try {
-      const res = await fetch("/api/user/profile", { credentials: "same-origin" });
+      const res = await resilientFetch("/api/user/profile", { credentials: "same-origin" });
       if (requestVersion !== this._profileRequestVersion) {
         return;
       }

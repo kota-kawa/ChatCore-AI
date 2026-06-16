@@ -5,6 +5,7 @@ import type {
   PromptType
 } from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
+import { resilientFetch } from "../core/resilient_fetch";
 
 type ApiResponse = {
   error?: string;
@@ -150,7 +151,8 @@ export function addPromptAsTask(prompt: PromptData) {
 
 export function fetchPromptList() {
   return fetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
-    defaultMessage: "プロンプト一覧の取得に失敗しました。"
+    defaultMessage: "プロンプト一覧の取得に失敗しました。",
+    fetchImpl: resilientFetch
   }).then(({ payload }) => payload);
 }
 
@@ -173,7 +175,8 @@ export function fetchPromptSearchResults(
     `/search/prompts?${params.toString()}`,
     undefined,
     {
-      defaultMessage: "検索に失敗しました。"
+      defaultMessage: "検索に失敗しました。",
+      fetchImpl: resilientFetch
     }
   ).then(({ payload }) => payload);
 }

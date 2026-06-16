@@ -9,6 +9,7 @@ import {
   registerPasskey
 } from "../../scripts/core/passkeys";
 import { fetchJson } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { REDIRECT_DELAY_MS } from "./auth_gateway_modules/constants";
 import { AuthCodeStep } from "./auth_gateway_modules/components/auth_code_step";
 import { AuthEntryStep } from "./auth_gateway_modules/components/auth_entry_step";
@@ -134,7 +135,7 @@ export default function AuthGatewayPage() {
       const provider = query.get("provider") === "google" ? "google" : "email";
 
       try {
-        const response = await fetch("/api/current_user", {
+        const response = await resilientFetch("/api/current_user", {
           credentials: "same-origin"
         });
         const data = await response.json();

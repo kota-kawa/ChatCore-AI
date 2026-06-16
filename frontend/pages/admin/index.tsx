@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "r
 import useSWR from "swr";
 
 import { SeoHead } from "../../components/SeoHead";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 // テーブルの各カラムのメタ情報を表す型
 // Type representing metadata for each column of a database table
@@ -71,7 +72,7 @@ const EMPTY_DASHBOARD: AdminDashboardData = {
 // SWRのフェッチャー関数：APIからダッシュボードデータを取得してnormalizeする
 // SWR fetcher: fetches dashboard data from the API and normalizes keys
 const loadAdminDashboard = async (url: string): Promise<AdminDashboardData> => {
-  const res = await fetch(url, { credentials: "same-origin" });
+  const res = await resilientFetch(url, { credentials: "same-origin" });
   const data: AdminDashboardResponse = await res.json().catch(() => ({}));
 
   if (res.status === 401) {
