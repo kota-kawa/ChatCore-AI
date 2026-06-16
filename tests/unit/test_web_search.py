@@ -275,7 +275,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
-            with patch.object(web_search.requests, "get", return_value=response) as mock_get:
+            with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
                 with patch.object(
                     web_search, "fetch_url_content", return_value="Full article body"
                 ) as mock_fetch:
@@ -306,7 +306,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict(os.environ, {"BRAVE_API_KEY": "test-key"}, clear=False):
-            with patch.object(web_search.requests, "get", return_value=response) as mock_get:
+            with patch.object(web_search.http_client, "get", return_value=response) as mock_get:
                 web_search.search_brave_llm_context("今日のニュース", freshness="pd")
 
         self.assertEqual(mock_get.call_args.kwargs["params"]["search_lang"], "jp")
@@ -323,7 +323,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 return_value=(False, 0, 500),
             ):
                 with patch.object(web_search, "get_seconds_until_monthly_reset", return_value=60):
-                    with patch.object(web_search.requests, "get") as mock_get:
+                    with patch.object(web_search.http_client, "get") as mock_get:
                         with self.assertRaises(web_search.WebSearchQuotaExceeded) as cm:
                             web_search.search_brave_llm_context("example query")
 

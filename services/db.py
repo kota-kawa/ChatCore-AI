@@ -1,6 +1,8 @@
 import atexit
+import logging
 import os
 import threading
+import time
 from types import TracebackType
 from typing import Any
 
@@ -11,12 +13,31 @@ from .runtime_config import is_production_env
 try:
     import psycopg2
     from psycopg2 import Error, extras
-    from psycopg2.pool import ThreadedConnectionPool
+    from psycopg2.pool import PoolError, ThreadedConnectionPool
 except ModuleNotFoundError:  # pragma: no cover - optional for test envs
     psycopg2 = None
     Error = Exception
     extras = None
     ThreadedConnectionPool = None
+
+    class PoolError(Exception):  # type: ignore[no-redef]
+        """psycopg2 未導入環境向けのプレースホルダ例外。"""
+
+
+logger = logging.getLogger(__name__)
+
+
+# 接続プールが枯渇し、待機タイムアウト内に接続を確保できなかったことを表す例外
+# Raised when the connection pool stays exhausted past the acquire timeout.
+class DbConnectionPoolTimeout(RuntimeError):
+    """Raised when a pooled DB connection cannot be acquired in time."""
+
+
+# プール枯渇待機の既定値（秒）。スパイク時の一時的な枯渇を吸収するために待機する。
+# Defaults for the bounded wait that absorbs short-lived pool exhaustion spikes.
+DEFAULT_POOL_ACQUIRE_TIMEOUT_SECONDS = 10.0
+DEFAULT_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS = 0.05
+MAX_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS = 0.5
 
 
 _pool_lock = threading.Lock()
@@ -133,6 +154,44 @@ class _ConnectionProxy:
     def __getattr__(self, name: str) -> Any:
         self._ensure_open()
         return getattr(self._connection, name)
+
+
+# 環境変数から正の浮動小数点数を取得する（不正値は既定値にフォールバック）
+# Read a positive float env var, falling back to the default on invalid input.
+def _get_positive_float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+# プールから接続を確保する際の待機タイムアウト（秒）を取得する
+# Resolve the bounded wait timeout (seconds) for acquiring a pooled connection.
+def _get_pool_acquire_timeout_seconds() -> float:
+    return _get_positive_float_env(
+        "DB_POOL_ACQUIRE_TIMEOUT_SECONDS",
+        DEFAULT_POOL_ACQUIRE_TIMEOUT_SECONDS,
+    )
+
+
+# 枯渇時のリトライ間隔（秒）を取得する。上限でクランプし、過剰なスピンを防ぐ。
+# Resolve the retry interval (seconds) while the pool is exhausted, clamped to a ceiling.
+def _get_pool_acquire_retry_interval_seconds() -> float:
+    interval = _get_positive_float_env(
+        "DB_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS",
+        DEFAULT_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS,
+    )
+    return min(interval, MAX_POOL_ACQUIRE_RETRY_INTERVAL_SECONDS)
+
+
+# PoolError が「プール枯渇」を表すものか（再試行で解消し得る一過性か）を判定する
+# Decide whether a PoolError signals a (transient, retryable) pool exhaustion.
+def _is_pool_exhausted_error(exc: BaseException) -> bool:
+    return isinstance(exc, PoolError) and "exhausted" in str(exc).lower()
 
 
 # 環境変数を優先度の順に参照し、値を決定するヘルパー関数
@@ -360,5 +419,30 @@ def get_db_connection() -> _ConnectionProxy:
         raise RuntimeError("psycopg2 is required to connect to the database.")
 
     connection_pool = _get_connection_pool()
-    connection = connection_pool.getconn()
-    return _ConnectionProxy(connection, connection_pool)
+
+    # ThreadedConnectionPool.getconn() は枯渇時に待機せず即時 PoolError を送出する。
+    # 同時実行がプール上限を一瞬超えただけで失敗しないよう、上限付きで待機リトライする。
+    # getconn() raises immediately on exhaustion instead of waiting, so retry within a
+    # bounded window to ride out short bursts where in-flight work briefly exceeds the pool.
+    timeout = _get_pool_acquire_timeout_seconds()
+    retry_interval = _get_pool_acquire_retry_interval_seconds()
+    deadline = time.monotonic() + timeout
+
+    while True:
+        try:
+            connection = connection_pool.getconn()
+            return _ConnectionProxy(connection, connection_pool)
+        except PoolError as exc:
+            if not _is_pool_exhausted_error(exc):
+                raise
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning(
+                    "DB connection pool exhausted; gave up after %.1fs of waiting.",
+                    timeout,
+                )
+                raise DbConnectionPoolTimeout(
+                    "Database connection pool exhausted; no connection became "
+                    f"available within {timeout:.1f}s."
+                ) from exc
+            time.sleep(min(retry_interval, remaining))

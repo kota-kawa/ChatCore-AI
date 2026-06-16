@@ -16,8 +16,7 @@ from datetime import datetime, timezone
 from html import escape
 from typing import Any
 
-import requests
-
+from services import http_client
 from services.llm import (
     LlmServiceError,
     get_llm_json_response,
@@ -1020,7 +1019,9 @@ def search_brave_llm_context(query: str, *, freshness: str = "") -> WebSearchRes
     if freshness:
         params["freshness"] = freshness
 
-    response = requests.get(
+    # 共有セッション経由でコネクションを再利用する
+    # Reuse pooled connections via the shared HTTP session.
+    response = http_client.get(
         BRAVE_LLM_CONTEXT_URL,
         headers={
             "Accept": "application/json",

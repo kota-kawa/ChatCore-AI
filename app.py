@@ -25,12 +25,13 @@ from services.background_executor import (  # noqa: E402
     shutdown_background_executor,
     submit_background_task,
 )
-from services.db import close_db_pool  # noqa: E402
+from services.db import DbConnectionPoolTimeout, close_db_pool  # noqa: E402
 from services.default_tasks import ensure_default_tasks_seeded  # noqa: E402
 from services.default_shared_prompts import ensure_default_shared_prompts  # noqa: E402
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
 from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
 from services.logging_config import configure_logging  # noqa: E402
+from services.cache import try_acquire_single_flight  # noqa: E402
 from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.request_context import RequestContextMiddleware  # noqa: E402
 from services.runtime_config import (  # noqa: E402
@@ -63,6 +64,18 @@ same_site = get_session_same_site()
 https_only = is_production_env()
 
 
+# 一時チャットのクリーンアップ間隔（秒）。100分ごとに実行する。
+# Ephemeral chat cleanup interval (seconds); runs every 100 minutes.
+CLEANUP_INTERVAL_SECONDS = 6000
+# 複数ワーカーで重複実行しないための分散ロックTTL。間隔より僅かに短くし、次サイクルで再取得可能にする。
+# Single-flight lock TTL; slightly shorter than the interval so the next cycle can re-acquire it.
+CLEANUP_LOCK_TTL_SECONDS = CLEANUP_INTERVAL_SECONDS - 60
+
+# 起動時シードの分散ロックTTL（秒）。短めにして次回デプロイで確実に再試行できるようにする。
+# Single-flight lock TTL (seconds) for startup seeding; short so a later deploy can retry it.
+STARTUP_SEED_LOCK_TTL_SECONDS = 120
+
+
 # 一時的なチャットデータを定期的にクリーンアップするバックグラウンドタスク
 # A background task to periodically clean up ephemeral chat data
 def periodic_cleanup(stop_event: threading.Event) -> None:
@@ -70,14 +83,19 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
     # Run the loop until the stop event is set
     while not stop_event.is_set():
         try:
-            # 一時チャットの削除処理を呼び出す
-            # Call the handler to delete ephemeral chats
-            cleanup_ephemeral_chats()
+            # マルチワーカー構成では各プロセスがこのスレッドを持つため、Redisの
+            # シングルフライトロックを獲得できたワーカーだけが実際の削除を行う。
+            # Every worker process owns this thread under multi-worker deployments, so only
+            # the worker that wins the single-flight lock performs the actual cleanup.
+            if try_acquire_single_flight("ephemeral_cleanup", CLEANUP_LOCK_TTL_SECONDS):
+                # 一時チャットの削除処理を呼び出す
+                # Call the handler to delete ephemeral chats
+                cleanup_ephemeral_chats()
         except Exception:
             logger.exception("Failed to clean up ephemeral chats.")
-        # 100分（6000秒）待機するか、停止イベントの発生を待つ
-        # Wait for 100 minutes (6000 seconds) or until the stop event is signaled
-        stop_event.wait(timeout=6000)
+        # 設定間隔だけ待機するか、停止イベントの発生を待つ
+        # Wait for the configured interval or until the stop event is signaled
+        stop_event.wait(timeout=CLEANUP_INTERVAL_SECONDS)
 
 
 # アプリケーションの起動時とシャットダウン時のライフサイクルイベントを管理する
@@ -86,25 +104,32 @@ def periodic_cleanup(stop_event: threading.Event) -> None:
 async def lifespan(app_instance: FastAPI):
     # 起動時の処理: デフォルトタスクや初期プロンプトのDB登録
     # Startup processing: Seeding default tasks and initial shared prompts
-    try:
-        # デフォルトタスクの初期データをデータベースに投入する（未投入分のみ）
-        # Seed default tasks into the database (insert only missing rows)
-        inserted = ensure_default_tasks_seeded()
-        if inserted > 0:
-            logger.info("Seeded %s default tasks.", inserted)
-    except Exception:
-        logger.exception("Failed to seed default tasks.")
-        raise
+    # マルチワーカー構成では各プロセスが lifespan を実行するため、SELECT→INSERT 方式の
+    # シードが同時に走ると重複行/一意制約違反の競合になり得る。シングルフライトロックを
+    # 獲得できたワーカーだけがシードを行う（他は確定済みとみなしてスキップ）。
+    # Every worker runs lifespan under a multi-worker deployment, so concurrent SELECT→INSERT
+    # seeding could race into duplicate rows / unique violations. Only the worker that wins the
+    # single-flight lock seeds; the others treat seeding as already handled and skip it.
+    if try_acquire_single_flight("startup_seed", STARTUP_SEED_LOCK_TTL_SECONDS):
+        try:
+            # デフォルトタスクの初期データをデータベースに投入する（未投入分のみ）
+            # Seed default tasks into the database (insert only missing rows)
+            inserted = ensure_default_tasks_seeded()
+            if inserted > 0:
+                logger.info("Seeded %s default tasks.", inserted)
+        except Exception:
+            logger.exception("Failed to seed default tasks.")
+            raise
 
-    try:
-        # 共有の初期プロンプトデータをデータベースに投入する（未投入分のみ）
-        # Seed sample shared prompts into the database (insert only missing rows)
-        inserted = ensure_default_shared_prompts()
-        if inserted > 0:
-            logger.info("Seeded %s sample shared prompts.", inserted)
-    except Exception:
-        logger.exception("Failed to seed sample shared prompts.")
-        raise
+        try:
+            # 共有の初期プロンプトデータをデータベースに投入する（未投入分のみ）
+            # Seed sample shared prompts into the database (insert only missing rows)
+            inserted = ensure_default_shared_prompts()
+            if inserted > 0:
+                logger.info("Seeded %s sample shared prompts.", inserted)
+        except Exception:
+            logger.exception("Failed to seed sample shared prompts.")
+            raise
 
     # クリーンアップタスク用の停止シグナルイベントを作成
     # Create a stop signal event for the periodic cleanup task
@@ -236,6 +261,23 @@ app.include_router(search_bp)
 app.include_router(prompt_manage_api_bp)
 app.include_router(admin_bp)
 app.include_router(memo_bp)
+
+
+# DB接続プール枯渇時はサーバー過負荷として 503 + Retry-After を返し、上流に再試行を促す
+# On pool-exhaustion treat the server as overloaded: return 503 with Retry-After to shed load.
+@app.exception_handler(DbConnectionPoolTimeout)
+async def db_pool_timeout_handler(request: Request, exc: DbConnectionPoolTimeout):
+    logger.warning(
+        "Shedding load on %s %s: database connection pool exhausted.",
+        request.method,
+        request.url.path,
+    )
+    retry_after = os.getenv("DB_POOL_TIMEOUT_RETRY_AFTER_SECONDS", "3")
+    return jsonify(
+        {"error": DEFAULT_INTERNAL_ERROR_MESSAGE},
+        status_code=503,
+        headers={"Retry-After": retry_after},
+    )
 
 
 # キャッチされなかった例外を処理し、安全なエラーレスポンスを返却するグローバル例外ハンドラー
