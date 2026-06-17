@@ -13,12 +13,20 @@ class DbPoolAcquireTestCase(unittest.TestCase):
     def test_get_db_connection_retries_until_available(self):
         attempts = {"count": 0}
 
+        class DummyConn:
+            class _DummyCursor:
+                def execute(self, *args, **kwargs): pass
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            def cursor(self): return self._DummyCursor()
+            closed = 0
+
         class FakePool:
             def getconn(self):
                 attempts["count"] += 1
                 if attempts["count"] < 3:
                     raise db.PoolError("connection pool exhausted")
-                return object()
+                return DummyConn()
 
             def putconn(self, *_args, **_kwargs):
                 pass

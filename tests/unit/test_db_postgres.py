@@ -14,12 +14,22 @@ class DummyConnection:
         self.rollback_called = False
         self.closed = 0
 
+    class _DummyCursor:
+        def __init__(self, parent, args, kwargs):
+            self.parent = parent
+            self.parent.cursor_args = args
+            self.parent.cursor_kwargs = kwargs
+        def execute(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
     # 日本語: 後処理を実行します。
-# English: Perform cleanup operations.
+    # English: Perform cleanup operations.
     def cursor(self, *args, **kwargs):
-        self.cursor_args = args
-        self.cursor_kwargs = kwargs
-        return "cursor"
+        return self._DummyCursor(self, args, kwargs)
 
     def rollback(self):
         self.rollback_called = True
@@ -109,7 +119,7 @@ class DBConfigTestCase(unittest.TestCase):
             cursor = proxy.cursor(dictionary=True)
             proxy.close()
 
-        self.assertEqual(cursor, "cursor")
+        self.assertIsInstance(cursor, DummyConnection._DummyCursor)
         self.assertEqual(len(pool_factory.instances), 1)
         pool = pool_factory.instances[0]
         self.assertEqual(pool.kwargs["host"], "pg-host")
