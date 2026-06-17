@@ -9,3 +9,10 @@
   margin: 0;
   padding: 0;
 }
+
+/* Class-level display rules (e.g. display:flex on .image-prompt-fields) would otherwise
+   override the UA stylesheet's [hidden]{display:none} (specificity 0-0-1 < 0-1-0).
+   !important here wins over any author display rule so [hidden] always hides. */
+:where(body.prompt-share-page, .prompt-share-page, body.prompt-manage-page, .prompt-manage-page) [hidden] {
+  display: none !important;
+}
