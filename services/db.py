@@ -431,6 +431,23 @@ def get_db_connection() -> _ConnectionProxy:
     while True:
         try:
             connection = connection_pool.getconn()
+
+            # 接続が生きているか物理レベルと論理レベルで確認する (pool_pre_ping)。
+            # DBの再起動などによりプール内の接続が切断されている場合、
+            # 破棄して別の接続（または新規接続）を取得し直す。
+            # Verify if the connection is alive (pool_pre_ping). If broken due to
+            # a DB restart, discard it and retrieve another.
+            if getattr(connection, "closed", 0) != 0:
+                connection_pool.putconn(connection, close=True)
+                continue
+
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+            except Exception:
+                connection_pool.putconn(connection, close=True)
+                continue
+
             return _ConnectionProxy(connection, connection_pool)
         except PoolError as exc:
             if not _is_pool_exhausted_error(exc):
