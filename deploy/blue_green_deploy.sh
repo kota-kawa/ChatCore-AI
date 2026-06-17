@@ -333,6 +333,24 @@ write_active_upstreams() {
   nginx_reload
 }
 
+preflight_nginx_config() {
+  local color="$1"
+
+  echo "Checking host Nginx configuration before deployment..."
+  write_upstream_files "${color}"
+  if [ -n "${NGINX_SITE_PATH}" ]; then
+    install_nginx_site_config
+  else
+    echo "NGINX_SITE_PATH is unset; validating the existing host Nginx configuration." >&2
+  fi
+
+  if ! nginx_test; then
+    echo "Host Nginx configuration test failed before application deployment." >&2
+    echo "Fix the nginx -t error on the server, then rerun deployment." >&2
+    return 1
+  fi
+}
+
 detect_active_color() {
   local color
 
@@ -500,6 +518,12 @@ trap rollback ERR
 
 echo "Current color: ${CURRENT_COLOR}"
 echo "Deploying inactive color: ${TARGET_COLOR}"
+
+PREFLIGHT_COLOR="${CURRENT_COLOR}"
+if [ "${PREFLIGHT_COLOR}" = "none" ]; then
+  PREFLIGHT_COLOR="${TARGET_COLOR}"
+fi
+preflight_nginx_config "${PREFLIGHT_COLOR}"
 
 start_core_services
 build_runtime_images "${TARGET_COLOR}"
