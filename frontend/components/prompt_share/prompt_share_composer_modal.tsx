@@ -147,7 +147,8 @@ function PromptComposerSelect({
   onChange,
   onAfterChange,
   required = false,
-  menuLabel
+  menuLabel,
+  isModalOpen
 }: {
   selectId: string;
   nativeRef: RefObject<HTMLSelectElement>;
@@ -158,6 +159,7 @@ function PromptComposerSelect({
   onAfterChange: () => void;
   required?: boolean;
   menuLabel: string;
+  isModalOpen?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -178,6 +180,16 @@ function PromptComposerSelect({
   useEffect(() => {
     setActiveIndex(selectedIndex);
   }, [selectedIndex]);
+
+  // モーダルが閉じられたときにドロップダウンを閉じる。Escapeキーや投稿成功後の自動クローズで
+  // モーダルが閉じてもisOpen状態がリセットされず、次回モーダルを開いたときにメニューが
+  // 開いたまま表示されてしまう問題を防ぐ
+  // Close the dropdown when the parent modal closes to prevent it from reopening in an open state
+  useEffect(() => {
+    if (isModalOpen === false) {
+      setIsOpen(false);
+    }
+  }, [isModalOpen]);
 
   // メニューが開いている間だけpointerdownを監視し、外側クリックで閉じる
   // Listen for outside pointer events only while the menu is open to close it on click-away
@@ -642,6 +654,7 @@ export function PromptShareComposerModal({
                     menuLabel="カテゴリを選択"
                     onChange={setPostCategory}
                     onAfterChange={updatePromptFeedbackErrorIfNeeded}
+                    isModalOpen={isOpen}
                   />
                 </div>
               </div>
@@ -738,6 +751,7 @@ export function PromptShareComposerModal({
                     menuLabel="使用AIモデルを選択"
                     onChange={setPostAiModel}
                     onAfterChange={updatePromptFeedbackErrorIfNeeded}
+                    isModalOpen={isOpen}
                   />
                 </div>
               </div>
