@@ -8,9 +8,13 @@ import type { AppProps } from "next/app";
 import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
 import { useRouter } from "next/router";
+import { SWRConfig } from "swr";
 import { GoogleAnalytics } from "../components/GoogleAnalytics";
 import { GlobalAiAgent } from "../components/GlobalAiAgent";
+import { NetworkStatusBanner } from "../components/NetworkStatusBanner";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
+import { swrFetcher } from "../lib/data/swr_fetcher";
+import { createPersistentCacheProvider } from "../lib/data/persistent_cache";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -318,6 +322,22 @@ function removeInactiveRouteStylesheets(activePathname: string) {
   });
 }
 
+// localStorage バックの SWR キャッシュプロバイダーは一度だけ生成する（再生成するとキャッシュが失われる）。
+// Create the localStorage-backed SWR cache provider once (re-creating it would drop the cache).
+const persistentCacheProvider = createPersistentCacheProvider();
+
+// アプリ全体の SWR 既定設定。遅い回線でも前回データを即表示し、再接続・フォーカスで裏更新する。
+// App-wide SWR defaults: show previous data instantly on slow links and revalidate on reconnect/focus.
+const swrGlobalConfig = {
+  fetcher: swrFetcher,
+  provider: persistentCacheProvider,
+  keepPreviousData: true,
+  dedupingInterval: 4000,
+  revalidateOnReconnect: true,
+  focusThrottleInterval: 8000,
+  errorRetryCount: 2,
+} as const;
+
 // Next.jsのカスタムAppコンポーネント（テーマ管理・ルート遷移・スタイルシート先読みを統括する）
 // Next.js custom App component (manages theme, route transitions, and stylesheet preloading)
 export default function App({ Component, pageProps }: AppProps) {
@@ -464,19 +484,23 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [router]);
 
   return (
-    <div className={`${appSansFont.variable}${isRouteTransitioning ? " is-route-transitioning" : ""}`}>
-      <GlobalErrorBoundary>
-        <GoogleAnalytics />
-        {/* ルート遷移アニメーション中にオーバーレイを表示する / Show overlay during route transition animation */}
-        <div className="cc-route-frame">
-          <Component {...pageProps} />
-        </div>
-        <div className="cc-route-transition-overlay" aria-hidden="true">
-          <div className="cc-route-transition-overlay__bar"></div>
-        </div>
-        {/* 認証ページ以外でグローバルAIエージェントを表示する / Show global AI agent on non-auth pages */}
-        {showAiAgent && <GlobalAiAgent />}
-      </GlobalErrorBoundary>
-    </div>
+    <SWRConfig value={swrGlobalConfig}>
+      <div className={`${appSansFont.variable}${isRouteTransitioning ? " is-route-transitioning" : ""}`}>
+        <GlobalErrorBoundary>
+          <GoogleAnalytics />
+          {/* オフライン・低速回線・復帰を控えめに通知する / Subtly announce offline/slow/recovery */}
+          <NetworkStatusBanner />
+          {/* ルート遷移アニメーション中にオーバーレイを表示する / Show overlay during route transition animation */}
+          <div className="cc-route-frame">
+            <Component {...pageProps} />
+          </div>
+          <div className="cc-route-transition-overlay" aria-hidden="true">
+            <div className="cc-route-transition-overlay__bar"></div>
+          </div>
+          {/* 認証ページ以外でグローバルAIエージェントを表示する / Show global AI agent on non-auth pages */}
+          {showAiAgent && <GlobalAiAgent />}
+        </GlobalErrorBoundary>
+      </div>
+    </SWRConfig>
   );
 }

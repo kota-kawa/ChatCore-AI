@@ -2484,3 +2484,203 @@ a.cc-texture-btn:active {
     animation: none;
   }
 }
+
+/* =====================================================================
+ * 共有 UI プリミティブ（モダンなマイクロインタラクション & ローディング表現）
+ * Shared UI primitives (modern micro-interactions & loading affordances)
+ *
+ * デザインは変えず、控えめで上質な動きとローディング表現だけを足すユーティリティ群。
+ * Utilities that add only subtle, high-quality motion and loading affordances —
+ * the existing visual design is left unchanged.
+ * すべて prefers-reduced-motion で無効化される（このファイル末尾を参照）。
+ * All of these are disabled under prefers-reduced-motion (see the block at the end of this file).
+ * ===================================================================== */
+
+/* --- スケルトン / Skeleton placeholders --- */
+.cc-skeleton {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-tertiary, rgba(148, 163, 184, 0.18));
+  border-radius: var(--radius-sm, 6px);
+  /* 子要素を持たない空要素でも高さを保つ / Keep height even with no children */
+  line-height: 1;
+}
+
+.cc-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 100%
+  );
+  animation: ccSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
+[data-theme="dark"] .cc-skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+}
+
+.cc-skeleton--text {
+  height: 0.85em;
+  border-radius: var(--radius-sm, 6px);
+  vertical-align: middle;
+}
+
+.cc-skeleton--circle {
+  border-radius: var(--radius-full, 9999px);
+}
+
+.cc-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  width: 100%;
+}
+
+@keyframes ccSkeletonShimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* --- 押下フィードバック / Press feedback --- */
+.cc-press {
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cc-press:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.97);
+}
+
+/* --- ホバー時のわずかな浮き上がり / Subtle hover lift --- */
+.cc-hover-raise {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+@media (hover: hover) {
+  .cc-hover-raise:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--chat-shadow-soft, 0 6px 18px rgba(15, 23, 42, 0.08));
+  }
+}
+
+/* --- コンテンツの穏やかな出現 / Gentle content reveal --- */
+.cc-fade-in {
+  animation: ccFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes ccFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- 統一フォーカスリング（オプトインのユーティリティ）/ Unified focus ring (opt-in) --- */
+.cc-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(59, 130, 246, 0.45));
+  border-radius: inherit;
+}
+
+/* --- ネットワーク状態バナー / Network status banner --- */
+.cc-net-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -120%);
+  z-index: var(--z-alert-modal, 2147483000);
+  max-width: min(92vw, 420px);
+  margin-top: max(env(safe-area-inset-top, 0px), 10px);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  color: #fff;
+  background: rgba(30, 41, 59, 0.96);
+  border-radius: var(--radius-full, 9999px);
+  box-shadow: var(--chat-shadow-strong, 0 10px 30px rgba(15, 23, 42, 0.25));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.32s ease;
+}
+
+.cc-net-banner.is-visible {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.cc-net-banner[data-variant="offline"] {
+  background: var(--danger-color, #dc2626);
+}
+
+.cc-net-banner[data-variant="slow"] {
+  background: rgba(30, 41, 59, 0.96);
+}
+
+.cc-net-banner[data-variant="recovered"] {
+  background: var(--success-color, #16a34a);
+}
+
+.cc-net-banner__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: currentColor;
+  opacity: 0.9;
+  flex: none;
+}
+
+.cc-net-banner[data-variant="slow"] .cc-net-banner__dot {
+  animation: ccNetPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ccNetPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-skeleton::after {
+    animation: none;
+  }
+  .cc-press,
+  .cc-hover-raise {
+    transition: none;
+  }
+  .cc-press:active:not(:disabled):not([aria-disabled="true"]),
+  .cc-hover-raise:hover {
+    transform: none;
+  }
+  .cc-fade-in {
+    animation: none;
+  }
+  .cc-net-banner {
+    transition: opacity 0.01ms;
+  }
+  .cc-net-banner__dot {
+    animation: none;
+  }
+}

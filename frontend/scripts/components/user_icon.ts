@@ -2,6 +2,7 @@
 // ────────────────────────────────────────────────
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 import { resilientFetch } from "../core/resilient_fetch";
+import { clearPersistentCache } from "../../lib/data/persistent_cache";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username を取得
 //  - カスタム画像がある場合はデフォルト画像を先に出さない
@@ -153,6 +154,9 @@ tpl.innerHTML = `
 
 async function postLogoutAndRedirect() {
   clearCachedProfile();
+  // ユーザー切替時に他人のデータを見せないよう、永続 SWR キャッシュを消去する。
+  // Clear the persisted SWR cache so a switched user never sees the previous user's data.
+  clearPersistentCache();
   try {
     const response = await fetch("/logout", {
       method: "POST",
