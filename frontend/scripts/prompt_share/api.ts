@@ -13,12 +13,23 @@ type ApiResponse = {
   [key: string]: unknown;
 };
 
+function promptShareFetchJsonOrThrow<TPayload>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: Parameters<typeof fetchJsonOrThrow<TPayload>>[2],
+) {
+  return fetchJsonOrThrow<TPayload>(input, init, {
+    ...options,
+    fetchImpl: resilientFetch,
+  });
+}
+
 export async function sendLikeRequest(method: "POST" | "DELETE", prompt: PromptData) {
   if (prompt.id === undefined || prompt.id === null) {
     return Promise.reject(new Error("いいね対象のプロンプトIDが見つかりません。"));
   }
 
-  const { payload } = await fetchJsonOrThrow<ApiResponse>("/prompt_share/api/like", {
+  const { payload } = await promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/like", {
     method,
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +49,7 @@ export function removePromptLike(prompt: PromptData) {
 }
 
 export function fetchPromptComments(promptId: string | number) {
-  return fetchJsonOrThrow<PromptCommentsResponse>(
+  return promptShareFetchJsonOrThrow<PromptCommentsResponse>(
     `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/comments`,
     undefined,
     {
@@ -48,7 +59,7 @@ export function fetchPromptComments(promptId: string | number) {
 }
 
 export function createPromptComment(promptId: string | number, content: string) {
-  return fetchJsonOrThrow<PromptCommentsResponse>(
+  return promptShareFetchJsonOrThrow<PromptCommentsResponse>(
     `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/comments`,
     {
       method: "POST",
@@ -63,7 +74,7 @@ export function createPromptComment(promptId: string | number, content: string) 
 }
 
 export function deletePromptComment(commentId: string | number) {
-  return fetchJsonOrThrow<PromptCommentsResponse>(
+  return promptShareFetchJsonOrThrow<PromptCommentsResponse>(
     `/prompt_share/api/comments/${encodeURIComponent(String(commentId))}`,
     {
       method: "DELETE",
@@ -80,7 +91,7 @@ export function reportPromptComment(
   reason: "spam" | "harassment" | "abuse" | "other" = "abuse",
   details = ""
 ) {
-  return fetchJsonOrThrow<PromptCommentsResponse>(
+  return promptShareFetchJsonOrThrow<PromptCommentsResponse>(
     `/prompt_share/api/comments/${encodeURIComponent(String(commentId))}/report`,
     {
       method: "POST",
@@ -101,7 +112,7 @@ export function addPromptAsTask(prompt: PromptData) {
     return Promise.reject(new Error("チャットで使う対象のプロンプトIDが見つかりません。"));
   }
 
-  return fetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
+  return promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -118,7 +129,7 @@ export function removePromptAsTask(prompt: PromptData) {
     return Promise.reject(new Error("チャットで使う解除対象のプロンプトIDが見つかりません。"));
   }
 
-  return fetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
+  return promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
     method: "DELETE",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -129,9 +140,8 @@ export function removePromptAsTask(prompt: PromptData) {
 }
 
 export function fetchPromptList() {
-  return fetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
+  return promptShareFetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
     defaultMessage: "プロンプト一覧の取得に失敗しました。",
-    fetchImpl: resilientFetch
   }).then(({ payload }) => payload);
 }
 
@@ -150,12 +160,11 @@ export function fetchPromptSearchResults(
     params.set("prompt_type", options.promptType);
   }
 
-  return fetchJsonOrThrow<PromptFeedResponse>(
+  return promptShareFetchJsonOrThrow<PromptFeedResponse>(
     `/search/prompts?${params.toString()}`,
     undefined,
     {
-      defaultMessage: "検索に失敗しました。",
-      fetchImpl: resilientFetch
+      defaultMessage: "検索に失敗しました。"
     }
   ).then(({ payload }) => payload);
 }
@@ -163,7 +172,7 @@ export function fetchPromptSearchResults(
 export async function createPrompt(postData: FormData) {
   // FormData は multipart 送信になるため Content-Type は自動設定に任せる
   // Let browser set multipart Content-Type automatically for FormData.
-  const { payload } = await fetchJsonOrThrow<ApiResponse>(
+  const { payload } = await promptShareFetchJsonOrThrow<ApiResponse>(
     "/prompt_share/api/prompts",
     {
       method: "POST",

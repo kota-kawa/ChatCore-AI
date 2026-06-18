@@ -15,10 +15,12 @@ import {
 import "../scripts/core/csrf";
 import { PasskeyCancelledError, browserSupportsPasskeys, registerPasskey } from "../scripts/core/passkeys";
 import { showConfirmModal } from "../scripts/core/alert_modal";
+import { resilientFetch } from "../scripts/core/resilient_fetch";
 import { showToast } from "../scripts/core/toast";
 import { fetchJsonOrThrow } from "../scripts/core/runtime_validation";
 import { getStoredThemePreference, setThemePreference, type ThemePreference } from "../scripts/core/theme";
 import { InlineLoading } from "../components/ui/inline_loading";
+import { Skeleton, SkeletonText } from "../components/ui/skeleton";
 import { formatDateTime } from "../lib/datetime";
 import { asId, asRecord, asString } from "../lib/utils";
 import {
@@ -123,6 +125,17 @@ const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
 // アカウント削除を確定させるためにユーザーが入力すべき文字列
 // Exact string the user must type to confirm account deletion
 const ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT";
+
+function settingsFetchJsonOrThrow<TPayload>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: Parameters<typeof fetchJsonOrThrow<TPayload>>[2],
+) {
+  return fetchJsonOrThrow<TPayload>(input, init, {
+    ...options,
+    fetchImpl: resilientFetch,
+  });
+}
 
 // サイドバーに表示するナビゲーション項目の定義
 // Definition of navigation items shown in the settings sidebar
@@ -279,7 +292,7 @@ function PromptCard({
   const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : "日時未設定";
 
   return (
-    <article className="prompt-card" data-prompt-id={promptId}>
+    <article className="prompt-card cc-press" data-prompt-id={promptId}>
       <div className="prompt-card__main">
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
@@ -318,7 +331,7 @@ function PromptCard({
         <div className="prompt-card__actions">
           <button
             type="button"
-            className="prompt-card__action-btn prompt-card__action-btn--edit"
+            className="prompt-card__action-btn prompt-card__action-btn--edit cc-press"
             onClick={() => onEdit(prompt)}
             aria-label="編集"
           >
@@ -327,7 +340,7 @@ function PromptCard({
           </button>
           <button
             type="button"
-            className="prompt-card__action-btn prompt-card__action-btn--delete"
+            className="prompt-card__action-btn prompt-card__action-btn--delete cc-press"
             onClick={() => onDelete(prompt)}
             aria-label="削除"
           >
@@ -357,7 +370,7 @@ function LikedPromptCard({
   const likedAtLabel = entry.likedAt ? toDisplayDate(entry.likedAt) : "日時未設定";
 
   return (
-    <article className="prompt-card" data-liked-prompt-id={entryId}>
+    <article className="prompt-card cc-press" data-liked-prompt-id={entryId}>
       <div className="prompt-card__main">
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
@@ -400,7 +413,7 @@ function LikedPromptCard({
         <div className="prompt-card__actions">
           <button
             type="button"
-            className="prompt-card__action-btn prompt-card__action-btn--delete"
+            className="prompt-card__action-btn prompt-card__action-btn--delete cc-press"
             onClick={() => onDelete(entry)}
             aria-label="いいねを解除"
           >
@@ -410,6 +423,43 @@ function LikedPromptCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function SettingsProfileSkeleton() {
+  return (
+    <div className="settings-profile-skeleton" role="status" aria-label="プロフィールを読み込み中">
+      <Skeleton variant="circle" width={96} height={96} />
+      <div className="settings-profile-skeleton__fields">
+        <Skeleton variant="text" width="34%" height="0.9rem" />
+        <Skeleton variant="block" width="100%" height="2.8rem" />
+        <Skeleton variant="text" width="38%" height="0.9rem" />
+        <Skeleton variant="block" width="100%" height="2.8rem" />
+        <Skeleton variant="text" width="28%" height="0.9rem" />
+        <Skeleton variant="block" width="100%" height="7rem" />
+        <Skeleton variant="text" width="42%" height="0.9rem" />
+        <Skeleton variant="block" width="100%" height="8rem" />
+      </div>
+    </div>
+  );
+}
+
+function SettingsPromptCardSkeletonGrid() {
+  return (
+    <>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <article key={index} className="prompt-card prompt-card--skeleton">
+          <div className="prompt-card__main">
+            <Skeleton variant="text" width={index % 2 === 0 ? "58%" : "74%"} height="1.1rem" />
+            <SkeletonText lines={3} />
+            <Skeleton variant="text" width="40%" height="0.8rem" />
+          </div>
+          <div className="prompt-card__footer">
+            <Skeleton variant="text" width={120} height="2rem" />
+          </div>
+        </article>
+      ))}
+    </>
   );
 }
 
@@ -865,6 +915,7 @@ export default function UserSettingsPage() {
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(DEFAULT_AVATAR_URL);
   const [initialAvatarUrl, setInitialAvatarUrl] = useState(DEFAULT_AVATAR_URL);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<ProfileSaveStatus | null>(null);
   // トークンをインクリメントすることで保存成功アニメーションを再トリガーする
@@ -930,8 +981,9 @@ export default function UserSettingsPage() {
   // プロフィール情報を API から取得してフォームに反映する
   // Fetch profile data from the API and populate the form
   const loadProfile = useCallback(async () => {
+    setProfileLoading(true);
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
         { credentials: "same-origin" },
         { defaultMessage: "プロフィール情報の取得に失敗しました。" }
@@ -968,6 +1020,8 @@ export default function UserSettingsPage() {
       }
     } catch (error) {
       console.error("loadProfile:", error instanceof Error ? error.message : String(error));
+    } finally {
+      setProfileLoading(false);
     }
   }, []);
 
@@ -976,8 +1030,9 @@ export default function UserSettingsPage() {
   const loadMyPrompts = useCallback(async () => {
     setMyPromptsLoading(true);
     setMyPromptsError(null);
+
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await settingsFetchJsonOrThrow(
         "/prompt_manage/api/my_prompts",
         {
           credentials: "same-origin"
@@ -1001,7 +1056,7 @@ export default function UserSettingsPage() {
     setLikedPromptsLoading(true);
     setLikedPromptsError(null);
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await settingsFetchJsonOrThrow(
         "/prompt_manage/api/liked_prompts",
         {
           credentials: "same-origin"
@@ -1034,7 +1089,7 @@ export default function UserSettingsPage() {
     setPasskeysLoading(true);
 
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/passkeys",
         {
           credentials: "same-origin"
@@ -1246,7 +1301,7 @@ export default function UserSettingsPage() {
     setProfileSaveStatus(null);
     setProfileSaveEffectActive(false);
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
         {
           method: "POST",
@@ -1325,7 +1380,7 @@ export default function UserSettingsPage() {
     setEmailChangeSubmitting(true);
     setEmailChangeStatus(null);
     try {
-      await fetchJsonOrThrow<Record<string, unknown>>(
+      await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/email/request_change",
         {
           method: "POST",
@@ -1366,7 +1421,7 @@ export default function UserSettingsPage() {
     setEmailChangeSubmitting(true);
     setEmailChangeStatus(null);
     try {
-      const { payload } = await fetchJsonOrThrow<Record<string, unknown>>(
+      const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/email/confirm_change",
         {
           method: "POST",
@@ -1453,8 +1508,11 @@ export default function UserSettingsPage() {
       return;
     }
 
+    const previousPrompts = myPrompts;
+    setMyPrompts((current) => current.filter((entry) => asId(entry.id) !== promptId));
+
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await settingsFetchJsonOrThrow(
         `/prompt_manage/api/prompts/${promptId}`,
         {
           method: "DELETE",
@@ -1466,11 +1524,12 @@ export default function UserSettingsPage() {
       );
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "削除しました。", { variant: "success" });
-      await loadMyPrompts();
+      void loadMyPrompts();
     } catch (error) {
+      setMyPrompts(previousPrompts);
       showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
     }
-  }, [loadMyPrompts]);
+  }, [loadMyPrompts, myPrompts]);
 
   // プロンプト編集フォームの汎用入力変更ハンドラ
   // Generic input change handler for the prompt edit form
@@ -1522,9 +1581,25 @@ export default function UserSettingsPage() {
       return;
     }
 
+    const previousPrompts = myPrompts;
+    const optimisticPrompt = {
+      title: editPromptForm.title,
+      category: editPromptForm.category,
+      content: editPromptForm.content,
+      inputExamples: editPromptForm.inputExamples,
+      outputExamples: editPromptForm.outputExamples,
+    };
+    setMyPrompts((current) =>
+      current.map((prompt) =>
+        asId(prompt.id) === editPromptForm.id
+          ? { ...prompt, ...optimisticPrompt }
+          : prompt
+      )
+    );
+
     setPromptSaving(true);
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await settingsFetchJsonOrThrow(
         `/prompt_manage/api/prompts/${editPromptForm.id}`,
         {
           method: "PUT",
@@ -1547,13 +1622,14 @@ export default function UserSettingsPage() {
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "更新しました。", { variant: "success" });
       setEditPromptForm(null);
-      await loadMyPrompts();
+      void loadMyPrompts();
     } catch (error) {
+      setMyPrompts(previousPrompts);
       showToast(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。", { variant: "error" });
     } finally {
       setPromptSaving(false);
     }
-  }, [editPromptForm, loadMyPrompts]);
+  }, [editPromptForm, loadMyPrompts, myPrompts]);
 
   // 確認ダイアログを経ていいねを解除する
   // Remove a liked prompt after user confirmation
@@ -1569,8 +1645,11 @@ export default function UserSettingsPage() {
       return;
     }
 
+    const previousLikedPrompts = likedPrompts;
+    setLikedPrompts((current) => current.filter((item) => asId(item.promptId) !== promptId));
+
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await settingsFetchJsonOrThrow(
         "/prompt_share/api/like",
         {
           method: "DELETE",
@@ -1584,11 +1663,11 @@ export default function UserSettingsPage() {
       );
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "いいねを解除しました。", { variant: "success" });
-      setLikedPrompts((current) => current.filter((item) => asId(item.promptId) !== promptId));
     } catch (error) {
+      setLikedPrompts(previousLikedPrompts);
       showToast(error instanceof Error ? error.message : "いいねの解除に失敗しました。", { variant: "error" });
     }
-  }, []);
+  }, [likedPrompts]);
 
   // ブラウザの Passkey 登録フローを起動し、キャンセル時はトーストを出さない
   // Launch the browser passkey registration flow; silently swallow user-cancelled errors
@@ -1620,7 +1699,7 @@ export default function UserSettingsPage() {
 
     setDeletingPasskeyId(passkeyId);
     try {
-      await fetchJsonOrThrow<Record<string, unknown>>(
+      await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/passkeys/delete",
         {
           method: "POST",
@@ -1664,7 +1743,7 @@ export default function UserSettingsPage() {
     setAccountDeleting(true);
     setAccountDeleteError(null);
     try {
-      await fetchJsonOrThrow<Record<string, unknown>>(
+      await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/account",
         {
           method: "DELETE",
@@ -1777,6 +1856,9 @@ export default function UserSettingsPage() {
                     {profileSaveStatus.message}
                   </p>
                 ) : null}
+                {profileLoading ? (
+                  <SettingsProfileSkeleton />
+                ) : (
                 <form id="userSettingsForm" onSubmit={handleProfileSubmit}>
                   {/* アバター画像の選択 — hidden input を重ねてスタイル自由なボタンで起動する / Avatar selection — triggers a hidden file input via a custom button */}
                   <div className="form-group avatar-group">
@@ -1897,6 +1979,7 @@ export default function UserSettingsPage() {
                     </button>
                   </div>
                 </form>
+                )}
               </div>
             </div>
 
@@ -1949,11 +2032,12 @@ export default function UserSettingsPage() {
                 </div>
 
                 {/* ローディング・エラー・空状態の 3 パターンを排他的に表示する / Show loading, error, or empty state exclusively — only one at a time */}
-                {myPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
+                {myPromptsLoading && myPrompts.length > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
                 {!myPromptsLoading && myPromptsError ? <p>{myPromptsError}</p> : null}
                 {!myPromptsLoading && !myPromptsError && myPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
 
                 <div id="promptList" className="prompt-grid">
+                  {myPromptsLoading && myPrompts.length === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
                   {myPromptCards}
                 </div>
               </div>
@@ -1967,13 +2051,14 @@ export default function UserSettingsPage() {
                   <h3 className="section-title">いいねしたプロンプト</h3>
                 </div>
 
-                {likedPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
+                {likedPromptsLoading && likedPrompts.length > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
                 {!likedPromptsLoading && likedPromptsError ? <p>{likedPromptsError}</p> : null}
                 {!likedPromptsLoading && !likedPromptsError && likedPrompts.length === 0 ? (
                   <p>いいねしたプロンプトは存在しません。</p>
                 ) : null}
 
                 <div id="likedPromptEntries" className="prompt-grid">
+                  {likedPromptsLoading && likedPrompts.length === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
                   {likedPromptCards}
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import { ShareChatRoomResponseSchema } from "../../types/chat";
 import { getCurrentChatRoomId } from "../core/app_state";
+import { resilientFetch } from "../core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { copyTextToClipboard } from "./message_utils";
 
@@ -92,7 +93,7 @@ async function createShareLink(forceRefresh = false) {
   setStatus("共有リンクを生成しています...");
 
   try {
-    const response = await fetch("/api/share_chat_room", {
+    const response = await resilientFetch("/api/share_chat_room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",

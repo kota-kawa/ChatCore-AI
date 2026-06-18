@@ -20,6 +20,7 @@ import {
   extractApiErrorMessage,
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
@@ -656,8 +657,22 @@ export function useHomePageRoomActions({
       const confirmed = await showConfirmModal(`「${roomTitle}」を削除しますか？`);
       if (!confirmed) return;
 
+      const previousRooms = chatRooms;
+      setOpenRoomActionsFor(null);
+      setChatRooms((previous) => removeChatRoomsById(previous, [roomId]));
+      void mutateChatRooms(
+        (previous) =>
+          previous
+            ? {
+                ...previous,
+                rooms: removeChatRoomsById(previous.rooms, [roomId]),
+              }
+            : previous,
+        { revalidate: false },
+      );
+
       try {
-        const response = await fetch("/api/delete_chat_room", {
+        const response = await resilientFetch("/api/delete_chat_room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -673,14 +688,23 @@ export function useHomePageRoomActions({
           clearCurrentRoomAfterDelete();
         }
 
-        setOpenRoomActionsFor(null);
-        setChatRooms((previous) => removeChatRoomsById(previous, [roomId]));
         void mutateChatRooms();
       } catch (error) {
+        setChatRooms(previousRooms);
+        void mutateChatRooms(
+          (previous) =>
+            previous
+              ? {
+                  ...previous,
+                  rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+                }
+              : previous,
+          { revalidate: false },
+        );
         showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [clearCurrentRoomAfterDelete, currentRoomIdRef, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
+    [chatRooms, clearCurrentRoomAfterDelete, currentRoomIdRef, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
   const handleBulkDeleteRooms = useCallback(async () => {
@@ -691,8 +715,21 @@ export function useHomePageRoomActions({
     if (!confirmed) return;
 
     setIsBulkDeletingRooms(true);
+    const previousRooms = chatRooms;
+    setChatRooms((previous) => removeChatRoomsById(previous, roomIds));
+    void mutateChatRooms(
+      (previous) =>
+        previous
+          ? {
+              ...previous,
+              rooms: removeChatRoomsById(previous.rooms, roomIds),
+            }
+          : previous,
+      { revalidate: false },
+    );
+
     try {
-      const response = await fetch("/api/delete_chat_rooms", {
+      const response = await resilientFetch("/api/delete_chat_rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -709,16 +746,27 @@ export function useHomePageRoomActions({
       }
 
       cancelRoomSelection();
-      setChatRooms((previous) => removeChatRoomsById(previous, roomIds));
       void mutateChatRooms();
       showToast(`${roomIds.length}件のチャットを削除しました。`, { variant: "success" });
     } catch (error) {
+      setChatRooms(previousRooms);
+      void mutateChatRooms(
+        (previous) =>
+          previous
+            ? {
+                ...previous,
+                rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+              }
+            : previous,
+        { revalidate: false },
+      );
       showToast(`削除失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
     } finally {
       setIsBulkDeletingRooms(false);
     }
   }, [
     cancelRoomSelection,
+    chatRooms,
     clearCurrentRoomAfterDelete,
     currentRoomIdRef,
     mutateChatRooms,
@@ -730,14 +778,29 @@ export function useHomePageRoomActions({
   const handleRenameRoom = useCallback(
     async (roomId: string, currentTitle: string) => {
       const nextTitle = window.prompt("新しいチャットルーム名", currentTitle);
-      if (!nextTitle || !nextTitle.trim()) return;
+      const normalizedTitle = nextTitle?.trim();
+      if (!normalizedTitle) return;
+
+      const previousRooms = chatRooms;
+      setOpenRoomActionsFor(null);
+      setChatRooms((previous) => updateChatRoomTitle(previous, roomId, normalizedTitle));
+      void mutateChatRooms(
+        (previous) =>
+          previous
+            ? {
+                ...previous,
+                rooms: updateChatRoomTitle(previous.rooms, roomId, normalizedTitle),
+              }
+            : previous,
+        { revalidate: false },
+      );
 
       try {
-        const response = await fetch("/api/rename_chat_room", {
+        const response = await resilientFetch("/api/rename_chat_room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ room_id: roomId, new_title: nextTitle.trim() }),
+          body: JSON.stringify({ room_id: roomId, new_title: normalizedTitle }),
         });
         const payload = await readJsonBodySafe(response);
 
@@ -745,14 +808,23 @@ export function useHomePageRoomActions({
           throw new Error(extractApiErrorMessage(payload, "名前変更失敗", response.status));
         }
 
-        setOpenRoomActionsFor(null);
-        setChatRooms((previous) => updateChatRoomTitle(previous, roomId, nextTitle));
         void mutateChatRooms();
       } catch (error) {
+        setChatRooms(previousRooms);
+        void mutateChatRooms(
+          (previous) =>
+            previous
+              ? {
+                  ...previous,
+                  rooms: previousRooms.slice(0, CHAT_ROOMS_PAGE_SIZE),
+                }
+              : previous,
+          { revalidate: false },
+        );
         showToast(`名前変更失敗: ${error instanceof Error ? error.message : String(error)}`, { variant: "error" });
       }
     },
-    [mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
+    [chatRooms, mutateChatRooms, setChatRooms, setOpenRoomActionsFor],
   );
 
   return {

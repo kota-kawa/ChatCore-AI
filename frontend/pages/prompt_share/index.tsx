@@ -14,6 +14,7 @@ import type { GetServerSideProps } from "next";
 import { SeoHead } from "../../components/SeoHead";
 import "../../scripts/core/csrf";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { showToast } from "../../scripts/core/toast";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { initPromptAssist } from "../../scripts/components/prompt_assist";
@@ -117,7 +118,7 @@ function getBackendOrigin() {
 // Pre-fetches the prompt list at SSR time; returns an empty array on failure so the client can retry
 export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = async () => {
   try {
-    const response = await fetch(`${getBackendOrigin()}/prompt_share/api/prompts`, {
+    const response = await resilientFetch(`${getBackendOrigin()}/prompt_share/api/prompts`, {
       headers: {
         "Accept": "application/json"
       }
@@ -998,22 +999,41 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       showToast("コメント内容を入力してください。", { variant: "error" });
       return;
     }
+    const optimisticCommentId = `optimistic-comment-${Date.now()}`;
+    const previousCommentCount = Number(detailPrompt?.comment_count || 0);
+    const optimisticComment: PromptCommentData = {
+      id: optimisticCommentId,
+      prompt_id: promptId,
+      user_id: 0,
+      author_name: "あなた",
+      content,
+      created_at: new Date().toISOString(),
+      mine: true,
+      can_delete: false
+    };
     setIsCommentSubmitting(true);
+    setCommentDraft("");
+    setDetailComments((current) => [...current, optimisticComment]);
+    updatePromptCommentCount(promptId, previousCommentCount + 1);
     try {
       const payload = await createPromptComment(promptId, content);
       if (payload.comment_count !== undefined) {
         updatePromptCommentCount(promptId, payload.comment_count);
       }
       if (payload.comment) {
-        setDetailComments((current) => [...current, payload.comment!]);
+        setDetailComments((current) =>
+          current.map((comment) => (String(comment.id) === optimisticCommentId ? payload.comment! : comment))
+        );
       } else {
         // APIがコメントオブジェクトを返さなかった場合はコメント一覧を再取得する
         // If the API did not return a comment object, re-fetch the full comment list
         await loadPromptComments(promptId);
       }
-      setCommentDraft("");
       showToast("コメントを投稿しました。", { variant: "success" });
     } catch (error) {
+      setDetailComments((current) => current.filter((comment) => String(comment.id) !== optimisticCommentId));
+      updatePromptCommentCount(promptId, previousCommentCount);
+      setCommentDraft(content);
       console.error("コメント投稿エラー:", error);
       showToast(error instanceof Error ? error.message : "コメント投稿に失敗しました。", {
         variant: "error"
@@ -1033,14 +1053,29 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       }
       const commentKey = String(commentId);
       setCommentActionPending(commentKey, true);
+      const removedComment = detailComments.find((comment) => String(comment.id) === commentKey) || null;
+      const currentPromptId = getPromptId(detailPrompt);
+      const previousCommentCount = Number(detailPrompt?.comment_count || 0);
+      setDetailComments((current) => current.filter((comment) => String(comment.id) !== commentKey));
+      if (currentPromptId) {
+        updatePromptCommentCount(currentPromptId, Math.max(0, previousCommentCount - 1));
+      }
       try {
         const payload = await deletePromptComment(commentId);
-        setDetailComments((current) => current.filter((comment) => String(comment.id) !== commentKey));
         if (payload.prompt_id !== undefined && payload.comment_count !== undefined) {
           updatePromptCommentCount(payload.prompt_id, payload.comment_count);
         }
         showToast("コメントを削除しました。", { variant: "success" });
       } catch (error) {
+        if (removedComment) {
+          setDetailComments((current) => {
+            if (current.some((comment) => String(comment.id) === commentKey)) return current;
+            return [...current, removedComment as PromptCommentData];
+          });
+        }
+        if (currentPromptId) {
+          updatePromptCommentCount(currentPromptId, previousCommentCount);
+        }
         console.error("コメント削除エラー:", error);
         showToast(error instanceof Error ? error.message : "コメント削除に失敗しました。", {
           variant: "error"
@@ -1049,7 +1084,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         setCommentActionPending(commentKey, false);
       }
     },
-    [setCommentActionPending, updatePromptCommentCount]
+    [detailComments, detailPrompt, setCommentActionPending, updatePromptCommentCount]
   );
 
   // コメントを不正利用として報告し、モデレーターによって非表示にされた場合はリストから即座に除外する
@@ -1503,7 +1538,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     // タイムアウト0でAPI呼び出しをマイクロタスクキューに遅延させ、キャッシュが先にレンダリングされるようにする
     // Defers the API call to the next tick so the cached state renders first
     const timerId = window.setTimeout(() => {
-      void fetch("/api/current_user")
+      void resilientFetch("/api/current_user", { credentials: "same-origin" })
         .then((res) => (res.ok ? res.json() : { logged_in: false }))
         .then((data: { logged_in?: boolean }) => {
           if (cancelled) {

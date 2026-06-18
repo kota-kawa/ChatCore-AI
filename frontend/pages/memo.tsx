@@ -16,6 +16,7 @@ import useSWR from "swr";
 
 import "../scripts/core/csrf";
 import { InlineLoading } from "../components/ui/inline_loading";
+import { Skeleton, SkeletonText } from "../components/ui/skeleton";
 import { MiniChat } from "../components/chat_page/MiniChat";
 import { formatDateTime } from "../lib/datetime";
 import { formatLLMOutput, formatMemoOutput } from "../scripts/chat/chat_ui";
@@ -411,12 +412,23 @@ const loadCollections = async (): Promise<Collection[]> => {
 // メモのIDから詳細情報を取得する非同期関数
 // Async function to load memo detail from its ID
 async function loadMemoDetail(memoId: string | number) {
-  const { payload } = await fetchJsonOrThrow<MemoDetailPayload>(
+  const { payload } = await memoFetchJsonOrThrow<MemoDetailPayload>(
     `/memo/api/${memoId}`,
     { credentials: "same-origin" },
     { defaultMessage: "メモの詳細取得に失敗しました。", hasApplicationError: (d) => !d.memo },
   );
   return payload.memo || null;
+}
+
+function memoFetchJsonOrThrow<TPayload>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: Parameters<typeof fetchJsonOrThrow<TPayload>>[2],
+) {
+  return fetchJsonOrThrow<TPayload>(input, init, {
+    ...options,
+    fetchImpl: resilientFetch,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -448,6 +460,29 @@ function CollectionBadge({ name, color }: { name: string; color: string }) {
       <i className="bi bi-folder2" aria-hidden="true"></i>
       {name}
     </span>
+  );
+}
+
+function MemoListSkeleton() {
+  return (
+    <div className="memo-history__sections memo-history__sections--skeleton" role="status" aria-live="polite" aria-label="メモを読み込み中">
+      <section className="memo-history__section">
+        <ul className="memo-history__list memo-history__list--skeleton">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <li key={index}>
+              <article className="memo-item memo-item--skeleton">
+                <Skeleton variant="text" width={index % 3 === 0 ? "62%" : "78%"} height="1.05rem" />
+                <SkeletonText lines={index % 2 === 0 ? 4 : 3} />
+                <div className="memo-item__footer memo-item__footer--skeleton">
+                  <Skeleton variant="text" width="42%" height="0.75rem" />
+                  <Skeleton variant="circle" width={30} height={30} />
+                </div>
+              </article>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   );
 }
 
@@ -744,7 +779,7 @@ export default function MemoPage() {
   useEffect(() => {
     const syncAuthState = async () => {
       try {
-        const res = await fetch("/api/current_user", { credentials: "same-origin" });
+        const res = await resilientFetch("/api/current_user", { credentials: "same-origin" });
         const data = res.ok ? await res.json() : { logged_in: false };
         const loggedIn = Boolean(data.logged_in);
         setIsLoggedIn(loggedIn);
@@ -883,6 +918,53 @@ export default function MemoPage() {
     try { await action(); } finally { setActionLoadingId(""); }
   }, []);
 
+  const shouldKeepMemoInCurrentList = useCallback((memo: MemoSummary) => {
+    if (archiveScope === "active" && memo.is_archived) return false;
+    if (archiveScope === "archived" && !memo.is_archived) return false;
+    if (activeCollectionId !== null && memo.collection_id !== activeCollectionId) return false;
+    return true;
+  }, [activeCollectionId, archiveScope]);
+
+  const updateMemoListOptimistically = useCallback(
+    async (updater: (memo: MemoSummary) => MemoSummary | null, targetIds: Iterable<string | number>) => {
+      const targets = new Set(Array.from(targetIds, String));
+      await mutate((current) => {
+        if (!current) return current;
+        let changed = false;
+        const nextMemos: MemoSummary[] = [];
+
+        current.memos.forEach((memo) => {
+          if (!targets.has(String(memo.id))) {
+            nextMemos.push(memo);
+            return;
+          }
+
+          changed = true;
+          const nextMemo = updater(memo);
+          if (nextMemo && shouldKeepMemoInCurrentList(nextMemo)) {
+            nextMemos.push(nextMemo);
+          }
+        });
+
+        if (!changed) return current;
+        return {
+          ...current,
+          memos: nextMemos,
+          total: Math.max(0, current.total + nextMemos.length - current.memos.length),
+        };
+      }, { revalidate: false });
+    },
+    [mutate, shouldKeepMemoInCurrentList],
+  );
+
+  const patchSelectedMemoOptimistically = useCallback((memoId: string | number, patch: Partial<MemoDetail>) => {
+    setSelectedMemo((current) => (
+      current && String(current.id) === String(memoId)
+        ? { ...current, ...patch }
+        : current
+    ));
+  }, []);
+
   const refreshSelectedMemoIfNeeded = useCallback(async () => {
     if (!selectedMemo?.id) return;
     try {
@@ -903,7 +985,7 @@ export default function MemoPage() {
     if (!formState.ai_response.trim()) { showFlash("error", "本文を入力してください。"); return; }
     setSubmitting(true);
     try {
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         "/memo/api",
         {
           method: "POST",
@@ -932,7 +1014,7 @@ export default function MemoPage() {
     if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を先に入力してください。"); return; }
     setAiSuggesting(true);
     try {
-      const { payload } = await fetchJsonOrThrow<{ title?: string }>(
+      const { payload } = await memoFetchJsonOrThrow<{ title?: string }>(
         "/memo/api/suggest",
         {
           method: "POST",
@@ -1101,7 +1183,7 @@ export default function MemoPage() {
         }
       }
 
-      const { payload } = await fetchJsonOrThrow<{ memo?: MemoDetail }>(
+      const { payload } = await memoFetchJsonOrThrow<{ memo?: MemoDetail }>(
         `/memo/api/${selectedMemo.id}`,
         {
           method: "PATCH",
@@ -1216,35 +1298,65 @@ export default function MemoPage() {
   // Handler to toggle the pinned state
   const handleTogglePin = useCallback(async (memo: MemoSummary) => {
     await withActionLoading(memo.id, async () => {
+      const enabled = !memo.is_pinned;
+      const pinnedAt = enabled ? new Date().toISOString() : null;
+      await updateMemoListOptimistically(
+        (current) => ({
+          ...current,
+          is_pinned: enabled,
+          pinned_at: pinnedAt,
+        }),
+        [memo.id],
+      );
+      patchSelectedMemoOptimistically(memo.id, { is_pinned: enabled, pinned_at: pinnedAt });
       try {
-        await fetchJsonOrThrow(
+        await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}/pin`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled: !memo.is_pinned }) },
+          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
           { defaultMessage: "ピン留め更新に失敗しました。" },
         );
         showFlash("success", memo.is_pinned ? "ピン留めを解除しました。" : "ピン留めしました。");
         await mutate();
         await refreshSelectedMemoIfNeeded();
-      } catch (error) { showFlash("error", error instanceof Error ? error.message : "ピン留め更新に失敗しました。"); }
+      } catch (error) {
+        showFlash("error", error instanceof Error ? error.message : "ピン留め更新に失敗しました。");
+        await mutate();
+        await refreshSelectedMemoIfNeeded();
+      }
     });
-  }, [mutate, refreshSelectedMemoIfNeeded, showFlash, withActionLoading]);
+  }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, updateMemoListOptimistically, withActionLoading]);
 
   // アーカイブ状態を切り替えるハンドラー
   // Handler to toggle the archived state
   const handleToggleArchive = useCallback(async (memo: MemoSummary) => {
     await withActionLoading(memo.id, async () => {
+      const enabled = !memo.is_archived;
+      const archivedAt = enabled ? new Date().toISOString() : null;
+      await updateMemoListOptimistically(
+        (current) => ({
+          ...current,
+          is_archived: enabled,
+          archived_at: archivedAt,
+        }),
+        [memo.id],
+      );
+      patchSelectedMemoOptimistically(memo.id, { is_archived: enabled, archived_at: archivedAt });
       try {
-        await fetchJsonOrThrow(
+        await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}/archive`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled: !memo.is_archived }) },
+          { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
           { defaultMessage: "アーカイブ更新に失敗しました。" },
         );
         showFlash("success", memo.is_archived ? "アーカイブを解除しました。" : "アーカイブしました。");
         await mutate();
         await refreshSelectedMemoIfNeeded();
-      } catch (error) { showFlash("error", error instanceof Error ? error.message : "アーカイブ更新に失敗しました。"); }
+      } catch (error) {
+        showFlash("error", error instanceof Error ? error.message : "アーカイブ更新に失敗しました。");
+        await mutate();
+        await refreshSelectedMemoIfNeeded();
+      }
     });
-  }, [mutate, refreshSelectedMemoIfNeeded, showFlash, withActionLoading]);
+  }, [mutate, patchSelectedMemoOptimistically, refreshSelectedMemoIfNeeded, showFlash, updateMemoListOptimistically, withActionLoading]);
 
   // メモを削除するハンドラー
   // Handler to delete a memo
@@ -1252,8 +1364,9 @@ export default function MemoPage() {
     const confirmed = await showConfirmModal(`「${memo.title || "保存したメモ"}」を削除しますか？`);
     if (!confirmed) return;
     await withActionLoading(memo.id, async () => {
+      await updateMemoListOptimistically(() => null, [memo.id]);
       try {
-        await fetchJsonOrThrow(
+        await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}`,
           { method: "DELETE", credentials: "same-origin" },
           { defaultMessage: "メモの削除に失敗しました。" },
@@ -1261,9 +1374,12 @@ export default function MemoPage() {
         showFlash("success", "メモを削除しました。");
         if (selectedMemo?.id && String(selectedMemo.id) === String(memo.id)) startMemoDetailCloseAnimation();
         await mutate();
-      } catch (error) { showFlash("error", error instanceof Error ? error.message : "メモの削除に失敗しました。"); }
+      } catch (error) {
+        showFlash("error", error instanceof Error ? error.message : "メモの削除に失敗しました。");
+        await mutate();
+      }
     });
-  }, [mutate, selectedMemo?.id, showFlash, startMemoDetailCloseAnimation, withActionLoading]);
+  }, [mutate, selectedMemo?.id, showFlash, startMemoDetailCloseAnimation, updateMemoListOptimistically, withActionLoading]);
 
   const copyMemoFullText = useCallback(async (memo: MemoSummary) => {
     const memoId = String(memo.id);
@@ -1394,7 +1510,7 @@ export default function MemoPage() {
     clearMemoDragState();
 
     try {
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         "/memo/api/reorder",
         {
           method: "POST",
@@ -1487,15 +1603,48 @@ export default function MemoPage() {
 
   const executeBulkAction = useCallback(async (action: BulkAction, extra?: { collectionId?: number | null }) => {
     if (selectedIds.size === 0) return;
+    const selectedIdList = Array.from(selectedIds);
     setBulkLoading(true);
+
+    const now = new Date().toISOString();
+    const targetCollection =
+      extra?.collectionId !== undefined && extra.collectionId !== null
+        ? collections.find((collection) => collection.id === extra.collectionId) ?? null
+        : null;
+
+    await updateMemoListOptimistically((memo) => {
+      if (action === "delete") return null;
+      if (action === "archive") return { ...memo, is_archived: true, archived_at: now };
+      if (action === "unarchive") return { ...memo, is_archived: false, archived_at: null };
+      if (action === "pin") return { ...memo, is_pinned: true, pinned_at: now };
+      if (action === "unpin") return { ...memo, is_pinned: false, pinned_at: null };
+      if (action === "set_collection" && targetCollection) {
+        return {
+          ...memo,
+          collection_id: targetCollection.id,
+          collection_name: targetCollection.name,
+          collection_color: targetCollection.color,
+        };
+      }
+      if (action === "clear_collection") {
+        return {
+          ...memo,
+          collection_id: null,
+          collection_name: null,
+          collection_color: null,
+        };
+      }
+      return memo;
+    }, selectedIdList);
+
     try {
       const body: Record<string, unknown> = {
         action,
-        memo_ids: Array.from(selectedIds).map(Number),
+        memo_ids: selectedIdList.map(Number),
       };
       if (extra?.collectionId !== undefined) body.collection_id = extra.collectionId;
 
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         "/memo/api/bulk",
         { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) },
         { defaultMessage: "一括操作に失敗しました。" },
@@ -1511,10 +1660,11 @@ export default function MemoPage() {
       setBulkCollectionId(null);
     } catch (error) {
       showFlash("error", error instanceof Error ? error.message : "一括操作に失敗しました。");
+      await mutate();
     } finally {
       setBulkLoading(false);
     }
-  }, [mutate, selectedIds, showFlash]);
+  }, [collections, mutate, selectedIds, showFlash, updateMemoListOptimistically]);
 
   const exitBulkMode = useCallback(() => {
     setIsBulkMode(false);
@@ -1526,7 +1676,7 @@ export default function MemoPage() {
   // -----------------------------------------------------------------------
 
   const loadShareState = useCallback(async (memoId: string | number) => {
-    const { payload } = await fetchJsonOrThrow<SharePayload>(
+    const { payload } = await memoFetchJsonOrThrow<SharePayload>(
       `/memo/api/${memoId}/share`,
       { credentials: "same-origin" },
       { defaultMessage: "共有情報の取得に失敗しました。" },
@@ -1550,7 +1700,7 @@ export default function MemoPage() {
       }
 
       setShareStatus({ type: "success", text: "共有リンクを作成しています..." });
-      const { payload: createdPayload } = await fetchJsonOrThrow<SharePayload>(
+      const { payload: createdPayload } = await memoFetchJsonOrThrow<SharePayload>(
         `/memo/api/${memoId}/share`,
         {
           method: "POST",
@@ -1608,7 +1758,7 @@ export default function MemoPage() {
     if (!name) { showFlash("error", "コレクション名を入力してください。"); return; }
     setCollectionActionLoading(true);
     try {
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         "/memo/api/collections",
         { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name, color: newCollectionColor }) },
         { defaultMessage: "コレクションの作成に失敗しました。" },
@@ -1626,7 +1776,7 @@ export default function MemoPage() {
   const handleUpdateCollection = useCallback(async (collectionId: number) => {
     setCollectionActionLoading(true);
     try {
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         `/memo/api/collections/${collectionId}`,
         { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name: editingCollectionName, color: editingCollectionColor }) },
         { defaultMessage: "コレクションの更新に失敗しました。" },
@@ -1646,7 +1796,7 @@ export default function MemoPage() {
     if (!confirmed) return;
     setCollectionActionLoading(true);
     try {
-      await fetchJsonOrThrow(
+      await memoFetchJsonOrThrow(
         `/memo/api/collections/${collectionId}`,
         { method: "DELETE", credentials: "same-origin" },
         { defaultMessage: "コレクションの削除に失敗しました。" },
@@ -2160,7 +2310,7 @@ export default function MemoPage() {
 
               {memoLoadError && <div className="memo-history__empty">{memoLoadError.message}</div>}
               {!memoLoadError && memoListLoading && memos.length === 0 && (
-                <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>
+                <MemoListSkeleton />
               )}
               {!memoLoadError && !memoListLoading && memos.length === 0 && (
                 <div className="memo-history__empty">条件に一致するメモがありません。</div>

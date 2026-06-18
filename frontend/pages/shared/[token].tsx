@@ -4,6 +4,7 @@ import MarkdownContent from "../../components/MarkdownContent";
 import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 // 共有チャットの個別メッセージを表す型
 // Represents a single message in a shared chat
@@ -129,7 +130,7 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
   let payload: SharedChatPayload = {};
 
   try {
-    const res = await fetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`);
+    const res = await resilientFetch(`${backendUrl}/api/shared_chat_room?token=${encodeURIComponent(token)}`);
     const data: SharedChatResponse = await res.json().catch(() => ({}));
     // バックエンドのステータスコードをそのままクライアントに転送する
     // Forward the backend status code to the client response
@@ -196,9 +197,9 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
       <div className="shared-chat-page">
         {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}
         {payload.error ? (
-          <div className="shared-chat-error">{payload.error}</div>
+          <div className="shared-chat-error cc-fade-in">{payload.error}</div>
         ) : (
-          <div className="shared-chat-shell">
+          <div className="shared-chat-shell cc-fade-in">
             <header className="shared-chat-header">
               <h1 className="shared-chat-header__title">{title}</h1>
               {payload.room?.created_at ? (

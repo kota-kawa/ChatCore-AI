@@ -91,6 +91,22 @@ body.prompt-manage-page,
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
   border-color: var(--ps-primary-color);
 }
+
+.prompt-card--skeleton {
+  cursor: default;
+  pointer-events: none;
+  min-height: 220px;
+}
+
+.prompt-card--skeleton:hover {
+  transform: none;
+  box-shadow: var(--ps-shadow);
+  border-color: var(--ps-border-color);
+}
+
+.prompt-card--skeleton .cc-skeleton-text {
+  margin: 1rem 0;
+}
 .prompt-card h3 {
   margin: 0 0 0.75rem;
   color: var(--ps-accent-color);

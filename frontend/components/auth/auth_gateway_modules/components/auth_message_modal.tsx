@@ -20,7 +20,7 @@ export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessag
       {/* クリックイベントの伝播を止めてモーダル本体のクリックで閉じないようにする */}
       {/* Stop click propagation so clicking inside the modal doesn't close it */}
       <div className="modal-content" onClick={(event) => event.stopPropagation()}>
-        <button className="close" type="button" onClick={onHide} aria-label="閉じる">
+        <button className="close cc-press" type="button" onClick={onHide} aria-label="閉じる">
           &times;
         </button>
         <p id="modalMessage">{message}</p>

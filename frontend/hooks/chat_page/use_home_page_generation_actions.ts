@@ -488,11 +488,15 @@ export function useHomePageGenerationActions({
         if (typeof lastEventId !== "number" || lastEventId <= 0) return null;
 
         try {
-          const reconnectResponse = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
-            credentials: "same-origin",
-            signal: generation.abortController.signal,
-            headers: { "Last-Event-ID": String(lastEventId) },
-          });
+          const reconnectResponse = await resilientFetch(
+            `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+            {
+              credentials: "same-origin",
+              signal: generation.abortController.signal,
+              headers: { "Last-Event-ID": String(lastEventId) },
+            },
+            { timeoutMs: 0 }
+          );
           if (!reconnectResponse.ok) return null;
           return reconnectResponse;
         } catch {
@@ -753,11 +757,15 @@ export function useHomePageGenerationActions({
       }
 
       try {
-        const response = await fetch(`/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`, {
-          credentials: "same-origin",
-          signal: generation.abortController.signal,
-          headers,
-        });
+        const response = await resilientFetch(
+          `/api/chat_generation_stream?room_id=${encodeURIComponent(roomId)}`,
+          {
+            credentials: "same-origin",
+            signal: generation.abortController.signal,
+            headers,
+          },
+          { timeoutMs: 0 }
+        );
 
         if (!response.ok) {
           const rawPayload = await readJsonBodySafe(response);
@@ -832,7 +840,7 @@ export function useHomePageGenerationActions({
 
         let generationStatus = normalizeGenerationStatusPayload({});
         try {
-          const statusResponse = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
+          const statusResponse = await resilientFetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
             credentials: "same-origin",
           });
           generationStatus = normalizeGenerationStatusPayload(await readJsonBodySafe(statusResponse));
@@ -972,7 +980,7 @@ export function useHomePageGenerationActions({
   const switchBranch = useCallback(
     async (messageId: number, roomId: string) => {
       try {
-        const response = await fetch("/api/chat_switch_branch", {
+        const response = await resilientFetch("/api/chat_switch_branch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -1002,7 +1010,7 @@ export function useHomePageGenerationActions({
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
-    const response = await fetch("/api/new_chat_room", {
+    const response = await resilientFetch("/api/new_chat_room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -1055,24 +1063,28 @@ export function useHomePageGenerationActions({
       scheduleAutoScrollIfNeeded(true);
 
       try {
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            message,
-            chat_room_id: roomId,
-            model,
-            attached_files:
-              attachedFiles?.map((f) => ({
-                name: f.name,
-                content: f.content ?? "",
-                media_type: f.mediaType ?? "",
-                data_base64: f.dataBase64 ?? "",
-              })) ?? [],
-          }),
-          signal: generation.abortController.signal,
-        });
+        const response = await resilientFetch(
+          "/api/chat",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              message,
+              chat_room_id: roomId,
+              model,
+              attached_files:
+                attachedFiles?.map((f) => ({
+                  name: f.name,
+                  content: f.content ?? "",
+                  media_type: f.mediaType ?? "",
+                  data_base64: f.dataBase64 ?? "",
+                })) ?? [],
+            }),
+            signal: generation.abortController.signal,
+          },
+          { timeoutMs: 0 }
+        );
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
@@ -1158,7 +1170,7 @@ export function useHomePageGenerationActions({
     if (!roomId) return;
 
     try {
-      await fetch("/api/chat_stop", {
+      await resilientFetch("/api/chat_stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -1222,18 +1234,22 @@ export function useHomePageGenerationActions({
       scheduleAutoScrollIfNeeded(true);
 
       try {
-        const response = await fetch("/api/chat_edit_and_regenerate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            chat_room_id: roomId,
-            new_message: newMessage,
-            trailing_user_count: trailingUserCount,
-            model,
-          }),
-          signal: generation.abortController.signal,
-        });
+        const response = await resilientFetch(
+          "/api/chat_edit_and_regenerate",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              chat_room_id: roomId,
+              new_message: newMessage,
+              trailing_user_count: trailingUserCount,
+              model,
+            }),
+            signal: generation.abortController.signal,
+          },
+          { timeoutMs: 0 }
+        );
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {
@@ -1366,13 +1382,17 @@ export function useHomePageGenerationActions({
       scheduleAutoScrollIfNeeded(true);
 
       try {
-        const response = await fetch("/api/chat_regenerate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ chat_room_id: roomId, model }),
-          signal: generation.abortController.signal,
-        });
+        const response = await resilientFetch(
+          "/api/chat_regenerate",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ chat_room_id: roomId, model }),
+            signal: generation.abortController.signal,
+          },
+          { timeoutMs: 0 }
+        );
 
         const contentType = response.headers.get("content-type") || "";
         if (contentType.includes("text/event-stream")) {

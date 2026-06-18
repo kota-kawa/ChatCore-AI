@@ -3,6 +3,7 @@ import { createSuggestionRow } from "./cards";
 import { PROMPT_ASSIST_PRIMARY_FIELDS, PROMPT_ASSIST_SKILL_META, PROMPT_ASSIST_TARGET_META } from "./constants";
 import { createPromptAssistMarkup } from "./markup";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
+import { resilientFetch } from "../../core/resilient_fetch";
 import type {
   PromptAssistConfig,
   PromptAssistFieldName,
@@ -212,6 +213,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
         },
         {
           defaultMessage: "AIによる作成に失敗しました。",
+          fetchImpl: resilientFetch,
         },
       );
 

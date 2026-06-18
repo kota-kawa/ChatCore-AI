@@ -3,6 +3,7 @@ import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 import { stripMarkdownForDescription, truncateSeoText } from "../../../lib/seo";
+import { resilientFetch } from "../../../scripts/core/resilient_fetch";
 
 // 共有メモのデータ型
 // Type for shared memo data
@@ -76,7 +77,7 @@ export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async
   let payload: SharedMemoPayload = {};
 
   try {
-    const res = await fetch(`${backendUrl}/memo/api/shared?token=${encodeURIComponent(token)}`);
+    const res = await resilientFetch(`${backendUrl}/memo/api/shared?token=${encodeURIComponent(token)}`);
     const data: SharedMemoPayload = await res.json().catch(() => ({}));
     // バックエンドのエラーステータスをフロントのレスポンスコードに伝播させる
     // Propagate backend error status to the frontend response code
@@ -143,11 +144,11 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
 
       <div className="shared-memo-page">
         {/* エラー時はエラーメッセージを表示 / Show error message on failure */}
-        {payload.error && <div className="shared-memo-state shared-memo-state--error">{payload.error}</div>}
+        {payload.error && <div className="shared-memo-state shared-memo-state--error cc-fade-in">{payload.error}</div>}
 
         {!payload.error && memo && (
           <article
-            className="shared-memo-shell"
+            className="shared-memo-shell cc-fade-in"
             // CSS変数でメモのテーマカラーを適用する / Apply memo theme color via CSS custom property
             style={memo.background_color ? { "--shared-memo-color": memo.background_color } as React.CSSProperties : undefined}
           >

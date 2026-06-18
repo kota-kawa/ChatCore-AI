@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "r
 import useSWR from "swr";
 
 import { SeoHead } from "../../components/SeoHead";
+import { Skeleton, SkeletonText } from "../../components/ui/skeleton";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 // テーブルの各カラムのメタ情報を表す型
@@ -98,6 +99,36 @@ const loadAdminDashboard = async (url: string): Promise<AdminDashboardData> => {
   };
 };
 
+function AdminTableListSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <li
+          className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 shadow-sm"
+          key={index}
+        >
+          <Skeleton variant="text" width={index % 2 === 0 ? "48%" : "62%"} height="0.95rem" />
+          <Skeleton variant="text" width={54} height="1.65rem" />
+        </li>
+      ))}
+    </>
+  );
+}
+
+function AdminPreviewSkeleton() {
+  return (
+    <div className="mt-6 space-y-5" role="status" aria-label="管理データを読み込み中">
+      <Skeleton variant="text" width="42%" height="1rem" />
+      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+        <SkeletonText lines={4} />
+      </div>
+      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+        <SkeletonText lines={6} />
+      </div>
+    </div>
+  );
+}
+
 // 管理コンソールのメインページコンポーネント
 // Main page component for the admin console
 export default function AdminDashboard() {
@@ -125,7 +156,8 @@ export default function AdminDashboard() {
   const {
     data: dashboard = EMPTY_DASHBOARD,
     error: dashboardFetchError,
-    isLoading
+    isLoading,
+    isValidating
   } = useSWR<AdminDashboardData, HttpError>(dashboardUrl, loadAdminDashboard, {
     revalidateOnFocus: true,
     refreshInterval: 15000,
@@ -147,6 +179,7 @@ export default function AdminDashboard() {
   // カラムが1つしかない場合は削除を禁止する（テーブルを壊さないため）
   // Disable column deletion when only one column exists to prevent table corruption
   const deleteDisabled = columnDetails.length <= 1;
+  const showInitialSkeleton = isLoading && tables.length === 0 && columnNames.length === 0 && rows.length === 0;
 
   // 長いテキストコンテンツを持つカラムは表示幅を広げる
   // Widen display columns known to contain long text content
@@ -166,7 +199,7 @@ export default function AdminDashboard() {
   const inputClass =
     "w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm text-slate-700 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100";
   const buttonClass =
-    "cc-texture-btn cc-texture-btn--indigo rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
+    "cc-texture-btn cc-texture-btn--indigo cc-press rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60";
 
   // メッセージカテゴリに応じたTailwindクラスを返すヘルパー
   // Returns Tailwind classes based on flash message category
@@ -201,7 +234,7 @@ export default function AdminDashboard() {
     const formData = new FormData(event.currentTarget);
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await resilientFetch(endpoint, {
         method: "POST",
         credentials: "same-origin",
         body: formData
@@ -216,7 +249,7 @@ export default function AdminDashboard() {
         throw new Error(data.error || "操作に失敗しました。");
       }
       const destination = data.redirect || router.asPath || "/admin";
-      router.replace(destination);
+      void router.replace(destination);
     } catch (err) {
       setLocalMessage({
         type: "error",
@@ -230,7 +263,7 @@ export default function AdminDashboard() {
   const handleLogout = async (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     try {
-      await fetch("/admin/api/logout", {
+      await resilientFetch("/admin/api/logout", {
         method: "POST",
         credentials: "same-origin"
       });
@@ -268,13 +301,13 @@ export default function AdminDashboard() {
             </div>
             <nav className="flex flex-wrap gap-3">
               <a
-                className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50"
+                className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo cc-press inline-flex items-center justify-center rounded-full border border-indigo-200 bg-white px-4 py-2 text-xs font-semibold text-indigo-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50"
                 href="/admin"
               >
                 管理トップへ戻る
               </a>
               <a
-                className="cc-texture-btn cc-texture-btn--light inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+                className="cc-texture-btn cc-texture-btn--light cc-press inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
                 href="/admin/logout"
                 onClick={handleLogout}
               >
@@ -287,9 +320,9 @@ export default function AdminDashboard() {
         <main className="relative z-10 mx-auto max-w-6xl px-6 py-10 lg:py-12">
           {/* ローディング状態・エラー・フラッシュメッセージを表示するエリア / Area for loading state, errors, and flash messages */}
           <div className="mb-8 grid gap-3">
-            {isLoading ? (
+            {isValidating && !showInitialSkeleton ? (
               <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
-                管理データを読み込んでいます...
+                管理データを更新しています...
               </div>
             ) : null}
             {dashboardFetchError && dashboardFetchError.status !== 401 ? (
@@ -326,7 +359,9 @@ export default function AdminDashboard() {
             <section className={panelClass}>
               <h2 className="text-lg font-semibold text-slate-900">テーブル一覧</h2>
               <ul className="mt-4 space-y-3">
-                {tables.length ? (
+                {showInitialSkeleton ? (
+                  <AdminTableListSkeleton />
+                ) : tables.length ? (
                   tables.map((table) => (
                     <li
                       className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"
@@ -334,7 +369,7 @@ export default function AdminDashboard() {
                     >
                       <span className="font-semibold text-slate-700">{table}</span>
                       <a
-                        className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo inline-flex items-center rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                        className="cc-texture-btn cc-texture-btn--light cc-texture-btn--light-indigo cc-press inline-flex items-center rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
                         href={`/admin?table=${encodeURIComponent(table)}`}
                       >
                         開く
@@ -359,7 +394,7 @@ export default function AdminDashboard() {
                 </div>
                 <button
                   type="submit"
-                  className="cc-texture-btn cc-texture-btn--danger rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-200/60 transition hover:-translate-y-0.5 hover:shadow-rose-300/70"
+                  className="cc-texture-btn cc-texture-btn--danger cc-press rounded-full bg-gradient-to-r from-rose-500 to-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-200/60 transition hover:-translate-y-0.5 hover:shadow-rose-300/70"
                 >
                   削除
                 </button>
@@ -371,7 +406,9 @@ export default function AdminDashboard() {
               {/* テーブルプレビューセクション：定義と最大100件のデータ行を表示 / Table preview section: shows schema definition and up to 100 data rows */}
               <section className={panelClass}>
                 <h2 className="text-lg font-semibold text-slate-900">テーブルプレビュー</h2>
-                {selectedTable ? (
+                {showInitialSkeleton ? (
+                  <AdminPreviewSkeleton />
+                ) : selectedTable ? (
                   <>
                     <p className="mt-3 text-sm text-slate-500">
                       最大100件の行を表示しています：<strong className="text-slate-700">{selectedTable}</strong>

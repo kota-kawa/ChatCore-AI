@@ -8,6 +8,7 @@ import type { NormalizedTask, TaskEditFormState } from "../../lib/chat_page/type
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import type { TaskItem } from "../../scripts/setup/setup_types";
 import {
   invalidateTasksCache,
@@ -55,6 +56,7 @@ export function useHomePageTaskActions({
       try {
         const { payload } = await fetchJsonOrThrow<{ tasks?: TaskItem[] }>("/api/tasks", undefined, {
           defaultMessage: "タスクの読み込みに失敗しました。",
+          fetchImpl: resilientFetch,
         });
 
         const fetchedTasks = Array.isArray(payload.tasks) ? payload.tasks : [];
@@ -82,6 +84,9 @@ export function useHomePageTaskActions({
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({ order }),
+      }, {
+        defaultMessage: "並び順の保存に失敗しました。",
+        fetchImpl: resilientFetch,
       });
       invalidateTasksCache();
     } catch (error) {
@@ -142,6 +147,9 @@ export function useHomePageTaskActions({
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify({ task: taskName }),
+        }, {
+          defaultMessage: "タスクの削除に失敗しました。",
+          fetchImpl: resilientFetch,
         });
 
         setTasks((previous) => {
@@ -198,6 +206,9 @@ export function useHomePageTaskActions({
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify(payload),
+      }, {
+        defaultMessage: "タスクの更新に失敗しました。",
+        fetchImpl: resilientFetch,
       });
 
       setTasks((previous) =>

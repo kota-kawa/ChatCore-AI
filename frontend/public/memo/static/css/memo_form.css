@@ -861,6 +861,10 @@ body.memo-page.modal-open {
   color: #b08642;
 }
 
+.memo-history__sections--skeleton {
+  pointer-events: none;
+}
+
 .memo-history__list {
   margin: 0;
   padding: 0;
@@ -895,6 +899,19 @@ body.memo-page.modal-open {
     transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
   isolation: isolate;
+}
+
+.memo-item--skeleton {
+  min-height: 190px;
+  cursor: default;
+}
+
+.memo-item--skeleton .cc-skeleton-text {
+  margin-top: 0.25rem;
+}
+
+.memo-item__footer--skeleton {
+  border-top-color: rgba(0, 0, 0, 0.04);
 }
 
 .memo-item.has-accent {

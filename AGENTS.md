@@ -28,6 +28,7 @@
 ## コミットおよびプルリクエストのガイドライン
 - 最近のコミットでは、短く説明的な要約（英語）を使用しています。厳格な conventional-commit 接頭辞は使用されていません。メッセージは簡潔でアクション指向のものにしてください。
 - PR（プルリクエスト）には以下を含める必要があります：明確な説明、関連するイシューへのリンク（存在する場合）、テストに関するメモ（コマンドと結果）、および UI の変更に関するスクリーンショットまたは画面キャプチャ。
+- PR（プルリクエスト）のタイトルと本文は、日本語と英語の両方を使って作成してください（PR titles and descriptions must include both Japanese and English）。
 
 ## セキュリティと設定のヒント
 - 必要な環境変数には、`GROQ_API_KEY`、`GEMINI_API_KEY`（従来の `Gemini_API_KEY` も使用可能）、`FASTAPI_SECRET_KEY`、Resend メールの設定（`RESEND_API_KEY` および `RESEND_FROM_ADDRESS`）、PostgreSQL の設定、および Redis の設定（Redis 認証を使用する場合）が含まれます（`FLASK_SECRET_KEY` はレガシーなフォールバックとして保持されています）。シークレット情報は環境変数または `.env` に保持し、git には含めないでください。

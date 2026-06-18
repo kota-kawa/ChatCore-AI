@@ -83,6 +83,19 @@
   z-index: 20;
 }
 
+.prompt-share-page .prompt-card--skeleton {
+  cursor: default;
+  pointer-events: none;
+  min-height: 220px;
+}
+
+.prompt-share-page .prompt-card--skeleton:hover,
+.prompt-share-page .prompt-card--skeleton:active {
+  transform: none;
+  border-color: #cbdceb;
+  box-shadow: 0 6px 18px rgba(65, 111, 158, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
 .prompt-share-page .prompt-card__header {
   position: relative;
   z-index: 1;

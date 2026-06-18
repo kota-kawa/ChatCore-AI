@@ -21,6 +21,7 @@ import {
 } from "../../lib/chat_page/ai_agent";
 import { readSessionJson, writeSessionJson } from "../../lib/utils";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import MarkdownContent from "../MarkdownContent";
 
 // アクション実行中の進捗状態を追跡する型定義
@@ -951,19 +952,23 @@ export function MiniChat({
     nextMessages: Message[],
     signal: AbortSignal,
   ): Promise<Message> => {
-    const response = await fetch("/api/ai-agent", {
-      method: "POST",
-      signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        // 直近 MAX_SEND_MESSAGES 件に絞ってペイロードサイズを制限する
-        // Limits history to MAX_SEND_MESSAGES to keep the API payload manageable
-        messages: nextMessages.slice(-MAX_SEND_MESSAGES).map((m) => ({ role: m.sender, content: m.text })),
-        current_page: typeof window !== "undefined" ? window.location.pathname : null,
-        current_dom: enableActions ? collectVisiblePageDom().slice(0, MAX_DOM_LENGTH) : "",
-        ...(numericMemoId ? { memo_id: numericMemoId } : {}),
-      }),
-    });
+    const response = await resilientFetch(
+      "/api/ai-agent",
+      {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // 直近 MAX_SEND_MESSAGES 件に絞ってペイロードサイズを制限する
+          // Limits history to MAX_SEND_MESSAGES to keep the API payload manageable
+          messages: nextMessages.slice(-MAX_SEND_MESSAGES).map((m) => ({ role: m.sender, content: m.text })),
+          current_page: typeof window !== "undefined" ? window.location.pathname : null,
+          current_dom: enableActions ? collectVisiblePageDom().slice(0, MAX_DOM_LENGTH) : "",
+          ...(numericMemoId ? { memo_id: numericMemoId } : {}),
+        }),
+      },
+      { timeoutMs: 0 }
+    );
 
     if (!response.ok) {
       throw await buildAiAgentHttpError(response);
