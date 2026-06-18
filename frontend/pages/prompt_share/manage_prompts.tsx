@@ -1,8 +1,10 @@
 import { SeoHead } from "../../components/SeoHead";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { Skeleton, SkeletonText } from "../../components/ui/skeleton";
 import "../../scripts/core/csrf";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
@@ -58,6 +60,36 @@ function createEditFormState(prompt: PromptRecord): PromptEditFormState {
   };
 }
 
+function promptManageFetchJsonOrThrow<TPayload>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: Parameters<typeof fetchJsonOrThrow<TPayload>>[2],
+) {
+  return fetchJsonOrThrow<TPayload>(input, init, {
+    ...options,
+    fetchImpl: resilientFetch,
+  });
+}
+
+function PromptManageSkeletonGrid() {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, index) => (
+        <article key={index} className="prompt-card prompt-card--skeleton" aria-label="プロンプトを読み込み中">
+          <div className="prompt-card__main">
+            <Skeleton variant="text" width={index % 2 === 0 ? "62%" : "78%"} height="1.1rem" />
+            <SkeletonText lines={3} />
+            <Skeleton variant="text" width="48%" height="0.8rem" />
+          </div>
+          <div className="prompt-card__footer">
+            <Skeleton variant="text" width={120} height="2rem" />
+          </div>
+        </article>
+      ))}
+    </>
+  );
+}
+
 // プロンプト管理ページのヘッダーコンポーネント
 // Header component for the prompt manage page
 function PromptManageHeader() {
@@ -86,7 +118,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
   const truncatedContent = truncateText(prompt.content, CONTENT_CHAR_LIMIT);
 
   return (
-    <article className="prompt-card" data-prompt-id={promptId}>
+    <article className="prompt-card cc-press" data-prompt-id={promptId}>
       <div className="prompt-card__main">
         <h3 title={prompt.title}>{truncatedTitle}</h3>
         <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
@@ -103,7 +135,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
         <div className="btn-group">
           <button
             type="button"
-            className="btn btn-sm btn-warning edit-btn"
+            className="btn btn-sm btn-warning edit-btn cc-press"
             data-id={promptId}
             onClick={() => onEdit(prompt)}
           >
@@ -111,7 +143,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
           </button>
           <button
             type="button"
-            className="btn btn-sm btn-danger delete-btn"
+            className="btn btn-sm btn-danger delete-btn cc-press"
             data-id={promptId}
             onClick={() => onDelete(prompt)}
           >
@@ -249,7 +281,7 @@ function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: P
               </div>
 
               <div className="form-actions">
-                <button type="submit" className="btn btn-primary w-100" disabled={isSaving}>
+                <button type="submit" className="btn btn-primary w-100 cc-press" disabled={isSaving}>
                   <i className="bi bi-save me-2"></i>{isSaving ? "更新中..." : "更新する"}
                 </button>
               </div>
@@ -276,7 +308,7 @@ export default function PromptManagePage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await promptManageFetchJsonOrThrow(
         "/prompt_manage/api/my_prompts",
         { credentials: "same-origin" },
         { defaultMessage: "プロンプトの取得に失敗しました。" }
@@ -354,7 +386,7 @@ export default function PromptManagePage() {
     }
 
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await promptManageFetchJsonOrThrow(
         `/prompt_manage/api/prompts/${promptId}`,
         {
           method: "DELETE",
@@ -369,13 +401,12 @@ export default function PromptManagePage() {
       );
       const response = parsePromptManageMutationResponse(payload);
       showToast(response.message || "削除しました。", { variant: "success" });
-      // 削除されたプロンプトをローカルの状態から即座に除去する
-      // Immediately remove the deleted prompt from local state
       setPrompts((prev) => prev.filter((entry) => asId(entry.id) !== promptId));
     } catch (error) {
+      void loadMyPrompts();
       showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
     }
-  }, []);
+  }, [loadMyPrompts]);
 
   // フォームの各フィールドの変更を編集フォーム状態に反映する
   // Reflect each form field change into the edit form state
@@ -407,7 +438,7 @@ export default function PromptManagePage() {
 
     setIsSaving(true);
     try {
-      const { payload } = await fetchJsonOrThrow(
+      const { payload } = await promptManageFetchJsonOrThrow(
         `/prompt_manage/api/prompts/${editFormState.id}`,
         {
           method: "PUT",
@@ -462,11 +493,12 @@ export default function PromptManagePage() {
           </div>
 
           {/* ローディング・エラー・空状態のフィードバック / Loading, error, and empty state feedback */}
-          {isLoading ? <p>プロンプトを読み込み中です...</p> : null}
+          {isLoading ? <p className="sr-only" role="status">プロンプトを読み込み中です...</p> : null}
           {!isLoading && loadError ? <p role="alert">{loadError}</p> : null}
           {!isLoading && !loadError && sortedPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
 
           <div id="promptList" className="prompt-grid">
+            {isLoading ? <PromptManageSkeletonGrid /> : null}
             {sortedPrompts.map((prompt, index) => {
               const key = asId(prompt.id) || `${prompt.title}-${index}`;
               return (

@@ -1,5 +1,6 @@
 import React, { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
+import { Skeleton, SkeletonText } from "../ui/skeleton";
 import { PromptCard, type PromptRecord } from "./prompt_card";
 import type { PromptCategory, PromptFeedback, PromptTypeFilter, PromptTypeFilterOption } from "./prompt_share_page_types";
 
@@ -43,6 +44,33 @@ type PromptSharePageLayoutProps = {
   // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
 };
+
+function PromptCardSkeletonGrid() {
+  return (
+    <>
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div key={index} className="prompt-card prompt-card--skeleton" role="status" aria-label="プロンプトを読み込み中">
+          <div className="prompt-card__header">
+            <div className="prompt-card__badges">
+              <Skeleton variant="text" width={82} height="1.45rem" />
+              <Skeleton variant="text" width={104} height="1.45rem" />
+            </div>
+            <Skeleton variant="circle" width={32} height={32} />
+          </div>
+          <Skeleton variant="text" width={index % 2 === 0 ? "70%" : "84%"} height="1.25rem" />
+          <SkeletonText lines={3} />
+          <div className="prompt-meta">
+            <div className="prompt-actions">
+              <Skeleton variant="circle" width={34} height={34} />
+              <Skeleton variant="circle" width={34} height={34} />
+              <Skeleton variant="circle" width={34} height={34} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
 
 // プロンプト共有ページのヘッダー・フィルター・カード一覧を担う純粋なレイアウトコンポーネント
 // Pure layout component for the prompt share page: header, filters, and card grid
@@ -102,7 +130,7 @@ export function PromptSharePageLayout({
       >
         <button
           id="login-btn"
-          className="auth-btn"
+          className="auth-btn cc-press"
           type="button"
           onClick={() => {
             window.location.href = "/login";
@@ -145,6 +173,7 @@ export function PromptSharePageLayout({
               <button
                 id="searchButton"
                 type="button"
+                className="cc-press"
                 data-agent-id="prompt.search-button"
                 aria-label="検索を実行する"
                 data-tooltip="入力したキーワードで検索"
@@ -161,7 +190,7 @@ export function PromptSharePageLayout({
               type="button"
               id="heroOpenPostModal"
               data-agent-id="prompt.open-composer"
-              className="hero-action hero-action--primary"
+              className="hero-action hero-action--primary cc-press"
               onClick={onOpenComposerModal}
             >
               <i className="bi bi-plus-lg"></i>
@@ -199,7 +228,7 @@ export function PromptSharePageLayout({
               <button
                 key={category.value}
                 type="button"
-                className={`category-card${selectedCategory === category.value ? " active" : ""}`}
+                className={`category-card cc-press${selectedCategory === category.value ? " active" : ""}`}
                 data-category={category.value}
                 onClick={() => {
                   onCategoryClick(category.value);
@@ -222,7 +251,7 @@ export function PromptSharePageLayout({
                 <button
                   key={promptTypeFilter.value}
                   type="button"
-                  className={`prompt-type-filter-btn${selectedPromptTypeFilter === promptTypeFilter.value ? " active" : ""}`}
+                  className={`prompt-type-filter-btn cc-press${selectedPromptTypeFilter === promptTypeFilter.value ? " active" : ""}`}
                   aria-pressed={selectedPromptTypeFilter === promptTypeFilter.value ? "true" : "false"}
                   onClick={() => {
                     onPromptTypeFilterClick(promptTypeFilter.value);
@@ -252,7 +281,7 @@ export function PromptSharePageLayout({
             {hasMoreSearchResults ? (
               <button
                 type="button"
-                className="prompt-load-more"
+                className="prompt-load-more cc-press"
                 onClick={onLoadMoreSearchResults}
                 disabled={isLoadingMoreSearchResults}
               >
@@ -269,7 +298,7 @@ export function PromptSharePageLayout({
             {/* 初回ロード中のみローディングメッセージを表示し、フィードバックと重複させない */}
             {/* Show loading message only on initial empty load, not when feedback is displayed */}
             {isPromptsLoading && visiblePrompts.length === 0 && !hasPromptFeedback ? (
-              <p className="prompt-loading-message">読み込み中...</p>
+              <PromptCardSkeletonGrid />
             ) : null}
 
             {/* エラーや空状態のフィードバックをvariantに応じたスタイルで表示する */}

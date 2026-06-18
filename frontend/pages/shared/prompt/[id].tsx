@@ -2,6 +2,7 @@ import type { GetServerSideProps } from "next";
 import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
+import { resilientFetch } from "../../../scripts/core/resilient_fetch";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
 // Type for shared prompt data (including skill prompt fields)
@@ -132,7 +133,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   let payload: SharedPromptPayload = {};
 
   try {
-    const res = await fetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`);
+    const res = await resilientFetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`);
     const data: SharedPromptResponse = await res.json().catch(() => ({}));
     // バックエンドのエラーステータスをフロントのレスポンスコードに伝播させる
     // Propagate backend error status to the frontend response code

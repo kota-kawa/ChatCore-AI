@@ -69,7 +69,7 @@ function PromptCardComponent({
 
   return (
     <div
-      className={`prompt-card${isDropdownOpen ? " menu-open" : ""}`}
+      className={`prompt-card cc-press${isDropdownOpen ? " menu-open" : ""}`}
       data-category={prompt.category || ""}
       onClick={() => {
         onOpenDetail(prompt);
@@ -95,7 +95,7 @@ function PromptCardComponent({
         {/* クリックがカード本体に伝播しないようにstopPropagationでモーダル誤起動を防ぐ */}
         {/* Stop propagation so clicking the menu button does not also open the detail modal */}
         <button
-          className="meatball-menu"
+          className="meatball-menu cc-press"
           type="button"
           aria-label="その他の操作"
           aria-haspopup="true"
@@ -121,7 +121,7 @@ function PromptCardComponent({
         }}
       >
         <button
-          className="dropdown-item"
+          className="dropdown-item cc-press"
           type="button"
           role="menuitem"
           data-action="share"
@@ -132,7 +132,7 @@ function PromptCardComponent({
           共有する
         </button>
         <button
-          className="dropdown-item"
+          className="dropdown-item cc-press"
           type="button"
           role="menuitem"
           onClick={() => {
@@ -142,7 +142,7 @@ function PromptCardComponent({
           ミュート
         </button>
         <button
-          className="dropdown-item"
+          className="dropdown-item cc-press"
           type="button"
           role="menuitem"
           onClick={() => {
@@ -172,7 +172,7 @@ function PromptCardComponent({
       <div className="prompt-meta">
         <div className="prompt-actions">
           <button
-            className="prompt-action-btn comment-btn"
+            className="prompt-action-btn comment-btn cc-press"
             type="button"
             aria-label="コメント"
             data-tooltip="コメントを見る・投稿する"
@@ -189,7 +189,7 @@ function PromptCardComponent({
           {/* isPendingの間は追加クリックを無視してAPIの二重送信を防ぐ */}
           {/* Guard against double-submission by ignoring clicks while a like request is in flight */}
           <button
-            className={`prompt-action-btn like-btn${prompt.liked ? " liked" : ""}${isLikePending ? " is-pending" : ""}${isLikeEffectActive ? " is-celebrating" : ""}`}
+            className={`prompt-action-btn like-btn cc-press${prompt.liked ? " liked" : ""}${isLikePending ? " is-pending" : ""}${isLikeEffectActive ? " is-celebrating" : ""}`}
             type="button"
             aria-label={prompt.liked ? "いいねを解除" : "いいね"}
             aria-pressed={prompt.liked ? "true" : "false"}
@@ -210,7 +210,7 @@ function PromptCardComponent({
           {/* チャットで使う操作も二重送信を防ぐ */}
           {/* Guard the use-in-chat action against duplicate API requests */}
           <button
-            className={`prompt-action-btn use-in-chat-btn${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
+            className={`prompt-action-btn use-in-chat-btn cc-press${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
             type="button"
             aria-label={isUsedInChat ? "チャットで使う設定を解除" : "チャットで使う"}
             aria-pressed={isUsedInChat ? "true" : "false"}
