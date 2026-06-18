@@ -234,6 +234,23 @@
   border-color: rgba(25, 195, 125, 0.2);
 }
 
+.prompt-card--skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
+.prompt-card--skeleton:hover {
+  transform: none;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.prompt-card--skeleton .cc-skeleton-text {
+  margin: 0.25rem 0;
+}
+
 .prompt-card__main {
   padding: 1.25rem;
   flex-grow: 1;
@@ -621,6 +638,19 @@ body.settings-page,
   animation: settings-save-feedback-pop 0.48s ease;
 }
 
+.settings-profile-skeleton {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+.settings-profile-skeleton__fields {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+}
+
 /* 共通フォーム要素 */
 .form-group {
   margin-bottom: 1.75rem; /* グループ間のマージンを増やす */
@@ -882,6 +912,9 @@ body.settings-page,
     .avatar-preview {
         width: 100px;
         height: 100px;
+    }
+    .settings-profile-skeleton {
+        grid-template-columns: 1fr;
     }
     .form-label {
         font-size: 0.9rem;
