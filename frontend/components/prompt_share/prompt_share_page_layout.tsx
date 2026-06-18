@@ -292,6 +292,7 @@ export function PromptSharePageLayout({
                   isLikePending={likePendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
+                  isUseInChatEffectActive={actionEffectIds.has(`${promptId}:use-in-chat`)}
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
                   onOpenShare={onOpenShare}

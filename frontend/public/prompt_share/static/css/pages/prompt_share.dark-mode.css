@@ -271,6 +271,17 @@
   box-shadow: none;
 }
 
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn.used-in-chat,
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn.used-in-chat:hover {
+  background: transparent;
+  color: #74c0fc;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn.used-in-chat i {
+  color: #74c0fc !important;
+}
+
 [data-theme="dark"] .post-modal-content {
   background: #111827;
   border-color: rgba(255, 255, 255, 0.1);

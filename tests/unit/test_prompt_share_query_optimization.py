@@ -75,6 +75,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
                     "reference_image_url": None,
                     "created_at": "2024-01-01T00:00:00",
                     "liked": True,
+                    "used_in_chat": True,
                 }
             ]
         )
@@ -93,10 +94,13 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         # 必要なJOIN文が含まれ、不要なテーブルJOINがないこと、およびパラメータの妥当性を検証
         # Verify needed JOINs are present, unnecessary joins are absent, and check parameter mappings
         self.assertIn("LEFT JOIN prompt_likes AS pl", query)
+        self.assertIn("LEFT JOIN task_with_examples AS used_tasks", query)
+        self.assertIn("used_tasks.source_prompt_id = p.id", query)
         self.assertNotIn("LEFT JOIN prompt_list_entries AS ple", query)
         self.assertNotIn("LEFT JOIN task_with_examples AS b", query)
-        self.assertEqual(params, (7,))
+        self.assertEqual(params, (7, 7))
         self.assertTrue(prompts[0]["liked"])
+        self.assertTrue(prompts[0]["used_in_chat"])
         self.assertNotIn("bookmarked", prompts[0])
         self.assertNotIn("saved_to_list", prompts[0])
         self.assertTrue(fake_cursor.closed)
