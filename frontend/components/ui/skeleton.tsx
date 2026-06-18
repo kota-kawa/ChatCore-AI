@@ -6,7 +6,7 @@
 // 見た目は globals.css の .cc-skeleton トークンに従い、prefers-reduced-motion でシマーは止まる。
 // Visuals follow the .cc-skeleton tokens in globals.css; the shimmer halts under prefers-reduced-motion.
 
-import type { CSSProperties } from "react";
+import React, { type CSSProperties } from "react";
 
 function joinClasses(...classes: Array<string | undefined | false>): string {
   return classes.filter(Boolean).join(" ");
