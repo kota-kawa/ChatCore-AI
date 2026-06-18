@@ -23,11 +23,6 @@ export function formatPromptDate(createdAt?: string) {
 
 export { escapeHtml };
 
-export function getBookmarkButtonMarkup(isBookmarked: boolean) {
-  const iconClass = isBookmarked ? "bi-bookmark-check-fill" : "bi-bookmark";
-  return `<i class="bi ${iconClass}"></i>`;
-}
-
 export function normalizePromptType(value?: string): PromptType {
   if (value === "image" || value === "skill") {
     return value;
@@ -55,8 +50,6 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     skill_markdown: prompt.skill_markdown || "",
     skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),
-    bookmarked: Boolean(prompt.bookmarked),
-    saved_to_list: Boolean(prompt.saved_to_list),
     comment_count: Number(prompt.comment_count || 0)
   };
 }

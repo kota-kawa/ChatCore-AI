@@ -1,14 +1,12 @@
 import { z } from "zod";
 
 import {
+  LikedPromptsApiResponseSchema,
+  LikedPromptApiSchema,
   MyPromptsApiResponseSchema,
-  PromptListApiResponseSchema,
-  PromptListEntryApiSchema,
-  PromptListEntryLegacyApiSchema,
   PromptManageMutationApiResponseSchema,
   PromptRecordApiSchema,
-  type PromptListEntryApi,
-  type PromptListEntryLegacyApi,
+  type LikedPromptApi,
   type PromptRecordApi
 } from "../../../types/generated/api_schemas";
 
@@ -60,16 +58,19 @@ export const toPromptRecord = (raw: unknown): PromptRecord => {
   return parseWithSchema(PromptRecordSchema, raw, "プロンプトデータの形式が不正です。");
 };
 
-function isPromptListEntryWithNestedPrompt(
-  entry: PromptListEntryApi | PromptListEntryLegacyApi
-): entry is PromptListEntryApi {
-  return "prompt" in entry;
-}
-
-function normalizePromptListEntry(entry: PromptListEntryApi | PromptListEntryLegacyApi) {
-  const prompt = normalizePromptRecord(isPromptListEntryWithNestedPrompt(entry) ? entry.prompt : entry);
+function normalizeLikedPrompt(entry: LikedPromptApi) {
+  const prompt = normalizePromptRecord({
+    id: entry.prompt_id,
+    title: entry.title,
+    content: entry.content,
+    category: entry.category,
+    input_examples: entry.input_examples,
+    output_examples: entry.output_examples,
+    created_at: entry.prompt_created_at ?? entry.created_at
+  });
   return {
     id: entry.id ?? undefined,
+    likeId: entry.like_id ?? entry.id ?? undefined,
     promptId: entry.prompt_id ?? undefined,
     prompt,
     title: prompt.title,
@@ -77,16 +78,16 @@ function normalizePromptListEntry(entry: PromptListEntryApi | PromptListEntryLeg
     category: prompt.category,
     inputExamples: prompt.inputExamples,
     outputExamples: prompt.outputExamples,
-    createdAt: normalizeOptionalDateTime(entry.created_at)
+    createdAt: normalizeOptionalDateTime(entry.prompt_created_at ?? entry.created_at),
+    likedAt: normalizeOptionalDateTime(entry.liked_at)
   };
 }
 
-const PromptListEntryApiUnionSchema = z.union([PromptListEntryApiSchema, PromptListEntryLegacyApiSchema]);
-export const PromptListEntrySchema = PromptListEntryApiUnionSchema.transform(normalizePromptListEntry);
-export type PromptListEntry = z.infer<typeof PromptListEntrySchema>;
+export const LikedPromptSchema = LikedPromptApiSchema.transform(normalizeLikedPrompt);
+export type LikedPrompt = z.infer<typeof LikedPromptSchema>;
 
-export const toPromptListEntry = (raw: unknown): PromptListEntry => {
-  return parseWithSchema(PromptListEntrySchema, raw, "保存したプロンプトデータの形式が不正です。");
+export const toLikedPrompt = (raw: unknown): LikedPrompt => {
+  return parseWithSchema(LikedPromptSchema, raw, "いいねしたプロンプトデータの形式が不正です。");
 };
 
 export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
@@ -100,13 +101,13 @@ export function parseMyPromptsResponse(raw: unknown): PromptRecord[] {
   return (response.prompts ?? []).map((prompt) => normalizePromptRecord(prompt));
 }
 
-export function parsePromptListResponse(raw: unknown): PromptListEntry[] {
+export function parseLikedPromptsResponse(raw: unknown): LikedPrompt[] {
   const response = parseWithSchema(
-    PromptListApiResponseSchema,
+    LikedPromptsApiResponseSchema,
     raw,
-    "保存したプロンプトレスポンスの形式が不正です。"
+    "いいねしたプロンプトレスポンスの形式が不正です。"
   );
-  return (response.prompts ?? []).map((entry) => normalizePromptListEntry(entry));
+  return (response.prompts ?? []).map((entry) => normalizeLikedPrompt(entry));
 }
 
 export function parsePromptManageMutationResponse(raw: unknown): PromptManageMutationResponse {

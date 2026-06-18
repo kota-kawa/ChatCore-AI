@@ -82,11 +82,9 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
     prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
     
-    # 評価、ブックマーク、保存状態などの真偽値キャストと、コメント数キャストを実行
+    # 評価状態の真偽値キャストと、コメント数キャストを実行
     # Cast interaction flags to Boolean and cast comment count to integer.
     prompt["liked"] = bool(prompt.get("liked"))
-    prompt["bookmarked"] = bool(prompt.get("bookmarked"))
-    prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     return prompt
 
@@ -152,8 +150,8 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         
         # 検索結果取得用SQL
         # SQL query to retrieve matching prompts.
-        # ユーザーごとのLike有無、ブックマーク・リスト保存有無、コメント数をJOIN等で取得する
-        # Join other tables to query user-specific likes, bookmarks, list entries and comment counts.
+        # ユーザーごとのLike有無とコメント数をJOIN等で取得する
+        # Join other tables to query user-specific likes and comment counts.
         sql = f"""
             SELECT
               p.id,
@@ -169,9 +167,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
               p.skill_python_script,
               p.created_at,
               COALESCE(pc.comment_count, 0) AS comment_count,
-              CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-              CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
-              CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
+              CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked
             FROM prompts AS p
             LEFT JOIN users AS u
               ON u.id = p.user_id
@@ -186,9 +182,6 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id
-            LEFT JOIN prompt_list_entries AS ple
-              ON ple.user_id = %s
-             AND ple.prompt_id = p.id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
               {select_type_condition}
@@ -237,7 +230,6 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         # 検索パラメータの構築
         # Build query arguments list.
         search_params = [
-            user_id,
             user_id,
         ]
         if prompt_type_filter:

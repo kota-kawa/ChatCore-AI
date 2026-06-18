@@ -351,12 +351,12 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn::before,
-.prompt-share-page .prompt-action-btn.bookmark-btn::before {
+.prompt-share-page .prompt-action-btn.use-in-chat-btn::before {
   content: none;
 }
 
 .prompt-share-page .prompt-action-btn.like-btn::after,
-.prompt-share-page .prompt-action-btn.bookmark-btn::after {
+.prompt-share-page .prompt-action-btn.use-in-chat-btn::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -384,9 +384,9 @@
   color: var(--ps-like);
 }
 
-.prompt-share-page .prompt-action-btn.bookmark-btn:hover {
+.prompt-share-page .prompt-action-btn.use-in-chat-btn:hover {
   background: transparent;
-  color: var(--ps-bookmark);
+  color: var(--ps-use-in-chat);
 }
 
 .prompt-share-page .prompt-action-btn:active {
@@ -395,23 +395,12 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn:active,
-.prompt-share-page .prompt-action-btn.bookmark-btn:active {
+.prompt-share-page .prompt-action-btn.use-in-chat-btn:active {
   background: transparent;
 }
 
 .prompt-share-page .prompt-action-btn[aria-disabled="true"] {
   cursor: pointer;
-}
-
-.prompt-share-page .bookmark-btn.bookmarked {
-  color: var(--ps-bookmark);
-  background: transparent;
-  box-shadow: none;
-}
-
-.prompt-share-page .bookmark-btn.bookmarked i {
-  color: var(--ps-bookmark) !important;
-  font-family: "bootstrap-icons" !important;
 }
 
 .prompt-share-page .like-btn.liked {
@@ -425,8 +414,7 @@
   font-family: "bootstrap-icons" !important;
 }
 
-.prompt-share-page .like-btn.liked.is-celebrating i,
-.prompt-share-page .bookmark-btn.bookmarked.is-celebrating i {
+.prompt-share-page .like-btn.liked.is-celebrating i {
   animation: prompt-action-icon-pop 520ms cubic-bezier(0.2, 1.72, 0.36, 1) both;
 }
 
@@ -439,18 +427,6 @@
     3px 20px 0 #ffd166,
     -16px 11px 0 #ff6b9a,
     -18px -9px 0 #ffc857;
-  animation: prompt-action-burst 640ms ease-out both;
-}
-
-.prompt-share-page .bookmark-btn.bookmarked.is-celebrating::after {
-  background: #8b5cf6;
-  box-shadow:
-    0 -21px 0 #8b5cf6,
-    17px -12px 0 #a78bfa,
-    19px 8px 0 #60a5fa,
-    3px 20px 0 #c084fc,
-    -16px 11px 0 #8b5cf6,
-    -18px -9px 0 #60a5fa;
   animation: prompt-action-burst 640ms ease-out both;
 }
 
@@ -485,9 +461,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page .like-btn.liked.is-celebrating i,
-  .prompt-share-page .bookmark-btn.bookmarked.is-celebrating i,
-  .prompt-share-page .like-btn.liked.is-celebrating::after,
-  .prompt-share-page .bookmark-btn.bookmarked.is-celebrating::after {
+  .prompt-share-page .like-btn.liked.is-celebrating::after {
     animation: none;
   }
 }
@@ -500,15 +474,6 @@
 }
 [data-theme="dark"] .like-btn.liked i {
   color: #ff7675 !important;
-}
-
-[data-theme="dark"] .bookmark-btn.bookmarked {
-  background: transparent;
-  color: #a78bfa;
-  box-shadow: none;
-}
-[data-theme="dark"] .bookmark-btn.bookmarked i {
-  color: #a78bfa !important;
 }
 
 .prompt-share-page .meatball-menu {

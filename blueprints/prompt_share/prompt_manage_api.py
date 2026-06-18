@@ -21,39 +21,43 @@ prompt_manage_api_bp = APIRouter(prefix="/prompt_manage/api", dependencies=[Depe
 logger = logging.getLogger(__name__)
 
 
-# ブックマーク保存されたプロンプトエントリ行を標準JSON形式にシリアライズする関数
-# Serialize bookmark saved prompt list entry records for the API response.
-def _serialize_prompt_list_entry(row: dict[str, Any]) -> dict[str, Any]:
+# いいね済みプロンプト行を標準JSON形式にシリアライズする関数
+# Serialize liked prompt rows for the API response.
+def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
     """
-    DBのブックマーク（プロンプトリスト）エントリレコードをシリアライズして標準のAPIレスポンス形式にする。
-    Serialize a database prompt list entry row to the standardized API response format.
+    DBのいいねレコードと公開プロンプト情報を、設定画面用のAPIレスポンス形式に整形する。
+    Serialize a liked prompt database row to the standardized settings API response format.
     """
     # 日付フィールドのISO 8601フォーマットへのシリアライズ処理を行う
     # Parse and convert datetime fields to ISO 8601 format strings.
     prompt_created_at = row.get("prompt_created_at")
-    saved_at = row.get("saved_at")
+    liked_at = row.get("liked_at")
     return {
-        "id": row.get("entry_id"),
+        "id": row.get("like_id"),
+        "like_id": row.get("like_id"),
         "prompt_id": row.get("prompt_id"),
-        "created_at": saved_at.isoformat() if hasattr(saved_at, "isoformat") else saved_at,
-        "prompt": {
-            "id": row.get("prompt_id"),
-            "title": row.get("title"),
-            "category": row.get("category"),
-            "content": row.get("content"),
-            "author": row.get("author"),
-            "prompt_type": row.get("prompt_type") or "text",
-            "reference_image_url": row.get("reference_image_url"),
-            "skill_markdown": row.get("skill_markdown") or "",
-            "skill_python_script": row.get("skill_python_script") or "",
-            "input_examples": row.get("input_examples"),
-            "output_examples": row.get("output_examples"),
-            "created_at": (
-                prompt_created_at.isoformat()
-                if hasattr(prompt_created_at, "isoformat")
-                else prompt_created_at
-            ),
-        },
+        "title": row.get("title"),
+        "category": row.get("category"),
+        "content": row.get("content"),
+        "author": row.get("author"),
+        "prompt_type": row.get("prompt_type") or "text",
+        "reference_image_url": row.get("reference_image_url"),
+        "skill_markdown": row.get("skill_markdown") or "",
+        "skill_python_script": row.get("skill_python_script") or "",
+        "input_examples": row.get("input_examples"),
+        "output_examples": row.get("output_examples"),
+        "prompt_created_at": (
+            prompt_created_at.isoformat()
+            if hasattr(prompt_created_at, "isoformat")
+            else prompt_created_at
+        ),
+        "created_at": (
+            prompt_created_at.isoformat()
+            if hasattr(prompt_created_at, "isoformat")
+            else prompt_created_at
+        ),
+        "liked_at": liked_at.isoformat() if hasattr(liked_at, "isoformat") else liked_at,
+        "liked": True,
     }
 
 
@@ -129,21 +133,21 @@ def _fetch_saved_prompts(user_id: int) -> list[dict[str, Any]]:
             cursor.close()
 
 
-# ユーザーがブックマーク保存（お気に入りリスト登録）したプロンプト一覧をDBから取得する関数
-# Database lookup to retrieve the user's bookmarks (saved prompts list).
-def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
+# ユーザーがいいねしたプロンプト一覧をDBから取得する関数
+# Database lookup to retrieve prompts liked by the user.
+def _fetch_liked_prompts(user_id: int) -> list[dict[str, Any]]:
     """
-    ユーザーがブックマーク（お気に入りリスト）に保存したプロンプト一覧を、関連するプロンプト詳細及びユーザー情報とJOINしてDBから取得する。
-    Retrieve prompt list entries saved by the user, joined with prompt and user details, and return serialized records.
+    ユーザーがいいねした公開中プロンプト一覧を、関連するプロンプト詳細及びユーザー情報とJOINしてDBから取得する。
+    Retrieve public prompts liked by the user, joined with prompt and user details, and return serialized records.
     """
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
-            # ブックマークされたプロンプト情報と投稿者名をJOINで取得
-            # Fetch bookmarked prompt details joined with author's name.
+            # いいねされた公開プロンプト情報と投稿者名をJOINで取得
+            # Fetch liked public prompt details joined with author name.
             query = """
-                SELECT ple.id AS entry_id,
-                       ple.prompt_id,
+                SELECT pl.id AS like_id,
+                       pl.prompt_id,
                        p.title,
                        p.category,
                        p.content,
@@ -155,42 +159,19 @@ def _fetch_prompt_list(user_id: int) -> list[dict[str, Any]]:
                        p.input_examples,
                        p.output_examples,
                        p.created_at AS prompt_created_at,
-                       ple.created_at AS saved_at
-                FROM prompt_list_entries ple
-                JOIN prompts p ON p.id = ple.prompt_id
+                       pl.created_at AS liked_at
+                FROM prompt_likes pl
+                JOIN prompts p ON p.id = pl.prompt_id
+                              AND p.is_public = TRUE
                               AND p.deleted_at IS NULL
                 LEFT JOIN users u ON u.id = p.user_id
-                WHERE ple.user_id = %s
-                ORDER BY ple.created_at DESC, ple.id DESC
+                WHERE pl.user_id = %s
+                ORDER BY pl.created_at DESC, pl.id DESC
             """
             cursor.execute(query, (user_id,))
             # 取得レコードをループ処理してAPI用フォーマットにシリアライズ
             # Serialize each fetched database row to the standard API structure.
-            return [_serialize_prompt_list_entry(dict(row)) for row in cursor.fetchall()]
-        finally:
-            # カーソルを確実にクローズ
-            # Ensure the cursor is closed properly.
-            cursor.close()
-
-
-# ブックマーク保存リストから指定されたエントリを削除する関数
-# Delete a specific bookmark list entry for a user.
-def _delete_prompt_list_entry_for_user(user_id: int, entry_id: int) -> int:
-    """
-    指定されたエントリIDとユーザーIDに一致するブックマーク登録を削除する。
-    Delete a specific bookmark list entry matching the given user ID and entry ID.
-    """
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            # ブックマークテーブルから直接物理削除を実行
-            # Hard delete the entry directly from prompt_list_entries table.
-            query = "DELETE FROM prompt_list_entries WHERE id = %s AND user_id = %s"
-            cursor.execute(query, (entry_id, user_id))
-            conn.commit()
-            # 影響を受けた行数を返す
-            # Return the count of affected rows.
-            return cursor.rowcount
+            return [_serialize_liked_prompt(dict(row)) for row in cursor.fetchall()]
         finally:
             # カーソルを確実にクローズ
             # Ensure the cursor is closed properly.
@@ -361,13 +342,13 @@ async def get_saved_prompts(request: Request):
         )
 
 
-# ログインユーザーのブックマーク保存されたプロンプト一覧を取得するエンドポイント
-# Endpoint to get user's bookmarked prompt list.
-@prompt_manage_api_bp.get("/prompt_list", name="prompt_manage_api.get_prompt_list")
-async def get_prompt_list(request: Request):
+# ログインユーザーがいいねしたプロンプト一覧を取得するエンドポイント
+# Endpoint to get prompts liked by the authenticated user.
+@prompt_manage_api_bp.get("/liked_prompts", name="prompt_manage_api.get_liked_prompts")
+async def get_liked_prompts(request: Request):
     """
-    ログイン中のユーザーがブックマーク（お気に入りリスト）に登録したプロンプト一覧をJSON形式で返却する。
-    GET API to retrieve the list of bookmarked prompts for the logged-in user.
+    ログイン中のユーザーがいいねした公開プロンプト一覧をJSON形式で返却する。
+    GET API to retrieve the list of public prompts liked by the logged-in user.
     """
     # セッションのログイン有無を検証
     # Check if the user is authenticated.
@@ -378,48 +359,14 @@ async def get_prompt_list(request: Request):
     try:
         # 非ブロッキングスレッドプールでDB処理を実行
         # Run database operation in a separate thread.
-        prompts = await run_blocking(_fetch_prompt_list, user_id)
+        prompts = await run_blocking(_fetch_liked_prompts, user_id)
         return jsonify({"prompts": prompts})
     except Exception:
         # エラーログ出力と500レスポンス返却
         # Log error and return 500 internal server error.
         return log_and_internal_server_error(
             logger,
-            "Failed to load prompt list.",
-        )
-
-
-# 保存したブックマークプロンプトエントリを削除するエンドポイント
-# Endpoint to delete a specific bookmarked prompt list entry.
-@prompt_manage_api_bp.delete(
-    "/prompt_list/{entry_id}", name="prompt_manage_api.delete_prompt_list_entry"
-)
-async def delete_prompt_list_entry(entry_id: int, request: Request):
-    """
-    ログイン中のユーザーのブックマークリストから指定のエントリIDを削除する。
-    DELETE API to remove a specific bookmark list entry for the logged-in user.
-    """
-    # セッションのログイン有無を検証
-    # Check if the user is authenticated.
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-
-    user_id = request.session["user_id"]
-    try:
-        # 非ブロッキングスレッドプールでDB削除処理を実行
-        # Run database delete operation in a separate thread.
-        deleted = await run_blocking(_delete_prompt_list_entry_for_user, user_id, entry_id)
-        if deleted == 0:
-            # 削除対象が存在しなかった、または別ユーザーのエントリだった場合
-            # Return 404 if the entry was not found or didn't belong to the user.
-            return jsonify({"error": "対象のプロンプトが見つかりませんでした。"}, status_code=404)
-        return jsonify({"message": "プロンプトを削除しました。"})
-    except Exception:
-        # エラーログ出力と500レスポンス返却
-        # Log error and return 500 internal server error.
-        return log_and_internal_server_error(
-            logger,
-            "Failed to delete prompt list entry.",
+            "Failed to load liked prompts.",
         )
 
 

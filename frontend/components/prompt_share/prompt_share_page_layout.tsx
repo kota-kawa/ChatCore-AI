@@ -30,7 +30,6 @@ type PromptSharePageLayoutProps = {
   feedbackToShow: PromptFeedback | null;
   openDropdownPromptId: string | null;
   likePendingIds: Set<string>;
-  bookmarkPendingIds: Set<string>;
   actionEffectIds: Set<string>;
   addAsTaskPendingIds: Set<string>;
   onOpenDetail: (prompt: PromptRecord) => void;
@@ -40,7 +39,6 @@ type PromptSharePageLayoutProps = {
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
-  onToggleBookmark: (prompt: PromptRecord) => void;
   // モーダルなど追加UIを差し込める拡張スロット
   // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
@@ -73,7 +71,6 @@ export function PromptSharePageLayout({
   feedbackToShow,
   openDropdownPromptId,
   likePendingIds,
-  bookmarkPendingIds,
   actionEffectIds,
   addAsTaskPendingIds,
   onOpenDetail,
@@ -83,7 +80,6 @@ export function PromptSharePageLayout({
   onCloseDropdown,
   onAddAsTask,
   onToggleLike,
-  onToggleBookmark,
   children
 }: PromptSharePageLayoutProps) {
   return (
@@ -294,9 +290,7 @@ export function PromptSharePageLayout({
                   prompt={prompt}
                   isDropdownOpen={openDropdownPromptId === promptId}
                   isLikePending={likePendingIds.has(promptId)}
-                  isBookmarkPending={bookmarkPendingIds.has(promptId)}
                   isLikeEffectActive={actionEffectIds.has(`${promptId}:like`)}
-                  isBookmarkEffectActive={actionEffectIds.has(`${promptId}:bookmark`)}
                   isAddAsTaskPending={addAsTaskPendingIds.has(promptId)}
                   onOpenDetail={onOpenDetail}
                   onOpenComments={onOpenComments}
@@ -305,7 +299,6 @@ export function PromptSharePageLayout({
                   onCloseDropdown={onCloseDropdown}
                   onAddAsTask={onAddAsTask}
                   onToggleLike={onToggleLike}
-                  onToggleBookmark={onToggleBookmark}
                 />
               );
             })}

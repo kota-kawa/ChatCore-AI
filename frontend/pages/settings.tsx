@@ -22,10 +22,10 @@ import { InlineLoading } from "../components/ui/inline_loading";
 import { formatDateTime } from "../lib/datetime";
 import { asId, asRecord, asString } from "../lib/utils";
 import {
+  parseLikedPromptsResponse,
   parseMyPromptsResponse,
-  parsePromptListResponse,
   parsePromptManageMutationResponse,
-  type PromptListEntry,
+  type LikedPrompt,
   type PromptRecord
 } from "../scripts/user/settings/types";
 import { truncateTitle } from "../scripts/user/settings/utils";
@@ -33,7 +33,7 @@ import { PROMPT_CATEGORY_OPTIONS } from "../components/prompt_share/prompt_share
 
 // 設定画面のどのセクションを表示するかを識別するユニオン型
 // Union type identifying which section of the settings page is currently visible
-type SettingsSection = "profile" | "appearance" | "prompts" | "prompt-list" | "notifications" | "security";
+type SettingsSection = "profile" | "appearance" | "prompts" | "liked-prompts" | "notifications" | "security";
 
 // テーマ選択肢の定義型 — アイコン・ラベル・説明を束ねる
 // Type for a single theme option bundling icon, label, and description
@@ -130,7 +130,7 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
   { section: "prompts", iconClass: "bi bi-shield-lock", label: "投稿したプロンプト" },
-  { section: "prompt-list", iconClass: "bi bi-list-stars", label: "保存したプロンプト" },
+  { section: "liked-prompts", iconClass: "bi bi-heart", label: "いいねしたプロンプト" },
   { section: "notifications", iconClass: "bi bi-bell", label: "通知設定" },
   { section: "security", iconClass: "bi bi-key", label: "セキュリティ" }
 ];
@@ -340,36 +340,36 @@ function PromptCard({
   );
 }
 
-// ユーザーが保存した（お気に入り）プロンプト 1 件を表示するカードコンポーネント
-// Card component displaying a single saved (bookmarked) prompt list entry
-function PromptListCard({
+// ユーザーがいいねしたプロンプト 1 件を表示するカードコンポーネント
+// Card component displaying a single liked prompt entry
+function LikedPromptCard({
   entry,
   onDelete
 }: {
-  entry: PromptListEntry;
-  onDelete: (entry: PromptListEntry) => void;
+  entry: LikedPrompt;
+  onDelete: (entry: LikedPrompt) => void;
 }) {
   const entryId = asId(entry.id);
   const contentPreview = normalizePreviewText(entry.content);
   const inputPreview = normalizePreviewText(entry.inputExamples);
   const outputPreview = normalizePreviewText(entry.outputExamples);
   const categoryLabel = normalizePreviewText(entry.category);
-  const createdAtLabel = entry.createdAt ? toDisplayDate(entry.createdAt) : "日時未設定";
+  const likedAtLabel = entry.likedAt ? toDisplayDate(entry.likedAt) : "日時未設定";
 
   return (
-    <article className="prompt-card" data-prompt-list-entry-id={entryId}>
+    <article className="prompt-card" data-liked-prompt-id={entryId}>
       <div className="prompt-card__main">
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
-            {/* 保存済みバッジを常に表示し、カテゴリがある場合のみカテゴリバッジも表示する / Always show the saved badge; show category badge only when a category is set */}
+            {/* いいね済みバッジを常に表示し、カテゴリがある場合のみカテゴリバッジも表示する / Always show the liked badge; show category badge only when a category is set */}
             <span className="prompt-card__badge prompt-card__badge--saved">
-              <i className="bi bi-bookmark-fill me-1"></i>保存済み
+              <i className="bi bi-heart-fill me-1"></i>いいね済み
             </span>
             {categoryLabel ? (
               <span className="prompt-card__badge prompt-card__badge--category">{categoryLabel}</span>
             ) : null}
-            <time className="prompt-card__date" dateTime={entry.createdAt}>
-              {createdAtLabel}
+            <time className="prompt-card__date" dateTime={entry.likedAt}>
+              {likedAtLabel}
             </time>
           </div>
           <h3 className="prompt-card__title" title={entry.title}>{truncateTitle(entry.title)}</h3>
@@ -402,10 +402,10 @@ function PromptListCard({
             type="button"
             className="prompt-card__action-btn prompt-card__action-btn--delete"
             onClick={() => onDelete(entry)}
-            aria-label="削除"
+            aria-label="いいねを解除"
           >
-            <i className="bi bi-trash3"></i>
-            <span>削除</span>
+            <i className="bi bi-heartbreak"></i>
+            <span>いいねを解除</span>
           </button>
         </div>
       </div>
@@ -882,11 +882,11 @@ export default function UserSettingsPage() {
   const [myPromptsLoading, setMyPromptsLoading] = useState(false);
   const [myPromptsError, setMyPromptsError] = useState<string | null>(null);
 
-  // 保存済みプロンプト一覧の状態
-  // State for the list of saved (bookmarked) prompt entries
-  const [promptListEntries, setPromptListEntries] = useState<PromptListEntry[]>([]);
-  const [promptListLoading, setPromptListLoading] = useState(false);
-  const [promptListError, setPromptListError] = useState<string | null>(null);
+  // いいねしたプロンプト一覧の状態
+  // State for the list of liked prompt entries
+  const [likedPrompts, setLikedPrompts] = useState<LikedPrompt[]>([]);
+  const [likedPromptsLoading, setLikedPromptsLoading] = useState(false);
+  const [likedPromptsError, setLikedPromptsError] = useState<string | null>(null);
 
   // 編集モーダルの表示制御 — null のときモーダルは非表示
   // Controls the edit modal; null means the modal is hidden
@@ -995,27 +995,27 @@ export default function UserSettingsPage() {
     }
   }, []);
 
-  // ユーザーが保存したプロンプト一覧を取得する
-  // Fetch the list of prompts saved (bookmarked) by the current user
-  const loadPromptList = useCallback(async () => {
-    setPromptListLoading(true);
-    setPromptListError(null);
+  // ユーザーがいいねしたプロンプト一覧を取得する
+  // Fetch the list of prompts liked by the current user
+  const loadLikedPrompts = useCallback(async () => {
+    setLikedPromptsLoading(true);
+    setLikedPromptsError(null);
     try {
       const { payload } = await fetchJsonOrThrow(
-        "/prompt_manage/api/prompt_list",
+        "/prompt_manage/api/liked_prompts",
         {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "保存したプロンプトの取得に失敗しました。"
+          defaultMessage: "いいねしたプロンプトの取得に失敗しました。"
         }
       );
-      setPromptListEntries(parsePromptListResponse(payload));
+      setLikedPrompts(parseLikedPromptsResponse(payload));
     } catch (error) {
-      setPromptListEntries([]);
-      setPromptListError(error instanceof Error ? error.message : "保存したプロンプトの取得に失敗しました。");
+      setLikedPrompts([]);
+      setLikedPromptsError(error instanceof Error ? error.message : "いいねしたプロンプトの取得に失敗しました。");
     } finally {
-      setPromptListLoading(false);
+      setLikedPromptsLoading(false);
     }
   }, []);
 
@@ -1139,14 +1139,14 @@ export default function UserSettingsPage() {
       void loadMyPrompts();
       return;
     }
-    if (section === "prompt-list") {
-      void loadPromptList();
+    if (section === "liked-prompts") {
+      void loadLikedPrompts();
       return;
     }
     if (section === "security") {
       void loadPasskeys();
     }
-  }, [loadMyPrompts, loadPasskeys, loadPromptList]);
+  }, [loadLikedPrompts, loadMyPrompts, loadPasskeys]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
@@ -1555,38 +1555,40 @@ export default function UserSettingsPage() {
     }
   }, [editPromptForm, loadMyPrompts]);
 
-  // 確認ダイアログを経て保存済みプロンプトを一覧から削除する
-  // Remove a saved prompt list entry after user confirmation
-  const handleDeletePromptListEntry = useCallback(async (entry: PromptListEntry) => {
-    const entryId = asId(entry.id);
-    if (!entryId) {
-      showToast("削除対象のエントリが見つかりませんでした。", { variant: "error" });
+  // 確認ダイアログを経ていいねを解除する
+  // Remove a liked prompt after user confirmation
+  const handleUnlikePrompt = useCallback(async (entry: LikedPrompt) => {
+    const promptId = asId(entry.promptId);
+    if (!promptId) {
+      showToast("いいね解除対象のプロンプトが見つかりませんでした。", { variant: "error" });
       return;
     }
 
-    const confirmed = await showConfirmModal("保存したプロンプトから削除しますか？");
+    const confirmed = await showConfirmModal("このプロンプトのいいねを解除しますか？");
     if (!confirmed) {
       return;
     }
 
     try {
       const { payload } = await fetchJsonOrThrow(
-        `/prompt_manage/api/prompt_list/${entryId}`,
+        "/prompt_share/api/like",
         {
           method: "DELETE",
-          credentials: "same-origin"
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt_id: promptId })
         },
         {
-          defaultMessage: "保存したプロンプトの削除に失敗しました。"
+          defaultMessage: "いいねの解除に失敗しました。"
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "プロンプトを削除しました。", { variant: "success" });
-      await loadPromptList();
+      showToast(response.message || "いいねを解除しました。", { variant: "success" });
+      setLikedPrompts((current) => current.filter((item) => asId(item.promptId) !== promptId));
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "保存したプロンプトの削除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : "いいねの解除に失敗しました。", { variant: "error" });
     }
-  }, [loadPromptList]);
+  }, []);
 
   // ブラウザの Passkey 登録フローを起動し、キャンセル時はトーストを出さない
   // Launch the browser passkey registration flow; silently swallow user-cancelled errors
@@ -1705,20 +1707,20 @@ export default function UserSettingsPage() {
     [handleDeletePrompt, handleOpenPromptEdit, myPrompts]
   );
 
-  // 保存済みプロンプトのカードリストをメモ化して不要な再レンダリングを防ぐ
-  // Memoize the saved prompt card list to avoid unnecessary re-renders
-  const promptListCards = useMemo(
-    () => promptListEntries.map((entry, index) => {
+  // いいねしたプロンプトのカードリストをメモ化して不要な再レンダリングを防ぐ
+  // Memoize the liked prompt card list to avoid unnecessary re-renders
+  const likedPromptCards = useMemo(
+    () => likedPrompts.map((entry, index) => {
       const key = asId(entry.id) || `${entry.title}-${index}`;
       return (
-        <PromptListCard
+        <LikedPromptCard
           key={key}
           entry={entry}
-          onDelete={handleDeletePromptListEntry}
+          onDelete={handleUnlikePrompt}
         />
       );
     }),
-    [handleDeletePromptListEntry, promptListEntries]
+    [handleUnlikePrompt, likedPrompts]
   );
 
   return (
@@ -1957,22 +1959,22 @@ export default function UserSettingsPage() {
               </div>
             </div>
 
-            {/* ---- 保存済みプロンプトセクション / Saved prompts section ---- */}
-            <div id="prompt-list-section" className={`settings-section${isSectionActive("prompt-list") ? " active" : ""}`}>
+            {/* ---- いいね済みプロンプトセクション / Liked prompts section ---- */}
+            <div id="liked-prompts-section" className={`settings-section${isSectionActive("liked-prompts") ? " active" : ""}`}>
               <div className="settings-card">
-                <h2>保存したプロンプト</h2>
+                <h2>いいねしたプロンプト</h2>
                 <div className="header-bar">
-                  <h3 className="section-title">保存したプロンプト</h3>
+                  <h3 className="section-title">いいねしたプロンプト</h3>
                 </div>
 
-                {promptListLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
-                {!promptListLoading && promptListError ? <p>{promptListError}</p> : null}
-                {!promptListLoading && !promptListError && promptListEntries.length === 0 ? (
-                  <p>保存したプロンプトは存在しません。</p>
+                {likedPromptsLoading ? <InlineLoading label="読み込み中..." className="mb-4" /> : null}
+                {!likedPromptsLoading && likedPromptsError ? <p>{likedPromptsError}</p> : null}
+                {!likedPromptsLoading && !likedPromptsError && likedPrompts.length === 0 ? (
+                  <p>いいねしたプロンプトは存在しません。</p>
                 ) : null}
 
-                <div id="promptListEntries" className="prompt-grid">
-                  {promptListCards}
+                <div id="likedPromptEntries" className="prompt-grid">
+                  {likedPromptCards}
                 </div>
               </div>
             </div>

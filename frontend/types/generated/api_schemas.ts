@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: ed4404741cdbaa70649da4b653d2c35acfc3da4fdd6d5995207d94b4e6e3a373
+// Schema fingerprint: 147d8b316cfcbdc3f7766d11498cfb70539749dc3562b678b519693e8a350904
 
 import { z } from "zod";
 
@@ -47,17 +47,8 @@ export type PromptAssistRequest = z.infer<typeof PromptAssistRequestSchema>;
 export const SharedPromptCreateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().default(""), "content": z.string().default(""), "prompt_type": z.enum(["text","image","skill"]).default("text"), "input_examples": z.string().default(""), "output_examples": z.string().default(""), "ai_model": z.string().default(""), "skill_markdown": z.string().max(30000).default(""), "skill_python_script": z.string().max(30000).default("") });
 export type SharedPromptCreateRequest = z.infer<typeof SharedPromptCreateRequestSchema>;
 
-export const BookmarkCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
-export type BookmarkCreateRequest = z.infer<typeof BookmarkCreateRequestSchema>;
-
-export const BookmarkDeleteRequestSchema = z.object({ "prompt_id": z.number().int() });
-export type BookmarkDeleteRequest = z.infer<typeof BookmarkDeleteRequestSchema>;
-
 export const PromptTaskCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
 export type PromptTaskCreateRequest = z.infer<typeof PromptTaskCreateRequestSchema>;
-
-export const PromptListEntryCreateRequestSchema = z.object({ "prompt_id": z.number().int() });
-export type PromptListEntryCreateRequest = z.infer<typeof PromptListEntryCreateRequestSchema>;
 
 export const PromptUpdateRequestSchema = z.object({ "title": z.string().min(1), "category": z.string().min(1), "content": z.string().min(1), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type PromptUpdateRequest = z.infer<typeof PromptUpdateRequestSchema>;
@@ -119,17 +110,14 @@ export type StoredChatHistoryEntry = z.infer<typeof StoredChatHistoryEntrySchema
 export const PromptRecordApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type PromptRecordApi = z.infer<typeof PromptRecordApiSchema>;
 
-export const PromptListEntryApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "prompt": z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any());
-export type PromptListEntryApi = z.infer<typeof PromptListEntryApiSchema>;
-
-export const PromptListEntryLegacyApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null) }).catchall(z.any());
-export type PromptListEntryLegacyApi = z.infer<typeof PromptListEntryLegacyApiSchema>;
+export const LikedPromptApiSchema = z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "like_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "author": z.union([z.string(), z.null()]).default(null), "prompt_type": z.union([z.string(), z.null()]).default("text"), "reference_image_url": z.union([z.string(), z.null()]).default(null), "skill_markdown": z.union([z.string(), z.null()]).default(""), "skill_python_script": z.union([z.string(), z.null()]).default(""), "prompt_created_at": z.union([z.string(), z.null()]).default(null), "liked_at": z.union([z.string(), z.null()]).default(null), "liked": z.boolean().default(true) }).catchall(z.any());
+export type LikedPromptApi = z.infer<typeof LikedPromptApiSchema>;
 
 export const MyPromptsApiResponseSchema = z.object({ "prompts": z.array(z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
 export type MyPromptsApiResponse = z.infer<typeof MyPromptsApiResponseSchema>;
 
-export const PromptListApiResponseSchema = z.object({ "prompts": z.array(z.union([z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "created_at": z.union([z.string(), z.null()]).default(null), "prompt": z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any()), z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null) }).catchall(z.any())])).optional() }).catchall(z.any());
-export type PromptListApiResponse = z.infer<typeof PromptListApiResponseSchema>;
+export const LikedPromptsApiResponseSchema = z.object({ "prompts": z.array(z.object({ "id": z.union([z.number().int(), z.string(), z.null()]).default(null), "title": z.string(), "content": z.string(), "category": z.union([z.string(), z.null()]).default(""), "input_examples": z.union([z.string(), z.null()]).default(""), "output_examples": z.union([z.string(), z.null()]).default(""), "created_at": z.union([z.string(), z.null()]).default(null), "like_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "prompt_id": z.union([z.number().int(), z.string(), z.null()]).default(null), "author": z.union([z.string(), z.null()]).default(null), "prompt_type": z.union([z.string(), z.null()]).default("text"), "reference_image_url": z.union([z.string(), z.null()]).default(null), "skill_markdown": z.union([z.string(), z.null()]).default(""), "skill_python_script": z.union([z.string(), z.null()]).default(""), "prompt_created_at": z.union([z.string(), z.null()]).default(null), "liked_at": z.union([z.string(), z.null()]).default(null), "liked": z.boolean().default(true) }).catchall(z.any())).optional() }).catchall(z.any());
+export type LikedPromptsApiResponse = z.infer<typeof LikedPromptsApiResponseSchema>;
 
 export const PromptManageMutationApiResponseSchema = z.object({ "message": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type PromptManageMutationApiResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;

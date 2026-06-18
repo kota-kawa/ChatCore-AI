@@ -88,21 +88,20 @@ class PromptRecordApi(ResponsePayloadModel):
     created_at: str | None = None
 
 
-# 日本語: プロンプトリストの要素レコードを表すモデル（ネストされたプロンプトオブジェクト形式）。
-# English: Model representing a list entry record with a nested prompt object.
-class PromptListEntryApi(ResponsePayloadModel):
+# 日本語: いいねしたプロンプト要素レコードを表すモデル。
+# English: Model representing a liked prompt list entry.
+class LikedPromptApi(PromptRecordApi):
     id: int | str | None = None
+    like_id: int | str | None = None
     prompt_id: int | str | None = None
-    created_at: str | None = None
-    prompt: PromptRecordApi
-
-
-# 日本語: フラットな構造で表された互換用（レガシー）のプロンプトリスト要素モデル。
-# English: Legacy list entry model representation with a flat structure.
-class PromptListEntryLegacyApi(PromptRecordApi):
-    id: int | str | None = None
-    prompt_id: int | str | None = None
-    created_at: str | None = None
+    author: str | None = None
+    prompt_type: str | None = "text"
+    reference_image_url: str | None = None
+    skill_markdown: str | None = ""
+    skill_python_script: str | None = ""
+    prompt_created_at: str | None = None
+    liked_at: str | None = None
+    liked: bool = True
 
 
 # 日本語: ユーザーが作成したプロンプトリストを返す応答モデル。
@@ -111,10 +110,10 @@ class MyPromptsApiResponse(ResponsePayloadModel):
     prompts: list[PromptRecordApi] = Field(default_factory=list)
 
 
-# 日本語: プロンプト（およびSKILL）の一覧データを返す応答モデル。
-# English: Response model returning a list of prompts/SKILLs.
-class PromptListApiResponse(ResponsePayloadModel):
-    prompts: list[PromptListEntryApi | PromptListEntryLegacyApi] = Field(default_factory=list)
+# 日本語: いいねしたプロンプト一覧データを返す応答モデル。
+# English: Response model returning a list of liked prompts.
+class LikedPromptsApiResponse(ResponsePayloadModel):
+    prompts: list[LikedPromptApi] = Field(default_factory=list)
 
 
 # 日本語: プロンプトの追加・変更・削除結果の成否メッセージを返す応答モデル。

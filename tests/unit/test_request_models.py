@@ -4,13 +4,11 @@ from pydantic import ValidationError
 
 from services.request_models import (
     AddTaskRequest,
-    BookmarkCreateRequest,
     ChatMessageRequest,
     ChatRoomIdsRequest,
     MemoCreateRequest,
     PromptAssistRequest,
     PromptLikeRequest,
-    PromptListEntryCreateRequest,
     PromptTaskCreateRequest,
     SharedPromptCreateRequest,
     UpdateTasksOrderRequest,
@@ -173,36 +171,6 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.prompt_type, "skill")
         self.assertEqual(result.skill_markdown, "# Skill")
-
-    # 保存プロンプトリスト追加リクエストで、プロンプトIDが文字列型であっても自動で整数型へパースされることを検証します。
-    # Verify that prompt list entry request correctly parses string prompt_id to integer type.
-    def test_prompt_list_entry_parses_prompt_id_type(self):
-        # 文字列のIDを渡してバリデーションを実行
-        # Run validation with prompt_id as a string value
-        payload = _validate(
-            PromptListEntryCreateRequest,
-            {"prompt_id": "12"},
-        )
-        self.assertEqual(payload.prompt_id, 12)
-
-    # 保存プロンプトリスト追加リクエストで、プロンプトIDが指定されていない場合はエラーになることを検証します。
-    # Verify that prompt list entry request requires prompt_id parameter.
-    def test_prompt_list_entry_requires_prompt_id(self):
-        # IDが未指定のときに ValidationError が発生することを確認
-        # Check that a ValidationError is raised when prompt_id is missing
-        with self.assertRaises(ValidationError):
-            _validate(PromptListEntryCreateRequest, {})
-
-    # ブックマーク追加リクエストで、プロンプトIDをパースして認識できることを検証します。
-    # Verify that bookmark creation parses the prompt_id successfully.
-    def test_bookmark_create_uses_prompt_id(self):
-        # プロンプトIDを指定してブックマーク作成のバリデーションを実行
-        # Run bookmark creation validation with prompt_id
-        payload = _validate(
-            BookmarkCreateRequest,
-            {"prompt_id": "12"},
-        )
-        self.assertEqual(payload.prompt_id, 12)
 
     # プロンプトからのタスク作成リクエストで、プロンプトIDをパースして認識できることを検証します。
     # Verify that creating a task from a prompt parses the prompt_id successfully.

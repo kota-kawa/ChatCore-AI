@@ -13,12 +13,9 @@ from services.auth_limits import consume_rate_limit, get_request_client_ip
 from services.csrf import require_csrf
 from services.db import get_db_connection
 from services.request_models import (
-    BookmarkCreateRequest,
-    BookmarkDeleteRequest,
     PromptCommentCreateRequest,
     PromptCommentReportRequest,
     PromptLikeRequest,
-    PromptListEntryCreateRequest,
     PromptTaskCreateRequest,
     SharedPromptCreateRequest,
 )
@@ -326,19 +323,19 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     return f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}"
 
 
-# 共有中プロンプトの一覧を、各種リアクション・ブックマーク状態フラグを含めてDBから取得する関数
-# Fetch public shared prompts including contextual engagement states (liked, bookmarked).
+# 共有中プロンプトの一覧を、コメント数といいね状態を含めてDBから取得する関数
+# Fetch public shared prompts including comment counts and contextual like state.
 def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
     """
-    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーのLike状態やブックマーク状態と結合して取得する。
-    Fetch all public, non-deleted prompts joined with interact states (likes/bookmarks) for the optional user ID.
+    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーのLike状態と結合して取得する。
+    Fetch all public, non-deleted prompts joined with like state for the optional user ID.
     """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        # 公開プロンプトとユーザーごとのLikeや保存リスト登録状況をJOINで取得
+        # 公開プロンプトとユーザーごとのLike状態をJOINで取得
         # Execute query to select public prompts with flags joined with the specific user ID.
         cursor.execute(
             """
@@ -357,9 +354,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.skill_python_script,
                 p.created_at,
                 COALESCE(pc.comment_count, 0) AS comment_count,
-                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-                CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS bookmarked,
-                CASE WHEN ple.id IS NOT NULL THEN TRUE ELSE FALSE END AS saved_to_list
+                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked
             FROM prompts AS p
             LEFT JOIN users AS u
               ON u.id = p.user_id
@@ -374,14 +369,11 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id
-            LEFT JOIN prompt_list_entries AS ple
-              ON ple.user_id = %s
-             AND ple.prompt_id = p.id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
             ORDER BY p.created_at DESC
             """,
-            (user_id, user_id),
+            (user_id,),
         )
         prompts = []
         # 結果の整形・真偽値キャストを実行
@@ -389,8 +381,6 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         for row in cursor.fetchall():
             prompt = _serialize_prompt_row(dict(row))
             prompt["liked"] = bool(prompt.get("liked"))
-            prompt["bookmarked"] = bool(prompt.get("bookmarked"))
-            prompt["saved_to_list"] = bool(prompt.get("saved_to_list"))
             prompt["comment_count"] = int(prompt.get("comment_count") or 0)
             prompts.append(prompt)
         return prompts
@@ -643,125 +633,6 @@ def _add_prompt_as_task_for_user(
         conn.commit()
         saved_id = _extract_id(cursor.fetchone())
         return {"message": "タスクとして追加しました。", "saved_id": saved_id}, 201
-    except Exception:
-        if conn is not None:
-            conn.rollback()
-        raise
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
-
-
-# プロンプトをお気に入りブックマークするエンドポイント（ラッパー）
-# Bookmark a prompt for a user (wrapper around prompt list insertion).
-def _add_bookmark_for_user(
-    user_id: int,
-    prompt_id: int,
-) -> tuple[dict[str, Any], int]:
-    """
-    お気に入りリスト追加処理(_add_prompt_list_entry_for_user)を呼び出し、レスポンスメッセージをブックマーク用にラップする。
-    Execute bookmark helper and format custom success/failure messaging.
-    """
-    payload, status_code = _add_prompt_list_entry_for_user(user_id, prompt_id)
-    if "error" in payload:
-        return payload, status_code
-    return {
-        **payload,
-        "message": "ブックマークが保存されました。",
-        "bookmarked": True,
-    }, status_code
-
-
-# ユーザーのブックマークリストからプロンプトを削除する関数
-# Remove a prompt from a user's bookmark list.
-def _remove_bookmark_for_user(user_id: int, prompt_id: int) -> int:
-    """
-    指定されたユーザーIDとお気に入りプロンプトIDの一致するお気に入りエントリレコードを削除する。
-    Hard delete a prompt bookmark list entry matching the given user ID and prompt ID.
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            DELETE FROM prompt_list_entries
-            WHERE user_id = %s
-              AND prompt_id = %s
-            """,
-            (user_id, prompt_id),
-        )
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
-
-
-# ブックマーク保存リストにプロンプトを追加するDB関数
-# Database implementation to add a prompt to user's bookmark list.
-def _add_prompt_list_entry_for_user(
-    user_id: int,
-    prompt_id: int,
-) -> tuple[dict[str, Any], int]:
-    """
-    指定されたプロンプトが公開かつ未削除であることを検証し、ユーザーのお気に入り（保存リスト）テーブルにエントリを挿入する。
-    Validate prompt visibility and insert it into prompt_list_entries for the specified user.
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        # プロンプトの存在と公開状態を確認
-        # Check target prompt exists and is public.
-        cursor.execute(
-            """
-            SELECT id
-            FROM prompts
-            WHERE id = %s
-              AND is_public = TRUE
-              AND deleted_at IS NULL
-            """,
-            (prompt_id,),
-        )
-        prompt = cursor.fetchone()
-        if not prompt:
-            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
-
-        # 既に同一ユーザーがお気に入りに登録しているか確認
-        # Prevent duplicate insertion of the same bookmark.
-        cursor.execute(
-            """
-            SELECT id
-            FROM prompt_list_entries
-            WHERE user_id = %s AND prompt_id = %s
-            """,
-            (user_id, prompt_id),
-        )
-        existing = cursor.fetchone()
-        if existing:
-            return {"message": "すでに保存されています。", "saved_id": existing["id"]}, 200
-
-        # 保存エントリを追加
-        # Insert the bookmark row.
-        cursor.execute(
-            """
-            INSERT INTO prompt_list_entries
-                (user_id, prompt_id)
-            VALUES (%s, %s)
-            RETURNING id
-            """,
-            (user_id, prompt_id),
-        )
-        conn.commit()
-        saved_id = _extract_id(cursor.fetchone())
-        return {"message": "保存したプロンプトに追加しました。", "saved_id": saved_id}, 201
     except Exception:
         if conn is not None:
             conn.rollback()
@@ -1622,104 +1493,6 @@ async def create_prompt(request: Request):
         )
 
 
-# プロンプトをお気に入りブックマークするエンドポイント
-# Endpoint to add a prompt to user's bookmark list.
-@prompt_share_api_bp.post("/bookmark", name="prompt_share_api.add_bookmark")
-async def add_bookmark(request: Request):
-    """
-    ログイン中のユーザーがお気に入りプロンプトとしてブックマーク登録するエンドポイント。
-    POST API endpoint to bookmark a public prompt.
-    """
-    # ログイン認証チェック
-    # Verify authentication state.
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    user_id = request.session["user_id"]
-
-    # リクエストデータがJSON辞書形式か検証
-    # Validate and retrieve JSON payload.
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
-
-    # リクエストボディモデルによるバリデーション
-    # Validate payload properties.
-    request_payload, validation_error = validate_payload_model(
-        data,
-        BookmarkCreateRequest,
-        error_message="必要なフィールドが不足しています",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    try:
-        # 非ブロッキングスレッドプールでブックマーク追加を実行
-        # Run DB bookmark addition in a separate thread.
-        response_payload, status_code = await run_blocking(
-            _add_bookmark_for_user,
-            user_id,
-            request_payload.prompt_id,
-        )
-        return jsonify(response_payload, status_code=status_code)
-    except Exception:
-        # エラー発生時はログに記録し、500内部サーバーエラーを返却
-        # Log error and return 500 internal server error.
-        return log_and_internal_server_error(
-            logger,
-            "Failed to add bookmark.",
-        )
-
-
-# ブックマークを解除・削除するエンドポイント
-# Endpoint to remove a prompt from user's bookmark list.
-@prompt_share_api_bp.delete("/bookmark", name="prompt_share_api.remove_bookmark")
-async def remove_bookmark(request: Request):
-    """
-    ログイン中のユーザーがお気に入りからブックマーク登録を解除・削除するエンドポイント。
-    DELETE API endpoint to remove a prompt bookmark.
-    """
-    # ログイン認証チェック
-    # Verify authentication state.
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    user_id = request.session["user_id"]
-
-    # リクエストデータがJSON辞書形式か検証
-    # Validate and retrieve JSON payload.
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
-
-    # リクエストボディモデルによるバリデーション
-    # Validate payload properties.
-    request_payload, validation_error = validate_payload_model(
-        data,
-        BookmarkDeleteRequest,
-        error_message="必要なフィールドが不足しています",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    try:
-        # 非ブロッキングスレッドプールでブックマーク解除を実行
-        # Run DB bookmark deletion in a separate thread.
-        deleted = await run_blocking(_remove_bookmark_for_user, user_id, request_payload.prompt_id)
-        status_code = 200 if deleted else 404
-        payload = (
-            {"message": "ブックマークが削除されました。", "bookmarked": False}
-            if deleted
-            else {"error": "対象のブックマークが見つかりませんでした。"}
-        )
-        return jsonify(payload, status_code=status_code)
-    except Exception:
-        # エラー発生時はログに記録し、500内部サーバーエラーを返却
-        # Log error and return 500 internal server error.
-        return log_and_internal_server_error(
-            logger,
-            "Failed to remove bookmark.",
-        )
-
-
 # 公開プロンプトをタスクに追加するエンドポイント
 # Endpoint to duplicate a public prompt as a user's task template.
 @prompt_share_api_bp.post("/task", name="prompt_share_api.add_prompt_as_task")
@@ -1758,6 +1531,11 @@ async def add_prompt_as_task(request: Request):
             user_id,
             request_payload.prompt_id,
         )
+        if status_code in {200, 201} and "error" not in response_payload:
+            response_payload = {
+                **response_payload,
+                "message": "チャットで使えるように追加しました。",
+            }
         return jsonify(response_payload, status_code=status_code)
     except Exception:
         # エラー発生時はログに記録し、500内部サーバーエラーを返却
@@ -1859,50 +1637,3 @@ async def remove_like(request: Request):
             "Failed to remove prompt like.",
         )
 
-
-# ブックマーク保存リストにプロンプトを追加するエンドポイント
-# Endpoint to add a prompt to user's bookmark list.
-@prompt_share_api_bp.post("/prompt_list", name="prompt_share_api.add_prompt_to_list")
-async def add_prompt_to_list(request: Request):
-    """
-    ログイン中のユーザーがお気に入り保存リストにプロンプトを追加するエンドポイント。
-    POST API endpoint to add a public prompt to the user's saved list.
-    """
-    # ログイン認証チェック
-    # Verify authentication state.
-    if "user_id" not in request.session:
-        return jsonify({"error": "ログインしていません"}, status_code=401)
-    user_id = request.session["user_id"]
-
-    # リクエストデータがJSON辞書形式か検証
-    # Validate and retrieve JSON payload.
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
-
-    # リクエストボディモデルによるバリデーション
-    # Validate payload properties.
-    request_payload, validation_error = validate_payload_model(
-        data,
-        PromptListEntryCreateRequest,
-        error_message="必要なフィールドが不足しています",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    try:
-        # 非ブロッキングスレッドプールで保存リスト追加処理を実行
-        # Run DB prompt list entry creation in a separate thread.
-        response_payload, status_code = await run_blocking(
-            _add_prompt_list_entry_for_user,
-            user_id,
-            request_payload.prompt_id,
-        )
-        return jsonify(response_payload, status_code=status_code)
-    except Exception:
-        # エラー発生時はログに記録し、500内部サーバーエラーを返却
-        # Log error and return 500 internal server error.
-        return log_and_internal_server_error(
-            logger,
-            "Failed to add prompt to prompt list.",
-        )

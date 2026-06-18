@@ -107,11 +107,11 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn,
-.prompt-share-page .prompt-action-btn.bookmark-btn,
+.prompt-share-page .prompt-action-btn.use-in-chat-btn,
 .prompt-share-page .prompt-action-btn.like-btn:hover:not(:disabled),
-.prompt-share-page .prompt-action-btn.bookmark-btn:hover:not(:disabled),
+.prompt-share-page .prompt-action-btn.use-in-chat-btn:hover:not(:disabled),
 .prompt-share-page .prompt-action-btn.like-btn:active:not(:disabled),
-.prompt-share-page .prompt-action-btn.bookmark-btn:active:not(:disabled) {
+.prompt-share-page .prompt-action-btn.use-in-chat-btn:active:not(:disabled) {
   background: transparent;
   box-shadow: none;
   filter: none;

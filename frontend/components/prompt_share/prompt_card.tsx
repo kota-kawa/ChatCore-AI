@@ -23,9 +23,7 @@ type PromptCardProps = {
   prompt: PromptRecord;
   isDropdownOpen: boolean;
   isLikePending: boolean;
-  isBookmarkPending: boolean;
   isLikeEffectActive: boolean;
-  isBookmarkEffectActive: boolean;
   isAddAsTaskPending: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
@@ -34,16 +32,13 @@ type PromptCardProps = {
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
-  onToggleBookmark: (prompt: PromptRecord) => void;
 };
 
 function PromptCardComponent({
   prompt,
   isDropdownOpen,
   isLikePending,
-  isBookmarkPending,
   isLikeEffectActive,
-  isBookmarkEffectActive,
   isAddAsTaskPending,
   onOpenDetail,
   onOpenComments,
@@ -52,12 +47,10 @@ function PromptCardComponent({
   onCloseDropdown,
   onAddAsTask,
   onToggleLike,
-  onToggleBookmark,
 }: PromptCardProps) {
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
   const promptTypeValue = normalizePromptType(prompt.prompt_type);
-  const isBookmarked = Boolean(prompt.bookmarked);
   const promptId = prompt.clientId;
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
@@ -138,19 +131,6 @@ function PromptCardComponent({
           className="dropdown-item"
           type="button"
           role="menuitem"
-          data-action="add-as-task"
-          disabled={isAddAsTaskPending}
-          onClick={(event) => {
-            event.stopPropagation();
-            void onAddAsTask(prompt);
-          }}
-        >
-          {isAddAsTaskPending ? "タスクに追加中..." : "タスクとして追加"}
-        </button>
-        <button
-          className="dropdown-item"
-          type="button"
-          role="menuitem"
           onClick={() => {
             onCloseDropdown();
           }}
@@ -223,25 +203,24 @@ function PromptCardComponent({
             <i className={`bi ${prompt.liked ? "bi-heart-fill" : "bi-heart"}`}></i>
           </button>
 
-          {/* ブックマークも同様に二重送信ガードを持つ */}
-          {/* Bookmark button has the same pending guard to prevent duplicate API calls */}
+          {/* チャットで使う操作も二重送信を防ぐ */}
+          {/* Guard the use-in-chat action against duplicate API requests */}
           <button
-            className={`prompt-action-btn bookmark-btn${isBookmarked ? " bookmarked" : ""}${isBookmarkPending ? " is-pending" : ""}${isBookmarkEffectActive ? " is-celebrating" : ""}`}
+            className={`prompt-action-btn use-in-chat-btn${isAddAsTaskPending ? " is-pending" : ""}`}
             type="button"
-            aria-label={isBookmarked ? "ブックマークを解除" : "ブックマーク"}
-            aria-pressed={isBookmarked ? "true" : "false"}
-            aria-disabled={isBookmarkPending ? "true" : "false"}
-            data-tooltip={isBookmarked ? "ブックマークを解除" : "このプロンプトをブックマーク"}
+            aria-label="チャットで使う"
+            aria-disabled={isAddAsTaskPending ? "true" : "false"}
+            data-tooltip={isAddAsTaskPending ? "チャットに追加中" : "チャットで使う"}
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
-              if (isBookmarkPending) {
+              if (isAddAsTaskPending) {
                 return;
               }
-              void onToggleBookmark(prompt);
+              void onAddAsTask(prompt);
             }}
           >
-            <i className={`bi ${isBookmarked ? "bi-bookmark-fill" : "bi-bookmark"}`}></i>
+            <i className="bi bi-plus-square"></i>
           </button>
         </div>
       </div>
