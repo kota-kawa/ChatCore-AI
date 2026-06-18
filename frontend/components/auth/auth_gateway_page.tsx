@@ -187,11 +187,15 @@ export default function AuthGatewayPage() {
 
     setSendingCode(true);
     try {
-      const { payload: data } = await fetchJson<Record<string, unknown>>("/api/auth/send_email_code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail })
-      });
+      const { payload: data } = await fetchJson<Record<string, unknown>>(
+        "/api/auth/send_email_code",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: trimmedEmail })
+        },
+        resilientFetch
+      );
 
       if (data.status === "success") {
         setStep("code");
@@ -221,11 +225,15 @@ export default function AuthGatewayPage() {
 
     setVerifyingCode(true);
     try {
-      const { payload: data } = await fetchJson<Record<string, unknown>>("/api/auth/verify_email_code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ authCode: trimmedCode })
-      });
+      const { payload: data } = await fetchJson<Record<string, unknown>>(
+        "/api/auth/verify_email_code",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ authCode: trimmedCode })
+        },
+        resilientFetch
+      );
 
       if (data.status === "success") {
         const flow = data.flow === "register" ? "register" : "login";

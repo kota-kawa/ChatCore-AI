@@ -517,6 +517,7 @@ export function useHomePageController() {
           },
           {
             defaultMessage: "タスクの追加に失敗しました。",
+            fetchImpl: resilientFetch,
           },
         );
 

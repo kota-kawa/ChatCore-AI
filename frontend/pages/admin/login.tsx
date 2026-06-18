@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import { useState, type FormEvent } from "react";
 
 import { SeoHead } from "../../components/SeoHead";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 // ステータスメッセージの型定義（成功・エラーの2種類）
 // Type definition for status messages (success or error)
@@ -32,7 +33,7 @@ export default function AdminLogin() {
     setSubmitting(true);
 
     try {
-      const res = await fetch("/admin/api/login", {
+      const res = await resilientFetch("/admin/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -117,7 +118,7 @@ export default function AdminLogin() {
               {/* 送信中はボタンを無効化する / Disable button while submitting */}
               <button
                 type="submit"
-                className="cc-texture-btn cc-texture-btn--indigo w-full rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60"
+                className="cc-texture-btn cc-texture-btn--indigo cc-press w-full rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200/60 transition hover:-translate-y-0.5 hover:shadow-indigo-300/70 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={submitting}
               >
                 ログイン

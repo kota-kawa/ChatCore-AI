@@ -1,4 +1,5 @@
 import type { GetServerSideProps } from "next";
+import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 // Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
 // Normalize the Host header value (take the first if it's an array)
@@ -61,7 +62,7 @@ function normalizeLastmod(value: string | undefined): string | undefined {
 async function fetchPublicPromptRoutes(): Promise<SitemapRoute[]> {
   const backendUrl = (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
   try {
-    const response = await fetch(`${backendUrl}/prompt_share/api/prompts`, {
+    const response = await resilientFetch(`${backendUrl}/prompt_share/api/prompts`, {
       headers: { Accept: "application/json" }
     });
     if (!response.ok) return [];

@@ -35,7 +35,7 @@ export function AuthPasskeyStep({
       {/* パスキー登録ボタン / Passkey registration button */}
       <button
         type="button"
-        className="passkey-btn"
+        className="passkey-btn cc-press"
         onClick={onRegisterPasskey}
         disabled={passkeyPending}
       >
@@ -44,7 +44,7 @@ export function AuthPasskeyStep({
       {/* パスキー設定をスキップするボタン / Button to skip passkey setup */}
       <button
         type="button"
-        className="ghost-btn"
+        className="ghost-btn cc-press"
         onClick={onLater}
       >
         後で設定する

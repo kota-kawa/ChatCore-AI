@@ -29,7 +29,7 @@ export function AuthEntryStep({
       {supportsPasskeys ? (
         <button
           type="button"
-          className="passkey-btn"
+          className="passkey-btn cc-press"
           onClick={onPasskeyLogin}
           disabled={passkeyPending}
         >
@@ -41,7 +41,7 @@ export function AuthEntryStep({
       <div className="google-container">
         <button
           type="button"
-          className="google-btn"
+          className="google-btn cc-press"
           id="googleAuthBtn"
           onClick={onGoogleLogin}
         >
@@ -92,7 +92,7 @@ export function AuthEntryStep({
       {/* メールで認証コードを送信するボタン / Button to send authentication code by email */}
       <button
         type="button"
-        className="submit-btn"
+        className="submit-btn cc-press"
         onClick={onSendCode}
         disabled={sendingCode}
       >

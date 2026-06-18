@@ -1,4 +1,5 @@
 import { fetchJsonOrThrow } from "./runtime_validation";
+import { resilientFetch } from "./resilient_fetch";
 
 type JsonRecord = Record<string, unknown>;
 type PasskeyAction = "authenticate" | "register";
@@ -128,7 +129,8 @@ async function requestJson(url: string, init?: RequestInit): Promise<JsonRecord>
     },
     {
       defaultMessage: "認証に失敗しました。",
-      hasApplicationError: (data) => data.status === "fail"
+      hasApplicationError: (data) => data.status === "fail",
+      fetchImpl: resilientFetch
     }
   );
   return payload;

@@ -36,7 +36,7 @@ export function AuthCodeStep({
       {/* 認証コードを送信するボタン / Button to submit the authentication code */}
       <button
         type="button"
-        className="submit-btn"
+        className="submit-btn cc-press"
         onClick={onVerifyCode}
         disabled={verifyingCode}
       >
@@ -52,7 +52,7 @@ export function AuthCodeStep({
       {/* メールアドレス入力画面に戻るボタン / Button to go back to email input */}
       <button
         type="button"
-        className="ghost-btn"
+        className="ghost-btn cc-press"
         onClick={onBack}
         disabled={verifyingCode}
       >

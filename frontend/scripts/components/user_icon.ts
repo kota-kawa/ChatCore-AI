@@ -158,7 +158,7 @@ async function postLogoutAndRedirect() {
   // Clear the persisted SWR cache so a switched user never sees the previous user's data.
   clearPersistentCache();
   try {
-    const response = await fetch("/logout", {
+    const response = await resilientFetch("/logout", {
       method: "POST",
       credentials: "same-origin"
     });

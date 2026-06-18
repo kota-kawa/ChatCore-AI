@@ -15,7 +15,7 @@ export default function NotFoundPage() {
           <h1>404 - ページが見つかりません</h1>
           <p>お探しのページは存在しないか、移動・削除された可能性があります。</p>
           {/* トップページへの導線 / Link back to the top page */}
-          <a href="/" className="cc-texture-btn cc-texture-btn--indigo">
+          <a href="/" className="cc-texture-btn cc-texture-btn--indigo cc-press">
             トップページへ戻る
           </a>
         </div>

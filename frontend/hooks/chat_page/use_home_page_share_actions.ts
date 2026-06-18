@@ -7,6 +7,7 @@ import {
   extractApiErrorMessage,
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 
 type ShareStatus = {
   message: string;
@@ -67,7 +68,7 @@ export function useHomePageShareActions({
       setShareStatus({ message: "共有リンクを生成しています...", error: false });
 
       try {
-        const response = await fetch("/api/share_chat_room", {
+        const response = await resilientFetch("/api/share_chat_room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
