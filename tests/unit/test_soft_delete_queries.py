@@ -6,7 +6,6 @@ from blueprints.prompt_share.prompt_manage_api import (
     _delete_prompt_for_user,
     _delete_saved_prompt_for_user,
 )
-from blueprints.prompt_share.prompt_share_api import _remove_bookmark_for_user
 
 
 # テスト用の疑似DBカーソルクラス。
@@ -114,22 +113,6 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         self.assertIn("UPDATE prompts SET deleted_at = CURRENT_TIMESTAMP", query)
         self.assertNotIn("DELETE FROM prompts", query)
         self.assertEqual(params, (77, 8))
-
-    # ブックマークの削除（解除）処理においては、論理削除ではなく物理的な削除（DELETE文）が行われることを確認します。
-    # Verify that removing a bookmark executes a hard delete (DELETE statement) in prompt_list_entries.
-    def test_remove_bookmark_deletes_prompt_list_entry(self):
-        fake_cursor = FakeCursor()
-        fake_conn = FakeConnection(fake_cursor)
-
-        # ブックマーク削除関数をモックされたDB接続を利用して呼び出し
-        # Call the remove bookmark function using the mocked DB connection
-        with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
-            _remove_bookmark_for_user(3, 42)
-
-        query, params = fake_cursor.executed[0]
-        self.assertIn("DELETE FROM prompt_list_entries", query)
-        self.assertEqual(params, (3, 42))
-
 
 if __name__ == "__main__":
     unittest.main()

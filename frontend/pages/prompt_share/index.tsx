@@ -27,9 +27,7 @@ import {
   fetchPromptSearchResults,
   reportPromptComment,
   addPromptAsTask,
-  removePromptBookmark,
   removePromptLike,
-  savePromptBookmark,
   savePromptLike
 } from "../../scripts/prompt_share/api";
 import {
@@ -141,8 +139,8 @@ export const getServerSideProps: GetServerSideProps<PromptSharePageProps> = asyn
   }
 };
 
-// プロンプト共有ページのメインコンポーネント。検索・フィルタ・モーダル・いいね・ブックマークなど全機能を管理する
-// Main component for the prompt share page; manages search, filters, modals, likes, bookmarks, and all other features
+// プロンプト共有ページのメインコンポーネント。検索・フィルタ・モーダル・いいね・チャット追加など全機能を管理する
+// Main component for the prompt share page; manages search, filters, modals, likes, use-in-chat, and all other features
 export default function PromptSharePage({ initialPrompts = [] }: PromptSharePageProps) {
   // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
   // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
@@ -203,7 +201,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   // Tracks open card dropdown and pending action IDs to prevent duplicate requests
   const [openDropdownPromptId, setOpenDropdownPromptId] = useState<string | null>(null);
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
-  const [bookmarkPendingIds, setBookmarkPendingIds] = useState<Set<string>>(new Set());
   const [actionEffectIds, setActionEffectIds] = useState<Set<string>>(new Set());
   const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
 
@@ -264,7 +261,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const promptAssistControllerRef = useRef<{ reset: () => void; updateForPromptType: (t: string) => void } | null>(null);
   const promptTypeRef = useRef<PromptType>("text");
   const likePendingIdsRef = useRef<Set<string>>(new Set());
-  const bookmarkPendingIdsRef = useRef<Set<string>>(new Set());
   // アニメーション効果のタイマーIDを管理し、素早い連続操作でタイマーが積み重ならないようにする
   // Stores animation effect timer IDs to cancel previous timers on rapid successive actions
   const actionEffectTimersRef = useRef<Map<string, number>>(new Map());
@@ -609,18 +605,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setLikePendingIds(new Set(likePendingIdsRef.current));
   }, []);
 
-  // ブックマーク操作のAPIリクエスト中に重複送信を防ぐためのフラグを管理する
-  // Manages a pending flag to prevent duplicate bookmark API requests
-  const setBookmarkPending = useCallback((clientId: string, pending: boolean) => {
-    if (pending) {
-      bookmarkPendingIdsRef.current.add(clientId);
-    } else {
-      bookmarkPendingIdsRef.current.delete(clientId);
-    }
-    setBookmarkPendingIds(new Set(bookmarkPendingIdsRef.current));
-  }, []);
-
-  // いいね・ブックマーク時のアニメーション効果を発火させ、一定時間後に自動解除する
+  // いいね時のアニメーション効果を発火させ、一定時間後に自動解除する
   // Triggers a visual animation effect and automatically removes it after a fixed duration
   const triggerActionEffect = useCallback((effectId: string) => {
     const activeTimerId = actionEffectTimersRef.current.get(effectId);
@@ -1171,25 +1156,25 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setOpenDropdownPromptId(null);
   }, []);
 
-  // プロンプトをタスクとして追加するAPIを呼び出す。未ログインの場合はトーストで案内する
-  // Calls the add-as-task API; shows a toast guide if the user is not logged in
+  // プロンプトをチャットで使えるように追加するAPIを呼び出す。未ログインの場合はトーストで案内する
+  // Calls the use-in-chat API; shows a toast guide if the user is not logged in
   const handleAddPromptAsTask = useCallback(
     async (prompt: PromptRecord) => {
       const promptId = prompt.clientId;
       setOpenDropdownPromptId(null);
 
       if (!isLoggedIn) {
-        showToast("タスクとして追加するにはログインが必要です。", { variant: "error" });
+        showToast("チャットで使うにはログインが必要です。", { variant: "error" });
         return;
       }
 
       setAddAsTaskPending(promptId, true);
       try {
         await addPromptAsTask(prompt);
-        showToast("タスクとして追加しました。", { variant: "success" });
+        showToast("チャットで使えるように追加しました。", { variant: "success" });
       } catch (error) {
-        console.error("タスク追加中にエラーが発生しました:", error);
-        showToast("タスクとして追加中にエラーが発生しました。", { variant: "error" });
+        console.error("チャット追加中にエラーが発生しました:", error);
+        showToast("チャットで使う準備中にエラーが発生しました。", { variant: "error" });
       } finally {
         setAddAsTaskPending(promptId, false);
       }
@@ -1240,47 +1225,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       }
     },
     [isLoggedIn, setLikePending, triggerActionEffect, updatePromptRecord]
-  );
-
-  // ブックマーク状態を楽観的UIで即座に反映し、API失敗時はロールバックする
-  // Optimistically updates the bookmark state immediately and rolls back if the API call fails
-  const handleTogglePromptBookmark = useCallback(
-    async (prompt: PromptRecord) => {
-      if (!isLoggedIn) {
-        showToast("ブックマークするにはログインが必要です。", { variant: "error" });
-        return;
-      }
-
-      const promptId = prompt.clientId;
-      if (bookmarkPendingIdsRef.current.has(promptId)) {
-        return;
-      }
-
-      const shouldBookmark = !prompt.bookmarked;
-      setBookmarkPending(promptId, true);
-      updatePromptRecord(promptId, (currentPrompt) => ({
-        ...currentPrompt,
-        bookmarked: shouldBookmark
-      }));
-      if (shouldBookmark) {
-        triggerActionEffect(`${promptId}:bookmark`);
-      }
-
-      try {
-        const request = shouldBookmark ? savePromptBookmark(prompt) : removePromptBookmark(prompt);
-        await request;
-      } catch (error) {
-        console.error("ブックマーク操作エラー:", error);
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          bookmarked: !shouldBookmark
-        }));
-        showToast("ブックマークの更新中にエラーが発生しました。", { variant: "error" });
-      } finally {
-        setBookmarkPending(promptId, false);
-      }
-    },
-    [isLoggedIn, setBookmarkPending, triggerActionEffect, updatePromptRecord]
   );
 
   // 未ログイン時はトーストで案内し、ログイン済みの場合は投稿モーダルを開く
@@ -1851,7 +1795,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         feedbackToShow={feedbackToShow}
         openDropdownPromptId={openDropdownPromptId}
         likePendingIds={likePendingIds}
-        bookmarkPendingIds={bookmarkPendingIds}
         actionEffectIds={actionEffectIds}
         addAsTaskPendingIds={addAsTaskPendingIds}
         onOpenDetail={openPromptDetailModal}
@@ -1861,7 +1804,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         onCloseDropdown={closePromptDropdown}
         onAddAsTask={handleAddPromptAsTask}
         onToggleLike={handleTogglePromptLike}
-        onToggleBookmark={handleTogglePromptBookmark}
       >
 
         {/* プロンプト投稿フォームのモーダル。ログイン済みユーザーのみ利用可能 / Composer modal for posting new prompts; only available to logged-in users */}

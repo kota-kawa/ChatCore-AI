@@ -13,44 +13,6 @@ type ApiResponse = {
   [key: string]: unknown;
 };
 
-export async function sendBookmarkRequest(
-  method: "POST" | "DELETE",
-  payload: Record<string, unknown>
-) {
-  // ブックマーク系APIの共通処理（HTTP失敗と業務エラーを同じ経路で扱う）
-  // Shared bookmark API helper handling both HTTP and business-level errors.
-  const { payload: data } = await fetchJsonOrThrow<ApiResponse>(
-    "/prompt_share/api/bookmark",
-    {
-      method,
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }
-  );
-  return data;
-}
-
-export function savePromptBookmark(prompt: PromptData) {
-  if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("ブックマーク対象のプロンプトIDが見つかりません。"));
-  }
-
-  return sendBookmarkRequest("POST", {
-    prompt_id: prompt.id
-  });
-}
-
-export function removePromptBookmark(prompt: PromptData) {
-  if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("ブックマーク対象のプロンプトIDが見つかりません。"));
-  }
-
-  return sendBookmarkRequest("DELETE", {
-    prompt_id: prompt.id
-  });
-}
-
 export async function sendLikeRequest(method: "POST" | "DELETE", prompt: PromptData) {
   if (prompt.id === undefined || prompt.id === null) {
     return Promise.reject(new Error("いいね対象のプロンプトIDが見つかりません。"));
@@ -136,7 +98,7 @@ export function addPromptAsTask(prompt: PromptData) {
   // タスク追加対象IDが無い場合はAPI呼び出し前に明確なエラーを返す
   // Fail fast before API call when prompt ID is missing.
   if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("タスク追加対象のプロンプトIDが見つかりません。"));
+    return Promise.reject(new Error("チャットで使う対象のプロンプトIDが見つかりません。"));
   }
 
   return fetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {

@@ -370,7 +370,6 @@ def delete_user_account(user_id: int) -> bool:
 
             for query in (
                 "DELETE FROM prompt_likes WHERE user_id = %s",
-                "DELETE FROM prompt_list_entries WHERE user_id = %s",
                 "DELETE FROM memo_entries WHERE user_id = %s",
                 "DELETE FROM memory_facts WHERE user_id = %s",
                 "DELETE FROM user_auth_providers WHERE user_id = %s",

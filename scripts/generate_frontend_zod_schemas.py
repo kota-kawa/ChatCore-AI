@@ -16,8 +16,6 @@ if str(REPO_ROOT) not in sys.path:
 from services.request_models import (  # noqa: E402
     AddTaskRequest,
     AuthCodeRequest,
-    BookmarkCreateRequest,
-    BookmarkDeleteRequest,
     ChatMessageRequest,
     ChatRoomIdRequest,
     ChatRoomIdsRequest,
@@ -34,7 +32,6 @@ from services.request_models import (  # noqa: E402
     MemoUpdateRequest,
     NewChatRoomRequest,
     PromptAssistRequest,
-    PromptListEntryCreateRequest,
     PromptTaskCreateRequest,
     PromptUpdateRequest,
     RenameChatRoomRequest,
@@ -51,12 +48,11 @@ from services.response_models import (  # noqa: E402
     ChatGenerationStatusResponse,
     ChatHistoryResponse,
     ChatJsonResponse,
+    LikedPromptApi,
+    LikedPromptsApiResponse,
     MemoSaveResponse,
     MyPromptsApiResponse,
-    PromptListEntryApi,
-    PromptListEntryLegacyApi,
     PromptRecordApi,
-    PromptListApiResponse,
     PromptManageMutationApiResponse,
     ShareChatRoomResponse,
     StoredChatHistoryEntry,
@@ -81,10 +77,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("AddTaskRequest", AddTaskRequest),
     ("PromptAssistRequest", PromptAssistRequest),
     ("SharedPromptCreateRequest", SharedPromptCreateRequest),
-    ("BookmarkCreateRequest", BookmarkCreateRequest),
-    ("BookmarkDeleteRequest", BookmarkDeleteRequest),
     ("PromptTaskCreateRequest", PromptTaskCreateRequest),
-    ("PromptListEntryCreateRequest", PromptListEntryCreateRequest),
     ("PromptUpdateRequest", PromptUpdateRequest),
     ("MemoCreateRequest", MemoCreateRequest),
     ("ShareMemoRequest", ShareMemoRequest),
@@ -106,10 +99,9 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("ShareChatRoomResponse", ShareChatRoomResponse),
     ("StoredChatHistoryEntry", StoredChatHistoryEntry),
     ("PromptRecordApi", PromptRecordApi),
-    ("PromptListEntryApi", PromptListEntryApi),
-    ("PromptListEntryLegacyApi", PromptListEntryLegacyApi),
+    ("LikedPromptApi", LikedPromptApi),
     ("MyPromptsApiResponse", MyPromptsApiResponse),
-    ("PromptListApiResponse", PromptListApiResponse),
+    ("LikedPromptsApiResponse", LikedPromptsApiResponse),
     ("PromptManageMutationApiResponse", PromptManageMutationApiResponse),
     ("MemoSaveResponse", MemoSaveResponse),
 ]
@@ -250,4 +242,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

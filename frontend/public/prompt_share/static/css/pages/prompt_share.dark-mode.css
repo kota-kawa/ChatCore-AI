@@ -264,9 +264,9 @@
 }
 
 [data-theme="dark"] .prompt-share-page .prompt-action-btn.like-btn,
-[data-theme="dark"] .prompt-share-page .prompt-action-btn.bookmark-btn,
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn,
 [data-theme="dark"] .prompt-share-page .prompt-action-btn.like-btn:hover,
-[data-theme="dark"] .prompt-share-page .prompt-action-btn.bookmark-btn:hover {
+[data-theme="dark"] .prompt-share-page .prompt-action-btn.use-in-chat-btn:hover {
   background: transparent;
   box-shadow: none;
 }

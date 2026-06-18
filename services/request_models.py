@@ -255,27 +255,9 @@ class SharedPromptCreateRequest(RequestPayloadModel):
         return self
 
 
-# 日本語: プロンプトをブックマーク登録する際のリクエストペイロード。
-# English: Request payload for bookmarking a prompt.
-class BookmarkCreateRequest(RequestPayloadModel):
-    prompt_id: int
-
-
-# 日本語: プロンプトのブックマークを解除する際のリクエストペイロード。
-# English: Request payload for removing a bookmark from a prompt.
-class BookmarkDeleteRequest(RequestPayloadModel):
-    prompt_id: int
-
-
 # 日本語: 共有プロンプトからマイスペースのタスクとしてコピー登録する際のリクエストペイロード。
 # English: Request payload for importing a shared prompt into my space tasks.
 class PromptTaskCreateRequest(RequestPayloadModel):
-    prompt_id: int
-
-
-# 日本語: 共有プロンプトの一覧用レコードを内部登録する際のリクエストペイロード。
-# English: Request payload for creating a prompt list entry internally.
-class PromptListEntryCreateRequest(RequestPayloadModel):
     prompt_id: int
 
 

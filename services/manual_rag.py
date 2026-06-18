@@ -369,7 +369,7 @@ _APP_TERMS = re.compile(
     r"|パスキー|passkey"
     r"|テーマ|ダークモード|ライトモード|ダーク|ライト"
     r"|共有|シェア"
-    r"|ブックマーク|いいね|リスト"
+    r"|いいね|チャットで使う"
     r"|エージェント|aiエージェント"
     r"|このアプリ|chatcore|chat.core",
     re.IGNORECASE,

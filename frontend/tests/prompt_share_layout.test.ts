@@ -37,7 +37,6 @@ test("prompt share layout renders crawlable page content before client API data 
       feedbackToShow: null,
       openDropdownPromptId: null,
       likePendingIds: new Set<string>(),
-      bookmarkPendingIds: new Set<string>(),
       actionEffectIds: new Set<string>(),
       addAsTaskPendingIds: new Set<string>(),
       onOpenDetail: noop,
@@ -46,8 +45,7 @@ test("prompt share layout renders crawlable page content before client API data 
       onToggleDropdown: noop,
       onCloseDropdown: noop,
       onAddAsTask: noop,
-      onToggleLike: noop,
-      onToggleBookmark: noop
+      onToggleLike: noop
     })
   );
 

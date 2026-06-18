@@ -23,8 +23,6 @@ export type PromptData = {
   output_examples?: string;
   ai_model?: string;
   liked?: boolean;
-  bookmarked?: boolean;
-  saved_to_list?: boolean;
   comment_count?: number;
   created_at?: string;
 };

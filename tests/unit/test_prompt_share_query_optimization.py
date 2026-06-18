@@ -55,7 +55,7 @@ class FakeConnection:
 # クエリの最適化（フラグ情報などを一括取得する効率的なJOINクエリ）を検証するテストクラス。
 # Test case class to verify query optimization (efficient JOIN queries that fetch flags together).
 class PromptShareQueryOptimizationTestCase(unittest.TestCase):
-    # 各種フラグ情報（いいね/ブックマークなど）を含むプロンプト取得時に、不要な重複クエリではなく1回のJOINクエリで取得されることを検証します。
+    # 各種フラグ情報（いいねなど）を含むプロンプト取得時に、不要な重複クエリではなく1回のJOINクエリで取得されることを検証します。
     # Verify that get prompts with flags uses a single join query instead of multiple query executions.
     def test_get_prompts_with_flags_uses_single_join_query(self):
         # テスト対象関数から返されるダミーレコードを設定
@@ -75,8 +75,6 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
                     "reference_image_url": None,
                     "created_at": "2024-01-01T00:00:00",
                     "liked": True,
-                    "bookmarked": True,
-                    "saved_to_list": False,
                 }
             ]
         )
@@ -95,12 +93,12 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         # 必要なJOIN文が含まれ、不要なテーブルJOINがないこと、およびパラメータの妥当性を検証
         # Verify needed JOINs are present, unnecessary joins are absent, and check parameter mappings
         self.assertIn("LEFT JOIN prompt_likes AS pl", query)
-        self.assertIn("LEFT JOIN prompt_list_entries AS ple", query)
+        self.assertNotIn("LEFT JOIN prompt_list_entries AS ple", query)
         self.assertNotIn("LEFT JOIN task_with_examples AS b", query)
-        self.assertEqual(params, (7, 7))
+        self.assertEqual(params, (7,))
         self.assertTrue(prompts[0]["liked"])
-        self.assertTrue(prompts[0]["bookmarked"])
-        self.assertFalse(prompts[0]["saved_to_list"])
+        self.assertNotIn("bookmarked", prompts[0])
+        self.assertNotIn("saved_to_list", prompts[0])
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 

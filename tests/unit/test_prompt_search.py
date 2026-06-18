@@ -47,8 +47,6 @@ class FakeCursor:
                     "skill_python_script": "",
                     "created_at": "2024-01-01T00:00:00",
                     "liked": True,
-                    "bookmarked": False,
-                    "saved_to_list": True,
                 }
             ]
 
@@ -110,8 +108,8 @@ class PromptSearchTestCase(unittest.TestCase):
         # Verify that search result data and metadata are set according to specifications
         self.assertEqual(payload["prompts"][0]["id"], 11)
         self.assertTrue(payload["prompts"][0]["liked"])
-        self.assertFalse(payload["prompts"][0]["bookmarked"])
-        self.assertTrue(payload["prompts"][0]["saved_to_list"])
+        self.assertNotIn("bookmarked", payload["prompts"][0])
+        self.assertNotIn("saved_to_list", payload["prompts"][0])
         self.assertEqual(payload["prompts"][0]["skill_markdown"], "")
         self.assertEqual(payload["pagination"]["page"], 2)
         self.assertEqual(payload["pagination"]["per_page"], 20)
@@ -130,9 +128,9 @@ class PromptSearchTestCase(unittest.TestCase):
         # Verify search query conditions and LIMIT / OFFSET values
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("LEFT JOIN prompt_likes AS pl", search_query)
-        self.assertIn("LEFT JOIN prompt_list_entries AS ple", search_query)
+        self.assertNotIn("LEFT JOIN prompt_list_entries AS ple", search_query)
         self.assertIn("LIMIT %s OFFSET %s", search_query)
-        self.assertEqual(search_params[:2], (9, 9))
+        self.assertEqual(search_params[:1], (9,))
         self.assertEqual(search_params[-2:], (20, 20))
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
@@ -158,7 +156,7 @@ class PromptSearchTestCase(unittest.TestCase):
         # Verify data retrieval query conditions and parameters
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("COALESCE(p.prompt_type, 'text') = %s", search_query)
-        self.assertEqual(search_params[:3], (9, 9, "image"))
+        self.assertEqual(search_params[:2], (9, "image"))
         self.assertEqual(search_params[-2:], (10, 0))
 
     # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
