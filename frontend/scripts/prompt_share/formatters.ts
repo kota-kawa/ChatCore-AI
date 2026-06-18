@@ -50,6 +50,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     skill_markdown: prompt.skill_markdown || "",
     skill_python_script: prompt.skill_python_script || "",
     liked: Boolean(prompt.liked),
+    used_in_chat: Boolean(prompt.used_in_chat),
     comment_count: Number(prompt.comment_count || 0)
   };
 }

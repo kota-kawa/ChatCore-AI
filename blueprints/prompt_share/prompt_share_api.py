@@ -323,19 +323,19 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     return f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}"
 
 
-# 共有中プロンプトの一覧を、コメント数といいね状態を含めてDBから取得する関数
-# Fetch public shared prompts including comment counts and contextual like state.
+# 共有中プロンプトの一覧を、コメント数と利用状態を含めてDBから取得する関数
+# Fetch public shared prompts including comment counts and contextual interaction state.
 def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
     """
-    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーのLike状態と結合して取得する。
-    Fetch all public, non-deleted prompts joined with like state for the optional user ID.
+    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーの操作状態と結合して取得する。
+    Fetch all public, non-deleted prompts joined with interaction state for the optional user ID.
     """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        # 公開プロンプトとユーザーごとのLike状態をJOINで取得
+        # 公開プロンプトとユーザーごとのLike/チャット利用状態をJOINで取得
         # Execute query to select public prompts with flags joined with the specific user ID.
         cursor.execute(
             """
@@ -354,7 +354,8 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.skill_python_script,
                 p.created_at,
                 COALESCE(pc.comment_count, 0) AS comment_count,
-                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked
+                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
+                CASE WHEN used_tasks.id IS NOT NULL THEN TRUE ELSE FALSE END AS used_in_chat
             FROM prompts AS p
             LEFT JOIN users AS u
               ON u.id = p.user_id
@@ -369,11 +370,21 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             LEFT JOIN prompt_likes AS pl
               ON pl.user_id = %s
              AND pl.prompt_id = p.id
+            LEFT JOIN task_with_examples AS used_tasks
+              ON used_tasks.user_id = %s
+             AND used_tasks.deleted_at IS NULL
+             AND (
+                  used_tasks.source_prompt_id = p.id
+                  OR (
+                       used_tasks.source_prompt_id IS NULL
+                       AND used_tasks.name = p.title
+                     )
+                 )
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
             ORDER BY p.created_at DESC
             """,
-            (user_id,),
+            (user_id, user_id),
         )
         prompts = []
         # 結果の整形・真偽値キャストを実行
@@ -381,6 +392,7 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
         for row in cursor.fetchall():
             prompt = _serialize_prompt_row(dict(row))
             prompt["liked"] = bool(prompt.get("liked"))
+            prompt["used_in_chat"] = bool(prompt.get("used_in_chat"))
             prompt["comment_count"] = int(prompt.get("comment_count") or 0)
             prompts.append(prompt)
         return prompts
@@ -597,33 +609,56 @@ def _add_prompt_as_task_for_user(
         if not prompt_template:
             return {"error": "タスクとして追加できる本文がありません。"}, 400
 
-        # すでに同一タイトルかつ削除されていないタスクが登録済みかチェック
-        # Check if the task template has already been added under this title.
+        # すでに同じ共有プロンプト由来、または移行前の同一タイトルタスクが登録済みかチェック
+        # Check if the source prompt or legacy same-title task template already exists.
         cursor.execute(
             """
             SELECT id
               FROM task_with_examples
              WHERE user_id = %s
-               AND name = %s
                AND deleted_at IS NULL
+               AND (
+                    source_prompt_id = %s
+                    OR (
+                         source_prompt_id IS NULL
+                         AND name = %s
+                       )
+                   )
+             ORDER BY CASE WHEN source_prompt_id = %s THEN 0 ELSE 1 END, id ASC
+             LIMIT 1
             """,
-            (user_id, title),
+            (user_id, prompt_id, title, prompt_id),
         )
         existing = cursor.fetchone()
         if existing:
-            return {"message": "すでにタスクとして追加されています。", "saved_id": existing["id"]}, 200
+            cursor.execute(
+                """
+                UPDATE task_with_examples
+                   SET source_prompt_id = %s
+                 WHERE id = %s
+                   AND source_prompt_id IS NULL
+                """,
+                (prompt_id, existing["id"]),
+            )
+            conn.commit()
+            return {
+                "message": "すでにチャットで使えるように追加済みです。",
+                "saved_id": existing["id"],
+                "used_in_chat": True,
+            }, 200
 
         # タスクテンプレートテーブルへレコード挿入
         # Perform SQL insert into task_with_examples.
         cursor.execute(
             """
             INSERT INTO task_with_examples
-                (user_id, name, prompt_template, input_examples, output_examples)
-            VALUES (%s,      %s,   %s,               %s,             %s)
+                (user_id, source_prompt_id, name, prompt_template, input_examples, output_examples)
+            VALUES (%s,      %s,               %s,   %s,               %s,             %s)
             RETURNING id
             """,
             (
                 user_id,
+                prompt_id,
                 title,
                 prompt_template,
                 prompt.get("input_examples") or "",
@@ -632,7 +667,11 @@ def _add_prompt_as_task_for_user(
         )
         conn.commit()
         saved_id = _extract_id(cursor.fetchone())
-        return {"message": "タスクとして追加しました。", "saved_id": saved_id}, 201
+        return {
+            "message": "チャットで使えるように追加しました。",
+            "saved_id": saved_id,
+            "used_in_chat": True,
+        }, 201
     except Exception:
         if conn is not None:
             conn.rollback()
@@ -1534,7 +1573,8 @@ async def add_prompt_as_task(request: Request):
         if status_code in {200, 201} and "error" not in response_payload:
             response_payload = {
                 **response_payload,
-                "message": "チャットで使えるように追加しました。",
+                "message": response_payload.get("message") or "チャットで使えるように追加しました。",
+                "used_in_chat": True,
             }
         return jsonify(response_payload, status_code=status_code)
     except Exception:
@@ -1636,4 +1676,3 @@ async def remove_like(request: Request):
             logger,
             "Failed to remove prompt like.",
         )
-

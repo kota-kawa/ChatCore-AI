@@ -23,6 +23,7 @@ export type PromptData = {
   output_examples?: string;
   ai_model?: string;
   liked?: boolean;
+  used_in_chat?: boolean;
   comment_count?: number;
   created_at?: string;
 };

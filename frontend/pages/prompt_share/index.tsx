@@ -148,7 +148,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     return initialPrompts.map((item, index) => ({
       ...normalizePromptData(item),
       clientId: `prompt-initial-${String(item.id ?? index)}`,
-      liked: Boolean(item.liked)
+      liked: Boolean(item.liked),
+      used_in_chat: Boolean(item.used_in_chat)
     }));
   }, [initialPrompts]);
 
@@ -404,7 +405,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     return items.map((item) => ({
       ...normalizePromptData(item),
       clientId: `prompt-${++nextPromptClientIdRef.current}`,
-      liked: Boolean(item.liked)
+      liked: Boolean(item.liked),
+      used_in_chat: Boolean(item.used_in_chat)
     }));
   }, []);
 
@@ -1168,18 +1170,44 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         return;
       }
 
+      const wasUsedInChat = Boolean(prompt.used_in_chat);
+      if (!wasUsedInChat) {
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          used_in_chat: true
+        }));
+        triggerActionEffect(`${promptId}:use-in-chat`);
+      }
+
       setAddAsTaskPending(promptId, true);
       try {
-        await addPromptAsTask(prompt);
-        showToast("チャットで使えるように追加しました。", { variant: "success" });
+        const response = await addPromptAsTask(prompt);
+        const responseMessage =
+          typeof response.message === "string" && response.message.trim()
+            ? response.message
+            : wasUsedInChat
+              ? "すでにチャットで使えるように追加済みです。"
+              : "チャットで使えるように追加しました。";
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          used_in_chat: true
+        }));
+        if (wasUsedInChat) {
+          triggerActionEffect(`${promptId}:use-in-chat`);
+        }
+        showToast(responseMessage, { variant: "success" });
       } catch (error) {
         console.error("チャット追加中にエラーが発生しました:", error);
+        updatePromptRecord(promptId, (currentPrompt) => ({
+          ...currentPrompt,
+          used_in_chat: wasUsedInChat
+        }));
         showToast("チャットで使う準備中にエラーが発生しました。", { variant: "error" });
       } finally {
         setAddAsTaskPending(promptId, false);
       }
     },
-    [isLoggedIn, setAddAsTaskPending]
+    [isLoggedIn, setAddAsTaskPending, triggerActionEffect, updatePromptRecord]
   );
 
   // いいね状態を楽観的UIで即座に反映し、API失敗時はロールバックする

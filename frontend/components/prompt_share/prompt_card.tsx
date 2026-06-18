@@ -11,10 +11,11 @@ import {
 import type { PromptData } from "../../scripts/prompt_share/types";
 
 // サーバーから受け取ったPromptDataに、クライアント専用の状態を追加した拡張型
-// Extends server-side PromptData with client-only state (local ID and like status)
+// Extends server-side PromptData with client-only state (local ID and action status)
 export type PromptRecord = PromptData & {
   clientId: string;
   liked: boolean;
+  used_in_chat: boolean;
 };
 
 // カードが受け取るすべての操作ハンドラと状態をまとめたProps型
@@ -25,6 +26,7 @@ type PromptCardProps = {
   isLikePending: boolean;
   isLikeEffectActive: boolean;
   isAddAsTaskPending: boolean;
+  isUseInChatEffectActive: boolean;
   onOpenDetail: (prompt: PromptRecord) => void;
   onOpenComments: (prompt: PromptRecord) => void;
   onOpenShare: (prompt: PromptRecord, event: MouseEvent<HTMLButtonElement>) => void;
@@ -40,6 +42,7 @@ function PromptCardComponent({
   isLikePending,
   isLikeEffectActive,
   isAddAsTaskPending,
+  isUseInChatEffectActive,
   onOpenDetail,
   onOpenComments,
   onOpenShare,
@@ -55,6 +58,7 @@ function PromptCardComponent({
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
+  const isUsedInChat = Boolean(prompt.used_in_chat);
 
   // SKILLタイプはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-type prompts; fall back to content otherwise
@@ -206,11 +210,18 @@ function PromptCardComponent({
           {/* チャットで使う操作も二重送信を防ぐ */}
           {/* Guard the use-in-chat action against duplicate API requests */}
           <button
-            className={`prompt-action-btn use-in-chat-btn${isAddAsTaskPending ? " is-pending" : ""}`}
+            className={`prompt-action-btn use-in-chat-btn${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label="チャットで使う"
+            aria-label={isUsedInChat ? "チャットで使用済み" : "チャットで使う"}
+            aria-pressed={isUsedInChat ? "true" : "false"}
             aria-disabled={isAddAsTaskPending ? "true" : "false"}
-            data-tooltip={isAddAsTaskPending ? "チャットに追加中" : "チャットで使う"}
+            data-tooltip={
+              isAddAsTaskPending
+                ? "チャットに追加中"
+                : isUsedInChat
+                  ? "チャットで使えるように追加済み"
+                  : "チャットで使う"
+            }
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
@@ -220,7 +231,7 @@ function PromptCardComponent({
               void onAddAsTask(prompt);
             }}
           >
-            <i className="bi bi-plus-square"></i>
+            <i className={`bi ${isUsedInChat ? "bi-plus-square-fill" : "bi-plus-square"}`}></i>
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import unittest
 from unittest.mock import patch
 
@@ -35,11 +36,13 @@ class PromptUseInChatApiTestCase(unittest.TestCase):
         # Mock the helper response for adding a prompt as a task
         with patch(
             "blueprints.prompt_share.prompt_share_api._add_prompt_as_task_for_user",
-            return_value=({"message": "タスクとして追加しました。"}, 201),
+            return_value=({"message": "チャットで使えるように追加しました。", "used_in_chat": True}, 201),
         ) as mock_add:
             response = asyncio.run(add_prompt_as_task(request))
 
         self.assertEqual(response.status_code, 201)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertTrue(payload["used_in_chat"])
         mock_add.assert_called_once_with(5, 10)
 
     # スキル型プロンプトからタスク用テンプレートを生成する際、説明文やPythonスクリプトが欠落せず維持されることを検証します。
