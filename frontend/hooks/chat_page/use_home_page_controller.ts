@@ -319,7 +319,11 @@ export function useHomePageController() {
     setMessages,
   });
   const hasCurrentRoom = Boolean(currentRoomId);
-  const { data: cachedChatRoomsPage, mutate: mutateChatRooms } = useSWR<ChatRoomsPage>(
+  const {
+    data: cachedChatRoomsPage,
+    isLoading: isLoadingChatRoomsPage,
+    mutate: mutateChatRooms,
+  } = useSWR<ChatRoomsPage>(
     loggedIn ? buildChatRoomsPageUrl() : null,
     fetchChatRoomsPage,
     {
@@ -329,6 +333,7 @@ export function useHomePageController() {
     },
   );
   const cachedChatRooms = cachedChatRoomsPage?.rooms;
+  const isChatRoomsInitialLoading = loggedIn && isLoadingChatRoomsPage && chatRooms.length === 0;
 
   const loadMoreChatRooms = useCallback(async () => {
     if (!loggedIn || !chatRoomsHasMore || isLoadingMoreChatRooms || loadingMoreChatRoomsRef.current) return;
@@ -1073,6 +1078,7 @@ export function useHomePageController() {
     sidebarOpen,
     chatRooms,
     chatRoomsHasMore,
+    isChatRoomsInitialLoading,
     isLoadingMoreChatRooms,
     currentRoomId,
     currentRoomMode,

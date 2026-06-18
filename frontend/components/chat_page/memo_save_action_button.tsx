@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { isRecord } from "../../lib/utils";
+import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
 
 // メモ保存ボタンのprops型定義
@@ -43,7 +44,7 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
     try {
       // メモ保存APIにAI回答をPOSTする
       // POST the AI response to the memo save API
-      const response = await fetch("/memo/api", {
+      const response = await resilientFetch("/memo/api", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

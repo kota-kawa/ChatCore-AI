@@ -26,6 +26,12 @@
   min-height: 1px;
 }
 
+.chat-room-list__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 /* ルームカード */
 .chat-room-card {
   background: transparent;
@@ -47,6 +53,16 @@
   font-size: 0.9rem;
   color: var(--text-dark, #1a1a1a);
   -webkit-tap-highlight-color: transparent;
+}
+
+.chat-room-card--skeleton {
+  cursor: default;
+  pointer-events: none;
+  justify-content: flex-start;
+}
+
+.chat-room-card--skeleton .cc-skeleton {
+  height: 0.9rem;
 }
 
 .chat-room-card__trigger {

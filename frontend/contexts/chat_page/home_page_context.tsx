@@ -63,6 +63,7 @@ type HomePageChatContextValue = Pick<
   | "sidebarOpen"
   | "chatRooms"
   | "chatRoomsHasMore"
+  | "isChatRoomsInitialLoading"
   | "isLoadingMoreChatRooms"
   | "currentRoomId"
   | "currentRoomMode"
@@ -230,6 +231,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       sidebarOpen: controller.sidebarOpen,
       chatRooms: controller.chatRooms,
       chatRoomsHasMore: controller.chatRoomsHasMore,
+      isChatRoomsInitialLoading: controller.isChatRoomsInitialLoading,
       isLoadingMoreChatRooms: controller.isLoadingMoreChatRooms,
       currentRoomId: controller.currentRoomId,
       currentRoomMode: controller.currentRoomMode,
@@ -274,6 +276,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.sidebarOpen,
       controller.chatRooms,
       controller.chatRoomsHasMore,
+      controller.isChatRoomsInitialLoading,
       controller.isLoadingMoreChatRooms,
       controller.currentRoomId,
       controller.currentRoomMode,

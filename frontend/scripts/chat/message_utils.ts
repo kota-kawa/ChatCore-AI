@@ -3,6 +3,7 @@
 import DOMPurify from "dompurify";
 import { getSharedDomRefs } from "../core/dom";
 import { sanitizeClassAttributeValue } from "../core/html";
+import { resilientFetch } from "../core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../core/runtime_validation";
 import { MemoSaveResponseSchema } from "../../types/generated/api_schemas";
 
@@ -316,7 +317,7 @@ function createMemoSaveBtn(getText: () => string) {
     setActionButtonIcon(btn, "bi-hourglass-split");
 
     try {
-      const response = await fetch("/memo/api", {
+      const response = await resilientFetch("/memo/api", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

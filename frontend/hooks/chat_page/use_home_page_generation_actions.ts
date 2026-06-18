@@ -832,7 +832,7 @@ export function useHomePageGenerationActions({
 
         let generationStatus = normalizeGenerationStatusPayload({});
         try {
-          const statusResponse = await fetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
+          const statusResponse = await resilientFetch(`/api/chat_generation_status?room_id=${encodeURIComponent(roomId)}`, {
             credentials: "same-origin",
           });
           generationStatus = normalizeGenerationStatusPayload(await readJsonBodySafe(statusResponse));
@@ -972,7 +972,7 @@ export function useHomePageGenerationActions({
   const switchBranch = useCallback(
     async (messageId: number, roomId: string) => {
       try {
-        const response = await fetch("/api/chat_switch_branch", {
+        const response = await resilientFetch("/api/chat_switch_branch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -1002,7 +1002,7 @@ export function useHomePageGenerationActions({
   );
 
   const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
-    const response = await fetch("/api/new_chat_room", {
+    const response = await resilientFetch("/api/new_chat_room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -1158,7 +1158,7 @@ export function useHomePageGenerationActions({
     if (!roomId) return;
 
     try {
-      await fetch("/api/chat_stop", {
+      await resilientFetch("/api/chat_stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

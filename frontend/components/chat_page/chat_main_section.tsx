@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
 import { InlineLoading } from "../ui/inline_loading";
+import { Skeleton } from "../ui/skeleton";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
@@ -39,6 +40,7 @@ function ChatMainSectionComponent() {
     sidebarOpen,
     chatRooms,
     chatRoomsHasMore,
+    isChatRoomsInitialLoading,
     isLoadingMoreChatRooms,
     currentRoomId,
     currentRoomMode,
@@ -257,7 +259,7 @@ function ChatMainSectionComponent() {
         <div className="header-left">
           <button
             id="back-to-setup"
-            className="icon-button"
+            className="icon-button cc-press"
             data-tooltip="タスク選択に戻る"
             data-tooltip-placement="bottom"
             onClick={() => {
@@ -279,7 +281,7 @@ function ChatMainSectionComponent() {
           >
             <button
               type="button"
-              className="chat-header-model-trigger"
+              className="chat-header-model-trigger cc-press"
               aria-haspopup="listbox"
               aria-expanded={chatHeaderModelMenuOpen ? "true" : "false"}
               onClick={() => {
@@ -295,7 +297,7 @@ function ChatMainSectionComponent() {
                 <button
                   key={option.value}
                   type="button"
-                  className={`chat-header-model-option ${selectedModel === option.value ? "is-selected" : ""}`.trim()}
+                  className={`chat-header-model-option cc-press ${selectedModel === option.value ? "is-selected" : ""}`.trim()}
                   role="option"
                   aria-selected={selectedModel === option.value ? "true" : "false"}
                   onClick={() => {
@@ -313,7 +315,7 @@ function ChatMainSectionComponent() {
           {/* Share button disabled for temporary rooms or during launch; tooltip reflects reason */}
           <button
             id="share-chat-btn"
-            className={`icon-button chat-share-btn ${canShareCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
+            className={`icon-button chat-share-btn cc-press ${canShareCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
             type="button"
             data-tooltip={currentRoomMode === "temporary" ? "未保存チャットは共有できません" : "このチャットを共有"}
             data-tooltip-placement="bottom"
@@ -345,7 +347,7 @@ function ChatMainSectionComponent() {
               <span className="room-selection-bar__count">{selectedRoomCount}件選択中</span>
               <button
                 type="button"
-                className="room-selection-bar__button room-selection-bar__button--danger"
+                className="room-selection-bar__button room-selection-bar__button--danger cc-press"
                 disabled={!hasSelectedRooms || isBulkDeletingRooms}
                 onClick={() => {
                   void handleBulkDeleteRooms();
@@ -356,7 +358,7 @@ function ChatMainSectionComponent() {
               </button>
               <button
                 type="button"
-                className="room-selection-bar__button"
+                className="room-selection-bar__button cc-press"
                 disabled={isBulkDeletingRooms}
                 onClick={() => {
                   cancelRoomSelection();
@@ -368,7 +370,7 @@ function ChatMainSectionComponent() {
           ) : (
             <button
               id="new-chat-btn"
-              className="new-chat-btn"
+              className="new-chat-btn cc-press"
               onClick={() => {
                 handleNewChat();
               }}
@@ -377,7 +379,16 @@ function ChatMainSectionComponent() {
             </button>
           )}
 
-          <div id="chat-room-list" aria-busy={isLoadingMoreChatRooms ? "true" : "false"}>
+          <div id="chat-room-list" aria-busy={isChatRoomsInitialLoading || isLoadingMoreChatRooms ? "true" : "false"}>
+            {isChatRoomsInitialLoading && (
+              <div className="chat-room-list__skeleton" role="status" aria-live="polite" aria-label="チャット履歴を読み込み中">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="chat-room-card chat-room-card--skeleton">
+                    <Skeleton variant="text" width={index === 0 ? "72%" : "88%"} />
+                  </div>
+                ))}
+              </div>
+            )}
             {chatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
               // タイトルが空の場合は「新規チャット」をフォールバック表示する。
@@ -389,7 +400,7 @@ function ChatMainSectionComponent() {
               return (
                 <div
                   key={room.id}
-                  className={`chat-room-card ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""}`.trim()}
+                  className={`chat-room-card cc-press ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""}`.trim()}
                   // 選択モード時は checkbox、通常時は button として扱い、アクセシビリティを確保する。
                   // Use checkbox role in selection mode, button role otherwise for accessibility.
                   role={isRoomSelectionMode ? "checkbox" : "button"}
@@ -428,7 +439,7 @@ function ChatMainSectionComponent() {
                     <div className="chat-room-card-actions">
                       <button
                         type="button"
-                        className="room-actions-icon"
+                        className="room-actions-icon cc-press"
                         aria-label={`${roomTitle} の操作メニューを開く`}
                         aria-haspopup="menu"
                         aria-expanded={roomMenuOpen ? "true" : "false"}
@@ -451,7 +462,7 @@ function ChatMainSectionComponent() {
                       >
                         <button
                           type="button"
-                          className="menu-item menu-item--rename"
+                          className="menu-item menu-item--rename cc-press"
                           role="menuitem"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -464,7 +475,7 @@ function ChatMainSectionComponent() {
 
                         <button
                           type="button"
-                          className="menu-item menu-item--select"
+                          className="menu-item menu-item--select cc-press"
                           role="menuitem"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -476,7 +487,7 @@ function ChatMainSectionComponent() {
 
                         <button
                           type="button"
-                          className="menu-item menu-item--delete"
+                          className="menu-item menu-item--delete cc-press"
                           role="menuitem"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -508,7 +519,7 @@ function ChatMainSectionComponent() {
           {/* Sidebar toggle button; aria-expanded communicates open/closed state accessibly. */}
           <button
             id="sidebar-toggle"
-            className="icon-button sidebar-toggle chat-sidebar-toggle"
+            className="icon-button sidebar-toggle chat-sidebar-toggle cc-press"
             aria-label={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
             aria-controls="chat-room-sidebar"
             data-tooltip={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
@@ -620,7 +631,7 @@ function ChatMainSectionComponent() {
               />
               <button
                 type="button"
-                className="chat-attach-btn"
+                className="chat-attach-btn cc-press"
                 aria-label="ファイルを添付"
                 data-tooltip="ファイルを添付"
                 data-tooltip-placement="top"
@@ -651,7 +662,7 @@ function ChatMainSectionComponent() {
               <button
                 type="button"
                 id="send-btn"
-                className={isGenerating ? "send-btn--stop" : ""}
+                className={`cc-press ${isGenerating ? "send-btn--stop" : ""}`.trim()}
                 aria-label={isGenerating ? "停止" : "送信"}
                 data-tooltip={isGenerating ? "生成を停止" : "メッセージを送信"}
                 data-tooltip-placement="top"
