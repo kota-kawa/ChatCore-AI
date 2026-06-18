@@ -10,6 +10,15 @@ from services.attached_files import (
     MAX_ATTACHED_FILE_CONTENT_LENGTH,
     MAX_ATTACHED_FILES,
 )
+from services.prompt_types import (
+    DEFAULT_CONTENT_FORMAT,
+    DEFAULT_MEDIA_TYPE,
+    normalize_content_format,
+    normalize_media_type,
+    requires_content,
+    sanitize_attributes,
+    validate_attributes,
+)
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 
@@ -235,22 +244,28 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     title: NonEmptyStr
     category: str = ""
     content: str = ""
-    prompt_type: Literal["text", "image", "skill"] = "text"
+    # 2軸モデル: フォーマット軸 (prompt/skill...) × メディア軸 (text/image...)。
+    # Two-axis model: content format axis × media type axis. See services/prompt_types.py.
+    content_format: str = DEFAULT_CONTENT_FORMAT
+    media_type: str = DEFAULT_MEDIA_TYPE
     input_examples: str = ""
     output_examples: str = ""
     ai_model: str = ""
-    skill_markdown: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
-    skill_python_script: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
+    # フォーマット固有の構造化フィールド (例: skill_markdown)。許可キーのみ採用。
+    # Format-specific structured fields (e.g. skill_markdown); only declared keys are kept.
+    attributes: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_skill_fields(self) -> "SharedPromptCreateRequest":
-        # 日本語: SKILLと通常のプロンプトでそれぞれ必須フィールドを検証します。
-        # English: Validate required fields respectively for SKILL and standard prompt types.
-        if self.prompt_type == "skill":
-            if not self.skill_markdown:
-                raise ValueError("SKILL投稿では skill_markdown が必須です。")
-            return self
-        if not self.content:
+    def validate_two_axis(self) -> "SharedPromptCreateRequest":
+        # 日本語: 軸の値を正規化し、フォーマットが宣言する属性のみ採用・検証します。
+        # English: Normalize the axes and keep/validate only the attributes the format declares.
+        self.content_format = normalize_content_format(self.content_format)
+        self.media_type = normalize_media_type(self.media_type)
+        self.attributes = sanitize_attributes(self.content_format, self.attributes)
+        errors = validate_attributes(self.content_format, self.attributes)
+        if errors:
+            raise ValueError(errors[0])
+        if requires_content(self.content_format) and not self.content:
             raise ValueError("通常投稿では content が必須です。")
         return self
 

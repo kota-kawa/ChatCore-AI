@@ -117,11 +117,11 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.category, "")
 
-    # プロンプト種別がテキストの場合、本文（content）の指定が必須であることを検証します。
-    # Verify that prompt creation requires content when prompt_type is set to 'text'.
+    # prompt フォーマットの場合、本文（content）の指定が必須であることを検証します。
+    # Verify that prompt creation requires content for the 'prompt' content format.
     def test_prompt_create_requires_content_for_text_type(self):
-        # テキスト種別で本文が空欄のときに ValidationError が発生することを確認
-        # Check that a ValidationError is raised when content is empty for text prompt type
+        # 本文が空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when content is empty for the prompt format
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
@@ -130,15 +130,16 @@ class RequestModelsTestCase(unittest.TestCase):
                     "category": "",
                     "content": "",
                     "author": "author",
-                    "prompt_type": "text",
+                    "content_format": "prompt",
+                    "media_type": "text",
                 },
             )
 
-    # プロンプト種別がスキルの場合、解説用のMarkdown（skill_markdown）の指定が必須であることを検証します。
-    # Verify that prompt creation requires skill markdown when prompt_type is set to 'skill'.
+    # skill フォーマットの場合、解説用のMarkdown（attributes.skill_markdown）が必須であることを検証します。
+    # Verify that the skill format requires attributes.skill_markdown.
     def test_prompt_create_requires_skill_markdown_for_skill_type(self):
-        # スキル種別で解説用Markdownが空欄のときに ValidationError が発生することを確認
-        # Check that a ValidationError is raised when skill_markdown is empty for skill prompt type
+        # skill定義Markdownが空欄のときに ValidationError が発生することを確認
+        # Check that a ValidationError is raised when skill_markdown is empty for the skill format
         with self.assertRaises(ValidationError):
             _validate(
                 SharedPromptCreateRequest,
@@ -147,16 +148,16 @@ class RequestModelsTestCase(unittest.TestCase):
                     "category": "",
                     "content": "概要",
                     "author": "author",
-                    "prompt_type": "skill",
-                    "skill_markdown": "   ",
+                    "content_format": "skill",
+                    "attributes": {"skill_markdown": "   "},
                 },
             )
 
-    # プロンプト種別がスキルの場合に Python スクリプトを含んだペイロードが正常に受け入れられることを検証します。
-    # Verify that prompt creation accepts a skill payload containing a python script.
+    # skill フォーマットで Python スクリプトを含んだペイロードが正常に受け入れられることを検証します。
+    # Verify that the skill format accepts a payload containing a python script.
     def test_prompt_create_accepts_skill_payload_with_python_script(self):
-        # スキル用パラメータとPythonスクリプトを指定してバリデーションを実行
-        # Run prompt creation validation with skill parameters and python script
+        # skill用属性とPythonスクリプトを指定してバリデーションを実行
+        # Run validation with skill attributes and a python script
         result = _validate(
             SharedPromptCreateRequest,
             {
@@ -164,13 +165,16 @@ class RequestModelsTestCase(unittest.TestCase):
                 "category": "",
                 "content": "概要",
                 "author": "author",
-                "prompt_type": "skill",
-                "skill_markdown": "# Skill",
-                "skill_python_script": "print('hello')",
+                "content_format": "skill",
+                "attributes": {
+                    "skill_markdown": "# Skill",
+                    "skill_python_script": "print('hello')",
+                },
             },
         )
-        self.assertEqual(result.prompt_type, "skill")
-        self.assertEqual(result.skill_markdown, "# Skill")
+        self.assertEqual(result.content_format, "skill")
+        self.assertEqual(result.attributes["skill_markdown"], "# Skill")
+        self.assertEqual(result.attributes["skill_python_script"], "print('hello')")
 
     # プロンプトからのタスク作成リクエストで、プロンプトIDをパースして認識できることを検証します。
     # Verify that creating a task from a prompt parses the prompt_id successfully.

@@ -72,10 +72,12 @@ class PromptUseInChatApiTestCase(unittest.TestCase):
     def test_compose_task_prompt_template_keeps_skill_body_and_script(self):
         template = _compose_task_prompt_template(
             {
-                "prompt_type": "skill",
+                "content_format": "skill",
                 "content": "",
-                "skill_markdown": "# SKILL\n\n使い方",
-                "skill_python_script": "print('hello')",
+                "attributes": {
+                    "skill_markdown": "# SKILL\n\n使い方",
+                    "skill_python_script": "print('hello')",
+                },
             }
         )
 

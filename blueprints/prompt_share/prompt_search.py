@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from services.async_utils import run_blocking
 from services.db import get_db_connection  # 既存の DB 接続関数を利用
 # Reuse the shared DB connection helper.
+from services.prompt_types import serialize_axes
 from services.web import jsonify, log_and_internal_server_error
 
 # 検索機能用ルーターの初期化
@@ -65,23 +66,12 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # Serialize datetime object to ISO format string.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
-    
-    # プロンプトタイプを小文字正規化して許容値か確認
-    # Normalize the prompt type to lowercase and verify check.
-    normalized_prompt_type = str(prompt.get("prompt_type") or "").strip().lower()
-    if normalized_prompt_type in {"image", "skill"}:
-        prompt["prompt_type"] = normalized_prompt_type
-    else:
-        # デフォルトはtextタイプとする
-        # Fall back to text type by default.
-        prompt["prompt_type"] = "text"
-        
-    # URLやマークダウンなどのオプショナルなフィールドを設定
-    # Set optional fields like URL and markdown contents.
-    prompt["reference_image_url"] = prompt.get("reference_image_url") or None
-    prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
-    prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
-    
+
+    # 2軸フィールド (content_format/media_type/attributes/attachments) を正準化し、
+    # 後方互換の派生フィールド (prompt_type/reference_image_url/skill_*) を付与する。
+    # Normalize the two-axis fields and attach derived legacy fields.
+    prompt.update(serialize_axes(prompt))
+
     # 評価・チャット利用状態の真偽値キャストと、コメント数キャストを実行
     # Cast interaction flags to Boolean and cast comment count to integer.
     prompt["liked"] = bool(prompt.get("liked"))
@@ -146,8 +136,18 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         # プロンプトタイプ指定の検証と追加SQL文の組み立て
         # Validate and construct optional SQL segments for prompt type filter.
         prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
-        select_type_condition = "AND COALESCE(p.prompt_type, 'text') = %s" if prompt_type_filter else ""
-        count_type_condition = "AND COALESCE(prompt_type, 'text') = %s" if prompt_type_filter else ""
+        # フィルタ値 (text/image/skill) を2軸カラムから派生する式で照合する。
+        # Match the legacy single-axis filter against an expression derived from the two axes.
+        _legacy_type_select = (
+            "CASE WHEN p.content_format = 'skill' THEN 'skill' "
+            "WHEN p.media_type = 'image' THEN 'image' ELSE 'text' END"
+        )
+        _legacy_type_count = (
+            "CASE WHEN content_format = 'skill' THEN 'skill' "
+            "WHEN media_type = 'image' THEN 'image' ELSE 'text' END"
+        )
+        select_type_condition = f"AND {_legacy_type_select} = %s" if prompt_type_filter else ""
+        count_type_condition = f"AND {_legacy_type_count} = %s" if prompt_type_filter else ""
         
         # 検索結果取得用SQL
         # SQL query to retrieve matching prompts.
@@ -162,10 +162,10 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
               COALESCE(u.username, p.author, 'ユーザー') AS author,
               p.input_examples,
               p.output_examples,
-              p.prompt_type,
-              p.reference_image_url,
-              p.skill_markdown,
-              p.skill_python_script,
+              p.content_format,
+              p.media_type,
+              p.attributes,
+              p.attachments,
               p.created_at,
               COALESCE(pc.comment_count, 0) AS comment_count,
               CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,

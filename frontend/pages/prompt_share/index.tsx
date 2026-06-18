@@ -32,14 +32,14 @@ import {
   removePromptLike,
   savePromptLike
 } from "../../scripts/prompt_share/api";
-import {
-  ACCEPTED_PROMPT_IMAGE_EXTENSIONS,
-  ACCEPTED_PROMPT_IMAGE_TYPES,
-  PROMPT_IMAGE_MAX_BYTES,
-  PROMPT_SHARE_TEXT,
-  PROMPT_SHARE_TITLE
-} from "../../scripts/prompt_share/constants";
+import { PROMPT_SHARE_TEXT, PROMPT_SHARE_TITLE } from "../../scripts/prompt_share/constants";
 import { normalizePromptData, normalizePromptType } from "../../scripts/prompt_share/formatters";
+import {
+  buildAttributes,
+  deriveLegacyPromptType,
+  mediaAllowsAttachment,
+  validateAttachmentFile
+} from "../../scripts/prompt_share/prompt_type_registry";
 import {
   readCachedAuthState,
   readPromptCache,
@@ -47,6 +47,8 @@ import {
   writePromptCache
 } from "../../scripts/prompt_share/storage";
 import type {
+  ContentFormat,
+  MediaType,
   PromptCommentData,
   PromptData,
   PromptFeedResponse,
@@ -209,7 +211,10 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
   // 投稿フォームの各フィールドの状態
   // Composer form field states
-  const [promptType, setPromptType] = useState<PromptType>("text");
+  // 2軸モデル: フォーマット軸 × メディア軸。
+  // Two-axis model: content format axis × media type axis.
+  const [contentFormat, setContentFormat] = useState<ContentFormat>("prompt");
+  const [mediaType, setMediaType] = useState<MediaType>("text");
   const [postTitle, setPostTitle] = useState("");
   const [postCategory, setPostCategory] = useState("未選択");
   const [postContent, setPostContent] = useState("");
@@ -303,9 +308,11 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     activeModalRef.current = activeModal;
   }, [activeModal]);
 
+  // AI補助やフィルタ文脈用に、2軸から派生した旧 prompt_type を最新に保つ。
+  // Keep the legacy prompt_type (derived from the two axes) current for AI-assist/filter context.
   useEffect(() => {
-    promptTypeRef.current = promptType;
-  }, [promptType]);
+    promptTypeRef.current = deriveLegacyPromptType(contentFormat, mediaType);
+  }, [contentFormat, mediaType]);
 
   // コンポーネントのアンマウント時に残存するアニメーションタイマーを全てクリアする
   // Clears all lingering animation timers when the component unmounts
@@ -366,22 +373,12 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [revokePromptImagePreview]);
 
-  // ファイルの拡張子とMIMEタイプおよびサイズを検証する
-  // Validates the file's extension, MIME type, and size against allowed values
-  const validateReferenceImageFile = useCallback((file: File | null) => {
-    if (!file) return null;
-    const lowerName = file.name.toLowerCase();
-    const hasAcceptedExtension = ACCEPTED_PROMPT_IMAGE_EXTENSIONS.some((ext) =>
-      lowerName.endsWith(ext)
-    );
-    if (!ACCEPTED_PROMPT_IMAGE_TYPES.has(file.type) && !hasAcceptedExtension) {
-      return "画像は PNG / JPG / WebP / GIF のいずれかを指定してください。";
-    }
-    if (file.size > PROMPT_IMAGE_MAX_BYTES) {
-      return "画像サイズは5MB以下にしてください。";
-    }
-    return null;
-  }, []);
+  // 選択中メディアの添付ルール（拡張子・MIME・サイズ）でファイルを検証する。
+  // Validate the file against the active media's attachment rule (ext / MIME / size).
+  const validateReferenceImageFile = useCallback(
+    (file: File | null) => validateAttachmentFile(mediaType, file),
+    [mediaType]
+  );
 
   // 新しいファイルが選択された際に以前のObject URLを解放してから新しいプレビューを生成する
   // Revokes the previous Object URL before generating a new preview to avoid accumulating blob URLs
@@ -1404,20 +1401,29 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         return;
       }
 
-      // プロンプトタイプに応じてフィールドを選択的にFormDataへ追加する
-      // Selectively appends fields to FormData based on the selected prompt type
+      // 2軸とフォーマット固有の属性を選択的にFormDataへ追加する
+      // Selectively append the two axes and format-specific attributes to FormData
+      const isSkill = contentFormat === "skill";
+      const includeExamples = !isSkill && guardrailEnabled;
+      // レジストリが宣言するキーのみを属性として送る (JSON文字列)。
+      // Send only the keys the format declares, as a JSON string.
+      const attributes = buildAttributes(contentFormat, {
+        skill_markdown: postSkillMarkdown,
+        skill_python_script: postSkillPythonScript
+      });
+
       const formData = new FormData();
       formData.append("title", postTitle);
       formData.append("category", postCategory === "未選択" ? "" : postCategory);
-      formData.append("content", promptType === "skill" ? "" : postContent);
-      formData.append("prompt_type", promptType);
-      formData.append("input_examples", promptType !== "skill" && guardrailEnabled ? postInputExample : "");
-      formData.append("output_examples", promptType !== "skill" && guardrailEnabled ? postOutputExample : "");
+      formData.append("content", isSkill ? "" : postContent);
+      formData.append("content_format", contentFormat);
+      formData.append("media_type", mediaType);
+      formData.append("input_examples", includeExamples ? postInputExample : "");
+      formData.append("output_examples", includeExamples ? postOutputExample : "");
       formData.append("ai_model", postAiModel);
-      formData.append("skill_markdown", promptType === "skill" ? postSkillMarkdown : "");
-      formData.append("skill_python_script", promptType === "skill" ? postSkillPythonScript : "");
+      formData.append("attributes", JSON.stringify(attributes));
 
-      if (promptType === "image" && referenceImageFile) {
+      if (mediaAllowsAttachment(mediaType) && referenceImageFile) {
         formData.append("reference_image", referenceImageFile);
       }
 
@@ -1431,7 +1437,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
         // 投稿成功後にフォームを全フィールドリセットする
         // Reset all form fields after a successful submission
-        setPromptType("text");
+        setContentFormat("prompt");
+        setMediaType("text");
         setPostTitle("");
         setPostCategory("未選択");
         setPostContent("");
@@ -1482,7 +1489,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       postSkillMarkdown,
       postSkillPythonScript,
       postTitle,
-      promptType,
+      contentFormat,
+      mediaType,
       referenceImageFile,
       setPromptPostStatus,
       validateReferenceImageFile
@@ -1583,19 +1591,21 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     void loadPrompts();
   }, [buildPromptCountMeta, loadPrompts, toPromptRecords]);
 
-  // 画像タイプ以外に切り替えた場合は参照画像の選択をクリアしてメモリを解放する
-  // Clears the reference image selection to free memory when switching away from the image prompt type
+  // 添付非対応のメディアへ切り替えた場合は添付の選択をクリアしてメモリを解放する
+  // Clears the attachment selection to free memory when switching to a media that disallows attachments
   useEffect(() => {
-    if (promptType !== "image") {
+    if (!mediaAllowsAttachment(mediaType)) {
       clearPromptImageSelection();
     }
-  }, [clearPromptImageSelection, promptType]);
+  }, [clearPromptImageSelection, mediaType]);
 
-  // プロンプトタイプが変わったときにAI補助パネルの表示を更新する
-  // Updates the AI-assist panel display whenever the prompt type changes
+  // 2軸が変わったときにAI補助パネルの表示を（派生した旧タイプで）更新する
+  // Updates the AI-assist panel display whenever the axes change, using the derived legacy type
   useEffect(() => {
-    promptAssistControllerRef.current?.updateForPromptType(promptType);
-  }, [promptType]);
+    promptAssistControllerRef.current?.updateForPromptType(
+      deriveLegacyPromptType(contentFormat, mediaType)
+    );
+  }, [contentFormat, mediaType]);
 
   // ドキュメント全体のクリックでドロップダウンを閉じる。バブリングを利用した実装
   // Closes any open dropdown on document click, leveraging event bubbling
@@ -1880,8 +1890,10 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
             closeModal("post", { rotateTrigger: true });
           }}
           onSubmit={handlePostSubmit}
-          promptType={promptType}
-          setPromptType={setPromptType}
+          contentFormat={contentFormat}
+          setContentFormat={setContentFormat}
+          mediaType={mediaType}
+          setMediaType={setMediaType}
           postTitle={postTitle}
           setPostTitle={setPostTitle}
           postCategory={postCategory}
@@ -1896,10 +1908,18 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           setPostInputExample={setPostInputExample}
           postOutputExample={postOutputExample}
           setPostOutputExample={setPostOutputExample}
-          postSkillMarkdown={postSkillMarkdown}
-          setPostSkillMarkdown={setPostSkillMarkdown}
-          postSkillPythonScript={postSkillPythonScript}
-          setPostSkillPythonScript={setPostSkillPythonScript}
+          attributeBindings={{
+            skill_markdown: {
+              value: postSkillMarkdown,
+              setValue: setPostSkillMarkdown,
+              ref: promptPostSkillMarkdownRef
+            },
+            skill_python_script: {
+              value: postSkillPythonScript,
+              setValue: setPostSkillPythonScript,
+              ref: promptPostSkillPythonScriptRef
+            }
+          }}
           updatePromptFeedbackErrorIfNeeded={updatePromptFeedbackErrorIfNeeded}
           categoryOptions={PROMPT_CATEGORY_OPTIONS}
           promptPostStatus={promptPostStatus}
@@ -1909,8 +1929,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           promptPostAiModelSelectRef={promptPostAiModelSelectRef}
           promptPostInputExamplesRef={promptPostInputExamplesRef}
           promptPostOutputExamplesRef={promptPostOutputExamplesRef}
-          promptPostSkillMarkdownRef={promptPostSkillMarkdownRef}
-          promptPostSkillPythonScriptRef={promptPostSkillPythonScriptRef}
           promptImageInputRef={promptImageInputRef}
           promptAssistRootRef={promptAssistRootRef}
           promptImagePreviewUrl={promptImagePreviewUrl}

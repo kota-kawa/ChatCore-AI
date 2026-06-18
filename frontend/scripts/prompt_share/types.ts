@@ -1,4 +1,19 @@
+// 旧・単一軸タイプ (派生値として後方互換のため保持: フィード絞り込み・カード表示で使用)。
+// Legacy single-axis type kept as a derived value (used by the feed filter and cards).
 export type PromptType = "text" | "image" | "skill";
+
+// 2軸モデル: フォーマット軸 × メディア軸 (services/prompt_types.py のミラー)。
+// Two-axis model: content format axis × media type axis.
+export type ContentFormat = "prompt" | "skill";
+export type MediaType = "text" | "image";
+
+// メディア添付の1要素。
+// A single media attachment descriptor.
+export type PromptAttachment = {
+  url: string;
+  role?: string;
+  media_type?: string;
+};
 
 export type PromptPagination = {
   page?: number;
@@ -15,6 +30,14 @@ export type PromptData = {
   content: string;
   category?: string;
   author?: string;
+  // 2軸モデルの正準フィールド。
+  // Canonical two-axis fields.
+  content_format?: ContentFormat | string;
+  media_type?: MediaType | string;
+  attributes?: Record<string, string>;
+  attachments?: PromptAttachment[];
+  // 旧フィールドは後方互換の派生値 (サーバが算出して返す)。
+  // Legacy fields are derived values returned by the server for compatibility.
   prompt_type?: PromptType | string;
   reference_image_url?: string;
   skill_markdown?: string;
