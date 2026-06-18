@@ -264,6 +264,12 @@ function ensureStylesheetApplied(href: string) {
       link.href = href;
       link.dataset.ccRouteStylesheetInjected = "true";
       document.head.appendChild(link);
+    } else if (link.rel === "preload") {
+      // プリロード済みリンクを再利用するときは、遷移先のCSSとして適用する。
+      // When reusing a preloaded link, promote it to the stylesheet for the destination route.
+      link.rel = "stylesheet";
+      link.removeAttribute("as");
+      link.dataset.ccRouteStylesheetInjected = "true";
     }
   });
 
@@ -284,9 +290,32 @@ function ensureRouteStylesheetsPreloaded(pathname: string) {
 // Apply all stylesheets required for the specified path to the DOM
 function ensureRouteStylesheetsApplied(pathname: string) {
   const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
-  if (stylesheetHrefs.length === 0) return Promise.resolve();
+  if (stylesheetHrefs.length === 0) {
+    removeInactiveRouteStylesheets(pathname);
+    return Promise.resolve();
+  }
 
-  return Promise.all(stylesheetHrefs.map(ensureStylesheetApplied)).then(() => undefined);
+  return Promise.all(stylesheetHrefs.map(ensureStylesheetApplied)).then(() => {
+    removeInactiveRouteStylesheets(pathname);
+  });
+}
+
+
+// 現在のルートで不要になった、遅延適用済みのルート専用CSSを取り除く
+// Remove lazily-applied route-specific CSS that is no longer needed for the current route
+function removeInactiveRouteStylesheets(activePathname: string) {
+  if (typeof window === "undefined") return;
+
+  const activeHrefs = new Set((ROUTE_STYLESHEETS_BY_PATH[activePathname] || []).map(normalizeStylesheetHref));
+  const routeHrefs = new Set(
+    Object.values(ROUTE_STYLESHEETS_BY_PATH).flat().map(normalizeStylesheetHref)
+  );
+
+  document.querySelectorAll<HTMLLinkElement>("link[data-cc-route-stylesheet-injected='true'][href]").forEach((link) => {
+    if (!routeHrefs.has(link.href) || activeHrefs.has(link.href)) return;
+    link.remove();
+    stylesheetApplyPromises.delete(link.href);
+  });
 }
 
 // Next.jsのカスタムAppコンポーネント（テーマ管理・ルート遷移・スタイルシート先読みを統括する）
