@@ -212,14 +212,14 @@ function PromptCardComponent({
           <button
             className={`prompt-action-btn use-in-chat-btn${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label={isUsedInChat ? "チャットで使用済み" : "チャットで使う"}
+            aria-label={isUsedInChat ? "チャットで使う設定を解除" : "チャットで使う"}
             aria-pressed={isUsedInChat ? "true" : "false"}
             aria-disabled={isAddAsTaskPending ? "true" : "false"}
             data-tooltip={
               isAddAsTaskPending
-                ? "チャットに追加中"
+                ? "チャット設定を更新中"
                 : isUsedInChat
-                  ? "チャットで使えるように追加済み"
+                  ? "チャットで使う設定を解除"
                   : "チャットで使う"
             }
             data-tooltip-placement="top"
