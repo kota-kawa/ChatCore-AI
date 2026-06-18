@@ -6,6 +6,7 @@ from unittest.mock import patch
 from blueprints.prompt_share.prompt_share_api import (
     _compose_task_prompt_template,
     add_prompt_as_task,
+    remove_prompt_as_task,
 )
 from tests.helpers.request_helpers import build_request
 
@@ -44,6 +45,27 @@ class PromptUseInChatApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertTrue(payload["used_in_chat"])
         mock_add.assert_called_once_with(5, 10)
+
+    # 共有プロンプトの「チャットで使う」状態を解除する処理が、専用エンドポイントから実行できることを検証します。
+    # Verify that removing a prompt from chat use goes through the dedicated task-removal endpoint.
+    def test_remove_prompt_as_task_uses_separate_endpoint(self):
+        request = make_request(
+            "DELETE",
+            "/prompt_share/api/task",
+            {"prompt_id": 10},
+            session={"user_id": 5},
+        )
+
+        with patch(
+            "blueprints.prompt_share.prompt_share_api._remove_prompt_as_task_for_user",
+            return_value=({"message": "チャットで使う設定を解除しました。", "used_in_chat": False}, 200),
+        ) as mock_remove:
+            response = asyncio.run(remove_prompt_as_task(request))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertFalse(payload["used_in_chat"])
+        mock_remove.assert_called_once_with(5, 10)
 
     # スキル型プロンプトからタスク用テンプレートを生成する際、説明文やPythonスクリプトが欠落せず維持されることを検証します。
     # Verify that composing a task template from a skill-type prompt preserves both description markdown and Python script.

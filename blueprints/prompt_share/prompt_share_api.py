@@ -683,6 +683,73 @@ def _add_prompt_as_task_for_user(
             conn.close()
 
 
+# 公開プロンプト由来のタスクを削除する関数
+# Remove a user's task template that came from a public prompt.
+def _remove_prompt_as_task_for_user(
+    user_id: int,
+    prompt_id: int,
+) -> tuple[dict[str, Any], int]:
+    """
+    公開プロンプトからチャット用に保存されたタスクテンプレートを論理削除する。
+    Soft-delete the task template saved for chat use from a public prompt.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT title
+              FROM prompts
+             WHERE id = %s
+               AND is_public = TRUE
+               AND deleted_at IS NULL
+            """,
+            (prompt_id,),
+        )
+        prompt = cursor.fetchone()
+        if not prompt:
+            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
+
+        title = prompt.get("title") or ""
+        cursor.execute(
+            """
+            UPDATE task_with_examples
+               SET deleted_at = CURRENT_TIMESTAMP
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+               AND (
+                    source_prompt_id = %s
+                    OR (
+                         source_prompt_id IS NULL
+                         AND name = %s
+                       )
+                   )
+            """,
+            (user_id, prompt_id, title),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return {
+                "message": "チャットで使う設定はすでに解除されています。",
+                "used_in_chat": False,
+            }, 200
+        return {
+            "message": "チャットで使う設定を解除しました。",
+            "used_in_chat": False,
+        }, 200
+    except Exception:
+        if conn is not None:
+            conn.rollback()
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 # プロンプトに対してユーザーから「いいね」を登録する関数
 # Add a "like" to a public prompt for a user.
 def _add_prompt_like_for_user(
@@ -1583,6 +1650,50 @@ async def add_prompt_as_task(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to add prompt as task.",
+        )
+
+
+# 公開プロンプトをチャットで使う設定から解除するエンドポイント
+# Endpoint to remove a public prompt from the user's chat-ready task templates.
+@prompt_share_api_bp.delete("/task", name="prompt_share_api.remove_prompt_as_task")
+async def remove_prompt_as_task(request: Request):
+    """
+    公開プロンプトから作成したタスクテンプレートを論理削除し、チャット利用状態を解除するエンドポイント。
+    DELETE API endpoint to remove a public prompt from the user's personal chat task templates.
+    """
+    if "user_id" not in request.session:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    user_id = request.session["user_id"]
+
+    data, error_response = await require_json_dict(request)
+    if error_response is not None:
+        return error_response
+
+    request_payload, validation_error = validate_payload_model(
+        data,
+        PromptTaskCreateRequest,
+        error_message="必要なフィールドが不足しています",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        response_payload, status_code = await run_blocking(
+            _remove_prompt_as_task_for_user,
+            user_id,
+            request_payload.prompt_id,
+        )
+        if status_code == 200 and "error" not in response_payload:
+            response_payload = {
+                **response_payload,
+                "message": response_payload.get("message") or "チャットで使う設定を解除しました。",
+                "used_in_chat": False,
+            }
+        return jsonify(response_payload, status_code=status_code)
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to remove prompt as task.",
         )
 
 

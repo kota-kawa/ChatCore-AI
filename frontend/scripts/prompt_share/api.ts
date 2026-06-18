@@ -111,6 +111,23 @@ export function addPromptAsTask(prompt: PromptData) {
   }).then(({ payload }) => payload);
 }
 
+export function removePromptAsTask(prompt: PromptData) {
+  // タスク解除対象IDが無い場合はAPI呼び出し前に明確なエラーを返す
+  // Fail fast before API call when prompt ID is missing.
+  if (prompt.id === undefined || prompt.id === null) {
+    return Promise.reject(new Error("チャットで使う解除対象のプロンプトIDが見つかりません。"));
+  }
+
+  return fetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt_id: prompt.id
+    })
+  }).then(({ payload }) => payload);
+}
+
 export function fetchPromptList() {
   return fetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
     defaultMessage: "プロンプト一覧の取得に失敗しました。",

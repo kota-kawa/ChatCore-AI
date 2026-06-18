@@ -27,6 +27,7 @@ import {
   fetchPromptSearchResults,
   reportPromptComment,
   addPromptAsTask,
+  removePromptAsTask,
   removePromptLike,
   savePromptLike
 } from "../../scripts/prompt_share/api";
@@ -1158,8 +1159,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     setOpenDropdownPromptId(null);
   }, []);
 
-  // プロンプトをチャットで使えるように追加するAPIを呼び出す。未ログインの場合はトーストで案内する
-  // Calls the use-in-chat API; shows a toast guide if the user is not logged in
+  // プロンプトのチャット利用状態をトグルするAPIを呼び出す。未ログインの場合はトーストで案内する
+  // Calls the use-in-chat toggle API; shows a toast guide if the user is not logged in
   const handleAddPromptAsTask = useCallback(
     async (prompt: PromptRecord) => {
       const promptId = prompt.clientId;
@@ -1171,38 +1172,39 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       }
 
       const wasUsedInChat = Boolean(prompt.used_in_chat);
-      if (!wasUsedInChat) {
-        updatePromptRecord(promptId, (currentPrompt) => ({
-          ...currentPrompt,
-          used_in_chat: true
-        }));
+      const nextUsedInChat = !wasUsedInChat;
+      updatePromptRecord(promptId, (currentPrompt) => ({
+        ...currentPrompt,
+        used_in_chat: nextUsedInChat
+      }));
+      if (nextUsedInChat) {
         triggerActionEffect(`${promptId}:use-in-chat`);
       }
 
       setAddAsTaskPending(promptId, true);
       try {
-        const response = await addPromptAsTask(prompt);
-        const responseMessage =
+        const response = nextUsedInChat
+          ? await addPromptAsTask(prompt)
+          : await removePromptAsTask(prompt);
+        const serverMessage =
           typeof response.message === "string" && response.message.trim()
             ? response.message
-            : wasUsedInChat
-              ? "すでにチャットで使えるように追加済みです。"
-              : "チャットで使えるように追加しました。";
+            : "";
+        const fallbackMessage = nextUsedInChat
+          ? "チャットで使えるように追加しました。"
+          : "チャットで使う設定を解除しました。";
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
-          used_in_chat: true
+          used_in_chat: nextUsedInChat
         }));
-        if (wasUsedInChat) {
-          triggerActionEffect(`${promptId}:use-in-chat`);
-        }
-        showToast(responseMessage, { variant: "success" });
+        showToast(serverMessage || fallbackMessage, { variant: "success" });
       } catch (error) {
-        console.error("チャット追加中にエラーが発生しました:", error);
+        console.error("チャット利用状態の更新中にエラーが発生しました:", error);
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           used_in_chat: wasUsedInChat
         }));
-        showToast("チャットで使う準備中にエラーが発生しました。", { variant: "error" });
+        showToast("チャットで使う設定の更新中にエラーが発生しました。", { variant: "error" });
       } finally {
         setAddAsTaskPending(promptId, false);
       }
