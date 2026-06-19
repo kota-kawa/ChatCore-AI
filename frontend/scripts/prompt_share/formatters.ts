@@ -45,6 +45,10 @@ export function getPromptTypeIconClass(promptType: PromptType) {
 export function normalizePromptData(prompt: PromptData): PromptData {
   return {
     ...prompt,
+    content_format: prompt.content_format || "prompt",
+    media_type: prompt.media_type || "text",
+    attributes: prompt.attributes || {},
+    attachments: Array.isArray(prompt.attachments) ? prompt.attachments : [],
     prompt_type: normalizePromptType(prompt.prompt_type),
     reference_image_url: prompt.reference_image_url || "",
     skill_markdown: prompt.skill_markdown || "",

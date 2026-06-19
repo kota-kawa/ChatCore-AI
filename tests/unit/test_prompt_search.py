@@ -150,16 +150,16 @@ class PromptSearchTestCase(unittest.TestCase):
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             _search_public_prompts("sample", 1, 10, 9, "image")
 
-        # 件数カウント用のクエリ条件に COALESCE(prompt_type) が含まれ、パラメータが設定されているか検証
-        # Verify that COALESCE(prompt_type) is in count query conditions and parameters are set
+        # 件数カウント用のクエリ条件に2軸由来の派生式が含まれ、パラメータが設定されているか検証
+        # Verify that the two-axis derived expression is in the count query and parameters are set
         count_query, count_params = fake_cursor.executed[0]
-        self.assertIn("COALESCE(prompt_type, 'text') = %s", count_query)
+        self.assertIn("WHEN media_type = 'image' THEN 'image'", count_query)
         self.assertEqual(count_params, ("image", "%sample%", "%sample%", "%sample%", "%sample%"))
 
         # データ取得用の検索クエリ条件とパラメータを検証
         # Verify data retrieval query conditions and parameters
         search_query, search_params = fake_cursor.executed[1]
-        self.assertIn("COALESCE(p.prompt_type, 'text') = %s", search_query)
+        self.assertIn("WHEN p.media_type = 'image' THEN 'image'", search_query)
         self.assertEqual(search_params[:3], (9, 9, "image"))
         self.assertEqual(search_params[-2:], (10, 0))
 

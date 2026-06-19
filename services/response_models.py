@@ -95,6 +95,14 @@ class LikedPromptApi(PromptRecordApi):
     like_id: int | str | None = None
     prompt_id: int | str | None = None
     author: str | None = None
+    # 2軸モデルの正準フィールド。
+    # Canonical two-axis fields.
+    content_format: str | None = "prompt"
+    media_type: str | None = "text"
+    attributes: dict[str, str] = Field(default_factory=dict)
+    attachments: list[dict[str, str]] = Field(default_factory=list)
+    # 旧フィールドは後方互換のための派生値 (保存はしない)。
+    # Legacy fields kept as derived values for backward compatibility (not persisted).
     prompt_type: str | None = "text"
     reference_image_url: str | None = None
     skill_markdown: str | None = ""

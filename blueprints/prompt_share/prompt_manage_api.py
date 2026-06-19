@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.db import get_db_connection
+from services.prompt_types import serialize_axes
 from services.request_models import PromptUpdateRequest
 from services.web import (
     jsonify,
@@ -40,10 +41,9 @@ def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
         "category": row.get("category"),
         "content": row.get("content"),
         "author": row.get("author"),
-        "prompt_type": row.get("prompt_type") or "text",
-        "reference_image_url": row.get("reference_image_url"),
-        "skill_markdown": row.get("skill_markdown") or "",
-        "skill_python_script": row.get("skill_python_script") or "",
+        # 2軸フィールド＋後方互換の派生フィールドを付与する。
+        # Attach the two-axis fields plus derived legacy fields.
+        **serialize_axes(row),
         "input_examples": row.get("input_examples"),
         "output_examples": row.get("output_examples"),
         "prompt_created_at": (
@@ -81,10 +81,10 @@ def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
                     content,
                     input_examples,
                     output_examples,
-                    prompt_type,
-                    reference_image_url,
-                    skill_markdown,
-                    skill_python_script,
+                    content_format,
+                    media_type,
+                    attributes,
+                    attachments,
                     created_at
                 FROM prompts
                 WHERE user_id = %s
@@ -92,7 +92,9 @@ def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
                 ORDER BY created_at DESC
             """
             cursor.execute(query, (user_id,))
-            return cursor.fetchall()
+            # 2軸フィールドを正準化し、後方互換の派生フィールドを付与する。
+            # Normalize the two-axis fields and attach derived legacy fields.
+            return [{**dict(row), **serialize_axes(dict(row))} for row in cursor.fetchall()]
         finally:
             # カーソルを確実にクローズ
             # Ensure the cursor is closed properly.
@@ -152,10 +154,10 @@ def _fetch_liked_prompts(user_id: int) -> list[dict[str, Any]]:
                        p.category,
                        p.content,
                        COALESCE(u.username, p.author, 'ユーザー') AS author,
-                       p.prompt_type,
-                       p.reference_image_url,
-                       p.skill_markdown,
-                       p.skill_python_script,
+                       p.content_format,
+                       p.media_type,
+                       p.attributes,
+                       p.attachments,
                        p.input_examples,
                        p.output_examples,
                        p.created_at AS prompt_created_at,

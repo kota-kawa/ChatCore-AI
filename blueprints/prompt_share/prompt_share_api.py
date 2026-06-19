@@ -1,4 +1,5 @@
 # prompt_share/prompt_share_api.py
+import json
 import logging
 import os
 import re
@@ -12,6 +13,14 @@ from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit, get_request_client_ip
 from services.csrf import require_csrf
 from services.db import get_db_connection
+from services.prompt_types import (
+    CONTENT_FORMAT_SKILL,
+    get_attachment_rule,
+    media_allows_attachment,
+    normalize_content_format,
+    normalize_media_type,
+    serialize_axes,
+)
 from services.request_models import (
     PromptCommentCreateRequest,
     PromptCommentReportRequest,
@@ -33,14 +42,8 @@ from services.web import (
 prompt_share_api_bp = APIRouter(prefix="/prompt_share/api", dependencies=[Depends(require_csrf)])
 logger = logging.getLogger(__name__)
 
-# プロンプトタイプの定数定義
-# Constants defining prompt types.
-PROMPT_TYPE_TEXT = "text"
-PROMPT_TYPE_IMAGE = "image"
-PROMPT_TYPE_SKILL = "skill"
-
-# プロンプトの画像アップロード先ディレクトリの設定
-# Directory path for prompt image uploads.
+# プロンプトの添付ファイル保存先ディレクトリの設定 (メディア種別共通)
+# Directory path for prompt attachment uploads (shared across media types).
 PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
     BASE_DIR,
     "frontend",
@@ -50,17 +53,9 @@ PROMPT_IMAGE_UPLOAD_DIR = os.path.join(
     "prompt_share",
 )
 
-# アップロードした画像を参照するためのURL接頭辞
-# URL prefix for accessing uploaded prompt images.
+# アップロードした添付を参照するためのURL接頭辞
+# URL prefix for accessing uploaded prompt attachments.
 PROMPT_IMAGE_URL_PREFIX = "/static/uploads/prompt_share"
-
-# プロンプト画像アップロードの最大ファイルサイズ（5MB）
-# Maximum file size allowed for prompt image uploads (5MB).
-PROMPT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
-
-# アップロード可能な画像ファイルの拡張子
-# Permitted image file extensions.
-PROMPT_IMAGE_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 # コメント投稿制限用の設定値
 # Comment rate limit and cooldown settings.
@@ -96,30 +91,11 @@ def _extract_id(row: dict[str, Any] | tuple[Any, ...] | None) -> Any:
     return row[0]
 
 
-# 入力されたプロンプトタイプを定義済みの3つ(text, image, skill)のいずれかに標準化する関数
-# Standardize the input prompt type to one of the defined categories (text, image, skill).
-def _normalize_prompt_type(value: Any) -> str:
-    """
-    入力されたプロンプトタイプ文字列をトリム・小文字化し、定義済みの標準タイプ（text/image/skill）へマッピングする。
-    Normalize the input prompt type string and resolve aliases to standard categories.
-    """
-    normalized = str(value or "").strip().lower()
-    # "skill"系の各エイリアスに対応
-    # Support various "skill" alias variations.
-    if normalized in {PROMPT_TYPE_SKILL, "skill_prompt", "claude_skill", "codex_skill"}:
-        return PROMPT_TYPE_SKILL
-    # "image"系の各エイリアスに対応
-    # Support various "image" alias variations.
-    if normalized in {PROMPT_TYPE_IMAGE, "image_prompt", "image-generation", "image_generation"}:
-        return PROMPT_TYPE_IMAGE
-    return PROMPT_TYPE_TEXT
-
-
 # プロンプトのDBレコードをJSONレスポンス用にシリアライズ・整形する関数
 # Serialize and format a prompt DB record row for the JSON response payload.
 def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     """
-    DBのプロンプトレコードを辞書から取り出し、作成日時のISO文字列化やオプショナルなフィールドの初期値補正を行う。
+    DBのプロンプトレコードを辞書から取り出し、作成日時のISO文字列化や2軸フィールドの整形を行う。
     Convert database prompt attributes into a clean API response dictionary structure.
     """
     prompt = dict(row)
@@ -128,12 +104,10 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # Format created_at to ISO string if it is a datetime object.
     if created_at is not None and hasattr(created_at, "isoformat"):
         prompt["created_at"] = created_at.isoformat()
-    # プロンプトタイプの正規化
-    # Normalize the prompt type field.
-    prompt["prompt_type"] = _normalize_prompt_type(prompt.get("prompt_type"))
-    prompt["reference_image_url"] = prompt.get("reference_image_url") or None
-    prompt["skill_markdown"] = prompt.get("skill_markdown") or ""
-    prompt["skill_python_script"] = prompt.get("skill_python_script") or ""
+    # 2軸フィールド (content_format/media_type/attributes/attachments) と
+    # 後方互換の派生フィールドを付与する。
+    # Attach the canonical two-axis fields plus derived legacy fields.
+    prompt.update(serialize_axes(prompt))
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     return prompt
 
@@ -248,41 +222,52 @@ def _consume_prompt_comment_create_limits(
     return True, None, None
 
 
-# プロンプトに関連付けられた参照画像ファイルをストレージから物理削除する関数
-# Permanently delete the stored reference image file from filesystem.
-def _delete_prompt_reference_image(image_url: str | None) -> None:
+# プロンプトに紐づく添付ファイル群をストレージから物理削除する関数
+# Permanently delete the stored attachment files from filesystem.
+def _delete_prompt_attachments(attachments: Any) -> None:
     """
-    指定された画像URLに該当する物理ファイルをローカルストレージ（アップロードディレクトリ）から削除する。
-    Delete the actual image file on the filesystem that corresponds to the given reference image URL.
+    attachments 配列に含まれる各URLに該当する物理ファイルをアップロードディレクトリから削除する。
+    Delete every uploaded file referenced by the attachments array from the upload directory.
     """
-    if not image_url or not image_url.startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
+    if not isinstance(attachments, list):
         return
-    filename = image_url.rsplit("/", 1)[-1].strip()
-    if not filename:
-        return
-    filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, filename)
-    if os.path.exists(filepath):
-        os.remove(filepath)
+    for attachment in attachments:
+        url = attachment.get("url") if isinstance(attachment, dict) else None
+        if not url or not str(url).startswith(f"{PROMPT_IMAGE_URL_PREFIX}/"):
+            continue
+        filename = str(url).rsplit("/", 1)[-1].strip()
+        if not filename:
+            continue
+        filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
 
-# アップロードされた参照画像を保存し、保存されたURLを返却する関数
-# Save uploaded reference image and return its public URL path.
-def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
+# アップロードされたメディア添付を保存し、attachments要素を返却する関数
+# Save an uploaded media attachment and return its attachment descriptor.
+def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> dict[str, str]:
     """
-    アップロードされたファイルを検証（拡張子、MIMEタイプ、ファイルサイズ）し、問題なければ一意のファイル名で保存する。
-    Validate and save the uploaded reference image, enforcing limits on size and file format.
+    指定メディアの添付ルール（拡張子・MIME・サイズ上限）で検証し、一意名で保存して
+    attachments 要素 {url, role, media_type} を返す。
+    Validate the upload against the media's attachment rule, store it under a unique name,
+    and return an attachments entry {url, role, media_type}.
     """
+    rule = get_attachment_rule(media_type)
+    if rule is None:
+        raise ValueError("このメディアタイプはファイル添付に対応していません。")
+
     filename = secure_filename(getattr(upload_file, "filename", "") or "")
     if not filename:
-        raise ValueError("画像ファイル名が不正です。")
+        raise ValueError("添付ファイル名が不正です。")
 
     extension = os.path.splitext(filename)[1].lower()
-    if extension not in PROMPT_IMAGE_ALLOWED_EXTENSIONS:
-        raise ValueError("画像は PNG / JPG / WebP / GIF のいずれかを指定してください。")
+    if extension not in rule.accepted_ext:
+        allowed = " / ".join(sorted({ext.lstrip(".").upper() for ext in rule.accepted_ext}))
+        raise ValueError(f"添付は {allowed} のいずれかを指定してください。")
 
     content_type = str(getattr(upload_file, "content_type", "") or "").lower()
-    if content_type and not content_type.startswith("image/"):
-        raise ValueError("画像ファイルのみアップロードできます。")
+    if content_type and content_type not in rule.accepted_mime:
+        raise ValueError("許可されていない形式の添付ファイルです。")
 
     # 保存ディレクトリを自動生成
     # Automatically create directory structure if not exists.
@@ -291,6 +276,7 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
     filepath = os.path.join(PROMPT_IMAGE_UPLOAD_DIR, stored_filename)
     file_obj = upload_file.file
     total_size = 0
+    max_mb = rule.max_bytes // (1024 * 1024)
 
     try:
         if hasattr(file_obj, "seek"):
@@ -304,8 +290,8 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
                 if not chunk:
                     break
                 total_size += len(chunk)
-                if total_size > PROMPT_IMAGE_MAX_BYTES:
-                    raise ValueError("画像サイズは5MB以下にしてください。")
+                if total_size > rule.max_bytes:
+                    raise ValueError(f"添付ファイルのサイズは{max_mb}MB以下にしてください。")
                 out_f.write(chunk)
     except Exception:
         # 途中での失敗時には作成途中の物理ファイルを削除
@@ -320,7 +306,11 @@ def _save_prompt_reference_image(upload_file: Any, user_id: int) -> str:
             except Exception:
                 pass
 
-    return f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}"
+    return {
+        "url": f"{PROMPT_IMAGE_URL_PREFIX}/{stored_filename}",
+        "role": rule.role,
+        "media_type": content_type or f"{media_type}/*",
+    }
 
 
 # 共有中プロンプトの一覧を、コメント数と利用状態を含めてDBから取得する関数
@@ -348,10 +338,10 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.input_examples,
                 p.output_examples,
                 p.ai_model,
-                p.prompt_type,
-                p.reference_image_url,
-                p.skill_markdown,
-                p.skill_python_script,
+                p.content_format,
+                p.media_type,
+                p.attributes,
+                p.attachments,
                 p.created_at,
                 COALESCE(pc.comment_count, 0) AS comment_count,
                 CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
@@ -428,10 +418,10 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 p.input_examples,
                 p.output_examples,
                 p.ai_model,
-                p.prompt_type,
-                p.reference_image_url,
-                p.skill_markdown,
-                p.skill_python_script,
+                p.content_format,
+                p.media_type,
+                p.attributes,
+                p.attachments,
                 (
                     SELECT COUNT(*)
                     FROM prompt_comments AS pc
@@ -468,13 +458,13 @@ def _create_prompt_for_user(
     title: str,
     category: str,
     content: str,
-    prompt_type: str,
+    content_format: str,
+    media_type: str,
     input_examples: str,
     output_examples: str,
     ai_model: str,
-    reference_image_url: str | None,
-    skill_markdown: str,
-    skill_python_script: str,
+    attributes: dict[str, str],
+    attachments: list[dict[str, str]],
 ) -> Any:
     """
     投稿ユーザー情報と指定された属性値を用いて、新規プロンプトデータをデータベースに挿入する。
@@ -493,10 +483,10 @@ def _create_prompt_for_user(
                 category,
                 content,
                 author,
-                prompt_type,
-                reference_image_url,
-                skill_markdown,
-                skill_python_script,
+                content_format,
+                media_type,
+                attributes,
+                attachments,
                 input_examples,
                 output_examples,
                 ai_model,
@@ -508,7 +498,7 @@ def _create_prompt_for_user(
             VALUES (
                 %s, %s, %s,
                 (SELECT COALESCE(username, 'ユーザー') FROM users WHERE id = %s),
-                %s, %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(), NOW()
+                %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, TRUE, NOW(), NOW()
             )
             RETURNING id
         """
@@ -519,10 +509,10 @@ def _create_prompt_for_user(
                 category,
                 content,
                 user_id,
-                _normalize_prompt_type(prompt_type),
-                reference_image_url,
-                skill_markdown,
-                skill_python_script,
+                normalize_content_format(content_format),
+                normalize_media_type(media_type),
+                json.dumps(attributes or {}),
+                json.dumps(attachments or []),
                 input_examples,
                 output_examples,
                 ai_model or None,
@@ -547,17 +537,18 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     プロンプトのタイプ（通常テキストか、スキル開発用か）に応じて、タスク登録用のテンプレート文字列を組み立てる。
     Generate a template string based on whether the prompt is standard text or a code/skill integration.
     """
-    prompt_type = _normalize_prompt_type(prompt.get("prompt_type"))
+    content_format = normalize_content_format(prompt.get("content_format"))
     # 通常プロンプトまたは画像生成の場合はコンテンツをそのまま返す
     # Return content as is if not a skill prompt.
-    if prompt_type != PROMPT_TYPE_SKILL:
+    if content_format != CONTENT_FORMAT_SKILL:
         return prompt.get("content") or ""
 
     # スキルプロンプトの場合はマークダウン解説とPythonスクリプトを連結
     # If it's a skill, combine markdown text and Python scripts.
     parts = []
-    skill_markdown = prompt.get("skill_markdown") or ""
-    skill_python_script = prompt.get("skill_python_script") or ""
+    attributes = prompt.get("attributes") if isinstance(prompt.get("attributes"), dict) else {}
+    skill_markdown = attributes.get("skill_markdown") or ""
+    skill_python_script = attributes.get("skill_python_script") or ""
     if skill_markdown:
         parts.append(skill_markdown)
     if skill_python_script:
@@ -588,9 +579,9 @@ def _add_prompt_as_task_for_user(
                    content,
                    input_examples,
                    output_examples,
-                   prompt_type,
-                   skill_markdown,
-                   skill_python_script
+                   content_format,
+                   media_type,
+                   attributes
             FROM prompts
             WHERE id = %s
               AND is_public = TRUE
@@ -1517,21 +1508,28 @@ async def create_prompt(request: Request):
     # コンテンツタイプに応じてフォームデータ、またはJSONを取得
     # Determine the payload source based on request headers.
     content_type = request.headers.get("content-type", "")
-    image_file = None
+    upload_file = None
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
-        image_candidate = form.get("reference_image")
-        image_file = image_candidate if getattr(image_candidate, "filename", "") else None
+        file_candidate = form.get("reference_image")
+        upload_file = file_candidate if getattr(file_candidate, "filename", "") else None
+        # attributes は JSON 文字列として送られる (型固有フィールドをまとめて格納)
+        # attributes is sent as a JSON string carrying format-specific fields.
+        attributes_raw = form.get("attributes", "")
+        try:
+            parsed_attributes = json.loads(attributes_raw) if attributes_raw else {}
+        except (ValueError, TypeError):
+            parsed_attributes = {}
         data = {
             "title": form.get("title", ""),
             "category": form.get("category", ""),
             "content": form.get("content", ""),
-            "prompt_type": form.get("prompt_type", PROMPT_TYPE_TEXT),
+            "content_format": form.get("content_format", ""),
+            "media_type": form.get("media_type", ""),
             "input_examples": form.get("input_examples", ""),
             "output_examples": form.get("output_examples", ""),
             "ai_model": form.get("ai_model", ""),
-            "skill_markdown": form.get("skill_markdown", ""),
-            "skill_python_script": form.get("skill_python_script", ""),
+            "attributes": parsed_attributes if isinstance(parsed_attributes, dict) else {},
         }
     else:
         data, error_response = await require_json_dict(request)
@@ -1548,23 +1546,23 @@ async def create_prompt(request: Request):
     if validation_error is not None:
         return validation_error
 
-    # 画像アップロード機能は画像生成プロンプトのみ許可する制限を確認
-    # Confirm prompt type is allowed to have an image.
-    normalized_prompt_type = _normalize_prompt_type(payload.prompt_type)
-    if normalized_prompt_type != PROMPT_TYPE_IMAGE and image_file is not None:
+    # 添付ファイルは、そのメディアが添付を許可する場合のみ受け付ける
+    # Accept the upload only when the selected media allows attachments.
+    if upload_file is not None and not media_allows_attachment(payload.media_type):
         return jsonify(
-            {"error": "画像は画像生成プロンプトでのみアップロードできます。"},
+            {"error": "このメディアタイプではファイルを添付できません。"},
             status_code=400,
         )
 
-    reference_image_url = None
-    skill_markdown = payload.skill_markdown if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
-    skill_python_script = payload.skill_python_script if normalized_prompt_type == PROMPT_TYPE_SKILL else ""
+    attachments: list[dict[str, str]] = []
     try:
-        # 画像ファイルがある場合、ディスクに保存してURLを取得
-        # Save upload reference image file to static folder.
-        if image_file is not None:
-            reference_image_url = await run_blocking(_save_prompt_reference_image, image_file, user_id)
+        # 添付ファイルがある場合、ディスクに保存して attachments 要素を得る
+        # Save the uploaded attachment and build its descriptor.
+        if upload_file is not None:
+            saved = await run_blocking(
+                _save_prompt_attachment, upload_file, user_id, payload.media_type
+            )
+            attachments = [saved]
         # プロンプトレコードをDBに新規作成
         # Create new prompt row in DB.
         prompt_id = await run_blocking(
@@ -1573,26 +1571,26 @@ async def create_prompt(request: Request):
             payload.title,
             payload.category,
             payload.content,
-            normalized_prompt_type,
+            payload.content_format,
+            payload.media_type,
             payload.input_examples,
             payload.output_examples,
             payload.ai_model,
-            reference_image_url,
-            skill_markdown,
-            skill_python_script,
+            payload.attributes,
+            attachments,
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)
     except ValueError as exc:
-        # ファイルバリデーションなどのエラー時は、アップロード済みの画像を削除して差し戻し
-        # Clean up any written file on valuation failures.
-        if reference_image_url:
-            await run_blocking(_delete_prompt_reference_image, reference_image_url)
+        # ファイルバリデーションなどのエラー時は、アップロード済みの添付を削除して差し戻し
+        # Clean up any written file on validation failures.
+        if attachments:
+            await run_blocking(_delete_prompt_attachments, attachments)
         return jsonify({"error": str(exc)}, status_code=400)
     except Exception:
-        # その他エラー発生時はアップロードした画像を削除し、500内部サーバーエラーを返却
+        # その他エラー発生時はアップロードした添付を削除し、500内部サーバーエラーを返却
         # Clean up files and return 500 on unexpected exceptions.
-        if reference_image_url:
-            await run_blocking(_delete_prompt_reference_image, reference_image_url)
+        if attachments:
+            await run_blocking(_delete_prompt_attachments, attachments)
         return log_and_internal_server_error(
             logger,
             "Failed to create shared prompt.",
