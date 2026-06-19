@@ -3,6 +3,12 @@ import MarkdownContent from "../../../components/MarkdownContent";
 import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 import { resilientFetch } from "../../../scripts/core/resilient_fetch";
+import {
+  getPromptFormatLabel,
+  getPromptMediaLabel,
+  normalizePromptContentFormat,
+  normalizePromptMediaType
+} from "../../../scripts/prompt_share/formatters";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
 // Type for shared prompt data (including skill prompt fields)
@@ -12,6 +18,8 @@ type SharedPrompt = {
   category?: string;
   content?: string;
   author?: string;
+  content_format?: string;
+  media_type?: string;
   prompt_type?: string;
   reference_image_url?: string | null;
   skill_markdown?: string;
@@ -100,7 +108,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   if (!prompt) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
-  const isSkillPrompt = prompt.prompt_type === "skill";
+  const isSkillPrompt = normalizePromptContentFormat(prompt.content_format || prompt.prompt_type || "") === "skill";
   const summarySource =
     (isSkillPrompt
       ? prompt.skill_markdown || prompt.skill_python_script || ""
@@ -158,20 +166,17 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   };
 };
 
-// 共有プロンプト詳細ページ（スキル・画像・通常プロンプトを型に応じて表示）
-// Shared prompt detail page (renders skill, image, or regular prompt by type)
+// 共有プロンプト詳細ページ（フォーマット軸・メディア軸に応じて表示）
+// Shared prompt detail page (renders according to content format and media type axes)
 export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
   const prompt = payload.prompt;
-  const isSkillPrompt = prompt?.prompt_type === "skill";
+  const contentFormat = normalizePromptContentFormat(prompt?.content_format || prompt?.prompt_type || "");
+  const mediaType = normalizePromptMediaType(prompt?.media_type || prompt?.prompt_type || "");
+  const isSkillPrompt = contentFormat === "skill";
   const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
-  // プロンプトタイプに応じた表示ラベルを決定する
-  // Determine the display label based on the prompt type
-  const promptTypeLabel = (() => {
-    if (prompt?.prompt_type === "image") return "画像生成プロンプト";
-    if (prompt?.prompt_type === "skill") return "SKILL";
-    return "通常プロンプト";
-  })();
+  const formatLabel = getPromptFormatLabel(contentFormat);
+  const mediaLabel = getPromptMediaLabel(mediaType);
   // 参照画像URLがある場合はそれをOG画像に使用し、ない場合はデフォルト画像を使う
   // Use the reference image as OG image if available, otherwise fall back to the default
   const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, (() => {
@@ -226,7 +231,10 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
         ) : prompt ? (
           <article className="shared-prompt-shell">
             <header className="shared-prompt-header">
-              <span className="shared-prompt-pill">{promptTypeLabel}</span>
+              <div className="shared-prompt-pills" aria-label="投稿のフォーマットと生成メディア">
+                <span className="shared-prompt-pill">フォーマット: {formatLabel}</span>
+                <span className="shared-prompt-pill shared-prompt-pill--media">生成メディア: {mediaLabel}</span>
+              </div>
               <h1>{prompt.title || "共有プロンプト"}</h1>
               <div className="shared-prompt-meta">
                 <span>カテゴリ: {prompt.category || "未分類"}</span>
@@ -236,10 +244,10 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </div>
             </header>
 
-            {/* 参照画像（画像生成プロンプトの作例など） / Reference image (e.g., example output for image prompts) */}
+            {/* 作例メディア（現状は画像プレビュー対応） / Reference media (currently image preview) */}
             {prompt.reference_image_url ? (
               <div className="shared-prompt-image">
-                <img src={prompt.reference_image_url} alt={prompt.title || "共有プロンプトの作例画像"} />
+                <img src={prompt.reference_image_url} alt={prompt.title || "共有プロンプトの作例メディア"} />
               </div>
             ) : null}
 

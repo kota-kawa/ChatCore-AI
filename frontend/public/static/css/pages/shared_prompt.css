@@ -53,6 +53,12 @@ body {
   line-height: 1.25;
 }
 
+.shared-prompt-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
 .shared-prompt-pill {
   display: inline-flex;
   align-items: center;
@@ -63,6 +69,11 @@ body {
   color: #0369a1;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.shared-prompt-pill--media {
+  background: rgba(20, 50, 74, 0.07);
+  color: #36506a;
 }
 
 .shared-prompt-meta {

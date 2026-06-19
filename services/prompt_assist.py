@@ -47,7 +47,7 @@ PROMPT_ASSIST_FIELD_LABELS = {
     "prompt_content": "プロンプト内容",
     "category": "カテゴリ",
     "author": "投稿者名",
-    "prompt_type": "投稿タイプ",
+    "prompt_type": "互換タイプ",
     "skill_markdown": "SKILL定義",
     "skill_python_script": "追加Pythonスクリプト",
     "input_examples": "入力例",
@@ -98,7 +98,7 @@ def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
 # 日本語: 補助対象（タスク、プロンプト、SKILL等）に合わせて設定（許可フィールド、主キー）を決定します。
 # English: Resolve the assist configuration settings based on the target type and metadata.
 def _resolve_target_config(target: str, fields: dict[str, str]) -> dict[str, Any]:
-    # 日本語: 共有プロンプトかつ投稿タイプが skill の場合、SKILL専用の対象設定を決定して返します。
+    # 日本語: 共有プロンプトかつ互換タイプが skill の場合、SKILL専用の対象設定を決定して返します。
     # English: Resolve and return the SKILL-specific configuration if it is a shared prompt with prompt_type 'skill'.
     target_config = PROMPT_ASSIST_TARGETS[target]
     if target != "shared_prompt_modal":

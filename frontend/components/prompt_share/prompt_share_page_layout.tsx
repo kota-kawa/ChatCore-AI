@@ -2,7 +2,13 @@ import React, { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type 
 
 import { Skeleton, SkeletonText } from "../ui/skeleton";
 import { PromptCard, type PromptRecord } from "./prompt_card";
-import type { PromptCategory, PromptFeedback, PromptTypeFilter, PromptTypeFilterOption } from "./prompt_share_page_types";
+import type {
+  ContentFormatFilter,
+  MediaTypeFilter,
+  PromptAxisFilterOption,
+  PromptCategory,
+  PromptFeedback
+} from "./prompt_share_page_types";
 
 // ページ全体のレイアウトが受け取るすべての状態・フィルター・ハンドラを定義する
 // Defines all state, filters, and event handlers passed into the page layout component
@@ -17,9 +23,12 @@ type PromptSharePageLayoutProps = {
   categories: PromptCategory[];
   selectedCategory: string;
   onCategoryClick: (category: string) => void;
-  promptTypeFilters: PromptTypeFilterOption[];
-  selectedPromptTypeFilter: PromptTypeFilter;
-  onPromptTypeFilterClick: (promptTypeFilter: PromptTypeFilter) => void;
+  contentFormatFilters: PromptAxisFilterOption<ContentFormatFilter>[];
+  selectedContentFormatFilter: ContentFormatFilter;
+  onContentFormatFilterClick: (contentFormatFilter: ContentFormatFilter) => void;
+  mediaTypeFilters: PromptAxisFilterOption<MediaTypeFilter>[];
+  selectedMediaTypeFilter: MediaTypeFilter;
+  onMediaTypeFilterClick: (mediaTypeFilter: MediaTypeFilter) => void;
   selectedCategoryTitle: string;
   promptCountMeta: string;
   hasMoreSearchResults: boolean;
@@ -85,9 +94,12 @@ export function PromptSharePageLayout({
   categories,
   selectedCategory,
   onCategoryClick,
-  promptTypeFilters,
-  selectedPromptTypeFilter,
-  onPromptTypeFilterClick,
+  contentFormatFilters,
+  selectedContentFormatFilter,
+  onContentFormatFilterClick,
+  mediaTypeFilters,
+  selectedMediaTypeFilter,
+  onMediaTypeFilterClick,
   selectedCategoryTitle,
   promptCountMeta,
   hasMoreSearchResults,
@@ -206,7 +218,7 @@ export function PromptSharePageLayout({
         <section className="prompt-crawl-summary" aria-labelledby="prompt-crawl-summary-title">
           <h2 id="prompt-crawl-summary-title">公開プロンプトライブラリ</h2>
           <p>
-            Chat Coreのプロンプト共有では、文章作成、調査、画像生成、SKILLなどの日本語AIプロンプトをカテゴリ別に探せます。
+            Chat Coreのプロンプト共有では、文章作成、調査、画像生成、SKILLなどの日本語AIプロンプトをカテゴリや形式別に探せます。
             気になるプロンプトは詳細を確認し、コメントや共有リンクから使い方の文脈も追えます。
           </p>
           <ul>
@@ -216,8 +228,8 @@ export function PromptSharePageLayout({
           </ul>
         </section>
 
-        {/* カテゴリフィルターとプロンプトタイプフィルターを並べたサイドバー的セクション */}
-        {/* Category and type filter controls for narrowing down the prompt list */}
+        {/* カテゴリフィルターと2軸フィルターを並べたサイドバー的セクション */}
+        {/* Category and two-axis filter controls for narrowing down the prompt list */}
         <section className="categories" aria-labelledby="categories-title">
           <div className="section-header section-header--compact">
             <h2 id="categories-title">カテゴリ</h2>
@@ -240,25 +252,49 @@ export function PromptSharePageLayout({
             ))}
           </div>
 
-          {/* タイプフィルターはrole="group"でカテゴリとは独立したコントロールグループにする */}
-          {/* Type filters use role="group" to form a distinct ARIA group from category buttons */}
+          {/* フォーマットフィルターはrole="group"でカテゴリとは独立したコントロールグループにする */}
+          {/* Content format filters use role="group" to form a distinct ARIA group from category buttons */}
           <div className="prompt-filter-block">
-            <div id="prompt-type-filter-title" className="prompt-filter-heading">
-              表示タイプ
+            <div id="prompt-format-filter-title" className="prompt-filter-heading">
+              フォーマット
             </div>
-            <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-type-filter-title">
-              {promptTypeFilters.map((promptTypeFilter) => (
+            <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-format-filter-title">
+              {contentFormatFilters.map((contentFormatFilter) => (
                 <button
-                  key={promptTypeFilter.value}
+                  key={contentFormatFilter.value}
                   type="button"
-                  className={`prompt-type-filter-btn cc-press${selectedPromptTypeFilter === promptTypeFilter.value ? " active" : ""}`}
-                  aria-pressed={selectedPromptTypeFilter === promptTypeFilter.value ? "true" : "false"}
+                  className={`prompt-type-filter-btn cc-press${selectedContentFormatFilter === contentFormatFilter.value ? " active" : ""}`}
+                  aria-pressed={selectedContentFormatFilter === contentFormatFilter.value ? "true" : "false"}
                   onClick={() => {
-                    onPromptTypeFilterClick(promptTypeFilter.value);
+                    onContentFormatFilterClick(contentFormatFilter.value);
                   }}
                 >
-                  <i className={promptTypeFilter.iconClass}></i>
-                  <span>{promptTypeFilter.label}</span>
+                  <i className={contentFormatFilter.iconClass}></i>
+                  <span>{contentFormatFilter.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* メディアフィルターはフォーマットとは独立し、画像・動画などの生成対象で絞り込む */}
+          {/* Media filters are independent from format filters and narrow by generation target */}
+          <div className="prompt-filter-block">
+            <div id="prompt-media-filter-title" className="prompt-filter-heading">
+              生成メディア
+            </div>
+            <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-media-filter-title">
+              {mediaTypeFilters.map((mediaTypeFilter) => (
+                <button
+                  key={mediaTypeFilter.value}
+                  type="button"
+                  className={`prompt-type-filter-btn cc-press${selectedMediaTypeFilter === mediaTypeFilter.value ? " active" : ""}`}
+                  aria-pressed={selectedMediaTypeFilter === mediaTypeFilter.value ? "true" : "false"}
+                  onClick={() => {
+                    onMediaTypeFilterClick(mediaTypeFilter.value);
+                  }}
+                >
+                  <i className={mediaTypeFilter.iconClass}></i>
+                  <span>{mediaTypeFilter.label}</span>
                 </button>
               ))}
             </div>

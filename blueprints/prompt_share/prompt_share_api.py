@@ -538,8 +538,8 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     Generate a template string based on whether the prompt is standard text or a code/skill integration.
     """
     content_format = normalize_content_format(prompt.get("content_format"))
-    # 通常プロンプトまたは画像生成の場合はコンテンツをそのまま返す
-    # Return content as is if not a skill prompt.
+    # promptフォーマットの場合は、メディア種別に関係なくコンテンツをそのまま返す
+    # Return content as is for the prompt format regardless of media type.
     if content_format != CONTENT_FORMAT_SKILL:
         return prompt.get("content") or ""
 

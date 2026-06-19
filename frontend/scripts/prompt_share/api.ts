@@ -1,4 +1,6 @@
 import type {
+  ContentFormat,
+  MediaType,
   PromptCommentsResponse,
   PromptData,
   PromptFeedResponse,
@@ -147,7 +149,13 @@ export function fetchPromptList() {
 
 export function fetchPromptSearchResults(
   query: string,
-  options?: { page?: number; perPage?: number; promptType?: PromptType | "all" }
+  options?: {
+    page?: number;
+    perPage?: number;
+    promptType?: PromptType | "all";
+    contentFormat?: ContentFormat | "all";
+    mediaType?: MediaType | "all";
+  }
 ) {
   const params = new URLSearchParams({ q: query });
   if (options?.page) {
@@ -158,6 +166,12 @@ export function fetchPromptSearchResults(
   }
   if (options?.promptType && options.promptType !== "all") {
     params.set("prompt_type", options.promptType);
+  }
+  if (options?.contentFormat && options.contentFormat !== "all") {
+    params.set("content_format", options.contentFormat);
+  }
+  if (options?.mediaType && options.mediaType !== "all") {
+    params.set("media_type", options.mediaType);
   }
 
   return promptShareFetchJsonOrThrow<PromptFeedResponse>(

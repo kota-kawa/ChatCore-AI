@@ -139,28 +139,57 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 
-    # プロンプトの種別（prompt_type）によるフィルタリングがSQL条件に正しく反映されることを検証します。
-    # Verify that filtering by prompt_type is correctly reflected in the SQL query conditions.
-    def test_search_public_prompts_filters_by_prompt_type(self):
+    # 旧プロンプト種別（prompt_type）が2軸条件に変換され、SQL条件に正しく反映されることを検証します。
+    # Verify that legacy prompt_type filters are converted to two-axis SQL conditions.
+    def test_search_public_prompts_maps_legacy_prompt_type_to_axes(self):
         fake_cursor = FakeCursor()
         fake_conn = FakeConnection(fake_cursor)
 
         # プロンプト種別を指定して検索関数を実行
-        # Call search function specifying a prompt type
+        # Call search function specifying a legacy prompt type
         with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
             _search_public_prompts("sample", 1, 10, 9, "image")
 
-        # 件数カウント用のクエリ条件に2軸由来の派生式が含まれ、パラメータが設定されているか検証
-        # Verify that the two-axis derived expression is in the count query and parameters are set
+        # 件数カウント用のクエリ条件に2軸条件が含まれ、パラメータが設定されているか検証
+        # Verify that two-axis conditions are in the count query and parameters are set
         count_query, count_params = fake_cursor.executed[0]
-        self.assertIn("WHEN media_type = 'image' THEN 'image'", count_query)
-        self.assertEqual(count_params, ("image", "%sample%", "%sample%", "%sample%", "%sample%"))
+        self.assertIn("AND content_format = %s", count_query)
+        self.assertIn("AND media_type = %s", count_query)
+        self.assertEqual(count_params, ("prompt", "image", "%sample%", "%sample%", "%sample%", "%sample%"))
 
         # データ取得用の検索クエリ条件とパラメータを検証
         # Verify data retrieval query conditions and parameters
         search_query, search_params = fake_cursor.executed[1]
-        self.assertIn("WHEN p.media_type = 'image' THEN 'image'", search_query)
-        self.assertEqual(search_params[:3], (9, 9, "image"))
+        self.assertIn("AND p.content_format = %s", search_query)
+        self.assertIn("AND p.media_type = %s", search_query)
+        self.assertEqual(search_params[:4], (9, 9, "prompt", "image"))
+        self.assertEqual(search_params[-2:], (10, 0))
+
+    # content_format / media_type の2軸フィルタがSQL条件として直接使われることを検証します。
+    # Verify direct content_format/media_type filters are applied as SQL axis conditions.
+    def test_search_public_prompts_filters_by_two_axes(self):
+        fake_cursor = FakeCursor()
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
+            _search_public_prompts(
+                "sample",
+                1,
+                10,
+                9,
+                content_format="skill",
+                media_type="text",
+            )
+
+        count_query, count_params = fake_cursor.executed[0]
+        self.assertIn("AND content_format = %s", count_query)
+        self.assertIn("AND media_type = %s", count_query)
+        self.assertEqual(count_params, ("skill", "text", "%sample%", "%sample%", "%sample%", "%sample%"))
+
+        search_query, search_params = fake_cursor.executed[1]
+        self.assertIn("AND p.content_format = %s", search_query)
+        self.assertIn("AND p.media_type = %s", search_query)
+        self.assertEqual(search_params[:4], (9, 9, "skill", "text"))
         self.assertEqual(search_params[-2:], (10, 0))
 
     # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
