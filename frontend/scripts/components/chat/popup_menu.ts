@@ -247,18 +247,17 @@ chatTemplate.innerHTML = `
 
     @media (max-width: 768px) {
       .actions-menu {
-        /* AIエージェントボタンと同じ高さに揃える。
-           --chat-action-menu-top が JS で設定されている場合はそれを優先し、
-           未設定時のフォールバックも AI エージェントボタンの bottom に一致させる。 */
-        top: var(--chat-action-menu-top, auto);
+        /* AIエージェントボタンと同じ bottom 値で固定する。
+           ページやビューポート（スクロール・URLバー・キーボード）の変化に
+           左右されず、常に同じ位置に表示されるようにする。 */
         bottom: calc(70px + env(safe-area-inset-bottom, 0px));
         right: 12px;
-        width: var(--chat-action-menu-size, 56px);
-        height: var(--chat-action-menu-size, 56px);
+        width: 56px;
+        height: 56px;
       }
       .actions-menu .btn--menu {
-        width: var(--chat-action-menu-size, 56px) !important;
-        height: var(--chat-action-menu-size, 56px) !important;
+        width: 56px !important;
+        height: 56px !important;
       }
       .actions-menu .btn:not(.btn--menu) {
         width: 45px;
@@ -285,15 +284,14 @@ chatTemplate.innerHTML = `
 
     @media (max-width: 480px) {
       .actions-menu {
-        top: var(--chat-action-menu-top, auto);
         bottom: calc(65px + env(safe-area-inset-bottom, 0px));
         right: 10px;
-        width: var(--chat-action-menu-size, 50px);
-        height: var(--chat-action-menu-size, 50px);
+        width: 50px;
+        height: 50px;
       }
       .actions-menu .btn--menu {
-        width: var(--chat-action-menu-size, 50px) !important;
-        height: var(--chat-action-menu-size, 50px) !important;
+        width: 50px !important;
+        height: 50px !important;
       }
       .actions-menu .btn:not(.btn--menu) {
         width: 40px;
@@ -342,9 +340,7 @@ chatTemplate.innerHTML = `
 
 class ChatActionMenu extends HTMLElement {
   private toggle: HTMLInputElement | null;
-  private aiAgentResizeObserver: ResizeObserver | null = null;
   private bodyObserver: MutationObserver | null = null;
-  private syncRafId: number | null = null;
   private readonly documentClickHandler = (event: MouseEvent) => {
     if (this.toggle?.checked && !event.composedPath().includes(this)) {
       this.toggle.checked = false;
@@ -372,13 +368,6 @@ class ChatActionMenu extends HTMLElement {
       window.location.href = href;
     }
   };
-  private readonly scheduleAiAgentAlignment = () => {
-    if (this.syncRafId !== null) return;
-    this.syncRafId = window.requestAnimationFrame(() => {
-      this.syncRafId = null;
-      this.syncWithAiAgentButton();
-    });
-  };
 
   constructor() {
     super();
@@ -393,9 +382,6 @@ class ChatActionMenu extends HTMLElement {
     this.shadowRoot?.addEventListener("click", this.navigationClickHandler);
     this.updateTextureContext();
     this.observeTextureContextChanges();
-    this.observeAiAgentButton();
-    this.bindViewportListeners();
-    this.scheduleAiAgentAlignment();
   }
 
   disconnectedCallback() {
@@ -403,13 +389,6 @@ class ChatActionMenu extends HTMLElement {
     this.shadowRoot?.removeEventListener("click", this.navigationClickHandler);
     this.bodyObserver?.disconnect();
     this.bodyObserver = null;
-    this.aiAgentResizeObserver?.disconnect();
-    this.aiAgentResizeObserver = null;
-    this.unbindViewportListeners();
-    if (this.syncRafId !== null) {
-      window.cancelAnimationFrame(this.syncRafId);
-      this.syncRafId = null;
-    }
   }
 
   updateTextureContext() {
@@ -421,56 +400,8 @@ class ChatActionMenu extends HTMLElement {
     this.bodyObserver?.disconnect();
     this.bodyObserver = new MutationObserver(() => {
       this.updateTextureContext();
-      this.scheduleAiAgentAlignment();
     });
     this.bodyObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-  }
-
-  observeAiAgentButton() {
-    this.aiAgentResizeObserver?.disconnect();
-
-    const aiAgentButton = document.querySelector<HTMLElement>(".global-ai-agent-button");
-    if (!aiAgentButton || typeof ResizeObserver === "undefined") return;
-
-    this.aiAgentResizeObserver = new ResizeObserver(this.scheduleAiAgentAlignment);
-    this.aiAgentResizeObserver.observe(aiAgentButton);
-  }
-
-  bindViewportListeners() {
-    window.addEventListener("resize", this.scheduleAiAgentAlignment);
-    window.addEventListener("scroll", this.scheduleAiAgentAlignment, { passive: true });
-    window.visualViewport?.addEventListener("resize", this.scheduleAiAgentAlignment);
-    window.visualViewport?.addEventListener("scroll", this.scheduleAiAgentAlignment);
-  }
-
-  unbindViewportListeners() {
-    window.removeEventListener("resize", this.scheduleAiAgentAlignment);
-    window.removeEventListener("scroll", this.scheduleAiAgentAlignment);
-    window.visualViewport?.removeEventListener("resize", this.scheduleAiAgentAlignment);
-    window.visualViewport?.removeEventListener("scroll", this.scheduleAiAgentAlignment);
-  }
-
-  syncWithAiAgentButton() {
-    const aiAgentButton = document.querySelector<HTMLElement>(".global-ai-agent-button");
-    if (!aiAgentButton) {
-      this.style.removeProperty("--chat-action-menu-top");
-      this.style.removeProperty("--chat-action-menu-size");
-      return;
-    }
-    if (!this.aiAgentResizeObserver && typeof ResizeObserver !== "undefined") {
-      this.aiAgentResizeObserver = new ResizeObserver(this.scheduleAiAgentAlignment);
-      this.aiAgentResizeObserver.observe(aiAgentButton);
-    }
-
-    const rect = aiAgentButton.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      this.style.removeProperty("--chat-action-menu-top");
-      this.style.removeProperty("--chat-action-menu-size");
-      return;
-    }
-
-    this.style.setProperty("--chat-action-menu-top", `${rect.top}px`);
-    this.style.setProperty("--chat-action-menu-size", `${rect.height}px`);
   }
 }
 
