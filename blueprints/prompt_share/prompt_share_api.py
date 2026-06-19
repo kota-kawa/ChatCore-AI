@@ -14,7 +14,6 @@ from services.auth_limits import consume_rate_limit, get_request_client_ip
 from services.csrf import require_csrf
 from services.db import get_db_connection
 from services.prompt_types import (
-    ATTACHMENT_ROLE_REFERENCE,
     CONTENT_FORMAT_SKILL,
     get_attachment_rule,
     media_allows_attachment,
