@@ -1,4 +1,4 @@
-import type { PromptType } from "../../scripts/prompt_share/types";
+import type { ContentFormat, MediaType } from "../../scripts/prompt_share/types";
 
 // プロンプトカテゴリーの型（値・アイコン・表示ラベル）
 // Type for a prompt category (value, icon, display label)
@@ -8,14 +8,18 @@ export type PromptCategory = {
   label: string;
 };
 
-// プロンプトのタイプフィルター（全件表示または特定タイプのみ）
-// Prompt type filter (show all or only a specific type)
-export type PromptTypeFilter = "all" | PromptType;
+// フォーマットフィルター（全件表示または特定フォーマットのみ）
+// Content format filter (show all or only a specific format)
+export type ContentFormatFilter = "all" | ContentFormat;
 
-// タイプフィルターの選択肢の型
-// Type for a type filter option
-export type PromptTypeFilterOption = {
-  value: PromptTypeFilter;
+// メディアフィルター（全件表示または特定生成メディアのみ）
+// Media type filter (show all or only a specific media type)
+export type MediaTypeFilter = "all" | MediaType;
+
+// 軸フィルターの選択肢の型
+// Type for an axis filter option
+export type PromptAxisFilterOption<TValue extends string> = {
+  value: TValue;
   iconClass: string;
   label: string;
 };

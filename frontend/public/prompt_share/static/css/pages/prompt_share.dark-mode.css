@@ -185,6 +185,7 @@
   color: #93c5fd;
 }
 
+[data-theme="dark"] .prompt-share-page .prompt-card__type-pill--prompt,
 [data-theme="dark"] .prompt-share-page .prompt-card__type-pill--text {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);

@@ -183,8 +183,8 @@ export function mediaAllowsAttachment(mediaType: string): boolean {
   return Boolean(getAttachmentRule(mediaType));
 }
 
-// 2軸から旧 prompt_type 互換値を算出する (フィード絞り込み・カード表示・AI補助の文脈用)。
-// Derive the legacy prompt_type from the two axes (for feed filter, cards, AI-assist context).
+// 2軸から旧 prompt_type 互換値を算出する (AI補助・旧API互換用)。
+// Derive the legacy prompt_type from the two axes (for AI-assist and legacy API compatibility).
 export function deriveLegacyPromptType(contentFormat: string, mediaType: string): PromptType {
   if (normalizeContentFormat(contentFormat) === "skill") return "skill";
   if (normalizeMediaType(mediaType) === "image") return "image";

@@ -2,9 +2,12 @@ import { memo, type MouseEvent } from "react";
 
 import {
   formatPromptDate,
-  getPromptTypeIconClass,
-  getPromptTypeLabel,
-  normalizePromptType,
+  getPromptFormatIconClass,
+  getPromptFormatLabel,
+  getPromptMediaIconClass,
+  getPromptMediaLabel,
+  normalizePromptContentFormat,
+  normalizePromptMediaType,
   truncateContent,
   truncateTitle,
 } from "../../scripts/prompt_share/formatters";
@@ -53,17 +56,18 @@ function PromptCardComponent({
 }: PromptCardProps) {
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
-  const promptTypeValue = normalizePromptType(prompt.prompt_type);
+  const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
+  const mediaTypeValue = normalizePromptMediaType(String(prompt.media_type || ""));
   const promptId = prompt.clientId;
   const safeCategory = prompt.category || "未分類";
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);
 
-  // SKILLタイプはskill_markdownを、それ以外はcontentをプレビューに使う
-  // Show skill_markdown preview for skill-type prompts; fall back to content otherwise
+  // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
+  // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
   const cardPreview =
-    promptTypeValue === "skill"
+    contentFormatValue === "skill"
       ? truncateContent(prompt.skill_markdown || "SKILLの詳細を開いて内容を確認してください。")
       : truncateContent(prompt.content);
 
@@ -81,11 +85,17 @@ function PromptCardComponent({
             <i className="bi bi-hash"></i>
             <span>{safeCategory}</span>
           </span>
-          {/* タイプバリアントをCSSクラスに反映し、アイコンとラベルを動的に決定する */}
-          {/* Apply type-variant CSS class and resolve icon/label dynamically */}
-          <span className={`prompt-card__type-pill prompt-card__type-pill--${promptTypeValue}`}>
-            <i className={`bi ${getPromptTypeIconClass(promptTypeValue)}`}></i>
-            <span>{getPromptTypeLabel(promptTypeValue)}</span>
+          {/* フォーマット軸をCSSクラスに反映し、アイコンとラベルをレジストリから決定する */}
+          {/* Apply content-format class and resolve icon/label from the registry */}
+          <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${contentFormatValue}`}>
+            <i className={`bi ${getPromptFormatIconClass(contentFormatValue)}`}></i>
+            <span>{getPromptFormatLabel(contentFormatValue)}</span>
+          </span>
+          {/* メディア軸を独立したバッジとして表示し、画像を生成対象として扱う */}
+          {/* Render media as an independent badge, so image is a generation target rather than a post type */}
+          <span className={`prompt-card__type-pill prompt-card__type-pill--media prompt-card__type-pill--${mediaTypeValue}`}>
+            <i className={`bi ${getPromptMediaIconClass(mediaTypeValue)}`}></i>
+            <span>{getPromptMediaLabel(mediaTypeValue)}</span>
           </span>
         </div>
         <span className="prompt-card__created-at">

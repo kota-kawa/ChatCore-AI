@@ -6,7 +6,12 @@ from fastapi import APIRouter, Request
 from services.async_utils import run_blocking
 from services.db import get_db_connection  # 既存の DB 接続関数を利用
 # Reuse the shared DB connection helper.
-from services.prompt_types import serialize_axes
+from services.prompt_types import (
+    CONTENT_FORMATS,
+    MEDIA_TYPES,
+    legacy_prompt_type_to_axes,
+    serialize_axes,
+)
 from services.web import jsonify, log_and_internal_server_error
 
 # 検索機能用ルーターの初期化
@@ -95,9 +100,39 @@ def _normalize_prompt_type_filter(value):
     return normalized if normalized in SEARCH_PROMPT_TYPES else None
 
 
+def _normalize_content_format_filter(value):
+    """
+    指定されたフォーマット軸の値が許可されたセットに含まれるか検証し、正規化する。
+    Validate and normalize a content_format filter value.
+    """
+    raw = str(value or "").strip().lower()
+    if not raw or raw == "all":
+        return None
+    return raw if raw in CONTENT_FORMATS else None
+
+
+def _normalize_media_type_filter(value):
+    """
+    指定されたメディア軸の値が許可されたセットに含まれるか検証し、正規化する。
+    Validate and normalize a media_type filter value.
+    """
+    raw = str(value or "").strip().lower()
+    if not raw or raw == "all":
+        return None
+    return raw if raw in MEDIA_TYPES else None
+
+
 # 公開プロンプトの部分一致検索をデータベースクエリとして実行する関数
 # Database lookup function to search public prompts by keywords and optional types.
-def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None):
+def _search_public_prompts(
+    query,
+    page,
+    per_page,
+    user_id=None,
+    prompt_type=None,
+    content_format=None,
+    media_type=None,
+):
     """
     公開プロンプトをデータベースから部分一致で検索する。ページネーションとインタラクション状態（Like等）の取得も行う。
     Perform a database query to search public prompts using partial match. Handles pagination and user-specific interaction status.
@@ -133,21 +168,33 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         # Calculate pagination offset.
         offset = (page - 1) * per_page
         
-        # プロンプトタイプ指定の検証と追加SQL文の組み立て
-        # Validate and construct optional SQL segments for prompt type filter.
+        # 2軸フィルタ指定の検証と追加SQL文の組み立て。旧 prompt_type は互換入力として2軸へ変換する。
+        # Validate and construct optional two-axis SQL segments. Legacy prompt_type maps to axes.
         prompt_type_filter = _normalize_prompt_type_filter(prompt_type)
-        # フィルタ値 (text/image/skill) を2軸カラムから派生する式で照合する。
-        # Match the legacy single-axis filter against an expression derived from the two axes.
-        _legacy_type_select = (
-            "CASE WHEN p.content_format = 'skill' THEN 'skill' "
-            "WHEN p.media_type = 'image' THEN 'image' ELSE 'text' END"
-        )
-        _legacy_type_count = (
-            "CASE WHEN content_format = 'skill' THEN 'skill' "
-            "WHEN media_type = 'image' THEN 'image' ELSE 'text' END"
-        )
-        select_type_condition = f"AND {_legacy_type_select} = %s" if prompt_type_filter else ""
-        count_type_condition = f"AND {_legacy_type_count} = %s" if prompt_type_filter else ""
+        content_format_filter = _normalize_content_format_filter(content_format)
+        media_type_filter = _normalize_media_type_filter(media_type)
+        if prompt_type_filter and not content_format_filter and not media_type_filter:
+            legacy_content_format, legacy_media_type = legacy_prompt_type_to_axes(prompt_type_filter)
+            content_format_filter = legacy_content_format
+            media_type_filter = legacy_media_type
+
+        select_axis_conditions = []
+        count_axis_conditions = []
+        count_filter_params = []
+        search_filter_params = []
+        if content_format_filter:
+            select_axis_conditions.append("AND p.content_format = %s")
+            count_axis_conditions.append("AND content_format = %s")
+            count_filter_params.append(content_format_filter)
+            search_filter_params.append(content_format_filter)
+        if media_type_filter:
+            select_axis_conditions.append("AND p.media_type = %s")
+            count_axis_conditions.append("AND media_type = %s")
+            count_filter_params.append(media_type_filter)
+            search_filter_params.append(media_type_filter)
+
+        select_axis_condition = "\n              ".join(select_axis_conditions)
+        count_axis_condition = "\n              ".join(count_axis_conditions)
         
         # 検索結果取得用SQL
         # SQL query to retrieve matching prompts.
@@ -196,7 +243,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
                  )
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
-              {select_type_condition}
+              {select_axis_condition}
               AND (
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
@@ -217,7 +264,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
               ON u.id = p.user_id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
-              {count_type_condition}
+              {count_axis_condition}
               AND (
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
@@ -228,9 +275,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
         # LIKE検索用のワイルドカード付きパターンを作成
         # Create a search pattern with wildcards for LIKE operator.
         like_query = f"%{query}%"
-        count_params = []
-        if prompt_type_filter:
-            count_params.append(prompt_type_filter)
+        count_params = list(count_filter_params)
         count_params.extend([like_query, like_query, like_query, like_query])
         
         # 件数のカウント実行
@@ -245,8 +290,7 @@ def _search_public_prompts(query, page, per_page, user_id=None, prompt_type=None
             user_id,
             user_id,
         ]
-        if prompt_type_filter:
-            search_params.append(prompt_type_filter)
+        search_params.extend(search_filter_params)
         search_params.extend([
             like_query,
             like_query,
@@ -297,6 +341,8 @@ async def search_prompts(request: Request):
     # Retrieve search query, prompt type, page, and per_page parameters.
     query = request.query_params.get('q', '').strip()
     prompt_type = _normalize_prompt_type_filter(request.query_params.get("prompt_type"))
+    content_format = _normalize_content_format_filter(request.query_params.get("content_format"))
+    media_type = _normalize_media_type_filter(request.query_params.get("media_type"))
     page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)
     per_page = _parse_positive_int(
         request.query_params.get("per_page"),
@@ -309,7 +355,16 @@ async def search_prompts(request: Request):
     try:
         # 非ブロッキングスレッドプールでDB検索処理を実行
         # Run DB lookup in the blocking thread pool safely.
-        payload = await run_blocking(_search_public_prompts, query, page, per_page, user_id, prompt_type)
+        payload = await run_blocking(
+            _search_public_prompts,
+            query,
+            page,
+            per_page,
+            user_id,
+            prompt_type,
+            content_format,
+            media_type,
+        )
         return jsonify({"status": "success", **payload})
     except Exception:
         # エラー発生時はログに記録し、500内部サーバーエラーを返却

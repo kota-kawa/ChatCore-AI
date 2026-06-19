@@ -1,4 +1,13 @@
-import type { PromptCategory, PromptTypeFilterOption } from "./prompt_share_page_types";
+import {
+  CONTENT_FORMATS,
+  MEDIA_TYPES
+} from "../../scripts/prompt_share/prompt_type_registry";
+import type {
+  ContentFormatFilter,
+  MediaTypeFilter,
+  PromptAxisFilterOption,
+  PromptCategory
+} from "./prompt_share_page_types";
 
 // 1ページあたりの検索結果件数。APIリクエストのlimitパラメータと合わせる必要がある
 // Items per search results page; must match the limit parameter used in API requests
@@ -19,13 +28,26 @@ export const PROMPT_CATEGORIES: PromptCategory[] = [
   { value: "グルメ", iconClass: "bi bi-shop", label: "グルメ" }
 ];
 
-// プロンプトタイプによる絞り込みフィルターの定義。カテゴリとは独立して組み合わせ可能
-// Prompt-type filter options; can be combined with category filters independently
-export const PROMPT_TYPE_FILTERS: PromptTypeFilterOption[] = [
+// フォーマット軸による絞り込みフィルター。カテゴリ・メディアとは独立して組み合わせ可能
+// Content format filter options; can be combined with category and media filters independently
+export const PROMPT_CONTENT_FORMAT_FILTERS: PromptAxisFilterOption<ContentFormatFilter>[] = [
   { value: "all", iconClass: "bi bi-layers", label: "全て" },
-  { value: "text", iconClass: "bi bi-chat-square-text", label: "通常プロンプト" },
-  { value: "image", iconClass: "bi bi-image", label: "画像プロンプト" },
-  { value: "skill", iconClass: "bi bi-code-slash", label: "スキル" }
+  ...CONTENT_FORMATS.map((format) => ({
+    value: format.key,
+    iconClass: `bi ${format.icon}`,
+    label: format.label
+  }))
+];
+
+// 生成メディア軸による絞り込みフィルター。画像・動画などの拡張はレジストリ追加で吸収する
+// Media type filter options; future media types are picked up from the registry
+export const PROMPT_MEDIA_TYPE_FILTERS: PromptAxisFilterOption<MediaTypeFilter>[] = [
+  { value: "all", iconClass: "bi bi-grid", label: "全て" },
+  ...MEDIA_TYPES.map((media) => ({
+    value: media.key,
+    iconClass: `bi ${media.icon}`,
+    label: media.label
+  }))
 ];
 
 // 投稿フォームのカテゴリセレクトに使う選択肢。"未選択"は投稿時のバリデーション用初期値

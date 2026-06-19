@@ -33,7 +33,13 @@ import {
   savePromptLike
 } from "../../scripts/prompt_share/api";
 import { PROMPT_SHARE_TEXT, PROMPT_SHARE_TITLE } from "../../scripts/prompt_share/constants";
-import { normalizePromptData, normalizePromptType } from "../../scripts/prompt_share/formatters";
+import {
+  getPromptFormatLabel,
+  getPromptMediaLabel,
+  normalizePromptContentFormat,
+  normalizePromptData,
+  normalizePromptMediaType
+} from "../../scripts/prompt_share/formatters";
 import {
   buildAttributes,
   deriveLegacyPromptType,
@@ -60,16 +66,18 @@ import { PromptShareDetailModal } from "../../components/prompt_share/prompt_sha
 import {
   PROMPT_CATEGORIES,
   PROMPT_CATEGORY_OPTIONS,
-  PROMPT_TYPE_FILTERS,
+  PROMPT_CONTENT_FORMAT_FILTERS,
+  PROMPT_MEDIA_TYPE_FILTERS,
   SEARCH_RESULTS_PER_PAGE
 } from "../../components/prompt_share/prompt_share_page_constants";
 import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
 import type {
   ModalKey,
+  ContentFormatFilter,
+  MediaTypeFilter,
   PromptFeedback,
   PromptPostStatus,
-  PromptPostStatusVariant,
-  PromptTypeFilter
+  PromptPostStatusVariant
 } from "../../components/prompt_share/prompt_share_page_types";
 import {
   getCategoryCountLabel,
@@ -169,7 +177,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedCategoryTitle, setSelectedCategoryTitle] = useState("全てのプロンプト");
   const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
-  const [selectedPromptTypeFilter, setSelectedPromptTypeFilter] = useState<PromptTypeFilter>("all");
+  const [selectedContentFormatFilter, setSelectedContentFormatFilter] = useState<ContentFormatFilter>("all");
+  const [selectedMediaTypeFilter, setSelectedMediaTypeFilter] = useState<MediaTypeFilter>("all");
 
   // プロンプト一覧の状態。SSRデータで初期化することで、初期描画をキャッシュで高速化する
   // Prompt list state; initialized from SSR data to speed up the first render with cached content
@@ -238,7 +247,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const nextPromptClientIdRef = useRef(initialPromptRecords.length);
   const promptsRef = useRef<PromptRecord[]>(initialPromptRecords);
   const selectedCategoryRef = useRef("all");
-  const selectedPromptTypeFilterRef = useRef<PromptTypeFilter>("all");
+  const selectedContentFormatFilterRef = useRef<ContentFormatFilter>("all");
+  const selectedMediaTypeFilterRef = useRef<MediaTypeFilter>("all");
   const activeModalRef = useRef<ModalKey>(null);
 
   // モーダルのDOM要素への参照。フォーカス管理とアクセシビリティのために使用する
@@ -301,8 +311,12 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   }, [selectedCategory]);
 
   useEffect(() => {
-    selectedPromptTypeFilterRef.current = selectedPromptTypeFilter;
-  }, [selectedPromptTypeFilter]);
+    selectedContentFormatFilterRef.current = selectedContentFormatFilter;
+  }, [selectedContentFormatFilter]);
+
+  useEffect(() => {
+    selectedMediaTypeFilterRef.current = selectedMediaTypeFilter;
+  }, [selectedMediaTypeFilter]);
 
   useEffect(() => {
     activeModalRef.current = activeModal;
@@ -409,21 +423,34 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }));
   }, []);
 
-  // フィルタ値からUI表示用のラベル文字列を取得する
-  // Returns the display label for a given prompt type filter value
-  const getPromptTypeFilterLabel = useCallback((promptTypeFilter: PromptTypeFilter) => {
-    return PROMPT_TYPE_FILTERS.find((option) => option.value === promptTypeFilter)?.label || "全て";
+  // 2軸フィルタ値からUI表示用のラベル文字列を取得する
+  // Return display labels for the two axis filter values
+  const getContentFormatFilterLabel = useCallback((contentFormatFilter: ContentFormatFilter) => {
+    return contentFormatFilter === "all" ? "全て" : getPromptFormatLabel(contentFormatFilter);
   }, []);
 
-  // カテゴリとプロンプトタイプの両方の条件でプロンプト一覧をフィルタリングする
-  // Filters the prompt list by both category and prompt type simultaneously
+  const getMediaTypeFilterLabel = useCallback((mediaTypeFilter: MediaTypeFilter) => {
+    return mediaTypeFilter === "all" ? "全て" : getPromptMediaLabel(mediaTypeFilter);
+  }, []);
+
+  // カテゴリ・フォーマット・メディアの条件でプロンプト一覧をフィルタリングする
+  // Filters the prompt list by category, content format, and media type simultaneously
   const filterPrompts = useCallback(
-    (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
+    (
+      items: PromptRecord[],
+      category: string | null,
+      contentFormatFilter: ContentFormatFilter,
+      mediaTypeFilter: MediaTypeFilter
+    ) => {
       return items.filter((item) => {
         const categoryMatches = !category || category === "all" || (item.category || "") === category;
-        const promptTypeMatches =
-          promptTypeFilter === "all" || normalizePromptType(item.prompt_type) === promptTypeFilter;
-        return categoryMatches && promptTypeMatches;
+        const contentFormatMatches =
+          contentFormatFilter === "all" ||
+          normalizePromptContentFormat(String(item.content_format || "")) === contentFormatFilter;
+        const mediaTypeMatches =
+          mediaTypeFilter === "all" ||
+          normalizePromptMediaType(String(item.media_type || "")) === mediaTypeFilter;
+        return categoryMatches && contentFormatMatches && mediaTypeMatches;
       });
     },
     []
@@ -432,8 +459,13 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   // 現在のフィルタ条件に一致する表示件数を算出する
   // Counts how many prompts are visible under the current filter conditions
   const countVisiblePrompts = useCallback(
-    (items: PromptRecord[], category: string | null, promptTypeFilter: PromptTypeFilter) => {
-      return filterPrompts(items, category, promptTypeFilter).length;
+    (
+      items: PromptRecord[],
+      category: string | null,
+      contentFormatFilter: ContentFormatFilter,
+      mediaTypeFilter: MediaTypeFilter
+    ) => {
+      return filterPrompts(items, category, contentFormatFilter, mediaTypeFilter).length;
     },
     [filterPrompts]
   );
@@ -444,35 +476,57 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     (
       items: PromptRecord[],
       category: string | null,
-      promptTypeFilter: PromptTypeFilter,
+      contentFormatFilter: ContentFormatFilter,
+      mediaTypeFilter: MediaTypeFilter,
       options?: { searchTotal?: number }
     ) => {
-      const visibleCount = countVisiblePrompts(items, category, promptTypeFilter);
-      const typeSuffix = promptTypeFilter === "all" ? "" : ` / ${getPromptTypeFilterLabel(promptTypeFilter)}`;
+      const visibleCount = countVisiblePrompts(items, category, contentFormatFilter, mediaTypeFilter);
+      const formatSuffix =
+        contentFormatFilter === "all" ? "" : ` / ${getContentFormatFilterLabel(contentFormatFilter)}`;
+      const mediaSuffix =
+        mediaTypeFilter === "all" ? "" : ` / ${getMediaTypeFilterLabel(mediaTypeFilter)}`;
+      const filterSuffix = `${formatSuffix}${mediaSuffix}`;
 
       if (typeof options?.searchTotal === "number") {
-        return `検索結果${typeSuffix}: ${visibleCount}件 / ${options.searchTotal}件`;
+        return `検索結果${filterSuffix}: ${visibleCount}件 / ${options.searchTotal}件`;
       }
 
-      return `${getCategoryCountLabel(category || "all")}${typeSuffix}: ${visibleCount}件`;
+      return `${getCategoryCountLabel(category || "all")}${filterSuffix}: ${visibleCount}件`;
     },
-    [countVisiblePrompts, getPromptTypeFilterLabel]
+    [countVisiblePrompts, getContentFormatFilterLabel, getMediaTypeFilterLabel]
   );
 
-  // フィルタ結果が0件だった場合にプロンプトタイプを含む適切なメッセージを返す
-  // Returns an appropriate empty-state message that includes the active prompt type filter
+  // フィルタ結果が0件だった場合に2軸条件を含む適切なメッセージを返す
+  // Returns an appropriate empty-state message that includes the active axis filters
   const getFilterEmptyMessage = useCallback(() => {
-    if (selectedPromptTypeFilterRef.current === "all") {
+    const contentFormatFilter = selectedContentFormatFilterRef.current;
+    const mediaTypeFilter = selectedMediaTypeFilterRef.current;
+    if (contentFormatFilter === "all" && mediaTypeFilter === "all") {
       return "条件に一致するプロンプトが見つかりませんでした。";
     }
-    return `${getPromptTypeFilterLabel(selectedPromptTypeFilterRef.current)}のプロンプトが見つかりませんでした。`;
-  }, [getPromptTypeFilterLabel]);
+    const labels = [
+      contentFormatFilter === "all" ? "" : getContentFormatFilterLabel(contentFormatFilter),
+      mediaTypeFilter === "all" ? "" : getMediaTypeFilterLabel(mediaTypeFilter)
+    ].filter(Boolean);
+    return `${labels.join(" / ")}のプロンプトが見つかりませんでした。`;
+  }, [getContentFormatFilterLabel, getMediaTypeFilterLabel]);
 
-  // カテゴリとプロンプトタイプでフィルタリングした後の表示対象プロンプト一覧
-  // Derived list of prompts visible after applying category and prompt type filters
+  // カテゴリ・フォーマット・メディアでフィルタリングした後の表示対象プロンプト一覧
+  // Derived list of prompts visible after applying category and two-axis filters
   const visiblePrompts = useMemo(() => {
-    return filterPrompts(prompts, appliedCategoryFilter, selectedPromptTypeFilter);
-  }, [filterPrompts, prompts, appliedCategoryFilter, selectedPromptTypeFilter]);
+    return filterPrompts(
+      prompts,
+      appliedCategoryFilter,
+      selectedContentFormatFilter,
+      selectedMediaTypeFilter
+    );
+  }, [
+    filterPrompts,
+    prompts,
+    appliedCategoryFilter,
+    selectedContentFormatFilter,
+    selectedMediaTypeFilter
+  ]);
 
   // 検索中かつ次ページが存在する場合に「もっと見る」ボタンを表示する
   // Indicates whether a "load more" button should be shown for search results
@@ -694,9 +748,16 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   // APIからプロンプト一覧を取得し、フィルタ状態を適用した上でキャッシュに書き込む
   // Fetches the full prompt list from the API, applies filter state, and writes the result to cache
   const loadPrompts = useCallback(
-    async (options?: { categoryToApply?: string; promptTypeToApply?: PromptTypeFilter }) => {
+    async (options?: {
+      categoryToApply?: string;
+      contentFormatToApply?: ContentFormatFilter;
+      mediaTypeToApply?: MediaTypeFilter;
+    }) => {
       const categoryToApply = options?.categoryToApply || selectedCategoryRef.current;
-      const promptTypeToApply = options?.promptTypeToApply || selectedPromptTypeFilterRef.current;
+      const contentFormatToApply =
+        options?.contentFormatToApply || selectedContentFormatFilterRef.current;
+      const mediaTypeToApply =
+        options?.mediaTypeToApply || selectedMediaTypeFilterRef.current;
       if (promptsRef.current.length === 0) {
         setIsPromptsLoading(true);
       }
@@ -714,7 +775,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         setActiveSearchQuery("");
         setSearchPagination(null);
         setSelectedCategory(categoryToApply);
-        setSelectedPromptTypeFilter(promptTypeToApply);
+        setSelectedContentFormatFilter(contentFormatToApply);
+        setSelectedMediaTypeFilter(mediaTypeToApply);
         setAppliedCategoryFilter(categoryToApply);
         setSelectedCategoryTitle(getCategoryTitle(categoryToApply));
 
@@ -727,7 +789,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           });
         }
 
-        setPromptCountMeta(buildPromptCountMeta(promptRecords, categoryToApply, promptTypeToApply));
+        setPromptCountMeta(
+          buildPromptCountMeta(promptRecords, categoryToApply, contentFormatToApply, mediaTypeToApply)
+        );
       } catch (error) {
         console.error("プロンプト取得エラー:", error);
         const message = error instanceof Error ? error.message : String(error);
@@ -745,13 +809,19 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
   // 入力文字列でプロンプトを検索し、クエリが空の場合は通常の一覧表示に戻る
   // Searches prompts by the current input; falls back to the full list if the query is empty
-  const searchPrompts = useCallback(async (options?: { promptTypeToApply?: PromptTypeFilter }) => {
+  const searchPrompts = useCallback(async (options?: {
+    contentFormatToApply?: ContentFormatFilter;
+    mediaTypeToApply?: MediaTypeFilter;
+  }) => {
     const query = searchInput.trim();
-    const promptTypeToApply = options?.promptTypeToApply || selectedPromptTypeFilterRef.current;
+    const contentFormatToApply =
+      options?.contentFormatToApply || selectedContentFormatFilterRef.current;
+    const mediaTypeToApply =
+      options?.mediaTypeToApply || selectedMediaTypeFilterRef.current;
 
     if (!query) {
       setSelectedCategoryTitle("全てのプロンプト");
-      await loadPrompts({ promptTypeToApply });
+      await loadPrompts({ contentFormatToApply, mediaTypeToApply });
       return;
     }
 
@@ -764,7 +834,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       const data = await fetchPromptSearchResults(query, {
         page: 1,
         perPage: SEARCH_RESULTS_PER_PAGE,
-        promptType: promptTypeToApply
+        contentFormat: contentFormatToApply,
+        mediaType: mediaTypeToApply
       });
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
@@ -772,7 +843,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       const promptRecords = toPromptRecords(normalizedPrompts);
 
       setPrompts(promptRecords);
-      setSelectedPromptTypeFilter(promptTypeToApply);
+      setSelectedContentFormatFilter(contentFormatToApply);
+      setSelectedMediaTypeFilter(mediaTypeToApply);
       setActiveSearchQuery(query);
       setSearchPagination(data.pagination || null);
       // 検索中はカテゴリフィルタを無効化する
@@ -788,7 +860,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         });
       }
       setPromptCountMeta(
-        buildPromptCountMeta(promptRecords, null, promptTypeToApply, {
+        buildPromptCountMeta(promptRecords, null, contentFormatToApply, mediaTypeToApply, {
           searchTotal: Number(data.pagination?.total || promptRecords.length)
         })
       );
@@ -819,7 +891,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       const data = await fetchPromptSearchResults(query, {
         page: nextPage,
         perPage: Number(searchPagination.per_page || SEARCH_RESULTS_PER_PAGE),
-        promptType: selectedPromptTypeFilterRef.current
+        contentFormat: selectedContentFormatFilterRef.current,
+        mediaType: selectedMediaTypeFilterRef.current
       });
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
@@ -831,9 +904,15 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       setSearchPagination(data.pagination || null);
       setPromptFeedback(null);
       setPromptCountMeta(
-        buildPromptCountMeta(nextPrompts, null, selectedPromptTypeFilterRef.current, {
-          searchTotal: Number(data.pagination?.total || nextPrompts.length)
-        })
+        buildPromptCountMeta(
+          nextPrompts,
+          null,
+          selectedContentFormatFilterRef.current,
+          selectedMediaTypeFilterRef.current,
+          {
+            searchTotal: Number(data.pagination?.total || nextPrompts.length)
+          }
+        )
       );
     } catch (error) {
       console.error("追加検索エラー:", error);
@@ -1307,37 +1386,72 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     (category: string) => {
       setOpenDropdownPromptId(null);
       setSelectedCategory(category);
-      const promptTypeToApply = selectedPromptTypeFilterRef.current;
+      const contentFormatToApply = selectedContentFormatFilterRef.current;
+      const mediaTypeToApply = selectedMediaTypeFilterRef.current;
 
       if (searchInput.trim()) {
         setSearchInput("");
-        void loadPrompts({ categoryToApply: category, promptTypeToApply });
+        void loadPrompts({ categoryToApply: category, contentFormatToApply, mediaTypeToApply });
         return;
       }
 
       setAppliedCategoryFilter(category);
       setSelectedCategoryTitle(getCategoryTitle(category));
 
-      setPromptCountMeta(buildPromptCountMeta(promptsRef.current, category, promptTypeToApply));
+      setPromptCountMeta(
+        buildPromptCountMeta(promptsRef.current, category, contentFormatToApply, mediaTypeToApply)
+      );
     },
     [buildPromptCountMeta, loadPrompts, searchInput]
   );
 
-  // プロンプトタイプのフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
-  // When a prompt type filter is clicked, re-searches if a query is active to apply the new filter
-  const handlePromptTypeFilterClick = useCallback(
-    (promptTypeFilter: PromptTypeFilter) => {
+  // フォーマットフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
+  // When a content format filter is clicked, re-searches if a query is active to apply the new filter
+  const handleContentFormatFilterClick = useCallback(
+    (contentFormatFilter: ContentFormatFilter) => {
       setOpenDropdownPromptId(null);
-      setSelectedPromptTypeFilter(promptTypeFilter);
-      selectedPromptTypeFilterRef.current = promptTypeFilter;
+      setSelectedContentFormatFilter(contentFormatFilter);
+      selectedContentFormatFilterRef.current = contentFormatFilter;
+      const mediaTypeFilter = selectedMediaTypeFilterRef.current;
 
       if (activeSearchQuery.trim() || searchInput.trim()) {
-        void searchPrompts({ promptTypeToApply: promptTypeFilter });
+        void searchPrompts({ contentFormatToApply: contentFormatFilter, mediaTypeToApply: mediaTypeFilter });
         return;
       }
 
       setPromptCountMeta(
-        buildPromptCountMeta(promptsRef.current, selectedCategoryRef.current, promptTypeFilter)
+        buildPromptCountMeta(
+          promptsRef.current,
+          selectedCategoryRef.current,
+          contentFormatFilter,
+          mediaTypeFilter
+        )
+      );
+    },
+    [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
+  );
+
+  // メディアフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
+  // When a media type filter is clicked, re-searches if a query is active to apply the new filter
+  const handleMediaTypeFilterClick = useCallback(
+    (mediaTypeFilter: MediaTypeFilter) => {
+      setOpenDropdownPromptId(null);
+      setSelectedMediaTypeFilter(mediaTypeFilter);
+      selectedMediaTypeFilterRef.current = mediaTypeFilter;
+      const contentFormatFilter = selectedContentFormatFilterRef.current;
+
+      if (activeSearchQuery.trim() || searchInput.trim()) {
+        void searchPrompts({ contentFormatToApply: contentFormatFilter, mediaTypeToApply: mediaTypeFilter });
+        return;
+      }
+
+      setPromptCountMeta(
+        buildPromptCountMeta(
+          promptsRef.current,
+          selectedCategoryRef.current,
+          contentFormatFilter,
+          mediaTypeFilter
+        )
       );
     },
     [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
@@ -1452,7 +1566,8 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
         await loadPrompts({
           categoryToApply: selectedCategoryRef.current,
-          promptTypeToApply: selectedPromptTypeFilterRef.current
+          contentFormatToApply: selectedContentFormatFilterRef.current,
+          mediaTypeToApply: selectedMediaTypeFilterRef.current
         });
 
         // 成功メッセージをユーザーに見せてからモーダルを閉じるための短い遅延
@@ -1585,7 +1700,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       setPrompts(promptRecords);
       setPromptFeedback(null);
       setIsPromptsLoading(false);
-      setPromptCountMeta(buildPromptCountMeta(promptRecords, "all", selectedPromptTypeFilterRef.current));
+      setPromptCountMeta(
+        buildPromptCountMeta(
+          promptRecords,
+          "all",
+          selectedContentFormatFilterRef.current,
+          selectedMediaTypeFilterRef.current
+        )
+      );
     }
 
     void loadPrompts();
@@ -1657,7 +1779,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         },
         ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {
-          label: "投稿タイプ",
+          label: "互換タイプ",
           element: null,
           getValue: () => promptTypeRef.current
         },
@@ -1854,9 +1976,12 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         categories={PROMPT_CATEGORIES}
         selectedCategory={selectedCategory}
         onCategoryClick={handleCategoryClick}
-        promptTypeFilters={PROMPT_TYPE_FILTERS}
-        selectedPromptTypeFilter={selectedPromptTypeFilter}
-        onPromptTypeFilterClick={handlePromptTypeFilterClick}
+        contentFormatFilters={PROMPT_CONTENT_FORMAT_FILTERS}
+        selectedContentFormatFilter={selectedContentFormatFilter}
+        onContentFormatFilterClick={handleContentFormatFilterClick}
+        mediaTypeFilters={PROMPT_MEDIA_TYPE_FILTERS}
+        selectedMediaTypeFilter={selectedMediaTypeFilter}
+        onMediaTypeFilterClick={handleMediaTypeFilterClick}
         selectedCategoryTitle={selectedCategoryTitle}
         promptCountMeta={promptCountMeta}
         hasMoreSearchResults={hasMoreSearchResults}

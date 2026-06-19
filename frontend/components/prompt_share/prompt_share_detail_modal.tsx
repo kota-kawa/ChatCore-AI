@@ -3,8 +3,10 @@ import type { RefObject } from "react";
 import MarkdownContent from "../MarkdownContent";
 import {
   formatPromptDate,
-  getPromptTypeLabel,
-  normalizePromptType
+  getPromptFormatLabel,
+  getPromptMediaLabel,
+  normalizePromptContentFormat,
+  normalizePromptMediaType
 } from "../../scripts/prompt_share/formatters";
 import type { PromptCommentData } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
@@ -58,9 +60,15 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
-  // promptがnullのときは安全なデフォルト値を使い、タイプ表示を崩さない
-  // Fall back to "text" when no prompt is loaded to keep type-dependent rendering stable
-  const detailPromptType = detailPrompt ? normalizePromptType(detailPrompt.prompt_type) : "text";
+  // promptがnullのときは安全なデフォルト値を使い、2軸表示を崩さない
+  // Fall back to default axes when no prompt is loaded to keep axis-dependent rendering stable
+  const detailContentFormat = detailPrompt
+    ? normalizePromptContentFormat(String(detailPrompt.content_format || ""))
+    : "prompt";
+  const detailMediaType = detailPrompt
+    ? normalizePromptMediaType(String(detailPrompt.media_type || ""))
+    : "text";
+  const isSkillFormat = detailContentFormat === "skill";
 
   return (
     <div
@@ -136,19 +144,28 @@ export function PromptShareDetailModal({
           >
             <div className="form-group">
               <label>
-                <strong>タイプ:</strong>
+                <strong>フォーマット:</strong>
               </label>
-              <p id="modalPromptType">
-                {detailPrompt ? getPromptTypeLabel(detailPromptType) : ""}
+              <p id="modalPromptFormat">
+                {detailPrompt ? getPromptFormatLabel(detailContentFormat) : ""}
               </p>
             </div>
 
-            {/* 作例画像はURLが存在するプロンプトにのみ表示する */}
-            {/* Reference image is only rendered when the prompt has an image URL */}
+            <div className="form-group">
+              <label>
+                <strong>生成メディア:</strong>
+              </label>
+              <p id="modalPromptMediaType">
+                {detailPrompt ? getPromptMediaLabel(detailMediaType) : ""}
+              </p>
+            </div>
+
+            {/* 作例メディアはURLが存在するプロンプトにのみ表示する（現状は画像プレビュー対応） */}
+            {/* Reference media is only rendered when the prompt has a URL (currently image preview) */}
             {detailPrompt?.reference_image_url ? (
               <div id="modalReferenceImageGroup" className="form-group" style={{ display: "block" }}>
                 <label>
-                  <strong>作例画像:</strong>
+                  <strong>作例メディア:</strong>
                 </label>
                 <div className="modal-reference-image">
                   <img
@@ -167,9 +184,9 @@ export function PromptShareDetailModal({
               <p id="modalPromptCategory">{detailPrompt?.category || ""}</p>
             </div>
 
-            {/* SKILLタイプはcontent欄がなく代わりにMarkdownで定義を表示するため除外する */}
+            {/* SKILLフォーマットはcontent欄がなく代わりにMarkdownで定義を表示するため除外する */}
             {/* SKILL prompts use skill_markdown instead of content, so content field is skipped */}
-            {detailPromptType !== "skill" ? (
+            {!isSkillFormat ? (
               <div className="form-group">
                 <label>
                   <strong>内容:</strong>
@@ -196,7 +213,7 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
-            {detailPromptType !== "skill" && detailPrompt?.input_examples ? (
+            {!isSkillFormat && detailPrompt?.input_examples ? (
               <div id="modalInputExamplesGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>入力例:</strong>
@@ -205,7 +222,7 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
-            {detailPromptType !== "skill" && detailPrompt?.output_examples ? (
+            {!isSkillFormat && detailPrompt?.output_examples ? (
               <div id="modalOutputExamplesGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>出力例:</strong>
@@ -216,7 +233,7 @@ export function PromptShareDetailModal({
 
             {/* SKILLのMarkdown定義はMarkdownContentコンポーネントでレンダリングする */}
             {/* Render SKILL Markdown definition with the shared MarkdownContent renderer */}
-            {detailPromptType === "skill" && detailPrompt?.skill_markdown ? (
+            {isSkillFormat && detailPrompt?.skill_markdown ? (
               <div id="modalSkillMarkdownGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>SKILL定義 (Markdown):</strong>
@@ -227,7 +244,7 @@ export function PromptShareDetailModal({
 
             {/* Pythonスクリプトはpreタグで等幅フォント表示し、コードの可読性を保つ */}
             {/* Python script shown in a <pre> block to preserve monospace formatting */}
-            {detailPromptType === "skill" && detailPrompt?.skill_python_script ? (
+            {isSkillFormat && detailPrompt?.skill_python_script ? (
               <div id="modalSkillPythonScriptGroup" className="form-group" style={{ display: "block" }}>
                 <label>
                   <strong>追加 Python スクリプト:</strong>
