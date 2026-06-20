@@ -87,6 +87,7 @@ import {
 } from "../../components/prompt_share/prompt_share_page_utils";
 import { PromptShareShareModal } from "../../components/prompt_share/prompt_share_share_modal";
 import type { PromptRecord } from "../../components/prompt_share/prompt_card";
+import { buildPromptPath } from "../../lib/promptSlug";
 import { absoluteUrl } from "../../lib/seo";
 
 // SEO向けのページ説明文。検索エンジンのスニペットとして表示される
@@ -926,14 +927,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     }
   }, [activeSearchQuery, buildPromptCountMeta, searchPagination, toPromptRecords]);
 
-  // プロンプトIDをもとに外部共有用のパーマリンクを生成する
-  // Generates a permanent shareable link from the prompt's ID
+  // プロンプトIDとタイトルをもとに、SEOに適したスラッグ付きの外部共有パーマリンクを生成する
+  // Generates a permanent shareable link from the prompt's ID and title, including an SEO-friendly slug
   const buildPromptShareUrl = useCallback((prompt: PromptRecord | null) => {
     const promptId = getPromptId(prompt);
     if (!promptId) {
       throw new Error("共有対象のプロンプトIDが見つかりません。");
     }
-    return `${window.location.origin}/shared/prompt/${encodeURIComponent(promptId)}`;
+    return `${window.location.origin}${buildPromptPath(promptId, prompt?.title)}`;
   }, []);
 
   // 共有モーダルのステータステキストをisErrorフラグと一緒に更新するヘルパー

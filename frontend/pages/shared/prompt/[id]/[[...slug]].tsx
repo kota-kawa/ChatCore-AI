@@ -1,14 +1,15 @@
 import type { GetServerSideProps } from "next";
-import MarkdownContent from "../../../components/MarkdownContent";
-import { SeoHead } from "../../../components/SeoHead";
-import { formatDateTime } from "../../../lib/datetime";
-import { resilientFetch } from "../../../scripts/core/resilient_fetch";
+import MarkdownContent from "../../../../components/MarkdownContent";
+import { SeoHead } from "../../../../components/SeoHead";
+import { formatDateTime } from "../../../../lib/datetime";
+import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
+import { resilientFetch } from "../../../../scripts/core/resilient_fetch";
 import {
   getPromptFormatLabel,
   getPromptMediaLabel,
   normalizePromptContentFormat,
   normalizePromptMediaType
-} from "../../../scripts/prompt_share/formatters";
+} from "../../../../scripts/prompt_share/formatters";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
 // Type for shared prompt data (including skill prompt fields)
@@ -98,6 +99,13 @@ function resolveAbsoluteUrl(value: string | null | undefined, origin: string) {
   return `${origin}/${value}`;
 }
 
+// 任意の catch-all セグメントから要求されたスラッグ（先頭セグメント）を取り出す
+// Extract the requested slug (first segment) from the optional catch-all params
+function extractRequestedSlug(rawSlug: string | string[] | undefined) {
+  if (Array.isArray(rawSlug)) return rawSlug[0] ?? "";
+  return rawSlug ?? "";
+}
+
 // OGP用のmeta descriptionをプロンプト内容から生成する
 // Build the OGP meta description from the prompt content
 function buildMetaDescription(payload: SharedPromptPayload) {
@@ -120,8 +128,10 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   return truncateText(normalized);
 }
 
-// プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）
-// Fetch prompt data by ID for SSR (returns 404 if the ID is missing)
+// プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）。
+// タイトル由来のスラッグが正規URLと一致しない場合は正規パスへ恒久リダイレクトする。
+// Fetch prompt data by ID for SSR (returns 404 if the ID is missing).
+// Permanently redirect to the canonical path when the title-derived slug does not match the requested one.
 export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = async (context) => {
   const rawId = context.params?.id;
   const promptId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -134,8 +144,6 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   const proto = normalizeProtoHeader(context.req.headers["x-forwarded-proto"])
     || (process.env.NODE_ENV === "development" ? "http" : "https");
   const origin = host ? `${proto}://${host}` : "";
-  const resolvedPath = context.resolvedUrl || `/shared/prompt/${encodeURIComponent(promptId)}`;
-  const pageUrl = origin ? `${origin}${resolvedPath}` : resolvedPath;
   const defaultOgImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
 
   let payload: SharedPromptPayload = {};
@@ -156,6 +164,31 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     context.res.statusCode = 500;
     payload = { error: "共有プロンプトの取得に失敗しました。" };
   }
+
+  // タイトルから正規スラッグを算出し、要求スラッグと異なれば正規パスへ301（恒久）リダイレクトする。
+  // 旧来のID単体URLや誤ったスラッグを正規URLへ集約し、重複コンテンツを防ぐ。
+  // Compute the canonical slug from the title and 301-redirect to the canonical path when the requested slug differs.
+  // This consolidates legacy ID-only URLs and incorrect slugs onto the canonical URL, preventing duplicate content.
+  const prompt = payload.prompt;
+  if (prompt && prompt.id !== undefined && prompt.id !== null) {
+    const canonicalSlug = buildPromptSlug(prompt.title);
+    const requestedSlug = extractRequestedSlug(context.params?.slug);
+    if (canonicalSlug && requestedSlug !== canonicalSlug) {
+      return {
+        redirect: {
+          destination: buildPromptPath(prompt.id, prompt.title),
+          permanent: true
+        }
+      };
+    }
+  }
+
+  // 正規パス（プロンプトが存在する場合はスラッグ付き、なければ要求パス）から絶対URLを組み立てる
+  // Build the absolute canonical URL from the canonical path (slug-based when the prompt exists, otherwise the requested path)
+  const canonicalPath = prompt && prompt.id !== undefined && prompt.id !== null
+    ? buildPromptPath(prompt.id, prompt.title)
+    : context.resolvedUrl || `/shared/prompt/${encodeURIComponent(promptId)}`;
+  const pageUrl = origin ? `${origin}${canonicalPath}` : canonicalPath;
 
   return {
     props: {
