@@ -1,4 +1,5 @@
 import type { GetServerSideProps } from "next";
+import { buildPromptPath } from "../lib/promptSlug";
 import { resilientFetch } from "../scripts/core/resilient_fetch";
 
 // Hostヘッダーの値を正規化する（配列の場合は先頭を取得）
@@ -67,16 +68,18 @@ async function fetchPublicPromptRoutes(): Promise<SitemapRoute[]> {
     });
     if (!response.ok) return [];
 
-    const data = (await response.json()) as { prompts?: Array<{ id?: string | number; created_at?: string }> };
+    const data = (await response.json()) as { prompts?: Array<{ id?: string | number; title?: string; created_at?: string }> };
     if (!Array.isArray(data.prompts)) return [];
 
     const routes: SitemapRoute[] = [];
     for (const prompt of data.prompts) {
       if (prompt.id === undefined || prompt.id === null || prompt.id === "") continue;
       // 末尾のスラッシュやXMLエスケープはbuildSitemapXml側で処理されるため、ここではパスのみ生成する
-      // Only build the path here; trailing-slash handling and XML escaping happen in buildSitemapXml
+      // タイトル由来のスラッグを含む正規パスを出力し、SSR側の正規URLと一致させる
+      // Only build the path here; trailing-slash handling and XML escaping happen in buildSitemapXml.
+      // Emit the canonical slug-based path so it matches the canonical URL used during SSR.
       routes.push({
-        path: `/shared/prompt/${encodeURIComponent(String(prompt.id))}`,
+        path: buildPromptPath(prompt.id, prompt.title),
         changefreq: "weekly",
         priority: "0.6",
         lastmod: normalizeLastmod(prompt.created_at)
