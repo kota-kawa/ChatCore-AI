@@ -35,6 +35,10 @@ Additional settings:
 > **Excluded on purpose:** `Coverage Report (Python 3.12)` and `Deploy (main push)`
 > are conditional jobs that do not run on pull requests. Marking them as required
 > would block every PR indefinitely, so they are not part of the required checks.
+>
+> Unit test shard jobs are also not listed directly. They are gated through
+> `Unit Tests (Python 3.12)`, which depends on every shard and fails if any shard
+> fails.
 
 ## How deploys are gated
 
