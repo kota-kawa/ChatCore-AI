@@ -85,14 +85,10 @@
     padding: 0.4rem 0.65rem;
   }
 
-  .prompt-type-filter-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .prompt-type-filter-btn {
-    min-height: 40px;
-    font-size: 0.82rem;
-    padding: 0.4rem 0.65rem;
+    min-height: 36px;
+    font-size: 0.8rem;
+    padding: 0.36rem 0.8rem;
   }
 
   .prompt-share-page .prompt-cards {
@@ -240,8 +236,8 @@
   }
 
   .prompt-type-filter-btn {
-    min-height: 40px;
-    font-size: 0.8rem;
+    min-height: 34px;
+    font-size: 0.78rem;
   }
 
   .prompt-share-page .prompt-card h3 {
