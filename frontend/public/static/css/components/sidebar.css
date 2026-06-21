@@ -14,6 +14,99 @@
   gap: 0.15rem;
 }
 
+/* チャット検索ボックス */
+.chat-room-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0.15rem 0 0.4rem;
+}
+
+.chat-room-search__icon {
+  position: absolute;
+  left: 0.7rem;
+  font-size: 0.92rem;
+  color: var(--text-secondary, #6b7280);
+  pointer-events: none;
+}
+
+.chat-room-search__input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0.5rem 2.1rem 0.5rem 2.1rem;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.1));
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+  font-size: 0.86rem;
+  outline: none;
+  transition:
+    border-color var(--transition-fast, 0.15s ease),
+    box-shadow var(--transition-fast, 0.15s ease);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.chat-room-search__input::placeholder {
+  color: var(--text-secondary, #9ca3af);
+}
+
+.chat-room-search__input:focus {
+  border-color: rgba(25, 195, 125, 0.5);
+  box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
+}
+
+/* ブラウザ標準の検索クリアアイコンを隠し、独自ボタンと重複させない */
+.chat-room-search__input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.chat-room-search__clear {
+  position: absolute;
+  right: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  font-size: 0.72rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-room-search__clear:hover,
+.chat-room-search__clear:focus-visible {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-dark, #1a1a1a);
+}
+
+/* 検索結果が空のときの案内 */
+.chat-room-search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.4rem 0.85rem;
+  text-align: center;
+  color: var(--text-secondary, #6b7280);
+}
+
+.chat-room-search-empty__icon {
+  font-size: 1.3rem;
+  opacity: 0.6;
+}
+
+.chat-room-search-empty__text {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 /* 追加読み込み中インジケータ（スクロールページネーション） */
 .chat-room-list__loading {
   display: flex;
@@ -389,6 +482,31 @@
 }
 
 /* ─── ダークモード ─── */
+[data-theme="dark"] .chat-room-search__input {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .chat-room-search__input::placeholder {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+[data-theme="dark"] .chat-room-search__input:focus {
+  border-color: rgba(94, 234, 212, 0.5);
+  box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.14);
+}
+
+[data-theme="dark"] .chat-room-search__clear:hover,
+[data-theme="dark"] .chat-room-search__clear:focus-visible {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .chat-room-search-empty {
+  color: rgba(148, 163, 184, 0.9);
+}
+
 [data-theme="dark"] .room-actions-menu {
   background: rgba(17, 24, 39, 0.98);
   border-color: rgba(148, 163, 184, 0.2);
@@ -468,6 +586,12 @@
     /* タップターゲットを広げる */
     min-height: 48px;
     padding: 0.72rem 1rem;
+  }
+
+  .chat-room-search__input {
+    /* タップ時のズームを防ぐため 16px 以上を確保 */
+    min-height: 46px;
+    font-size: 16px;
   }
 
   .chat-room-card {
