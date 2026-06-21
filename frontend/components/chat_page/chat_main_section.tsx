@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ChatMessageList } from "./chat_message_list";
+import { ChatRoomSearch } from "./chat_room_search";
 import { InlineLoading } from "../ui/inline_loading";
 import { Skeleton } from "../ui/skeleton";
 import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
@@ -103,6 +104,30 @@ function ChatMainSectionComponent() {
   // 入力テキストに含まれる URL を検出し、AI が参照するページとしてチップ表示する。
   // Detect URLs in the chat input to show as "AI will read" chips before sending.
   const detectedUrls = useMemo(() => extractUrlsFromText(chatInput), [chatInput]);
+
+  // サイドバーのチャット検索クエリ。読み込み済みルームをタイトルで絞り込むために使う。
+  // Sidebar chat search query; filters the loaded rooms by title.
+  const [roomSearchQuery, setRoomSearchQuery] = useState("");
+  const normalizedRoomSearchQuery = roomSearchQuery.trim().toLowerCase();
+  const isRoomSearchActive = normalizedRoomSearchQuery.length > 0;
+
+  // クエリに前方一致・部分一致するルームのみを表示する（大文字小文字を無視）。
+  // Show only rooms whose title matches the query (case-insensitive substring).
+  const filteredChatRooms = useMemo(() => {
+    if (!isRoomSearchActive) return chatRooms;
+    return chatRooms.filter((room) =>
+      (room.title || "新規チャット").toLowerCase().includes(normalizedRoomSearchQuery),
+    );
+  }, [chatRooms, isRoomSearchActive, normalizedRoomSearchQuery]);
+
+  // 検索中に絞り込み結果が空でも、未読み込みのルームがあれば末尾センチネルで
+  // 追加読み込みが走り、全ルームを横断して検索できる。読み込み完了かつ 0 件なら
+  // 「該当なし」を表示する。
+  // While searching, if the filtered list is empty but more rooms remain unloaded,
+  // the bottom sentinel keeps fetching so the search spans all rooms. Show the
+  // "no results" state only once everything is loaded and nothing matched.
+  const showRoomSearchEmptyState =
+    isRoomSearchActive && filteredChatRooms.length === 0 && !chatRoomsHasMore && !isChatRoomsInitialLoading;
 
   // 添付エラー通知は動的インポートで toast モジュールを遅延読み込みする。
   // Lazy-import the toast module to show attachment error notifications.
@@ -379,6 +404,16 @@ function ChatMainSectionComponent() {
             </button>
           )}
 
+          {/* チャット検索ボックス。選択モード中は一括操作に集中するため非表示にする。 */}
+          {/* Chat search box; hidden during selection mode to keep focus on bulk actions. */}
+          {!isRoomSelectionMode && (
+            <ChatRoomSearch
+              value={roomSearchQuery}
+              onChange={setRoomSearchQuery}
+              onClear={() => setRoomSearchQuery("")}
+            />
+          )}
+
           <div id="chat-room-list" aria-busy={isChatRoomsInitialLoading || isLoadingMoreChatRooms ? "true" : "false"}>
             {isChatRoomsInitialLoading && (
               <div className="chat-room-list__skeleton" role="status" aria-live="polite" aria-label="チャット履歴を読み込み中">
@@ -389,7 +424,7 @@ function ChatMainSectionComponent() {
                 ))}
               </div>
             )}
-            {chatRooms.map((room) => {
+            {filteredChatRooms.map((room) => {
               const roomMenuOpen = openRoomActionsFor === room.id;
               // タイトルが空の場合は「新規チャット」をフォールバック表示する。
               // Fall back to "新規チャット" when the room has no title yet.
@@ -503,6 +538,21 @@ function ChatMainSectionComponent() {
                 </div>
               );
             })}
+            {showRoomSearchEmptyState && (
+              // 検索クエリに一致するチャットが 1 件も無いことを伝える空状態。
+              // Empty state shown when no chat matches the search query.
+              <div className="chat-room-search-empty" role="status" aria-live="polite">
+                <i className="bi bi-search chat-room-search-empty__icon" aria-hidden="true"></i>
+                <span className="chat-room-search-empty__text">「{roomSearchQuery.trim()}」に一致するチャットはありません</span>
+              </div>
+            )}
+            {isRoomSearchActive && filteredChatRooms.length === 0 && chatRoomsHasMore && (
+              // 未読み込みのルームを横断検索するため追加読み込み中であることを示す。
+              // Indicate that more rooms are being loaded to search across all of them.
+              <div className="chat-room-list__loading" role="status" aria-live="polite">
+                <InlineLoading label="検索中" />
+              </div>
+            )}
             {isLoadingMoreChatRooms && (
               <div className="chat-room-list__loading" role="status" aria-live="polite">
                 <InlineLoading label="読み込み中" />
