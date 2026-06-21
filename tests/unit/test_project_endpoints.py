@@ -7,7 +7,6 @@ from blueprints.chat.projects import (
     create_project_endpoint,
     delete_project_endpoint,
     list_projects_endpoint,
-    add_project_files_endpoint,
     assign_room_project_endpoint,
 )
 from services.api_errors import ForbiddenOperationError
@@ -67,35 +66,6 @@ class ProjectEndpointsTestCase(unittest.TestCase):
             response = asyncio.run(delete_project_endpoint(request))
 
         self.assertEqual(response.status_code, 403)
-
-    def test_add_project_files_extracts_and_stores(self):
-        request = build_request(
-            method="POST",
-            path="/api/projects/5/files",
-            json_body={"files": [{"name": "note.txt", "content": "本文", "media_type": "text/plain"}]},
-            session={"user_id": 7},
-        )
-
-        class Prepared:
-            name = "note.txt"
-            content = "本文"
-
-        saved = {"id": 11, "fileName": "note.txt", "byteSize": 6}
-        with (
-            patch("blueprints.chat.projects.prepare_attached_files", return_value=[Prepared()]),
-            patch("blueprints.chat.projects.add_project_file", return_value=saved) as add_mock,
-        ):
-            response = asyncio.run(add_project_files_endpoint(request, project_id=5))
-
-        payload = json.loads(response.body.decode("utf-8"))
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(payload["files"], [saved])
-        # project_id / user_id / file_name / content が渡されること。
-        args = add_mock.call_args.args
-        self.assertEqual(args[0], 5)
-        self.assertEqual(args[1], 7)
-        self.assertEqual(args[2], "note.txt")
-        self.assertEqual(args[3], "本文")
 
     def test_assign_room_project_unassign(self):
         request = build_request(

@@ -311,7 +311,6 @@ class ChatPostUseCase:
         memory_facts: list[str] = []
         user_profile_prompt = None
         project_instructions: str | None = None
-        project_knowledge: str | None = None
 
         # ユーザープロフィールプロンプトの構築
         # Build the user profile prompt
@@ -322,14 +321,13 @@ class ChatPostUseCase:
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
 
-        # 通常のユーザーセッションの場合、所属プロジェクトの指示・ナレッジを読み込む
-        # For normal user sessions, load the owning project's instructions and knowledge.
+        # 通常のユーザーセッションの場合、所属プロジェクトの指示を読み込む
+        # For normal user sessions, load the owning project's instructions.
         if user_id is not None and room_mode == "normal":
             try:
                 project_context = await run_blocking(deps.load_project_context, chat_room_id)
                 if project_context:
                     project_instructions = str(project_context.get("instructions") or "") or None
-                    project_knowledge = str(project_context.get("knowledge_text") or "") or None
             except Exception:
                 deps.logger.warning("Failed to load project context; proceeding without it.")
 
@@ -376,7 +374,6 @@ class ChatPostUseCase:
             memory_facts=memory_facts,
             recent_messages=normalized_all_messages,
             project_instructions=project_instructions,
-            project_knowledge=project_knowledge,
         )
 
         # 生成キーの構築と二重送信防止ロック

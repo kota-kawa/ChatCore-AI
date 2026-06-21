@@ -26,22 +26,11 @@ export type Project = {
   createdAt?: string;
   updatedAt?: string;
   chatCount?: number;
-  fileCount?: number;
 };
 
-// プロジェクトのナレッジファイル（メタ情報。本文はサーバー側で保持）。
-// A project knowledge file (metadata only; content lives server-side).
-export type ProjectFile = {
-  id: number;
-  fileName: string;
-  byteSize: number;
-  createdAt?: string;
-};
-
-// プロジェクト詳細（指示・ナレッジ・所属チャットを含む）。
-// Project detail including instructions, knowledge files, and member chats.
+// プロジェクト詳細（指示・所属チャットを含む）。
+// Project detail including instructions and member chats.
 export type ProjectDetail = Project & {
-  files: ProjectFile[];
   rooms: ChatRoom[];
 };
 

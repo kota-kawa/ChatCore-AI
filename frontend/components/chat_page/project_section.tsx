@@ -1,44 +1,26 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   useHomePageChatContext,
   useHomePageProjectContext,
 } from "../../contexts/chat_page/home_page_context";
-import {
-  CHAT_ATTACHMENT_ACCEPT,
-  getAttachmentIconClass,
-  readSelectedChatAttachments,
-} from "../../lib/chat_page/file_attachments";
-import { showToast } from "../../scripts/core/toast";
 import { InlineLoading } from "../ui/inline_loading";
 
-// バイト数を人間可読なサイズ表記に変換する。
-// Format a byte count into a human-readable size string.
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / 1_048_576).toFixed(1)}MB`;
-}
-
-// プロジェクト詳細オーバーレイ。指示・ナレッジ・所属チャットを管理する。
-// Project detail overlay: manage instructions, knowledge files, and member chats.
+// プロジェクト詳細オーバーレイ。指示・所属チャットを管理する。
+// Project detail overlay: manage instructions and member chats.
 export function ProjectSection() {
   const {
     activeProjectId,
     activeProjectDetail,
     isProjectDetailLoading,
     isSavingProject,
-    isUploadingProjectFiles,
     closeProject,
     updateProject,
     deleteProject,
-    uploadProjectFiles,
-    deleteProjectFile,
     setNewChatProject,
   } = useHomePageProjectContext();
   const { switchChatRoom, handleNewChat } = useHomePageChatContext();
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
 
@@ -57,27 +39,6 @@ export function ProjectSection() {
     if (activeProjectId === null) return;
     void updateProject(activeProjectId, { name: name.trim() || "新規プロジェクト", instructions });
   }, [activeProjectId, instructions, name, updateProject]);
-
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFilesSelected = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const files = event.target.files;
-      if (!files || files.length === 0 || activeProjectId === null) return;
-      const prepared = await readSelectedChatAttachments(Array.from(files), [], (message) => {
-        showToast(message, { variant: "error" });
-      });
-      if (event.target) {
-        event.target.value = "";
-      }
-      if (prepared.length > 0) {
-        await uploadProjectFiles(activeProjectId, prepared);
-      }
-    },
-    [activeProjectId, uploadProjectFiles],
-  );
 
   const handleStartChatInProject = useCallback(() => {
     if (activeProjectId === null) return;
@@ -165,65 +126,6 @@ export function ProjectSection() {
                   {isSavingProject ? "保存中..." : "指示を保存"}
                 </button>
               </div>
-            </section>
-
-            {/* ナレッジ（参照ファイル）/ Knowledge (reference files) */}
-            <section className="project-section-block">
-              <div className="project-section-block__heading">
-                <h3 className="project-section-block__title">
-                  <i className="bi bi-journal-text" aria-hidden="true"></i> ナレッジ
-                </h3>
-                <button
-                  type="button"
-                  className="project-knowledge__add cc-press"
-                  onClick={handleUploadClick}
-                  disabled={isUploadingProjectFiles}
-                >
-                  <i className="bi bi-plus-lg" aria-hidden="true"></i>
-                  {isUploadingProjectFiles ? "追加中..." : "ファイルを追加"}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={CHAT_ATTACHMENT_ACCEPT}
-                  className="chat-file-input-hidden"
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  onChange={handleFilesSelected}
-                />
-              </div>
-              <p className="project-section-block__hint">
-                追加した資料はこのプロジェクト内の全会話で AI が参照します（PDF / Office / テキスト）。
-              </p>
-              {detail.files.length === 0 ? (
-                <p className="project-knowledge__empty">まだファイルがありません。</p>
-              ) : (
-                <ul className="project-knowledge__list">
-                  {detail.files.map((file) => (
-                    <li key={file.id} className="project-knowledge__item">
-                      <i
-                        className={`bi ${getAttachmentIconClass(file.fileName)} project-knowledge__icon`}
-                        aria-hidden="true"
-                      ></i>
-                      <span className="project-knowledge__name" title={file.fileName}>
-                        {file.fileName}
-                      </span>
-                      <span className="project-knowledge__size">{formatBytes(file.byteSize)}</span>
-                      <button
-                        type="button"
-                        className="project-knowledge__remove"
-                        aria-label={`${file.fileName}を削除`}
-                        onClick={() => {
-                          void deleteProjectFile(detail.id, file.id);
-                        }}
-                      >
-                        <i className="bi bi-x" aria-hidden="true"></i>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </section>
 
             {/* 所属チャット / Member chats */}

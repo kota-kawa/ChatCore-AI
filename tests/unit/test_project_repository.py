@@ -101,12 +101,11 @@ class ProjectRepositoryTestCase(unittest.TestCase):
         with self.assertRaises(ForbiddenOperationError):
             repo.get_project(project_id=5, user_id=1)
 
-    def test_get_project_includes_files_and_rooms(self):
+    def test_get_project_includes_rooms(self):
         now = datetime(2026, 6, 21, 12, 0, 0)
         cursor = FakeCursor(
             fetchone_results=[(5, "P", "instr", now, now, 1)],
             fetchall_results=[
-                [(11, "spec.pdf", 2048, now)],  # files
                 [("room-1", "設計", "normal", now)],  # rooms
             ],
         )
@@ -114,8 +113,7 @@ class ProjectRepositoryTestCase(unittest.TestCase):
 
         project = repo.get_project(project_id=5, user_id=1)
 
-        self.assertEqual(len(project["files"]), 1)
-        self.assertEqual(project["files"][0]["fileName"], "spec.pdf")
+        self.assertNotIn("files", project)
         self.assertEqual(len(project["rooms"]), 1)
         self.assertEqual(project["rooms"][0]["id"], "room-1")
 
@@ -139,10 +137,9 @@ class ProjectRepositoryTestCase(unittest.TestCase):
 
         self.assertIsNone(repo.get_project_context("room-1"))
 
-    def test_get_project_context_concatenates_knowledge(self):
+    def test_get_project_context_returns_instructions(self):
         cursor = FakeCursor(
             fetchone_results=[(5, "P", "従ってください")],
-            fetchall_results=[[("a.txt", "本文A"), ("b.txt", "本文B")]],
         )
         repo, _ = _make_repo(cursor)
 
@@ -150,9 +147,7 @@ class ProjectRepositoryTestCase(unittest.TestCase):
 
         self.assertEqual(context["project_id"], 5)
         self.assertEqual(context["instructions"], "従ってください")
-        self.assertIn("本文A", context["knowledge_text"])
-        self.assertIn("本文B", context["knowledge_text"])
-        self.assertIn('name="a.txt"', context["knowledge_text"])
+        self.assertNotIn("knowledge_text", context)
 
 
 if __name__ == "__main__":

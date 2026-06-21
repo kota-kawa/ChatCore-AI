@@ -5,13 +5,10 @@ from fastapi import Request
 
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
-from services.attached_files import prepare_attached_files
 from services.error_messages import ERROR_LOGIN_REQUIRED
 from services.project_service import (
-    add_project_file,
     create_project,
     delete_project,
-    delete_project_file,
     get_project,
     list_projects,
     update_project,
@@ -20,8 +17,6 @@ from services.project_service import (
 from services.request_models import (
     AssignRoomProjectRequest,
     ProjectCreateRequest,
-    ProjectFileIdRequest,
-    ProjectFilesUploadRequest,
     ProjectIdRequest,
     ProjectUpdateRequest,
 )
@@ -102,8 +97,8 @@ async def list_projects_endpoint(request: Request):
 @chat_bp.get("/api/projects/{project_id}", name="chat.get_project")
 async def get_project_endpoint(request: Request, project_id: int):
     """
-    プロジェクト詳細（指示・ナレッジ・所属チャット）を返します。
-    Return project detail including instructions, knowledge files, and member chats.
+    プロジェクト詳細（指示・所属チャット）を返します。
+    Return project detail including instructions and member chats.
     """
     user_id, error = _require_user_id(request)
     if error is not None:
@@ -168,75 +163,6 @@ async def delete_project_endpoint(request: Request):
         return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(logger, "Failed to delete project.")
-
-
-@chat_bp.post("/api/projects/{project_id}/files", name="chat.add_project_files")
-async def add_project_files_endpoint(request: Request, project_id: int):
-    """
-    プロジェクトにナレッジファイルを追加します。base64 を抽出してテキスト本文を保存します。
-    Add knowledge files to a project. Files are extracted to text and stored.
-    """
-    user_id, error = _require_user_id(request)
-    if error is not None:
-        return error
-
-    payload, error_response = await _read_payload(request, ProjectFilesUploadRequest, "files is required")
-    if error_response is not None:
-        return error_response
-
-    # 既存の添付ファイル抽出パイプラインを再利用して base64 → テキスト化する。
-    # Reuse the existing attachment extraction pipeline to turn base64 into text.
-    raw_files = [file.model_dump() for file in payload.files]
-    try:
-        prepared = await run_blocking(prepare_attached_files, raw_files)
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}, status_code=400)
-    except Exception:
-        return log_and_internal_server_error(logger, "Failed to extract project files.")
-
-    saved: list[dict[str, Any]] = []
-    try:
-        for item in prepared:
-            content = str(getattr(item, "content", "") or "")
-            file_record = await run_blocking(
-                add_project_file,
-                project_id,
-                user_id,
-                getattr(item, "name", "file"),
-                content,
-                len(content.encode("utf-8")),
-            )
-            saved.append(file_record)
-        return jsonify({"files": saved}, status_code=201)
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc)
-    except Exception:
-        return log_and_internal_server_error(logger, "Failed to store project files.")
-
-
-@chat_bp.post("/api/delete_project_file", name="chat.delete_project_file")
-async def delete_project_file_endpoint(request: Request):
-    """
-    プロジェクトのナレッジファイルを削除します。
-    Delete a knowledge file from a project.
-    """
-    user_id, error = _require_user_id(request)
-    if error is not None:
-        return error
-
-    payload, error_response = await _read_payload(request, ProjectFileIdRequest, "file_id is required")
-    if error_response is not None:
-        return error_response
-
-    try:
-        await run_blocking(delete_project_file, payload.file_id, user_id)
-        return jsonify({"message": "ファイルを削除しました。"}, status_code=200)
-    except ApiServiceError as exc:
-        return jsonify_service_error(exc)
-    except Exception:
-        return log_and_internal_server_error(logger, "Failed to delete project file.")
 
 
 @chat_bp.post("/api/assign_room_project", name="chat.assign_room_project")

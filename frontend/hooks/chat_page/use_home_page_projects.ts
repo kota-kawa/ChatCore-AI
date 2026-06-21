@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import type { AttachedFile, Project, ProjectDetail } from "../../lib/chat_page/types";
+import type { Project, ProjectDetail } from "../../lib/chat_page/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
@@ -38,7 +38,6 @@ export function useHomePageProjects({
   const [isProjectDetailLoading, setIsProjectDetailLoading] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSavingProject, setIsSavingProject] = useState(false);
-  const [isUploadingProjectFiles, setIsUploadingProjectFiles] = useState(false);
 
   const loadProjects = useCallback(async (): Promise<Project[]> => {
     if (!loggedIn) {
@@ -195,62 +194,6 @@ export function useHomePageProjects({
     [activeProjectId, closeProject, loadProjects],
   );
 
-  const uploadProjectFiles = useCallback(
-    async (projectId: number, files: AttachedFile[]): Promise<boolean> => {
-      if (files.length === 0) return false;
-      setIsUploadingProjectFiles(true);
-      try {
-        const response = await resilientFetch(`/api/projects/${projectId}/files`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            files: files.map((f) => ({
-              name: f.name,
-              content: f.content ?? "",
-              media_type: f.mediaType ?? "",
-              data_base64: f.dataBase64 ?? "",
-            })),
-          }),
-        });
-        const payload = (await readJsonBodySafe(response)) as { error?: string };
-        if (!response.ok || payload.error) {
-          throw new Error(extractApiErrorMessage(payload, "ファイルの追加に失敗しました。", response.status));
-        }
-        await Promise.all([refreshProjectDetail(projectId), loadProjects()]);
-        showToast("ナレッジを追加しました。", { variant: "success" });
-        return true;
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
-        return false;
-      } finally {
-        setIsUploadingProjectFiles(false);
-      }
-    },
-    [loadProjects, refreshProjectDetail],
-  );
-
-  const deleteProjectFile = useCallback(
-    async (projectId: number, fileId: number): Promise<void> => {
-      try {
-        const response = await resilientFetch("/api/delete_project_file", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ file_id: fileId }),
-        });
-        const payload = (await readJsonBodySafe(response)) as { error?: string };
-        if (!response.ok || payload.error) {
-          throw new Error(extractApiErrorMessage(payload, "ファイルの削除に失敗しました。", response.status));
-        }
-        await Promise.all([refreshProjectDetail(projectId), loadProjects()]);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
-      }
-    },
-    [loadProjects, refreshProjectDetail],
-  );
-
   // 「このプロジェクトで新規チャット」: 次の作成チャットに紐づけるIDを記録する。
   // "New chat in this project": record the id to attach to the next created chat.
   const setNewChatProject = useCallback(
@@ -269,7 +212,6 @@ export function useHomePageProjects({
     isProjectDetailLoading,
     isProjectModalOpen,
     isSavingProject,
-    isUploadingProjectFiles,
     loadProjects,
     openProject,
     closeProject,
@@ -279,8 +221,6 @@ export function useHomePageProjects({
     createProject,
     updateProject,
     deleteProject,
-    uploadProjectFiles,
-    deleteProjectFile,
     setNewChatProject,
   };
 }

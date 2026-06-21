@@ -119,7 +119,6 @@ type HomePageProjectContextValue = Pick<
   | "isProjectDetailLoading"
   | "isProjectModalOpen"
   | "isSavingProject"
-  | "isUploadingProjectFiles"
   | "pendingProjectId"
   | "loadProjects"
   | "openProject"
@@ -130,8 +129,6 @@ type HomePageProjectContextValue = Pick<
   | "createProject"
   | "updateProject"
   | "deleteProject"
-  | "uploadProjectFiles"
-  | "deleteProjectFile"
   | "setNewChatProject"
 >;
 
@@ -366,7 +363,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       isProjectDetailLoading: controller.isProjectDetailLoading,
       isProjectModalOpen: controller.isProjectModalOpen,
       isSavingProject: controller.isSavingProject,
-      isUploadingProjectFiles: controller.isUploadingProjectFiles,
       pendingProjectId: controller.pendingProjectId,
       loadProjects: controller.loadProjects,
       openProject: controller.openProject,
@@ -377,8 +373,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       createProject: controller.createProject,
       updateProject: controller.updateProject,
       deleteProject: controller.deleteProject,
-      uploadProjectFiles: controller.uploadProjectFiles,
-      deleteProjectFile: controller.deleteProjectFile,
       setNewChatProject: controller.setNewChatProject,
     }),
     [
@@ -389,7 +383,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.isProjectDetailLoading,
       controller.isProjectModalOpen,
       controller.isSavingProject,
-      controller.isUploadingProjectFiles,
       controller.pendingProjectId,
       controller.loadProjects,
       controller.openProject,
@@ -400,8 +393,6 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.createProject,
       controller.updateProject,
       controller.deleteProject,
-      controller.uploadProjectFiles,
-      controller.deleteProjectFile,
       controller.setNewChatProject,
     ],
   );

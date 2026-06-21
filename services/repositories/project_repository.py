@@ -13,21 +13,19 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 
 ERROR_PROJECT_NOT_FOUND = "該当プロジェクトが見つかりません"
 ERROR_PROJECT_FORBIDDEN = "他ユーザーのプロジェクトは操作できません"
-ERROR_PROJECT_FILE_NOT_FOUND = "該当ファイルが見つかりません"
-
-# プロジェクト名・指示・ナレッジの上限。極端に大きな入力で DB / 文脈を圧迫しないよう制限する。
-# Limits for project name / instructions / knowledge to avoid bloating the DB and LLM context.
+# プロジェクト名・指示の上限。極端に大きな入力で DB / 文脈を圧迫しないよう制限する。
+# Limits for project name / instructions to avoid bloating the DB and LLM context.
 MAX_PROJECT_NAME_LENGTH = 255
 MAX_PROJECT_INSTRUCTIONS_LENGTH = 20_000
 
 
 class ProjectRepository:
-    # projects / project_files / chat_rooms.project_id の永続化をまとめる境界。
+    # projects / chat_rooms.project_id の永続化をまとめる境界。
     # ChatRepository と同じく、テストで connection_getter / sleep を差し替えられる。
     #
-    # Boundary class coordinating persistence for projects, project_files, and the
-    # chat_rooms.project_id association. Like ChatRepository, connection_getter / sleep
-    # can be injected in tests to exercise retries without a real database.
+    # Boundary class coordinating persistence for projects and the chat_rooms.project_id
+    # association. Like ChatRepository, connection_getter / sleep can be injected in
+    # tests to exercise retries without a real database.
 
     def __init__(
         self,
@@ -122,11 +120,9 @@ class ProjectRepository:
                 cursor.execute(
                     """
                     SELECT p.id, p.name, p.instructions, p.created_at, p.updated_at,
-                           COUNT(DISTINCT cr.id) AS chat_count,
-                           COUNT(DISTINCT pf.id) AS file_count
+                           COUNT(DISTINCT cr.id) AS chat_count
                       FROM projects p
                       LEFT JOIN chat_rooms cr ON cr.project_id = p.id
-                      LEFT JOIN project_files pf ON pf.project_id = p.id
                      WHERE p.user_id = %s
                      GROUP BY p.id
                      ORDER BY p.created_at DESC, p.id DESC
@@ -156,7 +152,6 @@ class ProjectRepository:
                 if row[5] != user_id:
                     raise ForbiddenOperationError(ERROR_PROJECT_FORBIDDEN)
                 project = self._serialize_project_row(row)
-                project["files"] = self._list_files(cursor, project_id)
                 project["rooms"] = self._list_rooms(cursor, project_id)
                 return project
             finally:
@@ -203,59 +198,6 @@ class ProjectRepository:
 
         self._run_write(op, error_message="Failed to delete project after retry attempts.")
 
-    # ----- project files (knowledge) ----------------------------------------
-
-    def add_project_file(
-        self,
-        project_id: int,
-        user_id: int,
-        file_name: str,
-        content: str,
-        byte_size: int = 0,
-    ) -> dict[str, Any]:
-        def op(cursor: Any) -> dict[str, Any]:
-            self._require_owned_project(cursor, project_id, user_id)
-            cursor.execute(
-                """
-                INSERT INTO project_files (project_id, file_name, content, byte_size)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id, file_name, byte_size, created_at
-                """,
-                (project_id, str(file_name)[:255], content, int(byte_size or 0)),
-            )
-            return self._serialize_file_row(cursor.fetchone())
-
-        return self._run_write(op, error_message="Failed to add project file after retry attempts.")
-
-    def list_project_files(self, project_id: int, user_id: int) -> list[dict[str, Any]]:
-        with self._connection_getter() as conn:
-            cursor = conn.cursor()
-            try:
-                self._require_owned_project(cursor, project_id, user_id)
-                return self._list_files(cursor, project_id)
-            finally:
-                cursor.close()
-
-    def delete_project_file(self, file_id: int, user_id: int) -> None:
-        def op(cursor: Any) -> None:
-            cursor.execute(
-                """
-                SELECT p.user_id
-                  FROM project_files pf
-                  JOIN projects p ON p.id = pf.project_id
-                 WHERE pf.id = %s
-                """,
-                (file_id,),
-            )
-            row = cursor.fetchone()
-            if not row:
-                raise ResourceNotFoundError(ERROR_PROJECT_FILE_NOT_FOUND)
-            if row[0] != user_id:
-                raise ForbiddenOperationError(ERROR_PROJECT_FORBIDDEN)
-            cursor.execute("DELETE FROM project_files WHERE id = %s", (file_id,))
-
-        self._run_write(op, error_message="Failed to delete project file after retry attempts.")
-
     # ----- room association --------------------------------------------------
 
     def assign_room_to_project(self, room_id: str, user_id: int, project_id: int | None) -> None:
@@ -287,9 +229,9 @@ class ProjectRepository:
     # ----- context injection -------------------------------------------------
 
     def get_project_context(self, room_id: str) -> dict[str, Any] | None:
-        # チャットルームが所属するプロジェクトの指示とナレッジ本文を取得する。
+        # チャットルームが所属するプロジェクトの指示を取得する。
         # 未所属なら None。LLM 文脈注入に使う。
-        # Return the instructions and concatenated knowledge for the room's project.
+        # Return the instructions for the room's project.
         # None when the room belongs to no project. Used for LLM context injection.
         with self._connection_getter() as conn:
             cursor = conn.cursor()
@@ -306,43 +248,15 @@ class ProjectRepository:
                 project = cursor.fetchone()
                 if not project:
                     return None
-                project_id = project[0]
-                cursor.execute(
-                    """
-                    SELECT file_name, content
-                      FROM project_files
-                     WHERE project_id = %s AND content IS NOT NULL AND content <> ''
-                     ORDER BY id ASC
-                    """,
-                    (project_id,),
-                )
-                file_rows = cursor.fetchall()
-                knowledge_blocks = [
-                    f"<file name=\"{file_name}\">\n{content}\n</file>"
-                    for (file_name, content) in file_rows
-                ]
                 return {
-                    "project_id": project_id,
+                    "project_id": project[0],
                     "name": str(project[1] or ""),
                     "instructions": str(project[2] or "").strip(),
-                    "knowledge_text": "\n\n".join(knowledge_blocks),
                 }
             finally:
                 cursor.close()
 
     # ----- serialization helpers --------------------------------------------
-
-    def _list_files(self, cursor: Any, project_id: int) -> list[dict[str, Any]]:
-        cursor.execute(
-            """
-            SELECT id, file_name, byte_size, created_at
-              FROM project_files
-             WHERE project_id = %s
-             ORDER BY id ASC
-            """,
-            (project_id,),
-        )
-        return [self._serialize_file_row(row) for row in cursor.fetchall()]
 
     def _list_rooms(self, cursor: Any, project_id: int) -> list[dict[str, Any]]:
         cursor.execute(
@@ -377,14 +291,4 @@ class ProjectRepository:
         }
         if with_counts:
             project["chatCount"] = int(row[5] or 0)
-            project["fileCount"] = int(row[6] or 0)
         return project
-
-    @staticmethod
-    def _serialize_file_row(row: Any) -> dict[str, Any]:
-        return {
-            "id": row[0],
-            "fileName": str(row[1] or ""),
-            "byteSize": int(row[2] or 0),
-            "createdAt": serialize_datetime_iso(row[3]),
-        }
