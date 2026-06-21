@@ -1009,12 +1009,24 @@ export function useHomePageGenerationActions({
     [mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
   );
 
-  const createNewChatRoom = useCallback(async (roomId: string, title: string, mode: ChatRoomMode) => {
+  const createNewChatRoom = useCallback(async (
+    roomId: string,
+    title: string,
+    mode: ChatRoomMode,
+    projectId?: number | null,
+  ) => {
     const response = await resilientFetch("/api/new_chat_room", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ id: roomId, title, mode }),
+      body: JSON.stringify({
+        id: roomId,
+        title,
+        mode,
+        // プロジェクト指定時のみ project_id を送る（通常ルームのみサーバー側で紐づけ）。
+        // Send project_id only when set; the server links normal rooms to the project.
+        ...(projectId != null ? { project_id: projectId } : {}),
+      }),
     });
 
     const payload = (await readJsonBodySafe(response)) as { error?: string };

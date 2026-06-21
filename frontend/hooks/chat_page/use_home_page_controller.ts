@@ -3,6 +3,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type FormEvent,
 } from "react";
 import useSWR from "swr";
@@ -17,6 +18,7 @@ import { useHomePageUiState } from "./use_home_page_ui_state";
 import { useHomePageAiAgentState } from "./use_home_page_ai_agent_state";
 import { useHomePageGenerationActions } from "./use_home_page_generation_actions";
 import { useHomePageRoomActions } from "./use_home_page_room_actions";
+import { useHomePageProjects } from "./use_home_page_projects";
 import { setLoggedInState } from "../../scripts/core/app_state";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { CHAT_ROOMS_PAGE_SIZE } from "../../lib/chat_page/constants";
@@ -400,6 +402,26 @@ export function useHomePageController() {
     return timeoutId;
   }, []);
 
+  // 次に作成するチャットを紐づけるプロジェクトID（「このプロジェクトで新規チャット」用）。
+  // ref はルーム作成時に同期的に参照され、state はセットアップ画面のバッジ表示に使う。
+  // Project id to attach to the next created chat ("new chat in this project").
+  // The ref is read synchronously at room creation; the state drives the setup-view badge.
+  const [pendingProjectId, setPendingProjectId] = useState<number | null>(null);
+  const pendingProjectIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    pendingProjectIdRef.current = pendingProjectId;
+  }, [pendingProjectId]);
+  const clearPendingProject = useCallback(() => {
+    pendingProjectIdRef.current = null;
+    setPendingProjectId(null);
+  }, []);
+
+  const projectActions = useHomePageProjects({
+    loggedIn,
+    pendingProjectIdRef,
+    setPendingProjectId,
+  });
+
   const {
     loadChatRooms,
     switchChatRoom,
@@ -470,6 +492,8 @@ export function useHomePageController() {
     setShareStatus,
     setShareUrl,
     resetChatRoomsPaginationWindow,
+    pendingProjectIdRef,
+    clearPendingProject,
   });
 
   const resetNewPromptComposer = useCallback(() => {
@@ -1037,6 +1061,11 @@ export function useHomePageController() {
   return {
     loggedIn,
     authResolved,
+    // プロジェクト機能（一覧・詳細・CRUD・新規チャット紐づけ）
+    // Projects feature (list, detail, CRUD, new-chat association)
+    ...projectActions,
+    pendingProjectId,
+    clearPendingProject,
     pageViewState,
     isChatVisible,
     isSetupVisible,

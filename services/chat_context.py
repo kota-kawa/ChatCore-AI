@@ -12,6 +12,8 @@ CONTEXT_TOKEN_BUDGET = 6000
 SUMMARY_TOKEN_BUDGET = 900
 MEMORY_TOKEN_BUDGET = 500
 RECENT_HISTORY_TOKEN_BUDGET = 3400
+PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 1200
+PROJECT_KNOWLEDGE_TOKEN_BUDGET = 2000
 RECENT_HISTORY_MAX_MESSAGES = 16
 ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
@@ -234,6 +236,44 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     }
 
 
+# プロジェクト（ChatGPT/Claude のプロジェクトに相当）のカスタム指示をシステムメッセージ化する
+# Build the system message carrying a project's custom instructions.
+def build_project_instructions_message(instructions: str | None) -> dict[str, str] | None:
+    if not instructions:
+        return None
+    trimmed = trim_text_to_token_budget(instructions, PROJECT_INSTRUCTIONS_TOKEN_BUDGET)
+    if not trimmed:
+        return None
+    return {
+        "role": "system",
+        "content": (
+            "<project_instructions>\n"
+            "以下はこのプロジェクト固有の指示です。プロジェクト内の全会話で優先して従ってください。\n"
+            f"{trimmed}\n"
+            "</project_instructions>"
+        ),
+    }
+
+
+# プロジェクトのナレッジ（参照ファイル本文）をシステムメッセージ化する
+# Build the system message carrying a project's knowledge (reference file contents).
+def build_project_knowledge_message(knowledge_text: str | None) -> dict[str, str] | None:
+    if not knowledge_text:
+        return None
+    trimmed = trim_text_to_token_budget(knowledge_text, PROJECT_KNOWLEDGE_TOKEN_BUDGET)
+    if not trimmed:
+        return None
+    return {
+        "role": "system",
+        "content": (
+            "<project_knowledge>\n"
+            "以下はこのプロジェクトに添付された参照資料です。回答の根拠として活用してください。\n"
+            f"{trimmed}\n"
+            "</project_knowledge>"
+        ),
+    }
+
+
 # ベース指示、ユーザー定義、タスク指示、要約、メモリ、直近履歴を統合したLLM送信用メッセージリストを構築する
 # Build the list of messages for LLM request by integrating base instruction, user info, task context, summary, memory, and recent history
 def build_context_messages(
@@ -244,6 +284,8 @@ def build_context_messages(
     room_summary: str,
     memory_facts: list[str],
     recent_messages: list[dict[str, str]],
+    project_instructions: str | None = None,
+    project_knowledge: str | None = None,
 ) -> list[dict[str, str]]:
     messages = [{"role": "system", "content": base_system_prompt}]
 
@@ -251,6 +293,18 @@ def build_context_messages(
     # Add user profile prompt if specified
     if user_profile_prompt:
         messages.append({"role": "system", "content": user_profile_prompt})
+
+    # プロジェクト固有のカスタム指示を追加（タスク指示より前に置き全会話で優先）
+    # Add project custom instructions (before task prompt; applies to all chats in the project)
+    project_instructions_message = build_project_instructions_message(project_instructions)
+    if project_instructions_message is not None:
+        messages.append(project_instructions_message)
+
+    # プロジェクトのナレッジ（参照ファイル本文）を追加
+    # Add project knowledge (reference file contents)
+    project_knowledge_message = build_project_knowledge_message(project_knowledge)
+    if project_knowledge_message is not None:
+        messages.append(project_knowledge_message)
 
     # タスクテンプレートプロンプトを追加
     # Add task template prompt if specified

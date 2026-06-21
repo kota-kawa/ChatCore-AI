@@ -3,7 +3,7 @@ import { ChatMessageList } from "./chat_message_list";
 import { ChatRoomSearch } from "./chat_room_search";
 import { InlineLoading } from "../ui/inline_loading";
 import { Skeleton } from "../ui/skeleton";
-import { useHomePageChatContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
+import { useHomePageChatContext, useHomePageProjectContext, useHomePageTaskContext, useHomePageUiContext } from "../../contexts/chat_page/home_page_context";
 import { MAX_CHAT_MESSAGE_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -33,6 +33,10 @@ function ChatMainSectionComponent() {
   } = useHomePageUiContext();
 
   const { launchingTaskName, tasks } = useHomePageTaskContext();
+
+  // プロジェクト一覧と操作（サイドバーのプロジェクトセクション用）。
+  // Project list and actions for the sidebar's project section.
+  const { projects, openProject, openNewProjectModal } = useHomePageProjectContext();
 
   // チャット操作に関するすべての状態とハンドラーを Context から取得する。
   // Obtain all chat operation state and handlers from context.
@@ -365,6 +369,52 @@ function ChatMainSectionComponent() {
           aria-hidden={sidebarOpen ? "false" : "true"}
           onScroll={handleSidebarScroll}
         >
+          {/* プロジェクトセクション。関連チャットをまとめるワークスペース一覧を表示する。 */}
+          {/* Projects section: workspaces that group related chats. */}
+          {!isRoomSelectionMode && (
+            <div className="sidebar-projects">
+              <div className="sidebar-projects__header">
+                <span className="sidebar-projects__title">
+                  <i className="bi bi-folder2" aria-hidden="true"></i> プロジェクト
+                </span>
+                <button
+                  type="button"
+                  className="sidebar-projects__add cc-press"
+                  aria-label="新規プロジェクトを作成"
+                  data-tooltip="新規プロジェクト"
+                  data-tooltip-placement="bottom"
+                  onClick={() => {
+                    openNewProjectModal();
+                  }}
+                >
+                  <i className="bi bi-plus-lg" aria-hidden="true"></i>
+                </button>
+              </div>
+              {projects.length > 0 && (
+                <div className="sidebar-projects__list">
+                  {projects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      className="sidebar-project-card cc-press"
+                      onClick={() => {
+                        openProject(project.id);
+                      }}
+                    >
+                      <i className="bi bi-folder2-open sidebar-project-card__icon" aria-hidden="true"></i>
+                      <span className="sidebar-project-card__name" title={project.name}>
+                        {project.name}
+                      </span>
+                      {typeof project.chatCount === "number" && project.chatCount > 0 && (
+                        <span className="sidebar-project-card__count">{project.chatCount}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {isRoomSelectionMode ? (
             // 複数選択モード中は選択件数と一括削除ボタンを表示する。
             // In selection mode, show the selection count and bulk-delete controls.

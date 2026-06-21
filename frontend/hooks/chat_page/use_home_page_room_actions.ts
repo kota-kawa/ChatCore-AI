@@ -43,7 +43,12 @@ type UseHomePageRoomActionsParams = {
   chatRooms: ChatRoom[];
   closeOverlaySidebar: () => void;
   closeShareModal: () => void;
-  createNewChatRoom: (roomId: string, title: string, mode: ChatRoomMode) => Promise<void>;
+  createNewChatRoom: (
+    roomId: string,
+    title: string,
+    mode: ChatRoomMode,
+    projectId?: number | null,
+  ) => Promise<void>;
   currentRoomIdRef: MutableRefObject<string | null>;
   fetchChatRoomsPage: (url: string) => Promise<ChatRoomsPage>;
   editAndRegenerateMessage: (newMessage: string, trailingUserCount: number, model: string, roomId: string) => Promise<void>;
@@ -94,6 +99,10 @@ type UseHomePageRoomActionsParams = {
   setShareStatus: (status: ShareStatus) => void;
   setShareUrl: Dispatch<SetStateAction<string>>;
   resetChatRoomsPaginationWindow: () => void;
+  // 「このプロジェクトで新規チャット」用。作成時に参照し、作成後にクリアする。
+  // For "new chat in this project": read at creation time and cleared afterward.
+  pendingProjectIdRef: MutableRefObject<number | null>;
+  clearPendingProject: () => void;
 };
 
 export function useHomePageRoomActions({
@@ -147,6 +156,8 @@ export function useHomePageRoomActions({
   setShareStatus,
   setShareUrl,
   resetChatRoomsPaginationWindow,
+  pendingProjectIdRef,
+  clearPendingProject,
 }: UseHomePageRoomActionsParams) {
   const accessChatInProgressRef = useRef(false);
 
@@ -422,6 +433,11 @@ export function useHomePageRoomActions({
 
   const handleNewChat = useCallback(() => {
     cancelRoomSelection();
+    // 通常の「新規チャット」ではプロジェクト紐づけを解除する。プロジェクト内からの
+    // 新規チャットは handleNewChat の後に setNewChatProject を呼んで再設定する。
+    // A plain "new chat" clears project association; the in-project flow re-sets it
+    // by calling setNewChatProject after handleNewChat.
+    clearPendingProject();
     persistCurrentRoomId(null);
     setCurrentRoomMode("normal");
     setMessages([]);
@@ -461,6 +477,9 @@ export function useHomePageRoomActions({
 
       const roomId = Date.now().toString();
       const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
+      // プロジェクト紐づけは通常ルームのみ（一時チャットは永続化しないため）。
+      // Project association applies to normal rooms only (temporary chats are not persisted).
+      const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
       const currentSetupInfo = setupInfo.trim();
       const roomTitle = (currentSetupInfo || "新規チャット").slice(0, 255);
       const firstMessage = currentSetupInfo
@@ -471,9 +490,10 @@ export function useHomePageRoomActions({
 
       try {
         await Promise.all([
-          createNewChatRoom(roomId, roomTitle, roomMode),
+          createNewChatRoom(roomId, roomTitle, roomMode, projectId),
           waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
         ]);
+        clearPendingProject();
         if (currentRoomIdRef.current !== roomId) {
           setLaunchingTaskName(null);
           return;
@@ -537,15 +557,19 @@ export function useHomePageRoomActions({
 
     const roomId = Date.now().toString();
     const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
+    // プロジェクト紐づけは通常ルームのみ（一時チャットは永続化しないため）。
+    // Project association applies to normal rooms only (temporary chats are not persisted).
+    const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
     const roomTitle = firstMessage.slice(0, 255) || "新規チャット";
 
     resetLaunchingRoomState(roomId, roomMode);
 
     try {
       await Promise.all([
-        createNewChatRoom(roomId, roomTitle, roomMode),
+        createNewChatRoom(roomId, roomTitle, roomMode, projectId),
         waitForDuration(CHAT_LAUNCH_MIN_TRANSITION_MS),
       ]);
+      clearPendingProject();
       if (currentRoomIdRef.current !== roomId) {
         return;
       }

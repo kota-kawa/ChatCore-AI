@@ -117,6 +117,9 @@ class NewChatRoomRequest(RequestPayloadModel):
     id: str
     title: str = "新規チャット"
     mode: Literal["normal", "temporary"] = "normal"
+    # 所属させるプロジェクトID（任意）。指定時は作成後にルームを紐づける。
+    # Optional project to assign the new room to (linked after creation).
+    project_id: int | None = None
 
 
 # 日本語: 特定のチャットルームIDを対象とする操作のリクエストペイロード。
@@ -151,6 +154,46 @@ class AttachedFileItem(RequestPayloadModel):
     content: str = Field(default="", max_length=MAX_ATTACHED_FILE_CONTENT_LENGTH)
     media_type: str = Field(default="", max_length=128)
     data_base64: str = Field(default="", max_length=MAX_ATTACHED_FILE_BASE64_LENGTH)
+
+
+# 日本語: プロジェクト（ワークスペース）作成のリクエストペイロード。
+# English: Request payload for creating a project (workspace).
+class ProjectCreateRequest(RequestPayloadModel):
+    name: str = Field(default="新規プロジェクト", max_length=255)
+    instructions: str = Field(default="", max_length=20000)
+
+
+# 日本語: プロジェクトの名前・指示を更新するリクエストペイロード。
+# English: Request payload for updating a project's name/instructions.
+class ProjectUpdateRequest(RequestPayloadModel):
+    project_id: int
+    name: str | None = Field(default=None, max_length=255)
+    instructions: str | None = Field(default=None, max_length=20000)
+
+
+# 日本語: プロジェクトIDを対象とする操作のリクエストペイロード。
+# English: Request payload targetting a single project ID.
+class ProjectIdRequest(RequestPayloadModel):
+    project_id: int
+
+
+# 日本語: プロジェクトのナレッジファイルIDを対象とする操作のリクエストペイロード。
+# English: Request payload targetting a single project file ID.
+class ProjectFileIdRequest(RequestPayloadModel):
+    file_id: int
+
+
+# 日本語: プロジェクトへナレッジファイルを追加するリクエストペイロード。
+# English: Request payload for adding knowledge files to a project.
+class ProjectFilesUploadRequest(RequestPayloadModel):
+    files: list[AttachedFileItem] = Field(min_length=1, max_length=MAX_ATTACHED_FILES)
+
+
+# 日本語: チャットルームをプロジェクトへ所属/解除するリクエストペイロード。
+# English: Request payload for assigning/unassigning a room to a project.
+class AssignRoomProjectRequest(RequestPayloadModel):
+    room_id: ChatRoomIdStr
+    project_id: int | None = None
 
 
 # 日本語: 新しいチャットメッセージと添付ファイルを含むリクエストペイロード。

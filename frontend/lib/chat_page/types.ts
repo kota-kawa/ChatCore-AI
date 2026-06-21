@@ -17,6 +17,34 @@ export type ChatRoom = {
   mode: ChatRoomMode;
 };
 
+// プロジェクト（ChatGPT/Claude のプロジェクトに相当するワークスペース）。
+// A project: a workspace grouping chats with shared instructions and knowledge.
+export type Project = {
+  id: number;
+  name: string;
+  instructions: string;
+  createdAt?: string;
+  updatedAt?: string;
+  chatCount?: number;
+  fileCount?: number;
+};
+
+// プロジェクトのナレッジファイル（メタ情報。本文はサーバー側で保持）。
+// A project knowledge file (metadata only; content lives server-side).
+export type ProjectFile = {
+  id: number;
+  fileName: string;
+  byteSize: number;
+  createdAt?: string;
+};
+
+// プロジェクト詳細（指示・ナレッジ・所属チャットを含む）。
+// Project detail including instructions, knowledge files, and member chats.
+export type ProjectDetail = Project & {
+  files: ProjectFile[];
+  rooms: ChatRoom[];
+};
+
 export type ChatRoomsPagination = {
   hasMore: boolean;
   nextCursor: string | null;

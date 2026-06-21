@@ -28,6 +28,7 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.chat_context import build_context_messages
+from services.project_service import get_project_context
 from services.generative_ui import normalize_response_with_artifacts
 from services.chat_state import (
     get_room_summary,
@@ -565,6 +566,31 @@ async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, An
     return prompt_data
 
 
+async def _load_project_context_for_room(
+    user_id: int | None,
+    room_mode: str,
+    chat_room_id: str,
+) -> tuple[str | None, str | None]:
+    """
+    チャットルームが所属するプロジェクトの指示・ナレッジを取得します（regenerate/edit 用）。
+    Load the owning project's instructions and knowledge for a room (used by regenerate/edit).
+    取得に失敗しても応答生成は継続し、プロジェクト文脈のみが欠ける扱いにする。
+    On failure, generation continues; only the project context is omitted.
+    """
+    if user_id is None or room_mode != "normal":
+        return None, None
+    try:
+        project_context = await run_blocking(get_project_context, chat_room_id)
+    except Exception:
+        logger.warning("Failed to load project context; proceeding without it.")
+        return None, None
+    if not project_context:
+        return None, None
+    instructions = str(project_context.get("instructions") or "") or None
+    knowledge = str(project_context.get("knowledge_text") or "") or None
+    return instructions, knowledge
+
+
 # サンプルリスト文字列（JSON形式含む）をリスト型配列にパース標準化する関数
 # Parse and normalize example instructions into a list of strings.
 def _parse_example_list(examples: str | None) -> list[str]:
@@ -1011,6 +1037,7 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             list_room_memory_facts=list_room_memory_facts,
             remember_facts_from_message=remember_facts_from_message,
             rename_chat_room_if_current_title_in=rename_chat_room_if_current_title_in,
+            load_project_context=get_project_context,
             build_context_messages=build_context_messages,
             build_base_system_prompt=_build_base_system_prompt,
             build_generation_key=build_generation_key,
@@ -1172,6 +1199,10 @@ async def chat_regenerate(
         except Exception:
             logger.warning("Failed to load user profile context for regenerate; proceeding without it.")
 
+    project_instructions, project_knowledge = await _load_project_context_for_room(
+        user_id, room_mode, chat_room_id
+    )
+
     if user_id is not None and room_mode == "normal":
         try:
             summary_payload = await run_blocking(get_room_summary, chat_room_id)
@@ -1190,6 +1221,8 @@ async def chat_regenerate(
         room_summary=room_summary,
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
+        project_instructions=project_instructions,
+        project_knowledge=project_knowledge,
     )
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
@@ -1526,6 +1559,10 @@ async def chat_edit_and_regenerate(
         except Exception:
             logger.warning("Failed to load user profile for edit_and_regenerate; proceeding without it.")
 
+    project_instructions, project_knowledge = await _load_project_context_for_room(
+        user_id, room_mode, chat_room_id
+    )
+
     if user_id is not None and room_mode == "normal":
         try:
             summary_payload = await run_blocking(get_room_summary, chat_room_id)
@@ -1544,6 +1581,8 @@ async def chat_edit_and_regenerate(
         room_summary=room_summary,
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
+        project_instructions=project_instructions,
+        project_knowledge=project_knowledge,
     )
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)

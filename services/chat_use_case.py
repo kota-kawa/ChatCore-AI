@@ -67,6 +67,7 @@ class ChatPostUseCaseDependencies:
     list_room_memory_facts: Callable[..., Any]
     remember_facts_from_message: Callable[..., Any]
     rename_chat_room_if_current_title_in: Callable[..., Any]
+    load_project_context: Callable[..., Any]
     build_context_messages: Callable[..., Any]
     build_base_system_prompt: Callable[..., Any]
     build_generation_key: Callable[..., Any]
@@ -309,6 +310,8 @@ class ChatPostUseCase:
         room_summary = ""
         memory_facts: list[str] = []
         user_profile_prompt = None
+        project_instructions: str | None = None
+        project_knowledge: str | None = None
 
         # ユーザープロフィールプロンプトの構築
         # Build the user profile prompt
@@ -318,6 +321,17 @@ class ChatPostUseCase:
                 user_profile_prompt = deps.build_user_profile_prompt(user)
             except Exception:
                 deps.logger.warning("Failed to load user profile context; proceeding without it.")
+
+        # 通常のユーザーセッションの場合、所属プロジェクトの指示・ナレッジを読み込む
+        # For normal user sessions, load the owning project's instructions and knowledge.
+        if user_id is not None and room_mode == "normal":
+            try:
+                project_context = await run_blocking(deps.load_project_context, chat_room_id)
+                if project_context:
+                    project_instructions = str(project_context.get("instructions") or "") or None
+                    project_knowledge = str(project_context.get("knowledge_text") or "") or None
+            except Exception:
+                deps.logger.warning("Failed to load project context; proceeding without it.")
 
         # 通常のユーザーセッションの場合、要約とパーソナル記憶情報の読み込みと抽出
         # For normal user sessions, load summaries and extract/load personal memory facts
@@ -361,6 +375,8 @@ class ChatPostUseCase:
             room_summary=room_summary,
             memory_facts=memory_facts,
             recent_messages=normalized_all_messages,
+            project_instructions=project_instructions,
+            project_knowledge=project_knowledge,
         )
 
         # 生成キーの構築と二重送信防止ロック

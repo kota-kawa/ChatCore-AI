@@ -109,6 +109,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             list_room_memory_facts=Mock(return_value=["should not load"]),
             remember_facts_from_message=Mock(return_value=["remembered fact"]),
             rename_chat_room_if_current_title_in=Mock(return_value=False),
+            load_project_context=Mock(return_value=None),
             build_context_messages=build_context_messages,
             build_base_system_prompt=Mock(return_value="system"),
             build_generation_key=Mock(return_value="user:42:room-1"),

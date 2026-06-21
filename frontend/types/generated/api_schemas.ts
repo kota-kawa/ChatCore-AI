@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 8ce3af3d9e9516f7e1a9be099e90e628503ba189a81c0901d48c8d29c94e1ea1
+// Schema fingerprint: a5a3f16238c7bffd0c8adb7198ec3a38b919b4672deecc2a0cc316e80f6b43fc
 
 import { z } from "zod";
 
@@ -11,7 +11,7 @@ export type EmailRequest = z.infer<typeof EmailRequestSchema>;
 export const AuthCodeRequestSchema = z.object({ "authCode": z.union([z.string(), z.null()]).default(null) });
 export type AuthCodeRequest = z.infer<typeof AuthCodeRequestSchema>;
 
-export const NewChatRoomRequestSchema = z.object({ "id": z.string(), "title": z.string().default("新規チャット"), "mode": z.enum(["normal","temporary"]).default("normal") });
+export const NewChatRoomRequestSchema = z.object({ "id": z.string(), "title": z.string().default("新規チャット"), "mode": z.enum(["normal","temporary"]).default("normal"), "project_id": z.union([z.number().int(), z.null()]).default(null) });
 export type NewChatRoomRequest = z.infer<typeof NewChatRoomRequestSchema>;
 
 export const ChatRoomIdRequestSchema = z.object({ "room_id": z.string().min(1).max(128) });
