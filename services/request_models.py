@@ -177,18 +177,6 @@ class ProjectIdRequest(RequestPayloadModel):
     project_id: int
 
 
-# 日本語: プロジェクトのナレッジファイルIDを対象とする操作のリクエストペイロード。
-# English: Request payload targetting a single project file ID.
-class ProjectFileIdRequest(RequestPayloadModel):
-    file_id: int
-
-
-# 日本語: プロジェクトへナレッジファイルを追加するリクエストペイロード。
-# English: Request payload for adding knowledge files to a project.
-class ProjectFilesUploadRequest(RequestPayloadModel):
-    files: list[AttachedFileItem] = Field(min_length=1, max_length=MAX_ATTACHED_FILES)
-
-
 # 日本語: チャットルームをプロジェクトへ所属/解除するリクエストペイロード。
 # English: Request payload for assigning/unassigning a room to a project.
 class AssignRoomProjectRequest(RequestPayloadModel):

@@ -44,26 +44,6 @@ def delete_project(project_id: int, user_id: int) -> None:
     return _get_project_repository().delete_project(project_id, user_id)
 
 
-def add_project_file(
-    project_id: int,
-    user_id: int,
-    file_name: str,
-    content: str,
-    byte_size: int = 0,
-) -> dict[str, Any]:
-    return _get_project_repository().add_project_file(
-        project_id, user_id, file_name, content, byte_size
-    )
-
-
-def list_project_files(project_id: int, user_id: int) -> list[dict[str, Any]]:
-    return _get_project_repository().list_project_files(project_id, user_id)
-
-
-def delete_project_file(file_id: int, user_id: int) -> None:
-    return _get_project_repository().delete_project_file(file_id, user_id)
-
-
 def assign_room_to_project(room_id: str, user_id: int, project_id: int | None) -> None:
     return _get_project_repository().assign_room_to_project(room_id, user_id, project_id)
 

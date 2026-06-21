@@ -570,25 +570,23 @@ async def _load_project_context_for_room(
     user_id: int | None,
     room_mode: str,
     chat_room_id: str,
-) -> tuple[str | None, str | None]:
+) -> str | None:
     """
-    チャットルームが所属するプロジェクトの指示・ナレッジを取得します（regenerate/edit 用）。
-    Load the owning project's instructions and knowledge for a room (used by regenerate/edit).
+    チャットルームが所属するプロジェクトの指示を取得します（regenerate/edit 用）。
+    Load the owning project's instructions for a room (used by regenerate/edit).
     取得に失敗しても応答生成は継続し、プロジェクト文脈のみが欠ける扱いにする。
     On failure, generation continues; only the project context is omitted.
     """
     if user_id is None or room_mode != "normal":
-        return None, None
+        return None
     try:
         project_context = await run_blocking(get_project_context, chat_room_id)
     except Exception:
         logger.warning("Failed to load project context; proceeding without it.")
-        return None, None
+        return None
     if not project_context:
-        return None, None
-    instructions = str(project_context.get("instructions") or "") or None
-    knowledge = str(project_context.get("knowledge_text") or "") or None
-    return instructions, knowledge
+        return None
+    return str(project_context.get("instructions") or "") or None
 
 
 # サンプルリスト文字列（JSON形式含む）をリスト型配列にパース標準化する関数
@@ -1199,7 +1197,7 @@ async def chat_regenerate(
         except Exception:
             logger.warning("Failed to load user profile context for regenerate; proceeding without it.")
 
-    project_instructions, project_knowledge = await _load_project_context_for_room(
+    project_instructions = await _load_project_context_for_room(
         user_id, room_mode, chat_room_id
     )
 
@@ -1222,7 +1220,6 @@ async def chat_regenerate(
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
-        project_knowledge=project_knowledge,
     )
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
@@ -1559,7 +1556,7 @@ async def chat_edit_and_regenerate(
         except Exception:
             logger.warning("Failed to load user profile for edit_and_regenerate; proceeding without it.")
 
-    project_instructions, project_knowledge = await _load_project_context_for_room(
+    project_instructions = await _load_project_context_for_room(
         user_id, room_mode, chat_room_id
     )
 
@@ -1582,7 +1579,6 @@ async def chat_edit_and_regenerate(
         memory_facts=memory_facts,
         recent_messages=normalized_all_messages,
         project_instructions=project_instructions,
-        project_knowledge=project_knowledge,
     )
 
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)

@@ -75,7 +75,7 @@ export function NewProjectModal() {
         <header className="new-project-modal__header">
           <h2 id="new-project-title">新規プロジェクト</h2>
           <p className="new-project-modal__desc">
-            関連するチャットをまとめ、共有のカスタム指示とナレッジを設定できます。
+            関連するチャットをまとめ、共有のカスタム指示を設定できます。
           </p>
         </header>
 
