@@ -23,6 +23,7 @@ from services.chat_service import (
     rename_chat_room_in_db,
     validate_room_owner,
 )
+from services.project_service import assign_room_to_project
 from services.datetime_serialization import serialize_datetime_iso
 
 from services.request_models import (
@@ -510,6 +511,7 @@ async def new_chat_room(
     room_id = payload.id
     title = payload.title
     mode = payload.mode
+    project_id = payload.project_id
 
     session = request.session
     if "user_id" in session:
@@ -523,6 +525,13 @@ async def new_chat_room(
                 await run_blocking(ephemeral_store.create_room, temporary_sid, room_id, title)
             else:
                 await run_blocking(create_chat_room_in_db, room_id, user_id, title, mode)
+                # プロジェクト指定時はルームを紐づける（通常ルームのみ）。失敗してもルーム作成は成功扱い。
+                # Assign the room to the project when requested (normal rooms only).
+                if project_id is not None:
+                    try:
+                        await run_blocking(assign_room_to_project, room_id, user_id, project_id)
+                    except Exception:
+                        logger.warning("Failed to assign new room to project %s.", project_id)
             return jsonify(
                 {
                     "message": "チャットルームが作成されました。",

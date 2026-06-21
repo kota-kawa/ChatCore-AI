@@ -5,6 +5,8 @@ import { NewPromptModal } from "../components/chat_page/modals/new_prompt_modal"
 import { TaskDetailModal } from "../components/chat_page/modals/task_detail_modal";
 import { TaskEditModal } from "../components/chat_page/modals/task_edit_modal";
 import { SetupSection } from "../components/chat_page/setup_section";
+import { ProjectSection } from "../components/chat_page/project_section";
+import { NewProjectModal } from "../components/chat_page/modals/new_project_modal";
 import { HomePageContextProvider } from "../contexts/chat_page/home_page_context";
 import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
 import { absoluteUrl, DEFAULT_SEO_DESCRIPTION } from "../lib/seo";
@@ -158,6 +160,11 @@ export default function HomePage() {
 
             <ChatMainSection />
           </div>
+
+          {/* プロジェクト詳細オーバーレイ・新規プロジェクトモーダル（プロジェクト機能） */}
+          {/* Project detail overlay and new-project modal (Projects feature) */}
+          <ProjectSection />
+          <NewProjectModal />
 
           <TaskDetailModal
             taskDetail={taskDetail}

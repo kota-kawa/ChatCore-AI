@@ -110,10 +110,36 @@ type HomePageSetupChatContextValue = Pick<
   | "setAttachedFiles"
 >;
 
+type HomePageProjectContextValue = Pick<
+  HomePageControllerState,
+  | "projects"
+  | "isProjectsLoading"
+  | "activeProjectId"
+  | "activeProjectDetail"
+  | "isProjectDetailLoading"
+  | "isProjectModalOpen"
+  | "isSavingProject"
+  | "isUploadingProjectFiles"
+  | "pendingProjectId"
+  | "loadProjects"
+  | "openProject"
+  | "closeProject"
+  | "refreshProjectDetail"
+  | "openNewProjectModal"
+  | "closeNewProjectModal"
+  | "createProject"
+  | "updateProject"
+  | "deleteProject"
+  | "uploadProjectFiles"
+  | "deleteProjectFile"
+  | "setNewChatProject"
+>;
+
 const HomePageUiContext = createContext<HomePageUiContextValue | null>(null);
 const HomePageTaskContext = createContext<HomePageTaskContextValue | null>(null);
 const HomePageChatContext = createContext<HomePageChatContextValue | null>(null);
 const HomePageSetupChatContext = createContext<HomePageSetupChatContextValue | null>(null);
+const HomePageProjectContext = createContext<HomePageProjectContextValue | null>(null);
 
 type HomePageContextProviderProps = {
   controller: HomePageControllerState;
@@ -331,11 +357,62 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
     ],
   );
 
+  const projectValue = useMemo<HomePageProjectContextValue>(
+    () => ({
+      projects: controller.projects,
+      isProjectsLoading: controller.isProjectsLoading,
+      activeProjectId: controller.activeProjectId,
+      activeProjectDetail: controller.activeProjectDetail,
+      isProjectDetailLoading: controller.isProjectDetailLoading,
+      isProjectModalOpen: controller.isProjectModalOpen,
+      isSavingProject: controller.isSavingProject,
+      isUploadingProjectFiles: controller.isUploadingProjectFiles,
+      pendingProjectId: controller.pendingProjectId,
+      loadProjects: controller.loadProjects,
+      openProject: controller.openProject,
+      closeProject: controller.closeProject,
+      refreshProjectDetail: controller.refreshProjectDetail,
+      openNewProjectModal: controller.openNewProjectModal,
+      closeNewProjectModal: controller.closeNewProjectModal,
+      createProject: controller.createProject,
+      updateProject: controller.updateProject,
+      deleteProject: controller.deleteProject,
+      uploadProjectFiles: controller.uploadProjectFiles,
+      deleteProjectFile: controller.deleteProjectFile,
+      setNewChatProject: controller.setNewChatProject,
+    }),
+    [
+      controller.projects,
+      controller.isProjectsLoading,
+      controller.activeProjectId,
+      controller.activeProjectDetail,
+      controller.isProjectDetailLoading,
+      controller.isProjectModalOpen,
+      controller.isSavingProject,
+      controller.isUploadingProjectFiles,
+      controller.pendingProjectId,
+      controller.loadProjects,
+      controller.openProject,
+      controller.closeProject,
+      controller.refreshProjectDetail,
+      controller.openNewProjectModal,
+      controller.closeNewProjectModal,
+      controller.createProject,
+      controller.updateProject,
+      controller.deleteProject,
+      controller.uploadProjectFiles,
+      controller.deleteProjectFile,
+      controller.setNewChatProject,
+    ],
+  );
+
   return (
     <HomePageUiContext.Provider value={uiValue}>
       <HomePageTaskContext.Provider value={taskValue}>
         <HomePageSetupChatContext.Provider value={setupChatValue}>
-          <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+          <HomePageProjectContext.Provider value={projectValue}>
+            <HomePageChatContext.Provider value={chatValue}>{children}</HomePageChatContext.Provider>
+          </HomePageProjectContext.Provider>
         </HomePageSetupChatContext.Provider>
       </HomePageTaskContext.Provider>
     </HomePageUiContext.Provider>
@@ -364,4 +441,8 @@ export function useHomePageChatContext() {
 
 export function useHomePageSetupChatContext() {
   return useRequiredContext(HomePageSetupChatContext, "HomePageSetupChatContext");
+}
+
+export function useHomePageProjectContext() {
+  return useRequiredContext(HomePageProjectContext, "HomePageProjectContext");
 }
