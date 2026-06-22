@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatLLMOutput } from "../scripts/chat/chat_ui";
+import { formatLLMOutput, formatMemoOutput } from "../scripts/chat/chat_ui";
 
 // 回答直後（=セッション内で最初の formatLLMOutput 呼び出し）でも、Web 検索の
 // 「回答までのステップ」ブロックがエスケープされず HTML として描画されること。
@@ -63,4 +63,19 @@ test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", ()
   assert.doesNotMatch(html, /\\left/);
   assert.doesNotMatch(html, /\\begin\{cases\}/);
   assert.doesNotMatch(html, /\\\[6pt\]/);
+});
+
+test("formatMemoOutput preserves consecutive blank lines in memo preview", () => {
+  const html = formatMemoOutput(["項目A", "", "", "項目B"].join("\n"));
+
+  assert.match(html, /<p>項目A<\/p>/);
+  assert.match(html, /<div class="memo-preserved-blank-line"><\/div>/);
+  assert.match(html, /<p>項目B<\/p>/);
+});
+
+test("formatMemoOutput does not add blank line spacers inside fenced code blocks", () => {
+  const html = formatMemoOutput(["```text", "alpha", "", "", "beta", "```"].join("\n"));
+
+  assert.match(html, /memo-code-block-container/);
+  assert.doesNotMatch(html, /memo-preserved-blank-line/);
 });
