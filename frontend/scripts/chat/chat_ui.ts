@@ -251,14 +251,19 @@ function normalizeLooseInlineMath(line: string) {
   });
 }
 
-function normalizeMarkdownSegmentForDisplay(segment: string) {
-  const normalizedLines = segment
+type NormalizeMarkdownSegmentOptions = {
+  preserveBlankLines?: boolean;
+};
+
+function normalizeMarkdownSegmentForDisplay(segment: string, options: NormalizeMarkdownSegmentOptions = {}) {
+  const preserveBlankLines = options.preserveBlankLines === true;
+  const normalizedSegment = segment
     .replace(/\u00a0/g, " ")
     .replace(/[\t ]+\n/g, "\n")
-    .replace(/\n[\t \u3000]+\n/g, "\n\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^[\t \u3000]+$/gm, "")
     .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
-    .replace(/\r\n?/g, "\n")
+    .replace(/\r\n?/g, "\n");
+  const normalizedLines = (preserveBlankLines ? normalizedSegment : normalizedSegment.replace(/\n{3,}/g, "\n\n"))
     .split("\n")
     .map((line) => line.replace(/[ \t\u3000]+$/g, ""));
 
@@ -308,8 +313,9 @@ function normalizeMarkdownSegmentForDisplay(segment: string) {
     const labeled = isStandaloneLabelLine(line) ? toStandaloneLabel(line) : line;
     return normalizeLooseInlineMath(labeled);
   });
-  const compacted = collapseConsecutiveBlankLines(labeledLines, 1);
-  return stripInvisibleCharacters(compacted.join("\n").replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n").trimEnd());
+  const compacted = preserveBlankLines ? labeledLines : collapseConsecutiveBlankLines(labeledLines, 1);
+  const output = compacted.join("\n").replace(/^\n+/, "").trimEnd();
+  return stripInvisibleCharacters(preserveBlankLines ? output : output.replace(/\n{3,}/g, "\n\n"));
 }
 
 function normalizeLLMTextForDisplay(rawText: string) {
@@ -326,6 +332,32 @@ function normalizeLLMTextForDisplay(rawText: string) {
     .filter((part) => part.length > 0);
 
   return formattedParts.join("\n\n").trim();
+}
+
+function normalizeMemoTextForDisplay(rawText: string) {
+  const normalized = rawText.replace(/\r\n?/g, "\n");
+  const codeFencePattern = /(```[\s\S]*?```)/g;
+  const parts = normalized.split(codeFencePattern);
+  const formattedParts = parts
+    .map((part, idx) => {
+      if (!part) return "";
+      if (idx % 2 === 1) return part.trim();
+      return preserveMemoPreviewBlankLines(normalizeMarkdownSegmentForDisplay(part, { preserveBlankLines: true }));
+    })
+    .filter((part) => part.length > 0);
+
+  return formattedParts.join("\n\n").trim();
+}
+
+function preserveMemoPreviewBlankLines(markdown: string) {
+  return markdown.replace(/\n{3,}/g, (newlines) => {
+    const extraBlankLineCount = Math.max(0, newlines.length - 2);
+    const spacers = Array.from(
+      { length: extraBlankLineCount },
+      () => '<div class="memo-preserved-blank-line"></div>'
+    ).join("\n");
+    return `\n\n${spacers}\n\n`;
+  });
 }
 
 function normalizeUserTextForDisplay(rawText: string) {
@@ -618,7 +650,7 @@ function formatLLMOutput(text: string) {
 
 /* メモ用の LLM 出力 Markdown を HTML に変換 */
 function formatMemoOutput(text: string) {
-  const normalized = normalizeLLMTextForDisplay(text);
+  const normalized = normalizeMemoTextForDisplay(text);
   if (!memoMarkedParser && !markdownEnhancementDisabled) {
     void ensureMarkedParser();
   }
