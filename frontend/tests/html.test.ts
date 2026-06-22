@@ -11,3 +11,10 @@ test("sanitizeClassAttributeValue preserves web search source UI classes", () =>
     "web-search-sources web-search-sources--trace web-search-sources__summary web-search-sources__link"
   );
 });
+
+test("sanitizeClassAttributeValue preserves memo preview blank line spacer class", () => {
+  assert.equal(
+    sanitizeClassAttributeValue("memo-preserved-blank-line unsafe-class"),
+    "memo-preserved-blank-line"
+  );
+});
