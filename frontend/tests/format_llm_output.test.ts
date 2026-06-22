@@ -66,11 +66,14 @@ test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", ()
 });
 
 test("formatMemoOutput preserves consecutive blank lines in memo preview", () => {
-  const html = formatMemoOutput(["項目A", "", "", "項目B"].join("\n"));
+  const html = formatMemoOutput(["項目A", "", "項目B", "", "", "項目C"].join("\n"));
+  const spacerCount = (html.match(/memo-preserved-blank-line/g) || []).length;
 
   assert.match(html, /<p>項目A<\/p>/);
   assert.match(html, /<div class="memo-preserved-blank-line"><\/div>/);
   assert.match(html, /<p>項目B<\/p>/);
+  assert.match(html, /<p>項目C<\/p>/);
+  assert.equal(spacerCount, 3);
 });
 
 test("formatMemoOutput does not add blank line spacers inside fenced code blocks", () => {

@@ -350,10 +350,10 @@ function normalizeMemoTextForDisplay(rawText: string) {
 }
 
 function preserveMemoPreviewBlankLines(markdown: string) {
-  return markdown.replace(/\n{3,}/g, (newlines) => {
-    const extraBlankLineCount = Math.max(0, newlines.length - 2);
+  return markdown.replace(/\n{2,}/g, (newlines) => {
+    const blankLineCount = Math.max(1, newlines.length - 1);
     const spacers = Array.from(
-      { length: extraBlankLineCount },
+      { length: blankLineCount },
       () => '<div class="memo-preserved-blank-line"></div>'
     ).join("\n");
     return `\n\n${spacers}\n\n`;
