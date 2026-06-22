@@ -9,10 +9,11 @@
 - `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
 
 ## ビルド、テスト、開発コマンド
+> **注意:** この環境には `python` コマンドがありません。Python コマンドはすべて `python3`（および `python3 -m pip`）を使用してください。
 - `docker-compose up --build` は、Docker を使用してフルスタック（FastAPI + PostgreSQL）をビルドし、実行します。
-- `pip install -r requirements.txt` は、ローカル開発用の Python 依存関係をインストールします。
-- `python app.py` は、FastAPI アプリをローカルで起動します（必要な環境変数が設定されていることを確認してください）。
-- `python -m unittest` はテストスイートを実行します。特定のファイルをターゲットにする場合は、`python -m unittest tests.unit.test_edit_default_task` のように実行します。
+- `python3 -m pip install -r requirements.txt` は、ローカル開発用の Python 依存関係をインストールします。
+- `python3 app.py` は、FastAPI アプリをローカルで起動します（必要な環境変数が設定されていることを確認してください）。
+- `python3 -m unittest` はテストスイートを実行します。特定のファイルをターゲットにする場合は、`python3 -m unittest tests.unit.test_edit_default_task` のように実行します。
 
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
