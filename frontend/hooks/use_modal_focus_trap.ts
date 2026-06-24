@@ -66,6 +66,11 @@ export function useModalFocusTrap({
       const container = containerRef.current;
       if (!container) return;
 
+      // グローバル確認/通知モーダルが最前面にある間は、下層モーダルの
+      // フォーカストラップが Tab/Escape を奪わないようにする。
+      // While a global alert/confirm modal is on top, let it own keyboard handling.
+      if (document.querySelector(".cc-alert-modal.is-visible")) return;
+
       // Escapeキーが押された場合の処理
       // Handle the Escape key press
       if (event.key === "Escape" && onEscape) {
