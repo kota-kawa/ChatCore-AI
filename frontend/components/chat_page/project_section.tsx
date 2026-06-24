@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   useHomePageChatContext,
   useHomePageProjectContext,
 } from "../../contexts/chat_page/home_page_context";
+import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
+import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import { InlineLoading } from "../ui/inline_loading";
+import { ModalCloseButton } from "../ui/modal_close_button";
 
 // プロジェクト詳細オーバーレイ。指示・所属チャットを管理する。
 // Project detail overlay: manage instructions and member chats.
@@ -21,6 +24,7 @@ export function ProjectSection() {
   } = useHomePageProjectContext();
   const { switchChatRoom, handleNewChat } = useHomePageChatContext();
 
+  const modalRef = useRef<HTMLDivElement | null>(null);
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
 
@@ -34,6 +38,19 @@ export function ProjectSection() {
   }, [activeProjectDetail]);
 
   const isOpen = activeProjectId !== null;
+
+  const getInitialFocus = useCallback(() => {
+    return modalRef.current?.querySelector<HTMLElement>("#project-detail-close-btn") ?? null;
+  }, []);
+
+  useModalFocusTrap({
+    isOpen,
+    containerRef: modalRef,
+    getInitialFocus,
+    onEscape: closeProject,
+  });
+
+  useBodyScrollLock(isOpen);
 
   const handleSaveDetails = useCallback(() => {
     if (activeProjectId === null) return;
@@ -56,18 +73,28 @@ export function ProjectSection() {
     detail !== null && (name !== detail.name || instructions !== detail.instructions);
 
   return (
-    <div className="project-overlay" role="dialog" aria-modal="true" aria-label="プロジェクト詳細">
-      <div className="project-overlay__panel">
+    <div
+      ref={modalRef}
+      className="project-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="project-detail-title"
+      tabIndex={-1}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          closeProject();
+        }
+      }}
+    >
+      <div className="project-overlay__panel" tabIndex={-1}>
         <header className="project-overlay__header">
-          <button
-            type="button"
-            className="project-overlay__back icon-button cc-press"
-            aria-label="プロジェクトを閉じる"
+          <ModalCloseButton
+            id="project-detail-close-btn"
+            className="project-overlay__close icon-button cc-press"
+            label="プロジェクト詳細を閉じる"
             onClick={closeProject}
-          >
-            <i className="bi bi-arrow-left" aria-hidden="true"></i>
-          </button>
-          <span className="project-overlay__title">
+          />
+          <span id="project-detail-title" className="project-overlay__title">
             <i className="bi bi-folder2-open" aria-hidden="true"></i>
             プロジェクト
           </span>
@@ -98,6 +125,7 @@ export function ProjectSection() {
               <label className="project-field">
                 <span className="project-field__label">プロジェクト名</span>
                 <input
+                  id="project-name-input"
                   type="text"
                   className="project-field__input"
                   value={name}

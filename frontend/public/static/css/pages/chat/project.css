@@ -2,38 +2,61 @@
    Projects feature: detail overlay and new-project modal styles.
    Projects group related chats with shared custom instructions and knowledge. */
 
-/* ─── プロジェクト詳細オーバーレイ ─── */
+/* ─── プロジェクト詳細モーダル ─── */
 .project-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1200;
+  z-index: var(--z-modal-priority, 85);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 0;
-  background: var(--surface-primary, #ffffff);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  align-items: center;
+  padding: clamp(0.75rem, 2.5vw, 1.5rem);
+  background: var(--chat-modal-overlay, rgba(15, 23, 42, 0.45));
+  backdrop-filter: var(--chat-modal-backdrop-filter, blur(8px) saturate(125%));
+  -webkit-backdrop-filter: var(--chat-modal-backdrop-filter, blur(8px) saturate(125%));
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .project-overlay__panel {
-  width: 100%;
-  max-width: 820px;
+  width: min(780px, 100%);
+  max-height: min(860px, calc(var(--chat-visual-viewport-height, 100dvh) - 2rem));
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--chat-modal-border, rgba(184, 221, 204, 0.82));
+  border-radius: var(--chat-modal-panel-radius, 24px);
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.12), transparent 34%),
+    var(--chat-modal-surface-bg, var(--surface-primary, #ffffff));
+  box-shadow: var(--chat-modal-shadow, 0 24px 60px rgba(0, 0, 0, 0.25));
+  animation: project-modal-open var(--chat-modal-enter-duration, 0.24s) ease-out;
 }
 
 .project-overlay__header {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.9rem 1rem;
-  background: var(--surface-primary, #ffffff);
-  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  flex: 0 0 auto;
+  padding: 1rem 1.1rem;
+  background: var(--chat-modal-header-bg, rgba(255, 255, 255, 0.86));
+  border-bottom: 1px solid var(--chat-modal-header-border, rgba(0, 0, 0, 0.08));
+}
+
+.project-overlay__close {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-dark, #1a1a1a);
+}
+
+.project-overlay__close:hover,
+.project-overlay__close:focus-visible {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.28);
 }
 
 .project-overlay__title {
@@ -66,16 +89,37 @@
 }
 
 .project-overlay__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
   padding: 3rem 1rem;
   text-align: center;
   color: var(--text-secondary, #6b7280);
 }
 
 .project-overlay__body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.2rem 1rem 3rem;
+  padding: 1.2rem 1.1rem 1.4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes project-modal-open {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .project-section-block {
@@ -336,7 +380,11 @@
 }
 
 /* ─── ダークモード ─── */
-[data-theme="dark"] .project-overlay,
+[data-theme="dark"] .project-overlay {
+  background: rgba(2, 6, 23, 0.66);
+}
+
+[data-theme="dark"] .project-overlay__panel,
 [data-theme="dark"] .project-overlay__header,
 [data-theme="dark"] .new-project-modal__content {
   background: #0f172a;
@@ -355,6 +403,7 @@
 [data-theme="dark"] .new-project-field__input,
 [data-theme="dark"] .new-project-field__textarea,
 [data-theme="dark"] .project-newchat-btn,
+[data-theme="dark"] .project-overlay__close,
 [data-theme="dark"] .new-project-modal__cancel {
   color: #e2e8f0;
 }
@@ -365,6 +414,7 @@
 [data-theme="dark"] .new-project-field__textarea,
 [data-theme="dark"] .project-chats__item,
 [data-theme="dark"] .project-newchat-btn,
+[data-theme="dark"] .project-overlay__close,
 [data-theme="dark"] .new-project-modal__cancel {
   background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.22);
@@ -377,6 +427,25 @@
 
 /* ─── レスポンシブ ─── */
 @media (max-width: 576px) {
+  .project-overlay {
+    padding: 0.5rem;
+  }
+
+  .project-overlay__panel {
+    width: 100%;
+    max-height: calc(var(--chat-visual-viewport-height, 100dvh) - 1rem);
+    border-radius: 16px;
+  }
+
+  .project-overlay__header {
+    padding: 0.75rem 0.8rem;
+  }
+
+  .project-overlay__body {
+    gap: 1.1rem;
+    padding: 1rem 0.8rem 1.1rem;
+  }
+
   .project-field__input,
   .project-field__textarea,
   .new-project-field__input,
@@ -390,5 +459,6 @@
 
   .project-newchat-btn {
     margin-left: 0;
+    white-space: normal;
   }
 }
