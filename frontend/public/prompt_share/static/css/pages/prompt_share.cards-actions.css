@@ -18,8 +18,8 @@
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 0.9rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
 }
 
@@ -51,13 +51,14 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.86rem;
   border-radius: 16px;
-  border: 1px solid #cbdceb;
-  background: #ffffff;
-  padding: 1.1rem;
+  border: 1px solid #d6e2ef;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  padding: 1.12rem;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(65, 111, 158, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 24px rgba(65, 111, 158, 0.09), 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
   overflow: visible;
   user-select: none;
@@ -99,39 +100,49 @@
 .prompt-share-page .prompt-card__header {
   position: relative;
   z-index: 1;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "badges menu"
+    "date date";
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.42rem 0.54rem;
+  min-height: 3rem;
 }
 
 .prompt-share-page .prompt-card__created-at {
+  grid-area: date;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
-  margin-left: auto;
-  margin-right: 0.5rem;
-  color: #4a5568;
-  font-size: 0.725rem;
+  margin: 0;
+  color: #64748b;
+  font-size: 0.72rem;
   line-height: 1.2;
   white-space: nowrap;
-  flex-shrink: 0;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .prompt-share-page .prompt-card__created-at i {
   font-size: 0.7rem;
-  color: #718096;
+  color: #8aa0b8;
 }
 
 .prompt-share-page .prompt-card__badges {
-  flex: 1;
+  grid-area: badges;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.38rem;
   min-width: 0;
-  padding-left: 0.08rem;
+  overflow: hidden;
+  padding-left: 0;
+}
+
+.prompt-share-page .prompt-card__header > .cc-skeleton {
+  grid-area: menu;
+  justify-self: end;
 }
 
 .prompt-share-page .prompt-card__category-pill {
@@ -146,12 +157,23 @@
   background: #ebf8ff;
   padding: 0.22rem 0.65rem;
   line-height: 1.2;
-  letter-spacing: 0.02em;
+  min-width: 0;
+  max-width: min(48%, 11rem);
+  white-space: nowrap;
 }
 
 .prompt-share-page .prompt-card__category-pill i {
+  flex: 0 0 auto;
   font-size: 0.7rem;
   color: #3182ce;
+}
+
+.prompt-share-page .prompt-card__category-pill span,
+.prompt-share-page .prompt-card__type-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prompt-share-page .prompt-card__type-pill {
@@ -163,7 +185,8 @@
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .prompt-share-page .prompt-card__type-pill--prompt,
@@ -190,6 +213,7 @@
 }
 
 .prompt-share-page .prompt-card__type-pill i {
+  flex: 0 0 auto;
   font-size: 0.72rem;
 }
 
@@ -328,6 +352,8 @@
 }
 
 .prompt-share-page .meatball-menu {
+  grid-area: menu;
+  justify-self: end;
   border: none;
   border-radius: 10px;
   background: transparent;
