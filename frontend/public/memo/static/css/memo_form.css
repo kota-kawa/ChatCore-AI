@@ -2279,7 +2279,8 @@ textarea.memo-control {
 .memo-preview-content pre { border-radius: 8px; padding: 0.75rem; overflow-x: auto; }
 .memo-preview-content code { font-size: 0.85em; border-radius: 4px; padding: 0.15em 0.35em; }
 .memo-preview-content .memo-preserved-blank-line,
-.memo-modal__markdown .memo-preserved-blank-line {
+.memo-modal__markdown .memo-preserved-blank-line,
+.memo-item__excerpt .memo-preserved-blank-line {
   display: block;
   height: 1.68em;
   margin: 0;
