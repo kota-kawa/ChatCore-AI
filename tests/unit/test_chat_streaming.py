@@ -407,6 +407,79 @@ class ChatStreamingTestCase(unittest.TestCase):
             [("sid-1", "default", "assistant", "こんにちは")],
         )
 
+    # 日本語: 生成途中で停止しても、それまでに生成されたテキストが保存され aborted イベントに含まれることを検証します。
+    # English: Verify that stopping mid-generation persists the partial text and includes it in the aborted event.
+    def test_background_generation_job_persists_partial_reply_on_cancel(self):
+        persisted_messages = []
+        first_chunk_emitted = threading.Event()
+        release_second_chunk = threading.Event()
+
+        # 日本語: 1チャンク出力後にブロックし、キャンセルされるまで次のチャンクを出さない疑似ストリーム。
+        # English: Fake stream that blocks after the first chunk until cancellation is requested.
+        def fake_stream(*_args, **_kwargs):
+            yield "途中まで"
+            first_chunk_emitted.set()
+            release_second_chunk.wait(timeout=2)
+            yield "この続きは保存されない"
+
+        generation_key = "guest:sid-cancel:default"
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=fake_stream,
+        ):
+            job = start_generation_job(
+                generation_key,
+                conversation_messages=[{"role": "user", "content": "こんにちは"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            self.assertTrue(first_chunk_emitted.wait(timeout=2))
+            job.cancel()
+            release_second_chunk.set()
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: chunk", body)
+        self.assertIn("event: aborted", body)
+        self.assertIn('"response": "途中まで"', body)
+        self.assertIn('"partial": true', body)
+        self.assertEqual(persisted_messages, ["途中まで"])
+
+    # 日本語: 本文が生成される前に停止した場合は、空の応答を保存しないことを検証します。
+    # English: Verify that stopping before any body text is produced does not persist an empty reply.
+    def test_background_generation_job_skips_persist_on_cancel_without_text(self):
+        persisted_messages = []
+        first_call = threading.Event()
+        release = threading.Event()
+
+        def fake_stream(*_args, **_kwargs):
+            first_call.set()
+            release.wait(timeout=2)
+            return
+            yield  # pragma: no cover - generator marker
+
+        with patch(
+            "services.chat_generation.get_llm_response_stream",
+            side_effect=fake_stream,
+        ):
+            job = start_generation_job(
+                "guest:sid-empty:default",
+                conversation_messages=[{"role": "user", "content": "hi"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response: persisted_messages.append(response),
+            )
+
+            self.assertTrue(first_call.wait(timeout=2))
+            job.cancel()
+            release.set()
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertIn("event: aborted", body)
+        self.assertEqual(persisted_messages, [])
+
     # 日本語: バックグラウンド生成ジョブの完了イベント(done)に、永続化時のメタデータが含まれることを検証します。
     # English: Verify that the background generation job's done event includes persistence metadata.
     def test_background_generation_job_includes_persist_metadata_in_done_event(self):

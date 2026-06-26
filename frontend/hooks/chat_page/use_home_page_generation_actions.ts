@@ -608,7 +608,11 @@ export function useHomePageGenerationActions({
 
         if (parsed.event === "aborted") {
           streamState.completed = true;
-          finalizeStreamingMessage(streamedText, false);
+          // 停止時にサーバーが保存した生成途中のテキストを優先して表示する。
+          // Prefer the partial text the server persisted on stop so it is not lost.
+          const abortedPayload = normalizeChatResponsePayload(parsed.data);
+          const finalText = abortedPayload.response ?? streamedText;
+          finalizeStreamingMessage(finalText, false, abortedPayload.parts);
           clearStoredGenerationState(roomId);
           return;
         }
