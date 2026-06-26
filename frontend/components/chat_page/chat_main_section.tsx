@@ -485,7 +485,7 @@ function ChatMainSectionComponent() {
               return (
                 <div
                   key={room.id}
-                  className={`chat-room-card cc-press ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""}`.trim()}
+                  className={`chat-room-card cc-press ${currentRoomId === room.id ? "active" : ""} ${isRoomSelectionMode ? "chat-room-card--selectable" : ""} ${roomSelected ? "chat-room-card--selected" : ""} ${roomMenuOpen ? "chat-room-card--menu-open" : ""}`.trim()}
                   // 選択モード時は checkbox、通常時は button として扱い、アクセシビリティを確保する。
                   // Use checkbox role in selection mode, button role otherwise for accessibility.
                   role={isRoomSelectionMode ? "checkbox" : "button"}
@@ -521,7 +521,12 @@ function ChatMainSectionComponent() {
                   {!isRoomSelectionMode && (
                     // ルームカード右端の縦三点メニュー。名前変更・複数選択・削除を提供する。
                     // Three-dot context menu on each room card for rename, multi-select, and delete.
-                    <div className="chat-room-card-actions">
+                    <div
+                      className="chat-room-card-actions"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
                       <button
                         type="button"
                         className="room-actions-icon cc-press"

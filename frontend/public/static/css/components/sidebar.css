@@ -319,6 +319,10 @@
   border-color: rgba(15, 118, 110, 0.24);
 }
 
+.chat-room-card--menu-open {
+  z-index: 5;
+}
+
 .chat-room-card.active.chat-room-card--selected {
   background: var(--primary-hover, #15a86b);
 }
@@ -366,6 +370,7 @@
   align-items: center;
   position: relative;
   margin-left: auto;
+  z-index: 1;
 }
 
 .chat-room-card:hover {
