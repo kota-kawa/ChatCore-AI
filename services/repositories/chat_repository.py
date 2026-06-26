@@ -14,6 +14,21 @@ from services.db import Error, get_db_connection, is_retryable_db_error, rollbac
 from services.error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
 from services.generative_ui import decode_message_parts, encode_message_parts
 
+def _decode_web_search_context(raw: Any) -> list[dict[str, Any]] | None:
+    # 保存済みのWeb検索結果(JSONB文字列 or 解析済みリスト)を dict のリストに正規化する
+    # Normalize stored web search results (JSONB string or parsed list) into a list of dicts.
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return None
+    if not isinstance(raw, list):
+        return None
+    return [item for item in raw if isinstance(item, dict)] or None
+
+
 UNIQUE_VIOLATION_PGCODE = "23505"
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
@@ -55,6 +70,7 @@ class ChatRepository:
         parent_id: int | None = None,
         message_parts: list[dict[str, Any]] | None = None,
         attached_file_contents: list[Any] | None = None,
+        web_search_context: list[dict[str, Any]] | None = None,
     ) -> int | None:
         # メッセージを挿入し、それをアクティブなブランチの先端にする
         # Insert a message and make it the active branch tip.
@@ -69,6 +85,9 @@ class ChatRepository:
         file_names_json = json.dumps(attached_file_names, ensure_ascii=False) if attached_file_names else None
         message_parts_json = encode_message_parts(message_parts)
         attached_file_contents_json = encode_attached_files_for_storage(attached_file_contents)
+        web_search_context_json = (
+            json.dumps(web_search_context, ensure_ascii=False) if web_search_context else None
+        )
         for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
             with self._connection_getter() as conn:
                 cursor = conn.cursor()
@@ -81,9 +100,10 @@ class ChatRepository:
                             attached_file_names,
                             parent_id,
                             message_parts,
-                            attached_file_contents
+                            attached_file_contents,
+                            web_search_context
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """
                     cursor.execute(
@@ -96,6 +116,7 @@ class ChatRepository:
                             parent_id,
                             message_parts_json,
                             attached_file_contents_json,
+                            web_search_context_json,
                         ),
                     )
                     row = cursor.fetchone()
@@ -391,7 +412,8 @@ class ChatRepository:
                    timestamp,
                    attached_file_names,
                    message_parts,
-                   attached_file_contents
+                   attached_file_contents,
+                   web_search_context
               FROM chat_history
              WHERE chat_room_id = %s
              ORDER BY id ASC
@@ -409,6 +431,7 @@ class ChatRepository:
             file_names_json,
             message_parts_json,
             attached_file_contents_json,
+            web_search_context_json,
         ) in cursor.fetchall():
             nodes[message_id] = {
                 "id": message_id,
@@ -420,6 +443,7 @@ class ChatRepository:
                 "attached_file_names": file_names_json,
                 "message_parts": message_parts_json,
                 "attached_file_contents": attached_file_contents_json,
+                "web_search_context": web_search_context_json,
             }
 
         cursor.execute("SELECT active_root_id FROM chat_rooms WHERE id = %s", (chat_room_id,))
@@ -623,6 +647,26 @@ class ChatRepository:
                     role = "user" if node["sender"] == "user" else "assistant"
                     messages.append({"role": role, "content": node["message"]})
                 return messages
+            finally:
+                cursor.close()
+
+    def get_active_path_web_search_contexts(
+        self, chat_room_id: str
+    ) -> list[dict[str, Any]]:
+        # アクティブパス上の各メッセージに保存されたWeb検索結果を、古い順に集約して返す
+        # Aggregate stored web search results along the active path, oldest first.
+        with self._connection_getter() as conn:
+            cursor = conn.cursor()
+            try:
+                nodes, active_root_id = self._load_room_tree(cursor, chat_room_id)
+                children = self._children_by_parent(nodes)
+                path = self._walk_active_path(nodes, active_root_id, children)
+                contexts: list[dict[str, Any]] = []
+                for node in path:
+                    decoded = _decode_web_search_context(node.get("web_search_context"))
+                    if decoded:
+                        contexts.extend(decoded)
+                return contexts
             finally:
                 cursor.close()
 

@@ -286,6 +286,7 @@ class EphemeralChatStore:
         content: str,
         message_parts: list[dict] | None = None,
         attached_file_contents: list | None = None,
+        web_search_context: list[dict] | None = None,
     ) -> bool:
         # 指定ルームへメッセージを追記して永続化する
         # Append a message to the room and persist updated state.
@@ -300,6 +301,10 @@ class EphemeralChatStore:
         # Include additional metadata if message parts or file attachments exist.
         if message_parts:
             entry["message_parts"] = message_parts
+        # 過去ターンで参照できるようWeb検索結果を保存する。
+        # Persist web search results so later turns can reference them.
+        if web_search_context:
+            entry["web_search_context"] = web_search_context
         if attached_file_contents:
             encoded_attached_files = encode_attached_files_for_storage(attached_file_contents)
             if encoded_attached_files:

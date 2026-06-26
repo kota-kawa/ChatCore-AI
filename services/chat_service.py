@@ -26,6 +26,7 @@ def save_message_to_db(
     parent_id: int | None = None,
     message_parts: list[dict[str, Any]] | None = None,
     attached_file_contents: list[Any] | None = None,
+    web_search_context: list[dict[str, Any]] | None = None,
 ) -> int | None:
     return _get_chat_repository().save_message(
         chat_room_id,
@@ -35,6 +36,7 @@ def save_message_to_db(
         parent_id,
         message_parts,
         attached_file_contents,
+        web_search_context,
     )
 
 
@@ -111,6 +113,12 @@ def rename_chat_room_if_current_title_in(
 # Retrieve the message history of the chat room formatted for the LLM
 def get_chat_room_messages(chat_room_id: str) -> list[dict[str, str]]:
     return _get_chat_repository().get_room_messages_for_llm(chat_room_id)
+
+
+# アクティブパス上に保存された過去のWeb検索結果を取得する
+# Retrieve stored prior web search results along the room's active path
+def get_room_web_search_contexts(chat_room_id: str) -> list[dict[str, Any]]:
+    return _get_chat_repository().get_active_path_web_search_contexts(chat_room_id)
 
 
 # ルームの所有者（作成ユーザー）を検証する

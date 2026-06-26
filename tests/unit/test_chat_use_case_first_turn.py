@@ -38,7 +38,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
 
         # メッセージのDB保存処理を疑似的に行う
         # Mock saving user and assistant messages to the DB
-        def save_message_to_db(room_id, message, sender, attached_file_names=None, parent_id=None):
+        def save_message_to_db(room_id, message, sender, attached_file_names=None, parent_id=None, *args, **kwargs):
             saved_messages.append(
                 {
                     "room_id": room_id,
@@ -93,6 +93,7 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             save_message_to_db=save_message_to_db,
             get_active_leaf_id=Mock(return_value=None),
             get_chat_room_messages=get_chat_room_messages,
+            get_room_web_search_contexts=Mock(return_value=[]),
             normalize_messages_for_llm=lambda messages: [
                 {
                     "role": item["role"],
