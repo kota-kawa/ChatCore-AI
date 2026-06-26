@@ -31,9 +31,11 @@ from .web_search import (
     build_web_search_trace_markdown,
     combine_web_search_results,
     get_web_search_tool_definition,
+    inject_prior_web_search_context,
     is_web_search_enabled,
     maybe_augment_messages_with_web_search,
     search_brave_llm_context,
+    serialize_web_search_result,
     WebSearchQuotaExceeded,
     WebSearchResult,
 )
@@ -257,9 +259,11 @@ class ChatGenerationJob:
         on_finished: Callable[[], None] | None = None,
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
+        prior_web_search_results: list[WebSearchResult] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
+        self._prior_web_search_results = list(prior_web_search_results or [])
         self._persist_response = persist_response
         self._on_finished = on_finished
         self._on_finished_called = False
@@ -282,22 +286,29 @@ class ChatGenerationJob:
         self,
         response: str,
         message_parts: list[dict[str, Any]] | None,
+        web_search_context: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
         try:
             signature = inspect.signature(self._persist_response)
-            accepts_message_parts = (
-                "message_parts" in signature.parameters
-                or any(
-                    parameter.kind == inspect.Parameter.VAR_KEYWORD
-                    for parameter in signature.parameters.values()
-                )
+            parameters = signature.parameters
+            has_var_keyword = any(
+                parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters.values()
+            )
+            accepts_message_parts = "message_parts" in parameters or has_var_keyword
+            accepts_web_search_context = (
+                "web_search_context" in parameters or has_var_keyword
             )
         except (TypeError, ValueError):
             accepts_message_parts = False
+            accepts_web_search_context = False
 
+        kwargs: dict[str, Any] = {}
         if accepts_message_parts:
-            return self._persist_response(response, message_parts=message_parts)
-        return self._persist_response(response)
+            kwargs["message_parts"] = message_parts
+        if accepts_web_search_context and web_search_context:
+            kwargs["web_search_context"] = web_search_context
+        return self._persist_response(response, **kwargs)
 
     # ジョブの非同期処理をスレッドプール上で開始する
     # Start the job's asynchronous processing in the thread pool
@@ -477,6 +488,11 @@ class ChatGenerationJob:
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
         web_search_trace_steps: list[dict[str, str]] = []
         current_messages = [dict(m) for m in self._conversation_messages]
+        # 過去ターンの検索結果を参照用コンテキストとして再注入する
+        # Re-inject prior-turn search results as a reference context.
+        current_messages = inject_prior_web_search_context(
+            current_messages, self._prior_web_search_results
+        )
         suppress_next_generation_started = False
         max_steps = _get_chat_agent_max_steps()
         step_count = 0
@@ -901,8 +917,20 @@ class ChatGenerationJob:
         message_parts = normalized_response.parts
         self.response = bot_reply
 
+        # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう永続化する
+        # Serialize this turn's search results so later turns can reference them.
+        serialized_web_search = [
+            serialize_web_search_result(result)
+            for result in web_search_results
+            if result.has_sources
+        ]
+
         try:
-            persist_metadata = self._persist_generated_response(bot_reply, message_parts)
+            persist_metadata = self._persist_generated_response(
+                bot_reply,
+                message_parts,
+                web_search_context=serialized_web_search or None,
+            )
         except Exception:
             logger.exception("Failed to persist background chat response.")
             error_message = "応答は生成されましたが、履歴保存に失敗しました。"
@@ -1366,6 +1394,7 @@ return 0
         persist_response: Callable[..., dict[str, Any] | None],
         on_finished: Callable[[], None] | None = None,
         on_error: Callable[[], None] | None = None,
+        prior_web_search_results: list[WebSearchResult] | None = None,
     ) -> ChatGenerationJob:
         self._cleanup_expired_jobs()
         acquired_lock, lock_token = self._try_acquire_active_job_lock(job_key)
@@ -1391,6 +1420,7 @@ return 0
                 ),
                 on_event=lambda event: self._publish_distributed_event(job_key, event),
                 on_error=on_error,
+                prior_web_search_results=prior_web_search_results,
             )
             self._jobs[job_key] = job
 
@@ -1533,6 +1563,7 @@ def start_generation_job(
     on_finished: Callable[[], None] | None = None,
     on_error: Callable[[], None] | None = None,
     service: ChatGenerationService | None = None,
+    prior_web_search_results: list[WebSearchResult] | None = None,
 ) -> ChatGenerationJob:
     target = (
         service
@@ -1546,4 +1577,5 @@ def start_generation_job(
         persist_response=persist_response,
         on_finished=on_finished,
         on_error=on_error,
+        prior_web_search_results=prior_web_search_results,
     )

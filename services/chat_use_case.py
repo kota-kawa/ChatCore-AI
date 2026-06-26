@@ -27,7 +27,11 @@ from services.request_models import ChatMessageRequest
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
     build_web_search_trace_markdown,
+    deserialize_web_search_results,
+    extract_prior_web_search_results,
+    inject_prior_web_search_context,
     maybe_augment_messages_with_web_search,
+    serialize_web_search_result,
 )
 from services.chat_title import (
     build_initial_title_candidates,
@@ -57,6 +61,7 @@ class ChatPostUseCaseDependencies:
     save_message_to_db: Callable[..., Any]
     get_active_leaf_id: Callable[..., Any]
     get_chat_room_messages: Callable[..., Any]
+    get_room_web_search_contexts: Callable[..., Any]
     normalize_messages_for_llm: Callable[..., Any]
     find_latest_task_launch_request: Callable[..., Any]
     load_task_prompt_data: Callable[..., Any]
@@ -376,6 +381,21 @@ class ChatPostUseCase:
             project_instructions=project_instructions,
         )
 
+        # 過去ターンで取得した検索結果を読み込み、後続の生成で参照用文脈として再注入する
+        # Load prior-turn search results to re-inject as reference context during generation.
+        if user_id is not None and room_mode == "normal":
+            # 初回ターンは過去履歴が無いため、無駄なDB照会を避ける。
+            # Skip the lookup on the first turn since there is no prior history yet.
+            prior_web_search_results = (
+                []
+                if should_auto_title_room
+                else deserialize_web_search_results(
+                    await run_blocking(deps.get_room_web_search_contexts, chat_room_id)
+                )
+            )
+        else:
+            prior_web_search_results = extract_prior_web_search_results(all_messages)
+
         # 生成キーの構築と二重送信防止ロック
         # Build the generation key and check for active running jobs
         generation_key = deps.build_generation_key(
@@ -435,18 +455,17 @@ class ChatPostUseCase:
                     response: str,
                     *,
                     message_parts: list[dict[str, Any]] | None = None,
+                    web_search_context: list[dict[str, Any]] | None = None,
                 ) -> dict[str, Any] | None:
-                    save_args = [
+                    deps.save_message_to_db(
                         chat_room_id,
                         response,
                         "assistant",
                         None,
                         saved_user_message_id,
-                    ]
-                    if message_parts:
-                        save_args.append(message_parts)
-                    deps.save_message_to_db(
-                        *save_args,
+                        message_parts,
+                        None,
+                        web_search_context,
                     )
                     # 初回応答を保存できた後にだけタイトルを自動生成する。
                     # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
@@ -497,6 +516,7 @@ class ChatPostUseCase:
                         sid=sid,
                     ),
                     service=chat_generation_service,
+                    prior_web_search_results=prior_web_search_results,
                 )
             except ChatGenerationAlreadyRunningError:
                 return deps.jsonify(
@@ -508,6 +528,9 @@ class ChatPostUseCase:
 
         # 非ストリーミングモデルの場合は同期的にWeb検索/LLM応答を取得し、結果を永続化する
         # For non-streaming models, synchronously perform web search/LLM call and persist the response
+        conversation_messages = inject_prior_web_search_context(
+            conversation_messages, prior_web_search_results
+        )
         augmentation = maybe_augment_messages_with_web_search(conversation_messages, model)
         response_messages = augmentation.messages
 
@@ -612,21 +635,27 @@ class ChatPostUseCase:
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
 
+        # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう保存する
+        # Serialize this turn's search results so later turns can reference them.
+        this_turn_web_search = (
+            [serialize_web_search_result(augmentation.result)]
+            if augmentation.result is not None and augmentation.result.has_sources
+            else None
+        )
+
         saved_assistant_message_id: int | None = None
         generated_room_title: str | None = None
         if user_id is not None and room_mode == "normal":
-            save_args = [
+            saved_assistant_message_id = await run_blocking(
+                deps.save_message_to_db,
                 chat_room_id,
                 bot_reply,
                 "assistant",
                 None,
                 saved_user_message_id,
-            ]
-            if message_parts:
-                save_args.append(message_parts)
-            saved_assistant_message_id = await run_blocking(
-                deps.save_message_to_db,
-                *save_args,
+                message_parts or None,
+                None,
+                this_turn_web_search,
             )
             if should_auto_title_room:
                 title_candidates = build_initial_title_candidates(
@@ -644,12 +673,15 @@ class ChatPostUseCase:
                 )
         else:
             sid = sid or deps.get_session_id(session)
-            append_args = [sid, chat_room_id, "assistant", bot_reply]
-            if message_parts:
-                append_args.append(message_parts)
             await run_blocking(
                 deps.ephemeral_store.append_message,
-                *append_args,
+                sid,
+                chat_room_id,
+                "assistant",
+                bot_reply,
+                message_parts or None,
+                None,
+                this_turn_web_search,
             )
 
         if (

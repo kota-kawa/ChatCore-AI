@@ -21,6 +21,7 @@ from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
     save_message_to_db,
     get_chat_room_messages,
+    get_room_web_search_contexts,
     get_active_path,
     get_active_leaf_id,
     rename_chat_room_if_current_title_in,
@@ -28,6 +29,11 @@ from services.chat_service import (
     validate_room_owner,
 )
 from services.chat_context import build_context_messages
+from services.web_search import (
+    deserialize_web_search_results,
+    extract_prior_web_search_results,
+    inject_prior_web_search_context,
+)
 from services.project_service import get_project_context
 from services.generative_ui import normalize_response_with_artifacts
 from services.chat_state import (
@@ -1025,6 +1031,7 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             save_message_to_db=save_message_to_db,
             get_active_leaf_id=get_active_leaf_id,
             get_chat_room_messages=get_chat_room_messages,
+            get_room_web_search_contexts=get_room_web_search_contexts,
             normalize_messages_for_llm=_normalize_messages_for_llm,
             find_latest_task_launch_request=_find_latest_task_launch_request,
             load_task_prompt_data=_load_task_prompt_data,
@@ -1222,6 +1229,15 @@ async def chat_regenerate(
         project_instructions=project_instructions,
     )
 
+    # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
+    # Load prior-turn search results so regeneration also re-injects them as reference context.
+    if user_id is not None and room_mode == "normal":
+        prior_web_search_results = deserialize_web_search_results(
+            await run_blocking(get_room_web_search_contexts, chat_room_id)
+        )
+    else:
+        prior_web_search_results = extract_prior_web_search_results(all_messages)
+
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     if has_active_generation(generation_key, service=resolved_chat_generation_service):
         return jsonify(
@@ -1252,11 +1268,18 @@ async def chat_regenerate(
                 response: str,
                 *,
                 message_parts: list[dict[str, Any]] | None = None,
+                web_search_context: list[dict[str, Any]] | None = None,
             ) -> None:
-                save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
-                if message_parts:
-                    save_args.append(message_parts)
-                save_message_to_db(*save_args)
+                save_message_to_db(
+                    chat_room_id,
+                    response,
+                    "assistant",
+                    None,
+                    assistant_parent_id,
+                    message_parts,
+                    None,
+                    web_search_context,
+                )
 
             # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
             # Internal callback executed upon generation completion to update summary/memory.
@@ -1290,6 +1313,7 @@ async def chat_regenerate(
                     sid=sid,
                 ),
                 service=resolved_chat_generation_service,
+                prior_web_search_results=prior_web_search_results,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1298,6 +1322,12 @@ async def chat_regenerate(
             )
 
         return _build_llm_stream_response(_iter_llm_stream_events(job))
+
+    # 非ストリーミング再生成でも過去ターンの検索結果を参照用文脈として再注入する
+    # Re-inject prior-turn search results for non-streaming regeneration as well.
+    conversation_messages = inject_prior_web_search_context(
+        conversation_messages, prior_web_search_results
+    )
 
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)
@@ -1581,6 +1611,15 @@ async def chat_edit_and_regenerate(
         project_instructions=project_instructions,
     )
 
+    # 過去ターンで取得した検索結果を読み込み、再生成時にも参照用文脈として再注入する
+    # Load prior-turn search results so regeneration also re-injects them as reference context.
+    if user_id is not None and room_mode == "normal":
+        prior_web_search_results = deserialize_web_search_results(
+            await run_blocking(get_room_web_search_contexts, chat_room_id)
+        )
+    else:
+        prior_web_search_results = extract_prior_web_search_results(all_messages)
+
     generation_key = build_generation_key(chat_room_id=chat_room_id, user_id=user_id, sid=sid)
     if has_active_generation(generation_key, service=resolved_chat_generation_service):
         return jsonify(
@@ -1611,11 +1650,18 @@ async def chat_edit_and_regenerate(
                 response: str,
                 *,
                 message_parts: list[dict[str, Any]] | None = None,
+                web_search_context: list[dict[str, Any]] | None = None,
             ) -> None:
-                save_args = [chat_room_id, response, "assistant", None, assistant_parent_id]
-                if message_parts:
-                    save_args.append(message_parts)
-                save_message_to_db(*save_args)
+                save_message_to_db(
+                    chat_room_id,
+                    response,
+                    "assistant",
+                    None,
+                    assistant_parent_id,
+                    message_parts,
+                    None,
+                    web_search_context,
+                )
 
             # 生成処理完了時にルームの会話要約やメモリを更新する内部終了ハンドラ
             # Internal callback executed upon generation completion to update summary/memory.
@@ -1649,6 +1695,7 @@ async def chat_edit_and_regenerate(
                     sid=sid,
                 ),
                 service=resolved_chat_generation_service,
+                prior_web_search_results=prior_web_search_results,
             )
         except ChatGenerationAlreadyRunningError:
             return jsonify(
@@ -1657,6 +1704,12 @@ async def chat_edit_and_regenerate(
             )
 
         return _build_llm_stream_response(_iter_llm_stream_events(job))
+
+    # 非ストリーミング再生成でも過去ターンの検索結果を参照用文脈として再注入する
+    # Re-inject prior-turn search results for non-streaming regeneration as well.
+    conversation_messages = inject_prior_web_search_context(
+        conversation_messages, prior_web_search_results
+    )
 
     try:
         bot_reply = await run_blocking(get_llm_response, conversation_messages, model)

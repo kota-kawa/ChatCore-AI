@@ -952,7 +952,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         generation_finished = threading.Event()
         session = {"user_id": 42}
 
-        def save_message(room_id, message, sender, attached_file_names=None, parent_id=None):
+        def save_message(room_id, message, sender, attached_file_names=None, parent_id=None, *args, **kwargs):
             stored_messages.append((room_id, message, sender))
             if sender == "assistant":
                 generation_finished.set()
@@ -1095,6 +1095,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_user_by_id", return_value={}),
             patch("blueprints.chat.messages.get_room_summary", return_value={}),
             patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
+            patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
@@ -1155,6 +1156,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             patch("blueprints.chat.messages.get_user_by_id", return_value={}),
             patch("blueprints.chat.messages.get_room_summary", return_value={}),
             patch("blueprints.chat.messages.list_room_memory_facts", return_value=[]),
+            patch("blueprints.chat.messages.get_room_web_search_contexts", return_value=[]),
             patch("blueprints.chat.messages.consume_llm_daily_quota", return_value=(True, 1, 300)),
             patch("blueprints.chat.messages.is_streaming_model", return_value=False),
             patch("blueprints.chat.messages.get_llm_response", side_effect=get_llm_response),
