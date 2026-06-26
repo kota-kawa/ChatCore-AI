@@ -274,6 +274,11 @@ class ChatGenerationJob:
         self._condition = threading.Condition()
         self._future: Future[None] | None = None
         self._cancelled: bool = False
+        # 生成途中で停止された場合でも保存できるよう、出力済みチャンクを保持する。
+        # Keep emitted chunks so a mid-stream stop can still persist the partial reply.
+        self._chunks: list[str] = []
+        self._finalize_lock = threading.Lock()
+        self._response_persisted = False
         self.response = ""
         self.error_message: str | None = None
         self.started_at = time.monotonic()
@@ -310,6 +315,24 @@ class ChatGenerationJob:
             kwargs["web_search_context"] = web_search_context
         return self._persist_response(response, **kwargs)
 
+    # 応答の永続化を一度だけ実行する（完了とキャンセルの二重保存を防ぐ）
+    # Persist the response at most once (avoid double-saving on completion vs. cancel)
+    def _persist_once(
+        self,
+        response: str,
+        message_parts: list[dict[str, Any]] | None,
+        web_search_context: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
+        with self._finalize_lock:
+            if self._response_persisted:
+                return None
+            self._response_persisted = True
+        return self._persist_generated_response(
+            response,
+            message_parts,
+            web_search_context=web_search_context,
+        )
+
     # ジョブの非同期処理をスレッドプール上で開始する
     # Start the job's asynchronous processing in the thread pool
     def start(self) -> None:
@@ -317,15 +340,44 @@ class ChatGenerationJob:
             return
         self._future = submit_background_task(self._run)
 
-    # ジョブの実行をキャンセルし、abortedイベントを発行する
-    # Cancel the job's execution and publish an aborted event
+    # ジョブの実行をキャンセルし、生成途中のテキストを保存して abortedイベントを発行する
+    # Cancel the job, persist any partial text, and publish an aborted event
     def cancel(self) -> None:
         # 生成をキャンセルし、aborted イベントを発行して完了とする。
-        # Cancel generation, publish the aborted event, and mark as completed.
+        # ここまでに生成されたテキストがあれば保存し、停止後も残るようにする。
+        # Cancel generation and mark it complete with an aborted event.
+        # If any text was produced before the stop, persist it so it is not lost.
         if self.is_done:
             return
         self._cancelled = True
-        self._publish("aborted", {}, done=True)
+
+        partial_text = "".join(self._chunks)
+        if not partial_text.strip():
+            # まだ本文が無い場合は空応答を保存せず、中断のみ通知する。
+            # No body yet: skip persisting an empty reply and only signal the abort.
+            self._publish("aborted", {}, done=True)
+            return
+
+        normalized_response = normalize_response_with_artifacts(
+            partial_text,
+            recover_truncated=True,
+        )
+        bot_reply = normalized_response.text
+        message_parts = normalized_response.parts
+        self.response = bot_reply
+
+        persist_metadata: dict[str, Any] | None = None
+        try:
+            persist_metadata = self._persist_once(bot_reply, message_parts)
+        except Exception:
+            logger.exception("Failed to persist partial chat response on cancel.")
+
+        aborted_payload: dict[str, Any] = {"response": bot_reply, "partial": True}
+        if message_parts:
+            aborted_payload["parts"] = message_parts
+        if isinstance(persist_metadata, dict):
+            aborted_payload.update(persist_metadata)
+        self._publish("aborted", aborted_payload, done=True)
 
     # ジョブスレッドの完了を待機する
     # Wait for the job thread to complete
@@ -482,7 +534,9 @@ class ChatGenerationJob:
     # バックグラウンドスレッドで実行されるチャット応答生成のメインループ
     # The main loop for chat response generation executed in the background thread
     def _run(self) -> None:
-        chunks: list[str] = []
+        # キャンセル時に保存できるよう、インスタンス側のチャンクリストへ蓄積する。
+        # Accumulate into the instance chunk list so a cancel can persist the partial text.
+        chunks = self._chunks
         last_streaming_parts_signature: str | None = None
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
@@ -926,7 +980,7 @@ class ChatGenerationJob:
         ]
 
         try:
-            persist_metadata = self._persist_generated_response(
+            persist_metadata = self._persist_once(
                 bot_reply,
                 message_parts,
                 web_search_context=serialized_web_search or None,
