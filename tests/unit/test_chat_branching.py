@@ -36,6 +36,7 @@ class FakeCursor:
                 parent_id,
                 message_parts_json,
                 attached_file_contents_json,
+                web_search_context_json,
             ) = params
             new_id = self.store["seq"]
             self.store["seq"] += 1
@@ -51,6 +52,7 @@ class FakeCursor:
                     "attached_file_names": file_names_json,
                     "message_parts": message_parts_json,
                     "attached_file_contents": attached_file_contents_json,
+                    "web_search_context": web_search_context_json,
                 }
             )
             self._result_one = (new_id,)
@@ -101,6 +103,7 @@ class FakeCursor:
                     r["attached_file_names"],
                     r.get("message_parts"),
                     r.get("attached_file_contents"),
+                    r.get("web_search_context"),
                 )
                 for r in rows
             ]

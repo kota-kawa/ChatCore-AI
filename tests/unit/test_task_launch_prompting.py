@@ -101,7 +101,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         saved_messages = []
 
-        def append_message(_sid, _room_id, sender, message):
+        def append_message(_sid, _room_id, sender, message, *args, **kwargs):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
@@ -182,7 +182,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {"role": "assistant", "content": "了解しました。"},
         ]
 
-        def append_message(_sid, _room_id, sender, message):
+        def append_message(_sid, _room_id, sender, message, *args, **kwargs):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
@@ -252,7 +252,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         saved_messages = []
         fixed_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
 
-        def append_message(_sid, _room_id, sender, message):
+        def append_message(_sid, _room_id, sender, message, *args, **kwargs):
             saved_messages.append(
                 {"role": "user" if sender == "user" else "assistant", "content": message}
             )
