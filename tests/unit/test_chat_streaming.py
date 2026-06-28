@@ -188,10 +188,16 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Clear running temporary job state before starting each test.
     def setUp(self):
         clear_generation_job_state(cancel_running=True)
+        self._project_context_patch = patch(
+            "blueprints.chat.messages.get_project_context",
+            return_value=None,
+        )
+        self._project_context_patch.start()
 
     # 日本語: テスト終了後に実行中の一時ジョブ情報をクリアして後片付けします。
     # English: Clear running temporary job state and clean up after each test completes.
     def tearDown(self):
+        self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
 
     # 日本語: LLMに渡す会話履歴の切り詰め処理において、システムプロンプトと直近の会話履歴が保持されることを検証します。

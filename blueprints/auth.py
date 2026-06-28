@@ -1,13 +1,10 @@
-import json
 import logging
 import os
 import time
-from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from starlette.responses import RedirectResponse
 
 try:
@@ -60,21 +57,60 @@ except ModuleNotFoundError:  # pragma: no cover - optional for test envs
     ResidentKeyRequirement = None
     UserVerificationRequirement = None
 
-from services.web import (
-    log_and_internal_server_error,
-    jsonify,
-    jsonify_rate_limited,
-    require_json_dict,
-    validate_payload_model,
-    frontend_login_url,
-    frontend_url,
-    redirect_to_frontend,
-    sanitize_next_path,
-    set_session_permanent,
-    url_for,
+from blueprints.auth_account import (  # noqa: E402
+    api_current_user,
+    api_delete_user_account,
+    login,
+    logout,
+    register_page,
 )
-from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds
-from services.auth_limits import (
+from blueprints.auth_common import (  # noqa: E402
+    _append_query_params,
+    _build_absolute_url_from_reference,
+    _clear_google_oauth_session,
+    _clear_google_oauth_state,
+    _clear_login_verification_session,
+    _copy_default_tasks_after_login,
+    _google_callback_redirect_target,
+    _google_login_unavailable_response,
+    _google_next_path,
+    _passkey_unavailable_response,
+    _redirect_to_login_after_google_failure,
+    _resolve_auth_limit_service,
+    _resolve_llm_daily_limit_service,
+    _user_id_from_session,
+)
+from blueprints.auth_email import (  # noqa: E402
+    api_send_email_code,
+    api_send_login_code,
+    api_verify_email_code,
+    api_verify_login_code,
+)
+from blueprints.auth_google import (  # noqa: E402
+    _build_google_authorization_response,
+    _build_google_login_host_redirect,
+    _clean_google_field,
+    _fetch_google_user_info,
+    _google_client_config,
+    _validate_google_oauth_settings,
+    google_callback,
+    google_login,
+)
+from blueprints.auth_passkeys import (  # noqa: E402
+    api_delete_passkey,
+    api_list_passkeys,
+    api_passkey_authenticate_options,
+    api_passkey_authenticate_verify,
+    api_passkey_register_options,
+    api_passkey_register_verify,
+)
+from blueprints.verification import (  # noqa: E402
+    api_send_verification_email,
+    api_verify_registration_code,
+)
+from services.api_errors import DEFAULT_RETRY_AFTER_SECONDS, parse_retry_after_seconds  # noqa: E402
+from services.async_utils import run_blocking  # noqa: E402
+from services.auth_limits import (  # noqa: E402
     AuthLimitService,
     consume_auth_email_send_limits,
     consume_passkey_auth_options_limit,
@@ -82,61 +118,65 @@ from services.auth_limits import (
     consume_verification_attempt_limit,
     get_auth_limit_service,
 )
-from services.request_models import AuthCodeRequest, EmailRequest
-from services.async_utils import run_blocking
-from services.auth_session import establish_authenticated_session
-from services.csrf import require_csrf
-from services.passkeys import (
-    PASSKEY_CHALLENGE_TTL_SECONDS,
-    clear_passkey_session,
-    create_passkey,
-    get_credential_lookup_id,
-    get_passkey_authentication_ceremony,
-    delete_passkey,
-    get_passkey_registration_ceremony,
-    get_passkey_by_credential_id,
-    passkey_ceremony_is_expired,
-    get_passkey_origins,
-    get_passkey_rp_id,
-    get_passkey_rp_name,
-    list_passkeys_for_user,
-    store_passkey_authentication_ceremony,
-    store_passkey_registration_ceremony,
-    update_passkey_usage,
-)
-from services.users import (
-    ACCOUNT_DELETE_CONFIRMATION_TEXT,
-    get_user_by_email,
-    get_user_by_id,
-    get_user_by_google_id,
-    create_user,
-    delete_user_account,
-    link_google_account,
-    set_user_verified,
-    copy_default_tasks_for_user,
-    update_user_profile_from_google_if_unset,
-    GOOGLE_AUTH_PROVIDER,
-)
-from services.email_service import send_email
-from services.llm_daily_limit import (
+from services.auth_session import establish_authenticated_session  # noqa: E402
+from services.csrf import require_csrf  # noqa: E402
+from services.email_service import send_email  # noqa: E402
+from services.llm_daily_limit import (  # noqa: E402
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
     get_seconds_until_daily_reset,
     get_llm_daily_limit_service,
 )
-from services.runtime_config import is_production_env
-from services.security import constant_time_compare, generate_verification_code
-from blueprints.verification import (
-    api_send_verification_email,
-    api_verify_registration_code,
+from services.passkeys import (  # noqa: E402
+    PASSKEY_CHALLENGE_TTL_SECONDS,
+    clear_passkey_session,
+    create_passkey,
+    delete_passkey,
+    get_credential_lookup_id,
+    get_passkey_authentication_ceremony,
+    get_passkey_by_credential_id,
+    get_passkey_origins,
+    get_passkey_registration_ceremony,
+    get_passkey_rp_id,
+    get_passkey_rp_name,
+    list_passkeys_for_user,
+    passkey_ceremony_is_expired,
+    store_passkey_authentication_ceremony,
+    store_passkey_registration_ceremony,
+    update_passkey_usage,
+)
+from services.request_models import AuthCodeRequest, EmailRequest  # noqa: E402
+from services.runtime_config import is_production_env  # noqa: E402
+from services.security import constant_time_compare, generate_verification_code  # noqa: E402
+from services.users import (  # noqa: E402
+    ACCOUNT_DELETE_CONFIRMATION_TEXT,
+    GOOGLE_AUTH_PROVIDER,
+    copy_default_tasks_for_user,
+    create_user,
+    delete_user_account,
+    get_user_by_email,
+    get_user_by_google_id,
+    get_user_by_id,
+    link_google_account,
+    set_user_verified,
+    update_user_profile_from_google_if_unset,
+)
+from services.web import (  # noqa: E402
+    frontend_login_url,
+    frontend_url,
+    jsonify,
+    jsonify_rate_limited,
+    log_and_internal_server_error,
+    redirect_to_frontend,
+    require_json_dict,
+    sanitize_next_path,
+    set_session_permanent,
+    url_for,
+    validate_payload_model,
 )
 
-# 認証関連の環境変数を初期化する
-# Load environment variables needed by auth flows.
 load_dotenv()
 
-# 開発環境では OAuth の http コールバックを許可する
-# Allow OAuth over HTTP in non-production environments.
 if not is_production_env():
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
@@ -157,1603 +197,149 @@ LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS = 5
 GOOGLE_NEXT_PATH_SESSION_KEY = "google_login_next_path"
 AUTH_FAILURE_STATUS_CODE = 401
 
-
-# セッションからメールログイン検証用の一時データを削除する関数
-# Clear temporary login verification data from the session.
-def _clear_login_verification_session(session: dict[str, Any]) -> None:
-    """
-    セッションからメールログイン用の検証状態データをすべて削除します。
-    Clear all temporary login verification data from the session.
-    """
-    # 認証コード、仮ユーザーID、仮メールアドレス、発行日時、試行回数を削除
-    # Remove authentication code, temporary user ID, temporary email, issued time, and attempt count.
-    session.pop("login_verification_code", None)
-    session.pop("login_temp_user_id", None)
-    session.pop("login_temp_email", None)
-    session.pop("login_verification_code_issued_at", None)
-    session.pop("login_verification_code_attempts", None)
-
-
-# 環境変数からGoogle OAuthのクライアント設定を取得する関数
-# Construct Google OAuth client configuration from environment variables.
-def _google_client_config() -> dict[str, Any]:
-    """
-    環境変数からGoogle OAuthのクライアント設定（クライアントIDやシークレット等）を構築します。
-    Construct Google OAuth client configuration (client ID, client secret, etc.) from environment variables.
-    """
-    return {
-        "web": {
-            "client_id": (os.getenv("GOOGLE_CLIENT_ID") or "").strip(),
-            "project_id": os.getenv("GOOGLE_PROJECT_ID", ""),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_secret": (os.getenv("GOOGLE_CLIENT_SECRET") or "").strip(),
-            "redirect_uris": [],
-            "javascript_origins": [os.getenv("GOOGLE_JS_ORIGIN", "https://chatcore-ai.com")],
-        }
-    }
-
-
-# Google OAuth設定に必要なキー値が存在するか検証する関数
-# Validate that required Google OAuth configuration keys are present and non-empty.
-def _validate_google_oauth_settings(client_config: dict[str, Any]) -> str | None:
-    """
-    Google OAuthの設定が正しく存在し、必要なキーが空ではないか確認します。
-    Validate that required Google OAuth configuration keys are present and non-empty.
-    """
-    # webの定義を確認
-    # Confirm web block configuration
-    web_config = client_config.get("web") if isinstance(client_config, dict) else None
-    if not isinstance(web_config, dict):
-        return "Google OAuth client config is invalid."
-
-    missing_keys: list[str] = []
-    # Google クライアントIDの有無を確認
-    # Check Google client ID
-    client_id = web_config.get("client_id")
-    if not isinstance(client_id, str) or not client_id:
-        missing_keys.append("GOOGLE_CLIENT_ID")
-
-    # Google クライアントシークレットの有無を確認
-    # Check Google client secret
-    client_secret = web_config.get("client_secret")
-    if not isinstance(client_secret, str) or not client_secret:
-        missing_keys.append("GOOGLE_CLIENT_SECRET")
-
-    if missing_keys:
-        return f"Missing required Google OAuth environment variables: {', '.join(missing_keys)}"
-
-    return None
-
-
-# セッションからGoogle OAuth関連の状態データをすべて削除する関数
-# Clear all Google OAuth state variables from the user session.
-def _clear_google_oauth_session(session: dict[str, Any]) -> None:
-    """
-    セッションからGoogle OAuthのすべてのフロー情報をクリアします。
-    Clear all Google OAuth state variables from the user session.
-    """
-    # 認可状態、リダイレクト先URI、認証後の遷移先パスを削除
-    # Remove authorization state, redirect URI, and landing path from the session.
-    session.pop("google_oauth_state", None)
-    session.pop("google_redirect_uri", None)
-    session.pop(GOOGLE_NEXT_PATH_SESSION_KEY, None)
-
-
-# セッションからGoogle OAuthのstateおよびリダイレクトURI情報を削除する（遷移先パスは残す）関数
-# Clear Google OAuth challenge state and redirect URI from the session, keeping the landing path.
-def _clear_google_oauth_state(session: dict[str, Any]) -> None:
-    """
-    Google OAuthのセキュリティトークン(state)とリダイレクト情報をセッションからクリアし、遷移先情報は保持します。
-    Clear Google OAuth challenge state and redirect URI from the session, keeping the landing path.
-    """
-    session.pop("google_oauth_state", None)
-    session.pop("google_redirect_uri", None)
-
-
-# Googleログインが利用不可時の503エラーレスポンスを返す関数
-# Return a 503 service unavailable response when Google OAuth is unconfigured.
-def _google_login_unavailable_response() -> Any:
-    """
-    Googleログインが設定されていない等の理由により、利用不可能であることを示す503エラーレスポンスを返します。
-    Return a 503 service unavailable response when Google OAuth is unconfigured.
-    """
-    return jsonify({"error": GOOGLE_LOGIN_UNAVAILABLE_ERROR}, status_code=503)
-
-
-# パスキーログインが利用不可時の503エラーレスポンスを返す関数
-# Return a 503 service unavailable response when WebAuthn capability is missing.
-def _passkey_unavailable_response() -> Any:
-    """
-    WebAuthnライブラリがない、または利用不可能であることを示す503エラーレスポンスを返します。
-    Return a 503 service unavailable response when WebAuthn capability is missing.
-    """
-    return jsonify({"status": "fail", "error": PASSKEY_UNAVAILABLE_ERROR}, status_code=503)
-
-
-# リクエストから認証制限サービスを解決するヘルパー関数
-# Helper function to resolve the AuthLimitService instance from the request.
-def _resolve_auth_limit_service(
-    request: Request,
-    service: AuthLimitService | None,
-) -> AuthLimitService:
-    """
-    指定されたサービスインスタンスが有効ならそれを返し、なければリクエストから解決します。
-    Return the provided AuthLimitService instance if valid; otherwise, resolve it from the request.
-    """
-    if isinstance(service, AuthLimitService):
-        return service
-    return get_auth_limit_service(request)
-
-
-# リクエストからLLMの1日あたり制限サービスを解決するヘルパー関数
-# Helper function to resolve the LlmDailyLimitService instance from the request.
-def _resolve_llm_daily_limit_service(
-    request: Request,
-    service: LlmDailyLimitService | None,
-) -> LlmDailyLimitService:
-    """
-    指定されたサービスインスタンスが有効ならそれを返し、なければリクエストから解決します。
-    Return the provided LlmDailyLimitService instance if valid; otherwise, resolve it from the request.
-    """
-    if isinstance(service, LlmDailyLimitService):
-        return service
-    return get_llm_daily_limit_service(request)
-
-
-# セッションから整数値のユーザーIDを安全に取得する関数
-# Safely extract user_id from session dictionary as an integer.
-def _user_id_from_session(session: dict[str, Any]) -> int | None:
-    """
-    セッション辞書からユーザーIDを整数型として安全に取り出します。
-    Safely extract user_id from session dictionary as an integer.
-    """
-    user_id = session.get("user_id")
-    if isinstance(user_id, int):
-        return user_id
-    return None
-
-
-# ログイン完了後にデフォルトのタスクをユーザー用DBテーブルへコピーする非同期関数
-# Copy default system task templates into user's DB configuration after login.
-async def _copy_default_tasks_after_login(user_id: int, *, context: str) -> None:
-    """
-    ログイン成功時に、共通の初期デフォルトタスクを対象ユーザー用にデータベース内で複製します。
-    Copy default system task templates into user's DB configuration after login.
-    """
-    try:
-        # データベース操作を実行
-        # Perform DB operation.
-        await run_blocking(copy_default_tasks_for_user, user_id)
-    except Exception:
-        # 例外時はログを記録するが、ログイン処理自体の妨げにはしない
-        # Log exception, but do not interrupt the login flow.
-        logger.exception("%s: failed to copy default tasks for user %s", context, user_id)
-
-
-# リダイレクト基準URLをもとに絶対URLを組み立てる関数
-# Build an absolute target URL combining origin from a reference URL and a path.
-def _build_absolute_url_from_reference(reference_url: str, path: str) -> str | None:
-    """
-    基準となるリダイレクト先URL（origin情報を含むもの）と、相対もしくは絶対パスから完全な絶対URLを生成します。
-    Build an absolute target URL combining origin from a reference URL and a path.
-    """
-    # 参照元URLを分解
-    # Deconstruct reference URL.
-    parts = urlsplit(reference_url)
-    if not parts.scheme or not parts.netloc:
-        return None
-
-    # 指定されたパスを分解
-    # Deconstruct provided path.
-    target_parts = urlsplit(path)
-    normalized_path = target_parts.path if target_parts.path.startswith("/") else f"/{target_parts.path}"
-    if not target_parts.path:
-        normalized_path = "/"
-    # 結合して完全なURLにする
-    # Reassemble into a complete absolute URL.
-    return urlunsplit(
-        (
-            parts.scheme,
-            parts.netloc,
-            normalized_path,
-            target_parts.query,
-            target_parts.fragment,
-        )
-    )
-
-
-# 指定URLにクエリパラメータを追加する関数
-# Append query parameters to a given URL, merging with existing query variables.
-def _append_query_params(url: str, **params: str) -> str:
-    """
-    既存のクエリパラメータを保持しつつ、指定されたURLに新しいクエリパラメータを追加します。
-    Append query parameters to a given URL, merging with existing query variables.
-    """
-    parts = urlsplit(url)
-    # 既存のクエリパラメータをパース
-    # Parse existing query parameters.
-    existing_params = dict(parse_qsl(parts.query, keep_blank_values=True))
-    # パラメータを上書き/追加
-    # Overwrite or add parameters.
-    existing_params.update(params)
-    return urlunsplit(
-        (
-            parts.scheme,
-            parts.netloc,
-            parts.path,
-            urlencode(existing_params),
-            parts.fragment,
-        )
-    )
-
-
-# Google OAuthコールバックからの遷移先URL（絶対URL）を特定する関数
-# Resolve absolute landing URL for Google OAuth callback redirection based on various references.
-def _google_callback_redirect_target(
-    request: Request,
-    path: str,
-    *,
-    redirect_uri: str | None = None,
-) -> str:
-    """
-    リクエスト、セッション、または環境変数の中から適切なリダイレクト先ホストを探索し、遷移先絶対URLを返却します。
-    Resolve absolute landing URL for Google OAuth callback redirection based on various references.
-    """
-    session_redirect_uri = request.session.get("google_redirect_uri")
-    configured_redirect_uri = (os.getenv("GOOGLE_REDIRECT_URI") or "").strip()
-    references: tuple[str | None, ...] = (
-        redirect_uri,
-        session_redirect_uri if isinstance(session_redirect_uri, str) else None,
-        configured_redirect_uri or None,
-        str(request.url),
-    )
-    # 各リファレンスから絶対URLの構築を試行
-    # Try building absolute URL from each reference.
-    for reference in references:
-        if not isinstance(reference, str) or not reference:
-            continue
-        target = _build_absolute_url_from_reference(reference, path)
-        if target:
-            return target
-    # いずれも構築できなければフロントエンドURLを代替として返却
-    # Fallback to frontend URL if none of the references resolved.
-    return frontend_url(path)
-
-
-# セッションからサニタイズされたログイン後遷移先パスを取得する関数
-# Retrieve and sanitize the post-login destination path from the session.
-def _google_next_path(session: dict[str, Any]) -> str | None:
-    """
-    セッションから、ログイン成功後にリダイレクトすべき遷移先パス（クエリで渡されていたものなど）を取り出し、サニタイズして返します。
-    Retrieve and sanitize the post-login destination path from the session.
-    """
-    next_path = session.get(GOOGLE_NEXT_PATH_SESSION_KEY)
-    if not isinstance(next_path, str) or not next_path:
-        return None
-    return sanitize_next_path(next_path, default="/")
-
-
-# Google認証失敗時にセッションクリアしログイン画面へリダイレクトする関数
-# Clear Google OAuth state and return a RedirectResponse back to the login page.
-def _redirect_to_login_after_google_failure(
-    request: Request,
-    session: dict[str, Any],
-    *,
-    redirect_uri: str | None = None,
-) -> RedirectResponse:
-    """
-    Google認証連携が失敗した際、セッションから関連データをクリアした上で、ログイン画面へリダイレクトします。
-    Clear Google OAuth state and return a RedirectResponse back to the login page.
-    """
-    # 遷移先情報を取得
-    # Retrieve target path.
-    next_path = _google_next_path(session)
-    # リダイレクト先URLを構築
-    # Build target redirect URL.
-    target_url = _google_callback_redirect_target(
-        request,
-        "/login",
-        redirect_uri=redirect_uri,
-    )
-    if next_path:
-        target_url = _append_query_params(target_url, next=next_path)
-    # 一時データをクリアしてリダイレクト
-    # Clear temporary Google OAuth state and redirect.
-    _clear_google_oauth_state(session)
-    return RedirectResponse(target_url, status_code=302)
-
-
-# リバースプロキシ環境下などを考慮しGoogleトークン交換用の応答URLを組み立てる関数
-# Build token-exchange authorization response URL ensuring redirect_uri host is matched.
-def _build_google_authorization_response(request: Request, redirect_uri: str) -> str:
-    """
-    Googleトークン交換時に必要となるリクエストURLを組み立てます。リバースプロキシ等でプロトコルやホストが変更されている場合に対応します。
-    Build token-exchange authorization response URL ensuring redirect_uri host is matched.
-    """
-    # Reverse proxy 配下では request.url が http になる場合があるため、
-    # token 交換に使う URL は redirect_uri の scheme/host/path を優先する。
-    # Behind reverse proxies, request.url may appear as http.
-    # Prefer redirect_uri origin/path when building authorization_response.
-    redirect_parts = urlsplit(redirect_uri)
-    if redirect_parts.scheme and redirect_parts.netloc:
-        return urlunsplit(
-            (
-                redirect_parts.scheme,
-                redirect_parts.netloc,
-                redirect_parts.path,
-                request.url.query,
-                "",
-            )
-        )
-    return str(request.url)
-
-
-# ログイン開始ホストとコールバックホストがずれている場合にリダイレクト補正する関数
-# Redirect request to callback host beforehand to prevent host-only cookie divergence.
-def _build_google_login_host_redirect(
-    request: Request, redirect_uri: str
-) -> RedirectResponse | None:
-    """
-    ユーザーが別ホストから認証を呼び出した場合に、セッション情報の受け渡しミスを防ぐためGoogleコールバックのホストへ事前にリダイレクトします。
-    Redirect request to callback host beforehand to prevent host-only cookie divergence.
-    """
-    # Google callback のホストとログイン開始ホストがズレると host-only cookie の
-    # セッションが引き継がれないため、認可開始前に callback 側ホストへ寄せる。
-    # Canonicalize the auth-start host to the callback host so host-only session cookies survive.
-    redirect_parts = urlsplit(redirect_uri)
-    if not redirect_parts.scheme or not redirect_parts.netloc:
-        return None
-
-    request_host = request.headers.get("host") or request.url.netloc
-    if not isinstance(request_host, str) or not request_host:
-        return None
-
-    # ホストが一致していれば不要
-    # Do nothing if host matches.
-    if request_host.lower() == redirect_parts.netloc.lower():
-        return None
-
-    # コールバック先ホストのURLを構築してリダイレクト応答
-    # Build canonical url and return redirect.
-    canonical_url = urlunsplit(
-        (
-            redirect_parts.scheme,
-            redirect_parts.netloc,
-            request.url.path,
-            request.url.query,
-            "",
-        )
-    )
-    return RedirectResponse(canonical_url, status_code=302)
-
-
-# GoogleのUserInfo APIからプロフィール情報を取得する関数
-# Fetch authenticated user profile data from Google UserInfo API.
-def _fetch_google_user_info(access_token: str) -> dict[str, Any]:
-    """
-    GoogleのUserInfo APIを叩いて、ログインしたユーザーのメールアドレスやプロフィール情報を取得します。
-    Fetch authenticated user profile data from Google UserInfo API.
-    """
-    # Google API からログインユーザーのプロフィール情報を取得する
-    # Fetch authenticated user info from Google UserInfo API.
-    response = requests.get(
-        "https://www.googleapis.com/oauth2/v2/userinfo",
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=10,
-    )
-    response.raise_for_status()
-    try:
-        return response.json()
-    except ValueError as e:
-        raise requests.RequestException(f"Invalid JSON response: {e}") from e
-
-
-# Googleプロフィール情報から特定の文字列フィールドを安全に取得・サニタイズする関数
-# Safely extract and strip a string field from Google user info payload.
-def _clean_google_field(user_info: dict[str, Any], key: str) -> str:
-    """
-    Google UserInfo から取得した値の存在を安全に検証し、前後の不要な空白を取り除いて返します。
-    Safely extract and strip a string field from Google user info payload.
-    """
-    value = user_info.get(key)
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
-# ユーザー新規登録ページ（SPAのフロントエンド）へリダイレクトするエンドポイント
-# Endpoint that redirects registration requests to the frontend client.
-@auth_bp.get("/register", name="auth.register_page")
-async def register_page(request: Request):
-    """
-    ユーザー登録ページ（SPAフロントエンド）へ遷移させます。
-    Redirect the user to the registration page on the frontend client.
-    """
-    return redirect_to_frontend(request)
-
-
-# 現在ログイン中のユーザー情報を取得するAPIエンドポイント（古いセッションのクリーンアップも実施）
-# API endpoint to retrieve currently logged-in user state, clearing stale sessions if needed.
-@auth_bp.get("/api/current_user", name="auth.api_current_user")
-async def api_current_user(request: Request):
-    """
-    現在ログイン中のユーザーセッションを検証し、プロフィールを返却します。無効な古いセッションは破棄します。
-    Verify the active session, returning logged-in user details. Wipe session parameters if invalid.
-    """
-    session = request.session
-    if "user_id" in session:
-        # セッションに記録されているユーザーをDBから取得
-        # Retrieve user from DB as specified in the session.
-        user = await run_blocking(get_user_by_id, session["user_id"])
-        if user:
-            return jsonify(
-                {
-                    "logged_in": True,
-                    "user": {
-                        "id": user["id"],
-                        "email": user["email"],
-                        "username": user.get("username") or "",
-                    },
-                }
-            )
-        # ユーザーがDBに存在しないなどセッションが無効化している場合、クリーンアップする
-        # If the user_id in session is stale/invalid, clean up the session variables.
-        session.pop("user_id", None)
-        session.pop("user_email", None)
-        session.pop("login_verification_code", None)
-        session.pop("login_temp_user_id", None)
-        session.pop("login_temp_email", None)
-        session.pop("login_verification_code_issued_at", None)
-        session.pop("login_verification_code_attempts", None)
-        _clear_google_oauth_session(session)
-        clear_passkey_session(session)
-        set_session_permanent(session, False)
-        return jsonify({"logged_in": False})
-    else:
-        return jsonify({"logged_in": False})
-
-
-# 確認テキスト照合後にユーザーアカウントを完全削除するAPIエンドポイント
-# API endpoint to permanently delete user account upon confirmation string verification.
-@auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")
-async def api_delete_user_account(request: Request):
-    """
-    ログイン中のユーザーを、確認テキストの入力照合を経て、DBから完全に削除します（退会処理）。
-    Permanently delete the user account from the database if they confirm by matching the safety string.
-    """
-    user_id = _user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"error": "ログインが必要です。"}, status_code=401)
-
-    # JSONパラメータを取得
-    # Fetch JSON parameter.
-    data, error_response = await require_json_dict(request)
-    if error_response is not None:
-        return error_response
-
-    # ユーザーが入力した確認メッセージが既定値と一致するか検証
-    # Confirm that user matched the specific confirmation string.
-    confirmation = str(data.get("confirmation") or "").strip()
-    if confirmation != ACCOUNT_DELETE_CONFIRMATION_TEXT:
-        return jsonify({"error": "確認文字列が一致しません。"}, status_code=400)
-
-    try:
-        # データベースから削除を実行
-        # Perform DB deletion.
-        deleted = await run_blocking(delete_user_account, user_id)
-    except Exception:
-        # エラー時は500エラーを返却
-        # Return 500 error response on failure.
-        return log_and_internal_server_error(
-            logger,
-            "Failed to delete user account.",
-            message="アカウント削除に失敗しました。",
-        )
-
-    # セッション情報をすべて消去
-    # Wipe all session information.
-    request.session.clear()
-    if not deleted:
-        return jsonify({"error": "削除対象のアカウントが見つかりませんでした。"}, status_code=404)
-    return jsonify({"message": "アカウントを削除しました。"})
-
-
-# ログインページ（SPAのフロントエンド）へリダイレクトするエンドポイント
-# Endpoint that redirects login page requests to the frontend client.
-@auth_bp.get("/login", name="auth.login")
-async def login(request: Request):
-    """
-    ログインページ（SPAフロントエンド）へリダイレクトします。
-    Redirect the user to the login page on the frontend client.
-    """
-    return redirect_to_frontend(request)
-
-
-# セッションを破棄しログアウト処理を行うエンドポイント
-# Endpoint to clear the session and redirect user to the login view.
-@auth_bp.post("/logout", name="auth.logout")
-async def logout(request: Request):
-    """
-    ユーザーセッションを全消去してログアウトし、ログイン画面へ遷移させます。
-    Clear the session and redirect user to the login view.
-    """
-    request.session.clear()
-    return RedirectResponse(frontend_login_url(), status_code=302)
-
-
-# 新規登録またはログインのためのメール認証コードを送信する共通APIエンドポイント
-# API endpoint to send verification email (initiating registration or login depending on account state).
-@auth_bp.post("/api/auth/send_email_code", name="auth.api_send_email_code")
-async def api_send_email_code(
-    request: Request,
-    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
-    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
-):
-    """
-    指定メールアドレスのアカウント状況（登録済み/未完了）に応じて、ログイン用または登録用の認証メールを送信します。
-    Send a login or registration verification email depending on the status of the specified email address.
-    """
-    # 各種制限サービスを解決
-    # Resolve rate limit and daily quota limit services.
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
-        request,
-        llm_daily_limit_service,
-    )
-    # JSON入力値を取得
-    # Fetch JSON payload.
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    # バリデーションを実行
-    # Validate the inputs.
-    payload, validation_error = validate_payload_model(
-        data,
-        EmailRequest,
-        error_message="メールアドレスが指定されていません",
-        status="fail",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    # DBからユーザーを検索
-    # Lookup the user in the database.
-    user = await run_blocking(get_user_by_email, payload.email)
-    
-    # 登録済みかつ認証済みユーザーであれば、ログインコード送信APIを内部で呼び出し
-    # If user exists and is verified, call the login code generator API.
-    if user and user.get("is_verified"):
-        return await api_send_login_code(
-            request,
-            auth_limit_service=resolved_auth_limit_service,
-            llm_daily_limit_service=resolved_llm_daily_limit_service,
-        )
-    # 未登録ユーザーであれば、仮登録コード送信APIを呼び出し
-    # If the user is unverified or new, call the registration verification email API.
-    return await api_send_verification_email(
-        request,
-        auth_limit_service=resolved_auth_limit_service,
-        llm_daily_limit_service=resolved_llm_daily_limit_service,
-    )
-
-
-# 入力された認証コードを確認し、ログイン処理または登録処理を分岐実行するAPIエンドポイント
-# API endpoint to verify the submitted email code and delegate to login or registration flows.
-@auth_bp.post("/api/auth/verify_email_code", name="auth.api_verify_email_code")
-async def api_verify_email_code(request: Request):
-    """
-    セッションの状態から「ログインコード確認」と「仮登録コード確認」を判別して、適切な検証処理を分岐実行します。
-    Verify the code submitted by the user, dynamically routing to registration or login verify methods based on session values.
-    """
-    session = request.session
-    # ログイン検証コードがセッションに存在する場合
-    # If login verification credentials exist in the session.
-    if session.get("login_verification_code") and session.get("login_temp_user_id"):
-        return await api_verify_login_code(request)
-    # 新規登録用のコードがセッションに存在する場合
-    # If registration verification credentials exist in the session.
-    if session.get("verification_code") and session.get("temp_user_id"):
-        return await api_verify_registration_code(request)
-    
-    # セッションが存在しない場合のエラーレスポンス
-    # Return failure if session state does not exist.
-    return jsonify(
-        {"status": "fail", "error": "セッション情報がありません。最初からやり直してください"},
-        status_code=AUTH_FAILURE_STATUS_CODE,
-    )
-
-
-# ログイン中のユーザーが登録しているパスキーの一覧を取得するAPIエンドポイント
-# API endpoint to retrieve registered passkeys list for the authenticated user.
-@auth_bp.get("/api/passkeys", name="auth.api_list_passkeys")
-async def api_list_passkeys(request: Request):
-    """
-    現在ログイン中のユーザーに紐づいている登録済みWebAuthn/パスキーの一覧を返します。
-    Retrieve a list of WebAuthn/passkey credentials registered under the current logged-in user.
-    """
-    user_id = _user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
-
-    # 登録済みパスキーを取得
-    # Fetch registered passkeys list from database.
-    passkeys = await run_blocking(list_passkeys_for_user, user_id)
-    return jsonify({"status": "success", "passkeys": passkeys})
-
-
-# パスキーを削除するAPIエンドポイント
-# API endpoint to delete a specific registered passkey.
-@auth_bp.post("/api/passkeys/delete", name="auth.api_delete_passkey")
-async def api_delete_passkey(request: Request):
-    """
-    指定されたパスキーIDをDBから削除します（自分の所有であるか検証されます）。
-    Delete a specific registered passkey credential from the DB under the active user account.
-    """
-    user_id = _user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
-
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    # パスIDをパース
-    # Parse the passkey ID.
-    try:
-        passkey_id = int(data.get("passkey_id"))
-    except (TypeError, ValueError):
-        return jsonify({"status": "fail", "error": "Passkeyが指定されていません"}, status_code=400)
-
-    # パスキーの削除を実行
-    # Perform database deletion.
-    deleted = await run_blocking(delete_passkey, user_id, passkey_id)
-    if not deleted:
-        return jsonify({"status": "fail", "error": "Passkeyが見つかりません"}, status_code=404)
-
-    return jsonify({"status": "success"})
-
-
-# パスキー新規登録用のオプション（チャレンジ等）を生成するAPIエンドポイント
-# API endpoint to generate WebAuthn registration options for creating a new passkey.
-@auth_bp.post("/api/passkeys/register/options", name="auth.api_passkey_register_options")
-async def api_passkey_register_options(request: Request):
-    """
-    新規パスキーを登録するために必要なWebAuthnクレデンシャル作成オプション（チャレンジ文字列など）を生成します。
-    Generate WebAuthn registration options (containing challenge, user info) for creating a new passkey.
-    """
-    # ライブラリの有無を確認
-    # Verify that WebAuthn libraries are loaded.
-    if (
-        generate_registration_options is None
-        or options_to_json is None
-        or AuthenticatorSelectionCriteria is None
-        or ResidentKeyRequirement is None
-        or UserVerificationRequirement is None
-        or PublicKeyCredentialHint is None
-        or PublicKeyCredentialDescriptor is None
-        or base64url_to_bytes is None
-        or bytes_to_base64url is None
-    ):
-        return _passkey_unavailable_response()
-
-    user_id = _user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
-
-    user = await run_blocking(get_user_by_id, user_id)
-    if not user:
-        return jsonify({"status": "fail", "error": "ユーザーが存在しません"}, status_code=404)
-
-    # 二重登録を防ぐため、既に登録されているクレデンシャルを取得し除外リストへ追加する
-    # Avoid duplicate registrations by retrieving existing credentials for exclude_credentials.
-    existing_passkeys = await run_blocking(list_passkeys_for_user, user_id)
-    exclude_credentials = [
-        PublicKeyCredentialDescriptor(id=base64url_to_bytes(row["credential_id"]))
-        for row in existing_passkeys
-        if isinstance(row.get("credential_id"), str) and row["credential_id"]
-    ]
-
-    # WebAuthnの登録オプションを生成
-    # Generate WebAuthn registration options.
-    options = generate_registration_options(
-        rp_id=get_passkey_rp_id(request),
-        rp_name=get_passkey_rp_name(),
-        user_name=user["email"],
-        user_id=str(user_id).encode("utf-8"),
-        user_display_name=(user.get("username") or user["email"]),
-        authenticator_selection=AuthenticatorSelectionCriteria(
-            resident_key=ResidentKeyRequirement.REQUIRED,
-            user_verification=UserVerificationRequirement.REQUIRED,
-        ),
-        exclude_credentials=exclude_credentials,
-        hints=[
-            PublicKeyCredentialHint.CLIENT_DEVICE,
-            PublicKeyCredentialHint.SECURITY_KEY,
-            PublicKeyCredentialHint.HYBRID,
-        ],
-    )
-    # チャレンジ文字列をセッションに保管（有効期限検証のため）
-    # Store registration ceremony parameters (challenge) in session.
-    store_passkey_registration_ceremony(
-        request.session,
-        bytes_to_base64url(options.challenge),
-    )
-    return jsonify(json.loads(options_to_json(options)))
-
-
-# クライアントからのパスキー登録応答を検証し、パスキーをDBに保存するAPIエンドポイント
-# API endpoint to verify client's WebAuthn registration response and save the credential.
-@auth_bp.post("/api/passkeys/register/verify", name="auth.api_passkey_register_verify")
-async def api_passkey_register_verify(request: Request):
-    """
-    クライアントが送信したパスキー登録結果（公開鍵署名等のアサーション情報）を検証し、成功すればDBに保存します。
-    Verify client's WebAuthn registration response (assertion data) and save the generated public key credential.
-    """
-    if (
-        verify_registration_response is None
-        or base64url_to_bytes is None
-        or bytes_to_base64url is None
-    ):
-        return _passkey_unavailable_response()
-
-    user_id = _user_id_from_session(request.session)
-    if user_id is None:
-        return jsonify({"status": "fail", "error": "ログインが必要です"}, status_code=401)
-
-    # セッションから以前生成したチャレンジを取得
-    # Retrieve challenge ceremony state from session.
-    ceremony = get_passkey_registration_ceremony(request.session)
-    if ceremony is None:
-        return jsonify({"status": "fail", "error": "Passkey登録を最初からやり直してください"}, status_code=400)
-    # 有効期限を確認
-    # Check challenge TTL.
-    if passkey_ceremony_is_expired(ceremony):
-        clear_passkey_session(request.session)
-        return jsonify(
-            {
-                "status": "fail",
-                "error": (
-                    f"Passkey登録の有効期限が切れています。"
-                    f"{PASSKEY_CHALLENGE_TTL_SECONDS // 60}分以内に再試行してください"
-                ),
-            },
-            status_code=400,
-        )
-
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    credential = data.get("credential")
-    label = data.get("label")
-    if not isinstance(credential, dict):
-        return jsonify({"status": "fail", "error": "Passkeyの応答が不正です"}, status_code=400)
-
-    try:
-        # クライアントのパスキー署名レスポンスを検証
-        # Verify the client's WebAuthn response.
-        verified = verify_registration_response(
-            credential=credential,
-            expected_challenge=base64url_to_bytes(ceremony["challenge"]),
-            expected_rp_id=get_passkey_rp_id(request),
-            expected_origin=get_passkey_origins(request),
-            require_user_verification=True,
-        )
-        # クレデンシャル（公開鍵、署名回数、認証デバイス情報）をDBに永続化
-        # Persist credential details in DB.
-        passkey = await run_blocking(
-            create_passkey,
-            user_id,
-            bytes_to_base64url(verified.credential_id),
-            bytes_to_base64url(verified.credential_public_key),
-            int(verified.sign_count),
-            aaguid=verified.aaguid,
-            credential_device_type=str(verified.credential_device_type.value),
-            credential_backed_up=bool(verified.credential_backed_up),
-            label=str(label) if isinstance(label, str) else None,
-        )
-    except Exception as exc:
-        logger.exception(
-            "Passkey registration verification failed for user %s: %s: %s",
-            user_id,
-            type(exc).__name__,
-            exc,
-        )
-        clear_passkey_session(request.session)
-        return jsonify({"status": "fail", "error": "Passkeyの登録に失敗しました"}, status_code=400)
-
-    # 完了後、セッションの仮登録データをクリア
-    # Clean up registration ceremony data from session on success.
-    clear_passkey_session(request.session)
-    return jsonify({"status": "success", "passkey": passkey})
-
-
-# パスキー認証（ログイン）用のオプションを生成するAPIエンドポイント
-# API endpoint to generate WebAuthn authentication options for passkey sign-in.
-@auth_bp.post("/api/passkeys/authenticate/options", name="auth.api_passkey_authenticate_options")
-async def api_passkey_authenticate_options(
-    request: Request,
-    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
-):
-    """
-    パスキー認証（ログイン）を初期化するために必要なWebAuthn認証オプション（チャレンジ文字列など）を生成します。
-    Generate WebAuthn authentication options (containing unique challenge) for passkey sign-in flow.
-    """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    if (
-        generate_authentication_options is None
-        or options_to_json is None
-        or UserVerificationRequirement is None
-        or bytes_to_base64url is None
-    ):
-        return _passkey_unavailable_response()
-
-    # パスキー認証オプション要求の頻度制限を確認
-    # Apply rate limits on authentication option request attempts.
-    allowed, limit_error = consume_passkey_auth_options_limit(
-        request,
-        service=resolved_auth_limit_service,
-    )
-    if not allowed:
-        return jsonify_rate_limited(
-            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
-            retry_after=parse_retry_after_seconds(
-                limit_error,
-                default=DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-            status="fail",
-        )
-
-    # 認証用のチャレンジを生成
-    # Generate WebAuthn authentication options.
-    options = generate_authentication_options(
-        rp_id=get_passkey_rp_id(request),
-        user_verification=UserVerificationRequirement.REQUIRED,
-    )
-    # チャレンジ情報をセッションに保存
-    # Store authentication ceremony state (challenge) in session.
-    store_passkey_authentication_ceremony(
-        request.session,
-        bytes_to_base64url(options.challenge),
-    )
-    return jsonify(json.loads(options_to_json(options)))
-
-
-# クライアントからのパスキー認証応答を検証し、ログインセッションを確立するAPIエンドポイント
-# API endpoint to verify WebAuthn assertion response and establish an authenticated session.
-@auth_bp.post("/api/passkeys/authenticate/verify", name="auth.api_passkey_authenticate_verify")
-async def api_passkey_authenticate_verify(
-    request: Request,
-    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
-):
-    """
-    クライアントが送信したWebAuthn認証アサーション（ログイン試行署名）を検証し、成功すればログインセッションを確立します。
-    Verify client's WebAuthn assertion response and set user_id/user_email into session to establish login state.
-    """
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    if (
-        verify_authentication_response is None
-        or base64url_to_bytes is None
-    ):
-        return _passkey_unavailable_response()
-
-    # パスキー署名検証の試行頻度制限を確認
-    # Enforce rate limits on verification attempts.
-    allowed, limit_error = consume_passkey_auth_verify_limit(
-        request,
-        service=resolved_auth_limit_service,
-    )
-    if not allowed:
-        return jsonify_rate_limited(
-            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
-            retry_after=parse_retry_after_seconds(
-                limit_error,
-                default=DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-            status="fail",
-        )
-
-    # セッションから元のチャレンジを取得
-    # Retrieve previous challenge from the session.
-    ceremony = get_passkey_authentication_ceremony(request.session)
-    if ceremony is None:
-        return jsonify({"status": "fail", "error": "Passkey認証を最初からやり直してください"}, status_code=400)
-    # 有効期限を確認
-    # Confirm expiration.
-    if passkey_ceremony_is_expired(ceremony):
-        clear_passkey_session(request.session)
-        return jsonify(
-            {
-                "status": "fail",
-                "error": (
-                    f"Passkey認証の有効期限が切れています。"
-                    f"{PASSKEY_CHALLENGE_TTL_SECONDS // 60}分以内に再試行してください"
-                ),
-            },
-            status_code=400,
-        )
-
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    credential = data.get("credential")
-    if not isinstance(credential, dict):
-        return jsonify({"status": "fail", "error": "Passkeyの応答が不正です"}, status_code=400)
-
-    credential_id = get_credential_lookup_id(credential)
-    if not isinstance(credential_id, str) or not credential_id:
-        return jsonify({"status": "fail", "error": "PasskeyのIDが不正です"}, status_code=400)
-
-    # クレデンシャルIDをキーとしてDBからパスキー情報を検索
-    # Lookup stored public key credential by credential_id.
-    passkey = await run_blocking(get_passkey_by_credential_id, credential_id)
-    if not passkey:
-        clear_passkey_session(request.session)
-        return jsonify({"status": "fail", "error": "Passkey認証に失敗しました"}, status_code=400)
-
-    try:
-        # パスキーのアサーション署名を検証
-        # Verify WebAuthn assertion signature using user's stored public key.
-        verified = verify_authentication_response(
-            credential=credential,
-            expected_challenge=base64url_to_bytes(ceremony["challenge"]),
-            expected_rp_id=get_passkey_rp_id(request),
-            expected_origin=get_passkey_origins(request),
-            credential_public_key=base64url_to_bytes(passkey["public_key"]),
-            credential_current_sign_count=int(passkey["sign_count"] or 0),
-            require_user_verification=True,
-        )
-    except Exception as exc:
-        logger.exception(
-            "Passkey authentication verification failed: %s: %s",
-            type(exc).__name__,
-            exc,
-        )
-        clear_passkey_session(request.session)
-        return jsonify({"status": "fail", "error": "Passkey認証に失敗しました"}, status_code=400)
-
-    # ユーザー存在確認およびステータスチェック
-    # Look up user and check verified status.
-    user = await run_blocking(get_user_by_id, passkey["user_id"])
-    if not user or not user.get("is_verified"):
-        clear_passkey_session(request.session)
-        return jsonify({"status": "fail", "error": "ユーザーが存在しないか、認証されていません"}, status_code=400)
-
-    # ログインセッションを確立
-    # Establish login state in session.
-    establish_authenticated_session(request, int(passkey["user_id"]), user["email"])
-    clear_passkey_session(request.session)
-
-    try:
-        # DB上の署名カウンタやデバイス属性情報を更新
-        # Update device details and sign count increment in DB.
-        await run_blocking(
-            update_passkey_usage,
-            int(passkey["id"]),
-            int(verified.new_sign_count),
-            credential_backed_up=bool(verified.credential_backed_up),
-            credential_device_type=str(verified.credential_device_type.value),
-        )
-    except Exception:
-        logger.exception(
-            "Passkey authentication: failed to update credential usage for passkey %s",
-            passkey["id"],
-        )
-    # 初期タスクのセットアップを確認/実行
-    # Copy default system tasks if needed.
-    await _copy_default_tasks_after_login(
-        int(passkey["user_id"]),
-        context="Passkey authentication",
-    )
-
-    return jsonify({"status": "success", "message": "Passkeyでログインしました"})
-
-
-# Google OAuth認可URLへリダイレクトしてGoogleログインフローを開始するエンドポイント
-# Redirect to Google OAuth authorization page to initiate Google sign-in.
-@auth_bp.get("/google-login", name="auth.google_login")
-async def google_login(request: Request):
-    """
-    Googleのログイン認可URLを生成し、ブラウザをGoogleログインページへリダイレクトします。
-    Generate Google OAuth authorization URL and redirect client to Google sign-in page.
-    """
-    if Flow is None:
-        logger.error(
-            "Google login is unavailable because google-auth-oauthlib is not installed."
-        )
-        return _google_login_unavailable_response()
-    
-    # 認可後にGoogleから呼び出されるコールバックURIを決定
-    # Determine the OAuth callback redirect URI.
-    configured_redirect_uri = (os.getenv("GOOGLE_REDIRECT_URI") or "").strip()
-    redirect_uri = configured_redirect_uri or url_for(
-        request, "auth.google_callback", _external=True
-    )
-    
-    # セッション分断を避けるため、必要な場合はリダイレクト処理
-    # Handle pre-redirect checks to prevent cookie/session host mismatches.
-    canonical_redirect = _build_google_login_host_redirect(request, configured_redirect_uri)
-    if canonical_redirect is not None:
-        return canonical_redirect
-        
-    next_param = request.query_params.get("next")
-    safe_next_path = sanitize_next_path(next_param, default="/") if next_param else None
-    
-    # Google OAuth用の設定情報をロード
-    # Load Google OAuth client settings.
-    client_config = _google_client_config()
-    settings_error = _validate_google_oauth_settings(client_config)
-    if settings_error:
-        logger.error(
-            "Google login is unavailable due to configuration error: %s",
-            settings_error,
-        )
-        return _google_login_unavailable_response()
-        
-    client_config["web"]["redirect_uris"] = [redirect_uri]
-    try:
-        # OAuthフローオブジェクトを生成
-        # Initialize Google OAuth Flow object.
-        flow = Flow.from_client_config(
-            client_config,
-            scopes=GOOGLE_SCOPES,
-            redirect_uri=redirect_uri,
-        )
-        # OAuth state をセッション保存し、コールバックで照合する
-        # Persist OAuth state in session and verify it in callback.
-        authorization_url, state = flow.authorization_url(prompt="consent")
-    except (
-        GoogleAuthError,
-        OAuth2Error,
-        requests.RequestException,
-        ValueError,
-    ):
-        logger.exception("Failed to initialize Google OAuth authorization URL.")
-        return _google_login_unavailable_response()
-        
-    # セキュリティトークン(state)や遷移先パラメータをセッションに一時保存
-    # Store CSRF verification state and redirect variables in session.
-    request.session["google_oauth_state"] = state
-    request.session["google_redirect_uri"] = redirect_uri
-    if safe_next_path:
-        request.session[GOOGLE_NEXT_PATH_SESSION_KEY] = safe_next_path
-    else:
-        request.session.pop(GOOGLE_NEXT_PATH_SESSION_KEY, None)
-        
-    logger.info(
-        "Google OAuth login started. State: %s, Redirect URI: %s, Session ID: %s",
-        state[:16] + "..." if state else "None",
-        redirect_uri,
-        request.scope.get("session_id", "unknown"),
-    )
-    return RedirectResponse(authorization_url, status_code=302)
-
-
-# Google OAuth認可応答を受け取り、トークン交換・ユーザー同期・ログインセッション確立を行うエンドポイント
-# Handle Google OAuth redirect callback, exchanging authorization response and completing login.
-@auth_bp.get("/google-callback", name="auth.google_callback")
-async def google_callback(request: Request):
-    """
-    Googleからリダイレクトで戻された認可パラメータを受け取り、アクセストークンを交換し、ログインまたは自動新規登録を実行します。
-    Handle Google OAuth redirect, exchanging authority response for access token and completing user login or auto-registration.
-    """
-    session = request.session
-    if Flow is None:
-        return _redirect_to_login_after_google_failure(request, session)
-        
-    # Google 側でエラーが発生した場合（ユーザーがキャンセルした等）を先に処理
-    # Handle Google-side errors first (e.g., user cancelled authorization).
-    google_error = request.query_params.get("error")
-    if google_error:
-        logger.warning(
-            "Google OAuth callback: authorization error from Google: %s",
-            google_error,
-        )
-        return _redirect_to_login_after_google_failure(request, session)
-        
-    state = session.get("google_oauth_state")
-    logger.info(
-        "Google OAuth callback received. Session ID: %s, Has state: %s, Session keys: %s",
-        request.scope.get("session_id", "unknown"),
-        bool(state),
-        list(session.keys()),
-    )
-    
-    # セッション内のstateトークンが欠落していないか検証
-    # Verify that the session challenge state exists.
-    if not state:
-        logger.warning(
-            "Google OAuth callback: session state missing. "
-            "Session keys: %s, Request host: %s",
-            list(session.keys()),
-            request.headers.get("host"),
-        )
-        return _redirect_to_login_after_google_failure(request, session)
-        
-    redirect_uri = session.get("google_redirect_uri") or os.getenv(
-        "GOOGLE_REDIRECT_URI"
-    )
-    if not redirect_uri:
-        redirect_uri = url_for(request, "auth.google_callback", _external=True)
-        
-    next_path = _google_next_path(session)
-    client_config = _google_client_config()
-    settings_error = _validate_google_oauth_settings(client_config)
-    if settings_error:
-        logger.error(
-            "Google OAuth callback aborted due to configuration error: %s",
-            settings_error,
-        )
-        return _redirect_to_login_after_google_failure(
-            request,
-            session,
-            redirect_uri=redirect_uri,
-        )
-        
-    login_redirect_url = _google_callback_redirect_target(
-        request,
-        "/login",
-        redirect_uri=redirect_uri,
-    )
-    if next_path:
-        login_redirect_url = _append_query_params(login_redirect_url, next=next_path)
-        
-    success_redirect_url = _google_callback_redirect_target(
-        request,
-        next_path or "/",
-        redirect_uri=redirect_uri,
-    )
-    client_config["web"]["redirect_uris"] = [redirect_uri]
-    
-    try:
-        # フローオブジェクトを再構築
-        # Reconstruct Flow object using cached state and client config.
-        flow = Flow.from_client_config(
-            client_config,
-            scopes=GOOGLE_SCOPES,
-            state=state,
-            redirect_uri=redirect_uri,
-        )
-    except (
-        GoogleAuthError,
-        OAuth2Error,
-        requests.RequestException,
-        ValueError,
-    ):
-        logger.exception("Failed to initialize Google OAuth callback flow.")
-        return _redirect_to_login_after_google_failure(
-            request,
-            session,
-            redirect_uri=redirect_uri,
-        )
-        
-    # コールバックURLから認可コードを交換し、アクセストークンを取得する
-    # Exchange callback authorization response for access token.
-    authorization_response = _build_google_authorization_response(request, redirect_uri)
-    try:
-        await run_blocking(flow.fetch_token, authorization_response=authorization_response)
-    except (
-        GoogleAuthError,
-        OAuth2Error,
-        requests.RequestException,
-        ValueError,
-    ):
-        logger.exception("Google OAuth token exchange failed.")
-        _clear_google_oauth_session(session)
-        return RedirectResponse(login_redirect_url, status_code=302)
-
-    # トークン交換成功後にOAuthセッションをクリアする
-    # Clear OAuth session after successful token exchange.
-    _clear_google_oauth_state(session)
-
-    credentials = flow.credentials
-    access_token = getattr(credentials, "token", "")
-    if not isinstance(access_token, str) or not access_token:
-        logger.error("Google OAuth callback completed without an access token.")
-        _clear_google_oauth_session(session)
-        return RedirectResponse(login_redirect_url, status_code=302)
-
-    # Google API経由でユーザープロフィール情報を取得
-    # Request profile information from Google API.
-    try:
-        user_info = await run_blocking(_fetch_google_user_info, access_token)
-    except requests.RequestException:
-        logger.exception("Failed to fetch Google user info.")
-        _clear_google_oauth_session(session)
-        return RedirectResponse(login_redirect_url, status_code=302)
-
-    # プロフィール項目の抽出と検証
-    # Clean and sanitize extracted profile fields.
-    email = _clean_google_field(user_info, "email")
-    # id (v2) または sub (OIDC) のいずれかを Google ID として使用する
-    # Use 'id' (legacy) or 'sub' (standard OIDC) as Google provider identity.
-    google_user_id = _clean_google_field(user_info, "id") or _clean_google_field(user_info, "sub")
-    display_name = _clean_google_field(user_info, "name")
-    picture = _clean_google_field(user_info, "picture")
-    # verified_email (v2) または email_verified (OIDC) のいずれかで認証済みか判定する
-    # Check if email is verified via 'verified_email' or 'email_verified' field.
-    verified_email = bool(user_info.get("verified_email") or user_info.get("email_verified"))
-
-    if not email or not google_user_id or not verified_email:
-        missing = []
-        if not email:
-            missing.append("email")
-        if not google_user_id:
-            missing.append("google_user_id (id/sub)")
-        if not verified_email:
-            missing.append("verified_email/email_verified")
-        logger.warning("Google OAuth callback: required fields missing: %s", ", ".join(missing))
-        _clear_google_oauth_session(session)
-        return RedirectResponse(login_redirect_url, status_code=302)
-
-    # ユーザー検索・作成（クリティカル：失敗時はログインを中断する）
-    # User lookup / creation — abort login on failure.
-    try:
-        user = await run_blocking(get_user_by_google_id, google_user_id)
-        should_mark_verified = False
-        should_offer_passkey_setup = False
-        if user:
-            # 既存のGoogle紐付けアカウントが見つかった場合
-            # If a matched Google user account exists.
-            user_id = user["id"]
-            await run_blocking(link_google_account, user_id, google_user_id, email)
-            should_mark_verified = not user.get("is_verified")
-            should_offer_passkey_setup = should_mark_verified
-        else:
-            # Google IDでの紐付けはないが、メールアドレスが一致するユーザーが存在するか検証
-            # Otherwise, check if user exists with matching email address.
-            user = await run_blocking(get_user_by_email, email)
-            if user:
-                existing_google_user_id = (user.get("provider_user_id") or "").strip()
-                if existing_google_user_id and existing_google_user_id != google_user_id:
-                    # 他のGoogleアカウントと既に紐付けされている場合は競合エラー
-                    # Conflict check: user email linked to another Google profile.
-                    logger.warning(
-                        "Google OAuth callback: conflicting google_user_id for email %s",
-                        email,
-                    )
-                    _clear_google_oauth_session(session)
-                    return RedirectResponse(login_redirect_url, status_code=302)
-                user_id = user["id"]
-                linked_google_account_for_first_time = not existing_google_user_id
-                # 初めてGoogleを紐付ける
-                # Link Google OAuth identifier to the existing account.
-                await run_blocking(link_google_account, user_id, google_user_id, email)
-                should_mark_verified = not user.get("is_verified")
-                should_offer_passkey_setup = (
-                    linked_google_account_for_first_time or should_mark_verified
-                )
-            else:
-                # Google 初回ログイン時は Google プロフィールを初期値に使って自動作成する
-                # Auto-create a verified user seeded from the Google profile.
-                user_id = await run_blocking(
-                    create_user,
-                    email,
-                    username=display_name or None,
-                    avatar_url=picture or None,
-                    auth_provider=GOOGLE_AUTH_PROVIDER,
-                    provider_user_id=google_user_id,
-                    provider_email=email,
-                    is_verified=True,
-                )
-                if not user_id:
-                    logger.error(
-                        "Google OAuth callback: user creation returned no id for email %s",
-                        email,
-                    )
-                    _clear_google_oauth_session(session)
-                    return RedirectResponse(login_redirect_url, status_code=302)
-    except Exception:
-        logger.exception("Google OAuth callback: unexpected error during user lookup/creation.")
-        _clear_google_oauth_session(session)
-        return RedirectResponse(login_redirect_url, status_code=302)
-
-    # セッション確立（最優先：以降の補助処理が失敗してもログインは成立させる）
-    # Establish session first — non-critical helpers must not block login.
-    establish_authenticated_session(request, int(user_id), email)
-
-    # 補助処理（失敗してもログイン自体には影響させない）
-    # Auxiliary operations — failures are logged but do not block login.
-    try:
-        # 未設定の場合のみプロフィール画像や表示名を同期
-        # Sync profile image and display name if not set yet.
-        await run_blocking(
-            update_user_profile_from_google_if_unset,
-            user_id,
-            display_name or None,
-            picture or None,
-        )
-    except Exception:
-        logger.exception("Google OAuth callback: failed to sync profile for user %s", user_id)
-
-    if should_mark_verified:
-        try:
-            # 認証済みに更新
-            # Mark user verified.
-            await run_blocking(set_user_verified, user_id)
-        except Exception:
-            logger.exception("Google OAuth callback: failed to verify user %s", user_id)
-
-    # 初期デフォルトタスクをコピー
-    # Copy default system tasks.
-    await _copy_default_tasks_after_login(user_id, context="Google OAuth callback")
-
-    try:
-        persisted_user = await run_blocking(get_user_by_id, user_id)
-        if persisted_user:
-            session["user_email"] = persisted_user["email"]
-    except Exception:
-        logger.exception("Google OAuth callback: failed to refresh email for user %s", user_id)
-
-    # パスキーの設定オファーを行うか判定
-    # Determine if we should recommend WebAuthn/passkey setup on the client.
-    if should_offer_passkey_setup:
-        passkey_setup_url = _google_callback_redirect_target(
-            request,
-            "/login",
-            redirect_uri=redirect_uri,
-        )
-        passkey_setup_query = {
-            "flow": "register",
-            "offer_passkey_setup": "1",
-            "provider": "google",
-        }
-        if next_path:
-            passkey_setup_query["next"] = next_path
-        _clear_google_oauth_session(session)
-        return RedirectResponse(
-            _append_query_params(passkey_setup_url, **passkey_setup_query),
-            status_code=302,
-        )
-
-    # 通常ログイン完了リダイレクト
-    # Complete redirect on successful OAuth login.
-    _clear_google_oauth_session(session)
-    if next_path:
-        return RedirectResponse(success_redirect_url, status_code=302)
-    return RedirectResponse(
-        _append_query_params(success_redirect_url, auth="success"),
-        status_code=302,
-    )
-
-
-# 既存のアカウントに対してログインコードを生成・送信するAPIエンドポイント
-# API endpoint to generate and email a login verification code for verified accounts.
-@auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")
-async def api_send_login_code(
-    request: Request,
-    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
-    llm_daily_limit_service: LlmDailyLimitService | None = Depends(get_llm_daily_limit_service),
-):
-    """
-    ログイン用の認証コード送信 API
-    - POST JSON: { "email": "ユーザーのメールアドレス" }
-    - 対象ユーザーが存在し、かつ is_verified=True であれば認証コードを生成し、メール送信する
-    - 認証コードとユーザーIDはセッション変数 (login_verification_code, login_temp_user_id) に一時保存
-    Login verification code API.
-    - POST JSON: { "email": "..."}
-    - Send code only for existing verified users
-    - Store code and temporary user id in session
-    """
-    # 依存関係の解決
-    # Resolve services.
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
-        request,
-        llm_daily_limit_service,
-    )
-    
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    payload, validation_error = validate_payload_model(
-        data,
-        EmailRequest,
-        error_message="メールアドレスが指定されていません",
-        status="fail",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    email = payload.email
-    # メール送信制限（短時間連続送信の防止）をチェックして消費
-    # Verify rate limits before generating codes.
-    allowed, limit_error = consume_auth_email_send_limits(
-        request,
-        email,
-        service=resolved_auth_limit_service,
-    )
-    if not allowed:
-        return jsonify_rate_limited(
-            limit_error or "試行回数が多すぎます。時間をおいて再試行してください。",
-            retry_after=parse_retry_after_seconds(
-                limit_error,
-                default=DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-            status="fail",
-        )
-
-    # 対象ユーザーが登録かつ有効化済みであることを確認
-    # Confirm that user is verified.
-    user = await run_blocking(get_user_by_email, email)
-    if not user or not user["is_verified"]:
-        return jsonify(
-            {"status": "fail", "error": "ユーザーが存在しないか、認証されていません"},
-            status_code=AUTH_FAILURE_STATUS_CODE,
-        )
-        
-    # メールの1日送信制限（全ユーザー対象クォータ）をチェックして消費
-    # Consume from the system-wide daily email quota.
-    can_send_email, _, daily_limit = await run_blocking(
-        consume_auth_email_daily_quota,
-        service=resolved_llm_daily_limit_service,
-    )
-    if not can_send_email:
-        return jsonify_rate_limited(
-            (
-                f"本日の認証メール送信上限（全ユーザー合計 {daily_limit} 件）に達しました。"
-                "日付が変わってから再度お試しください。"
-            ),
-            retry_after=get_seconds_until_daily_reset(),
-            status="fail",
-        )
-        
-    # 認証コードを発行し、検証用にセッションへ保持する
-    # Generate and store login verification code in session.
-    code = generate_verification_code()
-    request.session["login_verification_code"] = code
-    request.session["login_temp_user_id"] = user["id"]
-    request.session["login_temp_email"] = email  # rate-limit key (cross-session)
-    request.session["login_verification_code_issued_at"] = int(time.time())
-    request.session["login_verification_code_attempts"] = 0
-    
-    subject = "AIチャットサービス: ログイン認証コード"
-    body_text = f"以下の認証コードをログイン画面に入力してください。\n\n認証コード: {code}"
-    try:
-        # メール送信
-        # Dispatch the email.
-        await run_blocking(send_email, to_address=email, subject=subject, body_text=body_text)
-        return jsonify({"status": "success", "message": "認証コードを送信しました"})
-    except Exception:
-        return log_and_internal_server_error(
-            logger,
-            "Failed to send login verification code email.",
-            status="fail",
-        )
-
-
-# 送信されたログインコードを照合し、ログインセッションを確立するAPIエンドポイント
-# API endpoint to verify the submitted login code and establish an authenticated user session.
-@auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")
-async def api_verify_login_code(
-    request: Request,
-    auth_limit_service: AuthLimitService | None = Depends(get_auth_limit_service),
-):
-    """
-    ログイン用の認証コード確認 API
-    - POST JSON: { "authCode": "ユーザーが入力した認証コード" }
-    - セッションに保存した認証コードと照合し、一致すればログイン（session["user_id"] にユーザーIDを保存）する
-    Login code verification API.
-    - POST JSON: { "authCode": "..."}
-    - Compare submitted code with session-stored code and complete login on match
-    """
-    data, error_response = await require_json_dict(request, status="fail")
-    if error_response is not None:
-        return error_response
-
-    payload, validation_error = validate_payload_model(
-        data,
-        AuthCodeRequest,
-        error_message="認証コードが違います",
-        status="fail",
-    )
-    if validation_error is not None:
-        return validation_error
-
-    auth_code = payload.authCode
-    session = request.session
-    session_code = session.get("login_verification_code")
-    user_id = session.get("login_temp_user_id")
-    
-    # セッション内に必要な認証コードとユーザーIDがあるか確認
-    # Verify presence of session verification keys.
-    if not session_code or not user_id:
-        return jsonify(
-            {"status": "fail", "error": "セッション情報がありません。最初からやり直してください"},
-            status_code=AUTH_FAILURE_STATUS_CODE,
-        )
-        
-    issued_at = int(session.get("login_verification_code_issued_at") or 0)
-    attempts = int(session.get("login_verification_code_attempts") or 0)
-    
-    # 認証コードの有効期限（TTL）を確認
-    # Check if the code has expired.
-    if issued_at <= 0 or int(time.time()) - issued_at > LOGIN_VERIFICATION_CODE_TTL_SECONDS:
-        _clear_login_verification_session(session)
-        return jsonify(
-            {"status": "fail", "error": "認証コードの有効期限が切れています。"},
-            status_code=AUTH_FAILURE_STATUS_CODE,
-        )
-        
-    # セッションあたりのコード試行上限数を確認
-    # Confirm in-session attempt limits.
-    if attempts >= LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS:
-        _clear_login_verification_session(session)
-        return jsonify(
-            {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
-            status_code=AUTH_FAILURE_STATUS_CODE,
-        )
-
-    # Cross-session brute-force defence: in-session attempts above can be
-    # bypassed by opening a new session per try, so we additionally enforce a
-    # per-email/per-IP rolling-window cap that survives session resets.
-    resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
-    email_for_limit = str(session.get("login_temp_email") or "")
-    allowed, limit_error = await run_blocking(
-        consume_verification_attempt_limit,
-        request,
-        email_for_limit,
-        service=resolved_auth_limit_service,
-    )
-    if not allowed:
-        return jsonify_rate_limited(
-            limit_error or "認証コードの試行回数が多すぎます。時間をおいて再試行してください。",
-            retry_after=parse_retry_after_seconds(
-                limit_error,
-                default=DEFAULT_RETRY_AFTER_SECONDS,
-            ),
-            status="fail",
-        )
-
-    # 安全な定数時間比較で入力コードを検証
-    # Match the code securely using constant-time comparison.
-    submitted_code = str(auth_code or "")
-    if constant_time_compare(submitted_code, str(session_code)):
-        # ユーザー情報を取得
-        # Retrieve target user.
-        user = await run_blocking(get_user_by_id, user_id)
-        if not user or not user.get("is_verified"):
-            _clear_login_verification_session(session)
-            session.pop("user_id", None)
-            session.pop("user_email", None)
-            return jsonify(
-                {"status": "fail", "error": "ユーザーが存在しないか、認証されていません"},
-                status_code=AUTH_FAILURE_STATUS_CODE,
-            )
-            
-        # 認証済みセッションの確立（ログイン成功）
-        # Log the user in.
-        establish_authenticated_session(request, int(user_id), user["email"] if user else "")
-        _clear_login_verification_session(session)
-        
-        # ログイン時の初期タスクコピーを実行
-        # Attempt task cloning after login.
-        await _copy_default_tasks_after_login(int(user_id), context="Email login verification")
-        return jsonify(
-            {
-                "status": "success",
-                "message": "ログインに成功しました",
-                "flow": "login",
-                "offer_passkey_setup": False,
-            }
-        )
-    else:
-        # 不一致時は試行カウントを進める
-        # Increment attempt counter on mismatch.
-        attempts += 1
-        session["login_verification_code_attempts"] = attempts
-        if attempts >= LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS:
-            _clear_login_verification_session(session)
-            return jsonify(
-                {"status": "fail", "error": "認証コードの試行回数が上限に達しました。"},
-                status_code=AUTH_FAILURE_STATUS_CODE,
-            )
-        return jsonify(
-            {"status": "fail", "error": "認証コードが一致しません。"},
-            status_code=AUTH_FAILURE_STATUS_CODE,
-        )
+auth_bp.get("/register", name="auth.register_page")(register_page)
+auth_bp.get("/api/current_user", name="auth.api_current_user")(api_current_user)
+auth_bp.delete("/api/user/account", name="auth.api_delete_user_account")(api_delete_user_account)
+auth_bp.get("/login", name="auth.login")(login)
+auth_bp.post("/logout", name="auth.logout")(logout)
+auth_bp.post("/api/auth/send_email_code", name="auth.api_send_email_code")(api_send_email_code)
+auth_bp.post("/api/auth/verify_email_code", name="auth.api_verify_email_code")(api_verify_email_code)
+auth_bp.get("/api/passkeys", name="auth.api_list_passkeys")(api_list_passkeys)
+auth_bp.post("/api/passkeys/delete", name="auth.api_delete_passkey")(api_delete_passkey)
+auth_bp.post("/api/passkeys/register/options", name="auth.api_passkey_register_options")(api_passkey_register_options)
+auth_bp.post("/api/passkeys/register/verify", name="auth.api_passkey_register_verify")(api_passkey_register_verify)
+auth_bp.post("/api/passkeys/authenticate/options", name="auth.api_passkey_authenticate_options")(api_passkey_authenticate_options)
+auth_bp.post("/api/passkeys/authenticate/verify", name="auth.api_passkey_authenticate_verify")(api_passkey_authenticate_verify)
+auth_bp.get("/google-login", name="auth.google_login")(google_login)
+auth_bp.get("/google-callback", name="auth.google_callback")(google_callback)
+auth_bp.post("/api/send_login_code", name="auth.api_send_login_code")(api_send_login_code)
+auth_bp.post("/api/verify_login_code", name="auth.api_verify_login_code")(api_verify_login_code)
+
+__all__ = [
+    "ACCOUNT_DELETE_CONFIRMATION_TEXT",
+    "AUTH_FAILURE_STATUS_CODE",
+    "AuthCodeRequest",
+    "AuthLimitService",
+    "AuthenticatorSelectionCriteria",
+    "DEFAULT_RETRY_AFTER_SECONDS",
+    "EmailRequest",
+    "Flow",
+    "GOOGLE_AUTH_PROVIDER",
+    "GOOGLE_LOGIN_UNAVAILABLE_ERROR",
+    "GOOGLE_NEXT_PATH_SESSION_KEY",
+    "GOOGLE_SCOPES",
+    "GoogleAuthError",
+    "LOGIN_VERIFICATION_CODE_MAX_ATTEMPTS",
+    "LOGIN_VERIFICATION_CODE_TTL_SECONDS",
+    "LlmDailyLimitService",
+    "OAuth2Error",
+    "PASSKEY_CHALLENGE_TTL_SECONDS",
+    "PASSKEY_UNAVAILABLE_ERROR",
+    "PublicKeyCredentialDescriptor",
+    "PublicKeyCredentialHint",
+    "RedirectResponse",
+    "ResidentKeyRequirement",
+    "UserVerificationRequirement",
+    "_append_query_params",
+    "_build_absolute_url_from_reference",
+    "_build_google_authorization_response",
+    "_build_google_login_host_redirect",
+    "_clean_google_field",
+    "_clear_google_oauth_session",
+    "_clear_google_oauth_state",
+    "_clear_login_verification_session",
+    "_copy_default_tasks_after_login",
+    "_fetch_google_user_info",
+    "_google_callback_redirect_target",
+    "_google_client_config",
+    "_google_login_unavailable_response",
+    "_google_next_path",
+    "_passkey_unavailable_response",
+    "_redirect_to_login_after_google_failure",
+    "_resolve_auth_limit_service",
+    "_resolve_llm_daily_limit_service",
+    "_user_id_from_session",
+    "_validate_google_oauth_settings",
+    "api_current_user",
+    "api_delete_passkey",
+    "api_delete_user_account",
+    "api_list_passkeys",
+    "api_passkey_authenticate_options",
+    "api_passkey_authenticate_verify",
+    "api_passkey_register_options",
+    "api_passkey_register_verify",
+    "api_send_email_code",
+    "api_send_login_code",
+    "api_send_verification_email",
+    "api_verify_email_code",
+    "api_verify_login_code",
+    "api_verify_registration_code",
+    "auth_bp",
+    "base64url_to_bytes",
+    "bytes_to_base64url",
+    "clear_passkey_session",
+    "constant_time_compare",
+    "consume_auth_email_daily_quota",
+    "consume_auth_email_send_limits",
+    "consume_passkey_auth_options_limit",
+    "consume_passkey_auth_verify_limit",
+    "consume_verification_attempt_limit",
+    "copy_default_tasks_for_user",
+    "create_passkey",
+    "create_user",
+    "delete_passkey",
+    "delete_user_account",
+    "establish_authenticated_session",
+    "frontend_login_url",
+    "frontend_url",
+    "generate_authentication_options",
+    "generate_registration_options",
+    "generate_verification_code",
+    "get_auth_limit_service",
+    "get_credential_lookup_id",
+    "get_llm_daily_limit_service",
+    "get_passkey_authentication_ceremony",
+    "get_passkey_by_credential_id",
+    "get_passkey_origins",
+    "get_passkey_registration_ceremony",
+    "get_passkey_rp_id",
+    "get_passkey_rp_name",
+    "get_seconds_until_daily_reset",
+    "get_user_by_email",
+    "get_user_by_google_id",
+    "get_user_by_id",
+    "google_callback",
+    "google_login",
+    "is_production_env",
+    "jsonify",
+    "jsonify_rate_limited",
+    "link_google_account",
+    "list_passkeys_for_user",
+    "log_and_internal_server_error",
+    "logger",
+    "login",
+    "logout",
+    "options_to_json",
+    "os",
+    "parse_retry_after_seconds",
+    "passkey_ceremony_is_expired",
+    "redirect_to_frontend",
+    "register_page",
+    "requests",
+    "require_csrf",
+    "require_json_dict",
+    "run_blocking",
+    "sanitize_next_path",
+    "send_email",
+    "set_session_permanent",
+    "set_user_verified",
+    "store_passkey_authentication_ceremony",
+    "store_passkey_registration_ceremony",
+    "time",
+    "update_passkey_usage",
+    "update_user_profile_from_google_if_unset",
+    "url_for",
+    "validate_payload_model",
+    "verify_authentication_response",
+    "verify_registration_response",
+]
