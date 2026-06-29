@@ -177,6 +177,27 @@
     max-height: 86vh;
   }
 
+  #promptDetailModal .prompt-detail-header {
+    flex-direction: column;
+    gap: 0.72rem;
+    padding-right: 3rem;
+  }
+
+  .prompt-detail-header__chips {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .prompt-detail-primary--with-media,
+  .prompt-detail-examples {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-detail-section--body .prompt-detail-text-block,
+  .prompt-detail-section--body .prompt-detail-markdown {
+    max-height: 340px;
+  }
+
   .prompt-share-dialog__sns {
     grid-template-columns: 1fr;
   }
@@ -304,8 +325,31 @@
     padding: 1rem;
   }
 
-  #promptDetailModal .post-modal-content--detail h2 {
+  #promptDetailModal .prompt-detail-header {
     padding-right: 3.1rem;
+  }
+
+  #promptDetailModal .post-modal-content--detail h2 {
+    padding-right: 0;
+    font-size: 1.12rem;
+  }
+
+  .prompt-detail-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-detail-section,
+  .prompt-detail-media {
+    padding: 0.74rem;
+  }
+
+  .prompt-detail-section__header {
+    align-items: flex-start;
+  }
+
+  .prompt-detail-copy-btn {
+    min-width: 0;
+    padding-inline: 0.62rem;
   }
 
   .prompt-share-page .form-group input[type="text"],

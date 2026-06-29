@@ -290,6 +290,45 @@
   color: #f3f4f6;
 }
 
+[data-theme="dark"] .prompt-detail-heading__eyebrow {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] #promptDetailModal .post-modal-content--detail h2 {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .prompt-detail-chip {
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.82);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .prompt-detail-chip i {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-detail-chip strong {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .prompt-detail-summary__item {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.62);
+}
+
+[data-theme="dark"] .prompt-detail-summary__item dt {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-detail-summary__item dt i {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-detail-summary__item dd {
+  color: #e2e8f0;
+}
+
 [data-theme="dark"] .prompt-detail-tabs {
   border-color: rgba(107, 114, 128, 0.7);
   background: rgba(15, 23, 42, 0.62);
@@ -308,6 +347,35 @@
 [data-theme="dark"] .prompt-detail-tabs__button span {
   background: rgba(96, 165, 250, 0.18);
   color: #93c5fd;
+}
+
+[data-theme="dark"] .prompt-detail-section,
+[data-theme="dark"] .prompt-detail-media {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.68);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .prompt-detail-section--body {
+  background: rgba(15, 23, 42, 0.84);
+}
+
+[data-theme="dark"] .prompt-detail-section__label {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .prompt-detail-section__meta {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .prompt-detail-copy-btn {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+[data-theme="dark"] .prompt-detail-copy-btn:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.22);
 }
 
 [data-theme="dark"] .prompt-detail-comments {
@@ -369,6 +437,7 @@
   color: #cbd5e1;
 }
 
+[data-theme="dark"] .prompt-detail-text-block,
 [data-theme="dark"] .prompt-detail-markdown,
 [data-theme="dark"] .prompt-detail-code {
   border-color: rgba(148, 163, 184, 0.24);
