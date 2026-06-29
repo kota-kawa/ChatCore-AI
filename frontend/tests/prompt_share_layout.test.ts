@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { PromptShareDetailModal } from "../components/prompt_share/prompt_share_detail_modal";
 import { PromptSharePageLayout } from "../components/prompt_share/prompt_share_page_layout";
 
 const noop = () => {};
@@ -56,4 +57,54 @@ test("prompt share layout renders crawlable page content before client API data 
   assert.match(html, /Chat Coreのプロンプト共有/);
   assert.match(html, /文章作成/);
   assert.match(html, /調査/);
+});
+
+test("prompt share detail modal highlights prompt content and metadata", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptShareDetailModal, {
+      isOpen: true,
+      isLoggedIn: true,
+      activeView: "detail",
+      promptDetailModalRef: React.createRef<HTMLDivElement>(),
+      commentsSectionRef: React.createRef<HTMLElement>(),
+      commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
+      detailPrompt: {
+        id: 12,
+        clientId: "prompt-12",
+        title: "会議メモ要約",
+        content: "議事録を要点、決定事項、次のアクションに分けて要約してください。",
+        category: "ビジネス",
+        author: "Kota",
+        content_format: "prompt",
+        media_type: "text",
+        prompt_type: "text",
+        ai_model: "Gemini 2.5",
+        input_examples: "長い会議メモ",
+        output_examples: "要点 / 決定事項 / 次のアクション",
+        liked: false,
+        used_in_chat: false,
+        comment_count: 3,
+        created_at: "2026-06-01T00:00:00Z"
+      },
+      detailComments: [],
+      isDetailCommentsLoading: false,
+      isCommentSubmitting: false,
+      commentDraft: "",
+      commentActionPendingIds: new Set<string>(),
+      promptDetailCloseButtonRef: React.createRef<HTMLButtonElement>(),
+      onActiveViewChange: noop,
+      onCommentDraftChange: noop,
+      onSubmitComment: noop,
+      onDeleteComment: noop,
+      onReportComment: noop,
+      onReloadComments: noop,
+      onClose: noop
+    })
+  );
+
+  assert.match(html, /プロンプト本文/);
+  assert.match(html, /議事録を要点、決定事項、次のアクションに分けて要約してください。/);
+  assert.match(html, /ビジネス/);
+  assert.match(html, /Gemini 2.5/);
+  assert.match(html, /コピー/);
 });
