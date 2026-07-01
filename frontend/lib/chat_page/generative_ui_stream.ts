@@ -17,8 +17,6 @@ const GENERATIVE_UI_FENCE_START_RE = new RegExp(
   "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "gi",
 );
-const GENERATIVE_UI_IN_PROGRESS_TEXT = "生成UIを作成中です...";
-
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
   let stripped = normalized.replace(COMPLETE_GENERATIVE_UI_FENCE_RE, "\n\n");
@@ -37,11 +35,28 @@ export function stripGenerativeUiFencesForStreaming(text: string) {
   return stripped.replace(/\n{3,}/g, "\n\n").trimEnd();
 }
 
+// フェンスを取り除いた本文のみを返す。生成UIの進行はテキストではなく
+// 専用ローダー（GenerativeUiLoader）で可視化する。
+// Return only the prose with fences stripped; generative UI progress is
+// visualized by the dedicated loader (GenerativeUiLoader), not by text.
 export function getStreamingGenerativeUiDisplayText(text: string) {
-  const stripped = stripGenerativeUiFencesForStreaming(text);
-  if (stripped.trim()) return stripped;
+  return stripGenerativeUiFencesForStreaming(text);
+}
+
+// ストリーム中のテキストに生成UIフェンスの開始が含まれるかを判定する
+// Detect whether the streamed text contains the start of a generative UI fence
+export function hasGenerativeUiFenceStart(text: string) {
+  const normalized = String(text || "").replace(/\r\n?/g, "\n");
   GENERATIVE_UI_FENCE_START_RE.lastIndex = 0;
-  return GENERATIVE_UI_FENCE_START_RE.test(text) ? GENERATIVE_UI_IN_PROGRESS_TEXT : stripped;
+  return GENERATIVE_UI_FENCE_START_RE.test(normalized);
+}
+
+// 生成UIの作成中（フェンスは始まったが、描画可能なパーツがまだ届いていない）かを判定する
+// Whether a generative UI is still being produced: a fence has started but no
+// renderable non-text part has arrived yet.
+export function isGenerativeUiPending(text: string, parts?: ChatMessagePart[]) {
+  if (!hasGenerativeUiFenceStart(text)) return false;
+  return !parts?.some((part) => part.type !== "text");
 }
 
 export function updateStreamingTextPart(
