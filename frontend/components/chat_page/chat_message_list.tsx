@@ -21,6 +21,7 @@ import { BotMessageParts } from "./bot_message_parts";
 import { BranchNavigator } from "./branch_navigator";
 import { CopyActionButton } from "./copy_action_button";
 import { EditActionButton } from "./edit_action_button";
+import { GenerativeUiLoader } from "./generative_ui_loader";
 import { MemoSaveActionButton } from "./memo_save_action_button";
 import { RegenerateActionButton } from "./regenerate_action_button";
 import { TaskPromptDisclosure } from "./task_prompt_disclosure";
@@ -325,6 +326,9 @@ function ChatMessageRow({
       >
         <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
           <BotMessageParts fallbackText={message.text} parts={message.parts} />
+          {/* 生成UIのフェンスをストリーミング中は、無表示にならないよう組み立てローダーを見せる。 */}
+          {/* While a generative UI fence is streaming, show the assembly loader so the screen never looks stalled. */}
+          {isActivelyStreaming && message.generativeUiPending ? <GenerativeUiLoader /> : null}
         </div>
         <div className="message-actions" style={actionVisibilityStyle}>
           {!message.error && (

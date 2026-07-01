@@ -85,6 +85,8 @@ export type UiChatMessage = {
   parts?: ChatMessagePart[];
   generationPhase?: ChatGenerationPhase;
   streaming?: boolean;
+  /** True while a generative UI fence is streaming and no renderable part has arrived yet. */
+  generativeUiPending?: boolean;
   error?: boolean;
   attachedFileNames?: string[];
   /** Server-side chat_history id; present for persisted (DB-backed) messages. */

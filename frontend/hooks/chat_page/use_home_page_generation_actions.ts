@@ -16,6 +16,7 @@ import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
   getStreamingGenerativeUiDisplayText,
+  isGenerativeUiPending,
   updateStreamingTextPart,
 } from "../../lib/chat_page/generative_ui_stream";
 import {
@@ -370,6 +371,7 @@ export function useHomePageGenerationActions({
         const newId = streamingMessageId;
         const displayText = getStreamingGenerativeUiDisplayText(streamedText);
         const displayParts = updateStreamingTextPart(streamingParts, displayText);
+        const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 
         setMessages((previous) => {
           if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -380,6 +382,7 @@ export function useHomePageGenerationActions({
               sender: "assistant",
               text: displayText,
               streaming: true,
+              generativeUiPending,
               ...(displayParts ? { parts: displayParts } : {}),
             },
           ];
@@ -455,6 +458,7 @@ export function useHomePageGenerationActions({
               text: finalDisplayText || message.text,
               ...(hasParts ? { parts: resolvedParts } : {}),
               streaming: false,
+              generativeUiPending: false,
             };
           });
         });
@@ -522,6 +526,7 @@ export function useHomePageGenerationActions({
           updateStoredGenerationState(roomId, { streamedText });
           const displayText = getStreamingGenerativeUiDisplayText(streamedText);
           const displayParts = updateStreamingTextPart(streamingParts, displayText);
+          const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 
           setMessages((previous) => {
             if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -531,6 +536,7 @@ export function useHomePageGenerationActions({
                 ...message,
                 text: displayText,
                 streaming: true,
+                generativeUiPending,
                 ...(displayParts ? { parts: displayParts } : {}),
               };
             });
@@ -547,6 +553,7 @@ export function useHomePageGenerationActions({
           }
           const streamId = ensureStreamingMessage();
           const displayParts = updateStreamingTextPart(streamingParts, displayText);
+          const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 
           setMessages((previous) => {
             if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
@@ -556,6 +563,7 @@ export function useHomePageGenerationActions({
                 ...message,
                 text: displayText,
                 streaming: true,
+                generativeUiPending,
                 ...(displayParts ? { parts: displayParts } : {}),
               };
             });

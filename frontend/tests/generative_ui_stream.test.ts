@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   getStreamingGenerativeUiDisplayText,
+  hasGenerativeUiFenceStart,
+  isGenerativeUiPending,
   stripGenerativeUiFencesForStreaming,
   updateStreamingTextPart,
 } from "../lib/chat_page/generative_ui_stream";
@@ -50,22 +52,58 @@ test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while s
   assert.equal(getStreamingGenerativeUiDisplayText(text), "説明します。");
 });
 
-test("getStreamingGenerativeUiDisplayText shows progress for alias-only artifact output", () => {
+test("getStreamingGenerativeUiDisplayText returns empty text for alias-only artifact output", () => {
+  // 進行表示は静的テキストではなく GenerativeUiLoader が担うため、本文は空になる。
+  // The GenerativeUiLoader (not static text) now indicates progress, so the prose stays empty.
   const text = [
     "```ui_artifact",
     '{"version":1,"title":"UI"',
   ].join("\n");
 
-  assert.equal(getStreamingGenerativeUiDisplayText(text), "生成UIを作成中です...");
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "");
+  assert.equal(isGenerativeUiPending(text), true);
 });
 
-test("getStreamingGenerativeUiDisplayText shows an in-progress label for artifact-only output", () => {
+test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
   const text = [
     "```chatcore-artifact",
     '{"version":1,"title":"UI"',
   ].join("\n");
 
-  assert.equal(getStreamingGenerativeUiDisplayText(text), "生成UIを作成中です...");
+  assert.equal(getStreamingGenerativeUiDisplayText(text), "");
+  assert.equal(isGenerativeUiPending(text), true);
+});
+
+test("hasGenerativeUiFenceStart detects fence starts and ignores plain code fences", () => {
+  assert.equal(hasGenerativeUiFenceStart("説明\n```generative-ui json\n{"), true);
+  assert.equal(hasGenerativeUiFenceStart("```chatcore-buttons\n"), true);
+  assert.equal(hasGenerativeUiFenceStart("```python\nprint(1)\n```"), false);
+  assert.equal(hasGenerativeUiFenceStart("ただのテキストです。"), false);
+});
+
+test("isGenerativeUiPending stays true while streaming and turns false once a part arrives", () => {
+  const text = [
+    "作りますね。",
+    "```chatcore-artifact",
+    '{"version":1,"title":"UI","html":"<div',
+  ].join("\n");
+
+  assert.equal(isGenerativeUiPending(text), true);
+  assert.equal(isGenerativeUiPending(text, [{ type: "text", text: "作りますね。" }]), true);
+
+  const partsWithArtifact: ChatMessagePart[] = [
+    { type: "text", text: "作りますね。" },
+    {
+      type: "sandbox_artifact",
+      artifact: { version: 1, title: "UI", html: "<div></div>", css: "", js: "" },
+    },
+  ];
+  assert.equal(isGenerativeUiPending(text, partsWithArtifact), false);
+});
+
+test("isGenerativeUiPending is false for plain text streams", () => {
+  assert.equal(isGenerativeUiPending("こんにちは。普通の回答です。"), false);
+  assert.equal(isGenerativeUiPending(""), false);
 });
 
 test("updateStreamingTextPart keeps artifact parts while refreshing streamed text", () => {
