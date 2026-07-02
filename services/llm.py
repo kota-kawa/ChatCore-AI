@@ -76,7 +76,13 @@ OPENAI_DEFAULT_MODEL = (
     or GPT_5_MINI_MODEL
 )
 GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
-LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 4096)
+# 対応モデル（gemini-2.5-flash / gpt-oss / gpt-5-mini）はいずれも思考トークンがこの上限に
+# 含まれる。4096では生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
+# ため、既定値を引き上げる（全プロバイダの出力上限 65536 以内）。
+# All supported models (gemini-2.5-flash / gpt-oss / gpt-5-mini) count reasoning tokens
+# against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
+# code) mid-stream, so raise the default (well within every provider's 65536 output cap).
+LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
 LLM_REQUEST_TIMEOUT_SECONDS = 30.0
 # 一時的な接続失敗を吸収するため既定の再試行回数を増やします（環境変数で調整可能です）。
 # Retry transient connection failures by default; configurable via env var.
@@ -566,7 +572,17 @@ def _get_openai_compatible_response_stream(
         for chunk in stream:
             if not chunk.choices:
                 continue
-            delta = chunk.choices[0].delta
+            choice = chunk.choices[0]
+            if getattr(choice, "finish_reason", None) == "length":
+                # 出力がトークン上限で打ち切られたことを記録する（生成UIのJSONが壊れる主因）。
+                # Record that output was cut off at the token cap (a main cause of broken
+                # generative UI JSON).
+                logger.warning(
+                    "LLM stream truncated by token limit (model=%s, max_tokens=%s).",
+                    model_name,
+                    LLM_MAX_TOKENS,
+                )
+            delta = choice.delta
             if getattr(delta, "content", None):
                 yield delta.content
 
@@ -822,6 +838,15 @@ def get_openai_response_stream(
                     delta = event.delta
                     if delta:
                         yield delta
+                elif event.type == "response.incomplete":
+                    # 出力がトークン上限で打ち切られたことを記録する（生成UIのJSONが壊れる主因）。
+                    # Record that output was cut off at the token cap (a main cause of
+                    # broken generative UI JSON).
+                    logger.warning(
+                        "OpenAI Responses stream incomplete (model=%s, max_output_tokens=%s).",
+                        model_name,
+                        LLM_MAX_TOKENS,
+                    )
     except Exception as exc:
         _raise_provider_error(
             exc,

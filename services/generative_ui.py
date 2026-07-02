@@ -61,6 +61,14 @@ _BLOCKED_TAG_RE = re.compile(
     r"<\s*/?\s*(script|iframe|object|embed|link|meta|base)\b[^>]*>",
     re.IGNORECASE,
 )
+# 出力打ち切りで `>` まで届かなかった禁止タグの残骸。除去しないと banned-tag 検査で
+# Artifact 全体が拒否されてしまう。
+# Remnant of a banned tag whose `>` was cut off by output truncation. Without removal
+# the banned-tag check rejects the whole artifact.
+_TRUNCATED_BLOCKED_TAG_RE = re.compile(
+    r"<\s*/?\s*(script|iframe|object|embed|link|meta|base)\b[^>]*\Z",
+    re.IGNORECASE,
+)
 _EVENT_ATTR_RE = re.compile(
     r"\s(?P<name>on[a-z0-9_-]+)\s*=\s*(?P<value>\"[^\"]*\"|'[^']*'|[^\s>]+)",
     re.IGNORECASE,
@@ -126,7 +134,12 @@ _JS_BANNED_TOKEN_RE = re.compile(
     r"\bdocument\s*\.\s*(?:write|writeln)\s*\(|"
     r"\bset(?:Timeout|Interval)\s*\(\s*['\"]|"
     r"\b(?:window|globalThis|self)\s*\.\s*(?:parent|top|opener)\b|"
-    r"(?<![\w$])(?:parent|top|opener)\s*\.|"
+    # `.` 直後の parent/top/opener は他オブジェクトのプロパティ参照（rect.top / node.parent 等）
+    # なので許可し、裸の parent./top./opener.（window暗黙参照）だけを禁止する。
+    # parent/top/opener right after `.` is a property access on another object
+    # (rect.top / node.parent etc.), so only bare parent./top./opener. (implicit
+    # window references) are banned.
+    r"(?<![\w$.])(?:parent|top|opener)\s*\.|"
     r"\bpostMessage\s*\(|"
     r"\b(?:window|document)\s*\.\s*location\b|"
     r"(?<![\w$])location\s*(?:=|\.|\[))",
@@ -396,7 +409,12 @@ def _loads_artifact_json(raw_json: str) -> Any:
     try:
         return json.loads(raw_json)
     except json.JSONDecodeError:
-        return json.loads(_normalize_jsonish_source(raw_json))
+        # strict=False は文字列内の生の制御文字（タブ等）を許容する。モデル出力では
+        # コード断片が未エスケープのまま混ざることがあるため、リトライ側だけ緩める。
+        # strict=False tolerates raw control characters (tabs etc.) inside strings.
+        # Model outputs sometimes embed unescaped code fragments, so only the retry
+        # path is relaxed.
+        return json.loads(_normalize_jsonish_source(raw_json), strict=False)
 
 
 # 2つの文字列スパンが重複しているかどうかを判定します。
@@ -654,7 +672,7 @@ def _repair_truncated_json(source: str) -> str | None:
             continue
         closed = trimmed + closers
         try:
-            json.loads(_normalize_jsonish_source(closed))
+            json.loads(_normalize_jsonish_source(closed), strict=False)
         except json.JSONDecodeError:
             shortened = _drop_trailing_json_token(trimmed)
             if shortened == trimmed:
@@ -908,6 +926,7 @@ def _sanitize_html(value: str) -> str:
     sanitized = _coerce_string(value)
     sanitized = _BLOCKED_ELEMENT_RE.sub("", sanitized)
     sanitized = _BLOCKED_TAG_RE.sub("", sanitized)
+    sanitized = _TRUNCATED_BLOCKED_TAG_RE.sub("", sanitized)
 
     def replace_event_attr(match: re.Match[str]) -> str:
         handler = _strip_attribute_quotes(match.group("value"))
