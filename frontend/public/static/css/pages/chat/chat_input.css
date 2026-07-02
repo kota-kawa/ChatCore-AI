@@ -803,23 +803,29 @@
   animation-delay: var(--node-delay, 0s);
 }
 
+/* 星座間のモーフィング。--morph-delay で要素ごとに時間差をつけ、
+   端から順に波打つように組み変わる。イージングはゆったり減速する曲線。
+   Morph between constellations: --morph-delay staggers each element so the
+   shape re-forms in a ripple, with a long, gently decelerating easing. */
 .constellation-loader.is-ready .constellation-loader__link {
   transition:
-    left 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease,
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+    left 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    top 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    width 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    opacity 360ms ease,
+    transform 1150ms cubic-bezier(0.3, 0.9, 0.24, 1);
+  transition-delay: var(--morph-delay, 0s);
 }
 
 .constellation-loader.is-ready .constellation-loader__node {
   transition:
-    left 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 760ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 220ms ease,
-    transform 760ms cubic-bezier(0.22, 1, 0.36, 1);
+    left 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    top 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    width 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    height 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
+    opacity 360ms ease,
+    transform 1150ms cubic-bezier(0.3, 0.9, 0.24, 1);
+  transition-delay: var(--morph-delay, 0s);
 }
 
 @keyframes constellationPanelDrift {
