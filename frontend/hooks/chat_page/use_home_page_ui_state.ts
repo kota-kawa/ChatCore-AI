@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_MODEL, MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import {
+  readStoredHomePageViewState,
+  writeStoredHomePageViewState,
+} from "../../lib/chat_page/storage";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
 
 export type HomePageViewState = "setup" | "launching" | "chat";
@@ -73,8 +77,16 @@ export function useHomePageUiState() {
   useEffect(() => {
     setSetupInfo(readStoredSetupInfo());
     setTemporaryModeEnabled(readStoredTemporaryModeEnabled());
+    setPageViewState(readStoredHomePageViewState());
     setStoredSetupStateLoaded(true);
   }, []);
+
+  // 最後に表示していたトップページのビューを保存する
+  // Save the last visible top-page view so reloads restore the same screen.
+  useEffect(() => {
+    if (!storedSetupStateLoaded) return;
+    writeStoredHomePageViewState(pageViewState);
+  }, [pageViewState, storedSetupStateLoaded]);
 
   // セットアップ情報の変更をローカルストレージに保存する
   // Save setup info changes to local storage

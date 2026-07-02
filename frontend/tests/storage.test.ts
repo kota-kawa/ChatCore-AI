@@ -4,13 +4,18 @@ import test from "node:test";
 import {
   appendStoredHistory,
   clearStoredGenerationState,
+  readStoredActiveChatRoom,
   readActiveStoredGenerationState,
+  readStoredHomePageViewState,
   readStoredGenerationState,
   readStoredHistory,
+  writeStoredActiveChatRoom,
+  writeStoredHomePageViewState,
   writeStoredGenerationState,
   writeStoredHistory,
 } from "../lib/chat_page/storage";
 import type { StoredHistoryEntry } from "../lib/chat_page/types";
+import { STORAGE_KEYS } from "../scripts/core/constants";
 
 class FakeLocalStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -140,4 +145,51 @@ test("clearing stored generation state removes active generation pointer", () =>
 
   assert.equal(readStoredGenerationState("room-clear"), null);
   assert.equal(readActiveStoredGenerationState(), null);
+});
+
+test("home page view state persists setup and chat views", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  assert.equal(readStoredHomePageViewState(), "setup");
+
+  assert.equal(writeStoredHomePageViewState("launching"), true);
+  assert.equal(readStoredHomePageViewState(), "chat");
+
+  assert.equal(writeStoredHomePageViewState("setup"), true);
+  assert.equal(readStoredHomePageViewState(), "setup");
+});
+
+test("active chat room storage keeps temporary rooms out of legacy current room key", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  assert.equal(writeStoredActiveChatRoom("temp-room", "temporary"), true);
+  assert.deepEqual(readStoredActiveChatRoom(), {
+    roomId: "temp-room",
+    roomMode: "temporary",
+  });
+  assert.equal(storage.getItem(STORAGE_KEYS.currentChatRoomId), null);
+
+  assert.equal(writeStoredActiveChatRoom("normal-room", "normal"), true);
+  assert.deepEqual(readStoredActiveChatRoom(), {
+    roomId: "normal-room",
+    roomMode: "normal",
+  });
+  assert.equal(storage.getItem(STORAGE_KEYS.currentChatRoomId), "normal-room");
+
+  assert.equal(writeStoredActiveChatRoom(null), true);
+  assert.equal(readStoredActiveChatRoom(), null);
+  assert.equal(storage.getItem(STORAGE_KEYS.currentChatRoomId), null);
+});
+
+test("active chat room storage falls back to legacy current room id", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  storage.setItem(STORAGE_KEYS.currentChatRoomId, "legacy-room");
+
+  assert.deepEqual(readStoredActiveChatRoom(), {
+    roomId: "legacy-room",
+    roomMode: "normal",
+  });
 });
