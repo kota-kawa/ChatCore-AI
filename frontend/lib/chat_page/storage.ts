@@ -4,6 +4,14 @@ import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntr
 
 const GENERATION_STATE_TTL_MS = 30 * 60 * 1000;
 
+export type StoredHomePageViewState = "setup" | "chat";
+type WritableHomePageViewState = StoredHomePageViewState | "launching";
+
+export type StoredActiveChatRoom = {
+  roomId: string;
+  roomMode: ChatRoomMode;
+};
+
 function getStoredHistoryKey(roomId: string) {
   return `chatHistory_${roomId}`;
 }
@@ -21,6 +29,80 @@ function isQuotaExceededError(error: unknown) {
 
 function persistStoredHistory(key: string, entries: StoredHistoryEntry[]) {
   localStorage.setItem(key, JSON.stringify(entries));
+}
+
+function normalizeStoredRoomMode(rawMode: unknown): ChatRoomMode {
+  return rawMode === "temporary" ? "temporary" : "normal";
+}
+
+function normalizeStoredHomePageViewState(rawState: unknown): StoredHomePageViewState {
+  return rawState === "chat" ? "chat" : "setup";
+}
+
+export function readStoredHomePageViewState(): StoredHomePageViewState {
+  try {
+    return normalizeStoredHomePageViewState(localStorage.getItem(STORAGE_KEYS.homePageViewState));
+  } catch {
+    return "setup";
+  }
+}
+
+export function writeStoredHomePageViewState(viewState: WritableHomePageViewState): boolean {
+  try {
+    localStorage.setItem(
+      STORAGE_KEYS.homePageViewState,
+      viewState === "setup" ? "setup" : "chat",
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readStoredActiveChatRoom(): StoredActiveChatRoom | null {
+  try {
+    const activeRoomId = localStorage.getItem(STORAGE_KEYS.activeChatRoomId)?.trim();
+    if (activeRoomId) {
+      return {
+        roomId: activeRoomId,
+        roomMode: normalizeStoredRoomMode(localStorage.getItem(STORAGE_KEYS.activeChatRoomMode)),
+      };
+    }
+
+    const legacyRoomId = localStorage.getItem(STORAGE_KEYS.currentChatRoomId)?.trim();
+    if (!legacyRoomId) return null;
+    return {
+      roomId: legacyRoomId,
+      roomMode: "normal",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredActiveChatRoom(roomId: string | null, mode: ChatRoomMode = "normal"): boolean {
+  try {
+    if (!roomId) {
+      localStorage.removeItem(STORAGE_KEYS.activeChatRoomId);
+      localStorage.removeItem(STORAGE_KEYS.activeChatRoomMode);
+      localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
+      return true;
+    }
+
+    const roomMode = normalizeStoredRoomMode(mode);
+    localStorage.setItem(STORAGE_KEYS.activeChatRoomId, roomId);
+    localStorage.setItem(STORAGE_KEYS.activeChatRoomMode, roomMode);
+
+    if (roomMode === "temporary") {
+      localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
+    } else {
+      localStorage.setItem(STORAGE_KEYS.currentChatRoomId, roomId);
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export type StoredHistoryWriteResult = {

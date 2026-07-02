@@ -32,6 +32,8 @@ import {
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
   readActiveStoredGenerationState,
+  readStoredActiveChatRoom,
+  readStoredHomePageViewState,
   readCachedAuthState,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
@@ -43,7 +45,6 @@ import type {
   ChatRoomsPage,
   PromptAssistController,
 } from "../../lib/chat_page/types";
-import { STORAGE_KEYS } from "../../scripts/core/constants";
 import { showToast } from "../../scripts/core/toast";
 import {
   extractApiErrorMessage,
@@ -862,6 +863,7 @@ export function useHomePageController() {
 
   useEffect(() => {
     try {
+      const storedViewState = readStoredHomePageViewState();
       const activeGeneration = readActiveStoredGenerationState();
       if (activeGeneration) {
         setCurrentRoomId(activeGeneration.roomId);
@@ -876,15 +878,44 @@ export function useHomePageController() {
         return;
       }
 
-      const storedRoomId = localStorage.getItem(STORAGE_KEYS.currentChatRoomId);
-      if (storedRoomId) {
-        setCurrentRoomId(storedRoomId);
-        currentRoomIdRef.current = storedRoomId;
+      const storedActiveRoom = readStoredActiveChatRoom();
+      if (storedActiveRoom) {
+        setCurrentRoomId(storedActiveRoom.roomId);
+        currentRoomIdRef.current = storedActiveRoom.roomId;
+        setCurrentRoomMode(storedActiveRoom.roomMode);
+
+        if (storedViewState === "chat") {
+          setPageViewState("chat");
+          setChatMessageListResetKey((previous) => previous + 1);
+          loadLocalChatHistory(storedActiveRoom.roomId);
+          void loadChatHistory(storedActiveRoom.roomId, true);
+        }
+        return;
+      }
+
+      if (storedViewState === "chat") {
+        setPageViewState("chat");
+        setCurrentRoomMode("normal");
+        setChatMessageListResetKey((previous) => previous + 1);
+        setMessages([]);
+        setHistoryHasMore(false);
+        setHistoryNextBeforeId(null);
+        setIsLoadingOlder(false);
       }
     } catch {
       // ignore localStorage failures
     }
-  }, [loadChatHistory, loadLocalChatHistory, setChatMessageListResetKey, setCurrentRoomMode, setPageViewState]);
+  }, [
+    loadChatHistory,
+    loadLocalChatHistory,
+    setChatMessageListResetKey,
+    setCurrentRoomMode,
+    setHistoryHasMore,
+    setHistoryNextBeforeId,
+    setIsLoadingOlder,
+    setMessages,
+    setPageViewState,
+  ]);
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {

@@ -30,6 +30,7 @@ import {
   removeStoredHistory,
   toStoredSender,
   updateStoredGenerationState,
+  writeStoredActiveChatRoom,
   writeStoredGenerationState,
   writeStoredHistory,
   type StoredHistoryWriteResult,
@@ -48,7 +49,6 @@ import type {
   ActiveGeneration,
   GenerationGuard,
 } from "../../lib/chat_page/generation_guard";
-import { STORAGE_KEYS } from "../../scripts/core/constants";
 import { showToast } from "../../scripts/core/toast";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import {
@@ -219,13 +219,7 @@ export function useHomePageGenerationActions({
     }
     currentRoomIdRef.current = roomId;
     setCurrentRoomId(roomId);
-    try {
-      if (roomId && mode !== "temporary") {
-        localStorage.setItem(STORAGE_KEYS.currentChatRoomId, roomId);
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.currentChatRoomId);
-      }
-    } catch {
+    if (!writeStoredActiveChatRoom(roomId, mode)) {
       notifyLocalStorageWriteFailure();
     }
   }, [disconnectActiveGeneration, notifyLocalStorageWriteFailure]);
