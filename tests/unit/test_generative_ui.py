@@ -328,6 +328,92 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Assert that 'style.top' is preserved
         self.assertIn("style.top", normalized["js"])
 
+    def test_validate_artifact_allows_property_access_named_top_and_parent(self):
+        """
+        他オブジェクトのプロパティ参照(rect.top、node.parentなど)が誤って拒否されないことを検証します。
+        Verify that property access on non-window objects (rect.top, node.parent, etc.) is not rejected.
+        """
+        # レイアウト計算やツリー走査でよく使われるコードを含むアーティファクトを設定
+        # Set an artifact with JavaScript commonly used for layout math and tree traversal
+        artifact = dict(VALID_ARTIFACT)
+        artifact["js"] = (
+            "const rect = document.getElementById('app').getBoundingClientRect();"
+            "const label = rect.top.toFixed(1);"
+            "const node = {parent: {name: 'root'}};"
+            "console.log(label, node.parent.name, node?.parent.name);"
+        )
+
+        # ペイロード検証を実行
+        # Execute payload validation
+        normalized = validate_artifact_payload(artifact)
+
+        # コードがそのまま保持されていることを検証
+        # Assert that the code is preserved
+        self.assertIn("rect.top.toFixed", normalized["js"])
+        self.assertIn("node.parent.name", normalized["js"])
+
+    def test_validate_artifact_still_rejects_window_parent_access(self):
+        """
+        window.parent や裸の parent./top. などの親フレームアクセスは引き続き拒否されることを検証します。
+        Verify that parent-frame access (window.parent, bare parent./top.) is still rejected.
+        """
+        for js in (
+            "window.parent.location = 'https://example.com';",
+            "parent.location = 'https://example.com';",
+            "top.location.href = 'https://example.com';",
+            "globalThis.top.x = 1;",
+        ):
+            artifact = dict(VALID_ARTIFACT)
+            artifact["js"] = js
+
+            # 検証エラーが送出されることを検証
+            # Verify that a GenerativeUiValidationError is raised
+            with self.assertRaises(GenerativeUiValidationError, msg=js):
+                validate_artifact_payload(artifact)
+
+    def test_validate_artifact_accepts_raw_control_characters_in_json_strings(self):
+        """
+        JSON文字列内に生のタブなどの制御文字が混ざっていてもアーティファクトとして抽出できることを検証します。
+        Verify that raw control characters (e.g., tabs) inside JSON strings do not break extraction.
+        """
+        # HTML文字列に生のタブ文字を含むアーティファクトブロックを作成
+        # Create an artifact block whose HTML string contains a raw tab character
+        raw = (
+            "整理しました。\n\n"
+            "```chatcore-artifact\n"
+            '{"version":1,"title":"タブ混入","html":"<div id=\'app\'>\ta\tb</div>"}\n'
+            "```"
+        )
+
+        # レスポンスの正規化処理を実行
+        # Run the normalization process on the response
+        normalized = normalize_response_with_artifacts(raw)
+
+        # アーティファクトが抽出され、エラーが無いことを検証
+        # Assert the artifact is extracted without validation errors
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+        self.assertIn("a\tb", normalized.parts[1]["artifact"]["html"])
+
+    def test_validate_artifact_strips_truncated_banned_tag_fragment(self):
+        """
+        出力打ち切りで閉じられなかった禁止タグの断片が除去され、アーティファクト全体は拒否されないことを検証します。
+        Verify that a banned-tag fragment cut off by truncation is stripped instead of rejecting the artifact.
+        """
+        # 末尾が `<script ...` のまま途切れたHTMLを設定
+        # Set HTML that ends mid-way through an unclosed `<script ...` tag
+        artifact = dict(VALID_ARTIFACT)
+        artifact["html"] = '<div id="app">グラフ</div><script type="mod'
+
+        # ペイロード検証を実行
+        # Execute payload validation
+        normalized = validate_artifact_payload(artifact)
+
+        # 断片が除去され、本文は保持されることを検証
+        # Assert the fragment is removed while the body is preserved
+        self.assertNotIn("<script", normalized["html"].lower())
+        self.assertIn("グラフ", normalized["html"])
+
     def test_validate_artifact_accepts_common_aliases_and_embedded_code(self):
         """
         アーティファクトキーのエイリアス(titleの代わりにname、js/cssがhtmlに埋め込まれているケースなど)が正しく正規化されることを検証します。
