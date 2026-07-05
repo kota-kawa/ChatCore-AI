@@ -350,6 +350,10 @@ export default function App({ Component, pageProps }: AppProps) {
   // Ref for identifying concurrent navigation requests (to ignore stale requests)
   const navigationRequestIdRef = useRef(0);
 
+  useEffect(() => {
+    (window as Window & { __CHAT_CORE_APP_HYDRATED__?: boolean }).__CHAT_CORE_APP_HYDRATED__ = true;
+  }, []);
+
   // テーマの初期化とストレージ変更・ページ表示イベントへの同期
   // Initialize the theme and sync on storage changes and page show events
   useEffect(() => {

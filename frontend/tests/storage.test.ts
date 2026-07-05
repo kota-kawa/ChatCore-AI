@@ -6,6 +6,7 @@ import {
   clearStoredGenerationState,
   readStoredActiveChatRoom,
   readActiveStoredGenerationState,
+  readRestorableHomePageViewState,
   readStoredHomePageViewState,
   readStoredGenerationState,
   readStoredHistory,
@@ -158,6 +159,40 @@ test("home page view state persists setup and chat views", () => {
 
   assert.equal(writeStoredHomePageViewState("setup"), true);
   assert.equal(readStoredHomePageViewState(), "setup");
+});
+
+test("restorable home page view returns chat while a generation is active", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+
+  writeStoredGenerationState({
+    roomId: "room-active-generation",
+    roomMode: "normal",
+    lastEventId: 4,
+    streamedText: "応答中",
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(readStoredHomePageViewState(), "setup");
+  assert.equal(readRestorableHomePageViewState(), "chat");
+});
+
+test("restorable home page view ignores stale active generation state", () => {
+  const storage = new FakeLocalStorage();
+  installFakeLocalStorage(storage);
+  const staleGeneration = {
+    roomId: "room-stale-generation",
+    roomMode: "normal",
+    lastEventId: 4,
+    streamedText: "古い応答",
+    updatedAt: Date.now() - 31 * 60 * 1000,
+  };
+
+  storage.setItem(STORAGE_KEYS.activeChatGeneration, JSON.stringify(staleGeneration));
+  storage.setItem("chatGeneration_room-stale-generation", JSON.stringify(staleGeneration));
+
+  assert.equal(readRestorableHomePageViewState(), "setup");
+  assert.equal(readActiveStoredGenerationState(), null);
 });
 
 test("active chat room storage keeps temporary rooms out of legacy current room key", () => {

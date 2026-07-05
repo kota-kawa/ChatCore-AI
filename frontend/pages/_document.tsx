@@ -12,7 +12,7 @@ const themeBootstrapScript = `(function(){try{var k='chatcore-theme';var v=local
 // <html> before hydration so CSS can prevent the setup view from flashing.
 // The flag is cleared by use_home_page_controller once the view is restored.
 // The key must match STORAGE_KEYS.homePageViewState in frontend/scripts/core/constants.ts.
-const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/')return;if(localStorage.getItem('chatcore.home.viewState')==='chat'){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
+const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/')return;var shouldBootChat=localStorage.getItem('chatcore.home.viewState')==='chat';if(!shouldBootChat){try{var raw=localStorage.getItem('chatcore.chat.activeGeneration');var parsed=raw?JSON.parse(raw):null;var updatedAt=Number(parsed&&parsed.updatedAt);shouldBootChat=!!(parsed&&typeof parsed.roomId==='string'&&parsed.roomId.trim()&&isFinite(updatedAt)&&Date.now()-updatedAt<=1800000);}catch(_){}}if(shouldBootChat){document.documentElement.setAttribute('data-cc-home-boot-view','chat');}}catch(e){}})();`;
 
 // Next.jsカスタムDocumentコンポーネント（共通のHTMLシェルとPWA対応のmeta/linkタグを設定する）
 // Next.js custom Document component (sets up the common HTML shell and PWA-related meta/link tags)

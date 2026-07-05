@@ -33,7 +33,7 @@ import {
   isCachedAuthStateFresh,
   readActiveStoredGenerationState,
   readStoredActiveChatRoom,
-  readStoredHomePageViewState,
+  readRestorableHomePageViewState,
   readCachedAuthState,
   writeCachedAuthState,
 } from "../../lib/chat_page/storage";
@@ -870,18 +870,10 @@ export function useHomePageController() {
     }
   }, [taskCollapseLimit, tasks.length]);
 
-  // 前回のビュー（チャット画面など）とアクティブルームの復元。最初のペイント前に
-  // 反映しないとセットアップ画面が一瞬表示されてからチャット画面へ切り替わるため、
-  // layout effect で同期的に復元する（ローカル履歴の読み込みも同じパスで行われ、
-  // 初回描画にメッセージが含まれる）。
-  // Restore the previous view (e.g. chat) and active room. This must run before
-  // the first paint — otherwise the setup view flashes briefly and then swaps to
-  // the chat view — so restore synchronously in a layout effect (local history
-  // loads on the same path, so the first paint already contains the messages).
-  useIsomorphicLayoutEffect(() => {
+  const restoreHomeViewFromStorage = useCallback(() => {
     try {
-      const storedViewState = readStoredHomePageViewState();
       const activeGeneration = readActiveStoredGenerationState();
+      const storedViewState = activeGeneration ? "chat" : readRestorableHomePageViewState();
       if (activeGeneration) {
         setCurrentRoomId(activeGeneration.roomId);
         currentRoomIdRef.current = activeGeneration.roomId;
@@ -925,6 +917,7 @@ export function useHomePageController() {
   }, [
     loadChatHistory,
     loadLocalChatHistory,
+    setCurrentRoomId,
     setChatMessageListResetKey,
     setCurrentRoomMode,
     setHistoryHasMore,
@@ -933,6 +926,33 @@ export function useHomePageController() {
     setMessages,
     setPageViewState,
   ]);
+
+  // 前回のビュー（チャット画面など）とアクティブルームの復元。最初のペイント前に
+  // 反映しないとセットアップ画面が一瞬表示されてからチャット画面へ切り替わるため、
+  // layout effect で同期的に復元する（ローカル履歴の読み込みも同じパスで行われ、
+  // 初回描画にメッセージが含まれる）。
+  // Restore the previous view (e.g. chat) and active room. This must run before
+  // the first paint — otherwise the setup view flashes briefly and then swaps to
+  // the chat view — so restore synchronously in a layout effect (local history
+  // loads on the same path, so the first paint already contains the messages).
+  useIsomorphicLayoutEffect(() => {
+    restoreHomeViewFromStorage();
+  }, [restoreHomeViewFromStorage]);
+
+  useEffect(() => {
+    const restoreIfHomePage = () => {
+      if (window.location.pathname !== "/") return;
+      restoreHomeViewFromStorage();
+    };
+
+    window.addEventListener("pageshow", restoreIfHomePage);
+    window.addEventListener("popstate", restoreIfHomePage);
+
+    return () => {
+      window.removeEventListener("pageshow", restoreIfHomePage);
+      window.removeEventListener("popstate", restoreIfHomePage);
+    };
+  }, [restoreHomeViewFromStorage]);
 
   // _document.tsx のブートスクリプトが立てるプリハイドレーション用フラグを解除する。
   // フラグが立っている間は CSS がセットアップ画面を隠し、ビュー切替のトランジション・
