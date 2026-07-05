@@ -191,17 +191,6 @@ export function deriveLegacyPromptType(contentFormat: string, mediaType: string)
   return "text";
 }
 
-// 旧 prompt_type を2軸へ変換する。
-// Map a legacy prompt_type to the two axes.
-export function legacyPromptTypeToAxes(promptType?: string): {
-  contentFormat: ContentFormat;
-  mediaType: MediaType;
-} {
-  if (promptType === "skill") return { contentFormat: "skill", mediaType: "text" };
-  if (promptType === "image") return { contentFormat: "prompt", mediaType: "image" };
-  return { contentFormat: "prompt", mediaType: "text" };
-}
-
 // フォーマットが宣言するキーのみを残して attributes を組み立てる。
 // Build the attributes map keeping only the keys the format declares.
 export function buildAttributes(
