@@ -346,38 +346,6 @@ return {1, current}
         )
 
 
-# LLM APIの日次利用上限数を取得します。
-# Get the daily limit for LLM API calls.
-def get_llm_daily_api_limit() -> int:
-    return _get_limit(LLM_DAILY_API_LIMIT_ENV, DEFAULT_LLM_DAILY_API_LIMIT)
-
-
-# 認証メールの日次送信上限数を取得します。
-# Get the daily limit for auth email sends.
-def get_auth_email_daily_send_limit() -> int:
-    return _get_limit(
-        AUTH_EMAIL_DAILY_SEND_LIMIT_ENV, DEFAULT_AUTH_EMAIL_DAILY_SEND_LIMIT
-    )
-
-
-# AIサポートエージェントの月次利用上限数を取得します。
-# Get the monthly limit for support AI agent calls.
-def get_ai_agent_monthly_api_limit() -> int:
-    return _get_limit(
-        AI_AGENT_MONTHLY_API_LIMIT_ENV,
-        DEFAULT_AI_AGENT_MONTHLY_API_LIMIT,
-    )
-
-
-# Brave Web検索の月次検索上限数を取得します。
-# Get the monthly limit for Brave web searches.
-def get_brave_web_search_monthly_limit() -> int:
-    return _get_limit(
-        BRAVE_WEB_SEARCH_MONTHLY_LIMIT_ENV,
-        DEFAULT_BRAVE_WEB_SEARCH_MONTHLY_LIMIT,
-    )
-
-
 _default_llm_daily_limit_service = LlmDailyLimitService()
 
 

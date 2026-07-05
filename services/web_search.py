@@ -442,15 +442,6 @@ def _is_iso_date(value: str) -> bool:
     return year.isdigit() and month.isdigit() and day.isdigit()
 
 
-def _parse_decision(raw_response: str, user_message: str) -> WebSearchDecision:
-    # プランナーレスポンスからWeb検索の要否判断結果を解析する
-    # Parse decision on whether to search from raw planner response.
-    loaded = _extract_json_object(raw_response)
-    if loaded is None:
-        return _fallback_decision(user_message)
-    return _parse_decision_payload(loaded, user_message)
-
-
 def _parse_decision_payload(
     loaded: dict[str, Any],
     user_message: str,

@@ -62,12 +62,6 @@ def unregister_guest_room(session: dict, room_id: str) -> None:
     session.pop(GUEST_ROOM_IDS_SESSION_KEY, None)
 
 
-# 指定されたルームIDがセッションのゲストルーム一覧に含まれているか確認する関数
-# Verify whether the specified room ID belongs to the guest's session.
-def guest_room_belongs_to_session(session: dict, room_id: str) -> bool:
-    return room_id in get_guest_room_ids(session)
-
-
 # ゲスト/仮ユーザーのデータストアキーを取得する関数
 # Generate a storage lookup key for a temporary/guest user.
 def get_temporary_user_store_key(user_id: int) -> str:
@@ -91,7 +85,6 @@ __all__ = [
     "get_guest_room_ids",
     "register_guest_room",
     "unregister_guest_room",
-    "guest_room_belongs_to_session",
     "get_temporary_user_store_key",
     "ephemeral_store",
     "EXPIRATION_TIME",

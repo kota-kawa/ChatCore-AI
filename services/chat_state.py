@@ -92,46 +92,6 @@ def list_room_memory_facts(chat_room_id: str, *, limit: int = MAX_MEMORY_FACTS_F
             conn.close()
 
 
-# チャットルームに紐づくアクティブな記憶事実のレコード詳細（ID、テキスト、スコープ、更新日時）を取得する
-# Retrieve detailed records of active memory facts (ID, text, scope, updated time) associated with the chat room
-def list_room_memory_fact_records(
-    chat_room_id: str,
-    *,
-    limit: int = MAX_MEMORY_FACTS_FOR_CONTEXT,
-) -> list[dict[str, Any]]:
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, fact, scope, updated_at
-              FROM memory_facts
-             WHERE chat_room_id = %s
-               AND is_active = TRUE
-             ORDER BY updated_at DESC, id DESC
-             LIMIT %s
-            """,
-            (chat_room_id, limit),
-        )
-        rows = cursor.fetchall()
-        return [
-            {
-                "id": row[0],
-                "fact": row[1],
-                "scope": row[2],
-                "updated_at": serialize_datetime_iso(row[3]),
-            }
-            for row in rows
-        ]
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
-
-
 # メッセージから記憶事実を抽出してデータベースに保存（既存なら更新）する
 # Extract memory facts from the message and save (or update if existing) them in the database
 def remember_facts_from_message(
