@@ -7,7 +7,6 @@ import {
   readStoredActiveChatRoom,
   readActiveStoredGenerationState,
   readRestorableHomePageViewState,
-  readStoredHomePageViewState,
   readStoredGenerationState,
   readStoredHistory,
   writeStoredActiveChatRoom,
@@ -152,13 +151,15 @@ test("home page view state persists setup and chat views", () => {
   const storage = new FakeLocalStorage();
   installFakeLocalStorage(storage);
 
-  assert.equal(readStoredHomePageViewState(), "setup");
+  assert.equal(readRestorableHomePageViewState(), "setup");
 
   assert.equal(writeStoredHomePageViewState("launching"), true);
-  assert.equal(readStoredHomePageViewState(), "chat");
+  assert.equal(storage.getItem(STORAGE_KEYS.homePageViewState), "chat");
+  assert.equal(readRestorableHomePageViewState(), "chat");
 
   assert.equal(writeStoredHomePageViewState("setup"), true);
-  assert.equal(readStoredHomePageViewState(), "setup");
+  assert.equal(storage.getItem(STORAGE_KEYS.homePageViewState), "setup");
+  assert.equal(readRestorableHomePageViewState(), "setup");
 });
 
 test("restorable home page view returns chat while a generation is active", () => {
@@ -173,7 +174,7 @@ test("restorable home page view returns chat while a generation is active", () =
     updatedAt: Date.now(),
   });
 
-  assert.equal(readStoredHomePageViewState(), "setup");
+  assert.equal(storage.getItem(STORAGE_KEYS.homePageViewState), null);
   assert.equal(readRestorableHomePageViewState(), "chat");
 });
 

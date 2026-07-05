@@ -54,10 +54,6 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
 export const PromptRecordSchema = PromptRecordApiSchema.transform(normalizePromptRecord);
 export type PromptRecord = z.infer<typeof PromptRecordSchema>;
 
-export const toPromptRecord = (raw: unknown): PromptRecord => {
-  return parseWithSchema(PromptRecordSchema, raw, "プロンプトデータの形式が不正です。");
-};
-
 function normalizeLikedPrompt(entry: LikedPromptApi) {
   const prompt = normalizePromptRecord({
     id: entry.prompt_id,
@@ -85,10 +81,6 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
 
 export const LikedPromptSchema = LikedPromptApiSchema.transform(normalizeLikedPrompt);
 export type LikedPrompt = z.infer<typeof LikedPromptSchema>;
-
-export const toLikedPrompt = (raw: unknown): LikedPrompt => {
-  return parseWithSchema(LikedPromptSchema, raw, "いいねしたプロンプトデータの形式が不正です。");
-};
 
 export type PromptManageMutationResponse = z.infer<typeof PromptManageMutationApiResponseSchema>;
 

@@ -32,7 +32,3 @@ export function escapeHtml(value: unknown): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-
-export function formatMultilineHtml(value: unknown): string {
-  return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
-}

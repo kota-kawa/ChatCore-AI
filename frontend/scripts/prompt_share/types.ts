@@ -81,12 +81,3 @@ export type PromptCommentsResponse = {
   hidden?: boolean;
   already_reported?: boolean;
 };
-
-export type CurrentUserResponse = {
-  logged_in?: boolean;
-  user?: {
-    id?: number;
-    email?: string;
-    username?: string;
-  };
-};

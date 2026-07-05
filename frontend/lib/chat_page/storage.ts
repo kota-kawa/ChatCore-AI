@@ -39,14 +39,6 @@ function normalizeStoredHomePageViewState(rawState: unknown): StoredHomePageView
   return rawState === "chat" ? "chat" : "setup";
 }
 
-export function readStoredHomePageViewState(): StoredHomePageViewState {
-  try {
-    return normalizeStoredHomePageViewState(localStorage.getItem(STORAGE_KEYS.homePageViewState));
-  } catch {
-    return "setup";
-  }
-}
-
 export function shouldRestoreHomeChatView(): boolean {
   try {
     if (normalizeStoredHomePageViewState(localStorage.getItem(STORAGE_KEYS.homePageViewState)) === "chat") {

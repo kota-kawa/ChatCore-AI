@@ -77,18 +77,6 @@ def delete_chat_room_if_no_assistant_messages(room_id: str, user_id: int) -> boo
     return _get_chat_repository().delete_room_if_no_assistant_messages(room_id, user_id)
 
 
-# メッセージ編集のために、指定した件数以降のユーザーメッセージ等を切り詰める
-# Truncate messages starting from a trailing user message count for editing
-def truncate_chat_room_for_edit(chat_room_id: str, trailing_user_count: int) -> bool:
-    return _get_chat_repository().delete_messages_from_trailing_user_count(chat_room_id, trailing_user_count)
-
-
-# 最後のメッセージがアシスタントのものである場合、データベースから削除する
-# Delete the last message from the database if it was sent by the assistant
-def delete_last_assistant_message_from_db(chat_room_id: str) -> bool:
-    return _get_chat_repository().delete_last_assistant_message(chat_room_id)
-
-
 # チャットルームのタイトルを変更する
 # Rename the title of the chat room
 def rename_chat_room_in_db(room_id: str, new_title: str) -> None:

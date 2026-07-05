@@ -93,47 +93,6 @@ _PAGE_MAP: list[tuple[re.Pattern[str], str, list[tuple[str, int]]]] = [
     ),
 ]
 
-# 日本語: ユーザーがページの代理操作（クリックや入力など）を求めているかを判別する正規表現。
-# English: Regular expression to identify if the user is requesting page actions (e.g. clicking or typing).
-_ACTION_REQUEST_PATTERNS = re.compile(
-    r"(?:クリック|タップ|押)して(?:ほしい|くれ|ください|もらえ|みて)?"
-    r"|(?:入力|記入|書き込)(?:んで|いて|して)(?:ほしい|くれ|ください|もらえ)?"
-    r"|(?:操作|実行)して(?:ほしい|くれ|ください|もらえ|みて)?"
-    r"|代わりに.{0,30}(?:して|クリック|入力|押)"
-    r"|やって(?:ほしい|くれ|ください|もらえ)",
-    re.IGNORECASE,
-)
-
-# 日本語: ユーザーの入力が「この画面」「ここ」など現在開いている画面について言及しているかを判別する正規表現。
-# English: Regular expression to identify if the user is referring to the current page (e.g. "this screen", "here").
-_PAGE_CONTEXT_PATTERNS = re.compile(
-    r"このページ|この画面|今のページ|今の画面|今開いている|現在のページ|現在の画面"
-    r"|ここで[はにのを]|ここから|ここに|こここ|ここは"
-    r"|このフォーム|この入力欄|このボタン|このモーダル|このタブ"
-    r"|どこ[inでから]?(ある|あります|押す|クリック|入力)"
-    r"|このアプリの(使い方|操作|機能|画面)",
-    re.IGNORECASE,
-)
-
-
-# 日本語: ユーザーのメッセージが「現在のページ」に関連するもの（「この画面」「ここ」など）を指しているか判定します。
-# English: Assess if the query refers to the current page/screen context.
-def is_page_specific_query(query: str) -> bool:
-    """ユーザーが今開いているページについて質問しているか判定する。"""
-    # 日本語: 入力テキストから、現在表示中の画面に関する表現を検索します。
-    # English: Scan the input text for expressions indicating the current screen context.
-    return bool(_PAGE_CONTEXT_PATTERNS.search(query))
-
-
-# 日本語: ユーザーのメッセージが画面の代理操作（「クリックして」「入力して」など）を依頼しているか判定します。
-# English: Assess if the query requests automation actions like clicking or typing.
-def is_action_request(query: str) -> bool:
-    """ユーザーがページ上での操作（クリック・入力等）を依頼しているか判定する。"""
-    # 日本語: 入力テキストから、代理操作の要求に一致する表現を検索します。
-    # English: Scan the input text for requests indicating automated actions.
-    return bool(_ACTION_REQUEST_PATTERNS.search(query))
-
-
 # 日本語: フロントエンドのソースコードファイルを読み込み、行数制限以内で先頭部分を返します。
 # English: Read and return the top lines of a source file up to the specified line limit.
 def _read_file_head(rel_path: str, max_lines: int) -> str:

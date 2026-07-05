@@ -236,9 +236,6 @@ export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
   },
 ];
 
-export const THINKING_CONSTELLATION_NODES = THINKING_CONSTELLATION_VARIANTS[0]?.nodes ?? [];
-export const THINKING_CONSTELLATION_LINKS = THINKING_CONSTELLATION_VARIANTS[0]?.links ?? [];
-
 export const MODEL_OPTIONS: ModelOption[] = [
   { value: "openai/gpt-oss-120b", label: "GROQ | GPT-OSS 120B（標準・高品質な応答）", shortLabel: "GPT-OSS 120B" },
   {

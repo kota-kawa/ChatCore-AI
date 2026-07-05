@@ -110,9 +110,6 @@ from . import (
 )
 
 logger = logging.getLogger(__name__)
-LLM_CONTEXT_MAX_HISTORY_MESSAGES = 40
-LLM_CONTEXT_MAX_CHAR_BUDGET = 24000
-LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS = 6000
 
 
 # チャット用リポジトリを取得するヘルパー関数
@@ -866,81 +863,6 @@ def _resolve_authenticated_room_target(
     if room_mode == "temporary":
         return room_mode, temporary_sid, None
     return room_mode, None, None
-
-
-# トークン予算内に収まるようメッセージコンテンツの文字数を切り詰める関数
-# Trim message text size to stay within budget constraints.
-def _trim_message_content_for_budget(content: str, char_budget: int) -> str:
-    """
-    トークン/文字数予算の上限に収まるよう、メッセージテキストの末尾部分を切り詰めます。
-    Trims message text size to stay within budget constraints.
-    """
-    if char_budget <= 0:
-        return ""
-    if len(content) <= char_budget:
-        return content
-    return content[-char_budget:]
-
-
-# LLMに送信可能なコンテキスト制限を超えないよう、過去ログ会話履歴を切り詰める関数
-# Prune conversation history to fit context limits before sending to LLM.
-def _truncate_conversation_for_llm(
-    messages: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    """
-    LLMが受信可能な最大トークン（文字数）制限および件数制限を超えないよう、過去の会話履歴を古いものから切り詰めます。
-    Prunes conversation history to fit context limits before sending to LLM.
-    """
-    if not messages:
-        return []
-
-    system_messages: list[dict[str, str]] = []
-    non_system_messages: list[dict[str, str]] = []
-    system_prefix_active = True
-    for message in messages:
-        role = message.get("role", "")
-        if system_prefix_active and role == "system":
-            system_messages.append(dict(message))
-            continue
-        system_prefix_active = False
-        non_system_messages.append(dict(message))
-
-    if not non_system_messages:
-        return system_messages
-
-    selected_reversed: list[dict[str, str]] = []
-    remaining_char_budget = max(LLM_CONTEXT_MAX_CHAR_BUDGET, 1)
-
-    for message in reversed(non_system_messages):
-        content = message.get("content", "")
-        if not isinstance(content, str):
-            content = str(content)
-        normalized_content = content[-LLM_CONTEXT_MAX_SINGLE_MESSAGE_CHARS:]
-
-        if not selected_reversed:
-            # 最低でも最新メッセージは保持する
-            normalized_content = _trim_message_content_for_budget(
-                normalized_content,
-                remaining_char_budget,
-            )
-            message["content"] = normalized_content
-            selected_reversed.append(message)
-            remaining_char_budget -= len(normalized_content)
-            continue
-
-        if len(selected_reversed) >= LLM_CONTEXT_MAX_HISTORY_MESSAGES:
-            break
-        if remaining_char_budget <= 0:
-            break
-        if len(normalized_content) > remaining_char_budget:
-            break
-
-        message["content"] = normalized_content
-        selected_reversed.append(message)
-        remaining_char_budget -= len(normalized_content)
-
-    selected_history = list(reversed(selected_reversed))
-    return system_messages + selected_history
 
 
 # 指定されたルームIDのチャット履歴（メッセージ配列）を取得する関数
