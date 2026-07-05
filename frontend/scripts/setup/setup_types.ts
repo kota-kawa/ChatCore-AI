@@ -7,7 +7,3 @@ export type TaskItem = {
   output_examples?: string;
   is_default?: boolean;
 };
-
-export type LoadTaskCardsOptions = {
-  forceRefresh?: boolean;
-};

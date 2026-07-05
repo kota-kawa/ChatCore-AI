@@ -53,27 +53,6 @@ export function setThemePreference(preference: ThemePreference): void {
     // localStorage unavailable
   }
   applyTheme(resolveTheme(preference));
-  notifyThemeChange(preference);
-}
-
-type ThemeChangeListener = (preference: ThemePreference) => void;
-const themeChangeListeners = new Set<ThemeChangeListener>();
-
-function notifyThemeChange(preference: ThemePreference): void {
-  themeChangeListeners.forEach((listener) => {
-    try {
-      listener(preference);
-    } catch (error) {
-      console.error("theme change listener failed:", error);
-    }
-  });
-}
-
-export function onThemeChange(listener: ThemeChangeListener): () => void {
-  themeChangeListeners.add(listener);
-  return () => {
-    themeChangeListeners.delete(listener);
-  };
 }
 
 let systemMediaQuery: MediaQueryList | null = null;
