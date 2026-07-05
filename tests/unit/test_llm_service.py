@@ -149,16 +149,14 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "gemini-ok")
         mock_gemini.chat.completions.create.assert_called_once()
 
-    def test_gemini_api_key_accepts_standard_uppercase_env_name(self):
+    def test_gemini_api_key_reads_standard_uppercase_env_name(self):
         """
-        環境変数からGemini APIキーを読み取る際、標準的な大文字のGEMINI_API_KEYが優先されることを検証します。
-        Verify that the standard uppercase GEMINI_API_KEY environment variable is prioritized.
+        環境変数からGemini APIキーを読み取る際、標準的な大文字のGEMINI_API_KEYが使用されることを検証します。
+        Verify that the standard uppercase GEMINI_API_KEY environment variable is used.
         """
-        # 両方の環境変数が設定されている状態をモック
-        # Mock the state where both env variables are set
         with patch.dict(
             llm.os.environ,
-            {"GEMINI_API_KEY": "standard-key", "Gemini_API_KEY": ""},
+            {"GEMINI_API_KEY": "standard-key"},
             clear=False,
         ):
             self.assertEqual(llm._get_gemini_api_key(), "standard-key")

@@ -52,10 +52,7 @@ logger = logging.getLogger(__name__)
 # Validate session secret at boot and fail fast when it is missing.
 secret_key = get_session_secret_key()
 if not secret_key:
-    raise ValueError(
-        "No session secret key set. Define FASTAPI_SECRET_KEY "
-        "(or legacy FLASK_SECRET_KEY)."
-    )
+    raise ValueError("No session secret key set. Define FASTAPI_SECRET_KEY.")
 permanent_max_age = int(timedelta(days=30).total_seconds())
 
 # SameSite は環境に応じて切り替え、HTTPS の時のみ Secure を有効化する

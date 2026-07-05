@@ -134,34 +134,6 @@ class DBConfigTestCase(unittest.TestCase):
         self.assertEqual(len(pool.putconn_calls), 2)
         self.assertFalse(pool.putconn_calls[-1][1])
 
-    # 日本語: mysqlenvへ、getDBconnectionfallsことを検証します。
-    # English: Verify that get db connection falls back to mysql env.
-    def test_get_db_connection_falls_back_to_mysql_env(self):
-        connection = DummyConnection()
-        pool_factory = DummyPoolFactory(connection)
-        env = {
-            "MYSQL_HOST": "mysql-host",
-            "MYSQL_USER": "mysql-user",
-            "MYSQL_PASSWORD": "mysql-pass",
-            "MYSQL_DATABASE": "mysql-db",
-            "MYSQL_PORT": "15432",
-        }
-        # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
-        # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(os.environ, env, clear=True), patch.object(
-            db, "ThreadedConnectionPool", pool_factory
-        ), patch.object(db, "psycopg2", object()), patch.object(db, "extras", DummyExtras):
-            proxy = db.get_db_connection()
-            proxy.close()
-
-        self.assertEqual(len(pool_factory.instances), 1)
-        pool = pool_factory.instances[0]
-        self.assertEqual(pool.kwargs["host"], "mysql-host")
-        self.assertEqual(pool.kwargs["user"], "mysql-user")
-        self.assertEqual(pool.kwargs["password"], "mysql-pass")
-        self.assertEqual(pool.kwargs["dbname"], "mysql-db")
-        self.assertEqual(pool.kwargs["port"], 15432)
-
     # 日本語: getDBconnectionreusesexistingpoolことを検証します。
     # English: Verify that get db connection reuses existing pool.
     def test_get_db_connection_reuses_existing_pool(self):

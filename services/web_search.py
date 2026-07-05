@@ -500,10 +500,7 @@ def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
         add(selected, supports_json_mode=True)
 
     # 選択モデルが失敗した場合のフォールバック候補。
-    if (
-        os.environ.get("GEMINI_API_KEY", "").strip()
-        or os.environ.get("Gemini_API_KEY", "").strip()
-    ):
+    if os.environ.get("GEMINI_API_KEY", "").strip():
         add(
             os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash"),
             supports_json_mode=True,

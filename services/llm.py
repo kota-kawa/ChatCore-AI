@@ -60,10 +60,10 @@ def _get_non_negative_int_env(name: str, default: int) -> int:
     return value if value >= 0 else default
 
 
-# 大文字・小文字を問わず、環境変数からGeminiのAPIキーを取得します。
-# Retrieve the Gemini API key from environment variables (case-insensitive).
+# 環境変数からGeminiのAPIキーを取得します。
+# Retrieve the Gemini API key from environment variables.
 def _get_gemini_api_key() -> str:
-    return os.environ.get("GEMINI_API_KEY", "") or os.environ.get("Gemini_API_KEY", "")
+    return os.environ.get("GEMINI_API_KEY", "")
 
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -677,7 +677,7 @@ def get_gemini_response(
     # Run chat completion through the Gemini client.
     """Google Gemini API呼び出し (via OpenAI client)"""
     if gemini_client is None:
-        raise LlmConfigurationError("GEMINI_API_KEY または Gemini_API_KEY が未設定です。")
+        raise LlmConfigurationError("GEMINI_API_KEY が未設定です。")
 
     sanitized_messages = _sanitize_conversation_messages(conversation_messages)
     try:
@@ -729,7 +729,7 @@ def get_gemini_response_stream(
         client=gemini_client,
         conversation_messages=conversation_messages,
         model_name=model_name,
-        missing_key_message="GEMINI_API_KEY または Gemini_API_KEY が未設定です。",
+        missing_key_message="GEMINI_API_KEY が未設定です。",
         provider_error_message="Google Gemini streaming API call failed.",
         tools=tools,
     )
@@ -1010,7 +1010,7 @@ def get_llm_json_response(
             conversation_messages=conversation_messages,
             model_name=model_name,
             provider_name="Google Gemini",
-            missing_key_message="GEMINI_API_KEY または Gemini_API_KEY が未設定です。",
+            missing_key_message="GEMINI_API_KEY が未設定です。",
             fallback_message="Google Gemini JSON API call failed.",
         )
     if is_groq_model(model_name):

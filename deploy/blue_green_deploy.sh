@@ -61,26 +61,6 @@ load_env_file() {
   set -u
 }
 
-apply_legacy_env_fallback() {
-  local target_var="$1"
-  local legacy_var="$2"
-  local current_value="${!target_var:-}"
-  local legacy_value="${!legacy_var:-}"
-
-  if is_empty_or_unresolved "${current_value}" && ! is_empty_or_unresolved "${legacy_value}"; then
-    export "${target_var}=${legacy_value}"
-    echo "Using legacy environment variable ${legacy_var} for ${target_var}." >&2
-  fi
-}
-
-apply_legacy_env_fallbacks() {
-  apply_legacy_env_fallback POSTGRES_USER MYSQL_USER
-  apply_legacy_env_fallback POSTGRES_PASSWORD MYSQL_PASSWORD
-  apply_legacy_env_fallback POSTGRES_DB MYSQL_DATABASE
-  apply_legacy_env_fallback FASTAPI_SECRET_KEY FLASK_SECRET_KEY
-  apply_legacy_env_fallback FASTAPI_ENV FLASK_ENV
-}
-
 preflight_compose_config() {
   compose config >/dev/null
 }
@@ -124,7 +104,6 @@ require_cmd docker
 require_env_file
 require_nginx_site_source
 load_env_file
-apply_legacy_env_fallbacks
 preflight_compose_config
 validate_required_env
 require_noninteractive_sudo
