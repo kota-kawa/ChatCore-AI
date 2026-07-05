@@ -58,6 +58,14 @@ import {
 
 const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 
+// ストリーム進行状態（復元用）を localStorage へ書き込む最短間隔。
+// チャンク毎に全文を同期書き込みすると応答が伸びるほどメインスレッドを
+// 塞ぐため、一定間隔にまとめる。復元データなのでこの粒度で十分。
+// Minimum interval for persisting stream progress (recovery data) to
+// localStorage. Writing the whole accumulated text on every chunk blocks the
+// main thread more as the reply grows; recovery data tolerates this cadence.
+const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
+
 function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
@@ -359,6 +367,71 @@ export function useHomePageGenerationActions({
       let streamedText = storedGeneration?.streamedText ?? "";
       let streamingParts: ChatMessagePart[] | undefined;
 
+      // localStorage への進行状態書き込みをスロットルするための保留値とタイマー。
+      // Pending values and timer used to throttle progress writes to localStorage.
+      let storedStateSyncTimerId: number | null = null;
+      let pendingStoredLastEventId = 0;
+      let hasPendingStoredStreamedText = false;
+      const flushStoredGenerationStateSync = () => {
+        storedStateSyncTimerId = null;
+        if (pendingStoredLastEventId <= 0 && !hasPendingStoredStreamedText) return;
+        const updates = {
+          ...(pendingStoredLastEventId > 0 ? { lastEventId: pendingStoredLastEventId } : {}),
+          ...(hasPendingStoredStreamedText ? { streamedText } : {}),
+        };
+        pendingStoredLastEventId = 0;
+        hasPendingStoredStreamedText = false;
+        updateStoredGenerationState(roomId, updates);
+      };
+      const scheduleStoredGenerationStateSync = () => {
+        if (storedStateSyncTimerId !== null) return;
+        storedStateSyncTimerId = window.setTimeout(
+          flushStoredGenerationStateSync,
+          STORED_GENERATION_STATE_SYNC_INTERVAL_MS,
+        );
+      };
+
+      // チャンク描画を 1 フレーム 1 回へ間引くための rAF ハンドル。表示は元々
+      // リフレッシュレートでしか更新されないため見た目は変わらず、チャンク毎の
+      // 全文 Markdown 変換・サニタイズ・DOM 差し替えの回数だけが減る。
+      // rAF handle that coalesces chunk rendering to once per frame. The screen
+      // only updates at the refresh rate anyway, so this changes nothing
+      // visually; it only cuts the per-chunk full-text markdown/sanitize/DOM work.
+      let chunkRenderRafId: number | null = null;
+      const flushStreamedChunkRender = () => {
+        chunkRenderRafId = null;
+        const streamId = streamingMessageId;
+        if (!streamId) return;
+        const displayText = getStreamingGenerativeUiDisplayText(streamedText);
+        const displayParts = updateStreamingTextPart(streamingParts, displayText);
+        const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
+
+        setMessages((previous) => {
+          if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
+          return previous.map((message) => {
+            if (message.id !== streamId) return message;
+            return {
+              ...message,
+              text: displayText,
+              streaming: true,
+              generativeUiPending,
+              ...(displayParts ? { parts: displayParts } : {}),
+            };
+          });
+        });
+        scheduleAutoScrollIfNeeded();
+      };
+      const scheduleStreamedChunkRender = () => {
+        if (chunkRenderRafId !== null) return;
+        chunkRenderRafId = window.requestAnimationFrame(flushStreamedChunkRender);
+      };
+      const cancelStreamedChunkRender = () => {
+        if (chunkRenderRafId !== null) {
+          window.cancelAnimationFrame(chunkRenderRafId);
+          chunkRenderRafId = null;
+        }
+      };
+
       const ensureStreamingMessage = () => {
         if (streamingMessageId) return streamingMessageId;
         streamingMessageId = nextMessageId("assistant-stream", messageSeqRef);
@@ -405,6 +478,9 @@ export function useHomePageGenerationActions({
         persist = true,
         parts?: ChatMessagePart[],
       ) => {
+        // 確定テキストを保留中の途中描画で上書きしないようにキャンセルする。
+        // Cancel any pending partial render so it cannot overwrite the final text.
+        cancelStreamedChunkRender();
         const finalDisplayText = finalText || getStreamingGenerativeUiDisplayText(streamedText);
         const resolvedParts = Array.isArray(parts) && parts.length > 0
           ? parts
@@ -509,37 +585,26 @@ export function useHomePageGenerationActions({
 
         if (!rememberStreamEventId(streamLastEventIdByRoomRef.current, roomId, parsed.id)) return;
         if (typeof parsed.id === "number" && parsed.id > 0) {
-          updateStoredGenerationState(roomId, { lastEventId: parsed.id });
+          pendingStoredLastEventId = parsed.id;
+          scheduleStoredGenerationStateSync();
         }
 
         if (parsed.event === "chunk") {
           const text = typeof parsed.data.text === "string" ? parsed.data.text : "";
           if (!text) return;
-          const streamId = ensureStreamingMessage();
+          ensureStreamingMessage();
           streamedText += text;
-          updateStoredGenerationState(roomId, { streamedText });
-          const displayText = getStreamingGenerativeUiDisplayText(streamedText);
-          const displayParts = updateStreamingTextPart(streamingParts, displayText);
-          const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
-
-          setMessages((previous) => {
-            if (currentRoomIdRef.current !== roomId || !isGenerationActive(generation)) return previous;
-            return previous.map((message) => {
-              if (message.id !== streamId) return message;
-              return {
-                ...message,
-                text: displayText,
-                streaming: true,
-                generativeUiPending,
-                ...(displayParts ? { parts: displayParts } : {}),
-              };
-            });
-          });
-          scheduleAutoScrollIfNeeded();
+          hasPendingStoredStreamedText = true;
+          scheduleStoredGenerationStateSync();
+          scheduleStreamedChunkRender();
           return;
         }
 
         if (parsed.event === "response_parts_updated") {
+          // 直後に最新テキストで即時描画するため、保留中のチャンク描画は破棄する。
+          // Drop the pending chunk render; the immediate update below already
+          // carries the latest text.
+          cancelStreamedChunkRender();
           const updatePayload = normalizeChatResponsePayload(parsed.data);
           const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
           if (updatePayload.parts?.length) {
@@ -676,49 +741,61 @@ export function useHomePageGenerationActions({
         return streamState.completed ? ("completed" as const) : ("interrupted" as const);
       };
 
-      let activeResponse = response;
-      for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
-        const result = await readStreamResponse(activeResponse);
-        if (!isGenerationActive(generation)) return false;
+      try {
+        let activeResponse = response;
+        for (let reconnectAttempt = 0; reconnectAttempt <= GENERATION_STREAM_RECONNECT_DELAYS_MS.length; reconnectAttempt += 1) {
+          const result = await readStreamResponse(activeResponse);
+          if (!isGenerationActive(generation)) return false;
 
-        if (result === "completed") {
-          return true;
+          if (result === "completed") {
+            return true;
+          }
+
+          if (result === "aborted" || result === "inactive") {
+            return false;
+          }
+
+          if (typeof result === "object" && result.status === "error") {
+            persistInterruptedStream(
+              streamedText
+                ? `${result.message} ここまでの応答を保存しました。`
+                : result.message,
+            );
+            return false;
+          }
+
+          const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
+          if (!streamedText || reconnectDelay === undefined) {
+            persistInterruptedStream(
+              streamedText
+                ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
+                : "ストリームが途中で終了しました。",
+            );
+            return false;
+          }
+
+          await waitForDuration(reconnectDelay);
+          if (!isGenerationActive(generation)) return false;
+
+          const reconnectResponse = await openReconnectStream();
+          if (!reconnectResponse) {
+            persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
+            return false;
+          }
+          activeResponse = reconnectResponse;
         }
-
-        if (result === "aborted" || result === "inactive") {
-          return false;
+        return false;
+      } finally {
+        // 途中終了時も保留分を確定させる。クリア済みの場合は
+        // updateStoredGenerationState が no-op になるため復活はしない。
+        // On any exit, settle pending work. If the stored state was already
+        // cleared, updateStoredGenerationState is a no-op, so nothing revives.
+        cancelStreamedChunkRender();
+        if (storedStateSyncTimerId !== null) {
+          window.clearTimeout(storedStateSyncTimerId);
         }
-
-        if (typeof result === "object" && result.status === "error") {
-          persistInterruptedStream(
-            streamedText
-              ? `${result.message} ここまでの応答を保存しました。`
-              : result.message,
-          );
-          return false;
-        }
-
-        const reconnectDelay = GENERATION_STREAM_RECONNECT_DELAYS_MS[reconnectAttempt];
-        if (!streamedText || reconnectDelay === undefined) {
-          persistInterruptedStream(
-            streamedText
-              ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
-              : "ストリームが途中で終了しました。",
-          );
-          return false;
-        }
-
-        await waitForDuration(reconnectDelay);
-        if (!isGenerationActive(generation)) return false;
-
-        const reconnectResponse = await openReconnectStream();
-        if (!reconnectResponse) {
-          persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
-          return false;
-        }
-        activeResponse = reconnectResponse;
+        flushStoredGenerationStateSync();
       }
-      return false;
     },
     [
       appendAssistantErrorMessage,
