@@ -4471,11 +4471,13 @@ textarea.memo-control {
   }
 
   .memo-modal__body--with-agent .memo-modal__edit-form {
+    order: 2;
     min-height: 52vh;
   }
 
   .memo-modal__agent-panel {
-    flex: 0 0 min(70vh, 420px);
+    order: 1;
+    flex: 0 0 min(62dvh, 420px);
     min-width: 0;
     width: 100%;
   }
