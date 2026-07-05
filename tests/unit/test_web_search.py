@@ -235,7 +235,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             os.environ,
-            {"Gemini_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
+            {"GEMINI_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
             clear=False,
         ):
             with patch.object(

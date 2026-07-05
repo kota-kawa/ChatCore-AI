@@ -26,11 +26,11 @@ def _resolve_database_url() -> str:
 
     # 個別の接続情報環境変数からURLを組み立てる（デフォルトはPostgreSQL）
     # Construct URL from individual connection environment variables (defaults to PostgreSQL)
-    user = os.getenv("POSTGRES_USER") or os.getenv("MYSQL_USER") or "postgres"
-    password = os.getenv("POSTGRES_PASSWORD") or os.getenv("MYSQL_PASSWORD") or "postgres"
-    host = os.getenv("POSTGRES_HOST") or os.getenv("MYSQL_HOST") or "localhost"
-    port = os.getenv("POSTGRES_PORT") or os.getenv("MYSQL_PORT") or "5432"
-    dbname = os.getenv("POSTGRES_DB") or os.getenv("MYSQL_DATABASE") or "postgres"
+    user = os.getenv("POSTGRES_USER") or "postgres"
+    password = os.getenv("POSTGRES_PASSWORD") or "postgres"
+    host = os.getenv("POSTGRES_HOST") or "localhost"
+    port = os.getenv("POSTGRES_PORT") or "5432"
+    dbname = os.getenv("POSTGRES_DB") or "postgres"
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
 
 

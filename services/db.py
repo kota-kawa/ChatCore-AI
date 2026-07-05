@@ -196,13 +196,10 @@ def _is_pool_exhausted_error(exc: BaseException) -> bool:
 
 # 環境変数を優先度の順に参照し、値を決定するヘルパー関数
 # Helper function to resolve environment variables in order of priority.
-def _get_env(name: str, fallback_name: str, default: str | None) -> str | None:
-    # 新旧環境変数を順番に見て互換性を維持する
-    # Resolve value from primary and legacy env vars for backward compatibility.
+def _get_env(name: str, default: str | None) -> str | None:
+    # 環境変数を取得し、未設定なら既定値を返す
+    # Resolve value from the env var, falling back to the default when unset.
     value = os.environ.get(name)
-    if value:
-        return value
-    value = os.environ.get(fallback_name)
     if value:
         return value
     return default
@@ -242,7 +239,7 @@ def is_retryable_db_error(exc: BaseException) -> bool:
 # 環境変数からDBのホスト名のリストを取得する（ローカル開発用フォールバックを含む）
 # Get the list of database hosts from environment variables (including local development fallbacks).
 def _get_db_hosts() -> list[str]:
-    env_host = os.environ.get("POSTGRES_HOST") or os.environ.get("MYSQL_HOST")
+    env_host = os.environ.get("POSTGRES_HOST")
     if env_host:
         hosts = [host.strip() for host in env_host.split(",") if host.strip()]
         # If a single docker-compose host is provided, add safe local fallbacks.
@@ -256,19 +253,19 @@ def _get_db_hosts() -> list[str]:
 # 環境変数からデータベース設定（ユーザー名、パスワード、DB名など）を取得する
 # Retrieve database configuration settings (user, password, dbname, etc.) from env variables.
 def _get_db_config() -> DbConfig:
-    user = _get_env("POSTGRES_USER", "MYSQL_USER", None)
-    password = _get_env("POSTGRES_PASSWORD", "MYSQL_PASSWORD", None)
-    dbname = _get_env("POSTGRES_DB", "MYSQL_DATABASE", None)
+    user = _get_env("POSTGRES_USER", None)
+    password = _get_env("POSTGRES_PASSWORD", None)
+    dbname = _get_env("POSTGRES_DB", None)
 
     if not all([user, password, dbname]):
         raise ValueError("Database configuration (USER, PASSWORD, DB) must be set in environment variables.")
 
     return {
-        "host": _get_env("POSTGRES_HOST", "MYSQL_HOST", "db"),
+        "host": _get_env("POSTGRES_HOST", "db"),
         "user": user,
         "password": password,
         "dbname": dbname,
-        "port": int(_get_env("POSTGRES_PORT", "MYSQL_PORT", "5432")),
+        "port": int(_get_env("POSTGRES_PORT", "5432")),
     }
 
 
