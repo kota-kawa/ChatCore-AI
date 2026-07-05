@@ -47,6 +47,22 @@ export function readStoredHomePageViewState(): StoredHomePageViewState {
   }
 }
 
+export function shouldRestoreHomeChatView(): boolean {
+  try {
+    if (normalizeStoredHomePageViewState(localStorage.getItem(STORAGE_KEYS.homePageViewState)) === "chat") {
+      return true;
+    }
+
+    return readActiveStoredGenerationState() !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function readRestorableHomePageViewState(): StoredHomePageViewState {
+  return shouldRestoreHomeChatView() ? "chat" : "setup";
+}
+
 export function writeStoredHomePageViewState(viewState: WritableHomePageViewState): boolean {
   try {
     localStorage.setItem(

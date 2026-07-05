@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { DEFAULT_MODEL, MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
-  readStoredHomePageViewState,
+  readRestorableHomePageViewState,
   writeStoredHomePageViewState,
 } from "../../lib/chat_page/storage";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
@@ -12,6 +12,10 @@ import { STORAGE_KEYS } from "../../scripts/core/constants";
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export type HomePageViewState = "setup" | "launching" | "chat";
+
+type ChatCoreHydrationWindow = Window & {
+  __CHAT_CORE_APP_HYDRATED__?: boolean;
+};
 
 /**
  * 保存されたセットアップ情報を読み込む
@@ -45,6 +49,18 @@ function readStoredTemporaryModeEnabled() {
   }
 }
 
+function readInitialPageViewState(): HomePageViewState {
+  if (typeof window === "undefined") return "setup";
+
+  // During the first document hydration the server markup is the setup view.
+  // Keep that initial state to avoid hydration mismatches; the head bootstrap
+  // CSS hides setup when a chat restore is pending. After the app has hydrated,
+  // client-side route returns can start directly from the stored view.
+  if (!(window as ChatCoreHydrationWindow).__CHAT_CORE_APP_HYDRATED__) return "setup";
+
+  return readRestorableHomePageViewState();
+}
+
 /**
  * ホームページのUI状態を管理するカスタムフック
  * Custom hook to manage the UI state of the home page
@@ -52,7 +68,7 @@ function readStoredTemporaryModeEnabled() {
 export function useHomePageUiState() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
-  const [pageViewState, setPageViewState] = useState<HomePageViewState>("setup");
+  const [pageViewState, setRawPageViewState] = useState<HomePageViewState>(readInitialPageViewState);
   const [setupInfo, setSetupInfo] = useState("");
   const [temporaryModeEnabled, setTemporaryModeEnabled] = useState(false);
   const [storedSetupStateLoaded, setStoredSetupStateLoaded] = useState(false);
@@ -63,6 +79,20 @@ export function useHomePageUiState() {
 
   const modelSelectRef = useRef<HTMLDivElement | null>(null);
   const chatHeaderModelSelectRef = useRef<HTMLDivElement | null>(null);
+
+  const setPageViewState = useCallback<Dispatch<SetStateAction<HomePageViewState>>>((nextState) => {
+    if (typeof nextState !== "function") {
+      writeStoredHomePageViewState(nextState);
+      setRawPageViewState(nextState);
+      return;
+    }
+
+    setRawPageViewState((previous) => {
+      const resolved = nextState(previous);
+      writeStoredHomePageViewState(resolved);
+      return resolved;
+    });
+  }, []);
 
   // 選択されたモデルのラベルを取得する
   // Get the label of the selected model
@@ -85,7 +115,7 @@ export function useHomePageUiState() {
   useIsomorphicLayoutEffect(() => {
     setSetupInfo(readStoredSetupInfo());
     setTemporaryModeEnabled(readStoredTemporaryModeEnabled());
-    setPageViewState(readStoredHomePageViewState());
+    setRawPageViewState(readRestorableHomePageViewState());
     setStoredSetupStateLoaded(true);
   }, []);
 

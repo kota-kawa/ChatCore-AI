@@ -805,7 +805,10 @@ html[data-cc-home-boot-view="chat"] #setup-container {
 }
 
 html[data-cc-home-boot-view="chat"] #chat-container {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
   transition: none;
+  pointer-events: auto;
 }
 
 html[data-cc-home-boot-view="chat"] #chat-container .chat-header,
