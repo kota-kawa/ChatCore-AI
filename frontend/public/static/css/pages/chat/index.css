@@ -770,6 +770,50 @@ body.chat-page .chat-share-sns a:hover {
   z-index: 1;
 }
 
+/* チャット画面復元時のプリハイドレーションガード。
+   直前がチャット画面のままの再読込・再訪問では、_document.tsx のブート
+   スクリプトが <html data-cc-home-boot-view="chat"> を立てる。ハイドレー
+   ションでビューが復元されるまでセットアップ画面を隠し、復元時のビュー
+   切替はトランジションなしで即座に反映する（通常のページ読み込みと同じ
+   見え方）。フラグはビュー復元後に use_home_page_controller が解除する。
+
+   注意: animation-name を none にせず duration/delay をほぼ 0 に上書き
+   していること（アニメーションを即完了扱いにする）が重要。name を外すと
+   フラグ解除時にアニメーションが最初から再スタートしてしまう。duration
+   方式なら、解除が元の再生時間より後であれば再生済みとして扱われ、見た
+   目の変化なしに通常のアニメーション定義へ戻れる。解除タイミングは
+   use_home_page_controller 側で元の再生時間より長く取っている。
+   Pre-hydration guard for chat-view restores. When the last view was the
+   chat view, the bootstrap script in _document.tsx sets
+   <html data-cc-home-boot-view="chat">. Until hydration restores the view,
+   the setup panel stays hidden, and the restore itself applies instantly
+   without the view-switch transitions (matching a normal page load). The
+   controller removes the flag after restoring.
+
+   Note: we override animation duration/delay to ~0 (finishing the animation
+   instantly) instead of setting animation-name to none. Removing the name
+   would restart the animation from scratch when the flag is released; with
+   the duration override, the animation counts as already finished as long as
+   the flag is released after the original play time (the controller waits
+   longer than that), so releasing causes no visual change. */
+html[data-cc-home-boot-view="chat"] #setup-container {
+  opacity: 0;
+  animation-duration: 0.01ms;
+  animation-delay: 0ms;
+  transition: none;
+  pointer-events: none;
+}
+
+html[data-cc-home-boot-view="chat"] #chat-container {
+  transition: none;
+}
+
+html[data-cc-home-boot-view="chat"] #chat-container .chat-header,
+html[data-cc-home-boot-view="chat"] #chat-container .chat-area {
+  animation-duration: 0.01ms;
+  animation-delay: 0ms;
+}
+
 .chat-page-stage #chat-container {
   width: min(100%, var(--chat-shell-max-width-wide, 1520px));
   z-index: 2;

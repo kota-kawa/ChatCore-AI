@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_MODEL, MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
 import {
@@ -6,6 +6,10 @@ import {
   writeStoredHomePageViewState,
 } from "../../lib/chat_page/storage";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
+
+// SSR では useLayoutEffect が警告を出すため、サーバーでは useEffect に切り替える
+// useLayoutEffect warns during SSR, so fall back to useEffect on the server
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export type HomePageViewState = "setup" | "launching" | "chat";
 
@@ -72,9 +76,13 @@ export function useHomePageUiState() {
     return MODEL_OPTIONS.find((option) => option.value === selectedModel)?.shortLabel ?? MODEL_OPTIONS[0]?.shortLabel ?? "";
   }, [selectedModel]);
 
-  // 初回マウント時に保存された設定を読み込む
-  // Load stored settings on initial mount
-  useEffect(() => {
+  // 初回マウント時に保存された設定を読み込む。最初の描画（ペイント）前に
+  // 反映しないと、チャット画面の復元時にセットアップ画面が一瞬表示される
+  // ため、useEffect ではなく layout effect で同期的に復元する。
+  // Load stored settings on initial mount. This must apply before the first
+  // paint — with a plain useEffect the setup view flashes for one frame when
+  // restoring the chat view — so restore synchronously in a layout effect.
+  useIsomorphicLayoutEffect(() => {
     setSetupInfo(readStoredSetupInfo());
     setTemporaryModeEnabled(readStoredTemporaryModeEnabled());
     setPageViewState(readStoredHomePageViewState());
