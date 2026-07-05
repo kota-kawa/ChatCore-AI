@@ -1,4 +1,4 @@
-import React, { type Dispatch, type SetStateAction } from "react";
+import React, { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
 import { InlineLoading } from "../ui/inline_loading";
@@ -63,6 +63,24 @@ export function MemoDetailModal({
   detailEditAiResponse,
   setDetailEditAiResponse,
 }: MemoDetailModalProps) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMemoAgentOpen) return;
+    if (!window.matchMedia("(max-width: 768px)").matches) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      bodyRef.current?.scrollTo({
+        top: 0,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isMemoAgentOpen]);
+
   return (
         <div
           className={`memo-modal${selectedMemo && !isMemoDetailClosing ? " is-visible" : ""}${isMemoDetailClosing ? " is-closing" : ""}`}
@@ -171,7 +189,10 @@ export function MemoDetailModal({
             {detailLoading && <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>}
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
             {!detailLoading && selectedMemo && (
-              <div className={`memo-modal__body memo-modal__body--edit${isMemoAgentOpen ? " memo-modal__body--with-agent" : ""}`}>
+              <div
+                ref={bodyRef}
+                className={`memo-modal__body memo-modal__body--edit${isMemoAgentOpen ? " memo-modal__body--with-agent" : ""}`}
+              >
                 <section
                   className="memo-modal__section memo-modal__section--full memo-modal__edit-form"
                 >
