@@ -62,6 +62,15 @@ import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/se
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+// チャット画面復元のプリハイドレーションフラグ（_document.tsx のブートスクリプトが設定）。
+// Pre-hydration flag for chat-view restores, set by the bootstrap script in _document.tsx.
+const HOME_BOOT_VIEW_ATTRIBUTE = "data-cc-home-boot-view";
+// 入場アニメーション（最長 0.73s = chat-area の delay 0.18s + duration 0.55s）の
+// 元の再生時間を過ぎてからフラグを解除するための待機時間。
+// Wait long enough to exceed the entrance animations' original play time
+// (max 0.73s = chat-area delay 0.18s + duration 0.55s) before releasing the flag.
+const HOME_BOOT_VIEW_RELEASE_DELAY_MS = 1000;
+
 function isOverlaySidebarViewport() {
   return typeof window !== "undefined" && window.matchMedia(CHAT_SIDEBAR_OVERLAY_QUERY).matches;
 }
@@ -861,7 +870,15 @@ export function useHomePageController() {
     }
   }, [taskCollapseLimit, tasks.length]);
 
-  useEffect(() => {
+  // 前回のビュー（チャット画面など）とアクティブルームの復元。最初のペイント前に
+  // 反映しないとセットアップ画面が一瞬表示されてからチャット画面へ切り替わるため、
+  // layout effect で同期的に復元する（ローカル履歴の読み込みも同じパスで行われ、
+  // 初回描画にメッセージが含まれる）。
+  // Restore the previous view (e.g. chat) and active room. This must run before
+  // the first paint — otherwise the setup view flashes briefly and then swaps to
+  // the chat view — so restore synchronously in a layout effect (local history
+  // loads on the same path, so the first paint already contains the messages).
+  useIsomorphicLayoutEffect(() => {
     try {
       const storedViewState = readStoredHomePageViewState();
       const activeGeneration = readActiveStoredGenerationState();
@@ -916,6 +933,40 @@ export function useHomePageController() {
     setMessages,
     setPageViewState,
   ]);
+
+  // _document.tsx のブートスクリプトが立てるプリハイドレーション用フラグを解除する。
+  // フラグが立っている間は CSS がセットアップ画面を隠し、ビュー切替のトランジション・
+  // 入場アニメーションを即完了扱いにするため、復元されたチャット画面はアニメーション
+  // なしで即座に表示される。解除は入場アニメーションの元の再生時間（最長 0.73s）より
+  // 後に行う必要がある。CSS は animation-name を保持したまま duration を短縮している
+  // ため、それより早く解除すると再生途中と見なされて動き出してしまう。復元結果が
+  // セットアップ画面だった場合（保存状態の不整合など）は、画面を隠したままにしない
+  // よう即時解除する。
+  // Release the pre-hydration flag set by the bootstrap script in _document.tsx.
+  // While present, CSS hides the setup view and makes the view-switch transitions
+  // and entrance animations finish instantly, so the restored chat view appears
+  // without animating. The release must happen after the original play time of the
+  // entrance animations (max 0.73s): the CSS keeps animation-name and only shortens
+  // the duration, so releasing earlier would put them mid-flight and move things.
+  // If restoration lands on the setup view (stale stored state, etc.), release
+  // immediately so the setup view is not left hidden.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!root.hasAttribute(HOME_BOOT_VIEW_ATTRIBUTE)) return;
+
+    if (pageViewState === "setup") {
+      root.removeAttribute(HOME_BOOT_VIEW_ATTRIBUTE);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      root.removeAttribute(HOME_BOOT_VIEW_ATTRIBUTE);
+    }, HOME_BOOT_VIEW_RELEASE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pageViewState]);
 
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
