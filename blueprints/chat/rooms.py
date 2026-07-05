@@ -253,41 +253,6 @@ def _fetch_persisted_user_rooms(
             conn.close()
 
 
-# 一時保存（EphemeralStore）されているユーザーの一時チャットルーム一覧を取得する関数
-# Fetch temporary guest-level chat rooms from the ephemeral store for a user.
-def _fetch_temporary_user_rooms(user_id: int) -> list[dict[str, Any]]:
-    """
-    エフェメラルストアから、ユーザーに紐づく一時チャットルーム（保存前）の一覧を読み込みます。
-    Loads the list of temporary/unsaved chat rooms associated with the user from the ephemeral store.
-    """
-    temporary_sid = get_temporary_user_store_key(user_id)
-    rooms = ephemeral_store.list_rooms(temporary_sid)
-    return [
-        {
-            "id": str(room.get("id") or ""),
-            "title": str(room.get("title") or "新規チャット"),
-            "mode": "temporary",
-            "created_at": str(room.get("created_at") or ""),
-        }
-        for room in rooms
-        if room.get("id")
-    ]
-
-
-# ルーム一覧を最新の作成日時順に並び替えるヘルパー関数
-# Helper to sort room payloads by creation time in descending order.
-def _sort_rooms_newest_first(rooms: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    チャットルームのリストを作成日時の降順（新しい順）でソートします。
-    Sorts a list of chat rooms by their created_at value in descending order.
-    """
-    return sorted(
-        rooms,
-        key=lambda room: str(room.get("created_at") or ""),
-        reverse=True,
-    )
-
-
 # 指定ルームのモード（通常モードnormalまたは一時モードtemporary）を判定する関数
 # Resolve whether the room is normal (persisted in DB) or temporary (ephemeral store) for authenticated requests.
 def _resolve_authenticated_room_mode(

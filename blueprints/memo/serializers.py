@@ -165,28 +165,3 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         **share_meta,
     }
 
-
-def share_payload(share_state: dict[str, Any]) -> dict[str, Any]:
-    """
-    共有状態を表すレスポンス用ペイロードを作成する関数
-    Construct the response payload for a memo sharing state.
-
-    Args:
-        share_state (dict[str, Any]): 共有状態データ / The sharing state dictionary.
-
-    Returns:
-        dict[str, Any]: 構築された共有ペイロード / The constructed sharing payload dictionary.
-    """
-    # トークンを文字列にキャスト
-    # Cast the token to string.
-    share_token = str(share_state.get("share_token") or "")
-    share_url = ""
-
-    # 有効なトークンがあり、共有状態がアクティブであれば共有URLを設定
-    # Set the share URL if the token is present and the share state is active.
-    if share_token and bool(share_state.get("is_active")):
-        share_url = _frontend_url(f"/shared/memo/{share_token}")
-
-    # レスポンス用のディクショナリを返却
-    # Return the response payload dictionary.
-    return {"status": "success", **share_state, "share_url": share_url}

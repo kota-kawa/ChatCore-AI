@@ -8,7 +8,6 @@ from starlette.responses import StreamingResponse
 
 from blueprints.chat.messages import (
     _paginate_ephemeral_chat_history,
-    _truncate_conversation_for_llm,
     chat,
     chat_edit_and_regenerate,
     chat_regenerate,
@@ -199,20 +198,6 @@ class ChatStreamingTestCase(unittest.TestCase):
     def tearDown(self):
         self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
-
-    # 日本語: LLMに渡す会話履歴の切り詰め処理において、システムプロンプトと直近の会話履歴が保持されることを検証します。
-    # English: Verify that the conversation truncation process preserves the system prompt and recent history.
-    def test_truncate_conversation_for_llm_keeps_system_and_recent_history(self):
-        messages = [{"role": "system", "content": "system"}]
-        for index in range(60):
-            role = "user" if index % 2 == 0 else "assistant"
-            messages.append({"role": role, "content": f"msg-{index}"})
-
-        truncated = _truncate_conversation_for_llm(messages)
-
-        self.assertEqual(truncated[0]["role"], "system")
-        self.assertLessEqual(len(truncated), 41)
-        self.assertEqual(truncated[-1]["content"], "msg-59")
 
     # 日本語: 一時チャットのページネーションにおいて、残りデータがある旨(has_more)と次回用カーソルが正しく返ることを検証します。
     # English: Verify that ephemeral chat pagination correctly reports has_more and the next cursor ID.
