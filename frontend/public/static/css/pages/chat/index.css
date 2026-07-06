@@ -1101,8 +1101,8 @@ html[data-cc-home-boot-view="chat"] #chat-container .chat-area {
     right: auto;
     left: calc(var(--chat-mobile-gutter, 0.875rem) + env(safe-area-inset-left, 0px));
     bottom: var(--chat-floating-action-bottom);
-    width: 52px;
-    height: 52px;
+    width: 60px;
+    height: 60px;
   }
 
   body.chat-page.chat-view-active .global-ai-agent-button,

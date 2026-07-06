@@ -2381,8 +2381,8 @@ a.cc-texture-btn:active {
 
 @media (max-width: 640px) {
   .global-ai-agent-button {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     left: max(20px, env(safe-area-inset-left));
     bottom: max(20px, env(safe-area-inset-bottom));
   }
@@ -2412,8 +2412,8 @@ a.cc-texture-btn:active {
 
 @media (max-width: 480px) {
   .global-ai-agent-button {
-    width: 50px;
-    height: 50px;
+    width: 56px;
+    height: 56px;
     left: max(15px, env(safe-area-inset-left));
     bottom: max(15px, env(safe-area-inset-bottom));
   }
