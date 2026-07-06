@@ -275,8 +275,8 @@ template.innerHTML = `
       /* メニュー全体の位置とサイズ */
       .actions-menu {
         right: 20px;    /* プロンプト投稿ボタンの位置に合わせて調整 */
-        width: 56px;    /* プロンプト投稿ボタンと同じサイズに */
-        height: 56px;   /* プロンプト投稿ボタンと同じサイズに */
+        width: 60px;
+        height: 60px;
       }
 
       :host([data-context="chat"]) .actions-menu {
@@ -288,32 +288,32 @@ template.innerHTML = `
       }
       /* ハンバーガーボタンをプロンプト投稿ボタンと完全に同じサイズに */
       .actions-menu .btn--menu {
-        width: 56px !important;
-        height: 56px !important;
+        width: 60px !important;
+        height: 60px !important;
       }
       /* 他のボタンのサイズ */
       .actions-menu .btn:not(.btn--menu) {
-        width: 52px;
-        height: 52px;
+        width: 54px;
+        height: 54px;
       }
       /* アイコンサイズ調整 */
       .btn svg {
-        width: 22px;
-        height: 22px;
+        width: 23px;
+        height: 23px;
       }
 
-      /* 展開位置調整 — メニュー中心(28,28)から半径90pxの円弧上、ボタンサイズ52px */
+      /* 展開位置調整 — メニュー中心(30,30)から半径94pxの円弧上、ボタンサイズ54px */
       #actionMenuButton:checked + .actions-menu > .btn--share {
-        top: -88px;
-        left: 2px;
+        top: -91px;
+        left: 3px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--star {
-        top: -62px;
-        left: -62px;
+        top: -64px;
+        left: -64px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 2px;
-        left: -88px;
+        top: 3px;
+        left: -91px;
       }
     }
 
@@ -338,18 +338,18 @@ template.innerHTML = `
       .actions-menu {
         bottom: 90px;   /* 入力フォームから十分離して配置 */
         right: 15px;    /* プロンプト投稿ボタンの位置に合わせて調整 */
-        width: 50px;    /* プロンプト投稿ボタンと同じサイズに */
-        height: 50px;   /* プロンプト投稿ボタンと同じサイズに */
+        width: 56px;
+        height: 56px;
       }
       /* ハンバーガーボタンをプロンプト投稿ボタンと完全に同じサイズに */
       .actions-menu .btn--menu {
-        width: 50px !important;
-        height: 50px !important;
+        width: 56px !important;
+        height: 56px !important;
       }
       /* 他のボタンのサイズ */
       .actions-menu .btn:not(.btn--menu) {
-        width: 47px;
-        height: 47px;
+        width: 50px;
+        height: 50px;
       }
       /* アイコンサイズ調整 */
       .btn svg {
@@ -365,18 +365,18 @@ template.innerHTML = `
         bottom: max(15px, env(safe-area-inset-bottom));
       }
 
-      /* 展開位置調整 — メニュー中心(25,25)から半径80pxの円弧上、ボタンサイズ47px */
+      /* 展開位置調整 — メニュー中心(28,28)から半径86pxの円弧上、ボタンサイズ50px */
       #actionMenuButton:checked + .actions-menu > .btn--share {
-        top: -79px;
-        left: 2px;
+        top: -83px;
+        left: 3px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--star {
-        top: -55px;
-        left: -55px;
+        top: -58px;
+        left: -58px;
       }
       #actionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 2px;
-        left: -79px;
+        top: 3px;
+        left: -83px;
       }
     }
 

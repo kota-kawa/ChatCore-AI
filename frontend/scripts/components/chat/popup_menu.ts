@@ -252,6 +252,40 @@ chatTemplate.innerHTML = `
            左右されず、常に同じ位置に表示されるようにする。 */
         bottom: calc(70px + env(safe-area-inset-bottom, 0px));
         right: 12px;
+        width: 60px;
+        height: 60px;
+      }
+      .actions-menu .btn--menu {
+        width: 60px !important;
+        height: 60px !important;
+      }
+      .actions-menu .btn:not(.btn--menu) {
+        width: 52px;
+        height: 52px;
+      }
+      .btn svg {
+        width: 22px;
+        height: 22px;
+      }
+      /* 展開位置調整 — 半径94pxの円弧上に0°/45°/90°等間隔配置 */
+      #chatActionMenuButton:checked + .actions-menu > .btn--share {
+        top: -90px;
+        left: 4px;
+      }
+      #chatActionMenuButton:checked + .actions-menu > .btn--star {
+        top: -64px;
+        left: -64px;
+      }
+      #chatActionMenuButton:checked + .actions-menu > .btn--comment {
+        top: 4px;
+        left: -90px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .actions-menu {
+        bottom: calc(65px + env(safe-area-inset-bottom, 0px));
+        right: 10px;
         width: 56px;
         height: 56px;
       }
@@ -260,59 +294,25 @@ chatTemplate.innerHTML = `
         height: 56px !important;
       }
       .actions-menu .btn:not(.btn--menu) {
-        width: 45px;
-        height: 45px;
+        width: 50px;
+        height: 50px;
       }
       .btn svg {
-        width: 20px;
-        height: 20px;
+        width: 21px;
+        height: 21px;
       }
-      /* 展開位置調整 — 半径90pxの円弧上に0°/45°/90°等間隔配置 */
+      /* 展開位置調整 — 半径86pxの円弧上に0°/45°/90°等間隔配置 */
       #chatActionMenuButton:checked + .actions-menu > .btn--share {
-        top: -85px;
-        left: 5px;
+        top: -82px;
+        left: 3px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--star {
         top: -58px;
         left: -58px;
       }
       #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 5px;
-        left: -85px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .actions-menu {
-        bottom: calc(65px + env(safe-area-inset-bottom, 0px));
-        right: 10px;
-        width: 50px;
-        height: 50px;
-      }
-      .actions-menu .btn--menu {
-        width: 50px !important;
-        height: 50px !important;
-      }
-      .actions-menu .btn:not(.btn--menu) {
-        width: 40px;
-        height: 40px;
-      }
-      .btn svg {
-        width: 18px;
-        height: 18px;
-      }
-      /* 展開位置調整 — 半径80pxの円弧上に0°/45°/90°等間隔配置 */
-      #chatActionMenuButton:checked + .actions-menu > .btn--share {
-        top: -75px;
-        left: 5px;
-      }
-      #chatActionMenuButton:checked + .actions-menu > .btn--star {
-        top: -52px;
-        left: -52px;
-      }
-      #chatActionMenuButton:checked + .actions-menu > .btn--comment {
-        top: 5px;
-        left: -75px;
+        top: 3px;
+        left: -82px;
       }
     }
   </style>
