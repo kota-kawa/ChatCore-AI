@@ -36,7 +36,7 @@ function ChatMainSectionComponent() {
 
   // プロジェクト一覧と操作（サイドバーのプロジェクトセクション用）。
   // Project list and actions for the sidebar's project section.
-  const { projects, openProject, openNewProjectModal } = useHomePageProjectContext();
+  const { projects, isProjectsLoading, openProject, openNewProjectModal, assignRoomToProject } = useHomePageProjectContext();
 
   // チャット操作に関するすべての状態とハンドラーを Context から取得する。
   // Obtain all chat operation state and handlers from context.
@@ -574,6 +574,55 @@ function ChatMainSectionComponent() {
                         >
                           <i className="bi bi-check2-square menu-item__icon"></i> 複数選択
                         </button>
+
+                        {room.mode === "normal" && (
+                          <div className="room-actions-menu__section" role="none">
+                            <div className="room-actions-menu__label" role="presentation">
+                              <i className="bi bi-folder-plus menu-item__icon" aria-hidden="true"></i>
+                              プロジェクトへ追加
+                            </div>
+                            {isProjectsLoading ? (
+                              <button
+                                type="button"
+                                className="menu-item menu-item--project is-disabled"
+                                role="menuitem"
+                                disabled
+                              >
+                                読み込み中
+                              </button>
+                            ) : projects.length > 0 ? (
+                              projects.map((project) => (
+                                <button
+                                  key={project.id}
+                                  type="button"
+                                  className="menu-item menu-item--project cc-press"
+                                  role="menuitem"
+                                  title={project.name}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setOpenRoomActionsFor(null);
+                                    void assignRoomToProject(room.id, project.id, project.name);
+                                  }}
+                                >
+                                  <span className="menu-item__project-name">{project.name}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <button
+                                type="button"
+                                className="menu-item menu-item--project cc-press"
+                                role="menuitem"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setOpenRoomActionsFor(null);
+                                  openNewProjectModal();
+                                }}
+                              >
+                                新規プロジェクトを作成
+                              </button>
+                            )}
+                          </div>
+                        )}
 
                         <button
                           type="button"
