@@ -194,6 +194,34 @@ export function useHomePageProjects({
     [activeProjectId, closeProject, loadProjects],
   );
 
+  const assignRoomToProject = useCallback(
+    async (roomId: string, projectId: number, projectName: string): Promise<boolean> => {
+      try {
+        const response = await resilientFetch("/api/assign_room_project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ room_id: roomId, project_id: projectId }),
+        });
+        const payload = (await readJsonBodySafe(response)) as { error?: string };
+        if (!response.ok || payload.error) {
+          throw new Error(extractApiErrorMessage(payload, "プロジェクトへの追加に失敗しました。", response.status));
+        }
+
+        await loadProjects();
+        if (activeProjectId !== null) {
+          await refreshProjectDetail(activeProjectId);
+        }
+        showToast(`「${projectName}」へ追加しました。`, { variant: "success" });
+        return true;
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
+        return false;
+      }
+    },
+    [activeProjectId, loadProjects, refreshProjectDetail],
+  );
+
   // 「このプロジェクトで新規チャット」: 次の作成チャットに紐づけるIDを記録する。
   // "New chat in this project": record the id to attach to the next created chat.
   const setNewChatProject = useCallback(
@@ -221,6 +249,7 @@ export function useHomePageProjects({
     createProject,
     updateProject,
     deleteProject,
+    assignRoomToProject,
     setNewChatProject,
   };
 }

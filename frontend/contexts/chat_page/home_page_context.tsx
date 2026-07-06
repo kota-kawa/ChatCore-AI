@@ -129,6 +129,7 @@ type HomePageProjectContextValue = Pick<
   | "createProject"
   | "updateProject"
   | "deleteProject"
+  | "assignRoomToProject"
   | "setNewChatProject"
 >;
 
@@ -373,6 +374,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       createProject: controller.createProject,
       updateProject: controller.updateProject,
       deleteProject: controller.deleteProject,
+      assignRoomToProject: controller.assignRoomToProject,
       setNewChatProject: controller.setNewChatProject,
     }),
     [
@@ -393,6 +395,7 @@ export function HomePageContextProvider({ controller, children }: HomePageContex
       controller.createProject,
       controller.updateProject,
       controller.deleteProject,
+      controller.assignRoomToProject,
       controller.setNewChatProject,
     ],
   );

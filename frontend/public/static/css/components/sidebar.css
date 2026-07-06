@@ -439,7 +439,8 @@
   position: absolute;
   top: calc(100% + 5px);
   right: 0;
-  min-width: 144px;
+  min-width: 184px;
+  max-width: min(280px, calc(100vw - 32px));
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
@@ -521,6 +522,45 @@
 .room-actions-menu .menu-item--select:hover,
 .room-actions-menu .menu-item--select:focus-visible {
   background: rgba(15, 118, 110, 0.08);
+}
+
+.room-actions-menu__section {
+  padding: 0.25rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.room-actions-menu__label {
+  min-height: 34px;
+  padding: 0.42rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-actions-menu .menu-item--project {
+  color: #1f4f46;
+  min-height: 34px;
+}
+
+.room-actions-menu .menu-item--project:hover,
+.room-actions-menu .menu-item--project:focus-visible {
+  background: rgba(31, 79, 70, 0.08);
+}
+
+.room-actions-menu .menu-item--project.is-disabled {
+  color: #64748b;
+  cursor: default;
+}
+
+.room-actions-menu .menu-item__project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-actions-menu .menu-item--delete {
@@ -662,6 +702,27 @@
 [data-theme="dark"] .room-actions-menu .menu-item--select:hover,
 [data-theme="dark"] .room-actions-menu .menu-item--select:focus-visible {
   background: rgba(94, 234, 212, 0.12);
+}
+
+[data-theme="dark"] .room-actions-menu__section {
+  border-top-color: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="dark"] .room-actions-menu__label {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .room-actions-menu .menu-item--project {
+  color: #99f6e4;
+}
+
+[data-theme="dark"] .room-actions-menu .menu-item--project:hover,
+[data-theme="dark"] .room-actions-menu .menu-item--project:focus-visible {
+  background: rgba(45, 212, 191, 0.12);
+}
+
+[data-theme="dark"] .room-actions-menu .menu-item--project.is-disabled {
+  color: #64748b;
 }
 
 [data-theme="dark"] .room-actions-menu .menu-item--delete {
