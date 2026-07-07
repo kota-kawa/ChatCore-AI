@@ -15,6 +15,7 @@ import { NetworkStatusBanner } from "../components/NetworkStatusBanner";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 import { swrFetcher } from "../lib/data/swr_fetcher";
 import { createPersistentCacheProvider } from "../lib/data/persistent_cache";
+import { getAllRouteStylesheetHrefs, getRouteStylesheetHrefs } from "../lib/route_stylesheets";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -94,13 +95,6 @@ const AUTH_PAGES = new Set(["/login", "/register"]);
 // Paths that are targets for menu navigation
 const MENU_NAVIGATION_PATHS = ["/", "/memo", "/prompt_share"] as const;
 const MENU_NAVIGATION_PATH_SET = new Set<string>(MENU_NAVIGATION_PATHS);
-// ルートごとに遅延ロードするCSSのマッピング
-// Mapping of CSS files to lazy-load per route
-const ROUTE_STYLESHEETS_BY_PATH: Record<string, string[]> = {
-  "/": ["/static/css/pages/chat/page.css"],
-  "/memo": ["/memo/static/css/memo_form.css"],
-  "/prompt_share": ["/prompt_share/static/css/pages/prompt_share.css"]
-};
 // ルート遷移後にコンテンツを表示するまでの最小遅延（スタイルシートが揃うまで待つ）
 // Minimum delay before showing content after route transition (wait for stylesheets)
 const ROUTE_REVEAL_DELAY_MS = 220;
@@ -284,7 +278,7 @@ function ensureStylesheetApplied(href: string) {
 // 指定パスに必要なすべてのスタイルシートをプリロードする
 // Preload all stylesheets required for the specified path
 function ensureRouteStylesheetsPreloaded(pathname: string) {
-  const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
+  const stylesheetHrefs = getRouteStylesheetHrefs(pathname);
   if (stylesheetHrefs.length === 0) return Promise.resolve();
 
   return Promise.all(stylesheetHrefs.map(ensureStylesheetPreloaded)).then(() => undefined);
@@ -293,7 +287,7 @@ function ensureRouteStylesheetsPreloaded(pathname: string) {
 // 指定パスに必要なすべてのスタイルシートをDOMに適用する
 // Apply all stylesheets required for the specified path to the DOM
 function ensureRouteStylesheetsApplied(pathname: string) {
-  const stylesheetHrefs = ROUTE_STYLESHEETS_BY_PATH[pathname] || [];
+  const stylesheetHrefs = getRouteStylesheetHrefs(pathname);
   if (stylesheetHrefs.length === 0) {
     removeInactiveRouteStylesheets(pathname);
     return Promise.resolve();
@@ -310,10 +304,8 @@ function ensureRouteStylesheetsApplied(pathname: string) {
 function removeInactiveRouteStylesheets(activePathname: string) {
   if (typeof window === "undefined") return;
 
-  const activeHrefs = new Set((ROUTE_STYLESHEETS_BY_PATH[activePathname] || []).map(normalizeStylesheetHref));
-  const routeHrefs = new Set(
-    Object.values(ROUTE_STYLESHEETS_BY_PATH).flat().map(normalizeStylesheetHref)
-  );
+  const activeHrefs = new Set(getRouteStylesheetHrefs(activePathname).map(normalizeStylesheetHref));
+  const routeHrefs = new Set(getAllRouteStylesheetHrefs().map(normalizeStylesheetHref));
 
   document.querySelectorAll<HTMLLinkElement>("link[data-cc-route-stylesheet-injected='true'][href]").forEach((link) => {
     if (!routeHrefs.has(link.href) || activeHrefs.has(link.href)) return;
@@ -399,12 +391,15 @@ export default function App({ Component, pageProps }: AppProps) {
       window.clearTimeout(finishTimerId);
       finishTimerId = null;
     };
-    // 遷移開始：ローディング状態に設定する
-    // Transition start: set to loading state
-    const startTransition = () => {
+    // 遷移開始：ローディング状態に設定し、遷移先のCSSの先読みを開始する
+    // Transition start: set to loading state and start preloading the destination CSS
+    const startTransition = (url?: string) => {
       clearFinishTimer();
       finishRequestId += 1;
       setIsRouteTransitioning(true);
+      // ページ描画を待たずにダウンロードを開始して、遷移完了時までにCSSを揃える
+      // Start the download without waiting for the page render so the CSS is ready by transition end
+      void ensureRouteStylesheetsPreloaded(getPathnameFromRouteUrl(url));
     };
     // 遷移完了：スタイルシートの適用と最小遅延を待ってからローディングを解除する
     // Transition complete: wait for stylesheet application and minimum delay before releasing loading state
