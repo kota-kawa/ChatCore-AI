@@ -1,14 +1,14 @@
-.prompt-load-more:disabled {
+:where(body.prompt-share-page, .prompt-share-page) .prompt-load-more:disabled {
   opacity: 0.65;
   cursor: wait;
 }
 
-.prompt-load-more:focus-visible {
+:where(body.prompt-share-page, .prompt-share-page) .prompt-load-more:focus-visible {
   outline: 2px solid rgba(69, 88, 110, 0.32);
   outline-offset: 2px;
 }
 
-#promptResults {
+:where(body.prompt-share-page, .prompt-share-page) #promptResults {
   margin: 0;
   width: 100%;
   min-height: 0;
@@ -24,7 +24,9 @@
 }
 
 .prompt-share-page .prompt-loading-message,
+
 .prompt-share-page .prompt-feedback,
+
 .prompt-share-page .prompt-cards > p {
   grid-column: 1 / -1;
   margin: 0;
@@ -95,6 +97,7 @@
 }
 
 .prompt-share-page .prompt-card--skeleton:hover,
+
 .prompt-share-page .prompt-card--skeleton:active {
   transform: none;
   border-color: #cbdceb;
@@ -173,6 +176,7 @@
 }
 
 .prompt-share-page .prompt-card__category-pill span,
+
 .prompt-share-page .prompt-card__type-pill span {
   min-width: 0;
   overflow: hidden;
@@ -194,6 +198,7 @@
 }
 
 .prompt-share-page .prompt-card__type-pill--prompt,
+
 .prompt-share-page .prompt-card__type-pill--text {
   color: #5f6368;
   background: #f1f3f4;
@@ -385,12 +390,15 @@
 }
 
 .prompt-share-page .meatball-menu:hover:not(:disabled),
+
 .prompt-share-page .meatball-menu:active:not(:disabled),
+
 .prompt-share-page .meatball-menu[aria-expanded="true"] {
   transform: none;
 }
 
 .prompt-share-page .prompt-action-btn i,
+
 .prompt-share-page .meatball-menu i {
   font-size: 1.35rem;
   display: inline-block;
@@ -410,11 +418,13 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn::before,
+
 .prompt-share-page .prompt-action-btn.use-in-chat-btn::before {
   content: none;
 }
 
 .prompt-share-page .prompt-action-btn.like-btn::after,
+
 .prompt-share-page .prompt-action-btn.use-in-chat-btn::after {
   content: "";
   position: absolute;
@@ -454,6 +464,7 @@
 }
 
 .prompt-share-page .prompt-action-btn.like-btn:active,
+
 .prompt-share-page .prompt-action-btn.use-in-chat-btn:active {
   background: transparent;
 }
@@ -485,6 +496,7 @@
 }
 
 .prompt-share-page .like-btn.liked.is-celebrating i,
+
 .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating i {
   animation: prompt-action-icon-pop 520ms cubic-bezier(0.2, 1.72, 0.36, 1) both;
 }
@@ -544,30 +556,33 @@
 
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page .like-btn.liked.is-celebrating i,
+
   .prompt-share-page .like-btn.liked.is-celebrating::after,
+
   .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating i,
+
   .prompt-share-page .use-in-chat-btn.used-in-chat.is-celebrating::after {
     animation: none;
   }
 }
 
 /* Dark theme overrides */
-[data-theme="dark"] .like-btn.liked {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .like-btn.liked {
   background: transparent;
   color: #ff7675;
   box-shadow: none;
 }
-[data-theme="dark"] .like-btn.liked i {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .like-btn.liked i {
   color: #ff7675 !important;
 }
 
-[data-theme="dark"] .use-in-chat-btn.used-in-chat {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat {
   background: transparent;
   color: #74c0fc;
   box-shadow: none;
 }
 
-[data-theme="dark"] .use-in-chat-btn.used-in-chat i {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .use-in-chat-btn.used-in-chat i {
   color: #74c0fc !important;
 }
 
@@ -706,14 +721,18 @@
 
 @media (prefers-reduced-motion: reduce) {
   .prompt-share-page .prompt-actions-dropdown,
+
   .prompt-share-page .prompt-actions-dropdown .dropdown-item {
     transition-duration: 0.01ms !important;
     transition-delay: 0s !important;
   }
 
   .prompt-share-page .prompt-actions-dropdown,
+
   .prompt-share-page .prompt-actions-dropdown .dropdown-item,
+
   .prompt-share-page .prompt-actions-dropdown.is-open,
+
   .prompt-share-page .prompt-actions-dropdown.is-open .dropdown-item {
     transform: none;
   }

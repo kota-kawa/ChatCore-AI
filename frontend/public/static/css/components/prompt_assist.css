@@ -1,7 +1,7 @@
 /* AI によるプロンプト作成補助（トップページ／プロンプト共有ページの投稿モーダル内） */
 /* AI-assisted prompt creation block inside the new-prompt / post modals. */
 
-.prompt-assist {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist {
   --assist-hue-1: #0f766e;
   --assist-hue-2: #14b8a6;
   --assist-ink-strong: #103934;
@@ -19,7 +19,7 @@
   background: var(--assist-soft);
 }
 
-.prompt-assist[data-assist-target="shared_prompt_modal"] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist[data-assist-target="shared_prompt_modal"] {
   --assist-hue-1: #185abc;
   --assist-hue-2: #4f9cf5;
   --assist-ink-strong: #1f3654;
@@ -28,13 +28,13 @@
 }
 
 /* --- header --- */
-.prompt-assist__head {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__head {
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
 }
 
-.prompt-assist__icon {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__icon {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -47,40 +47,40 @@
   background: linear-gradient(135deg, var(--assist-hue-1) 0%, var(--assist-hue-2) 100%);
 }
 
-.prompt-assist__head-copy {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__head-copy {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
   min-width: 0;
 }
 
-.prompt-assist__title {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__title {
   color: var(--assist-ink-strong);
   font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.4;
 }
 
-.prompt-assist__lead {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__lead {
   color: var(--assist-ink);
   font-size: 0.82rem;
   line-height: 1.55;
 }
 
 /* --- brief input --- */
-.prompt-assist__brief {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
 }
 
-.prompt-assist__brief-label {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief-label {
   color: var(--assist-ink);
   font-size: 0.78rem;
   font-weight: 600;
 }
 
-.prompt-assist__brief-input {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief-input {
   width: 100%;
   min-height: 64px;
   resize: vertical;
@@ -94,25 +94,25 @@
   padding: 0.6rem 0.75rem;
 }
 
-.prompt-assist__brief-input::placeholder {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief-input::placeholder {
   color: color-mix(in srgb, var(--assist-ink) 65%, transparent);
 }
 
-.prompt-assist__brief-input:focus-visible {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__brief-input:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--assist-hue-2) 55%, var(--assist-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--assist-hue-2) 18%, transparent);
 }
 
 /* --- run button --- */
-.prompt-assist__run-row {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.prompt-assist__run {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -129,26 +129,26 @@
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
-.prompt-assist__run:hover:not(:disabled) {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: saturate(1.05);
 }
 
-.prompt-assist__run:disabled {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run:disabled {
   cursor: not-allowed;
   opacity: 0.6;
   box-shadow: none;
 }
 
-.prompt-assist__run:focus-visible,
-.prompt-assist__apply:focus-visible,
-.prompt-assist__retry:focus-visible {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--assist-hue-2) 24%, transparent);
 }
 
 /* --- loading row --- */
-.prompt-assist__loading {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__loading {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -156,11 +156,11 @@
   font-size: 0.84rem;
 }
 
-.prompt-assist__loading[hidden] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__loading[hidden] {
   display: none;
 }
 
-.prompt-assist__spinner {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__spinner {
   width: 1rem;
   height: 1rem;
   border-radius: 999px;
@@ -170,27 +170,27 @@
 }
 
 /* --- status line --- */
-.prompt-assist__status {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status {
   margin: 0;
   font-size: 0.82rem;
   line-height: 1.55;
   color: var(--assist-ink);
 }
 
-.prompt-assist__status[hidden] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[hidden] {
   display: none;
 }
 
-.prompt-assist__status[data-variant="success"] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[data-variant="success"] {
   color: color-mix(in srgb, var(--assist-hue-1) 78%, #0f766e);
 }
 
-.prompt-assist__status[data-variant="error"] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[data-variant="error"] {
   color: #c2410c;
 }
 
 /* --- result preview --- */
-.prompt-assist__preview {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -201,11 +201,11 @@
   animation: prompt-assist-enter 0.22s ease;
 }
 
-.prompt-assist__preview[hidden] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview[hidden] {
   display: none;
 }
 
-.prompt-assist__summary {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__summary {
   margin: 0;
   color: var(--assist-ink-strong);
   font-size: 0.88rem;
@@ -213,7 +213,7 @@
   line-height: 1.55;
 }
 
-.prompt-assist__warnings {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__warnings {
   margin: 0;
   padding-left: 1.1rem;
   color: #b45309;
@@ -221,30 +221,30 @@
   line-height: 1.5;
 }
 
-.prompt-assist__warnings[hidden] {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__warnings[hidden] {
   display: none;
 }
 
-.prompt-assist__result {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__result {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
 
-.prompt-assist__row {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__row {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.prompt-assist__row-label {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__row-label {
   color: var(--assist-ink);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
-.prompt-assist__row-value {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__row-value {
   margin: 0;
   border: 1px solid var(--assist-border);
   border-radius: 10px;
@@ -259,20 +259,20 @@
   overflow-y: auto;
 }
 
-.prompt-assist__row--primary .prompt-assist__row-value {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__row--primary .prompt-assist__row-value {
   max-height: 16rem;
   font-size: 0.9rem;
 }
 
 /* --- preview actions --- */
-.prompt-assist__preview-actions {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.prompt-assist__apply {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -289,18 +289,18 @@
   transition: transform 0.18s ease, filter 0.18s ease;
 }
 
-.prompt-assist__apply:hover:not(:disabled) {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: saturate(1.05);
 }
 
-.prompt-assist__apply:disabled,
-.prompt-assist__retry:disabled {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply:disabled,
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-.prompt-assist__retry {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry {
   border: 1px solid var(--assist-border);
   border-radius: 12px;
   padding: 0.5rem 0.85rem;
@@ -313,13 +313,13 @@
   transition: background 0.18s ease, color 0.18s ease;
 }
 
-.prompt-assist__retry:hover:not(:disabled) {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry:hover:not(:disabled) {
   background: var(--assist-soft);
   color: var(--assist-ink-strong);
 }
 
 /* --- field highlight after applying a suggestion --- */
-.prompt-assist-applied {
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist-applied {
   animation: prompt-assist-field-glow 0.9s ease;
 }
 
@@ -353,7 +353,7 @@
 }
 
 /* --- dark theme --- */
-[data-theme="dark"] .prompt-assist {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist {
   --assist-ink-strong: #e2f4ef;
   --assist-ink: #9fc4bd;
   --assist-border: rgba(45, 212, 191, 0.22);
@@ -361,43 +361,43 @@
   --assist-soft: rgba(20, 184, 166, 0.1);
 }
 
-[data-theme="dark"] .prompt-assist[data-assist-target="shared_prompt_modal"] {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist[data-assist-target="shared_prompt_modal"] {
   --assist-ink-strong: #e3edf8;
   --assist-ink: #a7c0db;
   --assist-border: rgba(96, 165, 250, 0.24);
   --assist-soft: rgba(79, 156, 245, 0.12);
 }
 
-[data-theme="dark"] .prompt-assist__status[data-variant="error"] {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__status[data-variant="error"] {
   color: #fdba74;
 }
 
-[data-theme="dark"] .prompt-assist__warnings {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__warnings {
   color: #fbbf24;
 }
 
 /* --- reduced motion --- */
 @media (prefers-reduced-motion: reduce) {
-  .prompt-assist__run,
-  .prompt-assist__apply,
-  .prompt-assist__retry {
+  :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run,
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply,
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__retry {
     transition: none;
   }
 
-  .prompt-assist__run:hover:not(:disabled),
-  .prompt-assist__apply:hover:not(:disabled) {
+  :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__run:hover:not(:disabled),
+:where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__apply:hover:not(:disabled) {
     transform: none;
   }
 
-  .prompt-assist__spinner {
+  :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__spinner {
     animation-duration: 1.4s;
   }
 
-  .prompt-assist__preview {
+  :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist__preview {
     animation: none;
   }
 
-  .prompt-assist-applied {
+  :where(body.chat-page, .chat-page-shell, body.prompt-share-page, .prompt-share-page) .prompt-assist-applied {
     animation: none;
   }
 }

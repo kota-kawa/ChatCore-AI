@@ -9,7 +9,7 @@
     padding: 0;
   }
 
-  .sidebar {
+  :where(body.chat-page, .chat-page-shell) .sidebar {
     border-right: none;
   }
 }

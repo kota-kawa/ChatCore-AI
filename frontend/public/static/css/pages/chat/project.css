@@ -3,7 +3,7 @@
    Projects group related chats with shared custom instructions and knowledge. */
 
 /* ─── プロジェクト詳細モーダル ─── */
-.project-overlay {
+:where(body.chat-page, .chat-page-shell) .project-overlay {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal-priority, 85);
@@ -18,7 +18,7 @@
   box-sizing: border-box;
 }
 
-.project-overlay__panel {
+:where(body.chat-page, .chat-page-shell) .project-overlay__panel {
   width: min(780px, 100%);
   max-height: min(860px, calc(var(--chat-visual-viewport-height, 100dvh) - 2rem));
   display: flex;
@@ -34,7 +34,7 @@
   animation: project-modal-open var(--chat-modal-enter-duration, 0.24s) ease-out;
 }
 
-.project-overlay__header {
+:where(body.chat-page, .chat-page-shell) .project-overlay__header {
   position: relative;
   z-index: 1;
   display: flex;
@@ -46,20 +46,20 @@
   border-bottom: 1px solid var(--chat-modal-header-border, rgba(0, 0, 0, 0.08));
 }
 
-.project-overlay__close {
+:where(body.chat-page, .chat-page-shell) .project-overlay__close {
   flex: 0 0 auto;
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
   background: rgba(255, 255, 255, 0.72);
   color: var(--text-dark, #1a1a1a);
 }
 
-.project-overlay__close:hover,
-.project-overlay__close:focus-visible {
+:where(body.chat-page, .chat-page-shell) .project-overlay__close:hover,
+:where(body.chat-page, .chat-page-shell) .project-overlay__close:focus-visible {
   background: rgba(15, 118, 110, 0.08);
   border-color: rgba(15, 118, 110, 0.28);
 }
 
-.project-overlay__title {
+:where(body.chat-page, .chat-page-shell) .project-overlay__title {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -68,7 +68,7 @@
   color: var(--text-dark, #1a1a1a);
 }
 
-.project-overlay__delete {
+:where(body.chat-page, .chat-page-shell) .project-overlay__delete {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
@@ -83,12 +83,12 @@
   cursor: pointer;
 }
 
-.project-overlay__delete:hover,
-.project-overlay__delete:focus-visible {
+:where(body.chat-page, .chat-page-shell) .project-overlay__delete:hover,
+:where(body.chat-page, .chat-page-shell) .project-overlay__delete:focus-visible {
   background: rgba(220, 38, 38, 0.08);
 }
 
-.project-overlay__loading {
+:where(body.chat-page, .chat-page-shell) .project-overlay__loading {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,7 +98,7 @@
   color: var(--text-secondary, #6b7280);
 }
 
-.project-overlay__body {
+:where(body.chat-page, .chat-page-shell) .project-overlay__body {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -122,20 +122,20 @@
   }
 }
 
-.project-section-block {
+:where(body.chat-page, .chat-page-shell) .project-section-block {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
 }
 
-.project-section-block__heading {
+:where(body.chat-page, .chat-page-shell) .project-section-block__heading {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
 }
 
-.project-section-block__title {
+:where(body.chat-page, .chat-page-shell) .project-section-block__title {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -145,32 +145,32 @@
   color: var(--text-dark, #1a1a1a);
 }
 
-.project-section-block__hint {
+:where(body.chat-page, .chat-page-shell) .project-section-block__hint {
   margin: 0;
   font-size: 0.78rem;
   color: var(--text-secondary, #6b7280);
 }
 
-.project-section-block__actions {
+:where(body.chat-page, .chat-page-shell) .project-section-block__actions {
   display: flex;
   justify-content: flex-end;
 }
 
 /* フォーム要素 / Form fields */
-.project-field {
+:where(body.chat-page, .chat-page-shell) .project-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.project-field__label {
+:where(body.chat-page, .chat-page-shell) .project-field__label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-secondary, #6b7280);
 }
 
-.project-field__input,
-.project-field__textarea {
+:where(body.chat-page, .chat-page-shell) .project-field__input,
+:where(body.chat-page, .chat-page-shell) .project-field__textarea {
   width: 100%;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
@@ -183,20 +183,20 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.project-field__textarea {
+:where(body.chat-page, .chat-page-shell) .project-field__textarea {
   resize: vertical;
   min-height: 7.5rem;
   line-height: 1.5;
 }
 
-.project-field__input:focus,
-.project-field__textarea:focus {
+:where(body.chat-page, .chat-page-shell) .project-field__input:focus,
+:where(body.chat-page, .chat-page-shell) .project-field__textarea:focus {
   border-color: rgba(25, 195, 125, 0.5);
   box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
 }
 
 /* 所属チャット一覧 / Member chats */
-.project-newchat-btn {
+:where(body.chat-page, .chat-page-shell) .project-newchat-btn {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
@@ -211,20 +211,20 @@
   cursor: pointer;
 }
 
-.project-newchat-btn:hover,
-.project-newchat-btn:focus-visible {
+:where(body.chat-page, .chat-page-shell) .project-newchat-btn:hover,
+:where(body.chat-page, .chat-page-shell) .project-newchat-btn:focus-visible {
   border-color: rgba(25, 195, 125, 0.4);
   box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.12);
 }
 
-.project-chats__empty {
+:where(body.chat-page, .chat-page-shell) .project-chats__empty {
   margin: 0;
   padding: 0.6rem 0;
   font-size: 0.84rem;
   color: var(--text-secondary, #6b7280);
 }
 
-.project-chats__list {
+:where(body.chat-page, .chat-page-shell) .project-chats__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -233,7 +233,7 @@
   gap: 0.35rem;
 }
 
-.project-chats__item {
+:where(body.chat-page, .chat-page-shell) .project-chats__item {
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -249,17 +249,17 @@
   transition: background 0.15s ease;
 }
 
-.project-chats__item:hover,
-.project-chats__item:focus-visible {
+:where(body.chat-page, .chat-page-shell) .project-chats__item:hover,
+:where(body.chat-page, .chat-page-shell) .project-chats__item:focus-visible {
   background: rgba(0, 0, 0, 0.04);
 }
 
-.project-chats__item-icon {
+:where(body.chat-page, .chat-page-shell) .project-chats__item-icon {
   flex: 0 0 auto;
   color: var(--text-secondary, #6b7280);
 }
 
-.project-chats__item-title {
+:where(body.chat-page, .chat-page-shell) .project-chats__item-title {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -268,7 +268,7 @@
 }
 
 /* ─── 新規プロジェクトモーダル ─── */
-.new-project-modal {
+:where(body.chat-page, .chat-page-shell) .new-project-modal {
   position: fixed;
   inset: 0;
   z-index: 1300;
@@ -279,11 +279,11 @@
   background: rgba(15, 23, 42, 0.45);
 }
 
-.new-project-modal.is-open {
+:where(body.chat-page, .chat-page-shell) .new-project-modal.is-open {
   display: flex;
 }
 
-.new-project-modal__content {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__content {
   position: relative;
   width: 100%;
   max-width: 520px;
@@ -295,43 +295,43 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
 }
 
-.new-project-modal__close {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__close {
   position: absolute;
   top: 0.8rem;
   right: 0.8rem;
 }
 
-.new-project-modal__header h2 {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__header h2 {
   margin: 0 0 0.35rem;
   font-size: 1.15rem;
 }
 
-.new-project-modal__desc {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__desc {
   margin: 0 0 1rem;
   font-size: 0.84rem;
   color: var(--text-secondary, #6b7280);
 }
 
-.new-project-modal__body {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__body {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
 }
 
-.new-project-field {
+:where(body.chat-page, .chat-page-shell) .new-project-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.new-project-field__label {
+:where(body.chat-page, .chat-page-shell) .new-project-field__label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-secondary, #6b7280);
 }
 
-.new-project-field__input,
-.new-project-field__textarea {
+:where(body.chat-page, .chat-page-shell) .new-project-field__input,
+:where(body.chat-page, .chat-page-shell) .new-project-field__textarea {
   width: 100%;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
@@ -343,26 +343,26 @@
   outline: none;
 }
 
-.new-project-field__textarea {
+:where(body.chat-page, .chat-page-shell) .new-project-field__textarea {
   resize: vertical;
   min-height: 6.5rem;
   line-height: 1.5;
 }
 
-.new-project-field__input:focus,
-.new-project-field__textarea:focus {
+:where(body.chat-page, .chat-page-shell) .new-project-field__input:focus,
+:where(body.chat-page, .chat-page-shell) .new-project-field__textarea:focus {
   border-color: rgba(25, 195, 125, 0.5);
   box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
 }
 
-.new-project-modal__actions {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 1.2rem;
 }
 
-.new-project-modal__cancel {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__cancel {
   padding: 0.55rem 1rem;
   border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
   border-radius: var(--radius-sm, 8px);
@@ -373,91 +373,91 @@
   cursor: pointer;
 }
 
-.new-project-modal__cancel:disabled,
-.new-project-modal__submit:disabled {
+:where(body.chat-page, .chat-page-shell) .new-project-modal__cancel:disabled,
+:where(body.chat-page, .chat-page-shell) .new-project-modal__submit:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
 
 /* ─── ダークモード ─── */
-[data-theme="dark"] .project-overlay {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay {
   background: rgba(2, 6, 23, 0.66);
 }
 
-[data-theme="dark"] .project-overlay__panel,
-[data-theme="dark"] .project-overlay__header,
-[data-theme="dark"] .new-project-modal__content {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__panel,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__header,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-modal__content {
   background: #0f172a;
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .project-overlay__header {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__header {
   border-bottom-color: rgba(148, 163, 184, 0.18);
 }
 
-[data-theme="dark"] .project-overlay__title,
-[data-theme="dark"] .project-section-block__title,
-[data-theme="dark"] .project-chats__item,
-[data-theme="dark"] .project-field__input,
-[data-theme="dark"] .project-field__textarea,
-[data-theme="dark"] .new-project-field__input,
-[data-theme="dark"] .new-project-field__textarea,
-[data-theme="dark"] .project-newchat-btn,
-[data-theme="dark"] .project-overlay__close,
-[data-theme="dark"] .new-project-modal__cancel {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__title,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-section-block__title,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-chats__item,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-field__input,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-field__textarea,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-field__input,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-field__textarea,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-newchat-btn,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__close,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-modal__cancel {
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .project-field__input,
-[data-theme="dark"] .project-field__textarea,
-[data-theme="dark"] .new-project-field__input,
-[data-theme="dark"] .new-project-field__textarea,
-[data-theme="dark"] .project-chats__item,
-[data-theme="dark"] .project-newchat-btn,
-[data-theme="dark"] .project-overlay__close,
-[data-theme="dark"] .new-project-modal__cancel {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-field__input,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-field__textarea,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-field__input,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-field__textarea,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-chats__item,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-newchat-btn,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-overlay__close,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .new-project-modal__cancel {
   background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.22);
 }
 
-[data-theme="dark"] .project-chats__item:hover,
-[data-theme="dark"] .project-chats__item:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-chats__item:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .project-chats__item:focus-visible {
   background: rgba(148, 163, 184, 0.12);
 }
 
 /* ─── レスポンシブ ─── */
 @media (max-width: 576px) {
-  .project-overlay {
+  :where(body.chat-page, .chat-page-shell) .project-overlay {
     padding: 0.5rem;
   }
 
-  .project-overlay__panel {
+  :where(body.chat-page, .chat-page-shell) .project-overlay__panel {
     width: 100%;
     max-height: calc(var(--chat-visual-viewport-height, 100dvh) - 1rem);
     border-radius: 16px;
   }
 
-  .project-overlay__header {
+  :where(body.chat-page, .chat-page-shell) .project-overlay__header {
     padding: 0.75rem 0.8rem;
   }
 
-  .project-overlay__body {
+  :where(body.chat-page, .chat-page-shell) .project-overlay__body {
     gap: 1.1rem;
     padding: 1rem 0.8rem 1.1rem;
   }
 
-  .project-field__input,
-  .project-field__textarea,
-  .new-project-field__input,
-  .new-project-field__textarea {
+  :where(body.chat-page, .chat-page-shell) .project-field__input,
+:where(body.chat-page, .chat-page-shell) .project-field__textarea,
+:where(body.chat-page, .chat-page-shell) .new-project-field__input,
+:where(body.chat-page, .chat-page-shell) .new-project-field__textarea {
     font-size: 16px;
   }
 
-  .project-section-block__heading {
+  :where(body.chat-page, .chat-page-shell) .project-section-block__heading {
     align-items: flex-start;
   }
 
-  .project-newchat-btn {
+  :where(body.chat-page, .chat-page-shell) .project-newchat-btn {
     margin-left: 0;
     white-space: normal;
   }

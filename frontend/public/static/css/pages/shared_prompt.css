@@ -1,4 +1,4 @@
-body {
+.shared-prompt-page {
   margin: 0;
   min-height: 100vh;
   background:
@@ -13,7 +13,7 @@ body {
   padding: 1.5rem;
 }
 
-.shared-prompt-state {
+.shared-prompt-page .shared-prompt-state {
   width: min(880px, 100%);
   margin: 4rem auto 0;
   padding: 1rem 1.2rem;
@@ -22,11 +22,11 @@ body {
   box-shadow: 0 18px 48px rgba(20, 50, 74, 0.12);
 }
 
-.shared-prompt-state--error {
+.shared-prompt-page .shared-prompt-state--error {
   color: #b42318;
 }
 
-.shared-prompt-shell {
+.shared-prompt-page .shared-prompt-shell {
   width: min(880px, 100%);
   margin: 0 auto;
   display: flex;
@@ -34,32 +34,32 @@ body {
   gap: 1rem;
 }
 
-.shared-prompt-header,
-.shared-prompt-section,
-.shared-prompt-image {
+.shared-prompt-page .shared-prompt-header,
+.shared-prompt-page .shared-prompt-section,
+.shared-prompt-page .shared-prompt-image {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(20, 50, 74, 0.08);
   box-shadow: 0 18px 48px rgba(20, 50, 74, 0.12);
 }
 
-.shared-prompt-header {
+.shared-prompt-page .shared-prompt-header {
   padding: 1.6rem;
 }
 
-.shared-prompt-header h1 {
+.shared-prompt-page .shared-prompt-header h1 {
   margin: 0.7rem 0 0;
   font-size: clamp(1.8rem, 3vw, 2.4rem);
   line-height: 1.25;
 }
 
-.shared-prompt-pills {
+.shared-prompt-page .shared-prompt-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
 }
 
-.shared-prompt-pill {
+.shared-prompt-page .shared-prompt-pill {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
@@ -71,19 +71,19 @@ body {
   font-weight: 700;
 }
 
-.shared-prompt-pill--media {
+.shared-prompt-page .shared-prompt-pill--media {
   background: rgba(20, 50, 74, 0.07);
   color: #36506a;
 }
 
-.shared-prompt-meta {
+.shared-prompt-page .shared-prompt-meta {
   margin-top: 1rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
 }
 
-.shared-prompt-meta span {
+.shared-prompt-page .shared-prompt-meta span {
   display: inline-flex;
   align-items: center;
   min-height: 36px;
@@ -94,28 +94,28 @@ body {
   font-size: 0.84rem;
 }
 
-.shared-prompt-image {
+.shared-prompt-page .shared-prompt-image {
   padding: 1rem;
 }
 
-.shared-prompt-image img {
+.shared-prompt-page .shared-prompt-image img {
   display: block;
   width: 100%;
   border-radius: 18px;
   object-fit: cover;
 }
 
-.shared-prompt-section {
+.shared-prompt-page .shared-prompt-section {
   padding: 1.3rem 1.4rem;
 }
 
-.shared-prompt-section h2 {
+.shared-prompt-page .shared-prompt-section h2 {
   margin: 0;
   font-size: 1rem;
   color: #0f4c81;
 }
 
-.md-content {
+.shared-prompt-page .md-content {
   margin: 0.8rem 0 0;
   line-height: 1.75;
   color: #173954;
@@ -123,41 +123,41 @@ body {
   word-break: break-word;
 }
 
-.md-content > * { margin: 0.65rem 0; }
-.md-content > :first-child { margin-top: 0; }
-.md-content > :last-child { margin-bottom: 0; }
+.shared-prompt-page .md-content > * { margin: 0.65rem 0; }
+.shared-prompt-page .md-content > :first-child { margin-top: 0; }
+.shared-prompt-page .md-content > :last-child { margin-bottom: 0; }
 
-.md-content p { margin: 0.5rem 0; }
+.shared-prompt-page .md-content p { margin: 0.5rem 0; }
 
-.md-content h1,
-.md-content h2,
-.md-content h3,
-.md-content h4,
-.md-content h5,
-.md-content h6 {
+.shared-prompt-page .md-content h1,
+.shared-prompt-page .md-content h2,
+.shared-prompt-page .md-content h3,
+.shared-prompt-page .md-content h4,
+.shared-prompt-page .md-content h5,
+.shared-prompt-page .md-content h6 {
   margin: 1.1rem 0 0.4rem;
   line-height: 1.35;
   font-weight: 700;
   color: #0f3a5e;
 }
 
-.md-content h1 {
+.shared-prompt-page .md-content h1 {
   font-size: 1.35rem;
   border-bottom: 1px solid rgba(14, 165, 233, 0.2);
   padding-bottom: 0.3rem;
 }
-.md-content h2 { font-size: 1.15rem; }
-.md-content h3 { font-size: 1rem; }
+.shared-prompt-page .md-content h2 { font-size: 1.15rem; }
+.shared-prompt-page .md-content h3 { font-size: 1rem; }
 
-.md-content ul,
-.md-content ol {
+.shared-prompt-page .md-content ul,
+.shared-prompt-page .md-content ol {
   margin: 0.5rem 0 0.5rem 1rem;
   padding-left: 0.8rem;
 }
 
-.md-content li + li { margin-top: 0.25rem; }
+.shared-prompt-page .md-content li + li { margin-top: 0.25rem; }
 
-.md-content blockquote {
+.shared-prompt-page .md-content blockquote {
   margin: 0.65rem 0;
   padding: 0.5rem 0.9rem;
   border-left: 3px solid #0ea5e9;
@@ -167,7 +167,7 @@ body {
   font-style: italic;
 }
 
-.md-content code {
+.shared-prompt-page .md-content code {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   background: rgba(14, 165, 233, 0.08);
   padding: 0.12rem 0.35rem;
@@ -176,7 +176,7 @@ body {
   color: #0369a1;
 }
 
-.md-content pre {
+.shared-prompt-page .md-content pre {
   margin: 0.65rem 0;
   padding: 0.9rem 1rem;
   background: #1e1e2e;
@@ -185,7 +185,7 @@ body {
   line-height: 1.55;
 }
 
-.md-content pre code {
+.shared-prompt-page .md-content pre code {
   background: transparent;
   padding: 0;
   border-radius: 0;
@@ -193,35 +193,35 @@ body {
   font-size: 0.84rem;
 }
 
-.md-content strong { font-weight: 700; }
-.md-content em { font-style: italic; }
+.shared-prompt-page .md-content strong { font-weight: 700; }
+.shared-prompt-page .md-content em { font-style: italic; }
 
-.md-content hr {
+.shared-prompt-page .md-content hr {
   border: none;
   border-top: 1px solid rgba(14, 165, 233, 0.2);
   margin: 1rem 0;
 }
 
-.md-content table {
+.shared-prompt-page .md-content table {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.9rem;
   margin: 0.65rem 0;
 }
 
-.md-content th,
-.md-content td {
+.shared-prompt-page .md-content th,
+.shared-prompt-page .md-content td {
   border: 1px solid rgba(14, 165, 233, 0.2);
   padding: 0.4rem 0.7rem;
   text-align: left;
 }
 
-.md-content th {
+.shared-prompt-page .md-content th {
   background: rgba(14, 165, 233, 0.07);
   font-weight: 700;
 }
 
-.md-content a {
+.shared-prompt-page .md-content a {
   color: #0369a1;
   text-decoration: underline;
 }
@@ -231,9 +231,9 @@ body {
     padding: 0.9rem;
   }
 
-  .shared-prompt-header,
-  .shared-prompt-section,
-  .shared-prompt-image {
+  .shared-prompt-page .shared-prompt-header,
+.shared-prompt-page .shared-prompt-section,
+.shared-prompt-page .shared-prompt-image {
     border-radius: 18px;
   }
 }

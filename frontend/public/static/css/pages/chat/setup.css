@@ -1,7 +1,7 @@
 /* setup.css
   最初の画面（フォーム、モーダル、タスク選択ヘッダー）のレイアウトと入力要素スタイル
 */
-#setup-container {
+:where(body.chat-page, .chat-page-shell) #setup-container {
   --setup-container-padding-y: 2.25rem;
   --setup-container-padding-x: 2.4rem;
   --setup-form-gap: 1.25rem;
@@ -44,7 +44,7 @@
     box-shadow 0.42s ease;
 }
 
-#setup-container[data-view="setup"] {
+:where(body.chat-page, .chat-page-shell) #setup-container[data-view="setup"] {
   opacity: 1;
   transform: translate3d(0, 0, 0);
   filter: none;
@@ -54,7 +54,7 @@
 /* While the chat is being prepared, the setup panel recedes into 3D depth
    (the parent .chat-page-stage provides the perspective) and softly blurs,
    signalling that focus is shifting to the incoming chat view. */
-#setup-container[data-view="launching"] {
+:where(body.chat-page, .chat-page-shell) #setup-container[data-view="launching"] {
   opacity: 0.32;
   transform: translate3d(0, -6px, -70px) scale(0.955) rotateX(4deg);
   filter: blur(6px) saturate(0.9);
@@ -62,14 +62,14 @@
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
-#setup-container[data-view="chat"] {
+:where(body.chat-page, .chat-page-shell) #setup-container[data-view="chat"] {
   opacity: 0;
   transform: translate3d(0, -22px, -150px) scale(0.94) rotateX(7deg);
   filter: blur(10px);
   pointer-events: none;
 }
 
-#setup-container::before {
+:where(body.chat-page, .chat-page-shell) #setup-container::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -77,7 +77,7 @@
   pointer-events: none;
 }
 
-.setup-form {
+:where(body.chat-page, .chat-page-shell) .setup-form {
   display: flex;
   flex-direction: column;
   gap: var(--setup-form-gap);
@@ -85,7 +85,7 @@
   z-index: 1;
 }
 
-.setup-form-title {
+:where(body.chat-page, .chat-page-shell) .setup-form-title {
   text-align: center;
   font-size: var(--setup-title-font-size);
   font-weight: 700;
@@ -96,7 +96,7 @@
 
 /* 未ログイン時にタイトル直下へ表示する機能紹介テキスト（控えめなリード文として既存デザインに馴染ませる） */
 /* Feature intro shown under the title when logged out; styled as a subtle lead paragraph to match the design */
-.setup-form-subtitle {
+:where(body.chat-page, .chat-page-shell) .setup-form-subtitle {
   margin: -0.35rem auto 0;
   max-width: 34rem;
   text-align: center;
@@ -105,14 +105,14 @@
   color: var(--text-secondary, #6b7280);
 }
 
-.form-group {
+:where(body.chat-page, .chat-page-shell) .form-group {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.form-label {
+:where(body.chat-page, .chat-page-shell) .form-label {
   position: static;
   background: transparent;
   padding: 0;
@@ -122,19 +122,19 @@
   letter-spacing: 0.02em;
 }
 
-.setup-info-group .form-label {
+:where(body.chat-page, .chat-page-shell) .setup-info-group .form-label {
   padding-right: 3.6rem;
 }
 
-.setup-info-field-shell {
+:where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
   position: relative;
 }
 
-.setup-info-input-area {
+:where(body.chat-page, .chat-page-shell) .setup-info-input-area {
   position: relative;
 }
 
-.setup-attached-files {
+:where(body.chat-page, .chat-page-shell) .setup-attached-files {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -142,8 +142,8 @@
   padding-right: 3.5rem;
 }
 
-.setup-form textarea,
-.setup-form select {
+:where(body.chat-page, .chat-page-shell) .setup-form textarea,
+:where(body.chat-page, .chat-page-shell) .setup-form select {
   width: 100%;
   padding: var(--setup-field-padding-y) var(--setup-field-padding-x);
   border: 1px solid #d7e8e5;
@@ -157,7 +157,7 @@
     background var(--transition-normal, 0.2s ease);
 }
 
-#setup-info {
+:where(body.chat-page, .chat-page-shell) #setup-info {
   --scrollbar-size-current: 5px;
   --scrollbar-track-current: transparent;
   --scrollbar-thumb-current: rgba(30, 107, 76, 0.20);
@@ -175,14 +175,14 @@
   display: block;
 }
 
-.setup-info-input-area .setup-send-btn {
+:where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
   position: absolute;
   right: calc(0.72rem + env(safe-area-inset-right, 0px));
   bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
   z-index: 2;
 }
 
-.setup-info-input-area .setup-attach-btn {
+:where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   position: absolute;
   right: calc(0.72rem + 52px + 0.4rem + env(safe-area-inset-right, 0px));
   bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
@@ -219,27 +219,27 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   background: rgba(16, 72, 50, 0.58);
 }
 
-.setup-info-counter {
+:where(body.chat-page, .chat-page-shell) .setup-info-counter {
   text-align: right;
   font-size: var(--text-md, 1rem);
   color: var(--text-muted, #9ca3af);
   transition: color var(--transition-normal, 0.2s ease);
 }
 
-.setup-info-counter--over {
+:where(body.chat-page, .chat-page-shell) .setup-info-counter--over {
   color: var(--danger-color, #ef4444);
   font-weight: 600;
 }
 
-.setup-form textarea:focus,
-.setup-form select:focus {
+:where(body.chat-page, .chat-page-shell) .setup-form textarea:focus,
+:where(body.chat-page, .chat-page-shell) .setup-form select:focus {
   border-color: var(--primary-color);
   box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
   background: #ffffff;
 }
 
-#ai-model.model-select-native {
+:where(body.chat-page, .chat-page-shell) #ai-model.model-select-native {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -250,12 +250,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   pointer-events: none;
 }
 
-.model-select {
+:where(body.chat-page, .chat-page-shell) .model-select {
   position: relative;
   width: 100%;
 }
 
-.model-select-trigger {
+:where(body.chat-page, .chat-page-shell) .model-select-trigger {
   width: 100%;
   border: 1px solid #d7e8e5;
   border-radius: 14px;
@@ -273,7 +273,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   position: relative;
 }
 
-.model-select-trigger::after {
+:where(body.chat-page, .chat-page-shell) .model-select-trigger::after {
   content: '';
   position: absolute;
   right: 1.05rem;
@@ -286,19 +286,19 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   transition: transform var(--transition-normal, 0.2s ease);
 }
 
-.model-select.is-open .model-select-trigger,
-.model-select-trigger:focus {
+:where(body.chat-page, .chat-page-shell) .model-select.is-open .model-select-trigger,
+:where(body.chat-page, .chat-page-shell) .model-select-trigger:focus {
   border-color: var(--primary-color);
   box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
   background: #ffffff;
 }
 
-.model-select.is-open .model-select-trigger::after {
+:where(body.chat-page, .chat-page-shell) .model-select.is-open .model-select-trigger::after {
   transform: translateY(-30%) rotate(-135deg);
 }
 
-.chat-save-mode-control {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-control {
   position: absolute;
   top: 0.78rem;
   right: 0.78rem;
@@ -309,7 +309,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   z-index: 2;
 }
 
-.chat-save-mode-toggle {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
   width: 2.9rem;
   height: 2.9rem;
   position: relative;
@@ -335,7 +335,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     transform var(--transition-normal, 0.2s ease);
 }
 
-.chat-save-mode-toggle:hover {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:hover {
   transform: translateY(-1px);
   border-color: rgba(15, 118, 110, 0.34);
   box-shadow:
@@ -343,7 +343,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
-.chat-save-mode-toggle.is-active {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active {
   border-color: rgba(180, 83, 9, 0.22);
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(255, 247, 237, 0.96)),
@@ -354,11 +354,11 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
-.chat-save-mode-toggle.is-active .chat-save-mode-toggle__icon {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active .chat-save-mode-toggle__icon {
   opacity: 0.72;
 }
 
-.chat-save-mode-toggle:focus-visible {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:focus-visible {
   outline: none;
   border-color: var(--primary-color);
   box-shadow:
@@ -366,7 +366,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     0 12px 24px rgba(16, 44, 35, 0.1);
 }
 
-.chat-save-mode-toggle__icon {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -375,13 +375,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   line-height: 1;
 }
 
-.chat-save-mode-toggle__icon svg {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__icon svg {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.chat-save-mode-toggle__check {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__check {
   position: absolute;
   inset: 0;
   display: inline-flex;
@@ -390,13 +390,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: #0f172a;
 }
 
-.chat-save-mode-toggle__check svg {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__check svg {
   width: 1.08rem;
   height: 1.08rem;
   display: block;
 }
 
-.chat-save-mode-feedback {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-feedback {
   max-width: 0;
   overflow: hidden;
   opacity: 0;
@@ -421,7 +421,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     color 0.2s ease;
 }
 
-.chat-save-mode-feedback.is-visible {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-feedback.is-visible {
   max-width: 9.5rem;
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -431,13 +431,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: #134e4a;
 }
 
-.chat-save-mode-feedback.is-visible.is-active {
+:where(body.chat-page, .chat-page-shell) .chat-save-mode-feedback.is-visible.is-active {
   border-color: rgba(180, 83, 9, 0.18);
   background: rgba(255, 247, 237, 0.96);
   color: #9a3412;
 }
 
-.model-select-menu {
+:where(body.chat-page, .chat-page-shell) .model-select-menu {
   position: absolute;
   top: calc(100% + 0.45rem);
   left: 0;
@@ -453,12 +453,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   z-index: var(--z-dropdown, 30);
 }
 
-.model-select.is-open .model-select-menu {
+:where(body.chat-page, .chat-page-shell) .model-select.is-open .model-select-menu {
   display: block;
   animation: slideUp 0.2s ease-out;
 }
 
-.model-select-option {
+:where(body.chat-page, .chat-page-shell) .model-select-option {
   width: 100%;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -476,12 +476,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     color var(--transition-normal, 0.2s ease);
 }
 
-.model-select-option:hover {
+:where(body.chat-page, .chat-page-shell) .model-select-option:hover {
   background: rgba(15, 118, 110, 0.08);
   border-color: rgba(15, 118, 110, 0.28);
 }
 
-.model-select-option.is-selected {
+:where(body.chat-page, .chat-page-shell) .model-select-option.is-selected {
   background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   border-color: rgba(19, 78, 74, 0.82);
   color: #ffffff;
@@ -489,19 +489,19 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   box-shadow: 0 10px 18px rgba(19, 78, 74, 0.18);
 }
 
-.model-select-option.is-selected:hover {
+:where(body.chat-page, .chat-page-shell) .model-select-option.is-selected:hover {
   background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
   border-color: rgba(15, 63, 59, 0.92);
   color: #ffffff;
 }
 
-.model-select-option:focus-visible {
+:where(body.chat-page, .chat-page-shell) .model-select-option:focus-visible {
   outline: 2px solid rgba(15, 118, 110, 0.42);
   outline-offset: 2px;
 }
 
 /* ２列レイアウトの設定（.task-wrapper にサイズ指定） */
-.task-selection {
+:where(body.chat-page, .chat-page-shell) .task-selection {
   position: relative;
   display: flex;
   flex-wrap: wrap;
@@ -510,24 +510,24 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   min-height: 0;
 }
 
-.task-selection .task-wrapper {
+:where(body.chat-page, .chat-page-shell) .task-selection .task-wrapper {
   flex: 0 0 calc(50% - 0.5rem);
   max-width: calc(50% - 0.5rem);
   display: block;
 }
 
-.task-overflow-container {
+:where(body.chat-page, .chat-page-shell) .task-overflow-container {
   flex: 0 0 100%;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.task-overflow-container.is-open {
+:where(body.chat-page, .chat-page-shell) .task-overflow-container.is-open {
   grid-template-rows: 1fr;
 }
 
-.task-overflow-inner {
+:where(body.chat-page, .chat-page-shell) .task-overflow-inner {
   overflow: hidden;
   display: flex;
   flex-wrap: wrap;
@@ -536,7 +536,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* カード本体のスタイル */
-.prompt-card {
+:where(body.chat-page, .chat-page-shell) .prompt-card {
   background: #ffffff;
   padding: var(--setup-card-padding-y) var(--setup-card-padding-x) !important;
   border-radius: 16px;
@@ -557,23 +557,23 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
 }
 
-.prompt-card:hover {
+:where(body.chat-page, .chat-page-shell) .prompt-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
   border-color: rgba(15, 118, 110, 0.45);
 }
 
-.task-selection[data-launching="true"] {
+:where(body.chat-page, .chat-page-shell) .task-selection[data-launching="true"] {
   pointer-events: none;
 }
 
-.task-selection[data-launching="true"] .prompt-card:not([data-launching="true"]) {
+:where(body.chat-page, .chat-page-shell) .task-selection[data-launching="true"] .prompt-card:not([data-launching="true"]) {
   opacity: 0.35;
   transform: translateY(-1px) scale(0.985);
   filter: saturate(0.5);
 }
 
-.prompt-card[data-launching="true"] {
+:where(body.chat-page, .chat-page-shell) .prompt-card[data-launching="true"] {
   animation: prompt-card-launch-sink 0.52s cubic-bezier(0.22, 0.72, 0.24, 1) forwards;
   border-color: rgba(15, 118, 110, 0.65);
   background:
@@ -583,7 +583,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* Expanding accent ring that radiates out from the tapped card. */
-.prompt-card[data-launching="true"]::before {
+:where(body.chat-page, .chat-page-shell) .prompt-card[data-launching="true"]::before {
   content: '';
   position: absolute;
   inset: -3px;
@@ -594,7 +594,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* A second, softer ring trailing the first for a layered, tactile pulse. */
-.prompt-card[data-launching="true"]::after {
+:where(body.chat-page, .chat-page-shell) .prompt-card[data-launching="true"]::after {
   content: '';
   position: absolute;
   inset: -3px;
@@ -655,7 +655,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* 入出力例コンテナ：カード内で絶対配置 */
-.io-container {
+:where(body.chat-page, .chat-page-shell) .io-container {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -674,7 +674,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* トグルボタンを右寄せするために使うカードヘッダー */
-.header-container {
+:where(body.chat-page, .chat-page-shell) .header-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -682,7 +682,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   width: 100%;
 }
 
-.task-header {
+:where(body.chat-page, .chat-page-shell) .task-header {
   flex: 1;
   min-width: 0;
   font-size: var(--setup-card-font-size);
@@ -693,7 +693,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   overflow: hidden;
 }
 
-.task-detail-toggle {
+:where(body.chat-page, .chat-page-shell) .task-detail-toggle {
   width: var(--setup-toggle-size);
   height: var(--setup-toggle-size);
   min-width: var(--setup-toggle-size);
@@ -711,11 +711,11 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   box-shadow: none !important;
 }
 
-.task-detail-toggle i {
+:where(body.chat-page, .chat-page-shell) .task-detail-toggle i {
   font-size: var(--text-xl, 1.125rem);
 }
 
-#setup-container.setup-fit-compact {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact {
   --setup-container-padding-y: 1.45rem;
   --setup-container-padding-x: 1.6rem;
   --setup-form-gap: 0.75rem;
@@ -733,25 +733,25 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-info-min-height: 5rem;
 }
 
-#setup-container.setup-fit-compact #setup-info {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #setup-info {
   padding-right: calc(1.84rem + 104px);
   padding-bottom: 3.9rem;
 }
 
-#setup-container.setup-fit-compact .form-label {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .form-label {
   font-size: var(--text-md, 1rem);
 }
 
-#setup-container.setup-fit-compact .task-selection-header {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection-header {
   gap: 0.45rem;
 }
 
-#setup-container.setup-fit-compact .task-selection-header p#task-selection-text {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection-header p#task-selection-text {
   font-size: var(--text-md, 1rem);
 }
 
-#setup-container.setup-fit-compact #openNewPromptModal,
-#setup-container.setup-fit-compact #edit-task-order-btn {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #openNewPromptModal,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact #edit-task-order-btn {
   width: 44px;
   height: 44px;
   min-width: 44px;
@@ -759,7 +759,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   font-size: 1rem;
 }
 
-#setup-container.setup-fit-tight {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight {
   --setup-container-padding-y: 1rem;
   --setup-container-padding-x: 1.1rem;
   --setup-form-gap: 0.5rem;
@@ -777,21 +777,21 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   --setup-info-min-height: 4.25rem;
 }
 
-#setup-container.setup-fit-tight #setup-info {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #setup-info {
   padding-right: calc(1.84rem + 104px);
   padding-bottom: 3.7rem;
 }
 
-#setup-container.setup-fit-tight .form-label {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .form-label {
   font-size: var(--text-md, 1rem);
 }
 
-#setup-container.setup-fit-tight .task-selection-header p#task-selection-text {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection-header p#task-selection-text {
   font-size: var(--text-md, 1rem);
 }
 
-#setup-container.setup-fit-tight #openNewPromptModal,
-#setup-container.setup-fit-tight #edit-task-order-btn {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #openNewPromptModal,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight #edit-task-order-btn {
   width: 44px;
   height: 44px;
   min-width: 44px;
@@ -799,13 +799,13 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   font-size: 0.92rem;
 }
 
-#setup-container.setup-fit-tight .task-selection .task-wrapper {
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection .task-wrapper {
   flex: 0 0 calc(50% - 0.26rem);
   max-width: calc(50% - 0.26rem);
 }
 
 /* モーダルの全体（背景部分含む） */
-#io-modal {
+:where(body.chat-page, .chat-page-shell) #io-modal {
   z-index: var(--z-modal-priority, 85);
   padding: clamp(1rem, 3.2vw, 2.2rem);
   background: var(--chat-modal-overlay,
@@ -817,7 +817,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* モーダル内のコンテンツ領域 */
-.io-modal-content {
+:where(body.chat-page, .chat-page-shell) .io-modal-content {
   width: min(820px, calc(100vw - 2rem));
   max-height: min(84vh, 760px);
   overflow: hidden; /* スクロールバーを角丸内に収めるためhiddenに */
@@ -843,7 +843,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   }
 }
 
-.task-detail-modal-shell {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-shell {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -853,7 +853,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   z-index: 1;
 }
 
-.task-detail-modal-header {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -864,7 +864,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   background: var(--chat-modal-header-bg, linear-gradient(135deg, rgba(19, 78, 74, 0.12) 0%, rgba(153, 246, 228, 0.1) 44%, rgba(255, 255, 255, 0.78) 100%));
 }
 
-.task-detail-modal-eyebrow {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-eyebrow {
   margin: 0;
   font-size: var(--text-md, 1rem);
   font-weight: 700;
@@ -873,14 +873,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: var(--primary-dark, #1b5e43);
 }
 
-.task-detail-modal-title {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-title {
   margin: 0.15rem 0 0;
   font-size: clamp(1.25rem, 2.3vw, 1.5rem);
   line-height: 1.25;
   color: #111827;
 }
 
-.task-detail-modal-close {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-close {
   width: var(--tap-target-min, 44px);
   height: var(--tap-target-min, 44px);
   min-width: var(--tap-target-min, 44px);
@@ -900,33 +900,33 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border-color var(--transition-normal, 0.2s ease);
 }
 
-.task-detail-modal-close:hover {
+:where(body.chat-page, .chat-page-shell) .task-detail-modal-close:hover {
   transform: translateY(-1px);
   border-color: rgba(15, 118, 110, 0.42);
   box-shadow: 0 10px 18px rgba(15, 35, 28, 0.12);
 }
 
-.task-detail-sections {
+:where(body.chat-page, .chat-page-shell) .task-detail-sections {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
 }
 
-.task-detail-section {
+:where(body.chat-page, .chat-page-shell) .task-detail-section {
   padding: 0.9rem 1rem;
   border: 1px solid #dcebe4;
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 8px 18px rgba(16, 44, 35, 0.06);
 }
-.task-detail-section-title {
+:where(body.chat-page, .chat-page-shell) .task-detail-section-title {
   margin: 0;
   font-size: var(--text-md, 1rem);
   font-weight: 700;
   color: #064e3b;
 }
 
-.task-detail-section-body {
+:where(body.chat-page, .chat-page-shell) .task-detail-section-body {
   margin-top: 0.52rem;
   font-size: var(--text-md, 1rem);
   line-height: var(--leading-relaxed, 1.6);
@@ -936,12 +936,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   overflow-y: auto;
 }
 
-.task-detail-section-body-compact {
+:where(body.chat-page, .chat-page-shell) .task-detail-section-body-compact {
   max-height: none;
 }
 
 /* タスク選択ヘッダーを横並びに */
-.task-selection-header {
+:where(body.chat-page, .chat-page-shell) .task-selection-header {
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -950,17 +950,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 /* 「新しいプロンプトを投稿」ボタンを左側のテキストから右へ押し出す */
-.task-selection-header #openNewPromptModal {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
   margin-left: auto;
 }
 
 /* タスク編集ボタンとの間に適度な隙間を */
-.task-selection-header #edit-task-order-btn {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn {
   margin-left: 0.5rem;
 }
 
-.task-selection-header #edit-task-order-btn,
-.task-selection-header #openNewPromptModal {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn,
+:where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
   width: 48px;
   height: 48px;
   min-width: 48px;
@@ -973,59 +973,59 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   flex-shrink: 0;
 }
 
-.task-selection-header #edit-task-order-btn {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn {
   --chat-button-base: #0d9488;
   --chat-button-accent: #0f766e;
   --chat-button-shadow-color: rgba(15, 118, 110, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.26);
 }
 
-.task-selection-header #openNewPromptModal {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
   --chat-button-base: #84cc16;
   --chat-button-accent: #65a30d;
   --chat-button-shadow-color: rgba(101, 163, 13, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.task-selection-header #edit-task-order-btn i,
-.task-selection-header #openNewPromptModal i {
+:where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn i,
+:where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal i {
   font-size: 1.2rem;
   line-height: 1;
 }
 
-.task-selection-header p#task-selection-text {
+:where(body.chat-page, .chat-page-shell) .task-selection-header p#task-selection-text {
   flex: 1;
   margin: 0;
   font-weight: 600;
   color: var(--success-strong, #134e4a);
 }
 
-.task-toggle-btn {
+:where(body.chat-page, .chat-page-shell) .task-toggle-btn {
   width: 100%;
   margin-top: 0.1rem;
 }
 
-.setup-access-chat {
+:where(body.chat-page, .chat-page-shell) .setup-access-chat {
   text-align: center;
   margin-top: 0.2rem;
 }
 
-.task-card-action-container {
+:where(body.chat-page, .chat-page-shell) .task-card-action-container {
   position: absolute;
   top: -10px;
   z-index: 10;
 }
 
-.task-card-action-container--delete {
+:where(body.chat-page, .chat-page-shell) .task-card-action-container--delete {
   left: -10px;
 }
 
-.task-card-action-container--edit {
+:where(body.chat-page, .chat-page-shell) .task-card-action-container--edit {
   right: -10px;
 }
 
-.task-card-action-container .card-delete-btn,
-.task-card-action-container .card-edit-btn {
+:where(body.chat-page, .chat-page-shell) .task-card-action-container .card-delete-btn,
+:where(body.chat-page, .chat-page-shell) .task-card-action-container .card-edit-btn {
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -1037,26 +1037,26 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   justify-content: center;
 }
 
-.task-card-action-container .card-delete-btn i,
-.task-card-action-container .card-edit-btn i {
+:where(body.chat-page, .chat-page-shell) .task-card-action-container .card-delete-btn i,
+:where(body.chat-page, .chat-page-shell) .task-card-action-container .card-edit-btn i {
   color: inherit;
 }
 
 /* ===== Mobile Responsive Styles ===== */
 @media (max-width: 768px) {
-  #setup-container {
+  :where(body.chat-page, .chat-page-shell) #setup-container {
     --setup-container-padding-y: 2rem;
     --setup-container-padding-x: 1.8rem;
   }
 
-  .prompt-card {
+  :where(body.chat-page, .chat-page-shell) .prompt-card {
     font-size: var(--setup-card-font-size);
     min-height: var(--setup-card-min-height) !important;
   }
 }
 
 @media (max-width: 576px) {
-  #setup-container {
+  :where(body.chat-page, .chat-page-shell) #setup-container {
     --setup-container-padding-y: 0;
     --setup-container-padding-x: var(--chat-mobile-gutter, 1rem);
     --setup-form-gap: 1rem;
@@ -1086,17 +1086,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
       calc(var(--setup-container-padding-x) + env(safe-area-inset-left, 0px));
   }
 
-  #setup-container::before {
+  :where(body.chat-page, .chat-page-shell) #setup-container::before {
     display: none;
   }
 
-  .setup-form {
+  :where(body.chat-page, .chat-page-shell) .setup-form {
     width: min(100%, 680px);
     margin: 0 auto;
     gap: var(--setup-form-gap);
   }
 
-  .setup-form-title {
+  :where(body.chat-page, .chat-page-shell) .setup-form-title {
     margin-bottom: 0.1rem !important;
     padding-right: 3.2rem;
     text-align: left;
@@ -1105,17 +1105,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     letter-spacing: 0;
   }
 
-  .form-label {
+  :where(body.chat-page, .chat-page-shell) .form-label {
     font-size: 0.92rem;
     line-height: var(--leading-tight, 1.4);
     letter-spacing: 0;
   }
 
-  .setup-info-group .form-label {
+  :where(body.chat-page, .chat-page-shell) .setup-info-group .form-label {
     padding-right: 0;
   }
 
-  .setup-info-field-shell {
+  :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
     padding: 0.52rem;
     border: 1px solid rgba(212, 224, 218, 0.92);
     border-radius: 24px;
@@ -1123,14 +1123,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
   }
 
-  .setup-form textarea,
-  .setup-form select {
+  :where(body.chat-page, .chat-page-shell) .setup-form textarea,
+:where(body.chat-page, .chat-page-shell) .setup-form select {
     border-radius: 18px;
     border-color: rgba(207, 222, 215, 0.96);
     background: rgba(255, 255, 255, 0.98);
   }
 
-  #ai-model.model-select-native {
+  :where(body.chat-page, .chat-page-shell) #ai-model.model-select-native {
     position: static;
     width: 100%;
     height: auto;
@@ -1146,44 +1146,44 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     font-size: 1rem;
   }
 
-  .model-select {
+  :where(body.chat-page, .chat-page-shell) .model-select {
     display: none;
   }
 
-  .chat-save-mode-control {
+  :where(body.chat-page, .chat-page-shell) .chat-save-mode-control {
     top: 0.68rem;
     right: 0.68rem;
   }
 
-  .chat-save-mode-toggle {
+  :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
     width: 2.7rem;
     height: 2.7rem;
   }
 
-  #setup-info {
+  :where(body.chat-page, .chat-page-shell) #setup-info {
     min-height: min(34vh, 11rem);
     max-height: min(38vh, 13rem);
     padding-right: calc(1.6rem + 96px);
     padding-bottom: 3.95rem;
   }
 
-  .setup-info-input-area .setup-send-btn {
+  :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-send-btn {
     right: 0.62rem;
     bottom: 0.62rem;
   }
 
-  .setup-info-input-area .setup-attach-btn {
+  :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
     right: calc(0.62rem + 48px + 0.35rem);
     bottom: 0.62rem;
   }
 
-  .task-selection {
+  :where(body.chat-page, .chat-page-shell) .task-selection {
     gap: var(--setup-task-gap);
     width: 100%;
     overflow-x: hidden;
   }
 
-  .task-selection-header {
+  :where(body.chat-page, .chat-page-shell) .task-selection-header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
@@ -1191,7 +1191,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     margin-bottom: 0.72rem;
   }
 
-  .task-selection-header p#task-selection-text {
+  :where(body.chat-page, .chat-page-shell) .task-selection-header p#task-selection-text {
     grid-column: 1;
     flex: 1 1 auto;
     width: auto;
@@ -1203,16 +1203,16 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     word-break: break-word;
   }
 
-  .task-selection-header #edit-task-order-btn {
+  :where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn {
     margin-left: 0;
   }
 
-  .task-selection-header #openNewPromptModal {
+  :where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
     margin-left: 0;
   }
 
-  .task-selection-header #edit-task-order-btn,
-  .task-selection-header #openNewPromptModal {
+  :where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn,
+:where(body.chat-page, .chat-page-shell) .task-selection-header #openNewPromptModal {
     width: 44px;
     height: 44px;
     min-width: 44px;
@@ -1220,16 +1220,16 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     flex-shrink: 0;
   }
 
-  .task-selection .task-wrapper,
-  #setup-container.setup-fit-compact .task-selection .task-wrapper,
-  #setup-container.setup-fit-tight .task-selection .task-wrapper {
+  :where(body.chat-page, .chat-page-shell) .task-selection .task-wrapper,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection .task-wrapper,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection .task-wrapper {
     flex: 0 1 calc(50% - 0.35rem);
     max-width: calc(50% - 0.35rem);
     min-width: 0;
     box-sizing: border-box;
   }
 
-  .prompt-card {
+  :where(body.chat-page, .chat-page-shell) .prompt-card {
     box-sizing: border-box;
     height: auto;
     min-height: max(var(--setup-card-min-height), 62px) !important;
@@ -1242,11 +1242,11 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     -webkit-tap-highlight-color: transparent;
   }
 
-  .header-container {
+  :where(body.chat-page, .chat-page-shell) .header-container {
     min-width: 0;
   }
 
-  .task-header {
+  :where(body.chat-page, .chat-page-shell) .task-header {
     display: -webkit-box;
     min-width: 0;
     line-height: 1.35;
@@ -1258,7 +1258,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     -webkit-line-clamp: 2;
   }
 
-  .task-detail-toggle {
+  :where(body.chat-page, .chat-page-shell) .task-detail-toggle {
     width: 40px;
     height: 40px;
     min-width: 40px;
@@ -1269,43 +1269,43 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     box-shadow: none !important;
   }
 
-  .task-detail-toggle i {
+  :where(body.chat-page, .chat-page-shell) .task-detail-toggle i {
     font-size: 1rem;
   }
 
-  .task-wrapper.editable {
+  :where(body.chat-page, .chat-page-shell) .task-wrapper.editable {
     touch-action: none;
   }
 
-  .io-container {
+  :where(body.chat-page, .chat-page-shell) .io-container {
     font-size: var(--text-xs, 0.8125rem);
     width: calc(100% - 0.5rem);
   }
 
-  #io-modal {
+  :where(body.chat-page, .chat-page-shell) #io-modal {
     padding: 0.85rem;
   }
 
-  .io-modal-content {
+  :where(body.chat-page, .chat-page-shell) .io-modal-content {
     border-radius: 18px;
     max-height: 88vh;
     padding: 1rem;
   }
 
-  .task-detail-modal-title {
+  :where(body.chat-page, .chat-page-shell) .task-detail-modal-title {
     font-size: 1.2rem;
   }
 
-  .task-detail-modal-close {
+  :where(body.chat-page, .chat-page-shell) .task-detail-modal-close {
     width: 44px;
     height: 44px;
   }
 
-  .task-detail-section {
+  :where(body.chat-page, .chat-page-shell) .task-detail-section {
     padding: 0.78rem 0.82rem;
   }
 
-  .task-detail-section-body {
+  :where(body.chat-page, .chat-page-shell) .task-detail-section-body {
     font-size: var(--text-md, 1rem);
     max-height: 185px;
     overflow-y: auto;
@@ -1313,9 +1313,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 @media (max-width: 360px) {
-  .task-selection .task-wrapper,
-  #setup-container.setup-fit-compact .task-selection .task-wrapper,
-  #setup-container.setup-fit-tight .task-selection .task-wrapper {
+  :where(body.chat-page, .chat-page-shell) .task-selection .task-wrapper,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection .task-wrapper,
+:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection .task-wrapper {
     flex: 1 1 100%;
     max-width: 100%;
   }
@@ -1323,57 +1323,57 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 /* ===== Dark Mode ===== */
 /* Form inputs */
-[data-theme="dark"] .setup-form textarea,
-[data-theme="dark"] .setup-form select {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form textarea,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form select {
   background: rgba(15, 23, 42, 0.95);
   border-color: rgba(148, 163, 184, 0.22);
   color: var(--text-dark, #e5e7eb);
 }
 
-[data-theme="dark"] .setup-form textarea::placeholder {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form textarea::placeholder {
   color: rgba(148, 163, 184, 0.6);
 }
 
-[data-theme="dark"] .setup-form textarea:focus,
-[data-theme="dark"] .setup-form select:focus {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form textarea:focus,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-form select:focus {
   background: rgba(17, 24, 39, 1);
   border-color: rgba(15, 118, 110, 0.52);
 }
 
 /* Model select trigger */
-[data-theme="dark"] .model-select-trigger {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-trigger {
   background: rgba(15, 23, 42, 0.95) !important;
   border-color: rgba(148, 163, 184, 0.22) !important;
   color: var(--text-dark, #e5e7eb) !important;
 }
 
-[data-theme="dark"] .model-select-trigger::after {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-trigger::after {
   border-color: rgba(148, 163, 184, 0.7);
 }
 
-[data-theme="dark"] .model-select.is-open .model-select-trigger,
-[data-theme="dark"] .model-select-trigger:focus {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select.is-open .model-select-trigger,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-trigger:focus {
   background: rgba(17, 24, 39, 1) !important;
   border-color: rgba(15, 118, 110, 0.52) !important;
 }
 
 /* Model select dropdown */
-[data-theme="dark"] .model-select-menu {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-menu {
   background: #0f172a;
   border-color: rgba(15, 118, 110, 0.22);
   box-shadow: 0 18px 34px rgba(2, 6, 23, 0.52);
 }
 
-[data-theme="dark"] .model-select-option {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option {
   color: var(--text-dark, #e5e7eb);
 }
 
-[data-theme="dark"] .model-select-option:hover {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option:hover {
   background: rgba(15, 118, 110, 0.12);
   border-color: rgba(15, 118, 110, 0.3);
 }
 
-[data-theme="dark"] .model-select-option.is-selected {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option.is-selected {
   background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   border-color: rgba(94, 234, 212, 0.72);
   color: #ffffff;
@@ -1383,32 +1383,32 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     inset 3px 0 0 rgba(204, 251, 241, 0.9);
 }
 
-[data-theme="dark"] .model-select-option.is-selected:hover {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .model-select-option.is-selected:hover {
   background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
   border-color: rgba(153, 246, 228, 0.86);
   color: #ffffff;
 }
 
 /* Prompt cards */
-[data-theme="dark"] .prompt-card {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .prompt-card {
   background: rgba(17, 24, 39, 0.88);
   border-color: rgba(15, 118, 110, 0.18);
   color: var(--text-dark, #e5e7eb);
   box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
 }
 
-[data-theme="dark"] .prompt-card:hover {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .prompt-card:hover {
   background: rgba(22, 33, 54, 0.96);
   border-color: rgba(15, 118, 110, 0.44);
   box-shadow: 0 16px 32px rgba(2, 6, 23, 0.4);
 }
 
-[data-theme="dark"] .task-header {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-header {
   color: var(--text-dark, #e5e7eb);
 }
 
 /* Save mode toggle */
-[data-theme="dark"] .chat-save-mode-toggle {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle {
   background:
     radial-gradient(circle at 30% 30%, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.92)),
     rgba(15, 23, 42, 0.94);
@@ -1419,14 +1419,14 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-[data-theme="dark"] .chat-save-mode-toggle:hover {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle:hover {
   border-color: rgba(15, 118, 110, 0.38);
   box-shadow:
     0 14px 28px rgba(15, 118, 110, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-[data-theme="dark"] .chat-save-mode-toggle.is-active {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active {
   background:
     radial-gradient(circle at 30% 30%, rgba(30, 27, 20, 0.96), rgba(20, 18, 14, 0.92)),
     rgba(20, 18, 14, 0.94);
@@ -1434,29 +1434,29 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: #fcd34d;
 }
 
-[data-theme="dark"] .chat-save-mode-feedback.is-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-feedback.is-visible {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(15, 118, 110, 0.24);
   color: #5eead4;
 }
 
-[data-theme="dark"] .chat-save-mode-feedback.is-visible.is-active {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-feedback.is-visible.is-active {
   background: rgba(20, 14, 6, 0.92);
   border-color: rgba(180, 83, 9, 0.3);
   color: #fcd34d;
 }
 
-[data-theme="dark"] .chat-save-mode-toggle__check {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle__check {
   color: #f8fafc;
 }
 
-[data-theme="dark"] .chat-save-mode-toggle.is-active .chat-save-mode-toggle__check {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-save-mode-toggle.is-active .chat-save-mode-toggle__check {
   color: #ffffff;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
 }
 
 /* Setup attach button (dark mode: brighter blue) */
-[data-theme="dark"] .setup-info-input-area .setup-attach-btn {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-input-area .setup-attach-btn {
   --chat-button-base: #34d399;
   --chat-button-accent: #10b981;
   --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
@@ -1497,20 +1497,20 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   color: #2dd4bf;
 }
 
-[data-theme="dark"] .task-detail-modal-close:hover {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-modal-close:hover {
   border-color: rgba(15, 118, 110, 0.44);
   box-shadow: 0 10px 18px rgba(2, 6, 23, 0.28);
 }
 
 /* IO modal */
-[data-theme="dark"] .io-modal-content {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .io-modal-content {
   background: linear-gradient(145deg, #111827 0%, #0d1b2e 100%);
   border-color: rgba(15, 118, 110, 0.26);
   box-shadow: 0 30px 60px rgba(2, 6, 23, 0.55);
 }
 
 /* IO container (task card tooltip) */
-[data-theme="dark"] .io-container {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .io-container {
   background: rgba(17, 24, 39, 0.97);
   border-color: rgba(15, 118, 110, 0.28);
   color: var(--text-dark, #e5e7eb);
@@ -1518,25 +1518,25 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 }
 
 @media (max-width: 576px) {
-  [data-theme="dark"] #setup-container {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #setup-container {
     background:
       linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(8, 13, 24, 0.98) 100%),
       #0b1220;
   }
 
-  [data-theme="dark"] .setup-info-field-shell {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .setup-info-field-shell {
     border-color: rgba(148, 163, 184, 0.2);
     background: rgba(17, 24, 39, 0.78);
     box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
   }
 
-  [data-theme="dark"] #ai-model.model-select-native {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #ai-model.model-select-native {
     background: rgba(15, 23, 42, 0.95);
     border-color: rgba(148, 163, 184, 0.22);
     color: var(--text-dark, #e5e7eb);
   }
 
-  [data-theme="dark"] .task-detail-toggle {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle {
     background: rgba(15, 118, 110, 0.18) !important;
     border-color: rgba(15, 118, 110, 0.38) !important;
     color: #5eead4 !important;

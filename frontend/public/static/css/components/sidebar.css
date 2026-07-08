@@ -1,7 +1,7 @@
 /* sidebar.css
    Sidebar layout and chat room list card styles. Breakpoints are managed in
    base/responsive.css. */
-.sidebar {
+:where(body.chat-page, .chat-page-shell) .sidebar {
   width: 280px;
   background: var(--surface-sidebar, #f7f8f7);
   padding: 0.85rem;
@@ -15,7 +15,7 @@
 }
 
 /* プロジェクトセクション（サイドバー上部） */
-.sidebar-projects {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -24,14 +24,14 @@
   border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
 }
 
-.sidebar-projects__header {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.1rem 0.15rem;
 }
 
-.sidebar-projects__title {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__title {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -42,7 +42,7 @@
   color: var(--text-secondary, #6b7280);
 }
 
-.sidebar-projects__add {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -57,19 +57,19 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.sidebar-projects__add:hover,
-.sidebar-projects__add:focus-visible {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__add:hover,
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__add:focus-visible {
   background: rgba(0, 0, 0, 0.06);
   color: var(--text-dark, #1a1a1a);
 }
 
-.sidebar-projects__list {
+:where(body.chat-page, .chat-page-shell) .sidebar-projects__list {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
-.sidebar-project-card {
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -87,18 +87,18 @@
   transition: background var(--transition-fast, 0.15s ease);
 }
 
-.sidebar-project-card:hover,
-.sidebar-project-card:focus-visible {
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card:hover,
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card:focus-visible {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.sidebar-project-card__icon {
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card__icon {
   flex: 0 0 auto;
   color: var(--primary-color, #19c37d);
   font-size: 0.95rem;
 }
 
-.sidebar-project-card__name {
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card__name {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -106,7 +106,7 @@
   text-overflow: ellipsis;
 }
 
-.sidebar-project-card__count {
+:where(body.chat-page, .chat-page-shell) .sidebar-project-card__count {
   flex: 0 0 auto;
   min-width: 1.25rem;
   padding: 0.05rem 0.4rem;
@@ -118,36 +118,36 @@
   text-align: center;
 }
 
-[data-theme="dark"] .sidebar-projects {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-projects {
   border-bottom-color: rgba(148, 163, 184, 0.16);
 }
 
-[data-theme="dark"] .sidebar-projects__add:hover,
-[data-theme="dark"] .sidebar-projects__add:focus-visible,
-[data-theme="dark"] .sidebar-project-card:hover,
-[data-theme="dark"] .sidebar-project-card:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-projects__add:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-projects__add:focus-visible,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-project-card:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-project-card:focus-visible {
   background: rgba(148, 163, 184, 0.14);
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .sidebar-project-card {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-project-card {
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .sidebar-project-card__count {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .sidebar-project-card__count {
   background: rgba(148, 163, 184, 0.18);
   color: #cbd5e1;
 }
 
 /* チャット検索ボックス */
-.chat-room-search {
+:where(body.chat-page, .chat-page-shell) .chat-room-search {
   position: relative;
   display: flex;
   align-items: center;
   margin: 0.15rem 0 0.4rem;
 }
 
-.chat-room-search__icon {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__icon {
   position: absolute;
   left: 0.7rem;
   font-size: 0.92rem;
@@ -155,7 +155,7 @@
   pointer-events: none;
 }
 
-.chat-room-search__input {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__input {
   width: 100%;
   min-height: 40px;
   padding: 0.5rem 2.1rem 0.5rem 2.1rem;
@@ -172,22 +172,22 @@
   appearance: none;
 }
 
-.chat-room-search__input::placeholder {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__input::placeholder {
   color: var(--text-secondary, #9ca3af);
 }
 
-.chat-room-search__input:focus {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__input:focus {
   border-color: rgba(25, 195, 125, 0.5);
   box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.14);
 }
 
 /* ブラウザ標準の検索クリアアイコンを隠し、独自ボタンと重複させない */
-.chat-room-search__input::-webkit-search-cancel-button {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__input::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
 }
 
-.chat-room-search__clear {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__clear {
   position: absolute;
   right: 0.45rem;
   display: inline-flex;
@@ -204,14 +204,14 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.chat-room-search__clear:hover,
-.chat-room-search__clear:focus-visible {
+:where(body.chat-page, .chat-page-shell) .chat-room-search__clear:hover,
+:where(body.chat-page, .chat-page-shell) .chat-room-search__clear:focus-visible {
   background: rgba(0, 0, 0, 0.06);
   color: var(--text-dark, #1a1a1a);
 }
 
 /* 検索結果が空のときの案内 */
-.chat-room-search-empty {
+:where(body.chat-page, .chat-page-shell) .chat-room-search-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -221,37 +221,37 @@
   color: var(--text-secondary, #6b7280);
 }
 
-.chat-room-search-empty__icon {
+:where(body.chat-page, .chat-page-shell) .chat-room-search-empty__icon {
   font-size: 1.3rem;
   opacity: 0.6;
 }
 
-.chat-room-search-empty__text {
+:where(body.chat-page, .chat-page-shell) .chat-room-search-empty__text {
   font-size: 0.82rem;
   line-height: 1.45;
   word-break: break-word;
 }
 
 /* 追加読み込み中インジケータ（スクロールページネーション） */
-.chat-room-list__loading {
+:where(body.chat-page, .chat-page-shell) .chat-room-list__loading {
   display: flex;
   justify-content: center;
   padding: 0.6rem 0 0.4rem;
 }
 
-.chat-room-list__sentinel {
+:where(body.chat-page, .chat-page-shell) .chat-room-list__sentinel {
   width: 100%;
   min-height: 1px;
 }
 
-.chat-room-list__skeleton {
+:where(body.chat-page, .chat-page-shell) .chat-room-list__skeleton {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
 /* ルームカード */
-.chat-room-card {
+:where(body.chat-page, .chat-page-shell) .chat-room-card {
   background: transparent;
   /* タッチ端末で十分なタップ領域を確保 (min 44px) */
   padding: 0.7rem 0.85rem;
@@ -273,17 +273,17 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.chat-room-card--skeleton {
+:where(body.chat-page, .chat-page-shell) .chat-room-card--skeleton {
   cursor: default;
   pointer-events: none;
   justify-content: flex-start;
 }
 
-.chat-room-card--skeleton .cc-skeleton {
+:where(body.chat-page, .chat-page-shell) .chat-room-card--skeleton .cc-skeleton {
   height: 0.9rem;
 }
 
-.chat-room-card__trigger {
+:where(body.chat-page, .chat-page-shell) .chat-room-card__trigger {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -297,7 +297,7 @@
   cursor: pointer;
 }
 
-.chat-room-card__check {
+:where(body.chat-page, .chat-page-shell) .chat-room-card__check {
   width: 1.35rem;
   min-width: 1.35rem;
   height: 1.35rem;
@@ -310,28 +310,28 @@
   font-size: 1rem;
 }
 
-.chat-room-card--selectable {
+:where(body.chat-page, .chat-page-shell) .chat-room-card--selectable {
   cursor: pointer;
 }
 
-.chat-room-card--selected {
+:where(body.chat-page, .chat-page-shell) .chat-room-card--selected {
   background: rgba(15, 118, 110, 0.1);
   border-color: rgba(15, 118, 110, 0.24);
 }
 
-.chat-room-card--menu-open {
+:where(body.chat-page, .chat-page-shell) .chat-room-card--menu-open {
   z-index: 5;
 }
 
-.chat-room-card.active.chat-room-card--selected {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active.chat-room-card--selected {
   background: var(--primary-hover, #15a86b);
 }
 
-.chat-room-card.active .chat-room-card__check {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active .chat-room-card__check {
   color: #ffffff;
 }
 
-.chat-room-card__title-row {
+:where(body.chat-page, .chat-page-shell) .chat-room-card__title-row {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -339,7 +339,7 @@
   width: 100%;
 }
 
-.chat-room-card__mode-badge {
+:where(body.chat-page, .chat-page-shell) .chat-room-card__mode-badge {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -353,19 +353,19 @@
   letter-spacing: 0.03em;
 }
 
-.chat-room-card:focus-within {
+:where(body.chat-page, .chat-page-shell) .chat-room-card:focus-within {
   border-color: rgba(25, 195, 125, 0.4);
   box-shadow: 0 0 0 3px rgba(25, 195, 125, 0.16);
 }
 
-.chat-room-card__title-row > span:first-child {
+:where(body.chat-page, .chat-page-shell) .chat-room-card__title-row > span:first-child {
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.chat-room-card-actions {
+:where(body.chat-page, .chat-page-shell) .chat-room-card-actions {
   display: flex;
   align-items: center;
   position: relative;
@@ -373,7 +373,7 @@
   z-index: 1;
 }
 
-.chat-room-card:hover {
+:where(body.chat-page, .chat-page-shell) .chat-room-card:hover {
   background: rgba(0, 0, 0, 0.04);
   border-color: transparent;
   transform: none;
@@ -381,31 +381,31 @@
 }
 
 /* タッチフィードバック */
-.chat-room-card:active {
+:where(body.chat-page, .chat-page-shell) .chat-room-card:active {
   background: rgba(0, 0, 0, 0.07);
 }
 
-.chat-room-card.active {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active {
   background: var(--primary-color, #19c37d);
   color: #fff;
   border-color: transparent;
   box-shadow: 0 2px 8px rgba(25, 195, 125, 0.3);
 }
 
-.chat-room-card.active:hover {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active:hover {
   background: var(--primary-hover, #15a86b);
 }
 
-.chat-room-card.active:active {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active:active {
   background: #139259;
 }
 
-.chat-room-card.active .chat-room-card__mode-badge {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active .chat-room-card__mode-badge {
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
 }
 
-.room-actions-icon {
+:where(body.chat-page, .chat-page-shell) .room-actions-icon {
   cursor: pointer;
   margin-left: 8px;
   font-size: 1.1em;
@@ -423,19 +423,19 @@
   justify-content: center;
 }
 
-.room-actions-icon:focus-visible,
-.room-actions-menu .menu-item:focus-visible,
-.chat-room-card__trigger:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-icon:focus-visible,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item:focus-visible,
+:where(body.chat-page, .chat-page-shell) .chat-room-card__trigger:focus-visible {
   outline: 2px solid rgba(25, 195, 125, 0.7);
   outline-offset: 2px;
 }
 
-.chat-room-card:hover .room-actions-icon,
-.chat-room-card.active .room-actions-icon {
+:where(body.chat-page, .chat-page-shell) .chat-room-card:hover .room-actions-icon,
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active .room-actions-icon {
   opacity: 1;
 }
 
-.room-actions-menu {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu {
   position: absolute;
   top: calc(100% + 5px);
   right: 0;
@@ -457,7 +457,7 @@
   transform-origin: top right;
 }
 
-.room-actions-menu.is-open {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu.is-open {
   display: flex;
   animation: roomMenuOpen 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -473,11 +473,11 @@
   }
 }
 
-.chat-room-card.active .room-actions-menu {
+:where(body.chat-page, .chat-page-shell) .chat-room-card.active .room-actions-menu {
   color: var(--text-dark, #1a1a1a);
 }
 
-.room-actions-menu .menu-item {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item {
   padding: 0.5rem 0.85rem;
   white-space: nowrap;
   cursor: pointer;
@@ -496,40 +496,40 @@
   text-align: left;
 }
 
-.room-actions-menu .menu-item:last-child {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item:last-child {
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.room-actions-menu .menu-item__icon {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item__icon {
   margin-right: 0;
   font-size: 0.88em;
   flex-shrink: 0;
 }
 
-.room-actions-menu .menu-item--rename {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename {
   color: #1c1c1e;
 }
 
-.room-actions-menu .menu-item--rename:hover,
-.room-actions-menu .menu-item--rename:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:hover,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.room-actions-menu .menu-item--select {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select {
   color: #0f766e;
 }
 
-.room-actions-menu .menu-item--select:hover,
-.room-actions-menu .menu-item--select:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select:hover,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select:focus-visible {
   background: rgba(15, 118, 110, 0.08);
 }
 
-.room-actions-menu__section {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu__section {
   padding: 0.25rem 0;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.room-actions-menu__label {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu__label {
   min-height: 34px;
   padding: 0.42rem 0.85rem;
   display: flex;
@@ -541,43 +541,43 @@
   white-space: nowrap;
 }
 
-.room-actions-menu .menu-item--project {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project {
   color: #1f4f46;
   min-height: 34px;
 }
 
-.room-actions-menu .menu-item--project:hover,
-.room-actions-menu .menu-item--project:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project:hover,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project:focus-visible {
   background: rgba(31, 79, 70, 0.08);
 }
 
-.room-actions-menu .menu-item--project.is-disabled {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project.is-disabled {
   color: #64748b;
   cursor: default;
 }
 
-.room-actions-menu .menu-item__project-name {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item__project-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.room-actions-menu .menu-item--delete {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete {
   color: #dc2626;
 }
 
-.room-actions-menu .menu-item--delete:hover,
-.room-actions-menu .menu-item--delete:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete:hover,
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete:focus-visible {
   background: rgba(220, 38, 38, 0.07);
 }
 
-.room-actions-menu .menu-item:active {
+:where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item:active {
   opacity: 0.7;
   transition: none;
 }
 
-.room-selection-bar {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar {
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;
@@ -590,7 +590,7 @@
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.room-selection-bar__count {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__count {
   min-width: 0;
   padding-left: 0.35rem;
   color: var(--text-secondary, #6b7280);
@@ -601,7 +601,7 @@
   text-overflow: ellipsis;
 }
 
-.room-selection-bar__button {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button {
   min-height: 36px;
   padding: 0.45rem 0.62rem;
   border-radius: var(--radius-sm, 8px);
@@ -617,24 +617,24 @@
   cursor: pointer;
 }
 
-.room-selection-bar__button--danger {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button--danger {
   border-color: rgba(220, 38, 38, 0.2);
   color: #dc2626;
 }
 
-.room-selection-bar__button:hover:not(:disabled),
-.room-selection-bar__button:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button:hover:not(:disabled),
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button:focus-visible {
   border-color: rgba(15, 118, 110, 0.32);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
-.room-selection-bar__button--danger:hover:not(:disabled),
-.room-selection-bar__button--danger:focus-visible {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button--danger:hover:not(:disabled),
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button--danger:focus-visible {
   border-color: rgba(220, 38, 38, 0.28);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
-.room-selection-bar__button:disabled {
+:where(body.chat-page, .chat-page-shell) .room-selection-bar__button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -642,42 +642,42 @@
 /* ─── モバイル (≤992px) タッチ向け調整 ─── */
 @media (max-width: 992px) {
   /* タッチ端末ではアクションアイコンを常に表示 */
-  .room-actions-icon {
+  :where(body.chat-page, .chat-page-shell) .room-actions-icon {
     opacity: 0.5;
   }
 
-  .chat-room-card.active .room-actions-icon {
+  :where(body.chat-page, .chat-page-shell) .chat-room-card.active .room-actions-icon {
     opacity: 0.85;
   }
 }
 
 /* ─── ダークモード ─── */
-[data-theme="dark"] .chat-room-search__input {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__input {
   background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.22);
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .chat-room-search__input::placeholder {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__input::placeholder {
   color: rgba(148, 163, 184, 0.8);
 }
 
-[data-theme="dark"] .chat-room-search__input:focus {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__input:focus {
   border-color: rgba(94, 234, 212, 0.5);
   box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.14);
 }
 
-[data-theme="dark"] .chat-room-search__clear:hover,
-[data-theme="dark"] .chat-room-search__clear:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__clear:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search__clear:focus-visible {
   background: rgba(148, 163, 184, 0.16);
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .chat-room-search-empty {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-search-empty {
   color: rgba(148, 163, 184, 0.9);
 }
 
-[data-theme="dark"] .room-actions-menu {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu {
   background: rgba(17, 24, 39, 0.98);
   border-color: rgba(148, 163, 184, 0.2);
   box-shadow:
@@ -686,82 +686,82 @@
     0 0 0 0.5px rgba(148, 163, 184, 0.1);
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--rename {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename {
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--rename:hover,
-[data-theme="dark"] .room-actions-menu .menu-item--rename:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--rename:focus-visible {
   background: rgba(148, 163, 184, 0.12);
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--select {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select {
   color: #5eead4;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--select:hover,
-[data-theme="dark"] .room-actions-menu .menu-item--select:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--select:focus-visible {
   background: rgba(94, 234, 212, 0.12);
 }
 
-[data-theme="dark"] .room-actions-menu__section {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu__section {
   border-top-color: rgba(148, 163, 184, 0.12);
 }
 
-[data-theme="dark"] .room-actions-menu__label {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu__label {
   color: #94a3b8;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--project {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project {
   color: #99f6e4;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--project:hover,
-[data-theme="dark"] .room-actions-menu .menu-item--project:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project:focus-visible {
   background: rgba(45, 212, 191, 0.12);
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--project.is-disabled {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--project.is-disabled {
   color: #64748b;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--delete {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete {
   color: #f87171;
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item--delete:hover,
-[data-theme="dark"] .room-actions-menu .menu-item--delete:focus-visible {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item--delete:focus-visible {
   background: rgba(248, 113, 113, 0.12);
 }
 
-[data-theme="dark"] .room-actions-menu .menu-item:last-child {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-actions-menu .menu-item:last-child {
   border-top-color: rgba(148, 163, 184, 0.12);
 }
 
-[data-theme="dark"] .chat-room-card--selected {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-card--selected {
   background: rgba(94, 234, 212, 0.12);
   border-color: rgba(94, 234, 212, 0.24);
 }
 
-[data-theme="dark"] .room-selection-bar {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-selection-bar {
   background: rgba(15, 23, 42, 0.68);
   border-color: rgba(148, 163, 184, 0.16);
 }
 
-[data-theme="dark"] .room-selection-bar__button {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-selection-bar__button {
   background: rgba(15, 23, 42, 0.94);
   border-color: rgba(148, 163, 184, 0.2);
   color: #e2e8f0;
 }
 
-[data-theme="dark"] .room-selection-bar__button--danger {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .room-selection-bar__button--danger {
   border-color: rgba(248, 113, 113, 0.24);
   color: #f87171;
 }
 
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
-  .sidebar {
+  :where(body.chat-page, .chat-page-shell) .sidebar {
     padding:
       /* サイドバートグルボタンの高さ分だけ上を空ける */
       calc(3.6rem + env(safe-area-inset-top, 0px))
@@ -773,19 +773,19 @@
     overscroll-behavior: contain;
   }
 
-  .new-chat-btn {
+  :where(body.chat-page, .chat-page-shell) .new-chat-btn {
     /* タップターゲットを広げる */
     min-height: 48px;
     padding: 0.72rem 1rem;
   }
 
-  .chat-room-search__input {
+  :where(body.chat-page, .chat-page-shell) .chat-room-search__input {
     /* タップ時のズームを防ぐため 16px 以上を確保 */
     min-height: 46px;
     font-size: 16px;
   }
 
-  .chat-room-card {
+  :where(body.chat-page, .chat-page-shell) .chat-room-card {
     min-height: 52px;
     padding: 0.72rem 0.78rem;
     font-size: 0.9rem;
@@ -797,7 +797,7 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .room-actions-icon {
+  :where(body.chat-page, .chat-page-shell) .room-actions-icon {
     width: 44px;
     height: 44px;
     min-width: 44px;
@@ -805,17 +805,17 @@
     margin-right: -0.35rem;
   }
 
-  .room-actions-menu {
+  :where(body.chat-page, .chat-page-shell) .room-actions-menu {
     right: 0;
     left: auto;
     min-width: 168px;
   }
 
-  .menu-item {
+  :where(body.chat-page, .chat-page-shell) .menu-item {
     min-height: 44px;
   }
 
-  [data-theme="dark"] .chat-room-card {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-card {
     background: rgba(15, 23, 42, 0.62);
     border-color: rgba(148, 163, 184, 0.12);
   }
