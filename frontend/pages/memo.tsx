@@ -1343,9 +1343,7 @@ export default function MemoPage() {
         description={memoPageDescription}
         canonicalPath="/memo"
         structuredData={memoStructuredData}
-      >
-        <link rel="stylesheet" href="/memo/static/css/memo_form.css" />
-      </SeoHead>
+      />
 
       <div className="memo-page-shell cc-page-rise">
         {/* 検索エンジン・支援技術向けの説明的なページ見出し（視覚的には非表示） */}

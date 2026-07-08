@@ -138,9 +138,7 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         ogType="article"
         noindex={Boolean(payload.error || !memo)}
         structuredData={structuredData}
-      >
-        <link rel="stylesheet" href="/static/css/pages/shared_memo.css" />
-      </SeoHead>
+      />
 
       <div className="shared-memo-page">
         {/* エラー時はエラーメッセージを表示 / Show error message on failure */}

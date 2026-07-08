@@ -1,6 +1,0 @@
-/* index.css
-   Entry point for the user settings page. Imports base styles and page
-   overrides. */
-@import url('../../base/base.css');
-@import url('../../base/global.css');
-@import url('user_settings.css');

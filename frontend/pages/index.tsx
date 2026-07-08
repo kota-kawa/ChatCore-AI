@@ -113,9 +113,7 @@ export default function HomePage() {
         title="ChatCore-AI | 日本語AIチャット・プロンプト共有・メモ管理"
         canonicalPath="/"
         structuredData={homeStructuredData}
-      >
-        <link rel="stylesheet" href="/static/css/pages/chat/page.css" />
-      </SeoHead>
+      />
 
       <HomePageContextProvider controller={controller}>
         <div className="chat-page-shell cc-page-rise">
