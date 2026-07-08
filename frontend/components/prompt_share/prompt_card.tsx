@@ -63,6 +63,7 @@ function PromptCardComponent({
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);
+  const menuId = `prompt-actions-menu-${promptId}`;
 
   // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
@@ -110,6 +111,7 @@ function PromptCardComponent({
           aria-label="その他の操作"
           aria-haspopup="true"
           aria-expanded={isDropdownOpen ? "true" : "false"}
+          aria-controls={menuId}
           data-tooltip="その他の操作"
           data-tooltip-placement="left"
           onClick={(event) => {
@@ -124,8 +126,10 @@ function PromptCardComponent({
       {/* ドロップダウンもカードクリックを遮断し、意図しない詳細モーダルの起動を避ける */}
       {/* Dropdown also stops propagation to prevent unintended detail modal trigger */}
       <div
+        id={menuId}
         className={`prompt-actions-dropdown${isDropdownOpen ? " is-open" : ""}`}
         role="menu"
+        aria-hidden={isDropdownOpen ? "false" : "true"}
         onClick={(event) => {
           event.stopPropagation();
         }}
@@ -139,7 +143,8 @@ function PromptCardComponent({
             onOpenShare(prompt, event);
           }}
         >
-          共有する
+          <i className="bi bi-share"></i>
+          <span>共有する</span>
         </button>
         <button
           className="dropdown-item cc-press"
@@ -149,7 +154,8 @@ function PromptCardComponent({
             onCloseDropdown();
           }}
         >
-          ミュート
+          <i className="bi bi-bell-slash"></i>
+          <span>ミュート</span>
         </button>
         <button
           className="dropdown-item cc-press"
@@ -159,7 +165,8 @@ function PromptCardComponent({
             onCloseDropdown();
           }}
         >
-          報告する
+          <i className="bi bi-flag"></i>
+          <span>報告する</span>
         </button>
       </div>
 
