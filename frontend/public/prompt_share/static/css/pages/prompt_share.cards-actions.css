@@ -371,7 +371,6 @@
   padding: 0;
   box-shadow: none;
   transition:
-    transform 0.18s ease,
     background 0.18s ease,
     color 0.18s ease,
     box-shadow 0.18s ease;
@@ -380,27 +379,15 @@
   overflow: hidden;
 }
 
-.prompt-share-page .meatball-menu::before {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border-radius: inherit;
-  background: rgba(47, 115, 199, 0.14);
-  opacity: 0;
-  transform: scale(0.58);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  pointer-events: none;
-}
-
 .prompt-share-page .meatball-menu:hover {
   background: #edf2f7;
   color: #2d3748;
 }
 
-.prompt-share-page .meatball-menu:hover::before,
-.prompt-share-page .meatball-menu[aria-expanded="true"]::before {
-  opacity: 1;
-  transform: scale(1);
+.prompt-share-page .meatball-menu:hover:not(:disabled),
+.prompt-share-page .meatball-menu:active:not(:disabled),
+.prompt-share-page .meatball-menu[aria-expanded="true"] {
+  transform: none;
 }
 
 .prompt-share-page .prompt-action-btn i,
@@ -420,10 +407,6 @@
   opacity: 1 !important;
   position: relative;
   z-index: 1;
-}
-
-.prompt-share-page .meatball-menu i {
-  transition: transform 0.24s cubic-bezier(0.2, 1.32, 0.32, 1), color 0.18s ease;
 }
 
 .prompt-share-page .prompt-action-btn.like-btn::before,
@@ -600,10 +583,6 @@
   box-shadow: 0 10px 24px rgba(47, 115, 199, 0.18);
 }
 
-.prompt-share-page .meatball-menu[aria-expanded="true"] i {
-  transform: rotate(90deg) scale(1.05);
-}
-
 .prompt-share-page .prompt-actions-dropdown {
   position: absolute;
   top: 42px;
@@ -726,15 +705,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .prompt-share-page .meatball-menu::before,
-  .prompt-share-page .meatball-menu i,
   .prompt-share-page .prompt-actions-dropdown,
   .prompt-share-page .prompt-actions-dropdown .dropdown-item {
     transition-duration: 0.01ms !important;
     transition-delay: 0s !important;
   }
 
-  .prompt-share-page .meatball-menu[aria-expanded="true"] i,
   .prompt-share-page .prompt-actions-dropdown,
   .prompt-share-page .prompt-actions-dropdown .dropdown-item,
   .prompt-share-page .prompt-actions-dropdown.is-open,
