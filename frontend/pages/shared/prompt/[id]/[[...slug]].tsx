@@ -254,9 +254,7 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
         ogType="article"
         noindex={Boolean(payload.error || !prompt)}
         structuredData={structuredData}
-      >
-        <link rel="stylesheet" href="/static/css/pages/shared_prompt.css" />
-      </SeoHead>
+      />
 
       <div className="shared-prompt-page">
         {payload.error ? (

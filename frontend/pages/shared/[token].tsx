@@ -190,9 +190,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
         ogType="article"
         noindex={Boolean(payload.error)}
         structuredData={structuredData}
-      >
-        <link rel="stylesheet" href="/static/css/pages/chat/shared_chat.css" />
-      </SeoHead>
+      />
 
       <div className="shared-chat-page">
         {/* エラー時はエラーメッセージのみ表示する / Show only the error message when the fetch failed */}

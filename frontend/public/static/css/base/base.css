@@ -1,6 +1,0 @@
-/* base.css
-   Aggregates foundational style modules. */
-@import url('variables.css');
-@import url('animations.css');
-@import url('buttons.css');
-@import url('responsive.css');

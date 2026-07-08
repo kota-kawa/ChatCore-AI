@@ -1959,9 +1959,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         description={promptShareDescription}
         canonicalPath="/prompt_share"
         structuredData={promptShareStructuredData}
-      >
-        <link rel="stylesheet" href="/prompt_share/static/css/pages/prompt_share.css" />
-      </SeoHead>
+      />
 
       {/* プロンプト一覧・検索・フィルタを含むページレイアウト / Page layout containing the prompt list, search bar, and filters */}
       <PromptSharePageLayout
