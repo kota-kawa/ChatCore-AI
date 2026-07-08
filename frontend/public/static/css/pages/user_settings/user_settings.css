@@ -2,7 +2,7 @@
    Styles specific to the user settings page. Base styles are imported via
    index.css. */
 /* ───────── 戻るボタン（.settings-back-btn）基本スタイル ───────── */
-.settings-back-btn {
+:where(body.settings-page, .user-settings-page) .settings-back-btn {
   background: var(--primary-color) !important; /* 緑色 */
   color: var(--text-light);
   width: 3rem;           /* 正円サイズ */
@@ -18,12 +18,12 @@
   transition: transform 0.2s ease, filter 0.2s ease;
 }
 
-.settings-back-btn i {
+:where(body.settings-page, .user-settings-page) .settings-back-btn i {
   font-size: 1.2rem;
   line-height: 1;
 }
 
-.settings-back-btn:hover {
+:where(body.settings-page, .user-settings-page) .settings-back-btn:hover {
   transform: translateY(-1px);
   filter: brightness(0.95);
 }
@@ -33,7 +33,7 @@
    ヘッダ行の少し下 (top: 1rem) に固定配置します。
 */
 @media (min-width: 577px) {
-  .settings-back-btn {
+  :where(body.settings-page, .user-settings-page) .settings-back-btn {
     position: fixed;
     top: 1rem;
     left: calc(260px + 1rem); /* サイドバー幅 + 余白 */
@@ -46,7 +46,7 @@
    画面左上に固定しますが、チャット画面ほど高い位置ではない適切な位置に配置
 */
 @media (max-width: 576px) {
-  .settings-back-btn {
+  :where(body.settings-page, .user-settings-page) .settings-back-btn {
     position: fixed !important;
     top: 1.5rem !important;   /* チャット画面より低い位置に調整 */
     left: 0.75rem !important;
@@ -58,49 +58,49 @@
 /* ─────────────────────────── */
 /* セクション管理               */
 /* ─────────────────────────── */
-.settings-section {
+:where(body.settings-page, .user-settings-page) .settings-section {
   display: none;
 }
 
-.settings-section.active {
+:where(body.settings-page, .user-settings-page) .settings-section.active {
   display: block;
 }
 
-.security-stack {
+:where(body.settings-page, .user-settings-page) .security-stack {
   display: grid;
   gap: 1rem;
 }
 
-.security-panel {
+:where(body.settings-page, .user-settings-page) .security-panel {
   padding: 1rem 1.1rem;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   background: #fff;
 }
 
-.security-panel__description {
+:where(body.settings-page, .user-settings-page) .security-panel__description {
   margin: 0 0 0.75rem;
   color: var(--settings-text-muted);
   line-height: 1.6;
 }
 
-.email-change-current {
+:where(body.settings-page, .user-settings-page) .email-change-current {
   margin: 0 0 1rem;
   color: var(--settings-text-muted);
 }
 
-.email-change-current strong {
+:where(body.settings-page, .user-settings-page) .email-change-current strong {
   color: var(--settings-text);
   overflow-wrap: anywhere;
 }
 
-.email-change-form {
+:where(body.settings-page, .user-settings-page) .email-change-form {
   display: grid;
   gap: 0.85rem;
   margin-top: 1rem;
 }
 
-.security-panel--danger {
+:where(body.settings-page, .user-settings-page) .security-panel--danger {
   display: grid;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
@@ -108,56 +108,56 @@
   background: rgba(254, 242, 242, 0.72);
 }
 
-.account-delete-header {
+:where(body.settings-page, .user-settings-page) .account-delete-header {
   display: grid;
   gap: 0.25rem;
 }
 
-.account-delete-header h3 {
+:where(body.settings-page, .user-settings-page) .account-delete-header h3 {
   margin: 0;
   font-size: 1rem;
 }
 
-.account-delete-copy {
+:where(body.settings-page, .user-settings-page) .account-delete-copy {
   margin: 0;
   color: var(--settings-text-muted);
   font-size: 0.92rem;
   line-height: 1.45;
 }
 
-.account-delete-confirmation {
+:where(body.settings-page, .user-settings-page) .account-delete-confirmation {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
   align-items: end;
   gap: 0.75rem;
 }
 
-.account-delete-field .form-label {
+:where(body.settings-page, .user-settings-page) .account-delete-field .form-label {
   margin-bottom: 0.35rem;
   font-size: 0.9rem;
 }
 
-.account-delete-field .custom-form-control {
+:where(body.settings-page, .user-settings-page) .account-delete-field .custom-form-control {
   padding: 0.7rem 0.85rem;
 }
 
-.account-delete-confirmation .danger-button {
+:where(body.settings-page, .user-settings-page) .account-delete-confirmation .danger-button {
   min-height: 42px;
   padding: 0.7rem 1.1rem;
   white-space: nowrap;
 }
 
-.security-panel--danger .settings-inline-feedback {
+:where(body.settings-page, .user-settings-page) .security-panel--danger .settings-inline-feedback {
   margin: 0;
   padding: 0.65rem 0.75rem;
   font-size: 0.9rem;
 }
-.passkey-list {
+:where(body.settings-page, .user-settings-page) .passkey-list {
   display: grid;
   gap: 0.75rem;
 }
 
-.passkey-item {
+:where(body.settings-page, .user-settings-page) .passkey-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -167,13 +167,13 @@
   background: #f7faf8;
 }
 
-.passkey-meta {
+:where(body.settings-page, .user-settings-page) .passkey-meta {
   color: #5f6b66;
   font-size: 0.92rem;
   line-height: 1.5;
 }
 
-.passkey-empty {
+:where(body.settings-page, .user-settings-page) .passkey-empty {
   margin: 0;
   color: #5f6b66;
 }
@@ -181,7 +181,7 @@
 /* ─────────────────────────── */
 /* 投稿したプロンプト用スタイル（モダン改善） */
 /* ─────────────────────────── */
-.header-bar {
+:where(body.settings-page, .user-settings-page) .header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -190,7 +190,7 @@
   margin-bottom: 1.5rem;
 }
 
-.section-title {
+:where(body.settings-page, .user-settings-page) .section-title {
   color: var(--primary-color);
   font-size: 1.4rem;
   font-weight: 700;
@@ -198,7 +198,7 @@
   letter-spacing: -0.01em;
 }
 
-.prompt-grid {
+:where(body.settings-page, .user-settings-page) .prompt-grid {
   --prompt-card-width: clamp(260px, 45%, 340px);
   --prompt-grid-gap: 1.25rem;
   display: grid;
@@ -209,14 +209,14 @@
   width: 100%;
 }
 
-.prompt-card {
+:where(body.settings-page, .user-settings-page) .prompt-card {
   --prompt-card-radius: 16px;
   display: flex;
   flex-direction: column;
   background: #ffffff;
   border-radius: var(--prompt-card-radius);
   border: 1px solid rgba(15, 23, 42, 0.06);
-  box-shadow: 
+  box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.05),
     0 8px 24px rgba(15, 23, 42, 0.04);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -226,20 +226,20 @@
   background-clip: padding-box;
 }
 
-.prompt-card:hover {
+:where(body.settings-page, .user-settings-page) .prompt-card:hover {
   transform: translateY(-4px);
-  box-shadow: 
+  box-shadow:
     0 4px 6px rgba(0, 0, 0, 0.05),
     0 20px 40px rgba(15, 23, 42, 0.08);
   border-color: rgba(25, 195, 125, 0.2);
 }
 
-.prompt-card--skeleton {
+:where(body.settings-page, .user-settings-page) .prompt-card--skeleton {
   cursor: default;
   pointer-events: none;
 }
 
-.prompt-card--skeleton:hover {
+:where(body.settings-page, .user-settings-page) .prompt-card--skeleton:hover {
   transform: none;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.05),
@@ -247,11 +247,11 @@
   border-color: rgba(15, 23, 42, 0.06);
 }
 
-.prompt-card--skeleton .cc-skeleton-text {
+:where(body.settings-page, .user-settings-page) .prompt-card--skeleton .cc-skeleton-text {
   margin: 0.25rem 0;
 }
 
-.prompt-card__main {
+:where(body.settings-page, .user-settings-page) .prompt-card__main {
   padding: 1.25rem;
   flex-grow: 1;
   display: flex;
@@ -259,20 +259,20 @@
   gap: 1rem;
 }
 
-.prompt-card__header {
+:where(body.settings-page, .user-settings-page) .prompt-card__header {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
 }
 
-.prompt-card__eyebrow {
+:where(body.settings-page, .user-settings-page) .prompt-card__eyebrow {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-.prompt-card__badge {
+:where(body.settings-page, .user-settings-page) .prompt-card__badge {
   font-size: 0.7rem;
   font-weight: 700;
   padding: 0.25rem 0.6rem;
@@ -283,17 +283,17 @@
   align-items: center;
 }
 
-.prompt-card__badge--category {
+:where(body.settings-page, .user-settings-page) .prompt-card__badge--category {
   background: #f1f5f9;
   color: #475569;
 }
 
-.prompt-card__badge--saved {
+:where(body.settings-page, .user-settings-page) .prompt-card__badge--saved {
   background: #ecfdf5;
   color: #059669;
 }
 
-.prompt-card__date {
+:where(body.settings-page, .user-settings-page) .prompt-card__date {
   font-size: 0.75rem;
   color: #94a3b8;
   display: flex;
@@ -302,7 +302,7 @@
   margin-left: auto;
 }
 
-.prompt-card__title {
+:where(body.settings-page, .user-settings-page) .prompt-card__title {
   font-size: 1.05rem;
   font-weight: 700;
   color: #1e293b;
@@ -314,13 +314,13 @@
   overflow: hidden;
 }
 
-.prompt-card__body {
+:where(body.settings-page, .user-settings-page) .prompt-card__body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.prompt-card__description {
+:where(body.settings-page, .user-settings-page) .prompt-card__description {
   font-size: 0.9rem;
   line-height: 1.6;
   color: #475569;
@@ -331,7 +331,7 @@
   overflow: hidden;
 }
 
-.prompt-card__preview-sections {
+:where(body.settings-page, .user-settings-page) .prompt-card__preview-sections {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -341,13 +341,13 @@
   border: 1px solid rgba(15, 23, 42, 0.03);
 }
 
-.prompt-card__preview-item {
+:where(body.settings-page, .user-settings-page) .prompt-card__preview-item {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.prompt-card__preview-label {
+:where(body.settings-page, .user-settings-page) .prompt-card__preview-label {
   font-size: 0.65rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -355,7 +355,7 @@
   letter-spacing: 0.05em;
 }
 
-.prompt-card__preview-text {
+:where(body.settings-page, .user-settings-page) .prompt-card__preview-text {
   font-size: 0.8rem;
   color: #64748b;
   margin: 0;
@@ -365,7 +365,7 @@
   overflow: hidden;
 }
 
-.prompt-card__footer {
+:where(body.settings-page, .user-settings-page) .prompt-card__footer {
   margin-top: auto;
   padding: 0.85rem 1.25rem;
   background: linear-gradient(180deg, rgba(252, 253, 254, 0.94) 0%, rgba(247, 250, 252, 0.98) 100%);
@@ -373,13 +373,13 @@
   border-radius: 0 0 calc(var(--prompt-card-radius) - 1px) calc(var(--prompt-card-radius) - 1px);
 }
 
-.prompt-card__actions {
+:where(body.settings-page, .user-settings-page) .prompt-card__actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
 }
 
-.prompt-card__action-btn {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -393,32 +393,32 @@
   transition: all 0.2s ease;
 }
 
-.prompt-card__action-btn i {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn i {
   font-size: 0.95rem;
 }
 
-.prompt-card__action-btn--edit {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn--edit {
   color: var(--primary-color);
   background: rgba(25, 195, 125, 0.06);
 }
 
-.prompt-card__action-btn--edit:hover {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn--edit:hover {
   background: var(--primary-color);
   color: #ffffff;
 }
 
-.prompt-card__action-btn--delete {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn--delete {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.06);
 }
 
-.prompt-card__action-btn--delete:hover {
+:where(body.settings-page, .user-settings-page) .prompt-card__action-btn--delete:hover {
   background: #ef4444;
   color: #ffffff;
 }
 
 @media (max-width: 768px) {
-  .prompt-grid {
+  :where(body.settings-page, .user-settings-page) .prompt-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
@@ -426,29 +426,30 @@
 
 
 /* モーダル用スタイル */
-.modal-form .form-group {
+:where(body.settings-page, .user-settings-page) .modal-form .form-group {
   margin-bottom: 1rem;
 }
 
-.modal-form .form-label {
+:where(body.settings-page, .user-settings-page) .modal-form .form-label {
   font-weight: 600;
   color: var(--text-dark);
   margin-bottom: 0.5rem;
 }
 
-.modal-form .input-field {
+:where(body.settings-page, .user-settings-page) .modal-form .input-field {
   border: 1px solid #ddd;
   border-radius: 6px;
   padding: 0.5rem;
   font-size: 0.9rem;
 }
 
-.modal-form .form-actions {
+:where(body.settings-page, .user-settings-page) .modal-form .form-actions {
   margin-top: 1.5rem;
 }
 
 /* global.css の body スタイルをこのページ専用に上書き */
 body.settings-page,
+
 .user-settings-page {
   --page-scrollbar-track: rgba(222, 226, 230, 0.86);
   --page-scrollbar-thumb: rgba(25, 195, 125, 0.28);
@@ -464,13 +465,13 @@ body.settings-page,
   font-family: 'Roboto', sans-serif;
 }
 
-.user-settings-layout {
+:where(body.settings-page, .user-settings-page) .user-settings-layout {
   display: flex;
   min-height: 100vh;
 }
 
 /* 左サイドバー */
-.settings-sidebar {
+:where(body.settings-page, .user-settings-page) .settings-sidebar {
   width: 260px;
   background: var(--settings-sidebar-bg);
   padding: 1.5rem;
@@ -484,27 +485,27 @@ body.settings-page,
   z-index: var(--z-sticky-bar, 40); /* 他の要素より手前に */
 }
 
-.settings-sidebar .sidebar-header {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-header {
   padding-bottom: 1rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--settings-border-color);
 }
 
-.settings-sidebar .sidebar-header h3 {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-header h3 {
   color: var(--text-dark);
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
 }
 
-.settings-sidebar .nav-menu {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-menu {
   list-style: none;
   padding: 0;
   margin: 0;
   flex-grow: 1;
 }
 
-.settings-sidebar .nav-link {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -522,44 +523,44 @@ body.settings-page,
   cursor: pointer;
 }
 
-.settings-sidebar .nav-link i {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link i {
   font-size: 1.2rem;
   color: var(--settings-text-muted);
   transition: color 0.2s ease;
 }
 
-.settings-sidebar .nav-link:hover {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link:hover {
   background-color: var(--settings-primary-color-light);
   color: var(--primary-color);
 }
 
-.settings-sidebar .nav-link:hover i {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link:hover i {
   color: var(--primary-color);
 }
 
-.settings-sidebar .nav-link.active {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link.active {
   background-color: var(--primary-color);
   color: var(--text-light);
   font-weight: 700;
 }
 
-.settings-sidebar .nav-link.active i {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link.active i {
   color: var(--text-light);
 }
 
-.settings-sidebar .nav-link:focus-visible {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link:focus-visible {
   outline: 2px solid rgba(25, 195, 125, 0.7);
   outline-offset: 2px;
 }
 
-.settings-sidebar .sidebar-footer {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-footer {
   margin-top: auto; /* フッターを一番下に配置 */
   padding-top: 1rem;
   border-top: 1px solid var(--settings-border-color);
   text-align: center;
 }
 
-.settings-sidebar .sidebar-footer p {
+:where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-footer p {
   font-size: 0.8rem;
   color: var(--settings-text-muted);
   margin: 0;
@@ -567,14 +568,14 @@ body.settings-page,
 
 
 /* 右コンテンツエリア */
-.settings-content {
+:where(body.settings-page, .user-settings-page) .settings-content {
   flex: 1;
   padding: 2rem;
   margin-left: 260px; /* サイドバーの幅分をオフセット */
   overflow-y: auto;
 }
 
-.settings-card {
+:where(body.settings-page, .user-settings-page) .settings-card {
   background: var(--settings-card-bg);
   padding: 2.5rem; /* パディングを増やす */
   border-radius: 16px; /* 角丸を調整 */
@@ -585,7 +586,7 @@ body.settings-page,
   overflow: hidden;
 }
 
-.settings-card h2 {
+:where(body.settings-page, .user-settings-page) .settings-card h2 {
   text-align: left; /* 左寄せに変更 */
   color: var(--text-dark); /* variables.css の text-dark を使用 */
   margin-bottom: 2rem; /* マージンを増やす */
@@ -593,11 +594,11 @@ body.settings-page,
   font-weight: 700;
 }
 
-.settings-card--save-success {
+:where(body.settings-page, .user-settings-page) .settings-card--save-success {
   animation: settings-save-card-glow 0.9s ease;
 }
 
-.settings-card--save-success::after {
+:where(body.settings-page, .user-settings-page) .settings-card--save-success::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -607,7 +608,7 @@ body.settings-page,
   animation: settings-save-card-sheen 0.9s ease;
 }
 
-.settings-inline-feedback {
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback {
   margin: -0.75rem 0 1.5rem;
   padding: 0.85rem 1rem;
   border-radius: 12px;
@@ -617,53 +618,53 @@ body.settings-page,
   gap: 0.65rem;
 }
 
-.settings-inline-feedback__icon {
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback__icon {
   flex-shrink: 0;
   font-size: 1rem;
 }
 
-.settings-inline-feedback--success {
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback--success {
   color: #166534;
   background: rgba(34, 197, 94, 0.12);
   border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
-.settings-inline-feedback--error {
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback--error {
   color: #991b1b;
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.18);
 }
 
-.settings-inline-feedback--celebrate {
+:where(body.settings-page, .user-settings-page) .settings-inline-feedback--celebrate {
   animation: settings-save-feedback-pop 0.48s ease;
 }
 
-.settings-profile-skeleton {
+:where(body.settings-page, .user-settings-page) .settings-profile-skeleton {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
   align-items: start;
   gap: 1.5rem;
 }
 
-.settings-profile-skeleton__fields {
+:where(body.settings-page, .user-settings-page) .settings-profile-skeleton__fields {
   display: grid;
   gap: 0.75rem;
   width: 100%;
 }
 
 /* 共通フォーム要素 */
-.form-group {
+:where(body.settings-page, .user-settings-page) .form-group {
   margin-bottom: 1.75rem; /* グループ間のマージンを増やす */
 }
 
-.form-label {
+:where(body.settings-page, .user-settings-page) .form-label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 700; /* ラベルの太さ */
   color: var(--text-dark);
 }
 
-.custom-form-control {
+:where(body.settings-page, .user-settings-page) .custom-form-control {
   width: 100%;
   padding: 0.85rem 1rem; /* パディング調整 */
   border: 1px solid var(--settings-border-color); /* 枠線を少し濃く */
@@ -673,17 +674,17 @@ body.settings-page,
   background-color: var(--settings-input-bg);
 }
 
-.custom-form-control:focus {
+:where(body.settings-page, .user-settings-page) .custom-form-control:focus {
   border-color: var(--primary-color);
   box-shadow: 0 0 0 0.2rem rgba(25, 195, 125, 0.25); /* Bootstrap風のフォーカス */
   outline: none;
 }
 
-.custom-form-control::placeholder {
+:where(body.settings-page, .user-settings-page) .custom-form-control::placeholder {
   color: var(--settings-text-muted);
 }
 
-.form-help-text {
+:where(body.settings-page, .user-settings-page) .form-help-text {
   margin: 0.55rem 0 0;
   color: var(--settings-text-muted);
   font-size: 0.92rem;
@@ -692,19 +693,19 @@ body.settings-page,
 
 
 /* アバタープレビュー */
-.avatar-group {
+:where(body.settings-page, .user-settings-page) .avatar-group {
   text-align: left; /* 左寄せ */
   margin-bottom: 2rem;
 }
 
-.avatar-preview-wrapper {
+:where(body.settings-page, .user-settings-page) .avatar-preview-wrapper {
   position: relative;
   display: inline-flex;
   margin-top: 0.5rem;
   width: fit-content;
 }
 
-.avatar-preview {
+:where(body.settings-page, .user-settings-page) .avatar-preview {
   width: 120px; /* サイズを少し大きく */
   height: 120px;
   border-radius: 50%;
@@ -713,7 +714,7 @@ body.settings-page,
   background-color: var(--secondary-color);
 }
 
-.change-avatar-btn {
+:where(body.settings-page, .user-settings-page) .change-avatar-btn {
   position: absolute;
   right: 0.2rem;
   bottom: 0.2rem;
@@ -733,23 +734,23 @@ body.settings-page,
   z-index: 2;
 }
 
-.change-avatar-btn:hover {
+:where(body.settings-page, .user-settings-page) .change-avatar-btn:hover {
   background: var(--accent-color); /* buttons.css の hover と合わせるか検討 */
   transform: scale(1.08);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
 }
 
-.change-avatar-btn i {
+:where(body.settings-page, .user-settings-page) .change-avatar-btn i {
     font-size: 1rem; /* アイコンサイズ調整 */
 }
 
 
 /* パスワード表示切替 */
-.password-wrapper {
+:where(body.settings-page, .user-settings-page) .password-wrapper {
   position: relative;
 }
 
-.toggle-password-btn {
+:where(body.settings-page, .user-settings-page) .toggle-password-btn {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -760,16 +761,16 @@ body.settings-page,
   padding: 0.5rem;
 }
 
-.toggle-password-btn:hover {
+:where(body.settings-page, .user-settings-page) .toggle-password-btn:hover {
     color: var(--primary-color);
 }
 
-.toggle-password-btn i {
+:where(body.settings-page, .user-settings-page) .toggle-password-btn i {
     font-size: 1.2rem;
 }
 
 /* ボタン配置 */
-.button-group {
+:where(body.settings-page, .user-settings-page) .button-group {
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
@@ -777,28 +778,28 @@ body.settings-page,
 }
 
 /* プライマリボタン (buttons.css のスタイルを継承しつつ、微調整が必要な場合はここに記述) */
-.primary-button {
+:where(body.settings-page, .user-settings-page) .primary-button {
   padding: 0.85rem 1.5rem; /* パディング調整 */
   font-weight: 700;
 }
 
-.profile-save-button {
+:where(body.settings-page, .user-settings-page) .profile-save-button {
   position: relative;
   overflow: hidden;
 }
 
-.profile-save-button__content {
+:where(body.settings-page, .user-settings-page) .profile-save-button__content {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
 }
 
-.profile-save-button--saved {
+:where(body.settings-page, .user-settings-page) .profile-save-button--saved {
   animation: settings-save-button-pulse 0.7s ease;
 }
 
-.profile-save-button--saved::after {
+:where(body.settings-page, .user-settings-page) .profile-save-button--saved::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -808,7 +809,7 @@ body.settings-page,
 }
 
 /* セカンダリボタン (buttons.css のスタイルを参考に新規作成または調整) */
-.secondary-button {
+:where(body.settings-page, .user-settings-page) .secondary-button {
   padding: 0.85rem 1.5rem;
   font-weight: 700;
   background: transparent;
@@ -818,13 +819,13 @@ body.settings-page,
   transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
-.secondary-button:hover {
+:where(body.settings-page, .user-settings-page) .secondary-button:hover {
   background: var(--secondary-color); /* variables.css の secondary-color */
   color: var(--text-dark);
   border-color: var(--settings-text-muted);
 }
 
-.danger-button {
+:where(body.settings-page, .user-settings-page) .danger-button {
   padding: 0.85rem 1.5rem;
   font-weight: 700;
   color: #ffffff;
@@ -833,93 +834,95 @@ body.settings-page,
   cursor: pointer;
 }
 
-.danger-button:disabled {
+:where(body.settings-page, .user-settings-page) .danger-button:disabled {
   cursor: not-allowed;
   opacity: var(--disabled-opacity, 0.6);
 }
 /* レスポンシブ対応 (基本的な例) */
 @media (max-width: 992px) {
-  .settings-sidebar {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar {
     width: 220px;
   }
-  .settings-content {
+  :where(body.settings-page, .user-settings-page) .settings-content {
     margin-left: 220px;
   }
-  .settings-card {
+  :where(body.settings-page, .user-settings-page) .settings-card {
     padding: 2rem;
   }
 }
 
 @media (max-width: 768px) {
-  .user-settings-layout {
+  :where(body.settings-page, .user-settings-page) .user-settings-layout {
     flex-direction: column;
   }
-  .settings-sidebar {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar {
     width: 100%;
     height: auto;
     position: static; /* モバイルでは固定解除 */
     box-shadow: none;
     border-bottom: 1px solid var(--settings-border-color);
   }
-  .settings-sidebar .sidebar-header h3 {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-header h3 {
     font-size: 1.25rem;
   }
-  .settings-sidebar .nav-menu {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar .nav-menu {
     display: flex; /* 横並びにするか検討 */
     overflow-x: auto; /* 横スクロール可能に */
     padding-bottom: 0.5rem; /* スクロールバーとのスペース */
   }
-  .settings-sidebar .nav-link {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar .nav-link {
     padding: 0.75rem;
     white-space: nowrap; /* テキストを折り返さない */
   }
-  .settings-sidebar .sidebar-footer {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-footer {
     display: none; /* モバイルではフッター非表示も検討 */
   }
 
-  .settings-content {
+  :where(body.settings-page, .user-settings-page) .settings-content {
     margin-left: 0;
     padding: 1.5rem;
   }
-  .settings-card {
+  :where(body.settings-page, .user-settings-page) .settings-card {
     margin: 1rem auto; /* モバイルでのマージン調整 */
     padding: 1.5rem;
   }
-  .settings-card h2 {
+  :where(body.settings-page, .user-settings-page) .settings-card h2 {
     font-size: 1.5rem;
     margin-bottom: 1.5rem;
   }
-  .button-group {
+  :where(body.settings-page, .user-settings-page) .button-group {
     flex-direction: column-reverse; /* ボタンを縦積みにし、保存を上に */
     gap: 0.75rem;
   }
-  .primary-button, .secondary-button, .danger-button {
+  :where(body.settings-page, .user-settings-page) .primary-button,
+:where(body.settings-page, .user-settings-page) .secondary-button,
+:where(body.settings-page, .user-settings-page) .danger-button {
     width: 100%;
   }
-  .account-delete-confirmation {
+  :where(body.settings-page, .user-settings-page) .account-delete-confirmation {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 576px) {
-    .settings-content {
+    :where(body.settings-page, .user-settings-page) .settings-content {
         padding: 1rem;
     }
-    .settings-card {
+    :where(body.settings-page, .user-settings-page) .settings-card {
         padding: 1rem;
         border-radius: 12px;
     }
-    .avatar-preview {
+    :where(body.settings-page, .user-settings-page) .avatar-preview {
         width: 100px;
         height: 100px;
     }
-    .settings-profile-skeleton {
+    :where(body.settings-page, .user-settings-page) .settings-profile-skeleton {
         grid-template-columns: 1fr;
     }
-    .form-label {
+    :where(body.settings-page, .user-settings-page) .form-label {
         font-size: 0.9rem;
     }
-    .custom-form-control {
+    :where(body.settings-page, .user-settings-page) .custom-form-control {
         padding: 0.75rem;
         font-size: 0.9rem;
     }
@@ -928,7 +931,7 @@ body.settings-page,
 
 /* ───────── スマホ版のみ「設定」テキストを中央揃え ───────── */
 @media (max-width: 576px) {
-  .settings-sidebar .sidebar-header h3 {
+  :where(body.settings-page, .user-settings-page) .settings-sidebar .sidebar-header h3 {
     /* 変更前（左寄せ・何も書かれていない状態） */
     /* text-align: left; */
 
@@ -1104,25 +1107,25 @@ body.settings-page :where(
 }
 
 /* ───────── 外観セクション（テーマ切替）───────── */
-.settings-section-lead {
+:where(body.settings-page, .user-settings-page) .settings-section-lead {
   margin: 0 0 1.25rem;
   color: var(--settings-text-muted, #6c757d);
   line-height: 1.65;
 }
 
-.theme-options {
+:where(body.settings-page, .user-settings-page) .theme-options {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 1fr;
 }
 
 @media (min-width: 720px) {
-  .theme-options {
+  :where(body.settings-page, .user-settings-page) .theme-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-.theme-option {
+:where(body.settings-page, .user-settings-page) .theme-option {
   position: relative;
   display: flex;
   align-items: center;
@@ -1143,25 +1146,25 @@ body.settings-page :where(
     color 0.2s ease;
 }
 
-.theme-option:hover {
+:where(body.settings-page, .user-settings-page) .theme-option:hover {
   border-color: rgba(25, 195, 125, 0.42);
   transform: translateY(-1px);
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
 }
 
-.theme-option:focus-visible {
+:where(body.settings-page, .user-settings-page) .theme-option:focus-visible {
   outline: none;
   border-color: var(--primary-color, #19c37d);
   box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.18);
 }
 
-.theme-option.is-selected {
+:where(body.settings-page, .user-settings-page) .theme-option.is-selected {
   border-color: var(--primary-color, #19c37d);
   background: linear-gradient(135deg, rgba(25, 195, 125, 0.1) 0%, rgba(25, 195, 125, 0.02) 100%);
   box-shadow: 0 12px 24px rgba(15, 122, 81, 0.12);
 }
 
-.theme-option__icon {
+:where(body.settings-page, .user-settings-page) .theme-option__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1174,12 +1177,12 @@ body.settings-page :where(
   flex-shrink: 0;
 }
 
-.theme-option.is-selected .theme-option__icon {
+:where(body.settings-page, .user-settings-page) .theme-option.is-selected .theme-option__icon {
   background: linear-gradient(135deg, var(--primary-color, #19c37d) 0%, var(--primary-hover, #15a86b) 100%);
   color: #ffffff;
 }
 
-.theme-option__body {
+:where(body.settings-page, .user-settings-page) .theme-option__body {
   display: flex;
   flex-direction: column;
   gap: 0.18rem;
@@ -1187,19 +1190,19 @@ body.settings-page :where(
   min-width: 0;
 }
 
-.theme-option__label {
+:where(body.settings-page, .user-settings-page) .theme-option__label {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-dark, #1a1a1a);
 }
 
-.theme-option__description {
+:where(body.settings-page, .user-settings-page) .theme-option__description {
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--settings-text-muted, #6c757d);
 }
 
-.theme-option__check {
+:where(body.settings-page, .user-settings-page) .theme-option__check {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1208,75 +1211,75 @@ body.settings-page :where(
   flex-shrink: 0;
 }
 
-[data-theme="dark"] .theme-option {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option {
   background: rgba(17, 24, 39, 0.88);
   border-color: rgba(148, 163, 184, 0.22);
   color: var(--text-dark, #e5e7eb);
 }
 
-[data-theme="dark"] .theme-option:hover {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option:hover {
   background: rgba(22, 33, 54, 0.96);
   border-color: rgba(25, 195, 125, 0.4);
   box-shadow: 0 12px 24px rgba(2, 6, 23, 0.32);
 }
 
-[data-theme="dark"] .theme-option.is-selected {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option.is-selected {
   background: linear-gradient(135deg, rgba(25, 195, 125, 0.18) 0%, rgba(25, 195, 125, 0.04) 100%);
   border-color: rgba(25, 195, 125, 0.55);
   box-shadow: 0 12px 24px rgba(2, 6, 23, 0.4);
 }
 
-[data-theme="dark"] .theme-option__icon {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option__icon {
   background: rgba(25, 195, 125, 0.18);
   color: #6ee7b7;
 }
 
-[data-theme="dark"] .theme-option__label {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option__label {
   color: #f1f5f9;
 }
 
-[data-theme="dark"] .theme-option__description {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option__description {
   color: #9ca3af;
 }
 
-[data-theme="dark"] .theme-option__check {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .theme-option__check {
   color: #34d399;
 }
 
 /* ─── ダークモード: フィードバックバナー ─── */
-[data-theme="dark"] .settings-inline-feedback--success {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .settings-inline-feedback--success {
   color: #4ade80;
   background: rgba(34, 197, 94, 0.16);
   border-color: rgba(34, 197, 94, 0.28);
 }
 
-[data-theme="dark"] .settings-inline-feedback--error {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .settings-inline-feedback--error {
   color: #f87171;
   background: rgba(239, 68, 68, 0.16);
   border-color: rgba(239, 68, 68, 0.28);
 }
 
 /* ─── ダークモード: セキュリティパネル ─── */
-[data-theme="dark"] .security-panel {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.22);
 }
 
-[data-theme="dark"] .security-panel--danger {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel--danger {
   background: rgba(127, 29, 29, 0.22);
   border-color: rgba(248, 113, 113, 0.34);
 }
-[data-theme="dark"] .passkey-item {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item {
   background: rgba(30, 41, 59, 0.72);
 }
 
-[data-theme="dark"] .passkey-meta,
-[data-theme="dark"] .passkey-empty {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-meta,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-empty {
   color: #94a3b8;
 }
 
 /* ─── ダークモード: 投稿したプロンプトカード（設定ページ） ─── */
-[data-theme="dark"] .prompt-card {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card {
   background: rgba(17, 24, 39, 0.88);
   border-color: rgba(148, 163, 184, 0.16);
   box-shadow:
@@ -1284,55 +1287,55 @@ body.settings-page :where(
     0 8px 24px rgba(2, 6, 23, 0.18);
 }
 
-[data-theme="dark"] .prompt-card:hover {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card:hover {
   border-color: rgba(25, 195, 125, 0.3);
   box-shadow:
     0 4px 6px rgba(0, 0, 0, 0.2),
     0 20px 40px rgba(2, 6, 23, 0.28);
 }
 
-[data-theme="dark"] .prompt-card__title {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__title {
   color: #f1f5f9;
 }
 
-[data-theme="dark"] .prompt-card__description {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__description {
   color: #9ca3af;
 }
 
-[data-theme="dark"] .prompt-card__date {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__date {
   color: #64748b;
 }
 
-[data-theme="dark"] .prompt-card__badge--category {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__badge--category {
   background: rgba(148, 163, 184, 0.18);
   color: #cbd5e1;
 }
 
-[data-theme="dark"] .prompt-card__badge--saved {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__badge--saved {
   background: rgba(25, 195, 125, 0.18);
   color: #6ee7b7;
 }
 
-[data-theme="dark"] .prompt-card__preview-sections {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__preview-sections {
   background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.1);
 }
 
-[data-theme="dark"] .prompt-card__preview-label {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__preview-label {
   color: #64748b;
 }
 
-[data-theme="dark"] .prompt-card__preview-text {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__preview-text {
   color: #94a3b8;
 }
 
-[data-theme="dark"] .prompt-card__footer {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__footer {
   background: rgba(15, 23, 42, 0.5);
   border-top-color: rgba(148, 163, 184, 0.1);
 }
 
 /* ─── ダークモード: モーダルフォーム入力 ─── */
-[data-theme="dark"] .modal-form .input-field {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .modal-form .input-field {
   border-color: rgba(148, 163, 184, 0.28);
   background: rgba(15, 23, 42, 0.88);
   color: var(--text-dark, #e5e7eb);

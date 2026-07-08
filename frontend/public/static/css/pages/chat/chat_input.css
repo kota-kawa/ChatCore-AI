@@ -1,14 +1,14 @@
 /* chat_input.css
    メッセージ入力フォーム、送信ボタン、タイピングインジケータのスタイル
 */
-.input-container {
+:where(body.chat-page, .chat-page-shell) .input-container {
   padding: 0.75rem 1rem 0.85rem;
   background: var(--surface-primary, #fff);
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
   flex-shrink: 0;
 }
 
-.input-wrapper {
+:where(body.chat-page, .chat-page-shell) .input-wrapper {
   display: flex;
   gap: 0.38rem;
   align-items: flex-end;
@@ -30,7 +30,7 @@
     background var(--transition-normal, 0.2s ease);
 }
 
-.input-wrapper:focus-within {
+:where(body.chat-page, .chat-page-shell) .input-wrapper:focus-within {
   border-color: rgba(15, 118, 110, 0.42);
   box-shadow:
     0 0 0 4px rgba(15, 118, 110, 0.12),
@@ -41,7 +41,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(247, 251, 249, 0.97) 100%);
 }
 
-#user-input {
+:where(body.chat-page, .chat-page-shell) #user-input {
   --scrollbar-size-current: 8px;
   --scrollbar-track-current: rgba(215, 226, 220, 0.78);
   --scrollbar-thumb-current: rgba(39, 117, 85, 0.22);
@@ -71,15 +71,15 @@
   border-radius: 0;
 }
 
-#user-input::placeholder {
+:where(body.chat-page, .chat-page-shell) #user-input::placeholder {
   color: #adb5bd;
   line-height: inherit;
 }
 
-#send-btn,
-.setup-send-btn,
-.setup-attach-btn,
-.chat-attach-btn {
+:where(body.chat-page, .chat-page-shell) #send-btn,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn {
   --send-btn-visual-inset: 4px;
   flex: 0 0 52px;
   width: 52px;
@@ -108,10 +108,10 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-#send-btn::before,
-.setup-send-btn::before,
-.setup-attach-btn::before,
-.chat-attach-btn::before {
+:where(body.chat-page, .chat-page-shell) #send-btn::before,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn::before,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn::before,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn::before {
   content: "";
   position: absolute;
   inset: var(--send-btn-visual-inset);
@@ -132,17 +132,17 @@
   pointer-events: none;
 }
 
-#send-btn:active,
-.setup-send-btn:active,
-.setup-attach-btn:active,
-.chat-attach-btn:active {
+:where(body.chat-page, .chat-page-shell) #send-btn:active,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn:active,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn:active,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn:active {
   transform: scale(0.92);
 }
 
-#send-btn i,
-.setup-send-btn i,
-.setup-attach-btn i,
-.chat-attach-btn i {
+:where(body.chat-page, .chat-page-shell) #send-btn i,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn i,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn i,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn i {
   position: relative;
   z-index: 1;
   font-size: var(--text-base, 0.9375rem);
@@ -151,7 +151,7 @@
 }
 
 /* send-btn morphing */
-.send-btn-spinner {
+:where(body.chat-page, .chat-page-shell) .send-btn-spinner {
   position: absolute;
   inset: 14px;
   border: 2px solid transparent;
@@ -165,49 +165,49 @@
 }
 
 /* paperclip icon doesn't need the send-icon visual offset */
-.chat-attach-btn i,
-.setup-attach-btn i {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn i,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn i {
   left: 0;
 }
 
-#send-btn:disabled,
-.setup-send-btn:disabled,
-.setup-attach-btn:disabled,
-.chat-attach-btn:disabled {
+:where(body.chat-page, .chat-page-shell) #send-btn:disabled,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn:disabled,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn:disabled,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn:disabled {
   cursor: default;
   opacity: 0.54;
 }
 
 /* 生成中: 停止ボタン */
-#send-btn.send-btn--stop {
+:where(body.chat-page, .chat-page-shell) #send-btn.send-btn--stop {
   --chat-button-base: var(--danger-color, #ef4444);
   --chat-button-accent: var(--danger-hover, #dc2626);
   --chat-button-shadow-color: rgba(220, 38, 38, 0.28);
 }
 
-#send-btn.send-btn--stop:active {
+:where(body.chat-page, .chat-page-shell) #send-btn.send-btn--stop:active {
   transform: scale(0.92);
 }
 
-#send-btn.send-btn--stop i {
+:where(body.chat-page, .chat-page-shell) #send-btn.send-btn--stop i {
   left: 0;
   opacity: 1;
   transform: none;
 }
 
-#send-btn.send-btn--stop .send-btn-spinner {
+:where(body.chat-page, .chat-page-shell) #send-btn.send-btn--stop .send-btn-spinner {
   opacity: 0;
   transform: scale(0.5);
   animation: none;
 }
 
 /* ─── ダークモード ─── */
-[data-theme="dark"] .input-container {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container {
   background: var(--surface-primary, #0f172a);
   border-top-color: var(--border-light, rgba(148, 163, 184, 0.22));
 }
 
-[data-theme="dark"] .input-wrapper {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-wrapper {
   background:
     radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(30, 41, 59, 0.98) 0%, rgba(17, 24, 39, 0.96) 100%);
@@ -217,7 +217,7 @@
     0 14px 30px rgba(2, 6, 23, 0.24);
 }
 
-[data-theme="dark"] .input-wrapper:focus-within {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-wrapper:focus-within {
   border-color: rgba(15, 118, 110, 0.42);
   box-shadow:
     0 0 0 4px rgba(15, 118, 110, 0.12),
@@ -228,17 +228,17 @@
     linear-gradient(180deg, rgba(22, 33, 54, 0.99) 0%, rgba(15, 23, 42, 0.97) 100%);
 }
 
-[data-theme="dark"] #user-input {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) #user-input {
   color: var(--text-dark, #e5e7eb);
 }
 
-[data-theme="dark"] #user-input::placeholder {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) #user-input::placeholder {
   color: #64748b;
 }
 
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
-  .input-container {
+  :where(body.chat-page, .chat-page-shell) .input-container {
     /* safe-area対応（iPhoneのホームインジケータ）
        キーボード表示中は safe-area-inset-bottom が 0 になるため、
        キーボードが収まった後にも正しく反映される */
@@ -256,7 +256,7 @@
     flex-shrink: 0;
   }
 
-  .input-wrapper {
+  :where(body.chat-page, .chat-page-shell) .input-wrapper {
     gap: 0.3rem;
     align-items: flex-end;
     min-height: 52px;
@@ -265,7 +265,7 @@
     border-radius: 26px;
   }
 
-  #user-input {
+  :where(body.chat-page, .chat-page-shell) #user-input {
     padding: 0.44rem 0 0.44rem 0;
     /* 16px 以上でズーム防止 */
     font-size: max(1rem, 16px);
@@ -274,10 +274,10 @@
     overscroll-behavior: contain;
   }
 
-  #send-btn,
-  .setup-send-btn,
-  .setup-attach-btn,
-  .chat-attach-btn {
+  :where(body.chat-page, .chat-page-shell) #send-btn,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn {
     --send-btn-visual-inset: 5px;
     flex-basis: 48px;
     width: 48px;
@@ -286,49 +286,49 @@
     min-height: 48px;
   }
 
-  #send-btn i,
-  .setup-send-btn i,
-  .setup-attach-btn i,
-  .chat-attach-btn i {
+  :where(body.chat-page, .chat-page-shell) #send-btn i,
+:where(body.chat-page, .chat-page-shell) .setup-send-btn i,
+:where(body.chat-page, .chat-page-shell) .setup-attach-btn i,
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn i {
     font-size: var(--text-sm, 0.875rem);
   }
 
-  #send-btn.send-btn--stop i {
+  :where(body.chat-page, .chat-page-shell) #send-btn.send-btn--stop i {
     left: 0;
   }
 }
 
 @media (max-width: 576px) {
-  [data-theme="dark"] .input-container {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .input-container {
     background: rgba(15, 23, 42, 0.94);
     border-top-color: rgba(148, 163, 184, 0.18);
   }
 }
 
 /* ─── ファイル添付ボタン ─── */
-.chat-file-input-hidden {
+:where(body.chat-page, .chat-page-shell) .chat-file-input-hidden {
   display: none;
 }
 
-.chat-attach-btn {
+:where(body.chat-page, .chat-page-shell) .chat-attach-btn {
   --chat-button-base: #059669;
   --chat-button-accent: #047857;
   --chat-button-shadow-color: rgba(5, 150, 105, 0.28);
   --chat-button-edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-[data-theme="dark"] .chat-attach-btn {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attach-btn {
   --chat-button-base: #34d399;
   --chat-button-accent: #10b981;
   --chat-button-shadow-color: rgba(52, 211, 153, 0.28);
 }
 
 /* ─── ドラッグ＆ドロップ添付 ─── */
-.chat-attachment-dropzone {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone {
   position: relative;
 }
 
-.chat-attachment-drop-overlay {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay {
   position: absolute;
   inset: -0.25rem;
   z-index: 12;
@@ -357,7 +357,7 @@
     visibility 0.18s ease;
 }
 
-.input-container .chat-attachment-drop-overlay {
+:where(body.chat-page, .chat-page-shell) .input-container .chat-attachment-drop-overlay {
   top: 0.48rem;
   bottom: 0.55rem;
   left: 50%;
@@ -366,17 +366,17 @@
   transform: translate3d(-50%, 6px, 0) scale(0.985);
 }
 
-.chat-attachment-dropzone--active .chat-attachment-drop-overlay {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active .chat-attachment-drop-overlay {
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
   visibility: visible;
 }
 
-.input-container.chat-attachment-dropzone--active .chat-attachment-drop-overlay {
+:where(body.chat-page, .chat-page-shell) .input-container.chat-attachment-dropzone--active .chat-attachment-drop-overlay {
   transform: translate3d(-50%, 0, 0) scale(1);
 }
 
-.chat-attachment-drop-overlay__icon {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -388,26 +388,26 @@
   box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.18);
 }
 
-.chat-attachment-drop-overlay__icon i {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__icon i {
   font-size: 1.25rem;
 }
 
-.chat-attachment-drop-overlay__text {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__text {
   font-size: var(--text-sm, 0.875rem);
   font-weight: 700;
   line-height: 1.35;
   text-align: center;
 }
 
-.chat-attachment-drop-overlay__hint {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__hint {
   font-size: var(--text-xs, 0.75rem);
   color: rgba(17, 94, 89, 0.72);
   line-height: 1.35;
   text-align: center;
 }
 
-.chat-attachment-dropzone--active .input-wrapper,
-.chat-attachment-dropzone--active #setup-info {
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active .input-wrapper,
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active #setup-info {
   border-color: rgba(13, 148, 136, 0.58);
   box-shadow:
     0 0 0 4px rgba(20, 184, 166, 0.13),
@@ -415,7 +415,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
-[data-theme="dark"] .chat-attachment-drop-overlay {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay {
   border-color: rgba(45, 212, 191, 0.42);
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(17, 35, 46, 0.9));
@@ -425,18 +425,18 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-[data-theme="dark"] .chat-attachment-drop-overlay__icon {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__icon {
   background: rgba(45, 212, 191, 0.12);
   color: #99f6e4;
   box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18);
 }
 
-[data-theme="dark"] .chat-attachment-drop-overlay__hint {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__hint {
   color: rgba(204, 251, 241, 0.72);
 }
 
-[data-theme="dark"] .chat-attachment-dropzone--active .input-wrapper,
-[data-theme="dark"] .chat-attachment-dropzone--active #setup-info {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active .input-wrapper,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active #setup-info {
   border-color: rgba(45, 212, 191, 0.5);
   box-shadow:
     0 0 0 4px rgba(45, 212, 191, 0.12),
@@ -445,34 +445,34 @@
 }
 
 @media (max-width: 576px) {
-  .chat-attachment-drop-overlay {
+  :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay {
     gap: 0.12rem;
     min-height: 4.7rem;
     padding: 0.72rem 0.75rem;
   }
 
-  .input-container .chat-attachment-drop-overlay {
+  :where(body.chat-page, .chat-page-shell) .input-container .chat-attachment-drop-overlay {
     width: calc(100% - 1.1rem);
     top: 0.38rem;
     bottom: calc(0.42rem + env(safe-area-inset-bottom, 0px));
   }
 
-  .chat-attachment-drop-overlay__icon {
+  :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__icon {
     width: 2.1rem;
     height: 2.1rem;
   }
 
-  .chat-attachment-drop-overlay__text {
+  :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__text {
     font-size: var(--text-xs, 0.75rem);
   }
 
-  .chat-attachment-drop-overlay__hint {
+  :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__hint {
     display: none;
   }
 }
 
 /* ─── 添付ファイルチップ（コンポーザー内） ─── */
-.chat-attached-files {
+:where(body.chat-page, .chat-page-shell) .chat-attached-files {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -481,7 +481,7 @@
   padding: 0 0.25rem;
 }
 
-.chat-attached-file-chip {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -494,13 +494,13 @@
   max-width: 200px;
 }
 
-.chat-attached-file-chip__icon {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__icon {
   flex-shrink: 0;
   font-size: 0.8rem;
   color: var(--primary-color, #0f766e);
 }
 
-.chat-attached-file-chip__name {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -508,13 +508,13 @@
   min-width: 0;
 }
 
-.chat-attached-file-chip__size {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__size {
   flex-shrink: 0;
   color: var(--text-muted, #9ca3af);
   font-size: 0.68rem;
 }
 
-.chat-attached-file-chip__remove {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__remove {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
@@ -531,23 +531,23 @@
   transition: color var(--transition-fast, 0.15s ease), background var(--transition-fast, 0.15s ease);
 }
 
-.chat-attached-file-chip__remove:hover {
+:where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__remove:hover {
   color: var(--danger-color, #ef4444);
   background: rgba(239, 68, 68, 0.1);
 }
 
-[data-theme="dark"] .chat-attached-file-chip {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attached-file-chip {
   background: rgba(45, 212, 191, 0.06);
   border-color: rgba(45, 212, 191, 0.18);
   color: var(--text-secondary, #cbd5e1);
 }
 
-[data-theme="dark"] .chat-attached-file-chip__icon {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-attached-file-chip__icon {
   color: var(--primary-color, #2dd4bf);
 }
 
 /* ─── コンポーザー URL 検出チップ ─── */
-.chat-detected-urls {
+:where(body.chat-page, .chat-page-shell) .chat-detected-urls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -556,7 +556,7 @@
   padding: 0 0.25rem;
 }
 
-.chat-detected-url-chip {
+:where(body.chat-page, .chat-page-shell) .chat-detected-url-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -570,13 +570,13 @@
   cursor: default;
 }
 
-.chat-detected-url-chip__icon {
+:where(body.chat-page, .chat-page-shell) .chat-detected-url-chip__icon {
   flex-shrink: 0;
   font-size: 0.78rem;
   color: #3b82f6;
 }
 
-.chat-detected-url-chip__domain {
+:where(body.chat-page, .chat-page-shell) .chat-detected-url-chip__domain {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -584,32 +584,32 @@
   min-width: 0;
 }
 
-.chat-detected-url-chip__label {
+:where(body.chat-page, .chat-page-shell) .chat-detected-url-chip__label {
   flex-shrink: 0;
   font-size: 0.68rem;
   color: var(--text-muted, #9ca3af);
   white-space: nowrap;
 }
 
-[data-theme="dark"] .chat-detected-url-chip {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-detected-url-chip {
   background: rgba(96, 165, 250, 0.07);
   border-color: rgba(96, 165, 250, 0.2);
   color: var(--text-secondary, #cbd5e1);
 }
 
-[data-theme="dark"] .chat-detected-url-chip__icon {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-detected-url-chip__icon {
   color: #60a5fa;
 }
 
 /* ─── 送信済みメッセージの添付ファイルバッジ ─── */
-.user-message-attachments {
+:where(body.chat-page, .chat-page-shell) .user-message-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-bottom: 0.45rem;
 }
 
-.user-message-attachment-chip {
+:where(body.chat-page, .chat-page-shell) .user-message-attachment-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -622,13 +622,13 @@
   opacity: 0.88;
 }
 
-.user-message-attachment-chip i {
+:where(body.chat-page, .chat-page-shell) .user-message-attachment-chip i {
   font-size: 0.78rem;
   opacity: 0.8;
 }
 
 /* 文字数カウンター */
-.chat-input-counter {
+:where(body.chat-page, .chat-page-shell) .chat-input-counter {
   max-width: 800px;
   margin: 0.3rem auto 0;
   text-align: right;
@@ -638,13 +638,13 @@
   transition: color var(--transition-normal, 0.2s ease);
 }
 
-.chat-input-counter--over {
+:where(body.chat-page, .chat-page-shell) .chat-input-counter--over {
   color: var(--danger-color, #ef4444);
   font-weight: 600;
 }
 
 /* ===== Thinking インジケータ (constellation 含む - そのまま保持) ===== */
-.thinking-message {
+:where(body.chat-page, .chat-page-shell) .thinking-message {
   --constellation-panel-border: rgba(15, 118, 110, 0.3);
   --constellation-panel-glow: rgba(45, 212, 191, 0.28);
   --constellation-surface-highlight: rgba(153, 246, 228, 0.18);
@@ -671,7 +671,7 @@
   --constellation-node-halo: rgba(123, 241, 188, 0.48);
 }
 
-.thinking-message[data-generation-phase="web-search"] {
+:where(body.chat-page, .chat-page-shell) .thinking-message[data-generation-phase="web-search"] {
   --constellation-stage-animation: constellationSearchStageSweep;
   --constellation-stage-duration: 2.7s;
   --constellation-stage-easing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -687,7 +687,7 @@
   --constellation-node-duration: 1.65s;
 }
 
-.thinking-message[data-generation-phase="preparing"] {
+:where(body.chat-page, .chat-page-shell) .thinking-message[data-generation-phase="preparing"] {
   --constellation-stage-animation: constellationGenerateStagePulse;
   --constellation-stage-duration: 4.2s;
   --constellation-nebula-animation: constellationGenerateNebulaBloom;
@@ -701,7 +701,7 @@
   --constellation-node-duration: 1.9s;
 }
 
-.constellation-loader {
+:where(body.chat-page, .chat-page-shell) .constellation-loader {
   position: relative;
   isolation: isolate;
   width: var(--constellation-width, 10rem);
@@ -721,7 +721,7 @@
   /* 入れ物(パネル)自体の揺れアニメーションは無効化。ノード/リンク/星雲/彗星の動きは維持する。 */
 }
 
-.constellation-loader::before {
+:where(body.chat-page, .chat-page-shell) .constellation-loader::before {
   content: "";
   position: absolute;
   inset: -12% -6% 2%;
@@ -735,7 +735,7 @@
   animation: var(--constellation-nebula-animation, constellationNebulaDrift) var(--constellation-nebula-duration, 7.2s) var(--constellation-nebula-easing, ease-in-out) infinite;
 }
 
-.constellation-loader::after {
+:where(body.chat-page, .chat-page-shell) .constellation-loader::after {
   content: "";
   position: absolute;
   top: 22%;
@@ -750,13 +750,13 @@
   animation: var(--constellation-comet-animation, constellationComet) var(--constellation-comet-duration, 4.4s) var(--constellation-comet-easing, cubic-bezier(0.26, 0.08, 0.2, 1)) infinite;
 }
 
-.constellation-loader__link,
-.constellation-loader__node {
+:where(body.chat-page, .chat-page-shell) .constellation-loader__link,
+:where(body.chat-page, .chat-page-shell) .constellation-loader__node {
   position: absolute;
   z-index: 1;
 }
 
-.constellation-loader__link {
+:where(body.chat-page, .chat-page-shell) .constellation-loader__link {
   left: 50%;
   top: 50%;
   width: 0;
@@ -768,7 +768,7 @@
   box-shadow: 0 0 12px var(--constellation-link-shadow);
 }
 
-.constellation-loader__link::before {
+:where(body.chat-page, .chat-page-shell) .constellation-loader__link::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -778,7 +778,7 @@
   animation-delay: var(--link-delay, 0s);
 }
 
-.constellation-loader__node {
+:where(body.chat-page, .chat-page-shell) .constellation-loader__node {
   left: 50%;
   top: 50%;
   width: 0;
@@ -792,7 +792,7 @@
     0 0 18px var(--constellation-node-shadow);
 }
 
-.constellation-loader__node::before {
+:where(body.chat-page, .chat-page-shell) .constellation-loader__node::before {
   content: "";
   position: absolute;
   inset: -0.55rem;
@@ -807,7 +807,7 @@
    端から順に波打つように組み変わる。イージングはゆったり減速する曲線。
    Morph between constellations: --morph-delay staggers each element so the
    shape re-forms in a ripple, with a long, gently decelerating easing. */
-.constellation-loader.is-ready .constellation-loader__link {
+:where(body.chat-page, .chat-page-shell) .constellation-loader.is-ready .constellation-loader__link {
   transition:
     left 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
     top 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
@@ -817,7 +817,7 @@
   transition-delay: var(--morph-delay, 0s);
 }
 
-.constellation-loader.is-ready .constellation-loader__node {
+:where(body.chat-page, .chat-page-shell) .constellation-loader.is-ready .constellation-loader__node {
   transition:
     left 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
     top 1150ms cubic-bezier(0.3, 0.9, 0.24, 1),
@@ -1051,23 +1051,23 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-attachment-drop-overlay,
-  .chat-attachment-dropzone--active .input-wrapper,
-  .chat-attachment-dropzone--active #setup-info {
+  :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay,
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active .input-wrapper,
+:where(body.chat-page, .chat-page-shell) .chat-attachment-dropzone--active #setup-info {
     transition: none;
   }
 
-  .thinking-message::before,
-  .constellation-loader,
-  .constellation-loader::before,
-  .constellation-loader::after,
-  .constellation-loader__link::before,
-  .constellation-loader__node::before {
+  :where(body.chat-page, .chat-page-shell) .thinking-message::before,
+:where(body.chat-page, .chat-page-shell) .constellation-loader,
+:where(body.chat-page, .chat-page-shell) .constellation-loader::before,
+:where(body.chat-page, .chat-page-shell) .constellation-loader::after,
+:where(body.chat-page, .chat-page-shell) .constellation-loader__link::before,
+:where(body.chat-page, .chat-page-shell) .constellation-loader__node::before {
     animation: none;
   }
 
-  .constellation-loader__link,
-  .constellation-loader__node {
+  :where(body.chat-page, .chat-page-shell) .constellation-loader__link,
+:where(body.chat-page, .chat-page-shell) .constellation-loader__node {
     transition: none;
   }
 }

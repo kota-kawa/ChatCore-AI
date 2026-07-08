@@ -1,6 +1,6 @@
 /* task-edit-modal.css */
 /* Custom Modal 全体のスタイル */
-#taskEditModal.custom-modal {
+:where(body.chat-page, .chat-page-shell) #taskEditModal.custom-modal {
   background: var(--chat-modal-overlay, var(--modal-overlay, rgba(0, 0, 0, 0.45))); /* 背景の半透明黒 */
   z-index: var(--z-modal-priority, 85);
   backdrop-filter: var(--chat-modal-backdrop-filter, blur(6px) saturate(110%));
@@ -8,7 +8,7 @@
 }
 
 /* モーダルのダイアログ部分 */
-.custom-modal-dialog {
+:where(body.chat-page, .chat-page-shell) .custom-modal-dialog {
   background: var(--chat-modal-surface-bg, var(--modal-surface, #fff));
   border-radius: var(--chat-modal-panel-radius, 28px);
   width: min(var(--modal-width-sm, 520px), calc(100vw - 2rem));
@@ -23,7 +23,7 @@
 }
 
 /* モーダルのコンテンツ部分 */
-.custom-modal-content {
+:where(body.chat-page, .chat-page-shell) .custom-modal-content {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -31,7 +31,7 @@
 }
 
 /* ヘッダー */
-.custom-modal-header {
+:where(body.chat-page, .chat-page-shell) .custom-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -41,13 +41,13 @@
   background: var(--chat-modal-header-bg, #f4faf7);
 }
 
-.custom-modal-title {
+:where(body.chat-page, .chat-page-shell) .custom-modal-title {
   font-size: var(--text-2xl, 1.25rem);
   font-weight: bold;
   margin: 0;
 }
 
-.custom-modal-close {
+:where(body.chat-page, .chat-page-shell) .custom-modal-close {
   background: none;
   border: none;
   font-size: 1.5rem;
@@ -55,7 +55,7 @@
 }
 
 /* ボディ */
-.custom-modal-body {
+:where(body.chat-page, .chat-page-shell) .custom-modal-body {
   padding: 20px;
   border-bottom: 1px solid #e2e9e6;
   overflow-y: auto;
@@ -64,7 +64,7 @@
 }
 
 /* フッター */
-.custom-modal-footer {
+:where(body.chat-page, .chat-page-shell) .custom-modal-footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -74,36 +74,36 @@
 }
 
 /* ボタンスタイル */
-.custom-btn-secondary,
-.custom-modal-footer .primary-button {
+:where(body.chat-page, .chat-page-shell) .custom-btn-secondary,
+:where(body.chat-page, .chat-page-shell) .custom-modal-footer .primary-button {
   padding: 8px 16px;
   border: none;
   border-radius: 10px;
   cursor: pointer;
 }
 
-.custom-btn-secondary {
+:where(body.chat-page, .chat-page-shell) .custom-btn-secondary {
   background-color: var(--neutral-button, #6c757d);
   color: var(--text-light, #fff);
 }
 
 /* フォーム関連 */
-.custom-form-group {
+:where(body.chat-page, .chat-page-shell) .custom-form-group {
   margin-bottom: 1rem;
 }
 
-.custom-form-label {
+:where(body.chat-page, .chat-page-shell) .custom-form-label {
   display: block;
   margin-bottom: 5px;
   font-size: var(--text-md, 1rem);
   color: var(--text-dark, #1a1a1a);
 }
 
-.custom-form-label__required {
+:where(body.chat-page, .chat-page-shell) .custom-form-label__required {
   color: var(--success-color, #0f766e);
 }
 
-.custom-form-control {
+:where(body.chat-page, .chat-page-shell) .custom-form-control {
   width: 100%;
   padding: 0.75rem 0.85rem;
   font-size: var(--text-md, 1rem);
@@ -115,37 +115,37 @@
     box-shadow var(--transition-normal, 0.2s ease);
 }
 
-.custom-form-control:focus {
+:where(body.chat-page, .chat-page-shell) .custom-form-control:focus {
   border-color: var(--primary-color);
   box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.2));
   outline: none;
 }
 
-.custom-form-text {
+:where(body.chat-page, .chat-page-shell) .custom-form-text {
   font-size: var(--text-sm, 0.875rem);
   color: #666;
   margin-top: 5px;
 }
 
-[data-theme="dark"] .custom-modal-body {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .custom-modal-body {
   border-bottom-color: rgba(148, 163, 184, 0.18);
 }
 
-[data-theme="dark"] .custom-modal-footer {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .custom-modal-footer {
   background: rgba(10, 16, 26, 0.6);
 }
 
-[data-theme="dark"] .custom-form-control {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .custom-form-control {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.22);
   color: var(--text-dark, #e5e7eb);
 }
 
-[data-theme="dark"] .custom-form-control:focus {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .custom-form-control:focus {
   border-color: rgba(15, 118, 110, 0.48);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
 }
 
-[data-theme="dark"] .custom-form-text {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .custom-form-text {
   color: #9ca3af;
 }

@@ -13,6 +13,7 @@
 }
 
 .prompt-share-page .ai-agent-btn[aria-expanded="true"],
+
 .prompt-share-page .ai-agent-btn:hover {
   border-color: rgba(255, 255, 255, 0.2);
   background:
@@ -111,8 +112,11 @@
 }
 
 .prompt-share-page .modal-close-btn:focus-visible,
+
 .prompt-share-page .mini-chat-send-btn:focus-visible,
+
 .prompt-share-page .mini-chat-action-btn:focus-visible,
+
 .prompt-share-page .mini-chat-suggestion:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.16);
@@ -367,6 +371,7 @@
 }
 
 .prompt-share-page .mini-chat-send-btn,
+
 .prompt-share-page .mini-chat-action-btn {
   width: 34px;
   height: 34px;
@@ -399,6 +404,7 @@
 }
 
 .prompt-share-page .mini-chat-send-btn:active:not(:disabled),
+
 .prompt-share-page .mini-chat-action-btn:active:not(:disabled) {
   transform: scale(0.94);
 }
@@ -491,46 +497,66 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .post-modal,
-  .post-modal::before,
-  .post-modal-content,
-  .post-modal .composer-hero,
-  .post-modal .post-form > *,
-  .category-card,
+  :where(body.prompt-share-page, .prompt-share-page) .post-modal,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal::before,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal-content,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal .composer-hero,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal .post-form > *,
+:where(body.prompt-share-page, .prompt-share-page) .category-card,
+
   .prompt-share-page .prompt-card,
+
   .prompt-share-page .prompt-action-btn,
+
   .prompt-share-page .meatball-menu,
+
   .prompt-share-page .prompt-actions-dropdown,
+
   .prompt-share-page .modal-close-btn,
+
   .prompt-share-page .mini-chat-suggestion,
+
   .prompt-share-page .mini-chat-send-btn,
+
   .prompt-share-page .mini-chat-action-btn,
+
   .prompt-share-page .mini-chat-typing-dot,
-  .new-prompt-btn,
-  .new-prompt-btn::before,
-  .new-prompt-btn::after,
-  .new-prompt-btn.launching,
-  .new-prompt-btn i,
-  .new-prompt-btn i.rotating {
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::before,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn::after,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn.launching,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
 
-  .category-card:hover,
+  :where(body.prompt-share-page, .prompt-share-page) .category-card:hover,
+
   .prompt-share-page .prompt-card:hover,
+
   .prompt-share-page .prompt-card:active,
+
   .prompt-share-page .prompt-action-btn:hover,
+
   .prompt-share-page .meatball-menu:hover,
+
   .prompt-share-page .prompt-action-btn:active,
+
   .prompt-share-page .meatball-menu:active,
+
   .prompt-share-page .modal-close-btn:active,
+
   .prompt-share-page .mini-chat-suggestion:hover,
+
   .prompt-share-page .mini-chat-send-btn:hover:not(:disabled),
+
   .prompt-share-page .mini-chat-send-btn:active:not(:disabled),
+
   .prompt-share-page .mini-chat-action-btn:active:not(:disabled),
-  .new-prompt-btn:hover,
-  .new-prompt-btn:active {
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:hover,
+:where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn:active {
     transform: none;
     filter: none;
     box-shadow: var(--ps-fab-blue-shadow);
@@ -538,11 +564,12 @@
   }
 
   .prompt-share-page .prompt-actions-dropdown,
+
   .prompt-share-page .prompt-actions-dropdown.is-open {
     transform: none;
   }
 
-  .new-prompt-btn i.rotating {
+  :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
     animation: none;
   }
 
@@ -550,15 +577,15 @@
     animation: none;
   }
 
-  .post-modal.show .post-modal-content,
-  .post-modal.show .composer-hero,
-  .post-modal.show .post-form > * {
+  :where(body.prompt-share-page, .prompt-share-page) .post-modal.show .post-modal-content,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal.show .composer-hero,
+:where(body.prompt-share-page, .prompt-share-page) .post-modal.show .post-form > * {
     transform: none;
     filter: none;
   }
 }
 
-.guardrail-info {
+:where(body.prompt-share-page, .prompt-share-page) .guardrail-info {
   margin-top: 0.85rem;
   border-radius: 10px;
   border-left: 3px solid var(--ps-primary);

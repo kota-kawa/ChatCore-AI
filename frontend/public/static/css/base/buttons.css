@@ -4,13 +4,13 @@
 
 
 /* hidden 属性を使う UI の表示制御を優先 */
-#auth-buttons[hidden],
-user-icon[hidden] {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons[hidden],
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) user-icon[hidden] {
   display: none !important;
 }
 
 /* ログイン前のボタンと同じ右上固定表示に */
-.settings-btn {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .settings-btn {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -30,7 +30,7 @@ user-icon[hidden] {
   box-sizing: content-box;
 }
 
-.settings-btn .user-icon-img {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .settings-btn .user-icon-img {
   /* 画像サイズはそのまま */
   width: 2.5rem;
   height: 2.5rem;
@@ -39,7 +39,7 @@ user-icon[hidden] {
 }
 
 /* prompt-sharing / settings-btn は .circle-button を継承 */
-.prompt-sharing {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .prompt-sharing {
   top: 10px;
   right: 10px;
 }
@@ -47,7 +47,7 @@ user-icon[hidden] {
 
 
 /* 新規チャットボタン */
-.new-chat-btn {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .new-chat-btn {
   width: 100%;
   margin-bottom: 0.6rem;
   padding: 0.6rem 1rem;
@@ -69,23 +69,23 @@ user-icon[hidden] {
     transform var(--transition-fast, 0.15s ease);
 }
 
-.new-chat-btn:hover {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .new-chat-btn:hover {
   background: var(--primary-hover, #15a86b);
   transform: none;
   box-shadow: none;
   filter: none;
 }
 
-.new-chat-btn:active {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .new-chat-btn:active {
   transform: scale(0.98);
 }
 
-.new-chat-btn i {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .new-chat-btn i {
   font-size: 1rem;
 }
 
 /* アイコンボタン */
-.icon-button {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button {
   padding: 0.55rem;
   min-width: 44px;
   min-height: 44px;
@@ -104,12 +104,12 @@ user-icon[hidden] {
   color: white;
 }
 
-.icon-button:hover {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 
 /* プライマリボタン */
-.primary-button {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button {
   background: var(--primary-color);
   color: white;
   padding: 0.65rem 1rem;
@@ -125,20 +125,20 @@ user-icon[hidden] {
     transform var(--transition-fast, 0.15s ease);
 }
 
-.primary-button:hover {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:hover {
   background: var(--primary-hover, #15a86b);
   transform: none;
   box-shadow: none;
   filter: none;
 }
 
-.primary-button:active {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:active {
   transform: scale(0.97);
 }
 
 
 /* ── 未ログイン時のログインボタン ── */
-#auth-buttons .auth-btn {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn {
   background: var(--primary-color);
   color: var(--text-light);
   border: none;
@@ -157,30 +157,30 @@ user-icon[hidden] {
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
 }
 
-#auth-buttons .auth-btn i {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn i {
   font-size: 1.8rem;
   color: #0a2f1f;
 }
 
-#auth-buttons .auth-btn span {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn span {
   font-size: 1rem;
   font-weight: bold;
   color: #0a2f1f;
 }
 
-#auth-buttons .auth-btn:hover {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn:hover {
   background: var(--primary-hover, #15a86b);
   transform: none;
 }
 
 @media (max-width: 768px) {
   /* セットアップ画面より手前に表示 */
-  #auth-buttons {
+  :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons {
     z-index: var(--z-floating-controls, 65) !important;
   }
 
   /* モバイルではアイコンのみ＆円形 */
-  #auth-buttons .auth-btn {
+  :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn {
     padding: 0;                     /* 余白はなし */
     width: 44px;                    /* 高さと同じに */
     height: 44px;                   /* 幅と同じに */
@@ -191,7 +191,7 @@ user-icon[hidden] {
   }
 
   /* 文字は非表示 */
-  #auth-buttons .auth-btn span {
+  :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #auth-buttons .auth-btn span {
     display: none;
   }
 }
@@ -199,7 +199,7 @@ user-icon[hidden] {
 /* ─────────────────────────────────────
    ユーザーメニューを右寄せ
 ───────────────────────────────────── */
-#user-menu {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu {
   right: 10px !important;
   left:  auto !important;
 }
@@ -208,7 +208,7 @@ user-icon[hidden] {
    モバイル表示時の調整 (幅576px以下)
 ───────────────────────────────────── */
    @media (max-width: 576px) {
-    #user-menu.mobile-user-menu {
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu.mobile-user-menu {
       position: static !important;
       top:      auto    !important;
       right:    auto    !important;
@@ -220,30 +220,30 @@ user-icon[hidden] {
       min-width:  auto !important;
     }
     /* 内部のメニュー項目は必要に応じて幅を100%に */
-    #user-menu.mobile-user-menu > div {
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu.mobile-user-menu > div {
       width: 100%;
       background: #fff;
       margin-bottom: .5rem;
       border-radius: 6px;
     }
-    #user-menu.mobile-user-menu > div:last-child {
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu.mobile-user-menu > div:last-child {
       margin-bottom: 0;
     }
   }
 
 
-  .sidebar-toggle{
+  :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle{
     display:none;                         /* PC では非表示 */
   }
 
 
   @media (max-width:576px){
-    .sidebar-toggle{
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle{
       display:inline-flex;                /* モバイルで表示 */
     }
 
     /* ボタンにプレス時のトランジションを設定 */
-    .sidebar-toggle {
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle {
       transition: transform 0.1s ease, background-color 0.1s ease;
       -webkit-tap-highlight-color: transparent;
       /* タッチ向け最小サイズ */
@@ -255,78 +255,78 @@ user-icon[hidden] {
     }
 
     /* 押下時に縮小＆背景色変化で押した感を演出 */
-    .sidebar-toggle:active {
+    :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .sidebar-toggle:active {
       transform: scale(0.9);
       background-color: rgba(255, 255, 255, 0.15);
     }
   }
 
 /* ─── ダークモード: モバイルユーザーメニュー ─── */
-[data-theme="dark"] #user-menu.mobile-user-menu > div {
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) #user-menu.mobile-user-menu > div {
   background: rgba(17, 24, 39, 0.98);
   color: var(--text-dark, #e5e7eb);
 }
 
 /* ボタンの影を全体で無効化 */
-button,
-input[type="button"],
-input[type="submit"],
-input[type="reset"],
-.btn,
-.auth-btn,
-.primary-button,
-.icon-button,
-.circle-button,
-.cc-texture-btn,
-a.cc-texture-btn {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="button"],
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="submit"],
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="reset"],
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .btn,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .auth-btn,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .circle-button,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .cc-texture-btn,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) a.cc-texture-btn {
   box-shadow: none !important;
   filter: none !important;
 }
 
-button:hover,
-button:focus,
-button:focus-visible,
-button:active,
-input[type="button"]:hover,
-input[type="button"]:focus,
-input[type="button"]:focus-visible,
-input[type="button"]:active,
-input[type="submit"]:hover,
-input[type="submit"]:focus,
-input[type="submit"]:focus-visible,
-input[type="submit"]:active,
-input[type="reset"]:hover,
-input[type="reset"]:focus,
-input[type="reset"]:focus-visible,
-input[type="reset"]:active,
-.btn:hover,
-.btn:focus,
-.btn:focus-visible,
-.btn:active,
-.auth-btn:hover,
-.auth-btn:focus,
-.auth-btn:focus-visible,
-.auth-btn:active,
-.primary-button:hover,
-.primary-button:focus,
-.primary-button:focus-visible,
-.primary-button:active,
-.icon-button:hover,
-.icon-button:focus,
-.icon-button:focus-visible,
-.icon-button:active,
-.circle-button:hover,
-.circle-button:focus,
-.circle-button:focus-visible,
-.circle-button:active,
-.cc-texture-btn:hover,
-.cc-texture-btn:focus,
-.cc-texture-btn:focus-visible,
-.cc-texture-btn:active,
-a.cc-texture-btn:hover,
-a.cc-texture-btn:focus,
-a.cc-texture-btn:focus-visible,
-a.cc-texture-btn:active {
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) button:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="button"]:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="button"]:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="button"]:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="button"]:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="submit"]:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="submit"]:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="submit"]:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="submit"]:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="reset"]:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="reset"]:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="reset"]:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) input[type="reset"]:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .btn:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .btn:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .btn:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .btn:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .auth-btn:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .auth-btn:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .auth-btn:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .auth-btn:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .primary-button:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .icon-button:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .circle-button:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .circle-button:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .circle-button:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .circle-button:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .cc-texture-btn:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .cc-texture-btn:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .cc-texture-btn:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) .cc-texture-btn:active,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) a.cc-texture-btn:hover,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) a.cc-texture-btn:focus,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) a.cc-texture-btn:focus-visible,
+:where(body.chat-page, .chat-page-shell, body.settings-page, .user-settings-page) a.cc-texture-btn:active {
   box-shadow: none !important;
   filter: none !important;
 }
