@@ -238,6 +238,11 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+[data-theme="dark"] .prompt-actions-dropdown::before {
+  background: #1e293b;
+  border-color: #334155;
+}
+
 /* specificity を light-mode (.prompt-share-page .prompt-actions-dropdown .dropdown-item = 0,3,0) と揃える */
 [data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item {
   color: #f3f4f6;
@@ -246,6 +251,14 @@
 
 [data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item:hover {
   background: #334155;
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item i {
+  color: #93a4b8;
+}
+
+[data-theme="dark"] .prompt-share-page .prompt-actions-dropdown .dropdown-item:hover i {
   color: #60a5fa;
 }
 
