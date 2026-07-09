@@ -242,6 +242,7 @@ export function PromptSharePageLayout({
                 type="button"
                 className={`category-card cc-press${selectedCategory === category.value ? " active" : ""}`}
                 data-category={category.value}
+                title={category.label}
                 onClick={() => {
                   onCategoryClick(category.value);
                 }}

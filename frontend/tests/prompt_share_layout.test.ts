@@ -57,6 +57,7 @@ test("prompt share layout renders crawlable page content before client API data 
   assert.match(html, /Chat Coreのプロンプト共有/);
   assert.match(html, /文章作成/);
   assert.match(html, /調査/);
+  assert.match(html, /title="文章作成"/);
 });
 
 test("prompt share detail modal highlights prompt content and metadata", () => {
