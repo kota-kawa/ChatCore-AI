@@ -32,6 +32,9 @@ SEARCH_DEFAULT_PER_PAGE = 20
 # Upper limit of items allowed per page.
 SEARCH_MAX_PER_PAGE = 100
 
+# Count queries are only needed for the initial page; later pages use LIMIT + 1.
+SEARCH_NEXT_PAGE_SIZE = 1
+
 # 検索可能なプロンプトタイプのセット
 # Set of allowed prompt types for filtering.
 SEARCH_PROMPT_TYPES = {"text", "image", "skill"}
@@ -133,6 +136,7 @@ def _search_public_prompts(
     prompt_type=None,
     content_format=None,
     media_type=None,
+    include_total=True,
 ):
     """
     公開プロンプトをデータベースから部分一致で検索する。ページネーションとインタラクション状態（Like等）の取得も行う。
@@ -197,63 +201,72 @@ def _search_public_prompts(
         select_axis_condition = "\n              ".join(select_axis_conditions)
         count_axis_condition = "\n              ".join(count_axis_conditions)
         
-        # 検索結果取得用SQL
-        # SQL query to retrieve matching prompts.
-        # ユーザーごとのLike/チャット利用有無とコメント数をJOIN等で取得する
-        # Join other tables to query user-specific interaction state and comment counts.
+        # まずページ対象を確定してから、各結果に必要な派生情報だけを取得する。
+        # Select the page first, then calculate interaction and comment metadata only for its rows.
         sql = f"""
+            WITH matched_prompts AS (
+              SELECT
+                p.id,
+                p.title,
+                p.category,
+                p.content,
+                COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.input_examples,
+                p.output_examples,
+                p.content_format,
+                p.media_type,
+                p.attributes,
+                p.attachments,
+                p.created_at
+              FROM prompts AS p
+              LEFT JOIN users AS u
+                ON u.id = p.user_id
+              WHERE p.is_public = TRUE
+                AND p.deleted_at IS NULL
+                {select_axis_condition}
+                AND (
+                  p.title LIKE %s OR
+                  p.content LIKE %s OR
+                  p.category = ANY(%s::text[]) OR
+                  p.author LIKE %s OR
+                  u.username LIKE %s
+                )
+              ORDER BY p.created_at DESC, p.id DESC
+              LIMIT %s
+              OFFSET %s
+            )
             SELECT
-              p.id,
-              p.title,
-              p.category,
-              p.content,
-              COALESCE(u.username, p.author, 'ユーザー') AS author,
-              p.input_examples,
-              p.output_examples,
-              p.content_format,
-              p.media_type,
-              p.attributes,
-              p.attachments,
-              p.created_at,
+              p.*,
               COALESCE(pc.comment_count, 0) AS comment_count,
-              CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-              CASE WHEN used_tasks.id IS NOT NULL THEN TRUE ELSE FALSE END AS used_in_chat
-            FROM prompts AS p
-            LEFT JOIN users AS u
-              ON u.id = p.user_id
-            LEFT JOIN (
-              SELECT prompt_id, COUNT(*) AS comment_count
+              EXISTS (
+                SELECT 1
+                FROM prompt_likes AS pl
+                WHERE pl.user_id = %s
+                  AND pl.prompt_id = p.id
+              ) AS liked,
+              EXISTS (
+                SELECT 1
+                FROM task_with_examples AS used_tasks
+                WHERE used_tasks.user_id = %s
+                  AND used_tasks.deleted_at IS NULL
+                  AND (
+                    used_tasks.source_prompt_id = p.id
+                    OR (
+                      used_tasks.source_prompt_id IS NULL
+                      AND used_tasks.name = p.title
+                    )
+                  )
+              ) AS used_in_chat
+            FROM matched_prompts AS p
+            LEFT JOIN LATERAL (
+              SELECT COUNT(*) AS comment_count
               FROM prompt_comments
               WHERE deleted_at IS NULL
                 AND hidden_by_reports_at IS NULL
-              GROUP BY prompt_id
+                AND prompt_id = p.id
             ) AS pc
-              ON pc.prompt_id = p.id
-            LEFT JOIN prompt_likes AS pl
-              ON pl.user_id = %s
-             AND pl.prompt_id = p.id
-            LEFT JOIN task_with_examples AS used_tasks
-              ON used_tasks.user_id = %s
-             AND used_tasks.deleted_at IS NULL
-             AND (
-                  used_tasks.source_prompt_id = p.id
-                  OR (
-                       used_tasks.source_prompt_id IS NULL
-                       AND used_tasks.name = p.title
-                     )
-                 )
-            WHERE p.is_public = TRUE
-              AND p.deleted_at IS NULL
-              {select_axis_condition}
-              AND (
-                p.title   LIKE %s OR
-                p.content LIKE %s OR
-                p.category = ANY(%s::text[]) OR
-                COALESCE(u.username, p.author) LIKE %s
-              )
-            ORDER BY p.created_at DESC
-            LIMIT %s
-            OFFSET %s
+              ON TRUE
+            ORDER BY p.created_at DESC, p.id DESC
         """
         
         # 総ヒット数取得用SQL
@@ -267,10 +280,11 @@ def _search_public_prompts(
               AND p.deleted_at IS NULL
               {count_axis_condition}
               AND (
-                p.title   LIKE %s OR
+                p.title LIKE %s OR
                 p.content LIKE %s OR
                 p.category = ANY(%s::text[]) OR
-                COALESCE(u.username, p.author) LIKE %s
+                p.author LIKE %s OR
+                u.username LIKE %s
               )
         """
         # LIKE検索用のワイルドカード付きパターンを作成
@@ -280,28 +294,28 @@ def _search_public_prompts(
         # Categories are stored as keys, so resolve a label substring match into the matching keys.
         matched_category_keys = category_keys_matching(query)
         count_params = list(count_filter_params)
-        count_params.extend([like_query, like_query, matched_category_keys, like_query])
-        
-        # 件数のカウント実行
-        # Execute counting.
-        cursor.execute(count_sql, tuple(count_params))
-        count_row = cursor.fetchone() or {}
-        total = int(count_row.get("total") or 0)
+        count_params.extend([like_query, like_query, matched_category_keys, like_query, like_query])
+        total = None
+        if include_total:
+            # 件数取得は初回ページだけに限定し、追加読み込み時の全件集計を避ける。
+            # Only the initial page needs an exact count; later pages use LIMIT + 1.
+            cursor.execute(count_sql, tuple(count_params))
+            count_row = cursor.fetchone() or {}
+            total = int(count_row.get("total") or 0)
 
         # 検索パラメータの構築
         # Build query arguments list.
-        search_params = [
-            user_id,
-            user_id,
-        ]
-        search_params.extend(search_filter_params)
+        search_params = list(search_filter_params)
         search_params.extend([
             like_query,
             like_query,
             matched_category_keys,
             like_query,
-            per_page,
+            like_query,
+            per_page + SEARCH_NEXT_PAGE_SIZE,
             offset,
+            user_id,
+            user_id,
         ])
         
         # 検索結果レコードの取得実行
@@ -310,18 +324,25 @@ def _search_public_prompts(
             sql,
             tuple(search_params),
         )
-        # 総ページ数を算出
-        # Calculate total pages.
-        total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+        rows = [dict(row) for row in cursor.fetchall()]
+        has_next = (
+            page * per_page < total
+            if total is not None
+            else len(rows) > per_page
+        )
+        rows = rows[:per_page]
+        total_pages = (
+            (total + per_page - 1) // per_page if total is not None and total > 0 else None
+        )
         return {
-            "prompts": [_normalize_search_prompt_row(dict(row)) for row in cursor.fetchall()],
+            "prompts": [_normalize_search_prompt_row(row) for row in rows],
             "pagination": {
                 "page": page,
                 "per_page": per_page,
                 "total": total,
                 "total_pages": total_pages,
-                "has_next": page < total_pages,
-                "has_prev": page > SEARCH_DEFAULT_PAGE and total > 0,
+                "has_next": has_next,
+                "has_prev": page > SEARCH_DEFAULT_PAGE,
             },
         }
     finally:
@@ -347,6 +368,11 @@ async def search_prompts(request: Request):
     prompt_type = _normalize_prompt_type_filter(request.query_params.get("prompt_type"))
     content_format = _normalize_content_format_filter(request.query_params.get("content_format"))
     media_type = _normalize_media_type_filter(request.query_params.get("media_type"))
+    include_total = request.query_params.get("include_total", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+    }
     page = _parse_positive_int(request.query_params.get("page"), SEARCH_DEFAULT_PAGE)
     per_page = _parse_positive_int(
         request.query_params.get("per_page"),
@@ -368,6 +394,7 @@ async def search_prompts(request: Request):
             prompt_type,
             content_format,
             media_type,
+            include_total,
         )
         return jsonify({"status": "success", **payload})
     except Exception:

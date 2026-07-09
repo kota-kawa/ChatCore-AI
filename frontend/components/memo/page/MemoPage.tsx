@@ -97,6 +97,7 @@ export default function MemoPage() {
 
   // Filter/sort state
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [sortMode, setSortMode] = useState("manual");
   const [archiveScope, setArchiveScope] = useState("active");
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
@@ -176,9 +177,14 @@ export default function MemoPage() {
   // Data fetching
   // -----------------------------------------------------------------------
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
   const listUrl = useMemo(
-    () => buildMemoListUrl({ query, sort: sortMode, archiveScope, collectionId: activeCollectionId }),
-    [archiveScope, query, sortMode, activeCollectionId],
+    () => buildMemoListUrl({ query: debouncedQuery, sort: sortMode, archiveScope, collectionId: activeCollectionId }),
+    [archiveScope, debouncedQuery, sortMode, activeCollectionId],
   );
 
   const { data: memoList = { memos: [], total: 0 }, error: memoLoadError, isLoading: memoListLoading, mutate } =

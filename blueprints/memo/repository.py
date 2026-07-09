@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import json
 import sys
 from typing import Any
 
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import get_db_connection as default_get_db_connection
-from services.memo_ai import rank_memos_by_semantic_similarity
-
 from .constants import (
     COLLECTION_NOT_FOUND_ERROR,
     MEMO_NOT_FOUND_ERROR,
-    SEMANTIC_SEARCH_MAX_MEMOS,
 )
 from .helpers import date_end, date_start, ensure_title, resolve_sort_order
 from .serializers import serialize_memo_detail, serialize_memo_summary
@@ -30,6 +28,14 @@ def _get_db_connection():
     if memo_module is not None:
         return getattr(memo_module, "get_db_connection", default_get_db_connection)()
     return default_get_db_connection()
+
+
+def _serialize_vector(embedding: list[float]) -> str:
+    """Serialize an embedding as PostgreSQL pgvector input."""
+    values = [float(value) for value in embedding]
+    if not values:
+        raise ValueError("Embedding must not be empty.")
+    return "[" + ",".join(format(value, ".9g") for value in values) + "]"
 
 
 def fetch_memo_summaries(
@@ -116,26 +122,27 @@ def fetch_memo_summaries(
 
         where_sql = " AND ".join(where_clauses)
 
-        # セマンティック検索（ベクトル検索）の場合の処理。上位レコードを取得しPython側で類似度順ソートを行う。
-        # For semantic search: fetch matching embedded memos, rank by similarity in Python.
+        # セマンティック検索は pgvector の距離演算と HNSW インデックスで DB 側に委譲する。
+        # Perform semantic ranking in PostgreSQL with pgvector rather than transferring and sorting candidates in Python.
         if semantic_query_embedding is not None:
             where_clauses_sem = list(where_clauses)
-            where_clauses_sem.append("me.embedding IS NOT NULL")
+            where_clauses_sem.append("me.embedding_vector IS NOT NULL")
             where_sem_sql = " AND ".join(where_clauses_sem)
+            semantic_vector = _serialize_vector(semantic_query_embedding)
 
-            # 総件数を取得
-            # Fetch total count.
-            count_sql = f"SELECT COUNT(*) AS total_count FROM memo_entries me WHERE {where_sql}"
+            # 検索可能な埋め込みを持つメモだけを件数に含める。
+            # Count only entries eligible for semantic ranking.
+            count_sql = f"SELECT COUNT(*) AS total_count FROM memo_entries me WHERE {where_sem_sql}"
             cursor.execute(count_sql, tuple(filter_params))
             count_row = cursor.fetchone() or {}
             total_count = int(count_row.get("total_count") or 0)
 
-            # 最大件数分、埋め込みベクトル付きのメモを取得
-            # Fetch memos with embeddings up to the semantic limit.
+            # HNSW 索引で近傍を取得し、ページ分だけ DB から返す。
+            # Retrieve only the requested nearest neighbours through the HNSW index.
             sem_sql = f"""
                 SELECT
                     me.id, me.title, me.created_at, me.updated_at,
-                    me.archived_at, me.pinned_at, me.embedding,
+                    me.archived_at, me.pinned_at,
                     LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                     me.collection_id,
                     me.background_color,
@@ -146,22 +153,15 @@ def fetch_memo_summaries(
                 LEFT JOIN memo_collections mc ON mc.id = me.collection_id
                 LEFT JOIN shared_memo_entries sme ON sme.memo_entry_id = me.id
                 WHERE {where_sem_sql}
-                ORDER BY me.created_at DESC
+                ORDER BY me.embedding_vector <=> %s::vector
                 LIMIT %s
+                OFFSET %s
             """
-            cursor.execute(sem_sql, tuple([*filter_params, SEMANTIC_SEARCH_MAX_MEMOS]))
+            cursor.execute(sem_sql, tuple([*filter_params, semantic_vector, limit, offset]))
             rows = list(cursor.fetchall())
-
-            # コサイン類似度を用いてランキングを算出
-            # Rank and sort memos based on cosine similarity.
-            ranked = rank_memos_by_semantic_similarity(semantic_query_embedding, rows)
-
-            # ページネーションを適用
-            # Apply offset and limit pagination.
-            paginated = ranked[offset : offset + limit]
             return {
                 "total": total_count,
-                "memos": [serialize_memo_summary(r) for r in paginated],
+                "memos": [serialize_memo_summary(row) for row in rows],
             }
 
         # 通常ソート条件の組み立て（ピン留め優先対応など）

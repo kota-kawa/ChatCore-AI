@@ -109,7 +109,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:15.14
+    image: pgvector/pgvector:0.8.4-pg15
     container_name: postgres_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}

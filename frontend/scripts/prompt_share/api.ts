@@ -152,6 +152,7 @@ export function fetchPromptSearchResults(
   options?: {
     page?: number;
     perPage?: number;
+    includeTotal?: boolean;
     promptType?: PromptType | "all";
     contentFormat?: ContentFormat | "all";
     mediaType?: MediaType | "all";
@@ -163,6 +164,9 @@ export function fetchPromptSearchResults(
   }
   if (options?.perPage) {
     params.set("per_page", String(options.perPage));
+  }
+  if (options?.includeTotal === false) {
+    params.set("include_total", "0");
   }
   if (options?.promptType && options.promptType !== "all") {
     params.set("prompt_type", options.promptType);

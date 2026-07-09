@@ -46,11 +46,17 @@ def store_embedding(memo_id: int, embedding: list[float]) -> None:
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
-        # ベクトルデータをJSON形式の文字列にシリアライズして保存
-        # Serialize the vector array to a JSON string and store it.
+        # 旧TEXT列を後方互換のため維持し、pgvector列も同時に更新する。
+        # Keep the legacy TEXT representation during migration and update pgvector alongside it.
+        vector_literal = "[" + ",".join(format(float(value), ".9g") for value in embedding) + "]"
         cursor.execute(
-            "UPDATE memo_entries SET embedding = %s WHERE id = %s",
-            (json.dumps(embedding), memo_id),
+            """
+            UPDATE memo_entries
+               SET embedding = %s,
+                   embedding_vector = %s::vector
+             WHERE id = %s
+            """,
+            (json.dumps(embedding), vector_literal, memo_id),
         )
         connection.commit()
     except Exception:
