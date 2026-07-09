@@ -21,6 +21,7 @@ import {
   QUICK_PROMPTS,
   clearPendingActionSteps,
   clearStoredConversation,
+  describeActionStep,
   executeActionSteps,
   getInternalPathname,
   getMessageStorageKeys,
@@ -79,6 +80,9 @@ export function MiniChat({
   // Hydration flag prevents rendering stale server-side state before client storage is read
   const [hydrated, setHydrated] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  // 詳細を開いているステップのキー集合 — 実行前に何が動くかをユーザーが確認できるようにする
+  // Keys of steps whose detail panel is open, letting users inspect what a step will run
+  const [expandedStepKeys, setExpandedStepKeys] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   // 非同期ハンドラが最新のメッセージを参照できるように ref で同期させる
@@ -281,6 +285,16 @@ export function MiniChat({
       setProgressSteps([]);
     }
   };
+
+  // ステップ詳細パネルの開閉を切り替える
+  // Toggles the disclosure panel that reveals a step's underlying command and parameters
+  const toggleStepDetails = useCallback((stepKey: string) => {
+    setExpandedStepKeys((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(stepKey)) next.add(stepKey);
+      return next;
+    });
+  }, []);
 
   // テキストをクリップボードにコピーし、2 秒後にアイコンを元に戻す
   // Copies text to the clipboard and resets the copied state after 2 seconds
@@ -569,31 +583,60 @@ export function MiniChat({
               {actionsEnabled && msg.actionPlan && (
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
-                    {msg.actionPlan.steps.map((step, si) => (
-                      <li
-                        key={si}
-                        className={`mini-chat-action-step ${
-                          executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
-                            ? "is-current"
-                            : executionProgress?.messageId === msg.id && executionProgress.completedStepIndexes.includes(si)
-                              ? "is-complete"
-                              : executedSet.has(msg.id)
+                    {msg.actionPlan.steps.map((step, si) => {
+                      const stepKey = `${msg.id}:${si}`;
+                      const isExpanded = expandedStepKeys.has(stepKey);
+                      const detailsId = `mini-chat-step-details-${msg.id}-${si}`;
+                      return (
+                        <li
+                          key={si}
+                          className={`mini-chat-action-step ${
+                            executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
+                              ? "is-current"
+                              : executionProgress?.messageId === msg.id && executionProgress.completedStepIndexes.includes(si)
                                 ? "is-complete"
-                                : ""
-                        }`.trim()}
-                        aria-current={
-                          executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
-                            ? "step"
-                            : undefined
-                        }
-                      >
-                        <span className={`mini-chat-action-badge mini-chat-action-badge--${step.action}`}>
-                          {ACTION_LABELS[step.action]}
-                        </span>
-                        <span className="mini-chat-action-index">{si + 1}</span>
-                        {step.description}
-                      </li>
-                    ))}
+                                : executedSet.has(msg.id)
+                                  ? "is-complete"
+                                  : ""
+                          }`.trim()}
+                          aria-current={
+                            executionProgress?.messageId === msg.id && executionProgress.currentStepIndex === si
+                              ? "step"
+                              : undefined
+                          }
+                        >
+                          {/* ステップ行をクリックすると、実行されるコマンドや対象要素を確認できる */}
+                          {/* Clicking a step row reveals the command and target it will actually run */}
+                          <button
+                            type="button"
+                            className="mini-chat-action-step-summary"
+                            onClick={() => toggleStepDetails(stepKey)}
+                            aria-expanded={isExpanded}
+                            aria-controls={detailsId}
+                          >
+                            <span className={`mini-chat-action-badge mini-chat-action-badge--${step.action}`}>
+                              {ACTION_LABELS[step.action]}
+                            </span>
+                            <span className="mini-chat-action-index">{si + 1}</span>
+                            <span className="mini-chat-action-step-text">{step.description}</span>
+                            <i
+                              className={`bi bi-chevron-down mini-chat-action-step-caret${isExpanded ? " is-open" : ""}`}
+                              aria-hidden="true"
+                            ></i>
+                          </button>
+                          {isExpanded && (
+                            <dl className="mini-chat-action-step-details" id={detailsId}>
+                              {describeActionStep(step).map((detail) => (
+                                <div key={detail.label} className="mini-chat-action-step-detail">
+                                  <dt>{detail.label}</dt>
+                                  <dd className={detail.multiline ? "is-multiline" : undefined}>{detail.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ol>
                   <button
                     type="button"
