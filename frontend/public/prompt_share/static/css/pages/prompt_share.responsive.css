@@ -60,23 +60,24 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) main {
-    padding: 0.95rem 0.72rem 2.3rem;
+    padding: 0.95rem 0.5rem 2.3rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .categories,
 :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
     border-radius: 14px;
-    padding: 1.1rem 1rem;
+    padding: 1.1rem 0.8rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .prompts-list {
-    padding: 1.1rem 0.92rem;
     gap: 0.88rem;
   }
 
+  /* 端末幅に合わせて列数を増やし、狭いタブレット幅で余白が広がりすぎないようにする */
+  /* Let the column count follow the viewport so wider phones/tablets do not waste horizontal space */
   :where(body.prompt-share-page, .prompt-share-page) .category-list {
     gap: 0.5rem;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .category-card {
@@ -230,6 +231,26 @@
 @media (max-width: 480px) {
   :where(body.prompt-share-page, .prompt-share-page) .prompts-header__inner {
     padding: 1.2rem 0.72rem 1.35rem;
+  }
+
+  /* スマホでは外側の余白を最小限にし、カテゴリとプロンプト一覧に画面幅を渡す */
+  /* On phones keep the outer gutters minimal so the category and prompt sections get the screen width */
+  :where(body.prompt-share-page, .prompt-share-page) main {
+    padding: 0.85rem 0.35rem 2.1rem;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .categories,
+:where(body.prompt-share-page, .prompt-share-page) .prompts-list {
+    padding: 1rem 0.68rem;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .category-list {
+    gap: 0.45rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .prompt-share-page .prompt-card {
+    padding: 0.72rem;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .hero-kicker {
