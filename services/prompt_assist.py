@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from services.llm import LlmProviderError, get_llm_response
+from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
 SHARED_PROMPT_SKILL_ALLOWED_FIELDS = ("title", "skill_markdown", "skill_python_script")
@@ -92,6 +93,10 @@ def _normalize_fields(target: str, fields: dict[str, Any]) -> dict[str, str]:
         normalized["prompt_type"] = normalized_prompt_type
     else:
         normalized["prompt_type"] = "text"
+    # 日本語: カテゴリはキーで届くため、LLMが解釈できる日本語ラベルへ解決します。
+    # English: Categories arrive as keys; resolve them to Japanese labels the LLM can read.
+    if "category" in normalized:
+        normalized["category"] = category_label(normalized["category"]) or normalized["category"]
     return normalized
 
 

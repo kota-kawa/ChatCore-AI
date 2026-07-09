@@ -51,6 +51,7 @@ import {
   PROMPT_MEDIA_TYPE_FILTERS,
   SEARCH_RESULTS_PER_PAGE
 } from "../../components/prompt_share/prompt_share_page_constants";
+import { CATEGORY_UNSET } from "../../scripts/prompt_share/prompt_category_registry";
 import { PromptSharePageLayout } from "../../components/prompt_share/prompt_share_page_layout";
 import type {
   ContentFormatFilter,
@@ -142,7 +143,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [contentFormat, setContentFormat] = useState<ContentFormat>("prompt");
   const [mediaType, setMediaType] = useState<MediaType>("text");
   const [postTitle, setPostTitle] = useState("");
-  const [postCategory, setPostCategory] = useState("未選択");
+  // カテゴリは保存用の安定キーで保持する。空文字列は「未選択」を表す。
+  // The category is held as the stable key persisted to the DB; empty means unselected.
+  const [postCategory, setPostCategory] = useState(CATEGORY_UNSET);
   const [postContent, setPostContent] = useState("");
   const [postAiModel, setPostAiModel] = useState("");
   const [guardrailEnabled, setGuardrailEnabled] = useState(false);
@@ -771,7 +774,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
       const formData = new FormData();
       formData.append("title", postTitle);
-      formData.append("category", postCategory === "未選択" ? "" : postCategory);
+      formData.append("category", postCategory);
       formData.append("content", isSkill ? "" : postContent);
       formData.append("content_format", contentFormat);
       formData.append("media_type", mediaType);
@@ -797,7 +800,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         setContentFormat("prompt");
         setMediaType("text");
         setPostTitle("");
-        setPostCategory("未選択");
+        setPostCategory(CATEGORY_UNSET);
         setPostContent("");
         setPostAiModel("");
         setGuardrailEnabled(false);

@@ -10,6 +10,7 @@ import {
   normalizePromptContentFormat,
   normalizePromptMediaType
 } from "../../../../scripts/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../../../scripts/prompt_share/prompt_category_registry";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
 // Type for shared prompt data (including skill prompt fields)
@@ -268,7 +269,7 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
               </div>
               <h1>{prompt.title || "共有プロンプト"}</h1>
               <div className="shared-prompt-meta">
-                <span>カテゴリ: {prompt.category || "未分類"}</span>
+                <span>カテゴリ: {getCategoryLabelOrFallback(prompt.category)}</span>
                 <span>投稿者: {prompt.author || "匿名ユーザー"}</span>
                 {prompt.created_at ? <span>投稿日: {formatDate(prompt.created_at)}</span> : null}
                 {prompt.ai_model ? <span>使用AI: {prompt.ai_model}</span> : null}

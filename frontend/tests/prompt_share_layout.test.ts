@@ -73,7 +73,7 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
         clientId: "prompt-12",
         title: "会議メモ要約",
         content: "議事録を要点、決定事項、次のアクションに分けて要約してください。",
-        category: "ビジネス",
+        category: "business",
         author: "Kota",
         content_format: "prompt",
         media_type: "text",
@@ -104,7 +104,9 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
 
   assert.match(html, /プロンプト本文/);
   assert.match(html, /議事録を要点、決定事項、次のアクションに分けて要約してください。/);
-  assert.match(html, /ビジネス/);
+  // カテゴリキーが表示ラベルへ解決されることを検証する
+  // The category key must be resolved to its display label
+  assert.match(html, /仕事・ビジネス/);
   assert.match(html, /Gemini 2.5/);
   assert.match(html, /コピー/);
 });

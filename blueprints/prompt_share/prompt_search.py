@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from services.async_utils import run_blocking
 from services.db import get_db_connection  # 既存の DB 接続関数を利用
 # Reuse the shared DB connection helper.
+from services.prompt_categories import category_keys_matching
 from services.prompt_types import (
     CONTENT_FORMATS,
     MEDIA_TYPES,
@@ -247,7 +248,7 @@ def _search_public_prompts(
               AND (
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
-                p.category LIKE %s OR
+                p.category = ANY(%s::text[]) OR
                 COALESCE(u.username, p.author) LIKE %s
               )
             ORDER BY p.created_at DESC
@@ -268,15 +269,18 @@ def _search_public_prompts(
               AND (
                 p.title   LIKE %s OR
                 p.content LIKE %s OR
-                p.category LIKE %s OR
+                p.category = ANY(%s::text[]) OR
                 COALESCE(u.username, p.author) LIKE %s
               )
         """
         # LIKE検索用のワイルドカード付きパターンを作成
         # Create a search pattern with wildcards for LIKE operator.
         like_query = f"%{query}%"
+        # カテゴリはキーで保存されるため、日本語ラベルへの部分一致をキー集合に解決してから照合する。
+        # Categories are stored as keys, so resolve a label substring match into the matching keys.
+        matched_category_keys = category_keys_matching(query)
         count_params = list(count_filter_params)
-        count_params.extend([like_query, like_query, like_query, like_query])
+        count_params.extend([like_query, like_query, matched_category_keys, like_query])
         
         # 件数のカウント実行
         # Execute counting.
@@ -294,7 +298,7 @@ def _search_public_prompts(
         search_params.extend([
             like_query,
             like_query,
-            like_query,
+            matched_category_keys,
             like_query,
             per_page,
             offset,

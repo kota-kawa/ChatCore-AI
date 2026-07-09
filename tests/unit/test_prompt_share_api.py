@@ -18,7 +18,7 @@ class PromptShareApiTestCase(unittest.TestCase):
         sample_prompt = {
             "id": 12,
             "title": "共有タイトル",
-            "category": "仕事",
+            "category": "business",
             "content": "内容",
             "author": "tester",
             "input_examples": "input",

@@ -3,6 +3,7 @@ import React, { type RefObject } from "react";
 import MarkdownContent from "../MarkdownContent";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { showToast } from "../../scripts/core/toast";
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -99,7 +100,7 @@ export function PromptShareDetailModal({
   const promptBodyHelper = isSkillFormat ? "Markdown" : "そのまま使える本文";
   const promptBodyEmptyText = detailPrompt ? "内容が登録されていません。" : "プロンプトを読み込み中です。";
   const formattedDate = formatPromptDate(detailPrompt?.created_at) || "日付未設定";
-  const categoryLabel = detailPrompt?.category || "未分類";
+  const categoryLabel = getCategoryLabelOrFallback(detailPrompt?.category);
   const authorLabel = detailPrompt?.author || "投稿者未設定";
   const promptBodyLength = Array.from(promptBody).length;
   const hasExamples = !isSkillFormat && Boolean(detailPrompt?.input_examples || detailPrompt?.output_examples);
@@ -359,7 +360,7 @@ export function PromptShareDetailModal({
             tabIndex={-1}
           >
             <div className="prompt-detail-comments__summary">
-              <span>{detailPrompt?.category || "未分類"}</span>
+              <span>{categoryLabel}</span>
               <strong>{detailPrompt?.title || "プロンプト"}</strong>
             </div>
             <div className="prompt-detail-comments__header">

@@ -65,7 +65,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
                 {
                     "id": 1,
                     "title": "Prompt",
-                    "category": "仕事",
+                    "category": "business",
                     "content": "Body",
                     "author": "tester",
                     "input_examples": "",

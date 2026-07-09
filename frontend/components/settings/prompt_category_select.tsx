@@ -5,6 +5,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { PROMPT_CATEGORY_OPTIONS } from "../prompt_share/prompt_share_page_constants";
 
 // キーボード操作に対応したアクセシブルなカテゴリ選択コンポーネント
@@ -26,13 +27,23 @@ export function PromptCategorySelect({
   // Holds refs to each option button so keyboard navigation can move focus programmatically
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const selectedValue = value || "未選択";
-  // 現在値が選択肢リストにない場合は先頭に追加して一覧に含める
-  // Prepend the current value when it is not part of the standard option list
-  const categoryOptions = PROMPT_CATEGORY_OPTIONS.includes(selectedValue)
+  // 値は保存用の安定キー、表示はレジストリ解決したラベル。空キーは「未選択」を表す。
+  // The value is the stable key; the label is resolved from the registry. Empty key means unselected.
+  const selectedValue = value || "";
+  // 現在値がレジストリにない（移行前の値など）場合は先頭に追加して一覧に含める
+  // Prepend the current value when the registry does not know it (e.g. a pre-migration value)
+  const isKnownValue = PROMPT_CATEGORY_OPTIONS.some((option) => option.value === selectedValue);
+  const categoryOptions = isKnownValue
     ? PROMPT_CATEGORY_OPTIONS
-    : [selectedValue, ...PROMPT_CATEGORY_OPTIONS];
-  const selectedIndex = Math.max(0, categoryOptions.indexOf(selectedValue));
+    : [
+        { value: selectedValue, label: getCategoryLabelOrFallback(selectedValue) },
+        ...PROMPT_CATEGORY_OPTIONS
+      ];
+  const selectedIndex = Math.max(
+    0,
+    categoryOptions.findIndex((option) => option.value === selectedValue)
+  );
+  const selectedLabel = categoryOptions[selectedIndex]?.label ?? "未選択";
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const listboxId = `${selectId}-menu`;
 
@@ -79,11 +90,11 @@ export function PromptCategorySelect({
   // 選択を確定してリストを閉じ、トリガーボタンにフォーカスを戻す
   // Commit the selection, close the list, and return focus to the trigger button
   const selectOption = (index: number) => {
-    const nextValue = categoryOptions[index];
-    if (!nextValue) {
+    const nextOption = categoryOptions[index];
+    if (!nextOption) {
       return;
     }
-    onChange(nextValue);
+    onChange(nextOption.value);
     setIsOpen(false);
     triggerRef.current?.focus();
   };
@@ -158,8 +169,8 @@ export function PromptCategorySelect({
         }}
       >
         {categoryOptions.map((category) => (
-          <option key={category} value={category}>
-            {category}
+          <option key={category.value} value={category.value}>
+            {category.label}
           </option>
         ))}
       </select>
@@ -193,7 +204,7 @@ export function PromptCategorySelect({
         }}
         onKeyDown={handleTriggerKeyDown}
       >
-        <span className="min-w-0 flex-1 truncate">{selectedValue}</span>
+        <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
         <i
           className={`bi bi-chevron-down shrink-0 text-sm text-[#4f7eb6] transition [html[data-theme='dark']_&]:text-emerald-300${isOpen ? " rotate-180 text-[#1a73e8]" : ""}`}
           aria-hidden="true"
@@ -215,10 +226,10 @@ export function PromptCategorySelect({
           ].join(" ")}
         >
           {categoryOptions.map((category, index) => {
-            const selected = selectedValue === category;
+            const selected = selectedValue === category.value;
             return (
               <button
-                key={category}
+                key={category.value}
                 ref={(node) => {
                   optionRefs.current[index] = node;
                 }}
@@ -241,7 +252,7 @@ export function PromptCategorySelect({
                   handleOptionKeyDown(event, index);
                 }}
               >
-                <span className="min-w-0 truncate">{category}</span>
+                <span className="min-w-0 truncate">{category.label}</span>
                 {selected ? <i className="bi bi-check-lg shrink-0" aria-hidden="true"></i> : null}
               </button>
             );

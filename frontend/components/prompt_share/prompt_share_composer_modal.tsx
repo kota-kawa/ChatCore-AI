@@ -20,7 +20,7 @@ import {
   normalizeMediaType
 } from "../../scripts/prompt_share/prompt_type_registry";
 import type { ContentFormat, MediaType } from "../../scripts/prompt_share/types";
-import type { PromptPostStatus } from "./prompt_share_page_types";
+import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
 
 // レジストリ駆動で描画する属性フィールドの、親が用意する状態バインディング。
 // State binding (provided by the parent) for a registry-driven attribute field.
@@ -62,7 +62,7 @@ type PromptShareComposerModalProps = {
   // Format-specific attribute fields (key -> state binding).
   attributeBindings: Record<string, AttributeBinding>;
   updatePromptFeedbackErrorIfNeeded: () => void;
-  categoryOptions: string[];
+  categoryOptions: PromptCategoryOption[];
   promptPostStatus: PromptPostStatus;
   promptPostTitleInputRef: RefObject<HTMLInputElement>;
   promptPostCategorySelectRef: RefObject<HTMLSelectElement>;
@@ -522,13 +522,6 @@ export function PromptShareComposerModal({
   onReferenceImageChange,
   onClearReferenceImage
 }: PromptShareComposerModalProps) {
-  // カテゴリ文字列をセレクト用のオブジェクト配列に変換する
-  // Convert raw category strings into option objects for the custom select component
-  const categorySelectOptions = categoryOptions.map((category) => ({
-    value: category,
-    label: category
-  }));
-
   // 選択中の2軸からレジストリ定義を解決する。
   // Resolve the registry descriptors for the currently selected axes.
   const activeFormat = getContentFormat(contentFormat);
@@ -664,7 +657,7 @@ export function PromptShareComposerModal({
                     selectId="prompt-category"
                     nativeRef={promptPostCategorySelectRef}
                     value={postCategory}
-                    options={categorySelectOptions}
+                    options={categoryOptions}
                     menuLabel="カテゴリを選択"
                     onChange={setPostCategory}
                     onAfterChange={updatePromptFeedbackErrorIfNeeded}

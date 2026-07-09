@@ -10,6 +10,7 @@ from services.attached_files import (
     MAX_ATTACHED_FILE_CONTENT_LENGTH,
     MAX_ATTACHED_FILES,
 )
+from services.prompt_categories import normalize_category
 from services.prompt_types import (
     DEFAULT_CONTENT_FORMAT,
     DEFAULT_MEDIA_TYPE,
@@ -290,6 +291,12 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     def validate_two_axis(self) -> "SharedPromptCreateRequest":
         # 日本語: 軸の値を正規化し、フォーマットが宣言する属性のみ採用・検証します。
         # English: Normalize the axes and keep/validate only the attributes the format declares.
+        # 日本語: カテゴリはレジストリの許可リストで検証し、正準キーへ正規化します。
+        # English: Validate the category against the registry allow-list and store the canonical key.
+        normalized_category = normalize_category(self.category)
+        if normalized_category is None:
+            raise ValueError("カテゴリの指定が不正です。")
+        self.category = normalized_category
         self.content_format = normalize_content_format(self.content_format)
         self.media_type = normalize_media_type(self.media_type)
         self.attributes = sanitize_attributes(self.content_format, self.attributes)
@@ -334,6 +341,16 @@ class PromptUpdateRequest(RequestPayloadModel):
     content: NonEmptyStr
     input_examples: str = ""
     output_examples: str = ""
+
+    @model_validator(mode="after")
+    def validate_category(self) -> "PromptUpdateRequest":
+        # 日本語: カテゴリをレジストリで検証し、正準キーへ正規化します（更新では未設定を許さない）。
+        # English: Validate against the registry and store the canonical key; unset is not allowed on update.
+        normalized_category = normalize_category(self.category)
+        if not normalized_category:
+            raise ValueError("カテゴリの指定が不正です。")
+        self.category = normalized_category
+        return self
 
 
 # 日本語: 新しいメモを作成し、指定のコレクションや配色で保存する際のリクエストペイロード。

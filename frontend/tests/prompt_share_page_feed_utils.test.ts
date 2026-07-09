@@ -14,7 +14,7 @@ const prompts: PromptRecord[] = [
   {
     id: 1,
     title: "メール文面",
-    category: "文章作成",
+    category: "writing",
     content: "Write an email",
     content_format: "prompt",
     media_type: "text",
@@ -25,7 +25,7 @@ const prompts: PromptRecord[] = [
   {
     id: 2,
     title: "画像生成",
-    category: "画像",
+    category: "creative",
     content: "Create an image",
     content_format: "prompt",
     media_type: "image",
@@ -36,7 +36,7 @@ const prompts: PromptRecord[] = [
   {
     id: 3,
     title: "SKILL",
-    category: "開発",
+    category: "coding",
     content: "",
     content_format: "skill",
     media_type: "text",
@@ -48,7 +48,7 @@ const prompts: PromptRecord[] = [
 
 test("filterPrompts applies category, format, and media filters together", () => {
   assert.deepEqual(
-    filterPrompts(prompts, "画像", "prompt", "image").map((prompt) => prompt.id),
+    filterPrompts(prompts, "creative", "prompt", "image").map((prompt) => prompt.id),
     [2],
   );
   assert.deepEqual(
@@ -61,6 +61,12 @@ test("buildPromptCountMeta preserves category and search count labels", () => {
   assert.equal(
     buildPromptCountMeta(prompts, "all", "all", "all"),
     "公開プロンプト: 3件",
+  );
+  // カテゴリキーはカウントラベルでも表示ラベルへ解決される
+  // The category key is resolved to its display label in the count meta too
+  assert.equal(
+    buildPromptCountMeta(prompts, "coding", "all", "all"),
+    "開発・プログラミング: 1件",
   );
   assert.equal(
     buildPromptCountMeta(prompts, null, "prompt", "image", { searchTotal: 8 }),
