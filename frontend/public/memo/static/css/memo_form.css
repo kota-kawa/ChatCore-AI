@@ -5195,11 +5195,10 @@ body.memo-page {
     0 2px 8px rgba(15, 23, 42, 0.05),
     0 14px 32px -14px rgba(180, 83, 9, 0.28);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(13rem, 20rem) minmax(0, auto);
   grid-template-areas:
-    "brand actions"
-    "search search"
-    "filters collections";
+    "brand brand"
+    "search actions";
   align-items: center;
   column-gap: 1rem;
   row-gap: 0.65rem;
@@ -5216,6 +5215,8 @@ body.memo-page {
   align-items: center;
   gap: 0.62rem;
   min-width: 0;
+  box-sizing: border-box;
+  padding-right: 4.75rem;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__app-mark {
@@ -5336,7 +5337,7 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search {
   grid-area: search;
-  width: clamp(13rem, 22vw, 20rem);
+  width: 100%;
   min-height: 42px;
   border: 1px solid rgba(60, 64, 67, 0.14);
   border-radius: 12px;
@@ -6267,10 +6268,9 @@ body.memo-page {
 }
 
 /* Keep the toolbar action buttons clear of the fixed top-right user/login
-   icon. Below ~1280px the toolbar spans nearly the full viewport width, so the
-   right-aligned buttons (and the stacked action row on mobile) would otherwise
-   sit underneath the floating icon. Reserve room equal to its footprint. */
-@media (max-width: 1280px) {
+   icon when narrower layouts put the actions back on the title row. Reserve
+   room equal to the floating avatar footprint. */
+@media (max-width: 1024px) {
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__actions {
     margin-right: 3.6rem;
   }
