@@ -50,28 +50,6 @@ export function MemoToolbar({
                   </div>
                 </div>
                 <div className="memo-toolbar__actions" role="toolbar" aria-label="メモ操作">
-                  <div className="memo-toolbar__search">
-                    <label htmlFor="memo-search" className="sr-only">メモを検索</label>
-                    <i className="bi bi-search" aria-hidden="true"></i>
-                    <input
-                      id="memo-search"
-                      type="search"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="検索..."
-                    />
-                    {hasActiveFilters && (
-                      <button
-                        type="button"
-                        className="memo-toolbar__search-clear"
-                        onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("manual"); setActiveCollectionId(null); }}
-                        aria-label="クリア"
-                      >
-                        <i className="bi bi-x-lg" aria-hidden="true"></i>
-                      </button>
-                    )}
-                  </div>
-
                   <button
                     type="button"
                     className="memo-toolbar__icon-btn"
@@ -103,6 +81,27 @@ export function MemoToolbar({
                     <i className="bi bi-download" aria-hidden="true"></i>
                   </button>
                 </div>
+              </div>
+              <div className="memo-toolbar__search">
+                <label htmlFor="memo-search" className="sr-only">メモを検索</label>
+                <i className="bi bi-search" aria-hidden="true"></i>
+                <input
+                  id="memo-search"
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="検索..."
+                />
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    className="memo-toolbar__search-clear"
+                    onClick={() => { setQuery(""); setArchiveScope("active"); setSortMode("manual"); setActiveCollectionId(null); }}
+                    aria-label="クリア"
+                  >
+                    <i className="bi bi-x-lg" aria-hidden="true"></i>
+                  </button>
+                )}
               </div>
             </header>
   );
