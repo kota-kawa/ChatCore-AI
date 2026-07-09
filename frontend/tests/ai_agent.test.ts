@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildAiAgentHttpError,
+  isActionStep,
   isAllowedNavigationPath,
   isDestructiveActionLabel,
   isSafeInternalPath,
@@ -70,6 +71,16 @@ test("isDestructiveActionLabel detects irreversible-control wording", () => {
   assert.equal(isDestructiveActionLabel("ログアウト"), true);
   assert.equal(isDestructiveActionLabel("もっと見る"), false);
   assert.equal(isDestructiveActionLabel(null), false);
+});
+
+test("isActionStep accepts memo_edit steps and keeps rejecting unknown actions", () => {
+  assert.equal(
+    isActionStep({ action: "memo_edit", description: "誤字を直した本文へ置き換えます", content: "本文" }),
+    true,
+  );
+  assert.equal(isActionStep({ action: "click", description: "ボタンを押す", selector: "#x" }), true);
+  assert.equal(isActionStep({ action: "memo_delete", description: "未知の操作" }), false);
+  assert.equal(isActionStep({ action: "memo_edit" }), false);
 });
 
 test("buildAiAgentHttpError prefers server error message and retry_after", async () => {

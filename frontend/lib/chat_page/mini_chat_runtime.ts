@@ -48,6 +48,14 @@ export type NavigateInternal = (path: string) => Promise<NavigationOutcome>;
 // Context persisted to sessionStorage when an undetected unload tears down the page mid-plan
 export type UnloadContext = { remaining: ActionStep[]; expectedPath?: string } | null;
 
+// memo_edit ステップが適用する編集内容
+// Edit payload a memo_edit step applies to the currently open memo
+export type MemoEditPayload = { content: string; title?: string };
+
+// memo_edit ステップを実際のメモ編集状態へ反映するハンドラ
+// Handler that applies a memo_edit step to the host page's memo editing state
+export type MemoEditApplyHandler = (edit: MemoEditPayload) => StepExecutionResult | Promise<StepExecutionResult>;
+
 // MiniChat コンポーネントの外部 API (props の型定義)
 // Public API surface for the MiniChat component
 export type MiniChatProps = {
@@ -59,6 +67,9 @@ export type MiniChatProps = {
   inputPlaceholder?: string;
   enableActions?: boolean;
   persistConversation?: boolean;
+  // memo_edit アクションを受け付けて開いているメモへ適用するハンドラ（指定時のみメモ編集計画が有効になる）
+  // Enables memo edit plans: applies a memo_edit step to the open memo when provided
+  onMemoEdit?: MemoEditApplyHandler;
 };
 
 // 実行オプション — ナビゲーション関数とアンロードコンテキスト更新を受け取る
@@ -67,6 +78,7 @@ export type ExecuteOptions = {
   navigateInternal: NavigateInternal;
   setUnloadContext: (context: UnloadContext) => void;
   onStepProgress?: (stepIndex: number, status: "current" | "complete") => void;
+  applyMemoEdit?: MemoEditApplyHandler;
 };
 
 // デフォルトの候補プロンプト — ユーザーが何を聞けるかをすぐに把握できるように
@@ -731,12 +743,33 @@ function isDestructiveStep(step: ActionStep): boolean {
   return isDestructiveActionLabel(haystack);
 }
 
+// memo_edit ステップを検証してホスト側のハンドラへ委譲する
+// Validates a memo_edit step and delegates the application to the host-provided handler
+async function executeMemoEdit(
+  step: ActionStep,
+  applyMemoEdit: MemoEditApplyHandler | undefined,
+): Promise<StepExecutionResult> {
+  if (!applyMemoEdit) {
+    return { ok: false, message: "この画面ではメモ編集を実行できません。", needsReplan: false };
+  }
+  const content = typeof step.content === "string" ? step.content : "";
+  if (!content.trim()) {
+    return { ok: false, message: "編集後の本文が空のため適用できませんでした。", needsReplan: false };
+  }
+  const title = typeof step.title === "string" && step.title.trim() ? step.title : undefined;
+  return applyMemoEdit({ content, title });
+}
+
 // 1 ステップを実行する — ナビゲーション・確認ダイアログ・リトライを含む完全なライフサイクル
 // Executes a single step through its full lifecycle: navigate, confirm, perform, verify
 async function executeActionStep(
   step: ActionStep,
-  navigateInternal: NavigateInternal,
+  options: ExecuteOptions,
 ): Promise<StepExecutionResult> {
+  const { navigateInternal } = options;
+  if (step.action === "memo_edit") {
+    return executeMemoEdit(step, options.applyMemoEdit);
+  }
   if (step.action === "navigate" || (step.action === "app_action" && step.command === "navigation.openPage")) {
     return executeNavigation(step, navigateInternal);
   }
@@ -776,7 +809,7 @@ export async function executeActionSteps(
   steps: ActionStep[],
   options: ExecuteOptions,
 ): Promise<StepExecutionResult> {
-  const { navigateInternal, setUnloadContext, onStepProgress } = options;
+  const { setUnloadContext, onStepProgress } = options;
   for (const [stepIndex, step] of steps.entries()) {
     const remaining = steps.slice(stepIndex + 1);
     const navigationPath = getStepNavigationPath(step);
@@ -793,7 +826,7 @@ export async function executeActionSteps(
     }
 
     onStepProgress?.(stepIndex, "current");
-    const result = await executeActionStep(step, navigateInternal);
+    const result = await executeActionStep(step, options);
     if (!result.ok) {
       setUnloadContext(null);
       clearPendingActionSteps();
@@ -829,6 +862,7 @@ export const ACTION_LABELS: Record<ActionStep["action"], string> = {
   select: "選択",
   check: "チェック",
   wait: "待機",
+  memo_edit: "メモ編集",
 };
 
 // 送信直後に表示する初期ステータステキスト

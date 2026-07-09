@@ -3072,6 +3072,118 @@ body.memo-page.modal-open {
   cursor: not-allowed;
 }
 
+/* ── Memo Agent panel: action plan (memo edit proposal) ── */
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-plan {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1.5px solid rgba(191, 122, 23, 0.24);
+  border-radius: 10px;
+  background: rgba(254, 243, 199, 0.44);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-steps {
+  margin: 0 0 0.6rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step {
+  position: relative;
+  padding: 0.3rem 0.36rem 0.3rem 0;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #57370d;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-current {
+  background: rgba(245, 158, 11, 0.14);
+  color: #451a00;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete {
+  color: rgba(87, 55, 13, 0.68);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete::after {
+  content: "\F26E";
+  margin-left: 6px;
+  color: #16a34a;
+  font-family: "bootstrap-icons";
+  font-size: 0.74rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.18rem;
+  height: 1.18rem;
+  margin-right: 5px;
+  border: 1px solid rgba(191, 122, 23, 0.3);
+  border-radius: 999px;
+  color: #92400e;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-badge {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(191, 122, 23, 0.16);
+  color: #92400e;
+  white-space: nowrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0.44rem 0;
+  border: 1.5px solid rgba(180, 83, 9, 0.55);
+  border-radius: 8px;
+  background: rgba(254, 243, 199, 0.5);
+  color: #92400e;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease,
+    transform 0.15s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ── Dark mode overrides for memo agent panel ── */
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-container {
   background: transparent;
@@ -3235,6 +3347,49 @@ body.memo-page.modal-open {
   color: #fbbf24;
   border-color: rgba(251, 191, 36, 0.36);
   background: rgba(251, 191, 36, 0.08);
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-plan {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(120, 53, 15, 0.22);
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step {
+  color: #fde68a;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-current {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fef3c7;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete {
+  color: rgba(253, 230, 138, 0.66);
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete::after {
+  color: #4ade80;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-index {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-badge {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(120, 53, 15, 0.28);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-execute-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  color: #ffffff;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-modal__edit-fields {
