@@ -8,12 +8,11 @@ import logging
 import re
 from typing import Any
 
-import numpy as np
-
 from .llm import GROQ_MODEL, LlmProviderError, groq_client, get_llm_response
 
 MEMO_SUGGEST_MODEL = GROQ_MODEL
 EMBEDDING_MODEL = "nomic-embed-text-v1_5"
+EMBEDDING_DIMENSIONS = 768
 EMBEDDING_MAX_INPUT_CHARS = 8000
 EMBEDDING_RESPONSE_SAMPLE_CHARS = 2000
 SUGGEST_RESPONSE_SAMPLE_CHARS = 1500
@@ -129,7 +128,15 @@ def generate_embedding(text: str) -> list[float] | None:
             model=EMBEDDING_MODEL,
             input=normalized,
         )
-        return response.data[0].embedding
+        embedding = list(response.data[0].embedding)
+        if len(embedding) != EMBEDDING_DIMENSIONS:
+            logger.warning(
+                "Embedding model returned %s dimensions; expected %s.",
+                len(embedding),
+                EMBEDDING_DIMENSIONS,
+            )
+            return None
+        return embedding
     except Exception:
         logger.warning("Embedding generation failed.", exc_info=True)
         return None
@@ -147,40 +154,3 @@ def build_memo_embedding_text(title: str, ai_response: str) -> str:
     if ai_response:
         parts.append(ai_response[:EMBEDDING_RESPONSE_SAMPLE_CHARS])
     return "\n".join(parts)
-
-
-# 2つのベクトルのコサイン類似度を算出します。
-# Calculate the cosine similarity score between two vectors.
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    va = np.asarray(a, dtype=np.float32)
-    vb = np.asarray(b, dtype=np.float32)
-    norm_a = float(np.linalg.norm(va))
-    norm_b = float(np.linalg.norm(vb))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return float(np.dot(va, vb) / (norm_a * norm_b))
-
-
-# クエリの埋め込みベクトルと各メモの類似度を計算し、類似度の高い順にソートしたメモ一覧を返します。
-# Sort the list of memos in descending order of similarity to the query embedding.
-def rank_memos_by_semantic_similarity(
-    query_embedding: list[float],
-    memos: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    # クエリの埋め込みベクトルと各メモの類似度を計算し、類似度の高い順にソートしたメモ一覧を返します。
-    # Sort the list of memos in descending order of similarity to the query embedding.
-    """Return *memos* sorted by descending cosine similarity to *query_embedding*."""
-    scored: list[tuple[float, dict[str, Any]]] = []
-    for memo in memos:
-        emb_raw = memo.get("embedding")
-        score = 0.0
-        if emb_raw:
-            try:
-                emb: list[float] = json.loads(emb_raw) if isinstance(emb_raw, str) else emb_raw
-                score = _cosine_similarity(query_embedding, emb)
-            except Exception:
-                pass
-        scored.append((score, memo))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [memo for _, memo in scored]

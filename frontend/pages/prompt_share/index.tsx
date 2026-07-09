@@ -527,6 +527,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       const data = await fetchPromptSearchResults(query, {
         page: nextPage,
         perPage: Number(searchPagination.per_page || SEARCH_RESULTS_PER_PAGE),
+        includeTotal: false,
         contentFormat: selectedContentFormatFilterRef.current,
         mediaType: selectedMediaTypeFilterRef.current
       });

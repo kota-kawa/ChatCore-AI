@@ -19,7 +19,3 @@ MAX_MEMO_LIST_LIMIT = 100
 # メモ概要（抜粋）のデフォルト文字数
 # Default character length for memo excerpts/previews.
 DEFAULT_EXCERPT_LENGTH = 180
-
-# セマンティック検索（ベクトル検索）の対象となる最大メモ件数
-# Maximum number of memos targeted for semantic search.
-SEMANTIC_SEARCH_MAX_MEMOS = 500
