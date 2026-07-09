@@ -44,6 +44,11 @@ from services.llm_daily_limit import (
 from services.code_search import search_codebase
 from services.intent_classifier import classify_intent
 from services.manual_rag import search_manual
+from services.memo_agent_actions import (
+    build_memo_edit_messages,
+    classify_memo_intent,
+    parse_memo_edit_response,
+)
 from services.page_actions import build_action_messages, parse_action_response
 from services.page_context import get_page_context
 from services.prompt_assist import create_prompt_assist_payload
@@ -101,6 +106,11 @@ AI_AGENT_PER_ACTOR_LIMIT = 40
 # AIエージェントに渡すメモコンテキストの最大文字長
 # Maximum character length for memo context sent to the AI Agent.
 AI_AGENT_MEMO_CONTEXT_MAX_LENGTH = 20000
+
+# メモ本文が長すぎて切り詰められたことを示す注記。編集計画（全文置換）の生成可否の判定にも使う。
+# Notice appended when the memo body was truncated for context; also used to decide whether
+# a full-replacement edit plan can be generated safely.
+MEMO_CONTEXT_TRUNCATED_NOTICE = "（本文が長いため一部を省略）"
 
 AI_AGENT_SYSTEM_PROMPT = """
 あなたは ChatCore の全ページ共通AIエージェントです。
@@ -332,7 +342,7 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
     # メモが上限サイズを超えている場合は切り捨て
     # Truncate content if it exceeds character limits
     if len(memo_text) > AI_AGENT_MEMO_CONTEXT_MAX_LENGTH:
-        memo_text = f"{memo_text[:AI_AGENT_MEMO_CONTEXT_MAX_LENGTH]}\n\n（本文が長いため一部を省略）"
+        memo_text = f"{memo_text[:AI_AGENT_MEMO_CONTEXT_MAX_LENGTH]}\n\n{MEMO_CONTEXT_TRUNCATED_NOTICE}"
 
     return (
         "【現在開いているメモ】\n"
@@ -1080,8 +1090,8 @@ async def ai_agent(
             if payload.current_dom:
                 dom_context = f"【現在ブラウザで見えている操作可能要素】\n{payload.current_dom}"
 
-            # メモIDが指定されている場合、メモの内容を背景コンテキストとして直接回答を生成する
-            # Handle memo-focused QA: build memo context and generate answer
+            # メモIDが指定されている場合、メモの内容を背景コンテキストとして編集提案または直接回答を生成する
+            # Handle memo-focused requests: propose an edit plan or answer questions using the memo as context
             if payload.memo_id is not None:
                 yield _ai_agent_sse("progress", {"message": "メモを読み込んでいます..."})
                 rag_context = await run_blocking(
@@ -1089,6 +1099,29 @@ async def ai_agent(
                     user_id,
                     payload.memo_id,
                 )
+
+                # 編集依頼なら、実行ボタン付きの編集計画（アクションプラン）を提案する。
+                # ただし本文が切り詰められている場合、全文置換の計画は末尾を消してしまうため生成しない。
+                # For edit requests, propose an executable edit plan the user confirms with the run button.
+                # Skip plan generation when the body was truncated for context: a full-replacement
+                # plan built from a partial body would silently delete the tail of the memo.
+                memo_intent = await run_blocking(classify_memo_intent, last_user_message)
+                if memo_intent == "edit" and not rag_context.endswith(MEMO_CONTEXT_TRUNCATED_NOTICE):
+                    yield _ai_agent_sse("progress", {"message": "編集案を作成中..."})
+                    edit_messages = build_memo_edit_messages(
+                        rag_context,
+                        [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                    )
+                    response_text = await run_blocking(
+                        get_llm_response, edit_messages, GPT_OSS_120B_MODEL
+                    )
+                    edit_plan = parse_memo_edit_response(response_text or "")
+                    if edit_plan:
+                        yield _ai_agent_sse("action_plan", edit_plan)
+                        return
+                    # 編集計画を生成できない場合は通常のQA回答にフォールバックする
+                    # Fall back to the standard QA answer when no valid edit plan was produced
+
                 yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
                 response_text = await run_blocking(
                     get_llm_response,

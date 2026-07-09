@@ -51,7 +51,11 @@ export function MiniChat({
   inputPlaceholder = "この画面でやりたいことを相談する",
   enableActions = true,
   persistConversation = true,
+  onMemoEdit,
 }: MiniChatProps = {}) {
+  // メモ編集ハンドラが渡されている場合は、画面操作が無効でもアクション計画（memo_edit）を受け付ける
+  // Accept action plans (memo_edit) when an edit handler is provided, even with page actions disabled
+  const actionsEnabled = enableActions || Boolean(onMemoEdit);
   const router = useRouter();
   // storageScope が変わったときだけキーを再計算する
   // Recompute storage keys only when storageScope changes to avoid unnecessary object churn
@@ -184,7 +188,7 @@ export function MiniChat({
         break;
       } else if (event.type === "action_plan") {
         assistantText = event.description;
-        actionPlan = enableActions ? { description: event.description, steps: event.steps } : undefined;
+        actionPlan = actionsEnabled ? { description: event.description, steps: event.steps } : undefined;
         break;
       } else if (event.type === "error") {
         assistantText = event.message;
@@ -361,6 +365,7 @@ export function MiniChat({
       const result = await executeActionSteps(steps, {
         navigateInternal,
         setUnloadContext,
+        applyMemoEdit: onMemoEdit,
         // ステップの current/complete 遷移ごとに UI の進捗表示を更新する
         // Updates the step-level progress indicator as each step transitions to current or complete
         onStepProgress: (stepIndex, status) => {
@@ -561,7 +566,7 @@ export function MiniChat({
               )}
               {/* アクション計画が含まれている場合、ステップ一覧と実行ボタンを表示する */}
               {/* Renders the action plan step list and execute button when an action plan is attached */}
-              {enableActions && msg.actionPlan && (
+              {actionsEnabled && msg.actionPlan && (
                 <div className="mini-chat-action-plan">
                   <ol className="mini-chat-action-steps">
                     {msg.actionPlan.steps.map((step, si) => (

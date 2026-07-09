@@ -1,5 +1,5 @@
 export type ActionStep = {
-  action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait";
+  action: "app_action" | "click" | "input" | "focus" | "scroll" | "navigate" | "select" | "check" | "wait" | "memo_edit";
   command?: string;
   args?: Record<string, unknown>;
   selector?: string;
@@ -9,6 +9,10 @@ export type ActionStep = {
   timeout_ms?: number;
   risk?: "low" | "medium" | "high";
   description: string;
+  /** memo_edit: 編集後のメモ本文全文 / full replacement body for the open memo */
+  content?: string;
+  /** memo_edit: 新しいタイトル（変更時のみ） / new memo title when the edit renames it */
+  title?: string;
 };
 
 export type ActionPlan = {
@@ -313,6 +317,7 @@ export function isActionStep(value: unknown): value is ActionStep {
     || step.action === "select"
     || step.action === "check"
     || step.action === "wait"
+    || step.action === "memo_edit"
   ) && typeof step.description === "string";
 }
 

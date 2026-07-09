@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import React, { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 
 import { MiniChat } from "../chat_page/MiniChat";
+import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
+import type { MemoEditPayload } from "../../lib/chat_page/mini_chat_runtime";
 import { InlineLoading } from "../ui/inline_loading";
 import { MEMO_AGENT_QUICK_PROMPTS, MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
@@ -64,6 +66,19 @@ export function MemoDetailModal({
   setDetailEditAiResponse,
 }: MemoDetailModalProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  // メモエージェントが提案した編集を編集中のタイトル・本文へ反映する（保存は既存の自動保存に任せる）
+  // Applies an agent-proposed edit to the editing state; persistence is handled by the existing autosave
+  const applyAgentMemoEdit = useCallback(async ({ content, title }: MemoEditPayload): Promise<StepExecutionResult> => {
+    if (!content.trim()) {
+      return { ok: false, message: "編集後の本文が空のため適用できませんでした。", needsReplan: false };
+    }
+    setDetailEditAiResponse(content);
+    if (title !== undefined) {
+      setDetailEditTitle(title.slice(0, 255));
+    }
+    return { ok: true };
+  }, [setDetailEditAiResponse, setDetailEditTitle]);
 
   useEffect(() => {
     if (!isMemoAgentOpen) return;
@@ -168,9 +183,9 @@ export function MemoDetailModal({
                           void openMemoAgent();
                         }
                       }}
-                      aria-label={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問"}
+                      aria-label={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問・編集"}
                       aria-expanded={isMemoAgentOpen}
-                      data-tooltip={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問"}
+                      data-tooltip={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問・編集"}
                       data-tooltip-placement="bottom"
                     >
                       <i className="bi bi-robot" aria-hidden="true"></i>
@@ -235,14 +250,14 @@ export function MemoDetailModal({
                   </div>
                 </section>
                 {isMemoAgentOpen && (
-                  <aside className="memo-modal__agent-panel" aria-label="このメモについてAIに質問">
+                  <aside className="memo-modal__agent-panel" aria-label="このメモについてAIに質問・編集">
                     <div className="memo-modal__agent-header">
                       <div className="memo-modal__agent-header-info">
                         <span className="memo-modal__agent-label">
                           <i className="bi bi-stars" aria-hidden="true"></i>
                           Memo Agent
                         </span>
-                        <strong>このメモについて質問</strong>
+                        <strong>このメモについて質問・編集</strong>
                       </div>
                       <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label="メモチャットを閉じる">
                         <i className="bi bi-x-lg" aria-hidden="true"></i>
@@ -254,10 +269,11 @@ export function MemoDetailModal({
                       storageScope={`memoAgent.${selectedMemo.id}`}
                       quickPrompts={MEMO_AGENT_QUICK_PROMPTS}
                       placeholderTitle="メモ専用エージェント"
-                      placeholderDescription="このメモの内容を参照して、要約、質問、整理を会話できます。"
-                      inputPlaceholder="このメモについて質問する..."
+                      placeholderDescription="このメモの内容を参照して、要約や質問に加えて、本文の編集も依頼できます。編集は実行ボタンを押したときだけ反映されます。"
+                      inputPlaceholder="このメモについて質問・編集を依頼する..."
                       enableActions={false}
                       persistConversation={false}
+                      onMemoEdit={applyAgentMemoEdit}
                     />
                   </aside>
                 )}

@@ -46,5 +46,6 @@ export const MEMO_COLOR_OPTIONS = [
 export const MEMO_AGENT_QUICK_PROMPTS = [
   "このメモを要約して",
   "重要なポイントを箇条書きにして",
-  "このメモについて質問に答えて"
+  "誤字脱字を修正して",
+  "本文を読みやすく整理して書き直して"
 ];
