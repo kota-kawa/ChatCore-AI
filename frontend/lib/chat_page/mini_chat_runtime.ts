@@ -868,3 +868,63 @@ export const ACTION_LABELS: Record<ActionStep["action"], string> = {
 // 送信直後に表示する初期ステータステキスト
 // Initial status shown while the request is in flight before the first SSE progress event
 export const INITIAL_PROGRESS_MESSAGE = "依頼を送信しています...";
+
+// リスク値をユーザー向けの日本語ラベルに変換するマッピング
+// Maps risk levels to the Japanese wording shown in the step detail panel
+export const RISK_LABELS: Record<NonNullable<ActionStep["risk"]>, string> = {
+  low: "低（元に戻しやすい操作）",
+  medium: "中（実行前に確認します）",
+  high: "高（実行前に確認します）",
+};
+
+// ステップ詳細パネルに表示する 1 行分の項目
+// A single labelled row rendered in the step detail disclosure panel
+export type ActionStepDetail = {
+  label: string;
+  value: string;
+  /** 本文など、折り返して複数行で見せる値 / values shown as wrapped multi-line text */
+  multiline?: boolean;
+};
+
+// step.args を人が読める JSON 文字列にする — 空や不正な値は空文字を返す
+// Renders step.args as readable JSON, returning "" when there is nothing worth showing
+function formatStepArgs(args: Record<string, unknown> | undefined): string {
+  if (!args || typeof args !== "object" || !Object.keys(args).length) return "";
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    return "";
+  }
+}
+
+// 実行前にユーザーが確認できるよう、ステップの内部フィールドを表示用の項目一覧へ変換する
+// Expands a step's internal fields into display rows so users can inspect what will run
+export function describeActionStep(step: ActionStep): ActionStepDetail[] {
+  const details: ActionStepDetail[] = [{ label: "種類", value: ACTION_LABELS[step.action] }];
+
+  if (step.command) details.push({ label: "コマンド", value: step.command });
+
+  const args = formatStepArgs(step.args);
+  if (args) details.push({ label: "パラメータ", value: args, multiline: true });
+
+  if (step.path) details.push({ label: "移動先", value: step.path });
+  if (step.selector) details.push({ label: "対象要素", value: step.selector });
+
+  if (step.action === "input") details.push({ label: "入力する値", value: step.value ?? "", multiline: true });
+  if (step.action === "select") details.push({ label: "選択する値", value: step.value ?? "" });
+  if (step.action === "check") {
+    details.push({ label: "チェック", value: step.checked ?? true ? "オンにする" : "オフにする" });
+  }
+  if (step.action === "wait" && typeof step.timeout_ms === "number") {
+    details.push({ label: "待機時間", value: `${step.timeout_ms} ミリ秒` });
+  }
+
+  if (step.title) details.push({ label: "新しいタイトル", value: step.title, multiline: true });
+  if (step.action === "memo_edit" && step.content) {
+    details.push({ label: "編集後の本文", value: step.content, multiline: true });
+  }
+
+  if (step.risk) details.push({ label: "リスク", value: RISK_LABELS[step.risk] });
+
+  return details;
+}

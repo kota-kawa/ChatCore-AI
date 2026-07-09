@@ -3112,12 +3112,89 @@ body.memo-page.modal-open {
   color: rgba(87, 55, 13, 0.68);
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete::after {
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete .mini-chat-action-step-summary::after {
   content: "\F26E";
   margin-left: 6px;
   color: #16a34a;
   font-family: "bootstrap-icons";
   font-size: 0.74rem;
+}
+
+/* 実行内容を確認するための開閉ボタン / Disclosure button revealing what a step runs */
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-summary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-summary:focus-visible {
+  outline: 2px solid rgba(180, 83, 9, 0.6);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-caret {
+  flex-shrink: 0;
+  margin-left: 6px;
+  color: rgba(146, 64, 14, 0.66);
+  font-size: 0.72rem;
+  transition: transform 0.18s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-caret.is-open {
+  transform: rotate(180deg);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-details {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.36rem 0 0.12rem;
+  padding: 0.44rem 0.56rem;
+  border: 1px solid rgba(191, 122, 23, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail dt {
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail dd {
+  margin: 0;
+  min-width: 0;
+  color: #3f2d12;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail dd.is-multiline {
+  max-height: 11rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-index {
@@ -3367,8 +3444,25 @@ body.memo-page.modal-open {
   color: rgba(253, 230, 138, 0.66);
 }
 
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete::after {
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step.is-complete .mini-chat-action-step-summary::after {
   color: #4ade80;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-caret {
+  color: rgba(252, 211, 77, 0.7);
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-details {
+  border-color: rgba(251, 191, 36, 0.2);
+  background: rgba(28, 25, 23, 0.72);
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail dt {
+  color: #fcd34d;
+}
+
+[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-step-detail dd {
+  color: #f5f0e6;
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-modal__agent-panel .mini-chat-action-index {

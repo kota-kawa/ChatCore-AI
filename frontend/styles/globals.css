@@ -1893,12 +1893,89 @@ a.cc-texture-btn:active {
   color: rgba(223, 248, 255, 0.72);
 }
 
-.global-ai-agent-modal .mini-chat-action-step.is-complete::after {
+.global-ai-agent-modal .mini-chat-action-step.is-complete .mini-chat-action-step-summary::after {
   content: "\F26E";
   margin-left: 6px;
   color: #bef264;
   font-family: "bootstrap-icons";
   font-size: 0.74rem;
+}
+
+/* 実行内容を確認するための開閉ボタン */
+.global-ai-agent-modal .mini-chat-action-step-summary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-summary:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.62);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-caret {
+  flex-shrink: 0;
+  margin-left: 6px;
+  color: rgba(186, 230, 253, 0.72);
+  font-size: 0.72rem;
+  transition: transform 0.18s ease;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.global-ai-agent-modal .mini-chat-action-step-details {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 2px;
+  padding: 7px 9px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 47, 73, 0.42);
+}
+
+.global-ai-agent-modal .mini-chat-action-step-detail {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-detail dt {
+  color: rgba(186, 230, 253, 0.76);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-detail dd {
+  margin: 0;
+  min-width: 0;
+  color: #dff8ff;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.global-ai-agent-modal .mini-chat-action-step-detail dd.is-multiline {
+  max-height: 11rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 
 .global-ai-agent-modal .mini-chat-action-index {
