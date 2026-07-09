@@ -1,5 +1,6 @@
 import { memo, type MouseEvent } from "react";
 
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
   formatPromptDate,
   getPromptFormatIconClass,
@@ -59,7 +60,7 @@ function PromptCardComponent({
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
   const mediaTypeValue = normalizePromptMediaType(String(prompt.media_type || ""));
   const promptId = prompt.clientId;
-  const safeCategory = prompt.category || "未分類";
+  const safeCategory = getCategoryLabelOrFallback(prompt.category);
   const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);

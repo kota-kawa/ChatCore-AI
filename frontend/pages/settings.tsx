@@ -734,11 +734,12 @@ export default function UserSettingsPage() {
 
     // 必須フィールドが揃っていない場合はサーバーに送らず早期リターンする
     // Guard against empty required fields before sending the request
+    // カテゴリ未選択は空キーで表されるため、空判定だけで弾ける
+    // An unselected category is the empty key, so the emptiness check alone rejects it
     if (
       !editPromptForm.id ||
       !editPromptForm.title.trim() ||
       !editPromptForm.category.trim() ||
-      editPromptForm.category === "未選択" ||
       !editPromptForm.content.trim()
     ) {
       showToast("編集フォームの値が不足しています。", { variant: "error" });

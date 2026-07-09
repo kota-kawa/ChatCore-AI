@@ -8,6 +8,13 @@ export type PromptCategory = {
   label: string;
 };
 
+// 投稿フォームのカテゴリセレクトの選択肢。value は保存用キー、label は表示名。
+// A category option for the composer select; value is the persisted key, label is displayed.
+export type PromptCategoryOption = {
+  value: string;
+  label: string;
+};
+
 // フォーマットフィルター（全件表示または特定フォーマットのみ）
 // Content format filter (show all or only a specific format)
 export type ContentFormatFilter = "all" | ContentFormat;

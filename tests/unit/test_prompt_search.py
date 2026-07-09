@@ -36,7 +36,7 @@ class FakeCursor:
                 {
                     "id": 11,
                     "title": "sample",
-                    "category": "仕事",
+                    "category": "business",
                     "content": "body",
                     "author": "tester",
                     "input_examples": "",
@@ -122,9 +122,11 @@ class PromptSearchTestCase(unittest.TestCase):
 
         # 件数取得クエリとそのパラメータの妥当性を検証
         # Verify validation of count query and its parameter list
+        # カテゴリはキー保存のため、ラベルに一致しない検索語では空のキー配列が渡される
+        # Categories are stored as keys, so a query matching no label passes an empty key array
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("SELECT COUNT(*) AS total", count_query)
-        self.assertEqual(count_params, ("%sample%", "%sample%", "%sample%", "%sample%"))
+        self.assertEqual(count_params, ("%sample%", "%sample%", [], "%sample%"))
 
         # 本文検索クエリの各種条件とLIMIT / OFFSET指定を検証
         # Verify search query conditions and LIMIT / OFFSET values
@@ -155,7 +157,7 @@ class PromptSearchTestCase(unittest.TestCase):
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("AND content_format = %s", count_query)
         self.assertIn("AND media_type = %s", count_query)
-        self.assertEqual(count_params, ("prompt", "image", "%sample%", "%sample%", "%sample%", "%sample%"))
+        self.assertEqual(count_params, ("prompt", "image", "%sample%", "%sample%", [], "%sample%"))
 
         # データ取得用の検索クエリ条件とパラメータを検証
         # Verify data retrieval query conditions and parameters
@@ -184,13 +186,32 @@ class PromptSearchTestCase(unittest.TestCase):
         count_query, count_params = fake_cursor.executed[0]
         self.assertIn("AND content_format = %s", count_query)
         self.assertIn("AND media_type = %s", count_query)
-        self.assertEqual(count_params, ("skill", "text", "%sample%", "%sample%", "%sample%", "%sample%"))
+        self.assertEqual(count_params, ("skill", "text", "%sample%", "%sample%", [], "%sample%"))
 
         search_query, search_params = fake_cursor.executed[1]
         self.assertIn("AND p.content_format = %s", search_query)
         self.assertIn("AND p.media_type = %s", search_query)
         self.assertEqual(search_params[:4], (9, 9, "skill", "text"))
         self.assertEqual(search_params[-2:], (10, 0))
+
+    # 日本語ラベルでの検索語が、DBに保存されたカテゴリキーの集合へ解決されることを検証します。
+    # Verify that a Japanese label query resolves to the category keys stored in the DB.
+    def test_search_public_prompts_resolves_category_label_to_keys(self):
+        fake_cursor = FakeCursor()
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("blueprints.prompt_share.prompt_search.get_db_connection", return_value=fake_conn):
+            _search_public_prompts("プログラミング", 1, 10, 9)
+
+        # カテゴリ条件はLIKEではなく、キー配列との等値照合になっている
+        # The category condition is an equality match against a key array, not a LIKE
+        count_query, count_params = fake_cursor.executed[0]
+        self.assertIn("p.category = ANY(%s::text[])", count_query)
+        self.assertEqual(count_params[2], ["coding"])
+
+        search_query, search_params = fake_cursor.executed[1]
+        self.assertIn("p.category = ANY(%s::text[])", search_query)
+        self.assertEqual(search_params[4], ["coding"])
 
     # 検索クエリが空の場合に、DBにアクセスせず空の結果を即座に返すことを検証します。
     # Verify that search returns an empty payload immediately without query execution when search query is blank.

@@ -1,4 +1,8 @@
 import { asId } from "../../lib/utils";
+import {
+  getCategoryLabel,
+  getCategoryLabelOrFallback
+} from "../../scripts/prompt_share/prompt_category_registry";
 import type { LikedPrompt, PromptRecord } from "../../scripts/user/settings/types";
 import { normalizePreviewText, toDisplayDate, truncateTitle } from "../../scripts/user/settings/utils";
 
@@ -19,7 +23,7 @@ export function PromptCard({
   const contentPreview = normalizePreviewText(prompt.content);
   const inputPreview = normalizePreviewText(prompt.inputExamples);
   const outputPreview = normalizePreviewText(prompt.outputExamples);
-  const categoryLabel = normalizePreviewText(prompt.category) || "未分類";
+  const categoryLabel = getCategoryLabelOrFallback(normalizePreviewText(prompt.category));
   const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : "日時未設定";
 
   return (
@@ -97,7 +101,9 @@ export function LikedPromptCard({
   const contentPreview = normalizePreviewText(entry.content);
   const inputPreview = normalizePreviewText(entry.inputExamples);
   const outputPreview = normalizePreviewText(entry.outputExamples);
-  const categoryLabel = normalizePreviewText(entry.category);
+  // カテゴリ未設定時はバッジ自体を出さないため、フォールバックなしでラベルを解決する
+  // Resolve the label without a fallback: an unset category hides the badge entirely
+  const categoryLabel = getCategoryLabel(normalizePreviewText(entry.category));
   const likedAtLabel = entry.likedAt ? toDisplayDate(entry.likedAt) : "日時未設定";
 
   return (

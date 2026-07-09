@@ -1,6 +1,7 @@
 import { SeoHead } from "../../components/SeoHead";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { PromptCategorySelect } from "../../components/settings/prompt_category_select";
 import { Skeleton, SkeletonText } from "../../components/ui/skeleton";
 import "../../scripts/core/csrf";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
@@ -9,6 +10,7 @@ import { showToast } from "../../scripts/core/toast";
 import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
 import { asId } from "../../lib/utils";
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
@@ -123,7 +125,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
         <h3 title={prompt.title}>{truncatedTitle}</h3>
         <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
         <div className="meta">
-          <span>カテゴリ: {prompt.category || "未設定"}</span>
+          <span>カテゴリ: {getCategoryLabelOrFallback(prompt.category, "未設定")}</span>
           <br />
           <span>投稿日: {toDisplayDate(prompt.createdAt)}</span>
         </div>
@@ -162,12 +164,20 @@ type PromptEditModalProps = {
   formState: PromptEditFormState;
   onClose: () => void;
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  onCategoryChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
 // プロンプト編集モーダルコンポーネント
 // Prompt edit modal component
-function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: PromptEditModalProps) {
+function PromptEditModal({
+  isSaving,
+  formState,
+  onClose,
+  onChange,
+  onCategoryChange,
+  onSubmit
+}: PromptEditModalProps) {
   return (
     <div
       id="editModal"
@@ -222,15 +232,13 @@ function PromptEditModal({ isSaving, formState, onClose, onChange, onSubmit }: P
                 <label htmlFor="editCategory" className="form-label">
                   カテゴリ
                 </label>
-                <input
-                  type="text"
-                  className="form-control input-field"
-                  id="editCategory"
-                  name="category"
-                  required
+                {/* カテゴリはレジストリの選択肢に限定する（自由入力はサーバー側で拒否される） */}
+                {/* Categories are limited to the registry options; free text is rejected server-side */}
+                <PromptCategorySelect
+                  selectId="editCategory"
                   value={formState.category}
-                  onChange={onChange}
                   disabled={isSaving}
+                  onChange={onCategoryChange}
                 />
               </div>
 
@@ -423,6 +431,12 @@ export default function PromptManagePage() {
     });
   }, []);
 
+  // カテゴリセレクトは値（安定キー）だけを返すため、専用のハンドラで状態へ反映する
+  // The category select emits only the stable key, so it needs its own state handler
+  const handleEditCategoryChange = useCallback((value: string) => {
+    setEditFormState((prev) => (prev ? { ...prev, category: value } : prev));
+  }, []);
+
   // 編集フォームの送信処理（バリデーション→PUT→一覧リロード）
   // Handle edit form submission (validate → PUT → reload list)
   const handleEditSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
@@ -523,6 +537,7 @@ export default function PromptManagePage() {
               }
             }}
             onChange={handleEditChange}
+            onCategoryChange={handleEditCategoryChange}
             onSubmit={handleEditSubmit}
           />
         ) : null}
