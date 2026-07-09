@@ -76,12 +76,12 @@
   /* 端末幅に合わせて列数を増やし、狭いタブレット幅で余白が広がりすぎないようにする */
   /* Let the column count follow the viewport so wider phones/tablets do not waste horizontal space */
   :where(body.prompt-share-page, .prompt-share-page) .category-list {
+    --prompt-category-card-height: 40px;
     gap: 0.5rem;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .category-card {
-    min-height: 40px;
     font-size: 0.85rem;
     padding: 0.4rem 0.65rem;
   }
@@ -273,7 +273,6 @@
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .category-card {
-    min-height: 40px;
     font-size: 0.82rem;
   }
 
