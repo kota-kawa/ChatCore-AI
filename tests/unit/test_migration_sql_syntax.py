@@ -192,5 +192,24 @@ class MigrationTriggerOperationLengthTest(unittest.TestCase):
         )
 
 
+# 物理削除で親レコードを失った履歴をINSERTしないようトリガー定義を検証するクラス。
+# Test that version triggers do not insert history after their parent rows are physically deleted.
+class MigrationVersionTriggerDeleteTest(unittest.TestCase):
+    # ユーザー削除時にタスク・プロンプト履歴の外部キー違反が起きないことを検証します。
+    # Verify account deletion cannot cause task or prompt version FK violations.
+    def test_latest_version_triggers_exclude_delete_events(self):
+        migration_path = MIGRATIONS_DIR / "20260710_02_skip_versions_for_physical_deletes.py"
+        migration = migration_path.read_text()
+        trigger_definition = migration.split("def _replace_version_trigger", 1)[1].split(
+            "def upgrade", 1
+        )[0]
+        upgrade = migration.split("def upgrade", 1)[1].split("def downgrade", 1)[0]
+
+        self.assertIn("AFTER INSERT OR UPDATE ON {table_name}", trigger_definition)
+        self.assertNotIn("DELETE", trigger_definition)
+        self.assertIn('"task_with_examples"', upgrade)
+        self.assertIn('"prompts"', upgrade)
+
+
 if __name__ == "__main__":
     unittest.main()
