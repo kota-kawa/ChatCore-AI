@@ -1,6 +1,10 @@
 import unittest
 
-from services.chat_context import build_context_messages, build_room_summary
+from services.chat_context import (
+    GENERATIVE_UI_EXECUTION_CONTRACT,
+    build_context_messages,
+    build_room_summary,
+)
 from services.chat_state import extract_memory_facts
 
 
@@ -41,13 +45,19 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             ],
         )
 
-        # 日本語: メッセージリストの順序が正しいことを確認（ベース→プロフィール→タスク→要約→記憶→最新）
-        # English: Confirm the message order is correct (base -> profile -> task -> summary -> memory -> recent)
+        # 日本語: メッセージリストの順序が正しいことを確認（ベース→プロフィール→タスク→要約→記憶→生成UI最終契約→最新）
+        # English: Confirm the message order is correct (base -> profile -> task -> summary -> memory -> final UI contract -> recent)
         self.assertEqual(context_messages[0]["content"], "base")
         self.assertEqual(context_messages[1]["content"], "profile")
         self.assertEqual(context_messages[2]["content"], "task")
         self.assertIn("summary text", context_messages[3]["content"])
         self.assertIn("Kota", context_messages[4]["content"])
+        self.assertEqual(context_messages[5]["role"], "system")
+        self.assertEqual(
+            context_messages[5]["content"],
+            GENERATIVE_UI_EXECUTION_CONTRACT,
+        )
+        self.assertIn("説明文だけで終える回答は未完了", context_messages[5]["content"])
         self.assertEqual(context_messages[-1]["content"], "third")
 
     # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。

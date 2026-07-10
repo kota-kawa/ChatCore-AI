@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from services import llm
+from services.chat_context import GENERATIVE_UI_EXECUTION_CONTRACT
 
 
 def _mock_openai_response(text):
@@ -88,7 +89,7 @@ class LlmServiceTestCase(unittest.TestCase):
         prepared = llm._prepare_openai_responses_input(
             [
                 {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "system", "content": "Follow the task contract."},
+                {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT},
                 {"role": "user", "content": "hello"},
             ]
         )
@@ -103,6 +104,8 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertFalse(
             prepared[1]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
         )
+        self.assertEqual(prepared[1]["content"], GENERATIVE_UI_EXECUTION_CONTRACT)
+        self.assertIn("説明文だけで終える回答は未完了", prepared[1]["content"])
         self.assertEqual(prepared[2]["role"], "user")
 
     def test_get_llm_response_routes_to_groq(self):

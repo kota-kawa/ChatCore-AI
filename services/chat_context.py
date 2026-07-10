@@ -18,6 +18,32 @@ ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 
+# 小型モデルでも生成UIの要否判定と構造化出力を最後まで実行できるよう、
+# 可変コンテキストの後ろに置く短い最終契約。詳細仕様と few-shot はベース
+# プロンプトに残し、ここでは実行条件と完了条件だけを再提示する。
+# Compact final contract placed after variable system context so smaller models
+# reliably make the UI decision and finish the structured output. Detailed rules
+# and few-shot examples remain in the base prompt; this repeats only execution
+# and completion criteria.
+GENERATIVE_UI_EXECUTION_CONTRACT = """
+<generative_ui_execution_contract>
+これは回答直前に適用する最終出力契約です。内部で UI_MODE を NONE / 2D / 3D から1つ選び、UI_MODE 自体は出力しないでください。
+
+判定順序:
+1. ユーザーが「テキストだけ」「UI不要」「図は不要」と指定した場合は NONE。
+2. ユーザーが3D、立体、空間モデル、軌道、回転デモを明示的に求めた場合は 3D。
+3. ユーザーが生成UI、可視化、図解、チャート、フロー、タイムライン、操作可能なデモを明示的に求めた場合は 2D（空間理解が中心なら3D）。
+4. 明示がなくても、比較・流れ・階層・位置関係・割合・優先度・状態・因果・入力による変化をUIにすると理解が明確になる場合は 2D または 3D。それ以外は NONE。
+
+UI_MODE が 2D または 3D の場合:
+- 短い導入文の直後に、完全な ```chatcore-artifact fenced block を必ず1つ出力してください。説明文だけで終える回答は未完了です。
+- JSONは version、title、html、css、js を含む有効な1オブジェクトとし、htmlには id="app" の要素を含めてください。
+- 3Dでは必ず "libraries":["three"] を含め、外部URLやアドオンを使わず THREE のコア機能だけで完成させてください。
+- Artifactの代わりにHTML・CSS・JavaScriptを別々のコードブロックで説明しないでください。
+- 送信前に、閉じ波括弧と閉じフェンスまで存在し、初期表示が空でなく、JSON文字列の改行・引用符が正しくエスケープされていることを確認してください。
+</generative_ui_execution_contract>
+""".strip()
+
 
 # テキストのトークン数を概算（簡易見積もり）する
 # Roughly estimate the token count of a given text
@@ -295,6 +321,16 @@ def build_context_messages(
     memory_message = build_memory_system_message(memory_facts)
     if memory_message is not None:
         messages.append(memory_message)
+
+    # タスク・プロフィール・プロジェクト指示などの可変システム文脈を読んだ後に、
+    # 生成UIの完了条件を短く再提示する。OpenAI Responses APIでは developer
+    # message、Gemini互換APIでは system messageとして同じ位置関係を保つ。
+    # Re-state the generative UI completion criteria after variable system
+    # context. This becomes a developer message for OpenAI Responses and remains
+    # a system message for the Gemini-compatible API.
+    messages.append(
+        {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT}
+    )
 
     # システムメッセージ群で使用されたトークン数を算出して直近履歴に使えるトークン予算を決定する
     # Calculate tokens used by system messages to determine the remaining budget for recent history
