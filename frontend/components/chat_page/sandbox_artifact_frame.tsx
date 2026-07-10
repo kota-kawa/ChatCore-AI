@@ -3,19 +3,36 @@ import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GenerativeUiArtifactV1 } from "../../lib/chat_page/types";
 
 // サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
+// scriptSourcesには、インラインに加えて許可するローカル配信ライブラリのURLだけを渡す
 // Content Security Policy for sandbox iframe (fully blocks external connections, forms, etc.)
-const SANDBOX_CSP = [
-  "default-src 'none'",
-  "img-src data: blob:",
-  "style-src 'unsafe-inline'",
-  "script-src 'unsafe-inline'",
-  "connect-src 'none'",
-  "media-src 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
+// scriptSources receives only the locally served library URLs allowed in addition to inline
+function buildSandboxCsp(scriptSources: string[]) {
+  return [
+    "default-src 'none'",
+    "img-src data: blob:",
+    "style-src 'unsafe-inline'",
+    `script-src ${["'unsafe-inline'", ...scriptSources].join(" ")}`,
+    "connect-src 'none'",
+    "media-src 'none'",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
+
+// ローカル配信するThree.js（UMDビルド）のパス。CDNはCSPで遮断されるため自オリジンから配信する
+// Path of the locally served Three.js (UMD build); CDNs are blocked by the CSP,
+// so it is served from our own origin
+const THREE_VENDOR_SCRIPT_PATH = "/static/js/vendor/three.min.js";
+
+// アーティファクトが要求するライブラリを、自オリジンの絶対URLに解決する
+// Resolve the libraries requested by the artifact into absolute same-origin URLs
+function resolveLibraryScriptUrls(artifact: GenerativeUiArtifactV1) {
+  if (!artifact.libraries?.includes("three")) return [];
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return [`${origin}${THREE_VENDOR_SCRIPT_PATH}`];
+}
 
 // フレームの高さの最小・最大・デフォルト値（px）
 // Minimum, maximum, and default frame heights (px)
@@ -69,6 +86,15 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
   const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${artifact.css || ""}`);
   const js = escapeScript(artifact.js || "");
   const html = artifact.html || "";
+  const libraryScriptUrls = resolveLibraryScriptUrls(artifact);
+  const libraryScriptTags = libraryScriptUrls
+    .map((url) => `<script src="${escapeHtmlAttribute(url)}"></script>`)
+    .join("\n");
+  // ライブラリの読み込みに失敗した場合は、ユーザーJSを実行せずにエラー経路へ流す
+  // If the library failed to load, route to the error path instead of running the user JS
+  const libraryGuard = artifact.libraries?.includes("three")
+    ? 'if (typeof THREE === "undefined") { throw new Error("Three.js failed to load"); }\n'
+    : "";
   const shellScript = `
 (function(){
   var MIN_HEIGHT = ${MIN_FRAME_HEIGHT};
@@ -167,9 +193,10 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(SANDBOX_CSP)}">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(buildSandboxCsp(libraryScriptUrls))}">
 <title>${title}</title>
 <style>${css}</style>
+${libraryScriptTags}
 </head>
 <body>
 <main id="chatcore-artifact-root" aria-label="${title}">
@@ -178,7 +205,7 @@ ${html}
 <script>${shellScript}</script>
 <script>
 try {
-${js}
+${libraryGuard}${js}
 } catch (error) {
   try {
     if (typeof window.__chatcoreReportArtifactError === "function") {

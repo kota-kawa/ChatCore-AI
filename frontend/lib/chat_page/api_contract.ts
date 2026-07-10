@@ -51,12 +51,16 @@ function normalizeArtifact(raw: unknown): GenerativeUiArtifactV1 | null {
     typeof record.height === "number" && Number.isFinite(record.height)
       ? Math.min(Math.max(Math.round(record.height), 160), 900)
       : undefined;
+  const libraries = Array.isArray(record.libraries)
+    ? record.libraries.filter((library): library is "three" => library === "three")
+    : undefined;
 
   return {
     version: 1,
     title,
     ...(description ? { description } : {}),
     ...(height ? { height } : {}),
+    ...(libraries && libraries.length > 0 ? { libraries } : {}),
     html,
     css,
     js,

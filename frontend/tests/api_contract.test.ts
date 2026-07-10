@@ -120,3 +120,27 @@ test("normalizers keep valid sandbox artifact parts", () => {
   });
   assert.equal(response.parts?.[0]?.type, "sandbox_artifact");
 });
+
+test("normalizers keep the three library declaration and drop unknown ones", () => {
+  const artifact = {
+    version: 1,
+    title: "3D scene",
+    height: 460,
+    libraries: ["three", "react"],
+    html: "<div id='app'></div>",
+    css: "#app{height:420px}",
+    js: "const scene = new THREE.Scene();",
+  };
+
+  const response = normalizeChatResponsePayload({
+    response: "answer",
+    parts: [{ type: "sandbox_artifact", artifact }],
+  });
+
+  const part = response.parts?.[0];
+  assert.equal(part?.type, "sandbox_artifact");
+  assert.deepEqual(
+    part?.type === "sandbox_artifact" ? part.artifact.libraries : undefined,
+    ["three"],
+  );
+});

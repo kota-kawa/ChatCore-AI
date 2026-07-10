@@ -60,6 +60,28 @@ test("buildSandboxArtifactSrcDoc includes an empty-artifact fallback", () => {
   assert.match(srcDoc, /__chatcoreEnsureArtifactVisible/);
 });
 
+test("buildSandboxArtifactSrcDoc injects local three.js when the artifact requests it", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    libraries: ["three"],
+    js: "const scene = new THREE.Scene();",
+  });
+
+  assert.match(srcDoc, /<script src="[^"]*\/static\/js\/vendor\/three\.min\.js"><\/script>/);
+  assert.match(srcDoc, /script-src 'unsafe-inline' [^;]*\/static\/js\/vendor\/three\.min\.js/);
+  assert.match(srcDoc, /typeof THREE === "undefined"/);
+  assert.match(srcDoc, /default-src 'none'/);
+  assert.match(srcDoc, /connect-src 'none'/);
+});
+
+test("buildSandboxArtifactSrcDoc keeps plain artifacts free of library scripts", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc(artifact);
+
+  assert.doesNotMatch(srcDoc, /three\.min\.js/);
+  assert.doesNotMatch(srcDoc, /typeof THREE/);
+  assert.match(srcDoc, /script-src 'unsafe-inline';/);
+});
+
 test("SandboxArtifactFrame clamps oversized requested height", () => {
   const markup = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, {
     artifact: {
