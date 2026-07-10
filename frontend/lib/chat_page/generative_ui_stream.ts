@@ -1,13 +1,11 @@
 import type { ChatMessagePart } from "./types";
 
 const GENERATIVE_UI_FENCE_NAMES = [
-  "chatcore-artifact",
-  "generative-ui",
-  "generative_ui",
-  "ui_artifact",
-  "chatcore-buttons",
-  "interactive-buttons",
-  "interactive_buttons",
+  "chatcore[\\s_-]*artifact",
+  "generative[\\s_-]*ui",
+  "ui[\\s_-]*artifact",
+  "chatcore[\\s_-]*buttons",
+  "interactive[\\s_-]*buttons",
 ].join("|");
 const COMPLETE_GENERATIVE_UI_FENCE_RE = new RegExp(
   "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",

@@ -56,6 +56,48 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
 
+    def test_normalize_response_hides_malformed_artifact_fence_beside_valid_artifact(self):
+        """
+        正常な生成UIと一緒に、形式が崩れたArtifactフェンスが返っても、
+        フェンス名やJSONが本文へ露出しないことを検証します。
+        Verify malformed artifact fences do not leak beside a valid generated UI.
+        """
+        raw = (
+            "図を表示します。\n\n"
+            "```chatcore-artifact\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```\n\n"
+            "``` chatcore-artifact:\n"
+            '{"version":1,"title":"broken","html":"<div>broken</div>"}\n'
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "図を表示します。")
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+        self.assertNotIn("chatcore-artifact", normalized.text)
+        self.assertNotIn('"version"', normalized.text)
+
+    def test_normalize_response_hides_malformed_artifact_fence_without_artifact_intent(self):
+        """
+        正式名と異なるフェンスでも、本文へ生成定義が露出しないことを検証します。
+        Verify a malformed fence is hidden even when it misses the normal intent keyword.
+        """
+        raw = (
+            "図を表示します。\n\n"
+            "```chatcore artifact:\n"
+            '{"version":1,"title":"broken","html":"<div>broken</div>"}\n'
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "図を表示します。")
+        self.assertNotIn("chatcore artifact", normalized.text)
+        self.assertNotIn('"version"', normalized.text)
+
     def test_normalize_response_keeps_plain_text_unchanged(self):
         """
         アーティファクトを含まないプレーンテキストが、そのまま変更されずに保持されることを検証します。

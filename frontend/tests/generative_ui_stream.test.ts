@@ -42,6 +42,20 @@ test("stripGenerativeUiFencesForStreaming removes supported artifact aliases", (
   assert.doesNotMatch(stripped, /generative-ui|interactive-buttons/);
 });
 
+test("stripGenerativeUiFencesForStreaming removes malformed artifact fence names", () => {
+  const text = [
+    "前置きです。",
+    "```chatcore artifact:",
+    '{"version":1,"title":"UI","html":"<div></div>","css":"","js":""}',
+    "```",
+  ].join("\n");
+
+  const stripped = stripGenerativeUiFencesForStreaming(text);
+
+  assert.equal(stripped, "前置きです。");
+  assert.doesNotMatch(stripped, /chatcore artifact|"version"/);
+});
+
 test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while streaming", () => {
   const text = [
     "説明します。",

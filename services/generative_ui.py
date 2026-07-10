@@ -18,6 +18,18 @@ ARTIFACT_OPEN_FENCE_RE = re.compile(
     r"```(?:chatcore-artifact|generative-ui|generative_ui|ui_artifact)(?:\s+json)?[^\S\n]*\n?",
     re.IGNORECASE,
 )
+# モデルがフェンス名の前後に空白・記号を加えると、正規の Artifact としては
+# 解釈できない。それでも定義ブロックを本文へ流すのは避けるため、表示から除く
+# 範囲だけを検出する（この正規表現自体は Artifact として実行しない）。
+# Models occasionally add whitespace or punctuation around a fence name. Such a
+# block cannot be parsed as a real Artifact, but must still be removed from the
+# visible prose. This pattern only identifies spans to discard; it never makes
+# the content executable.
+MALFORMED_ARTIFACT_FENCE_RE = re.compile(
+    r"```[^\n`]*(?:chatcore[\s_-]*artifact|generative[\s_-]*ui|ui[\s_-]*artifact)"
+    r"[^\n`]*(?:\n[\s\S]*?(?:```|\Z))",
+    re.IGNORECASE,
+)
 INTERACTIVE_BUTTONS_BLOCK_RE = re.compile(
     r"```(?:chatcore-buttons|interactive-buttons|interactive_buttons)(?:\s+json)?\s*"
     r"(?P<json>\{[\s\S]*?\})\s*```",
@@ -776,6 +788,20 @@ def _extract_artifact_candidates(
     return sorted(candidates, key=lambda candidate: candidate.span)
 
 
+def _extract_malformed_artifact_fence_spans(
+    text: str,
+    occupied_spans: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    """Return malformed artifact fence ranges that must not reach chat prose."""
+    spans: list[tuple[int, int]] = []
+    for match in MALFORMED_ARTIFACT_FENCE_RE.finditer(text):
+        span = match.span()
+        if _span_overlaps_any(span, [*occupied_spans, *spans]):
+            continue
+        spans.append(span)
+    return spans
+
+
 # 応答テキストから抽出されたアーティファクトの定義ブロック部分を除去（非表示化）します。
 # Strip the JSON/code block sections of identified candidates from the visible prose.
 def _remove_candidate_spans(text: str, candidates: list[_ArtifactCandidate]) -> str:
@@ -1185,9 +1211,14 @@ def normalize_response_with_artifacts(
     button_candidates: list[_ArtifactCandidate] = []
     for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
         button_candidates.append(_ArtifactCandidate(raw_json=match.group("json"), span=match.span()))
-        
+
+    all_candidates = sorted(candidates + button_candidates, key=lambda c: c.span)
+    malformed_fence_spans = _extract_malformed_artifact_fence_spans(
+        text,
+        [candidate.span for candidate in all_candidates],
+    )
     has_intent = _has_artifact_intent(text)
-    if not candidates and not button_candidates and not has_intent:
+    if not candidates and not button_candidates and not has_intent and not malformed_fence_spans:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
     artifacts: list[dict[str, Any]] = []
@@ -1207,8 +1238,11 @@ def normalize_response_with_artifacts(
         except (json.JSONDecodeError, GenerativeUiValidationError) as exc:
             validation_errors.append(str(exc))
 
-    all_candidates = sorted(candidates + button_candidates, key=lambda c: c.span)
-    visible_text = _remove_candidate_spans(text, all_candidates)
+    visible_candidates = [
+        *all_candidates,
+        *(_ArtifactCandidate(raw_json="", span=span) for span in malformed_fence_spans),
+    ]
+    visible_text = _remove_candidate_spans(text, visible_candidates)
 
     if not artifacts and not buttons_list:
         if not allow_fallback:
