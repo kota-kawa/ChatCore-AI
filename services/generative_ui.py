@@ -34,6 +34,22 @@ SOURCE_CODE_BLOCK_RE = re.compile(
 )
 
 MAX_ARTIFACTS_PER_MESSAGE = 3
+# サンドボックスで利用できるローカル配信ライブラリの正規名。
+# Canonical names of locally served libraries available inside the sandbox.
+SUPPORTED_ARTIFACT_LIBRARIES = ("three",)
+# モデル出力の表記ゆれ（three.js / threejs 等）を正規名へ寄せるためのエイリアス表。
+# Alias table folding model-output spelling variants (three.js / threejs etc.)
+# into canonical library names.
+_ARTIFACT_LIBRARY_ALIASES = {
+    "three": "three",
+    "three.js": "three",
+    "threejs": "three",
+    "three_js": "three",
+}
+# モデルが libraries を書き忘れても THREE を使う JS から three 依存を推定するための検出。
+# Detect THREE usage in JS so the three dependency is inferred even when the
+# model forgets to declare "libraries".
+_THREE_USAGE_RE = re.compile(r"\bTHREE\s*[.\[(]")
 MAX_ARTIFACT_HTML_CHARS = 12000
 MAX_ARTIFACT_CSS_CHARS = 12000
 MAX_ARTIFACT_JS_CHARS = 18000
@@ -89,7 +105,7 @@ _ARTIFACT_SOURCE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 _ARTIFACT_CONTEXT_KEY_RE = re.compile(
-    r'"(?:artifact|version|title|name|label|height|description|summary|caption)"\s*:',
+    r'"(?:artifact|version|title|name|label|height|description|summary|caption|libraries)"\s*:',
     re.IGNORECASE,
 )
 # 「明示的に生成UIを作ろうとした」強いシグナル。本文の長さに関わらずfallbackを許可する。
@@ -187,6 +203,7 @@ class GenerativeUiArtifactV1(BaseModel):
     title: str = Field(default="生成UI", min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     height: int | None = Field(default=None, ge=MIN_ARTIFACT_HEIGHT, le=MAX_ARTIFACT_HEIGHT)
+    libraries: list[Literal["three"]] | None = Field(default=None, max_length=4)
     html: str = Field(default="", max_length=MAX_ARTIFACT_HTML_CHARS)
     css: str = Field(default="", max_length=MAX_ARTIFACT_CSS_CHARS)
     js: str = Field(default="", max_length=MAX_ARTIFACT_JS_CHARS)
@@ -951,6 +968,28 @@ def _sanitize_html(value: str) -> str:
     return sanitized
 
 
+# libraries指定の表記ゆれを正規化し、JS本文からの推定も合わせてライブラリ一覧を組み立てます。
+# Normalize library declarations (folding aliases) and infer dependencies from the JS body.
+def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
+    if value is None:
+        raw_items: list[Any] = []
+    elif isinstance(value, str):
+        raw_items = re.split(r"[,\s]+", value)
+    elif isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    else:
+        raw_items = [value]
+
+    libraries: list[str] = []
+    for item in raw_items:
+        name = _ARTIFACT_LIBRARY_ALIASES.get(str(item).strip().lower())
+        if name and name not in libraries:
+            libraries.append(name)
+    if "three" not in libraries and _THREE_USAGE_RE.search(js):
+        libraries.append("three")
+    return libraries
+
+
 # アーティファクト定義の辞書型データを整形し、各コードソース（HTML、CSS、JS）を適切にセットします。
 # Coerce and format raw artifact dictionary fields into a standard structure.
 def _prepare_artifact_payload(payload: Any) -> Any:
@@ -989,6 +1028,9 @@ def _prepare_artifact_payload(payload: Any) -> Any:
 
     title = _coerce_string(_first_present(payload, "title", "name", "label")).strip() or "生成UI"
     description = _coerce_string(_first_present(payload, "description", "summary", "caption")).strip()
+    libraries = _normalize_artifact_libraries(
+        _first_present(payload, "libraries", "library", "libs", "lib"), js
+    )
     prepared = {
         "version": 1,
         "title": title[:120],
@@ -998,6 +1040,8 @@ def _prepare_artifact_payload(payload: Any) -> Any:
         "css": css,
         "js": js,
     }
+    if libraries:
+        prepared["libraries"] = libraries
     if prepared["description"] is None:
         prepared.pop("description")
     return prepared

@@ -48,11 +48,16 @@ export type ChatRoomsPage = {
 export type ChatSender = "user" | "assistant" | "thinking";
 export type ChatGenerationPhase = "preparing" | "web-search" | "generating";
 
+// サンドボックス内でローカル配信されるライブラリの識別子。
+// Identifier of a locally served library available inside the sandbox.
+export type GenerativeUiArtifactLibrary = "three";
+
 export type GenerativeUiArtifactV1 = {
   version: 1;
   title: string;
   description?: string;
   height?: number;
+  libraries?: GenerativeUiArtifactLibrary[];
   html: string;
   css: string;
   js: string;

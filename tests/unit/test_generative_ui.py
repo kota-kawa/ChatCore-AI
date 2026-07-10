@@ -661,6 +661,117 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Assert the results: only the invalid artifact is dropped
         self.assertEqual(decode_message_parts(parts), [{"type": "text", "text": "hello"}])
 
+    def test_validate_artifact_keeps_three_library_declaration(self):
+        """
+        libraries に three を指定した3Dアーティファクトが、宣言を保持したまま検証を通ることを検証します。
+        Verify that a 3D artifact declaring the three library passes validation with the declaration kept.
+        """
+        payload = {
+            **VALID_ARTIFACT,
+            "libraries": ["three"],
+            "js": "const scene = new THREE.Scene(); const g = new THREE.BoxGeometry(1,1,1);",
+        }
+
+        artifact = validate_artifact_payload(payload)
+
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_validate_artifact_normalizes_three_library_aliases(self):
+        """
+        three.js / Three.js などの表記ゆれや文字列指定が、正規名 three に正規化されることを検証します。
+        Verify that alias spellings such as three.js / Three.js are normalized to the canonical name.
+        """
+        for alias in ("three.js", "Three.js", "THREEJS", "three_js", "three"):
+            payload = {**VALID_ARTIFACT, "libraries": [alias]}
+            artifact = validate_artifact_payload(payload)
+            self.assertEqual(artifact["libraries"], ["three"], alias)
+
+        # 文字列単体での指定も許容されること
+        # A bare string declaration is also accepted
+        artifact = validate_artifact_payload({**VALID_ARTIFACT, "libraries": "three.js"})
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_validate_artifact_infers_three_from_js_usage(self):
+        """
+        libraries の宣言が無くても、JS内の THREE 使用から three 依存が推定されることを検証します。
+        Verify that the three dependency is inferred from THREE usage in JS without an explicit declaration.
+        """
+        payload = {
+            **VALID_ARTIFACT,
+            "js": "const renderer = new THREE.WebGLRenderer({antialias:true});",
+        }
+
+        artifact = validate_artifact_payload(payload)
+
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_validate_artifact_drops_unknown_libraries(self):
+        """
+        未対応のライブラリ指定は黙って除去され、libraries キー自体が出力されないことを検証します。
+        Verify that unsupported library declarations are silently dropped and the key is omitted.
+        """
+        payload = {**VALID_ARTIFACT, "libraries": ["react", "d3"]}
+
+        artifact = validate_artifact_payload(payload)
+
+        self.assertNotIn("libraries", artifact)
+
+    def test_validate_artifact_without_three_omits_libraries(self):
+        """
+        通常の2DアーティファクトではlibrariesキーがつかないことをVerifyします。
+        Verify that a plain 2D artifact does not gain a libraries key.
+        """
+        artifact = validate_artifact_payload(dict(VALID_ARTIFACT))
+
+        self.assertNotIn("libraries", artifact)
+
+    def test_normalize_response_extracts_three_artifact_block(self):
+        """
+        three を使うアーティファクトブロックが、libraries を保持したまま抽出されることを検証します。
+        Verify that an artifact block using three is extracted with libraries preserved.
+        """
+        payload = {
+            **VALID_ARTIFACT,
+            "title": "3Dデモ",
+            "libraries": ["three"],
+            "js": "const scene = new THREE.Scene();",
+        }
+        raw = (
+            "3Dで表示します。\n\n"
+            "```chatcore-artifact\n"
+            f"{json.dumps(payload, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["title"], "3Dデモ")
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_decode_message_parts_round_trips_three_libraries(self):
+        """
+        保存済みメッセージパーツの再デコードで libraries が維持されることを検証します。
+        Verify that libraries survive a decode round-trip of persisted message parts.
+        """
+        parts = [
+            {
+                "type": "sandbox_artifact",
+                "artifact": {
+                    **VALID_ARTIFACT,
+                    "libraries": ["three"],
+                    "js": "const scene = new THREE.Scene();",
+                },
+            },
+        ]
+
+        decoded = decode_message_parts(parts)
+
+        self.assertIsNotNone(decoded)
+        self.assertEqual(decoded[0]["artifact"]["libraries"], ["three"])
+
 
 if __name__ == "__main__":
     # テストを実行します

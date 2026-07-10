@@ -76,39 +76,107 @@
 }
 
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact {
+  position: relative;
   width: min(760px, 100%);
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 8px;
+  border: 1px solid rgba(13, 148, 136, 0.16);
+  border-radius: 16px;
   background: #ffffff;
-  box-shadow: 0 10px 28px -22px rgba(15, 23, 42, 0.45);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -18px rgba(15, 118, 110, 0.24);
   contain: layout paint;
 }
 
+/* カード上端のティールのアクセントライン（生成UIカードのシグネチャ） */
+/* Teal accent line across the card top (the generated-UI card signature) */
+.shared-chat-page .shared-chat-message__parts .sandbox-artifact::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, #0f766e, #2dd4bf 42%, rgba(45, 212, 191, 0) 88%);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact__header {
-  padding: 0.72rem 0.85rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.86));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.82rem 1rem 0.76rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.6), rgba(248, 250, 252, 0.35));
+  min-width: 0;
+}
+
+.shared-chat-page .shared-chat-message__parts .sandbox-artifact__heading {
   min-width: 0;
 }
 
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact__title {
   margin: 0;
   color: #0f172a;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1.35;
   font-weight: 700;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact__description {
-  margin: 0.16rem 0 0;
-  color: #475569;
+  margin: 0.22rem 0 0;
+  color: #64748b;
   font-size: 0.78rem;
-  line-height: 1.45;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  padding: 0.3rem 0.62rem;
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 999px;
+  background: rgba(240, 253, 250, 0.8);
+  color: #0f766e;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
+  animation: sandboxArtifactPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sandboxArtifactPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shared-chat-page .shared-chat-message__parts .sandbox-artifact__badge-dot {
+    animation: none;
+  }
 }
 
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact__frame {
@@ -123,7 +191,7 @@
 
 .shared-chat-page .shared-chat-message__parts .sandbox-artifact__error {
   margin: 0;
-  padding: 0.55rem 0.85rem;
+  padding: 0.55rem 1rem;
   border-top: 1px solid rgba(190, 18, 60, 0.14);
   color: #be123c;
   background: rgba(255, 241, 242, 0.88);
