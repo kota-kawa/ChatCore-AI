@@ -285,15 +285,21 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
     };
   }, []);
 
+  const badgeLabel = artifact.libraries?.includes("three") ? "Generated 3D" : "Generated UI";
+
   return (
     <section className="sandbox-artifact" aria-label={artifact.title}>
       <header className="sandbox-artifact__header">
-        <div>
+        <div className="sandbox-artifact__heading">
           <h3 className="sandbox-artifact__title">{artifact.title}</h3>
           {artifact.description ? (
             <p className="sandbox-artifact__description">{artifact.description}</p>
           ) : null}
         </div>
+        <span className="sandbox-artifact__badge">
+          <span className="sandbox-artifact__badge-dot" aria-hidden="true" />
+          {badgeLabel}
+        </span>
       </header>
       <iframe
         ref={iframeRef}

@@ -82,6 +82,21 @@ test("buildSandboxArtifactSrcDoc keeps plain artifacts free of library scripts",
   assert.match(srcDoc, /script-src 'unsafe-inline';/);
 });
 
+test("SandboxArtifactFrame shows a badge reflecting the artifact type", () => {
+  const markup2d = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact }));
+  assert.match(markup2d, /sandbox-artifact__badge/);
+  assert.match(markup2d, /Generated UI/);
+
+  const markup3d = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, {
+    artifact: {
+      ...artifact,
+      libraries: ["three"],
+      js: "const scene = new THREE.Scene();",
+    },
+  }));
+  assert.match(markup3d, /Generated 3D/);
+});
+
 test("SandboxArtifactFrame clamps oversized requested height", () => {
   const markup = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, {
     artifact: {
