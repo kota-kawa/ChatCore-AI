@@ -6311,14 +6311,15 @@ body.memo-page {
     font-size: 1.15rem;
   }
 
-  /* Reserve room on the right of the title row for the fixed top-right
-     user/login icon so the heading truncates instead of sliding under it. */
+  /* Keep enough inline space for the default "メモ" label instead of
+     truncating it behind the fixed user/login icon. */
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__brand {
-    padding-right: 3.2rem;
+    padding-right: 0;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__title :is(h1, h2) {
     font-size: 1.18rem;
+    min-inline-size: 2.5em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6332,6 +6333,13 @@ body.memo-page {
     gap: 0.3rem;
     justify-content: flex-start;
     margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* When expanded filters keep the actions beside the heading, retain space
+     for the fixed top-right user/login icon. */
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open .memo-toolbar__actions {
+    margin-right: 3.6rem;
   }
 
   :where(body.memo-page, .memo-page-shell) .memo-toolbar__search {
