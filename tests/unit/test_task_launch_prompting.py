@@ -10,6 +10,7 @@ from blueprints.chat.messages import (
     _build_user_profile_prompt,
     chat,
 )
+from services.chat_context import GENERATIVE_UI_EXECUTION_CONTRACT
 from tests.helpers.request_helpers import build_request
 
 
@@ -41,6 +42,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.
     def test_base_system_prompt_includes_generative_ui_stability_rules(self):
+        self.assertIn("UI_MODE = NONE / 2D / 3D", BASE_SYSTEM_PROMPT)
+        self.assertIn("短い説明だけで回答を終えることは禁止", BASE_SYSTEM_PROMPT)
+        self.assertIn("ユーザーが3D、立体、空間モデル、軌道、回転を明示", BASE_SYSTEM_PROMPT)
+        self.assertIn("Artifact が1つだけあること", BASE_SYSTEM_PROMPT)
         self.assertIn("視覚化や軽い操作が理解を明確にする場面", BASE_SYSTEM_PROMPT)
         self.assertIn("単純な事実回答", BASE_SYSTEM_PROMPT)
         self.assertIn("テキストだけ", BASE_SYSTEM_PROMPT)
@@ -300,7 +305,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         mock_log.assert_called_once()
 
         conversation_messages = mock_llm.call_args.args[0]
-        self.assertEqual(len(conversation_messages), 2)
+        self.assertEqual(len(conversation_messages), 3)
         self.assertEqual(conversation_messages[0]["role"], "system")
         self.assertEqual(
             conversation_messages[0]["content"].strip(),
@@ -308,6 +313,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         )
         self.assertEqual(
             conversation_messages[1]["content"],
+            GENERATIVE_UI_EXECUTION_CONTRACT,
+        )
+        self.assertEqual(
+            conversation_messages[2]["content"],
             "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
         )
 
