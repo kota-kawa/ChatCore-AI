@@ -82,6 +82,18 @@ test("buildSandboxArtifactSrcDoc keeps plain artifacts free of library scripts",
   assert.match(srcDoc, /script-src 'unsafe-inline';/);
 });
 
+test("buildSandboxArtifactSrcDoc supplies local OrbitControls compatibility", () => {
+  const srcDoc = buildSandboxArtifactSrcDoc({
+    ...artifact,
+    libraries: ["three"],
+    js: "const controls = new OrbitControls(camera, renderer.domElement); controls.update();",
+  });
+
+  assert.match(srcDoc, /function OrbitControls\(camera, element\)/);
+  assert.match(srcDoc, /THREE\.OrbitControls=OrbitControls/);
+  assert.doesNotMatch(srcDoc, /three\/examples\/jsm\/controls/);
+});
+
 test("SandboxArtifactFrame shows a badge reflecting the artifact type", () => {
   const markup2d = renderToStaticMarkup(React.createElement(SandboxArtifactFrame, { artifact }));
   assert.match(markup2d, /sandbox-artifact__badge/);

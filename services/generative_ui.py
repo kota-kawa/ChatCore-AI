@@ -62,6 +62,27 @@ _ARTIFACT_LIBRARY_ALIASES = {
 # Detect THREE usage in JS so the three dependency is inferred even when the
 # model forgets to declare "libraries".
 _THREE_USAGE_RE = re.compile(r"\bTHREE\s*[.\[(]")
+_THREE_INTENT_RE = re.compile(
+    r"(?:\bthree(?:\.js|js)?\b|\bwebgl\b|3\s*d|３\s*[dｄ]|三次元|立体|空間モデル)",
+    re.IGNORECASE,
+)
+_NO_ARTIFACT_REQUEST_RE = re.compile(
+    r"(?:テキスト(?:だけ|のみ)|(?:ui|図|可視化|3\s*d|three(?:\.js)?)\s*(?:は)?\s*(?:不要|なし|使わない)|"
+    r"(?:without|no)\s+(?:ui|diagram|visuali[sz]ation|3d|three(?:\.js)?))",
+    re.IGNORECASE,
+)
+# Some providers return browser-module imports even though artifacts execute as
+# classic scripts with a local THREE global. These patterns let us fold the
+# common core/OrbitControls forms into that supported runtime.
+_STATIC_IMPORT_RE = re.compile(
+    r"(?P<prefix>^|[;\n])(?P<space>[ \t]*)import\s+(?P<clause>[^;\n]+?)\s+from\s+"
+    r"(?P<quote>['\"])(?P<source>[^'\"]+)(?P=quote)\s*;?",
+    re.MULTILINE,
+)
+_UNSUPPORTED_MODULE_SYNTAX_RE = re.compile(
+    r"(?:^|[;\n])\s*(?:import\s|export\s)",
+    re.MULTILINE,
+)
 MAX_ARTIFACT_HTML_CHARS = 12000
 MAX_ARTIFACT_CSS_CHARS = 12000
 MAX_ARTIFACT_JS_CHARS = 18000
@@ -507,6 +528,23 @@ def _has_artifact_intent(text: str) -> bool:
         _WEAK_ARTIFACT_INTENT_RE.search(stripped)
         or _DISPLAY_ONLY_INTENT_RE.search(stripped)
     )
+
+
+def _has_requested_artifact_intent(text: str) -> bool:
+    """Infer explicit UI intent from the user request, honoring opt-outs first."""
+    stripped = _strip_web_search_sources_html(text or "").strip()
+    if not stripped or _NO_ARTIFACT_REQUEST_RE.search(stripped):
+        return False
+    return bool(
+        _STRONG_ARTIFACT_INTENT_RE.search(stripped)
+        or _WEAK_ARTIFACT_INTENT_RE.search(stripped)
+        or _THREE_INTENT_RE.search(stripped)
+    )
+
+
+def _has_three_intent(text: str) -> bool:
+    stripped = _strip_web_search_sources_html(text or "")
+    return bool(stripped and _THREE_INTENT_RE.search(stripped))
 
 
 # 開き括弧 { に対応する閉じ括弧 } のペアをパースし、JSONオブジェクトの終端インデックスを返します。
@@ -1016,6 +1054,58 @@ def _normalize_artifact_libraries(value: Any, js: str) -> list[str]:
     return libraries
 
 
+def _normalize_three_module_imports(js: str) -> str:
+    """Convert common Three.js module imports to the local global runtime."""
+    source = _coerce_string(js)
+
+    def replace_import(match: re.Match[str]) -> str:
+        module_source = match.group("source").lower()
+        if "three" not in module_source:
+            return match.group(0)
+
+        clause = match.group("clause").strip()
+        prefix = match.group("prefix")
+        is_addon_module = "/examples/" in module_source or "/addons/" in module_source
+        # The local UMD build already exposes THREE. Namespace/default imports
+        # therefore become no-ops.
+        if re.fullmatch(r"(?:\*\s+as\s+THREE|THREE)", clause, re.IGNORECASE):
+            return prefix
+
+        if clause.startswith("{") and clause.endswith("}"):
+            bindings: list[str] = []
+            saw_orbit_controls = False
+            for raw_binding in clause[1:-1].split(","):
+                binding = raw_binding.strip()
+                if not binding:
+                    continue
+                parts = re.split(r"\s+as\s+", binding, maxsplit=1, flags=re.IGNORECASE)
+                imported = parts[0].strip()
+                local = parts[1].strip() if len(parts) == 2 else imported
+                if imported == "OrbitControls":
+                    # The iframe supplies a small local compatibility control.
+                    saw_orbit_controls = True
+                    continue
+                if is_addon_module:
+                    return match.group(0)
+                if not re.fullmatch(r"[A-Za-z_$][\w$]*", imported) or not re.fullmatch(
+                    r"[A-Za-z_$][\w$]*", local
+                ):
+                    return match.group(0)
+                bindings.append(imported if imported == local else f"{imported}: {local}")
+            replacement = (
+                f"const {{{', '.join(bindings)}}}=THREE;"
+                if bindings
+                else ("void THREE.REVISION;" if saw_orbit_controls else "")
+            )
+            return f"{prefix}{replacement}"
+
+        # Keep unrecognized module syntax so validation rejects it and the
+        # deterministic 3D fallback is used instead of executing broken code.
+        return match.group(0)
+
+    return _STATIC_IMPORT_RE.sub(replace_import, source)
+
+
 # アーティファクト定義の辞書型データを整形し、各コードソース（HTML、CSS、JS）を適切にセットします。
 # Coerce and format raw artifact dictionary fields into a standard structure.
 def _prepare_artifact_payload(payload: Any) -> Any:
@@ -1049,6 +1139,7 @@ def _prepare_artifact_payload(payload: Any) -> Any:
         css = "\n".join(part for part in [css, *embedded_css] if part)
     if embedded_js:
         js = "\n".join(part for part in [js, *embedded_js] if part)
+    js = _normalize_three_module_imports(js)
     html = _ensure_artifact_has_body(html, js)
     html, css, js = _trim_artifact_sources(html, css, js)
 
@@ -1077,7 +1168,12 @@ def _prepare_artifact_payload(payload: Any) -> Any:
 # Validate raw dictionary properties of the sandbox artifact against version 1 schema.
 def validate_artifact_payload(payload: Any) -> dict[str, Any]:
     try:
-        artifact = GenerativeUiArtifactV1.model_validate(_prepare_artifact_payload(payload))
+        prepared = _prepare_artifact_payload(payload)
+        if isinstance(prepared, dict) and _UNSUPPORTED_MODULE_SYNTAX_RE.search(
+            _coerce_string(prepared.get("js"))
+        ):
+            raise ValueError("JavaScript module syntax is unsupported in sandbox artifacts.")
+        artifact = GenerativeUiArtifactV1.model_validate(prepared)
     except ValidationError as exc:
         raise GenerativeUiValidationError(str(exc)) from exc
     except ValueError as exc:
@@ -1152,8 +1248,54 @@ def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:
 
 # モデルがアーティファクト出力に失敗した際、本文中に埋め込まれたHTMLコード等を回収してフォールバック用のUIを組み立てます。
 # Recover un-fenced markup or scripts from prose to synthesize a fallback sandbox UI card.
-def _build_fallback_artifact(visible_text: str, raw_text: str) -> dict[str, Any]:
+def _build_fallback_artifact(
+    visible_text: str,
+    raw_text: str,
+    *,
+    prefer_three: bool = False,
+) -> dict[str, Any]:
     title = _infer_artifact_title(visible_text or raw_text)
+    if prefer_three:
+        return validate_artifact_payload(
+            {
+                "version": 1,
+                "title": title,
+                "description": "モデル出力を安全なThree.jsプレビューへ自動復旧しました。",
+                "height": 460,
+                "libraries": ["three"],
+                "html": (
+                    '<div id="app"><p class="three-fallback__label">3D preview</p></div>'
+                ),
+                "css": (
+                    "#app{position:relative;height:430px;overflow:hidden;border-radius:14px;"
+                    "background:radial-gradient(circle at 50% 30%,#1e3a5f,#07111f 68%)}"
+                    "#app canvas{display:block;width:100%;height:100%}"
+                    ".three-fallback__label{position:absolute;z-index:1;left:14px;top:12px;"
+                    "margin:0;padding:5px 9px;border:1px solid #ffffff30;border-radius:999px;"
+                    "background:#07111fcc;color:#bae6fd;font:600 12px system-ui,sans-serif;"
+                    "letter-spacing:.04em}"
+                ),
+                "js": (
+                    "const app=document.getElementById('app');const W=app.clientWidth||560;"
+                    "const H=430;const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});"
+                    "renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));"
+                    "renderer.setSize(W,H);app.appendChild(renderer.domElement);"
+                    "const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(52,W/H,.1,100);"
+                    "camera.position.set(0,1.2,4.3);const group=new THREE.Group();scene.add(group);"
+                    "const mesh=new THREE.Mesh(new THREE.TorusKnotGeometry(.85,.25,128,20),"
+                    "new THREE.MeshStandardMaterial({color:0x38bdf8,metalness:.35,roughness:.28}));"
+                    "group.add(mesh);scene.add(new THREE.HemisphereLight(0xdbeafe,0x172554,1.25));"
+                    "const key=new THREE.DirectionalLight(0xffffff,1.4);key.position.set(3,4,5);scene.add(key);"
+                    "let drag=false,px=0,py=0;renderer.domElement.addEventListener('pointerdown',e=>{"
+                    "drag=true;px=e.clientX;py=e.clientY;renderer.domElement.setPointerCapture(e.pointerId)});"
+                    "renderer.domElement.addEventListener('pointermove',e=>{if(!drag)return;"
+                    "group.rotation.y+=(e.clientX-px)*.008;group.rotation.x+=(e.clientY-py)*.008;"
+                    "px=e.clientX;py=e.clientY});renderer.domElement.addEventListener('pointerup',()=>drag=false);"
+                    "function tick(){if(!drag)group.rotation.y+=.006;mesh.rotation.x+=.003;"
+                    "renderer.render(scene,camera);requestAnimationFrame(tick)}tick();"
+                ),
+            }
+        )
     # Web検索のトレースブロックHTMLがエスケープされてカード本文に流れ込むのを防ぐ。
     # Keep the web-search trace markup out of the escaped card body.
     source_text = _strip_web_search_sources_html(
@@ -1204,6 +1346,7 @@ def normalize_response_with_artifacts(
     *,
     recover_truncated: bool = False,
     allow_fallback: bool = True,
+    artifact_intent_text: str | None = None,
 ) -> NormalizedGenerativeResponse:
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
     candidates = _extract_artifact_candidates(text, recover_truncated=recover_truncated)
@@ -1217,7 +1360,10 @@ def normalize_response_with_artifacts(
         text,
         [candidate.span for candidate in all_candidates],
     )
-    has_intent = _has_artifact_intent(text)
+    has_intent = _has_artifact_intent(text) or _has_requested_artifact_intent(
+        artifact_intent_text or ""
+    )
+    prefer_three = _has_three_intent(text) or _has_three_intent(artifact_intent_text or "")
     if not candidates and not button_candidates and not has_intent and not malformed_fence_spans:
         return NormalizedGenerativeResponse(text=text, parts=None, validation_errors=[])
 
@@ -1255,7 +1401,11 @@ def normalize_response_with_artifacts(
             )
         fallback_text = visible_text or "UIの作成に失敗しました。通常のテキストで再試行してください。"
         if candidates or has_intent:
-            fallback_artifact = _build_fallback_artifact(fallback_text, text)
+            fallback_artifact = _build_fallback_artifact(
+                fallback_text,
+                text,
+                prefer_three=prefer_three,
+            )
             return NormalizedGenerativeResponse(
                 text=fallback_text,
                 parts=[

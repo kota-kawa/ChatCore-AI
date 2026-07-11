@@ -814,6 +814,82 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIsNotNone(decoded)
         self.assertEqual(decoded[0]["artifact"]["libraries"], ["three"])
 
+    def test_normalizes_three_module_import_to_local_global(self):
+        """Common provider module output is adapted to the local classic-script runtime."""
+        payload = {
+            **VALID_ARTIFACT,
+            "js": (
+                "import * as THREE from 'https://cdn.example/three.module.js';\n"
+                "const scene = new THREE.Scene();"
+            ),
+        }
+
+        artifact = validate_artifact_payload(payload)
+
+        self.assertNotIn("import ", artifact["js"])
+        self.assertIn("new THREE.Scene()", artifact["js"])
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_normalizes_orbit_controls_import_for_local_compatibility(self):
+        """OrbitControls imports are removed and marked for the iframe compatibility control."""
+        payload = {
+            **VALID_ARTIFACT,
+            "js": (
+                "import { OrbitControls } from 'https://cdn.example/three/examples/jsm/controls/OrbitControls.js';\n"
+                "const controls = new OrbitControls(camera, renderer.domElement);"
+            ),
+        }
+
+        artifact = validate_artifact_payload(payload)
+
+        self.assertNotIn("import ", artifact["js"])
+        self.assertIn("new OrbitControls", artifact["js"])
+        self.assertEqual(artifact["libraries"], ["three"])
+
+    def test_unsupported_three_addon_uses_renderable_3d_fallback(self):
+        """Unsupported module addons fail closed into a local, renderable Three.js fallback."""
+        raw = (
+            "3Dモデルを表示します。\n```chatcore-artifact\n"
+            + json.dumps(
+                {
+                    **VALID_ARTIFACT,
+                    "js": (
+                        "import { GLTFLoader } from 'https://cdn.example/three/examples/jsm/loaders/GLTFLoader.js';\n"
+                        "new GLTFLoader();"
+                    ),
+                },
+                ensure_ascii=False,
+            )
+            + "\n```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertTrue(normalized.validation_errors)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["libraries"], ["three"])
+        self.assertIn("TorusKnotGeometry", artifact["js"])
+
+    def test_explicit_three_request_recovers_plain_model_response(self):
+        """A model that omits its artifact still yields a working 3D card for an explicit request."""
+        normalized = normalize_response_with_artifacts(
+            "こちらが完成イメージです。",
+            artifact_intent_text="Three.jsを使った3Dの回転デモを生成UIで見せて",
+        )
+
+        artifact = normalized.parts[1]["artifact"]
+        self.assertEqual(artifact["libraries"], ["three"])
+        self.assertIn("WebGLRenderer", artifact["js"])
+
+    def test_explicit_text_only_request_does_not_create_fallback(self):
+        """Request-aware recovery respects explicit UI opt-outs."""
+        normalized = normalize_response_with_artifacts(
+            "文章だけで回答します。",
+            artifact_intent_text="Three.jsについてテキストだけで説明して。UIは不要。",
+        )
+
+        self.assertIsNone(normalized.parts)
+
 
 if __name__ == "__main__":
     # テストを実行します

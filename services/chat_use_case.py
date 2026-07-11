@@ -626,6 +626,7 @@ class ChatPostUseCase:
         normalized_response = normalize_response_with_artifacts(
             bot_reply,
             recover_truncated=True,
+            artifact_intent_text=user_message,
         )
         if normalized_response.validation_errors:
             deps.logger.warning(

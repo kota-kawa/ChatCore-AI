@@ -34,6 +34,35 @@ function resolveLibraryScriptUrls(artifact: GenerativeUiArtifactV1) {
   return [`${origin}${THREE_VENDOR_SCRIPT_PATH}`];
 }
 
+// Several providers emit the familiar OrbitControls addon import even when the
+// prompt asks for core-only Three.js. The backend removes that network import;
+// this small local control preserves the expected drag-to-orbit behavior.
+function buildThreeCompatibilityScript(artifact: GenerativeUiArtifactV1) {
+  if (!artifact.libraries?.includes("three") || !/\bOrbitControls\b/.test(artifact.js || "")) {
+    return "";
+  }
+  return `
+(function(){
+  if (typeof THREE === "undefined" || typeof window.OrbitControls === "function") return;
+  function OrbitControls(camera, element){
+    this.object=camera;this.domElement=element;this.target=new THREE.Vector3();
+    this.enabled=true;this.enableDamping=false;this.dampingFactor=.08;
+    this.enableZoom=true;this.autoRotate=false;this.autoRotateSpeed=2;
+    var self=this,drag=false,x=0,y=0,theta=0,phi=0,radius=1;
+    function sync(){var offset=camera.position.clone().sub(self.target);radius=Math.max(.1,offset.length());theta=Math.atan2(offset.x,offset.z);phi=Math.acos(Math.max(-1,Math.min(1,offset.y/radius)));}
+    function apply(){phi=Math.max(.05,Math.min(Math.PI-.05,phi));camera.position.set(self.target.x+radius*Math.sin(phi)*Math.sin(theta),self.target.y+radius*Math.cos(phi),self.target.z+radius*Math.sin(phi)*Math.cos(theta));camera.lookAt(self.target);}
+    sync();
+    element.addEventListener("pointerdown",function(e){if(!self.enabled)return;drag=true;x=e.clientX;y=e.clientY;if(element.setPointerCapture)element.setPointerCapture(e.pointerId);});
+    element.addEventListener("pointermove",function(e){if(!drag||!self.enabled)return;theta-=(e.clientX-x)*.008;phi-=(e.clientY-y)*.008;x=e.clientX;y=e.clientY;apply();});
+    element.addEventListener("pointerup",function(){drag=false;});
+    element.addEventListener("wheel",function(e){if(!self.enabled||!self.enableZoom)return;e.preventDefault();radius*=Math.exp(e.deltaY*.001);radius=Math.max(.2,Math.min(200,radius));apply();},{passive:false});
+    this.update=function(){if(self.autoRotate&&!drag){theta+=self.autoRotateSpeed*.001;apply();}else{camera.lookAt(self.target);}return true;};
+    this.dispose=function(){};
+  }
+  window.OrbitControls=OrbitControls;THREE.OrbitControls=OrbitControls;
+})();`;
+}
+
 // フレームの高さの最小・最大・デフォルト値（px）
 // Minimum, maximum, and default frame heights (px)
 const MIN_FRAME_HEIGHT = 160;
@@ -87,6 +116,7 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
   const js = escapeScript(artifact.js || "");
   const html = artifact.html || "";
   const libraryScriptUrls = resolveLibraryScriptUrls(artifact);
+  const threeCompatibilityScript = buildThreeCompatibilityScript(artifact);
   const libraryScriptTags = libraryScriptUrls
     .map((url) => `<script src="${escapeHtmlAttribute(url)}"></script>`)
     .join("\n");
@@ -205,7 +235,7 @@ ${html}
 <script>${shellScript}</script>
 <script>
 try {
-${libraryGuard}${js}
+${libraryGuard}${threeCompatibilityScript}${js}
 } catch (error) {
   try {
     if (typeof window.__chatcoreReportArtifactError === "function") {
