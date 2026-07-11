@@ -58,6 +58,15 @@ _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
 
 
+def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
+    """Return the latest user prompt for request-aware UI recovery."""
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content")
+            return content if isinstance(content, str) else str(content or "")
+    return ""
+
+
 # ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
 # Parse UI parts like Artifacts from streaming response text and build the update payload
 def _build_streaming_parts_update(raw_text: str) -> dict[str, Any] | None:
@@ -361,6 +370,7 @@ class ChatGenerationJob:
         normalized_response = normalize_response_with_artifacts(
             partial_text,
             recover_truncated=True,
+            artifact_intent_text=_latest_user_message_text(self._conversation_messages),
         )
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
@@ -961,6 +971,7 @@ class ChatGenerationJob:
         normalized_response = normalize_response_with_artifacts(
             bot_reply,
             recover_truncated=True,
+            artifact_intent_text=_latest_user_message_text(self._conversation_messages),
         )
         if normalized_response.validation_errors:
             logger.warning(

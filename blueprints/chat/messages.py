@@ -1277,6 +1277,14 @@ async def chat_regenerate(
     normalized_response = normalize_response_with_artifacts(
         bot_reply,
         recover_truncated=True,
+        artifact_intent_text=next(
+            (
+                str(message.get("content") or "")
+                for message in reversed(conversation_messages)
+                if message.get("role") == "user"
+            ),
+            "",
+        ),
     )
     if normalized_response.validation_errors:
         logger.warning(
@@ -1659,6 +1667,14 @@ async def chat_edit_and_regenerate(
     normalized_response = normalize_response_with_artifacts(
         bot_reply,
         recover_truncated=True,
+        artifact_intent_text=next(
+            (
+                str(message.get("content") or "")
+                for message in reversed(conversation_messages)
+                if message.get("role") == "user"
+            ),
+            "",
+        ),
     )
     if normalized_response.validation_errors:
         logger.warning(
