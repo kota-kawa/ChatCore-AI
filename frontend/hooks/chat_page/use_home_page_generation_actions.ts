@@ -55,6 +55,7 @@ import {
   extractApiErrorMessage,
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
+import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
 
 const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 
@@ -1261,16 +1262,22 @@ export function useHomePageGenerationActions({
 
   const stopGeneration = useCallback(async () => {
     const roomId = currentRoomIdRef.current;
-    disconnectActiveGeneration();
-    if (!roomId) return;
+    if (!roomId) {
+      disconnectActiveGeneration();
+      return;
+    }
 
     try {
-      await resilientFetch("/api/chat_stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ chat_room_id: roomId }),
-      });
+      await stopGenerationBeforeDisconnect(
+        roomId,
+        (targetRoomId) => resilientFetch("/api/chat_stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ chat_room_id: targetRoomId }),
+        }),
+        disconnectActiveGeneration,
+      );
     } catch {
       // best effort
     }
