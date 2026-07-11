@@ -5626,10 +5626,6 @@ body.memo-page {
   line-height: 1;
 }
 
-:where(body.memo-page, .memo-page-shell) .memo-quick-capture__collapsed:hover .memo-quick-capture__shortcut-btn {
-  background: rgba(60, 64, 67, 0.08);
-}
-
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__shortcut-btn:hover,
 :where(body.memo-page, .memo-page-shell) .memo-quick-capture__shortcut-btn:focus-visible {
   background: rgba(60, 64, 67, 0.14);
@@ -6809,10 +6805,6 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-compose-palette__trigger.is-active {
   background: rgba(251, 188, 4, 0.14);
   color: #f3f6f8;
-}
-
-[data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-quick-capture__collapsed:hover .memo-quick-capture__shortcut-btn {
-  background: rgba(148, 163, 184, 0.14);
 }
 
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-compose-palette__menu {
