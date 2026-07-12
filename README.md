@@ -2,13 +2,13 @@
 
 # ChatCore-AI
 
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.133+-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-14.2+-000000?logo=nextdotjs&logoColor=white)
-![React](https://img.shields.io/badge/React-18.3+-61DAFB?logo=react&logoColor=000000)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.4+-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4+-06B6D4?logo=tailwindcss&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.139+-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.2+-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19.2+-61DAFB?logo=react&logoColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0+-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.3+-06B6D4?logo=tailwindcss&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
@@ -52,9 +52,9 @@ Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** s
 - **Groq / Gemini / OpenAI** integrations for LLM responses
 
 ## Tech Stack
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Alembic
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 15, Redis 7 (optional)
+- **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
+- **Database / Cache**: PostgreSQL 18, Redis 7 (optional)
 - **LLM Providers**: Groq, Google Gemini, OpenAI
 - **Local Dev**: Docker Compose
 
@@ -190,13 +190,13 @@ Licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file
 
 # Chat-Core-AI
 
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.133+-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-14.2+-000000?logo=nextdotjs&logoColor=white)
-![React](https://img.shields.io/badge/React-18.3+-61DAFB?logo=react&logoColor=000000)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.4+-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3.4+-06B6D4?logo=tailwindcss&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.14+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.139+-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16.2+-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19.2+-61DAFB?logo=react&logoColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0+-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.3+-06B6D4?logo=tailwindcss&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
@@ -240,9 +240,9 @@ ChatGPT などの AI チャットサービスを日常的に使うなかで、�
 - **Groq / Gemini / OpenAI 連携**
 
 ## 技術スタック
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy, Alembic
-- **Frontend**: Next.js 14, React 18, TypeScript, Tailwind CSS
-- **Database / Cache**: PostgreSQL 15, Redis 7（任意）
+- **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
+- **Database / Cache**: PostgreSQL 18, Redis 7（任意）
 - **LLM Providers**: Groq, Google Gemini, OpenAI
 - **Local Dev**: Docker Compose
 

@@ -88,7 +88,7 @@ function toBranchFields(entry: ChatHistoryMessagePayload): Partial<UiChatMessage
 
 type UseHomePageGenerationActionsParams = {
   abortControllerRef: MutableRefObject<AbortController | null>;
-  chatMessagesRef: RefObject<HTMLDivElement>;
+  chatMessagesRef: RefObject<HTMLDivElement | null>;
   currentRoomIdRef: MutableRefObject<string | null>;
   currentRoomMode: ChatRoomMode;
   generationGuardRef: MutableRefObject<GenerationGuard | null>;

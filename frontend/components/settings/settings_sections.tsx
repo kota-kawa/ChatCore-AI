@@ -42,7 +42,7 @@ export function ProfileSettingsSection({
   profileLoading: boolean;
   profileForm: ProfileFormState;
   avatarPreviewUrl: string;
-  avatarInputRef: RefObject<HTMLInputElement>;
+  avatarInputRef: RefObject<HTMLInputElement | null>;
   profileSaving: boolean;
   onProfileSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onAvatarFileChange: (event: ChangeEvent<HTMLInputElement>) => void;

@@ -2,7 +2,11 @@
   "name": "strike-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.17.0 <25"
+  },
   "scripts": {
     "check:imports": "node scripts/check-import-resolve.cjs",
     "generate:api-schemas": "cd .. && python3 scripts/generate_frontend_zod_schemas.py",
@@ -18,31 +22,35 @@
     "test:components:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
-    "bootstrap-icons": "1.11.3",
-    "dompurify": "3.4.1",
+    "bootstrap-icons": "1.13.1",
+    "dompurify": "3.4.12",
     "highlight.js": "11.11.1",
-    "marked": "15.0.12",
-    "next": "14.2.35",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "marked": "18.0.6",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-window": "2.2.7",
-    "swr": "2.4.1",
-    "zod": "3.25.76"
+    "swr": "2.4.2",
+    "zod": "4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "4.3.2",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
-    "@types/node": "20.19.30",
-    "@types/react": "18.3.27",
-    "@types/react-dom": "18.3.7",
-    "autoprefixer": "10.4.20",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "jsdom": "29.1.1",
     "json-schema-to-zod": "2.8.1",
-    "postcss": "8.4.47",
-    "tailwindcss": "3.4.10",
-    "tsx": "4.21.0",
-    "typescript": "5.9.3",
+    "postcss": "8.5.17",
+    "tailwindcss": "4.3.2",
+    "tsx": "4.23.0",
+    "typescript": "7.0.2",
     "vitest": "4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.17"
   }
 }

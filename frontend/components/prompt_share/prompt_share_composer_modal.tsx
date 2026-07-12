@@ -27,7 +27,7 @@ import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page
 export type AttributeBinding = {
   value: string;
   setValue: (value: string) => void;
-  ref: RefObject<HTMLTextAreaElement>;
+  ref: RefObject<HTMLTextAreaElement | null>;
 };
 
 // 投稿モーダルが親コンポーネントから受け取るすべての状態とハンドラを定義する
@@ -35,7 +35,7 @@ export type AttributeBinding = {
 type PromptShareComposerModalProps = {
   isOpen: boolean;
   isPostSubmitting: boolean;
-  postModalRef: RefObject<HTMLDivElement>;
+  postModalRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   // 2軸モデル: フォーマット軸 × メディア軸。
@@ -64,14 +64,14 @@ type PromptShareComposerModalProps = {
   updatePromptFeedbackErrorIfNeeded: () => void;
   categoryOptions: PromptCategoryOption[];
   promptPostStatus: PromptPostStatus;
-  promptPostTitleInputRef: RefObject<HTMLInputElement>;
-  promptPostCategorySelectRef: RefObject<HTMLSelectElement>;
-  promptPostContentTextareaRef: RefObject<HTMLTextAreaElement>;
-  promptPostAiModelSelectRef: RefObject<HTMLSelectElement>;
-  promptPostInputExamplesRef: RefObject<HTMLTextAreaElement>;
-  promptPostOutputExamplesRef: RefObject<HTMLTextAreaElement>;
-  promptImageInputRef: RefObject<HTMLInputElement>;
-  promptAssistRootRef: RefObject<HTMLDivElement>;
+  promptPostTitleInputRef: RefObject<HTMLInputElement | null>;
+  promptPostCategorySelectRef: RefObject<HTMLSelectElement | null>;
+  promptPostContentTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  promptPostAiModelSelectRef: RefObject<HTMLSelectElement | null>;
+  promptPostInputExamplesRef: RefObject<HTMLTextAreaElement | null>;
+  promptPostOutputExamplesRef: RefObject<HTMLTextAreaElement | null>;
+  promptImageInputRef: RefObject<HTMLInputElement | null>;
+  promptAssistRootRef: RefObject<HTMLDivElement | null>;
   promptImagePreviewUrl: string;
   promptImagePreviewName: string;
   onReferenceImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -169,7 +169,7 @@ function PromptComposerSelect({
   isModalOpen
 }: {
   selectId: string;
-  nativeRef: RefObject<HTMLSelectElement>;
+  nativeRef: RefObject<HTMLSelectElement | null>;
   value: string;
   options: PromptComposerSelectOption[];
   groupedOptions?: { label: string; options: PromptComposerSelectOption[] }[];

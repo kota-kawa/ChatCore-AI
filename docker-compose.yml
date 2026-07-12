@@ -109,8 +109,8 @@ services:
     restart: unless-stopped
 
   db:
-    image: pgvector/pgvector:0.8.4-pg15
-    container_name: postgres_db
+    image: pgvector/pgvector:0.8.5-pg18
+    container_name: ${POSTGRES_CONTAINER_NAME:-postgres_db}
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -136,7 +136,8 @@ services:
       - -c
       - log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      # PostgreSQL 18+ stores major-specific clusters below /var/lib/postgresql.
+      - db_data_pg18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -179,7 +180,7 @@ services:
     restart: unless-stopped
 
   nginx_bootstrap:
-    image: alpine:3.20.8
+    image: alpine:3.24.1
     environment:
       NGINX_UPSTREAM_DIR: ${NGINX_UPSTREAM_DIR:-/etc/nginx/chatcore-ai/upstreams}
       NGINX_BOOTSTRAP_COLOR: ${NGINX_BOOTSTRAP_COLOR:-blue}
@@ -209,5 +210,8 @@ services:
     restart: "no"
 
 volumes:
-  db_data:
+  # PostgreSQL major versions cannot share a data directory. The former
+  # chatcore-ai_db_data volume is intentionally left untouched as the pg15 archive.
+  db_data_pg18:
+    name: ${POSTGRES_18_VOLUME:-chatcore-ai_db_data_pg18}
   redis_data:
