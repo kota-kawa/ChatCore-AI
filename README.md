@@ -117,7 +117,7 @@ alembic upgrade head
 | Unit Tests | 25+ unit tests covering services, auth, chat, rate limiting, security |
 | Integration Tests | Route-level endpoint tests against the full ASGI app |
 | Coverage Report | Combined unit + integration coverage, uploaded as XML artifact |
-| Frontend Checks | TypeScript type-check and import resolution via `npm run typecheck` |
+| Frontend Checks | Import resolution, TypeScript type-check, and logic/component tests via `npm test` |
 | Deploy | SSH deploy to production — only runs after all jobs pass on `main` |
 
 - Concurrent runs on the same branch are automatically cancelled to avoid redundant work.
@@ -307,7 +307,7 @@ alembic upgrade head
 | Unit Tests | サービス層・認証・チャット・レート制限・セキュリティなど25件以上 |
 | Integration Tests | 実際のASGIアプリに対するルートレベルのエンドポイントテスト |
 | Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存 |
-| Frontend Checks | TypeScript型チェックおよびimport解決の検証 |
+| Frontend Checks | import解決、TypeScript型チェック、`npm test`によるロジック／コンポーネントテスト |
 | Deploy | 全ジョブ通過後にSSHで本番デプロイ（mainのpush時のみ） |
 
 - 同一ブランチで並走するジョブは自動キャンセルして無駄な実行を排除。

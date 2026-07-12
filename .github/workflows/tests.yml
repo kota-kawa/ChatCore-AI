@@ -311,6 +311,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Run frontend logic and component tests
+        working-directory: frontend
+        run: npm test
+
   docker_backend_build:
     name: Backend Docker Build
     runs-on: ubuntu-latest

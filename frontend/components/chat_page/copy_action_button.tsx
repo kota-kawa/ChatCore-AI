@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 
@@ -16,11 +16,13 @@ export function CopyActionButton({ getText }: CopyActionButtonProps) {
   const [iconClass, setIconClass] = useState("bi-clipboard");
   const [statusClass, setStatusClass] = useState("");
   const [disabled, setDisabled] = useState(false);
+  const copyInFlightRef = useRef(false);
 
   // コピーの実行と結果フィードバックを管理するコールバック
   // Callback that handles copying and manages result feedback
   const handleClick = useCallback(async () => {
-    if (disabled) return;
+    if (copyInFlightRef.current) return;
+    copyInFlightRef.current = true;
     setDisabled(true);
     try {
       await copyTextToClipboard(getText());
@@ -36,9 +38,10 @@ export function CopyActionButton({ getText }: CopyActionButtonProps) {
         setIconClass("bi-clipboard");
         setStatusClass("");
         setDisabled(false);
+        copyInFlightRef.current = false;
       }, 2000);
     }
-  }, [disabled, getText]);
+  }, [getText]);
 
   return (
     <button
