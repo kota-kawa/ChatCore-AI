@@ -1192,7 +1192,7 @@ function SetupSectionComponent() {
         </div>
 
         <div
-          className="task-selection"
+          className={`task-selection ${isTaskOrderEditing ? "task-selection--reordering" : ""}`.trim()}
           id="task-selection"
           data-launching={launchingTaskName ? "true" : "false"}
         >
