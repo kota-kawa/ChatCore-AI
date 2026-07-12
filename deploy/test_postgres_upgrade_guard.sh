@@ -59,6 +59,17 @@ fi
 write_volume_file "${TARGET_VOLUME}" .chatcore-pg15-to-pg18-complete "source_major=15"
 run_guard
 
+# The guard-logic checks above are fast and deterministic (they only touch
+# tiny alpine-backed volumes) and always run. The full pg15 -> pg18 dump/restore
+# below pulls multi-hundred-MB PostgreSQL images and starts live containers, so
+# it is opt-in to keep CI fast and immune to registry hiccups. Run it locally or
+# on demand with RUN_POSTGRES_MIGRATION_E2E=1.
+if [ "${RUN_POSTGRES_MIGRATION_E2E:-0}" != "1" ]; then
+  echo "PostgreSQL upgrade guard-logic tests passed."
+  echo "Skipping full pg15->pg18 dump/restore (set RUN_POSTGRES_MIGRATION_E2E=1 to run it)."
+  exit 0
+fi
+
 # Exercise the real pg15 -> pg18 dump/restore path with pgvector data.
 docker volume rm -f "${SOURCE_VOLUME}" "${TARGET_VOLUME}" >/dev/null
 docker run -d --name "chatcore_pg15_guard_init_${TEST_ID}" \
@@ -92,4 +103,4 @@ if [ "${probe}" != "1" ]; then
   exit 1
 fi
 
-echo "PostgreSQL upgrade guard tests passed."
+echo "PostgreSQL upgrade guard tests passed (including full pg15->pg18 dump/restore)."
