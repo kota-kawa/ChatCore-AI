@@ -13,7 +13,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:logic && npm run test:components",
-    "test:logic": "tsx --test \"tests/**/*.test.ts\"",
+    "test:logic": "node scripts/run-logic-tests.cjs",
     "test:components": "vitest run --config vitest.config.ts",
     "test:components:watch": "vitest --config vitest.config.ts"
   },
