@@ -35,7 +35,9 @@ describe("CopyActionButton", () => {
     expect(writeText).toHaveBeenCalledWith("copy me");
     expect(getText).toHaveBeenCalledOnce();
 
-    await vi.advanceTimersByTimeAsync(2000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
     expect(button).toBeEnabled();
     expect(button).not.toHaveClass("copy-btn--success");
     expect(button.querySelector("i")).toHaveClass("bi-clipboard");

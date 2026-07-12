@@ -12,4 +12,14 @@ declare global {
   }
 }
 
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "action-menu": HtmlTagProps;
+      "chat-action-menu": HtmlTagProps;
+      "user-icon": HtmlTagProps;
+    }
+  }
+}
+
 export {};

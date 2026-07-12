@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.14.6"
 
 jobs:
   version_lock_check:
@@ -24,9 +24,9 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -45,15 +45,45 @@ jobs:
           python -m pip freeze --exclude pip --exclude setuptools --exclude wheel | LC_ALL=C sort -f > /tmp/requirements.lock
           diff -u requirements.lock /tmp/requirements.lock
 
+  dependency_audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit locked Python dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit --disable-pip --no-deps --progress-spinner=off -r requirements.lock
+
+      - name: Audit production frontend dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev
+
   lint:
     name: Ruff Lint (Light)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -78,9 +108,9 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -100,7 +130,7 @@ jobs:
           python -m ruff check app.py blueprints services tests
 
   unit_test_shards:
-    name: Unit Test Shard ${{ matrix.shard_number }}/${{ matrix.shard_total }} (Python 3.12)
+    name: Unit Test Shard ${{ matrix.shard_number }}/${{ matrix.shard_total }} (Python 3.14)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -114,9 +144,9 @@ jobs:
       UNIT_TEST_SHARD_TOTAL: ${{ matrix.shard_total }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -178,7 +208,7 @@ jobs:
           python -m unittest -v "${unit_modules[@]}"
 
   unittest:
-    name: Unit Tests (Python 3.12)
+    name: Unit Tests (Python 3.14)
     runs-on: ubuntu-latest
     needs: unit_test_shards
     if: always()
@@ -195,16 +225,16 @@ jobs:
           echo "All unit test shards passed."
 
   integration_tests:
-    name: Integration Tests (Python 3.12)
+    name: Integration Tests (Python 3.14)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       PYTHONFAULTHANDLER: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -225,7 +255,7 @@ jobs:
           python -m unittest discover -s tests/integration -p "test_*.py" -t . -v
 
   coverage:
-    name: Coverage Report (Python 3.12)
+    name: Coverage Report (Python 3.14)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -233,9 +263,9 @@ jobs:
       PYTHONFAULTHANDLER: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -291,11 +321,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -321,7 +351,21 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Validate deployment configuration and PostgreSQL upgrade guard
+        env:
+          POSTGRES_DB: ci
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          FASTAPI_SECRET_KEY: ci
+          REDIS_PASSWORD: ci
+        run: |
+          set -euo pipefail
+          bash -n deploy/blue_green_deploy.sh deploy/migrate_postgres_15_to_18.sh deploy/test_postgres_upgrade_guard.sh
+          docker compose --env-file /dev/null -f docker-compose.yml config --quiet
+          docker compose --env-file /dev/null -f deploy/docker-compose.bluegreen.yml config --quiet
+          bash deploy/test_postgres_upgrade_guard.sh
 
       - name: Build backend image
         run: |
@@ -334,7 +378,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build frontend image
         run: |
@@ -348,9 +392,11 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [version_lock_check, lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+    needs: [version_lock_check, dependency_audit, lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 15
+    # The first PostgreSQL 15 -> 18 logical dump/restore can legitimately take
+    # longer than an ordinary blue/green application deployment.
+    timeout-minutes: 60
 
     steps:
       - name: Configure SSH key

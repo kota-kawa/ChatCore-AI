@@ -17,8 +17,9 @@ following status checks to pass before merging:
 - `Ruff Lint (Light)`
 - `Ruff Lint (Full)`
 - `Version Lock Check`
-- `Unit Tests (Python 3.12)`
-- `Integration Tests (Python 3.12)`
+- `Unit Tests (Python 3.14)`
+- `Integration Tests (Python 3.14)`
+- `Dependency Vulnerability Audit`
 - `Frontend Static Checks`
 - `Backend Docker Build`
 - `Frontend Docker Build`
@@ -32,12 +33,12 @@ Additional settings:
 | `strict` (require up to date) | `false` | Branches do not have to be rebased onto the latest `main` before merging. |
 | Required pull request reviews | none | Reviews are not enforced by this rule. |
 
-> **Excluded on purpose:** `Coverage Report (Python 3.12)` and `Deploy (main push)`
+> **Excluded on purpose:** `Coverage Report (Python 3.14)` and `Deploy (main push)`
 > are conditional jobs that do not run on pull requests. Marking them as required
 > would block every PR indefinitely, so they are not part of the required checks.
 >
 > Unit test shard jobs are also not listed directly. They are gated through
-> `Unit Tests (Python 3.12)`, which depends on every shard and fails if any shard
+> `Unit Tests (Python 3.14)`, which depends on every shard and fails if any shard
 > fails.
 
 ## How deploys are gated
@@ -65,8 +66,9 @@ cat > branch-protection.json <<'JSON'
       "Ruff Lint (Light)",
       "Ruff Lint (Full)",
       "Version Lock Check",
-      "Unit Tests (Python 3.12)",
-      "Integration Tests (Python 3.12)",
+      "Unit Tests (Python 3.14)",
+      "Integration Tests (Python 3.14)",
+      "Dependency Vulnerability Audit",
       "Frontend Static Checks",
       "Backend Docker Build",
       "Frontend Docker Build"

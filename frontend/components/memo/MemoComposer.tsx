@@ -22,7 +22,7 @@ type MemoComposerProps = {
   handleFormChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   previewMode: boolean;
   setPreviewMode: Dispatch<SetStateAction<boolean>>;
-  composeTextareaRef: RefObject<HTMLTextAreaElement>;
+  composeTextareaRef: RefObject<HTMLTextAreaElement | null>;
   collections: Collection[];
   setFormState: Dispatch<SetStateAction<MemoComposeFormState>>;
   aiSuggesting: boolean;

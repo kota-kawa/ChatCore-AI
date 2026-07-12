@@ -189,6 +189,36 @@ wait_for_service_healthy() {
   return 1
 }
 
+wait_for_legacy_service_healthy() {
+  local service="$1"
+  local retries="${2:-90}"
+  local cid status
+
+  while [ "${retries}" -gt 0 ]; do
+    cid="$(legacy_compose ps -a -q "${service}" || true)"
+    if [ -z "${cid}" ]; then
+      echo "Legacy service ${service} container is missing." >&2
+      return 1
+    fi
+
+    status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${cid}")"
+    if [ "${status}" = "healthy" ]; then
+      echo "Legacy service ${service} is healthy."
+      return 0
+    fi
+    if [ "${status}" = "unhealthy" ] || [ "${status}" = "exited" ] || [ "${status}" = "dead" ]; then
+      echo "Legacy service ${service} is ${status}." >&2
+      return 1
+    fi
+
+    sleep 2
+    retries=$((retries - 1))
+  done
+
+  echo "Timed out waiting for legacy ${service} to become healthy." >&2
+  return 1
+}
+
 wait_for_service_completed() {
   local service="$1"
   local retries="${2:-45}"
@@ -416,6 +446,44 @@ start_core_services() {
   wait_for_service_completed nginx_bootstrap 45
 }
 
+upgrade_postgres_if_required() {
+  local upgrade_script="deploy/migrate_postgres_15_to_18.sh"
+
+  if [ ! -x "${upgrade_script}" ]; then
+    echo "Required PostgreSQL upgrade guard is missing or not executable: ${upgrade_script}" >&2
+    return 1
+  fi
+
+  COMPOSE_FILE="${COMPOSE_FILE}" \
+    LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE}" \
+    ENV_FILE="${ENV_FILE}" \
+    "${upgrade_script}"
+}
+
+resume_current_color_after_database_upgrade() {
+  local color="${CURRENT_COLOR}"
+
+  if [ "${color}" = "none" ]; then
+    return 0
+  fi
+
+  # The one-time PostgreSQL dump/restore stops every database client. Bring the
+  # active release back before image builds so a later build failure can still
+  # roll traffic back to a healthy application.
+  if [ -n "$(compose ps -a -q "app_${color}" || true)" ]; then
+    compose start "app_${color}" "frontend_${color}"
+    wait_for_service_healthy "app_${color}" 90
+    wait_for_service_healthy "frontend_${color}" 90
+    return 0
+  fi
+
+  if [ -f "${LEGACY_COMPOSE_FILE}" ] && [ -n "$(legacy_compose ps -a -q app || true)" ]; then
+    legacy_compose start app frontend
+    wait_for_legacy_service_healthy app 90
+    wait_for_legacy_service_healthy frontend 90
+  fi
+}
+
 build_runtime_images() {
   local color="$1"
   compose build "app_${color}" "frontend_${color}"
@@ -504,7 +572,9 @@ if [ "${PREFLIGHT_COLOR}" = "none" ]; then
 fi
 preflight_nginx_config "${PREFLIGHT_COLOR}"
 
+upgrade_postgres_if_required
 start_core_services
+resume_current_color_after_database_upgrade
 build_runtime_images "${TARGET_COLOR}"
 run_migrations "${TARGET_COLOR}"
 deploy_color "${TARGET_COLOR}"

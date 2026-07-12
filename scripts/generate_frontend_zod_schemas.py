@@ -197,7 +197,7 @@ def _convert_schema_to_zod(symbol: str, schema: dict) -> str:
             "--module",
             "none",
             "--zodVersion",
-            "3",
+            "4",
         ],
         input=schema_json,
         text=True,

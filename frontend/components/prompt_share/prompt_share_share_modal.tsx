@@ -19,12 +19,12 @@ type PromptShareStatus = {
 // Props for the share modal
 type PromptShareShareModalProps = {
   isOpen: boolean;
-  promptShareModalRef: RefObject<HTMLDivElement>;
+  promptShareModalRef: RefObject<HTMLDivElement | null>;
   onClose: () => void;
   shareUrl: string;
   shareStatus: PromptShareStatus;
   shareActionLoading: boolean;
-  promptShareCopyButtonRef: RefObject<HTMLButtonElement>;
+  promptShareCopyButtonRef: RefObject<HTMLButtonElement | null>;
   onCopyLink: () => Promise<void> | void;
   supportsNativeShare: boolean;
   onNativeShare: () => Promise<void> | void;
