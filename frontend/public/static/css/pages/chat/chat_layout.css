@@ -213,9 +213,10 @@
   top: calc(100% + 0.4rem);
   right: 0;
   background: var(--surface-primary, #ffffff);
+  border: 1px solid rgba(15, 118, 110, 0.24);
   border-radius: 12px;
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.12),
+    0 18px 34px rgba(15, 23, 42, 0.16),
     0 1px 4px rgba(0, 0, 0, 0.08);
   min-width: 240px;
   z-index: var(--z-dropdown, 30);
@@ -232,21 +233,50 @@
   padding: 0.65rem 1rem;
   background: none;
   border: none;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
   font-size: var(--text-sm, 0.875rem);
   color: var(--text-dark, #1a1a1a);
   cursor: pointer;
-  transition: background var(--transition-fast, 0.15s ease);
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
+}
+
+:where(body.chat-page, .chat-page-shell) .chat-header-model-option:last-child {
+  border-bottom: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-header-model-option:hover {
-  background: rgba(15, 118, 110, 0.08);
+  background: rgba(15, 118, 110, 0.1);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected {
-  background: rgba(15, 118, 110, 0.15);
-  color: var(--success-strong, #134e4a);
-  font-weight: 600;
+  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 rgba(94, 234, 212, 0.95);
+}
+
+:where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected:hover {
+  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
+  color: #ffffff;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-menu {
+  border-color: rgba(94, 234, 212, 0.2);
+  box-shadow:
+    0 20px 40px rgba(2, 6, 23, 0.6),
+    0 0 0 1px rgba(94, 234, 212, 0.08);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-option {
+  color: var(--text-dark, #e5e7eb);
+  border-bottom-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-option:hover {
+  background: rgba(15, 118, 110, 0.24);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected {
