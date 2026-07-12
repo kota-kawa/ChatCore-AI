@@ -12,7 +12,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"tests/**/*.test.ts\""
+    "test": "npm run test:logic && npm run test:components",
+    "test:logic": "tsx --test \"tests/**/*.test.ts\"",
+    "test:components": "vitest run --config vitest.config.ts",
+    "test:components:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
     "bootstrap-icons": "1.11.3",
@@ -27,14 +30,19 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "20.19.30",
     "@types/react": "18.3.27",
     "@types/react-dom": "18.3.7",
     "autoprefixer": "10.4.20",
+    "jsdom": "29.1.1",
     "json-schema-to-zod": "2.8.1",
     "postcss": "8.4.47",
     "tailwindcss": "3.4.10",
     "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
   }
 }
