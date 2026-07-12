@@ -6803,7 +6803,7 @@ body.memo-page {
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-compose-palette__trigger:hover,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-compose-palette__trigger:focus-visible,
 [data-theme="dark"] :where(body.memo-page, .memo-page-shell) .memo-compose-palette__trigger.is-active {
-  background: rgba(251, 188, 4, 0.14);
+  background: rgba(255, 255, 255, 0.08);
   color: #f3f6f8;
 }
 
