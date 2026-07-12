@@ -1014,14 +1014,17 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   position: absolute;
   top: -10px;
   z-index: 10;
+  /* 隣り合う列のボタン同士が中央のギャップで重ならないよう、
+     列間ギャップ幅に応じてカード外へのはみ出し量を自動で縮小する */
+  --task-card-action-overhang: min(10px, calc((var(--setup-task-gap) - 4px) / 2));
 }
 
 :where(body.chat-page, .chat-page-shell) .task-card-action-container--delete {
-  left: -10px;
+  left: calc(-1 * var(--task-card-action-overhang));
 }
 
 :where(body.chat-page, .chat-page-shell) .task-card-action-container--edit {
-  right: -10px;
+  right: calc(-1 * var(--task-card-action-overhang));
 }
 
 :where(body.chat-page, .chat-page-shell) .task-card-action-container .card-delete-btn,
@@ -1181,6 +1184,12 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     gap: var(--setup-task-gap);
     width: 100%;
     overflow-x: hidden;
+  }
+
+  /* 並び替え編集中は削除・編集ボタンがカード外にはみ出すため、
+     左右端のカードのボタンが切れないよう overflow-x を解除する */
+  :where(body.chat-page, .chat-page-shell) .task-selection.task-selection--reordering {
+    overflow-x: visible;
   }
 
   :where(body.chat-page, .chat-page-shell) .task-selection-header {
