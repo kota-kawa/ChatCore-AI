@@ -1021,6 +1021,125 @@ body.settings-page,
   cursor: not-allowed;
   opacity: var(--disabled-opacity, 0.6);
 }
+
+/* ─────────────────────────── */
+/* セキュリティセクションのアクションボタン */
+/* Security-section action buttons */
+/* ─────────────────────────── */
+
+/* パネル内のアクション行 — ヘッダー直下に自然に続く控えめな余白 / Action row inside a panel — sits calmly below the header */
+:where(body.settings-page, .user-settings-page) .security-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+/* パネル内の button-group（メール確認フォーム）は余白を詰める / Tighten button-group spacing inside panels */
+:where(body.settings-page, .user-settings-page) .security-panel .button-group {
+  margin-top: 0.35rem;
+}
+
+/* アイコン＋ラベルを並べるボタン共通レイアウト / Shared icon + label layout */
+:where(body.settings-page, .user-settings-page) .security-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+:where(body.settings-page, .user-settings-page) .security-action i {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* 回転するリロードアイコン / Spinning reload icon while loading */
+:where(body.settings-page, .user-settings-page) .security-action__spin {
+  animation: security-action-spin 0.8s linear infinite;
+}
+
+@keyframes security-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ゴーストボタン — 「一覧を更新」など中立的なユーティリティ操作 / Ghost button for neutral utility actions like refresh */
+:where(body.settings-page, .user-settings-page) .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.15rem;
+  min-height: 44px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--settings-text-muted);
+  background: rgba(100, 116, 139, 0.06);
+  border: 1px solid var(--settings-border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .ghost-button i {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+:where(body.settings-page, .user-settings-page) .ghost-button:hover:not(:disabled) {
+  background: rgba(25, 195, 125, 0.1);
+  color: var(--primary-dark, #0f7a51);
+  border-color: rgba(25, 195, 125, 0.35);
+}
+
+:where(body.settings-page, .user-settings-page) .ghost-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+:where(body.settings-page, .user-settings-page) .ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity, 0.6);
+}
+
+/* 危険ゴーストボタン — 「削除」「連携を解除」など破壊的操作。通常は控えめ、hover で赤く塗る / Destructive ghost button: subtle by default, fills red on hover */
+:where(body.settings-page, .user-settings-page) .danger-ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1rem;
+  min-height: 40px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .danger-ghost-button i {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+:where(body.settings-page, .user-settings-page) .danger-ghost-button:hover:not(:disabled) {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+}
+
+:where(body.settings-page, .user-settings-page) .danger-ghost-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+:where(body.settings-page, .user-settings-page) .danger-ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity, 0.6);
+}
+
 /* レスポンシブ対応 (基本的な例) */
 @media (max-width: 992px) {
   :where(body.settings-page, .user-settings-page) .settings-sidebar {
@@ -1077,8 +1196,13 @@ body.settings-page,
     flex-direction: column-reverse; /* ボタンを縦積みにし、保存を上に */
     gap: 0.75rem;
   }
+  :where(body.settings-page, .user-settings-page) .security-actions {
+    flex-direction: column;
+  }
   :where(body.settings-page, .user-settings-page) .primary-button,
 :where(body.settings-page, .user-settings-page) .secondary-button,
+:where(body.settings-page, .user-settings-page) .ghost-button,
+:where(body.settings-page, .user-settings-page) .security-actions .primary-button,
 :where(body.settings-page, .user-settings-page) .danger-button {
     width: 100%;
   }
@@ -1555,6 +1679,31 @@ body.settings-page :where(
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-empty {
   color: #94a3b8;
   border-color: rgba(148, 163, 184, 0.28);
+}
+
+/* ─── ダークモード: ゴースト／危険ゴーストボタン ─── */
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .ghost-button {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .ghost-button:hover:not(:disabled) {
+  background: rgba(25, 195, 125, 0.16);
+  color: #6ee7b7;
+  border-color: rgba(25, 195, 125, 0.4);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .danger-ghost-button {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .danger-ghost-button:hover:not(:disabled) {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
 }
 
 /* ─── ダークモード: 投稿したプロンプトカード（設定ページ） ─── */
