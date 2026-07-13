@@ -249,7 +249,11 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
     if not _user_is_verified(user_id):
         raise ValueError("Only verified users can issue Claude credentials.")
 
-    client_id = f"claude-{secrets.token_urlsafe(24)}"
+    # クライアント ID には "claude" などのサービス名を含めず、他社サービスの
+    # コネクターからでも流用できる中立的な識別子にする。
+    # Keep the client ID vendor-neutral (no "claude") so it can also be reused
+    # by non-Claude MCP connectors.
+    client_id = f"mcp-{secrets.token_urlsafe(24)}"
     client_secret = secrets.token_urlsafe(48)
     client = OAuthClientInformationFull(
         client_id=client_id,
@@ -531,24 +535,61 @@ def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
             cursor.close()
 
 
-def _rotate_refresh(refresh: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
+def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
+    """Issue a fresh access token while keeping the same refresh token alive.
+
+    リフレッシュトークンを回転（毎回失効させて発行し直す）させると、リフレッシュ要求の
+    再試行や並行実行が発生したときに「既に使用済み」となって接続が切れ、外部サービスの
+    コネクターを繰り返し再接続する必要が生じる。ここでは同じリフレッシュトークンを再利用可能
+    のまま返し、使用のたびに有効期限を延長することで、一度接続したら切れないようにする。
+
+    Instead of rotating (revoking and reissuing) the refresh token on every use,
+    keep it reusable and simply roll its expiry forward. Rotation makes retried or
+    concurrent refreshes fail as "already used", which drops the connection and
+    forces users to reconnect their MCP connector; keeping the refresh token stable
+    means a connection stays alive as long as it is used within the refresh TTL.
+    """
+    access_token = secrets.token_urlsafe(32)
+    now = _utc_now()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute(
                 """
-                UPDATE mcp_oauth_tokens SET revoked_at = NOW(), replaced_at = NOW()
-                WHERE token_digest = %s AND revoked_at IS NULL
+                UPDATE mcp_oauth_tokens
+                SET expires_at = %s, last_used_at = NOW()
+                WHERE token_digest = %s AND token_type = 'refresh' AND revoked_at IS NULL
                 """,
-                (_digest(refresh.token),),
+                (now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS), _digest(refresh.token)),
             )
             if cursor.rowcount != 1:
                 conn.rollback()
-                raise TokenError("invalid_grant", "Refresh token was already used.")
+                raise TokenError("invalid_grant", "Refresh token is no longer valid.")
+            cursor.execute(
+                """
+                INSERT INTO mcp_oauth_tokens
+                    (token_digest, grant_id, client_id, token_type, scopes, resource, expires_at)
+                VALUES (%s, %s, %s, 'access', %s, %s, %s)
+                """,
+                (
+                    _digest(access_token),
+                    str(refresh.grant_id),
+                    refresh.client_id,
+                    scopes,
+                    refresh.resource,
+                    now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
+                ),
+            )
+            cursor.execute("UPDATE mcp_oauth_grants SET last_used_at = NOW() WHERE id = %s", (str(refresh.grant_id),))
             conn.commit()
         finally:
             cursor.close()
-    return _issue_tokens(refresh.grant_id, refresh.client_id, scopes, refresh.resource)
+    return OAuthToken(
+        access_token=access_token,
+        refresh_token=refresh.token,
+        expires_in=ACCESS_TOKEN_TTL_SECONDS,
+        scope=" ".join(scopes),
+    )
 
 
 def _load_access(raw_token: str) -> AccessToken | None:
@@ -633,7 +674,7 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
         return await run_blocking(_load_refresh, str(client.client_id), refresh_token)
 
     async def exchange_refresh_token(self, client: OAuthClientInformationFull, refresh_token: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
-        return await run_blocking(_rotate_refresh, refresh_token, scopes)
+        return await run_blocking(_refresh_access_token, refresh_token, scopes)
 
     async def load_access_token(self, token: str) -> AccessToken | None:
         return await run_blocking(_load_access, token)

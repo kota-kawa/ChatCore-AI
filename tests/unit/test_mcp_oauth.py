@@ -1,5 +1,7 @@
 import unittest
-from unittest.mock import patch
+from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 from mcp.server.auth.provider import AuthorizationParams, AuthorizeError
 from mcp.shared.auth import OAuthClientInformationFull
@@ -68,6 +70,39 @@ class McpOAuthTestCase(unittest.TestCase):
             details = mcp_oauth.consent_details(token)
 
         self.assertEqual(details["client_host"], "claude.ai")
+
+    def test_refresh_keeps_same_token_alive_without_rotation(self):
+        """リフレッシュしても同じリフレッシュトークンを返し、失効させないことを保証する。"""
+        refresh = mcp_oauth.StoredRefreshToken(
+            token="refresh-token-value",
+            client_id="mcp-personal-client",
+            scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+            expires_at=9999999999,
+            subject="7",
+            grant_id=uuid4(),
+            resource=SERVER_URL,
+        )
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            token = mcp_oauth._refresh_access_token(refresh, [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE])
+
+        # 同じリフレッシュトークンを返す（回転させない）。
+        self.assertEqual(token.refresh_token, "refresh-token-value")
+        # 新しいアクセストークンが発行される。
+        self.assertTrue(token.access_token)
+        self.assertNotEqual(token.access_token, "refresh-token-value")
+        self.assertEqual(token.expires_in, mcp_oauth.ACCESS_TOKEN_TTL_SECONDS)
+        # 既存のリフレッシュトークンを失効させる UPDATE を発行していないこと。
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertNotIn("revoked_at = NOW()", executed_sql)
 
     def test_redirect_validation_rejects_non_loopback_http(self):
         client = OAuthClientInformationFull(
