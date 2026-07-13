@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from blueprints.prompt_share.prompt_share_api import _get_prompts_with_flags
+from blueprints.prompt_share.prompt_share_api import _get_prompts_with_flags, _get_recommended_prompts
 
 
 # テスト用の疑似DBカーソルクラス。
@@ -103,6 +103,40 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertTrue(prompts[0]["used_in_chat"])
         self.assertNotIn("bookmarked", prompts[0])
         self.assertNotIn("saved_to_list", prompts[0])
+        self.assertTrue(fake_cursor.closed)
+        self.assertTrue(fake_conn.closed)
+
+    # おすすめ取得では閲覧中の投稿を除外し、DB側でランダムな最大件数に絞ることを検証します。
+    # Verify recommendation lookup excludes the viewed prompt and limits random rows in the database.
+    def test_get_recommended_prompts_excludes_current_prompt_and_limits_results(self):
+        fake_cursor = FakeCursor(
+            [
+                {
+                    "id": 8,
+                    "title": "Recommended prompt",
+                    "category": "business",
+                    "content": "Body",
+                    "author": "tester",
+                    "content_format": "prompt",
+                    "media_type": "text",
+                    "attributes": {},
+                    "attachments": [],
+                    "created_at": "2024-01-01T00:00:00",
+                }
+            ]
+        )
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
+            prompts = _get_recommended_prompts(exclude_prompt_id=7)
+
+        self.assertEqual(len(fake_cursor.executed), 1)
+        query, params = fake_cursor.executed[0]
+        self.assertIn("COALESCE(p.id <> %s, TRUE)", query)
+        self.assertIn("ORDER BY RANDOM()", query)
+        self.assertIn("LIMIT %s", query)
+        self.assertEqual(params, (7, 3))
+        self.assertEqual(prompts[0]["id"], 8)
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 

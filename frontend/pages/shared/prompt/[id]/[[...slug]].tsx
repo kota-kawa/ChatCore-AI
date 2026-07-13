@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from "next";
 import Link from "next/link";
+import { useEffect } from "react";
 import MarkdownContent from "../../../../components/MarkdownContent";
 import { SeoHead } from "../../../../components/SeoHead";
 import { formatDateTime } from "../../../../lib/datetime";
@@ -41,6 +42,12 @@ type SharedPromptPayload = {
   error?: string;
 };
 
+// おすすめカードに必要なプロンプト一覧のAPIレスポンス
+// API response for the prompts needed by recommendation cards.
+type RecommendedPromptsPayload = {
+  prompts?: SharedPrompt[];
+};
+
 // SSRで事前サニタイズ済みの各セクションHTML（クローラにも本文が見えるようにするため）
 // Pre-sanitized HTML for each section rendered during SSR (so crawlers can see the body too)
 type SharedPromptHtml = {
@@ -55,6 +62,7 @@ type SharedPromptHtml = {
 // Props for the page component
 type SharedPromptPageProps = {
   payload: SharedPromptPayload;
+  recommendedPrompts: SharedPrompt[];
   promptHtml: SharedPromptHtml;
   pageUrl: string;
   defaultOgImageUrl: string;
@@ -160,6 +168,14 @@ function buildMetaDescription(payload: SharedPromptPayload) {
   return truncateText(normalized);
 }
 
+// おすすめカード向けにMarkdownを含む本文から短いプレーンテキスト要約を作る
+// Build a short plain-text summary from Markdown-capable content for recommendation cards.
+function buildRecommendationPreview(prompt: SharedPrompt) {
+  const source = prompt.content || prompt.skill_markdown || "";
+  const preview = stripPreviewText(source);
+  return truncateText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
+}
+
 // プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）。
 // タイトル由来のスラッグが正規URLと一致しない場合は正規パスへ恒久リダイレクトする。
 // 本文Markdownはサーバー側でサニタイズ済みHTMLへ変換し、クローラにも本文が見えるようにする。
@@ -181,10 +197,19 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   const defaultOgImageUrl = origin ? `${origin}/static/img.jpg` : "/static/img.jpg";
 
   let payload: SharedPromptPayload = {};
+  let recommendedPrompts: SharedPrompt[] = [];
 
   try {
-    const res = await resilientFetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`);
+    const [res, recommendedRes] = await Promise.all([
+      resilientFetch(`${backendUrl}/prompt_share/api/prompts/${encodeURIComponent(promptId)}`),
+      resilientFetch(
+        `${backendUrl}/prompt_share/api/prompts/recommended?exclude_id=${encodeURIComponent(promptId)}`
+      ).catch(() => null)
+    ]);
     const data: SharedPromptResponse = await res.json().catch(() => ({}));
+    const recommendedData: RecommendedPromptsPayload = recommendedRes?.ok
+      ? await recommendedRes.json().catch(() => ({}))
+      : {};
     // バックエンドのエラーステータスをフロントのレスポンスコードに伝播させる
     // Propagate backend error status to the frontend response code
     if (!res.ok) {
@@ -194,6 +219,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     if (!res.ok && !payload.error) {
       payload.error = `共有プロンプトの取得に失敗しました (${res.status})`;
     }
+    recommendedPrompts = Array.isArray(recommendedData.prompts) ? recommendedData.prompts : [];
   } catch {
     context.res.statusCode = 500;
     payload = { error: "共有プロンプトの取得に失敗しました。" };
@@ -240,6 +266,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   return {
     props: {
       payload,
+      recommendedPrompts,
       promptHtml,
       pageUrl,
       defaultOgImageUrl
@@ -249,7 +276,19 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
 
 // 共有プロンプト詳細ページ（フォーマット軸・メディア軸に応じて表示）
 // Shared prompt detail page (renders according to content format and media type axes)
-export default function SharedPromptPage({ payload, promptHtml, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
+export default function SharedPromptPage({
+  payload,
+  recommendedPrompts,
+  promptHtml,
+  pageUrl,
+  defaultOgImageUrl
+}: SharedPromptPageProps) {
+  // 他ページと共通の右下アクションメニューをクライアント側で登録する
+  // Register the shared bottom-right action menu on the client.
+  useEffect(() => {
+    void import("../../../../scripts/components/popup_menu");
+  }, []);
+
   const prompt = payload.prompt;
   const contentFormat = normalizePromptContentFormat(prompt?.content_format || prompt?.prompt_type || "");
   const mediaType = normalizePromptMediaType(prompt?.media_type || prompt?.prompt_type || "");
@@ -325,6 +364,9 @@ export default function SharedPromptPage({ payload, promptHtml, pageUrl, default
       />
 
       <div className="shared-prompt-page">
+        {/* 他ページと共通の右下メニュー / Shared bottom-right menu used across pages */}
+        <action-menu></action-menu>
+
         {/* パンくずナビ（プロンプト共有トップへの内部リンク） / Breadcrumb nav (internal link back to the prompt share top) */}
         <nav className="shared-prompt-breadcrumb" aria-label="パンくずリスト">
           <ol>
@@ -410,6 +452,60 @@ export default function SharedPromptPage({ payload, promptHtml, pageUrl, default
                 <i className="bi bi-collection" aria-hidden="true" /> プロンプト共有ページへ
               </Link>
             </footer>
+
+            {recommendedPrompts.length > 0 ? (
+              <section className="shared-prompt-recommendations" aria-labelledby="shared-prompt-recommendations-title">
+                <div className="shared-prompt-recommendations__heading">
+                  <div>
+                    <p>Discover more</p>
+                    <h2 id="shared-prompt-recommendations-title">
+                      <i className="bi bi-stars" aria-hidden="true" /> おすすめのプロンプト
+                    </h2>
+                  </div>
+                  <Link href="/prompt_share">すべて見る <i className="bi bi-arrow-right" aria-hidden="true" /></Link>
+                </div>
+                <div className="shared-prompt-recommendations__grid">
+                  {recommendedPrompts.map((recommendedPrompt) => {
+                    const recommendationId = recommendedPrompt.id;
+                    if (recommendationId === undefined || recommendationId === null) return null;
+
+                    const recommendationFormat = normalizePromptContentFormat(
+                      recommendedPrompt.content_format || recommendedPrompt.prompt_type || ""
+                    );
+                    const recommendationMedia = normalizePromptMediaType(
+                      recommendedPrompt.media_type || recommendedPrompt.prompt_type || ""
+                    );
+
+                    return (
+                      <Link
+                        key={String(recommendationId)}
+                        href={buildPromptPath(recommendationId, recommendedPrompt.title)}
+                        className="shared-prompt-recommendation-card"
+                      >
+                        {recommendedPrompt.reference_image_url ? (
+                          <img
+                            src={recommendedPrompt.reference_image_url}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : null}
+                        <div className="shared-prompt-recommendation-card__body">
+                          <div className="shared-prompt-recommendation-card__pills">
+                            <span>{getCategoryLabelOrFallback(recommendedPrompt.category)}</span>
+                            <span>{getPromptFormatLabel(recommendationFormat)}</span>
+                            <span>{getPromptMediaLabel(recommendationMedia)}</span>
+                          </div>
+                          <h3>{recommendedPrompt.title || "共有プロンプト"}</h3>
+                          <p>{buildRecommendationPreview(recommendedPrompt)}</p>
+                          <span className="shared-prompt-recommendation-card__link">詳しく見る <i className="bi bi-arrow-right" aria-hidden="true" /></span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
           </article>
         ) : (
           <div className="shared-prompt-state shared-prompt-state--error">共有プロンプトの取得に失敗しました。</div>

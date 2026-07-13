@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from blueprints.prompt_share.prompt_share_api import get_prompt_detail
+from blueprints.prompt_share.prompt_share_api import get_prompt_detail, get_recommended_prompts
 
 
 # 公開されているプロンプトの詳細情報を取得するAPIの挙動を検証するテストクラス。
@@ -63,6 +63,25 @@ class PromptShareApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["error"], "プロンプトが見つかりません")
+
+    # 閲覧中のプロンプトIDを除外条件として渡し、おすすめ一覧を返すことを検証します。
+    # Verify that the recommendation endpoint passes the viewed prompt ID as its exclusion condition.
+    def test_get_recommended_prompts_returns_random_prompt_cards(self):
+        sample_prompts = [
+            {"id": 21, "title": "おすすめプロンプト", "content": "内容"},
+            {"id": 22, "title": "別のおすすめ", "content": "内容"},
+        ]
+
+        with patch(
+            "blueprints.prompt_share.prompt_share_api._get_recommended_prompts",
+            return_value=sample_prompts,
+        ) as mock_get_recommended:
+            response = asyncio.run(get_recommended_prompts(exclude_id=12))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["prompts"], sample_prompts)
+        mock_get_recommended.assert_called_once_with(12)
 
 
 if __name__ == "__main__":
