@@ -407,12 +407,20 @@ export function SecuritySettingsSection({
         <div className="security-stack">
           {/* メールアドレス変更パネル — 2 段階確認コードフローを含む / Email-change panel — includes two-step verification code flow */}
           <div className="security-panel">
-            <h3>メールアドレス変更</h3>
-            <p className="security-panel__description">
-              現在のメールアドレスで確認後、新しいメールアドレスにも確認コードを送信します。
-            </p>
+            <div className="security-panel__head">
+              <span className="security-panel__icon" aria-hidden="true">
+                <i className="bi bi-envelope-at"></i>
+              </span>
+              <div className="security-panel__heading">
+                <h3>メールアドレス変更</h3>
+                <p className="security-panel__description">
+                  現在のメールアドレスで確認後、新しいメールアドレスにも確認コードを送信します。
+                </p>
+              </div>
+            </div>
             <p className="email-change-current">
-              現在: <strong>{profileEmail || "未取得"}</strong>
+              <span className="email-change-current__label">現在のアドレス</span>
+              <strong>{profileEmail || "未取得"}</strong>
             </p>
 
             {emailChangeStatus ? (
@@ -506,8 +514,27 @@ export function SecuritySettingsSection({
 
           {/* Passkey 登録パネル — ブラウザ非対応時はボタンを無効化する / Passkey registration panel — buttons disabled when browser lacks support */}
           <div className="security-panel">
-            <h3>Passkeys</h3>
-            <p id="passkeySupportStatus">{passkeySupportStatus}</p>
+            <div className="security-panel__head">
+              <span className="security-panel__icon" aria-hidden="true">
+                <i className="bi bi-fingerprint"></i>
+              </span>
+              <div className="security-panel__heading">
+                <h3>Passkeys</h3>
+                <p className="security-panel__description">
+                  パスワードの代わりに、指紋・顔認証や端末のロック解除でサインインできます。
+                </p>
+              </div>
+              <span
+                className={`security-status-pill security-status-pill--${passkeySupported ? "ok" : "muted"}`}
+                id="passkeySupportStatus"
+              >
+                <i
+                  className={`bi ${passkeySupported ? "bi-check-circle-fill" : "bi-info-circle-fill"}`}
+                  aria-hidden="true"
+                ></i>
+                {passkeySupportStatus}
+              </span>
+            </div>
             <div className="button-group">
               <button
                 type="button"
@@ -536,24 +563,49 @@ export function SecuritySettingsSection({
 
           {/* 登録済み Passkey の一覧パネル — 削除ボタンは操作中のキーのみ無効化する / Registered passkey list panel — only the key being deleted has its button disabled */}
           <div className="security-panel">
-            <h3>登録済みPasskeys</h3>
+            <div className="security-panel__head">
+              <span className="security-panel__icon" aria-hidden="true">
+                <i className="bi bi-shield-lock"></i>
+              </span>
+              <div className="security-panel__heading">
+                <h3>登録済みPasskeys</h3>
+                <p className="security-panel__description">
+                  この端末やアカウントに登録されているPasskeyの一覧です。
+                </p>
+              </div>
+            </div>
             <div id="passkeyList" className="passkey-list">
               {passkeys.length === 0 ? (
-                <p className="passkey-empty">まだPasskeyは登録されていません。</p>
+                <div className="passkey-empty">
+                  <i className="bi bi-shield-slash" aria-hidden="true"></i>
+                  <span>まだPasskeyは登録されていません。</span>
+                </div>
               ) : (
                 passkeys.map((passkey) => (
                   <div key={passkey.id} className="passkey-item">
-                    <div>
-                      <strong>{passkey.label}</strong>
-                      <div className="passkey-meta">
-                        端末種別: {passkey.credentialDeviceType}
-                        <br />
-                        バックアップ: {passkey.credentialBackedUp ? "あり" : "なし"}
-                        <br />
-                        作成日時: {formatPasskeyDateTime(passkey.createdAt)}
-                        <br />
-                        最終利用: {formatPasskeyDateTime(passkey.lastUsedAt)}
-                      </div>
+                    <span className="passkey-item__icon" aria-hidden="true">
+                      <i className="bi bi-shield-lock-fill"></i>
+                    </span>
+                    <div className="passkey-item__body">
+                      <strong className="passkey-item__title">{passkey.label}</strong>
+                      <dl className="security-meta">
+                        <div className="security-meta__row">
+                          <dt>端末種別</dt>
+                          <dd>{passkey.credentialDeviceType}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>バックアップ</dt>
+                          <dd>{passkey.credentialBackedUp ? "あり" : "なし"}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>作成日時</dt>
+                          <dd>{formatPasskeyDateTime(passkey.createdAt)}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>最終利用</dt>
+                          <dd>{formatPasskeyDateTime(passkey.lastUsedAt)}</dd>
+                        </div>
+                      </dl>
                     </div>
                     <button
                       type="button"
@@ -573,10 +625,17 @@ export function SecuritySettingsSection({
           </div>
 
           <div className="security-panel">
-            <h3>AIサービス連携</h3>
-            <p className="security-panel__description">
-              外部AIサービスに、公開プロンプトを投稿する権限を付与した連携です。不要になった連携は解除できます。
-            </p>
+            <div className="security-panel__head">
+              <span className="security-panel__icon" aria-hidden="true">
+                <i className="bi bi-robot"></i>
+              </span>
+              <div className="security-panel__heading">
+                <h3>AIサービス連携</h3>
+                <p className="security-panel__description">
+                  外部AIサービスに、公開プロンプトを投稿する権限を付与した連携です。不要になった連携は解除できます。
+                </p>
+              </div>
+            </div>
             <div className="button-group">
               <button
                 type="button"
@@ -591,21 +650,37 @@ export function SecuritySettingsSection({
             </div>
             <div className="passkey-list" aria-live="polite">
               {mcpOAuthConnectionsLoading ? (
-                <p className="passkey-empty">AIサービス連携を読み込んでいます。</p>
+                <div className="passkey-empty">
+                  <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
+                  <span>AIサービス連携を読み込んでいます。</span>
+                </div>
               ) : mcpOAuthConnections.length === 0 ? (
-                <p className="passkey-empty">接続中のAIサービスはありません。</p>
+                <div className="passkey-empty">
+                  <i className="bi bi-plug" aria-hidden="true"></i>
+                  <span>接続中のAIサービスはありません。</span>
+                </div>
               ) : (
                 mcpOAuthConnections.map((connection) => (
                   <div key={connection.id} className="passkey-item">
-                    <div>
-                      <strong>{connection.client_name}</strong>
-                      <div className="passkey-meta">
-                        接続先: {connection.client_host}
-                        <br />
-                        接続日時: {formatPasskeyDateTime(connection.created_at)}
-                        <br />
-                        最終利用: {connection.last_used_at ? formatPasskeyDateTime(connection.last_used_at) : "未使用"}
-                      </div>
+                    <span className="passkey-item__icon" aria-hidden="true">
+                      <i className="bi bi-robot"></i>
+                    </span>
+                    <div className="passkey-item__body">
+                      <strong className="passkey-item__title">{connection.client_name}</strong>
+                      <dl className="security-meta">
+                        <div className="security-meta__row">
+                          <dt>接続先</dt>
+                          <dd>{connection.client_host}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>接続日時</dt>
+                          <dd>{formatPasskeyDateTime(connection.created_at)}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>最終利用</dt>
+                          <dd>{connection.last_used_at ? formatPasskeyDateTime(connection.last_used_at) : "未使用"}</dd>
+                        </div>
+                      </dl>
                     </div>
                     <button
                       type="button"
@@ -626,10 +701,15 @@ export function SecuritySettingsSection({
           {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}
           <div className="security-panel security-panel--danger">
             <div className="account-delete-header">
-              <h3>アカウント削除</h3>
-              <p className="account-delete-copy">
-                アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。
-              </p>
+              <span className="security-panel__icon security-panel__icon--danger" aria-hidden="true">
+                <i className="bi bi-exclamation-triangle"></i>
+              </span>
+              <div className="account-delete-header__text">
+                <h3>アカウント削除</h3>
+                <p className="account-delete-copy">
+                  アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。この操作は取り消せません。
+                </p>
+              </div>
             </div>
             <div className="account-delete-confirmation">
               <div className="account-delete-field">

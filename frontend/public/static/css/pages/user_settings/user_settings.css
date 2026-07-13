@@ -68,61 +68,166 @@
 
 :where(body.settings-page, .user-settings-page) .security-stack {
   display: grid;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
+/* セキュリティパネル — アイコンバッジ付きヘッダーを持つモダンカード / Modern card with an icon-badge header */
 :where(body.settings-page, .user-settings-page) .security-panel {
-  padding: 1rem 1.1rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: #fff;
+  padding: 1.5rem;
+  border: 1px solid var(--settings-border-color);
+  border-radius: 18px;
+  background: var(--settings-card-bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel:hover {
+  border-color: rgba(25, 195, 125, 0.35);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  margin-bottom: 1.1rem;
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  font-size: 1.25rem;
+  color: var(--primary-color);
+  background: linear-gradient(135deg, rgba(25, 195, 125, 0.16), rgba(25, 195, 125, 0.06));
+  border: 1px solid rgba(25, 195, 125, 0.2);
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel__heading {
+  flex: 1;
+  min-width: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel__heading h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  line-height: 1.3;
 }
 
 :where(body.settings-page, .user-settings-page) .security-panel__description {
-  margin: 0 0 0.75rem;
+  margin: 0;
   color: var(--settings-text-muted);
+  font-size: 0.92rem;
   line-height: 1.6;
 }
 
+/* 対応状況ピル / Support-status pill */
+:where(body.settings-page, .user-settings-page) .security-status-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+:where(body.settings-page, .user-settings-page) .security-status-pill--ok {
+  color: #0f7a51;
+  background: rgba(25, 195, 125, 0.12);
+  border: 1px solid rgba(25, 195, 125, 0.24);
+}
+
+:where(body.settings-page, .user-settings-page) .security-status-pill--muted {
+  color: var(--settings-text-muted);
+  background: rgba(100, 116, 139, 0.1);
+  border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+/* 現在のメールアドレス表示 — 落ち着いたインセットボックス / Current email — a calm inset box */
 :where(body.settings-page, .user-settings-page) .email-change-current {
-  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(100, 116, 139, 0.06);
+  border: 1px solid var(--settings-border-color);
+}
+
+:where(body.settings-page, .user-settings-page) .email-change-current__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--settings-text-muted);
 }
 
 :where(body.settings-page, .user-settings-page) .email-change-current strong {
-  color: var(--settings-text);
+  font-size: 1rem;
+  color: var(--text-dark);
   overflow-wrap: anywhere;
 }
 
 :where(body.settings-page, .user-settings-page) .email-change-form {
   display: grid;
   gap: 0.85rem;
-  margin-top: 1rem;
+  margin-top: 1.1rem;
 }
 
+/* 危険ゾーン: アカウント削除 / Danger zone: account deletion */
 :where(body.settings-page, .user-settings-page) .security-panel--danger {
   display: grid;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  border-color: rgba(220, 38, 38, 0.28);
-  background: rgba(254, 242, 242, 0.72);
+  gap: 1.1rem;
+  border-color: rgba(220, 38, 38, 0.24);
+  background:
+    linear-gradient(180deg, rgba(254, 242, 242, 0.65), rgba(254, 242, 242, 0.35));
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel--danger:hover {
+  border-color: rgba(220, 38, 38, 0.4);
+  box-shadow: 0 10px 30px rgba(220, 38, 38, 0.1);
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-header {
-  display: grid;
-  gap: 0.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+:where(body.settings-page, .user-settings-page) .account-delete-header__text {
+  flex: 1;
+  min-width: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .security-panel__icon--danger {
+  color: #dc2626;
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.16), rgba(220, 38, 38, 0.06));
+  border-color: rgba(220, 38, 38, 0.24);
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-header h3 {
-  margin: 0;
-  font-size: 1rem;
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #b91c1c;
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-copy {
   margin: 0;
-  color: var(--settings-text-muted);
+  color: #9f5757;
   font-size: 0.92rem;
-  line-height: 1.45;
+  line-height: 1.55;
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-confirmation {
@@ -133,7 +238,7 @@
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-field .form-label {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
   font-size: 0.9rem;
 }
 
@@ -142,40 +247,116 @@
 }
 
 :where(body.settings-page, .user-settings-page) .account-delete-confirmation .danger-button {
-  min-height: 42px;
-  padding: 0.7rem 1.1rem;
+  min-height: 44px;
+  padding: 0.7rem 1.25rem;
   white-space: nowrap;
 }
 
 :where(body.settings-page, .user-settings-page) .security-panel--danger .settings-inline-feedback {
   margin: 0;
-  padding: 0.65rem 0.75rem;
+  padding: 0.65rem 0.85rem;
   font-size: 0.9rem;
 }
+
+/* Passkey / 連携アイテムのリスト / List of passkeys and connections */
 :where(body.settings-page, .user-settings-page) .passkey-list {
   display: grid;
   gap: 0.75rem;
+  margin-top: 1.1rem;
 }
 
 :where(body.settings-page, .user-settings-page) .passkey-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
-  padding: 0.9rem 1rem;
+  gap: 0.9rem;
+  padding: 1rem;
   border-radius: 14px;
-  background: #f7faf8;
+  background: var(--settings-card-bg);
+  border: 1px solid var(--settings-border-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-:where(body.settings-page, .user-settings-page) .passkey-meta {
-  color: #5f6b66;
-  font-size: 0.92rem;
+:where(body.settings-page, .user-settings-page) .passkey-item:hover {
+  border-color: rgba(25, 195, 125, 0.3);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+:where(body.settings-page, .user-settings-page) .passkey-item__icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.15rem;
+  color: var(--primary-color);
+  background: rgba(25, 195, 125, 0.1);
+}
+
+:where(body.settings-page, .user-settings-page) .passkey-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .passkey-item__title {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.98rem;
+  color: var(--text-dark);
+  overflow-wrap: anywhere;
+}
+
+:where(body.settings-page, .user-settings-page) .passkey-item .delete-passkey-btn {
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+/* メタ情報 — ラベルと値を並べた小さな定義リスト / Meta — compact definition list of label/value pairs */
+:where(body.settings-page, .user-settings-page) .security-meta {
+  display: grid;
+  gap: 0.3rem 1rem;
+  margin: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .security-meta__row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.5rem;
+  font-size: 0.86rem;
   line-height: 1.5;
 }
 
-:where(body.settings-page, .user-settings-page) .passkey-empty {
+:where(body.settings-page, .user-settings-page) .security-meta__row dt {
   margin: 0;
-  color: #5f6b66;
+  color: var(--settings-text-muted);
+  font-weight: 600;
+}
+
+:where(body.settings-page, .user-settings-page) .security-meta__row dd {
+  margin: 0;
+  color: var(--text-dark);
+  overflow-wrap: anywhere;
+}
+
+/* 空状態 — 破線ボックスにアイコンを添える / Empty state — dashed box with an icon */
+:where(body.settings-page, .user-settings-page) .passkey-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 1.5rem 1rem;
+  border-radius: 14px;
+  border: 1px dashed var(--settings-border-color);
+  color: var(--settings-text-muted);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+:where(body.settings-page, .user-settings-page) .passkey-empty i {
+  font-size: 1.1rem;
+  opacity: 0.8;
 }
 
 /* ─────────────────────────── */
@@ -904,6 +1085,22 @@ body.settings-page,
   :where(body.settings-page, .user-settings-page) .account-delete-confirmation {
     grid-template-columns: 1fr;
   }
+  :where(body.settings-page, .user-settings-page) .security-panel {
+    padding: 1.25rem;
+  }
+  :where(body.settings-page, .user-settings-page) .security-panel__head {
+    flex-wrap: wrap;
+  }
+  :where(body.settings-page, .user-settings-page) .passkey-item {
+    flex-wrap: wrap;
+  }
+  :where(body.settings-page, .user-settings-page) .passkey-item__body {
+    flex-basis: calc(100% - 40px - 0.9rem);
+  }
+  :where(body.settings-page, .user-settings-page) .passkey-item .delete-passkey-btn {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
 }
 
 @media (max-width: 576px) {
@@ -1265,19 +1462,99 @@ body.settings-page :where(
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 1px 2px rgba(2, 6, 23, 0.3);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel:hover {
+  border-color: rgba(25, 195, 125, 0.4);
+  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.4);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel__heading h3 {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel__icon {
+  background: linear-gradient(135deg, rgba(25, 195, 125, 0.24), rgba(25, 195, 125, 0.1));
+  border-color: rgba(25, 195, 125, 0.3);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-status-pill--ok {
+  color: #6ee7b7;
+  background: rgba(25, 195, 125, 0.18);
+  border-color: rgba(25, 195, 125, 0.3);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-status-pill--muted {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .email-change-current {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .email-change-current strong {
+  color: #f1f5f9;
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel--danger {
-  background: rgba(127, 29, 29, 0.22);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.28), rgba(127, 29, 29, 0.16));
   border-color: rgba(248, 113, 113, 0.34);
 }
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item {
-  background: rgba(30, 41, 59, 0.72);
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel--danger:hover {
+  border-color: rgba(248, 113, 113, 0.5);
+  box-shadow: 0 12px 32px rgba(127, 29, 29, 0.4);
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-meta,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-panel__icon--danger {
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.26), rgba(248, 113, 113, 0.12));
+  border-color: rgba(248, 113, 113, 0.34);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .account-delete-header h3 {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .account-delete-copy {
+  color: #d8a5a5;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item {
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item:hover {
+  border-color: rgba(25, 195, 125, 0.4);
+  box-shadow: 0 8px 22px rgba(2, 6, 23, 0.4);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item__icon {
+  background: rgba(25, 195, 125, 0.16);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item__title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-meta__row dd {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-meta__row dt {
+  color: #94a3b8;
+}
+
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-empty {
   color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.28);
 }
 
 /* ─── ダークモード: 投稿したプロンプトカード（設定ページ） ─── */
