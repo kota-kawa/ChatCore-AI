@@ -6,6 +6,7 @@ import { SecuritySettingsSection } from "../components/settings/settings_section
 describe("SecuritySettingsSection MCP connections", () => {
   it("lists an authorized AI service and delegates revocation", () => {
     const onDeleteMcpOAuthConnection = vi.fn();
+    const onIssueClaudeOAuthClient = vi.fn();
     render(
       <SecuritySettingsSection
         isActive
@@ -30,6 +31,10 @@ describe("SecuritySettingsSection MCP connections", () => {
         }]}
         mcpOAuthConnectionsLoading={false}
         deletingMcpOAuthConnectionId={null}
+        claudeOAuthClient={null}
+        claudeOAuthClientLoading={false}
+        claudeOAuthClientIssuing={false}
+        claudeOAuthClientCredentials={null}
         accountDeleteConfirmation=""
         accountDeleting={false}
         accountDeleteError={null}
@@ -43,6 +48,7 @@ describe("SecuritySettingsSection MCP connections", () => {
         onDeletePasskey={vi.fn()}
         onRefreshMcpOAuthConnections={vi.fn()}
         onDeleteMcpOAuthConnection={onDeleteMcpOAuthConnection}
+        onIssueClaudeOAuthClient={onIssueClaudeOAuthClient}
         onAccountDeleteConfirmationChange={vi.fn()}
         onDeleteAccount={vi.fn()}
       />
@@ -52,5 +58,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(screen.getByText(/ai\.example\.com/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "連携を解除" }));
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Claude用認証情報を発行" }));
+    expect(onIssueClaudeOAuthClient).toHaveBeenCalledOnce();
   });
 });

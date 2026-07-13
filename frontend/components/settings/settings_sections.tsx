@@ -16,7 +16,11 @@ import type {
   ProfileFormState,
   ProfileSaveStatus
 } from "../../scripts/user/settings/page_types";
-import type { McpOAuthConnection } from "../../scripts/user/settings/types";
+import type {
+  ClaudeOAuthClientCredentials,
+  ClaudeOAuthClientStatus,
+  McpOAuthConnection
+} from "../../scripts/user/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
 import { formatPasskeyDateTime } from "../../scripts/user/settings/utils";
 import { SettingsProfileSkeleton, SettingsPromptCardSkeletonGrid } from "./settings_skeletons";
@@ -351,6 +355,10 @@ export function SecuritySettingsSection({
   mcpOAuthConnections,
   mcpOAuthConnectionsLoading,
   deletingMcpOAuthConnectionId,
+  claudeOAuthClient,
+  claudeOAuthClientLoading,
+  claudeOAuthClientIssuing,
+  claudeOAuthClientCredentials,
   accountDeleteConfirmation,
   accountDeleting,
   accountDeleteError,
@@ -364,6 +372,7 @@ export function SecuritySettingsSection({
   onDeletePasskey,
   onRefreshMcpOAuthConnections,
   onDeleteMcpOAuthConnection,
+  onIssueClaudeOAuthClient,
   onAccountDeleteConfirmationChange,
   onDeleteAccount
 }: {
@@ -383,6 +392,10 @@ export function SecuritySettingsSection({
   mcpOAuthConnections: McpOAuthConnection[];
   mcpOAuthConnectionsLoading: boolean;
   deletingMcpOAuthConnectionId: string | null;
+  claudeOAuthClient: ClaudeOAuthClientStatus | null;
+  claudeOAuthClientLoading: boolean;
+  claudeOAuthClientIssuing: boolean;
+  claudeOAuthClientCredentials: ClaudeOAuthClientCredentials | null;
   accountDeleteConfirmation: string;
   accountDeleting: boolean;
   accountDeleteError: string | null;
@@ -396,6 +409,7 @@ export function SecuritySettingsSection({
   onDeletePasskey: (passkeyId: number) => void;
   onRefreshMcpOAuthConnections: () => void;
   onDeleteMcpOAuthConnection: (connection: McpOAuthConnection) => void;
+  onIssueClaudeOAuthClient: () => void;
   onAccountDeleteConfirmationChange: (value: string) => void;
   onDeleteAccount: () => void;
 }) {
@@ -696,6 +710,74 @@ export function SecuritySettingsSection({
                 ))
               )}
             </div>
+          </div>
+
+          <div className="security-panel">
+            <div className="security-panel__head">
+              <span className="security-panel__icon" aria-hidden="true">
+                <i className="bi bi-key-fill"></i>
+              </span>
+              <div className="security-panel__heading">
+                <h3>Claude接続用認証情報</h3>
+                <p className="security-panel__description">
+                  Claudeで接続に失敗する場合に、詳細設定へ入力する専用のOAuth認証情報を発行します。再発行すると、以前の認証情報と連携は失効します。
+                </p>
+              </div>
+            </div>
+            {claudeOAuthClientLoading ? (
+              <p className="security-panel__description">Claude用認証情報を確認しています。</p>
+            ) : claudeOAuthClient?.configured ? (
+              <dl className="security-meta">
+                <div className="security-meta__row">
+                  <dt>クライアントID</dt>
+                  <dd>{claudeOAuthClient.client_id}</dd>
+                </div>
+                <div className="security-meta__row">
+                  <dt>MCPサーバーURL</dt>
+                  <dd>{claudeOAuthClient.mcp_server_url}</dd>
+                </div>
+                <div className="security-meta__row">
+                  <dt>発行日時</dt>
+                  <dd>{formatPasskeyDateTime(claudeOAuthClient.created_at)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="security-panel__description">Claude用認証情報はまだ発行されていません。</p>
+            )}
+            <div className="button-group">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={claudeOAuthClientLoading || claudeOAuthClientIssuing}
+                onClick={onIssueClaudeOAuthClient}
+              >
+                {claudeOAuthClientIssuing
+                  ? "発行中..."
+                  : claudeOAuthClient?.configured
+                    ? "認証情報を再発行"
+                    : "Claude用認証情報を発行"}
+              </button>
+            </div>
+            {claudeOAuthClientCredentials ? (
+              <div className="security-stack">
+                <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
+                  <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
+                  Claudeの「詳細設定」に、次の認証情報をコピーしてください。シークレットはページを再読み込みすると再表示できません。
+                </p>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="claudeMcpServerUrl">MCPサーバーURL</label>
+                  <input id="claudeMcpServerUrl" className="custom-form-control" value={claudeOAuthClientCredentials.mcp_server_url} readOnly />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="claudeOAuthClientId">OAuthクライアントID</label>
+                  <input id="claudeOAuthClientId" className="custom-form-control" value={claudeOAuthClientCredentials.client_id} readOnly />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="claudeOAuthClientSecret">OAuthクライアントシークレット</label>
+                  <input id="claudeOAuthClientSecret" className="custom-form-control" value={claudeOAuthClientCredentials.client_secret} readOnly autoComplete="off" />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}

@@ -1,9 +1,13 @@
 import { resilientFetch } from "../../core/resilient_fetch";
 import { extractApiErrorMessage, fetchJsonOrThrow } from "../../core/runtime_validation";
 import {
+  parseClaudeOAuthClientCredentials,
+  parseClaudeOAuthClientStatus,
   parseMcpOAuthConnections,
   parseMcpOAuthConsent,
   parseMcpOAuthConsentDecision,
+  type ClaudeOAuthClientCredentials,
+  type ClaudeOAuthClientStatus,
   type McpOAuthConnection,
   type McpOAuthConsent
 } from "./types";
@@ -74,4 +78,19 @@ export async function revokeMcpOAuthConnection(connectionId: string): Promise<vo
     method: "DELETE",
     credentials: "same-origin"
   });
+}
+
+export async function loadClaudeOAuthClientStatus(): Promise<ClaudeOAuthClientStatus> {
+  const payload = await fetchMcpOauthJson("/api/mcp/oauth/claude-client", {
+    credentials: "same-origin"
+  });
+  return parseClaudeOAuthClientStatus(payload);
+}
+
+export async function issueClaudeOAuthClient(): Promise<ClaudeOAuthClientCredentials> {
+  const payload = await fetchMcpOauthJson("/api/mcp/oauth/claude-client", {
+    method: "POST",
+    credentials: "same-origin"
+  });
+  return parseClaudeOAuthClientCredentials(payload);
 }
