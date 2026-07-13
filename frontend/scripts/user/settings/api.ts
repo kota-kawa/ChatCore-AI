@@ -87,12 +87,15 @@ export async function loadMcpOAuthClients(): Promise<McpOAuthClientList> {
   return parseMcpOAuthClientList(payload);
 }
 
-export async function issueMcpOAuthClient(label: string): Promise<McpOAuthClientCredentials> {
+export async function issueMcpOAuthClient(
+  label: string,
+  redirectUri: string
+): Promise<McpOAuthClientCredentials> {
   const payload = await fetchMcpOauthJson("/api/mcp/oauth/clients", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label })
+    body: JSON.stringify({ label, redirect_uri: redirectUri })
   });
   return parseMcpOAuthClientCredentials(payload);
 }

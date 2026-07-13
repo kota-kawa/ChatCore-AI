@@ -1,3 +1,4 @@
+import json
 import unittest
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
@@ -51,7 +52,7 @@ class McpOAuthTestCase(unittest.TestCase):
     def test_consent_details_uses_redirect_host_for_an_opaque_client_id(self):
         client = OAuthClientInformationFull(
             client_id="claude-personal-client",
-            redirect_uris=[mcp_oauth.CLAUDE_OAUTH_CALLBACK_URL],
+            redirect_uris=[mcp_oauth.DEFAULT_MCP_OAUTH_REDIRECT_URI],
             client_name="Claude",
             token_endpoint_auth_method="client_secret_post",
         )
@@ -61,7 +62,7 @@ class McpOAuthTestCase(unittest.TestCase):
                 "state": "state",
                 "scopes": ["prompts:write"],
                 "code_challenge": "challenge",
-                "redirect_uri": mcp_oauth.CLAUDE_OAUTH_CALLBACK_URL,
+                "redirect_uri": mcp_oauth.DEFAULT_MCP_OAUTH_REDIRECT_URI,
                 "resource": "https://chat.example.test/mcp",
             },
         }
@@ -152,6 +153,36 @@ class McpOAuthTestCase(unittest.TestCase):
         )
         with self.assertRaises(mcp_oauth.RegistrationError):
             mcp_oauth._validate_redirect_uris(client)
+
+    def test_issue_user_client_stores_user_selected_redirect_uri(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"active": 0}
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        fernet = MagicMock()
+        fernet.encrypt.return_value = b"encrypted-secret"
+        redirect_uri = "https://client.example.test/oauth/callback"
+        with (
+            patch("services.mcp_oauth._user_is_verified", return_value=True),
+            patch("services.mcp_oauth.get_db_connection", fake_connection),
+            patch("services.mcp_oauth._fernet", return_value=fernet),
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+        ):
+            credentials = mcp_oauth.issue_user_client(7, "Example AI", redirect_uri)
+
+        stored_client = json.loads(cursor.execute.call_args_list[2].args[1][1])
+        self.assertEqual(credentials["redirect_uri"], redirect_uri)
+        self.assertEqual(stored_client["redirect_uris"], [redirect_uri])
+        self.assertIsNone(stored_client.get("client_uri"))
+
+    def test_clean_redirect_uri_rejects_non_loopback_http(self):
+        with self.assertRaises(mcp_oauth.InvalidRedirectUriError):
+            mcp_oauth._clean_redirect_uri("http://client.example.test/callback")
 
     def test_resource_matches_server_accepts_missing_or_canonical(self):
         with patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL):

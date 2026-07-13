@@ -359,6 +359,7 @@ export function SecuritySettingsSection({
   mcpOAuthClientsLoading,
   mcpOAuthClientIssuing,
   mcpOAuthClientLabel,
+  mcpOAuthClientRedirectUri,
   deletingMcpOAuthClientId,
   mcpOAuthClientCredentials,
   accountDeleteConfirmation,
@@ -376,6 +377,7 @@ export function SecuritySettingsSection({
   onDeleteMcpOAuthConnection,
   onRefreshMcpOAuthClients,
   onMcpOAuthClientLabelChange,
+  onMcpOAuthClientRedirectUriChange,
   onIssueMcpOAuthClient,
   onDeleteMcpOAuthClient,
   onAccountDeleteConfirmationChange,
@@ -401,6 +403,7 @@ export function SecuritySettingsSection({
   mcpOAuthClientsLoading: boolean;
   mcpOAuthClientIssuing: boolean;
   mcpOAuthClientLabel: string;
+  mcpOAuthClientRedirectUri: string;
   deletingMcpOAuthClientId: string | null;
   mcpOAuthClientCredentials: McpOAuthClientCredentials | null;
   accountDeleteConfirmation: string;
@@ -418,6 +421,7 @@ export function SecuritySettingsSection({
   onDeleteMcpOAuthConnection: (connection: McpOAuthConnection) => void;
   onRefreshMcpOAuthClients: () => void;
   onMcpOAuthClientLabelChange: (value: string) => void;
+  onMcpOAuthClientRedirectUriChange: (value: string) => void;
   onIssueMcpOAuthClient: () => void;
   onDeleteMcpOAuthClient: (client: McpOAuthClient) => void;
   onAccountDeleteConfirmationChange: (value: string) => void;
@@ -747,7 +751,7 @@ export function SecuritySettingsSection({
                   OAuth認証情報を手動入力できる外部AIサービスで接続に失敗する場合に、詳細設定へ入力する認証情報を発行します。認証情報は複数保存でき、APIキーのように用途ごとに使い分けられます。認証情報を削除すると、その認証情報で確立済みの接続もすぐに使えなくなります。
                 </p>
                 <p className="security-panel__description">
-                  ※ 現在はClaudeのコネクター（コールバックURLがclaude.aiのもの）のみに対応しています。
+                  コールバックURL（リダイレクトURI）は、接続先AIサービスが指定する値を発行時に入力してください。発行後は変更できないため、変更する場合は認証情報を新しく発行してください。
                 </p>
               </div>
             </div>
@@ -764,10 +768,22 @@ export function SecuritySettingsSection({
                   onMcpOAuthClientLabelChange(event.target.value);
                 }}
               />
+              <input
+                type="url"
+                className="custom-form-control"
+                value={mcpOAuthClientRedirectUri}
+                maxLength={2048}
+                placeholder="コールバックURL（リダイレクトURI）"
+                aria-label="コールバックURL（リダイレクトURI）"
+                disabled={mcpOAuthClientIssuing}
+                onChange={(event) => {
+                  onMcpOAuthClientRedirectUriChange(event.target.value);
+                }}
+              />
               <button
                 type="button"
                 className="primary-button security-action"
-                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing}
+                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientRedirectUri.trim()}
                 onClick={onIssueMcpOAuthClient}
               >
                 <i className="bi bi-key" aria-hidden="true"></i>
@@ -835,6 +851,10 @@ export function SecuritySettingsSection({
                         <div className="security-meta__row">
                           <dt>クライアントID</dt>
                           <dd>{client.client_id}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>コールバックURL</dt>
+                          <dd>{client.redirect_uri}</dd>
                         </div>
                         <div className="security-meta__row">
                           <dt>発行日時</dt>

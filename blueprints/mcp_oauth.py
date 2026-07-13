@@ -9,6 +9,7 @@ from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
     ClientLimitReachedError,
+    InvalidRedirectUriError,
     complete_consent,
     consent_details,
     issue_user_client,
@@ -96,10 +97,15 @@ async def post_client(request: Request):
     if error is not None:
         return error
     label = body.get("label") if body else None
+    redirect_uri = body.get("redirect_uri") if body else None
     if label is not None and not isinstance(label, str):
         return jsonify({"error": "認証情報の名前が不正です。"}, status_code=400)
+    if redirect_uri is not None and not isinstance(redirect_uri, str):
+        return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)
     try:
-        credentials = await run_blocking(issue_user_client, user_id, label)
+        credentials = await run_blocking(issue_user_client, user_id, label, redirect_uri)
+    except InvalidRedirectUriError:
+        return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)
     except ValueError:
         return jsonify({"error": "メールアドレスの確認後に連携用認証情報を発行できます。"}, status_code=403)
     except ClientLimitReachedError:

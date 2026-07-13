@@ -135,6 +135,7 @@ export default function UserSettingsPage() {
   const [mcpOAuthClientsLoading, setMcpOAuthClientsLoading] = useState(false);
   const [mcpOAuthClientIssuing, setMcpOAuthClientIssuing] = useState(false);
   const [mcpOAuthClientLabel, setMcpOAuthClientLabel] = useState("");
+  const [mcpOAuthClientRedirectUri, setMcpOAuthClientRedirectUri] = useState("");
   const [deletingMcpOAuthClientId, setDeletingMcpOAuthClientId] = useState<string | null>(null);
   const [mcpOAuthClientCredentials, setMcpOAuthClientCredentials] = useState<McpOAuthClientCredentials | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
@@ -314,6 +315,7 @@ export default function UserSettingsPage() {
     try {
       const result = await loadMcpOAuthClients();
       setMcpOAuthClients(result.clients);
+      setMcpOAuthClientRedirectUri((current) => current || result.default_redirect_uri);
     } catch (error) {
       setMcpOAuthClients([]);
       showToast(
@@ -969,12 +971,16 @@ export default function UserSettingsPage() {
   const handleIssueMcpOAuthClient = useCallback(async () => {
     setMcpOAuthClientIssuing(true);
     try {
-      const credentials = await issueMcpOAuthClient(mcpOAuthClientLabel.trim());
+      const credentials = await issueMcpOAuthClient(
+        mcpOAuthClientLabel.trim(),
+        mcpOAuthClientRedirectUri.trim()
+      );
       setMcpOAuthClientCredentials(credentials);
       setMcpOAuthClients((current) => [
         {
           client_id: credentials.client_id,
           label: credentials.label,
+          redirect_uri: credentials.redirect_uri,
           created_at: new Date().toISOString()
         },
         ...current
@@ -989,7 +995,7 @@ export default function UserSettingsPage() {
     } finally {
       setMcpOAuthClientIssuing(false);
     }
-  }, [mcpOAuthClientLabel]);
+  }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri]);
 
   const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
     const name = client.label || client.client_id;
@@ -1196,6 +1202,7 @@ export default function UserSettingsPage() {
               mcpOAuthClientsLoading={mcpOAuthClientsLoading}
               mcpOAuthClientIssuing={mcpOAuthClientIssuing}
               mcpOAuthClientLabel={mcpOAuthClientLabel}
+              mcpOAuthClientRedirectUri={mcpOAuthClientRedirectUri}
               deletingMcpOAuthClientId={deletingMcpOAuthClientId}
               mcpOAuthClientCredentials={mcpOAuthClientCredentials}
               accountDeleteConfirmation={accountDeleteConfirmation}
@@ -1219,6 +1226,7 @@ export default function UserSettingsPage() {
               onDeleteMcpOAuthConnection={handleDeleteMcpOAuthConnection}
               onRefreshMcpOAuthClients={loadMcpOAuthClientList}
               onMcpOAuthClientLabelChange={setMcpOAuthClientLabel}
+              onMcpOAuthClientRedirectUriChange={setMcpOAuthClientRedirectUri}
               onIssueMcpOAuthClient={handleIssueMcpOAuthClient}
               onDeleteMcpOAuthClient={handleDeleteMcpOAuthClient}
               onAccountDeleteConfirmationChange={(value) => {
