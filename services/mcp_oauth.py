@@ -34,8 +34,8 @@ from services.runtime_config import get_session_secret_key
 from services.url_fetcher import _pin_dns, _resolve_safe_ip
 
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
-CLAUDE_CLIENT_PROVIDER = "claude"
-CLAUDE_OAUTH_CALLBACK_URL = "https://claude.ai/api/mcp/auth_callback"
+MANUAL_CLIENT_PROVIDER = "manual"
+DEFAULT_MCP_OAUTH_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 AUTHORIZATION_CODE_TTL_SECONDS = 300
 ACCESS_TOKEN_TTL_SECONDS = 3600
 REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
@@ -44,6 +44,7 @@ MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
 MAX_CLIENT_LABEL_LENGTH = 100
 MAX_CLIENTS_PER_USER = 20
+MAX_REDIRECT_URI_LENGTH = 2048
 
 _cimd_cache: dict[str, tuple[float, OAuthClientInformationFull]] = {}
 logger = logging.getLogger(__name__)
@@ -51,6 +52,10 @@ logger = logging.getLogger(__name__)
 
 class ClientLimitReachedError(Exception):
     """Raised when a user already holds the maximum number of connector credentials."""
+
+
+class InvalidRedirectUriError(ValueError):
+    """Raised when a user-supplied OAuth redirect URI is unsafe or malformed."""
 
 
 class StoredAuthorizationCode(AuthorizationCode):
@@ -112,18 +117,47 @@ def _resource_matches_server(requested: str | None) -> bool:
     return requested.rstrip("/") == get_mcp_server_url().rstrip("/")
 
 
+def _validate_redirect_uri(redirect_uri: str) -> None:
+    try:
+        parsed = urlparse(redirect_uri)
+        port = parsed.port
+    except ValueError as exc:
+        raise RegistrationError("invalid_redirect_uri", "Redirect URI is invalid.") from exc
+    hostname = (parsed.hostname or "").lower()
+    is_loopback = hostname in {"localhost", "127.0.0.1", "::1"}
+    if (
+        parsed.fragment
+        or not parsed.scheme
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None and not 1 <= port <= 65535
+    ):
+        raise RegistrationError("invalid_redirect_uri", "Redirect URI is invalid.")
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and is_loopback):
+        raise RegistrationError(
+            "invalid_redirect_uri",
+            "Redirect URI must use HTTPS, except for loopback HTTP callbacks.",
+        )
+
+
 def _validate_redirect_uris(client: OAuthClientInformationFull) -> None:
     for redirect_uri in client.redirect_uris or []:
-        parsed = urlparse(str(redirect_uri))
-        hostname = (parsed.hostname or "").lower()
-        is_loopback = hostname in {"localhost", "127.0.0.1", "::1"}
-        if parsed.fragment or not parsed.scheme or not parsed.netloc:
-            raise RegistrationError("invalid_redirect_uri", "Redirect URI is invalid.")
-        if parsed.scheme != "https" and not (parsed.scheme == "http" and is_loopback):
-            raise RegistrationError(
-                "invalid_redirect_uri",
-                "Redirect URI must use HTTPS, except for loopback HTTP callbacks.",
-            )
+        _validate_redirect_uri(str(redirect_uri))
+
+
+def _clean_redirect_uri(redirect_uri: str | None) -> str:
+    """Validate one callback URL supplied when creating a personal OAuth client."""
+    if not isinstance(redirect_uri, str):
+        raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。")
+    cleaned = redirect_uri.strip()
+    if not cleaned or len(cleaned) > MAX_REDIRECT_URI_LENGTH:
+        raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。")
+    try:
+        _validate_redirect_uri(cleaned)
+    except RegistrationError as exc:
+        raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。") from exc
+    return cleaned
 
 
 def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
@@ -256,7 +290,11 @@ def _clean_client_label(label: str | None) -> str | None:
     return cleaned[:MAX_CLIENT_LABEL_LENGTH]
 
 
-def issue_user_client(user_id: int, label: str | None = None) -> dict[str, str]:
+def issue_user_client(
+    user_id: int,
+    label: str | None = None,
+    redirect_uri: str | None = None,
+) -> dict[str, str]:
     """Create a personal OAuth client credential for a manual connector setup.
 
     複数の認証情報を（サービスの API キーのように）保存できるように、既存の認証情報は
@@ -272,23 +310,30 @@ def issue_user_client(user_id: int, label: str | None = None) -> dict[str, str]:
         raise ValueError("Only verified users can issue connector credentials.")
 
     cleaned_label = _clean_client_label(label)
+    cleaned_redirect_uri = _clean_redirect_uri(
+        DEFAULT_MCP_OAUTH_REDIRECT_URI if redirect_uri is None else redirect_uri
+    )
     # クライアント ID には "claude" などのサービス名を含めず、他社サービスの
     # コネクターからでも流用できる中立的な識別子にする。
     # Keep the client ID vendor-neutral (no "claude") so it can also be reused
     # by non-Claude MCP connectors.
     client_id = f"mcp-{secrets.token_urlsafe(24)}"
     client_secret = secrets.token_urlsafe(48)
-    client = OAuthClientInformationFull(
-        client_id=client_id,
-        client_secret=client_secret,
-        client_name=cleaned_label or "Personal Chat-Core connector",
-        client_uri="https://claude.ai",
-        redirect_uris=[CLAUDE_OAUTH_CALLBACK_URL],
-        grant_types=["authorization_code", "refresh_token"],
-        response_types=["code"],
-        token_endpoint_auth_method="client_secret_post",
-        scope=MCP_PROMPTS_WRITE_SCOPE,
-    )
+    try:
+        client = OAuthClientInformationFull(
+            client_id=client_id,
+            client_secret=client_secret,
+            client_name=cleaned_label or "Personal Chat-Core connector",
+            redirect_uris=[cleaned_redirect_uri],
+            grant_types=["authorization_code", "refresh_token"],
+            response_types=["code"],
+            token_endpoint_auth_method="client_secret_post",
+            scope=MCP_PROMPTS_WRITE_SCOPE,
+        )
+    except ValueError as exc:
+        raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。") from exc
+    _validate_redirect_uris(client)
+    registered_redirect_uri = str(client.redirect_uris[0])
     encrypted_secret = _fernet().encrypt(client_secret.encode("utf-8")).decode("ascii")
 
     with get_db_connection() as conn:
@@ -320,7 +365,7 @@ def issue_user_client(user_id: int, label: str | None = None) -> dict[str, str]:
                 INSERT INTO mcp_oauth_user_clients (client_id, user_id, provider, label)
                 VALUES (%s, %s, %s, %s)
                 """,
-                (client_id, user_id, CLAUDE_CLIENT_PROVIDER, cleaned_label),
+                (client_id, user_id, MANUAL_CLIENT_PROVIDER, cleaned_label),
             )
             conn.commit()
         except Exception:
@@ -333,7 +378,7 @@ def issue_user_client(user_id: int, label: str | None = None) -> dict[str, str]:
         "client_id": client_id,
         "client_secret": client_secret,
         "label": cleaned_label or "",
-        "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
+        "redirect_uri": registered_redirect_uri,
         "mcp_server_url": get_mcp_server_url(),
     }
 
@@ -345,10 +390,12 @@ def list_user_clients(user_id: int) -> dict[str, Any]:
         try:
             cursor.execute(
                 """
-                SELECT client_id, label, created_at
-                FROM mcp_oauth_user_clients
-                WHERE user_id = %s AND revoked_at IS NULL
-                ORDER BY created_at DESC
+                SELECT uc.client_id, uc.label, uc.created_at,
+                       c.metadata -> 'redirect_uris' ->> 0 AS redirect_uri
+                FROM mcp_oauth_user_clients uc
+                JOIN mcp_oauth_clients c ON c.client_id = uc.client_id
+                WHERE uc.user_id = %s AND uc.revoked_at IS NULL
+                ORDER BY uc.created_at DESC
                 """,
                 (user_id,),
             )
@@ -357,13 +404,14 @@ def list_user_clients(user_id: int) -> dict[str, Any]:
                 {
                     "client_id": str(row["client_id"]),
                     "label": row["label"] or "",
+                    "redirect_uri": str(row["redirect_uri"]),
                     "created_at": row["created_at"].isoformat(),
                 }
                 for row in rows
             ]
             return {
                 "clients": clients,
-                "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
+                "default_redirect_uri": DEFAULT_MCP_OAUTH_REDIRECT_URI,
                 "mcp_server_url": get_mcp_server_url(),
             }
         finally:

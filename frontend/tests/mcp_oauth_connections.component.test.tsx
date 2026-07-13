@@ -8,6 +8,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     const onDeleteMcpOAuthConnection = vi.fn();
     const onIssueMcpOAuthClient = vi.fn();
     const onDeleteMcpOAuthClient = vi.fn();
+    const onMcpOAuthClientRedirectUriChange = vi.fn();
     render(
       <SecuritySettingsSection
         isActive
@@ -35,11 +36,13 @@ describe("SecuritySettingsSection MCP connections", () => {
         mcpOAuthClients={[{
           client_id: "mcp-example-client",
           label: "My connector",
+          redirect_uri: "https://client.example.test/oauth/callback",
           created_at: "2026-07-14T10:00:00Z"
         }]}
         mcpOAuthClientsLoading={false}
         mcpOAuthClientIssuing={false}
         mcpOAuthClientLabel=""
+        mcpOAuthClientRedirectUri="https://claude.ai/api/mcp/auth_callback"
         deletingMcpOAuthClientId={null}
         mcpOAuthClientCredentials={null}
         accountDeleteConfirmation=""
@@ -57,6 +60,7 @@ describe("SecuritySettingsSection MCP connections", () => {
         onDeleteMcpOAuthConnection={onDeleteMcpOAuthConnection}
         onRefreshMcpOAuthClients={vi.fn()}
         onMcpOAuthClientLabelChange={vi.fn()}
+        onMcpOAuthClientRedirectUriChange={onMcpOAuthClientRedirectUriChange}
         onIssueMcpOAuthClient={onIssueMcpOAuthClient}
         onDeleteMcpOAuthClient={onDeleteMcpOAuthClient}
         onAccountDeleteConfirmationChange={vi.fn()}
@@ -70,6 +74,13 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
 
     expect(screen.getByText("My connector")).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "コールバックURL（リダイレクトURI）" }),
+      { target: { value: "https://client.example.test/changed-callback" } }
+    );
+    expect(onMcpOAuthClientRedirectUriChange).toHaveBeenCalledWith(
+      "https://client.example.test/changed-callback"
+    );
     fireEvent.click(screen.getByRole("button", { name: "認証情報を発行" }));
     expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));

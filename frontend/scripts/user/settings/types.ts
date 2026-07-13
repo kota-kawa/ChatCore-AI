@@ -135,9 +135,10 @@ const McpOAuthClientListSchema = z.object({
   clients: z.array(z.object({
     client_id: z.string().trim().min(1),
     label: z.string(),
+    redirect_uri: z.string().url(),
     created_at: z.string().trim().min(1)
   })),
-  redirect_uri: z.string().url(),
+  default_redirect_uri: z.string().url(),
   mcp_server_url: z.string().url()
 });
 
