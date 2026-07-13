@@ -1,13 +1,13 @@
 import { resilientFetch } from "../../core/resilient_fetch";
 import { extractApiErrorMessage, fetchJsonOrThrow } from "../../core/runtime_validation";
 import {
-  parseClaudeOAuthClientCredentials,
-  parseClaudeOAuthClientStatus,
+  parseMcpOAuthClientCredentials,
+  parseMcpOAuthClientList,
   parseMcpOAuthConnections,
   parseMcpOAuthConsent,
   parseMcpOAuthConsentDecision,
-  type ClaudeOAuthClientCredentials,
-  type ClaudeOAuthClientStatus,
+  type McpOAuthClientCredentials,
+  type McpOAuthClientList,
   type McpOAuthConnection,
   type McpOAuthConsent
 } from "./types";
@@ -80,17 +80,26 @@ export async function revokeMcpOAuthConnection(connectionId: string): Promise<vo
   });
 }
 
-export async function loadClaudeOAuthClientStatus(): Promise<ClaudeOAuthClientStatus> {
-  const payload = await fetchMcpOauthJson("/api/mcp/oauth/claude-client", {
+export async function loadMcpOAuthClients(): Promise<McpOAuthClientList> {
+  const payload = await fetchMcpOauthJson("/api/mcp/oauth/clients", {
     credentials: "same-origin"
   });
-  return parseClaudeOAuthClientStatus(payload);
+  return parseMcpOAuthClientList(payload);
 }
 
-export async function issueClaudeOAuthClient(): Promise<ClaudeOAuthClientCredentials> {
-  const payload = await fetchMcpOauthJson("/api/mcp/oauth/claude-client", {
+export async function issueMcpOAuthClient(label: string): Promise<McpOAuthClientCredentials> {
+  const payload = await fetchMcpOauthJson("/api/mcp/oauth/clients", {
     method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label })
+  });
+  return parseMcpOAuthClientCredentials(payload);
+}
+
+export async function revokeMcpOAuthClient(clientId: string): Promise<void> {
+  await fetchMcpOauthJson(`/api/mcp/oauth/clients/${encodeURIComponent(clientId)}`, {
+    method: "DELETE",
     credentials: "same-origin"
   });
-  return parseClaudeOAuthClientCredentials(payload);
 }

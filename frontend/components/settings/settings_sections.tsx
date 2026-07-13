@@ -17,8 +17,8 @@ import type {
   ProfileSaveStatus
 } from "../../scripts/user/settings/page_types";
 import type {
-  ClaudeOAuthClientCredentials,
-  ClaudeOAuthClientStatus,
+  McpOAuthClient,
+  McpOAuthClientCredentials,
   McpOAuthConnection
 } from "../../scripts/user/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
@@ -355,10 +355,12 @@ export function SecuritySettingsSection({
   mcpOAuthConnections,
   mcpOAuthConnectionsLoading,
   deletingMcpOAuthConnectionId,
-  claudeOAuthClient,
-  claudeOAuthClientLoading,
-  claudeOAuthClientIssuing,
-  claudeOAuthClientCredentials,
+  mcpOAuthClients,
+  mcpOAuthClientsLoading,
+  mcpOAuthClientIssuing,
+  mcpOAuthClientLabel,
+  deletingMcpOAuthClientId,
+  mcpOAuthClientCredentials,
   accountDeleteConfirmation,
   accountDeleting,
   accountDeleteError,
@@ -372,7 +374,10 @@ export function SecuritySettingsSection({
   onDeletePasskey,
   onRefreshMcpOAuthConnections,
   onDeleteMcpOAuthConnection,
-  onIssueClaudeOAuthClient,
+  onRefreshMcpOAuthClients,
+  onMcpOAuthClientLabelChange,
+  onIssueMcpOAuthClient,
+  onDeleteMcpOAuthClient,
   onAccountDeleteConfirmationChange,
   onDeleteAccount
 }: {
@@ -392,10 +397,12 @@ export function SecuritySettingsSection({
   mcpOAuthConnections: McpOAuthConnection[];
   mcpOAuthConnectionsLoading: boolean;
   deletingMcpOAuthConnectionId: string | null;
-  claudeOAuthClient: ClaudeOAuthClientStatus | null;
-  claudeOAuthClientLoading: boolean;
-  claudeOAuthClientIssuing: boolean;
-  claudeOAuthClientCredentials: ClaudeOAuthClientCredentials | null;
+  mcpOAuthClients: McpOAuthClient[];
+  mcpOAuthClientsLoading: boolean;
+  mcpOAuthClientIssuing: boolean;
+  mcpOAuthClientLabel: string;
+  deletingMcpOAuthClientId: string | null;
+  mcpOAuthClientCredentials: McpOAuthClientCredentials | null;
   accountDeleteConfirmation: string;
   accountDeleting: boolean;
   accountDeleteError: string | null;
@@ -409,7 +416,10 @@ export function SecuritySettingsSection({
   onDeletePasskey: (passkeyId: number) => void;
   onRefreshMcpOAuthConnections: () => void;
   onDeleteMcpOAuthConnection: (connection: McpOAuthConnection) => void;
-  onIssueClaudeOAuthClient: () => void;
+  onRefreshMcpOAuthClients: () => void;
+  onMcpOAuthClientLabelChange: (value: string) => void;
+  onIssueMcpOAuthClient: () => void;
+  onDeleteMcpOAuthClient: (client: McpOAuthClient) => void;
   onAccountDeleteConfirmationChange: (value: string) => void;
   onDeleteAccount: () => void;
 }) {
@@ -734,68 +744,119 @@ export function SecuritySettingsSection({
               <div className="security-panel__heading">
                 <h3>AIサービス連携用認証情報</h3>
                 <p className="security-panel__description">
-                  OAuth認証情報を手動入力できる外部AIサービスで接続に失敗する場合に、詳細設定へ入力する認証情報を発行します。再発行すると、以前の認証情報と連携は失効します。
+                  OAuth認証情報を手動入力できる外部AIサービスで接続に失敗する場合に、詳細設定へ入力する認証情報を発行します。認証情報は複数保存でき、APIキーのように用途ごとに使い分けられます。認証情報を削除すると、その認証情報で確立済みの接続もすぐに使えなくなります。
+                </p>
+                <p className="security-panel__description">
+                  ※ 現在はClaudeのコネクター（コールバックURLがclaude.aiのもの）のみに対応しています。
                 </p>
               </div>
             </div>
-            {claudeOAuthClientLoading ? (
-              <p className="security-panel__description">連携用認証情報を確認しています。</p>
-            ) : claudeOAuthClient?.configured ? (
-              <dl className="security-meta">
-                <div className="security-meta__row">
-                  <dt>クライアントID</dt>
-                  <dd>{claudeOAuthClient.client_id}</dd>
-                </div>
-                <div className="security-meta__row">
-                  <dt>MCPサーバーURL</dt>
-                  <dd>{claudeOAuthClient.mcp_server_url}</dd>
-                </div>
-                <div className="security-meta__row">
-                  <dt>発行日時</dt>
-                  <dd>{formatPasskeyDateTime(claudeOAuthClient.created_at)}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="security-panel__description">連携用認証情報はまだ発行されていません。</p>
-            )}
             <div className="security-actions">
+              <input
+                type="text"
+                className="custom-form-control"
+                value={mcpOAuthClientLabel}
+                maxLength={100}
+                placeholder="名前（任意・例: 自分のClaude）"
+                aria-label="認証情報の名前"
+                disabled={mcpOAuthClientIssuing}
+                onChange={(event) => {
+                  onMcpOAuthClientLabelChange(event.target.value);
+                }}
+              />
               <button
                 type="button"
                 className="primary-button security-action"
-                disabled={claudeOAuthClientLoading || claudeOAuthClientIssuing}
-                onClick={onIssueClaudeOAuthClient}
+                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing}
+                onClick={onIssueMcpOAuthClient}
+              >
+                <i className="bi bi-key" aria-hidden="true"></i>
+                {mcpOAuthClientIssuing ? "発行中..." : "認証情報を発行"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button security-action"
+                disabled={mcpOAuthClientsLoading}
+                onClick={() => {
+                  void onRefreshMcpOAuthClients();
+                }}
               >
                 <i
-                  className={`bi ${claudeOAuthClient?.configured ? "bi-arrow-repeat" : "bi-key"}`}
+                  className={`bi bi-arrow-clockwise${mcpOAuthClientsLoading ? " security-action__spin" : ""}`}
                   aria-hidden="true"
                 ></i>
-                {claudeOAuthClientIssuing
-                  ? "発行中..."
-                  : claudeOAuthClient?.configured
-                    ? "認証情報を再発行"
-                    : "認証情報を発行"}
+                一覧を更新
               </button>
             </div>
-            {claudeOAuthClientCredentials ? (
+            {mcpOAuthClientCredentials ? (
               <div className="security-stack">
                 <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
                   <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
                   連携先サービスの「詳細設定」に、次の認証情報をコピーしてください。シークレットはページを再読み込みすると再表示できません。
                 </p>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="claudeMcpServerUrl">MCPサーバーURL</label>
-                  <input id="claudeMcpServerUrl" className="custom-form-control" value={claudeOAuthClientCredentials.mcp_server_url} readOnly />
+                  <label className="form-label" htmlFor="mcpOAuthServerUrl">MCPサーバーURL</label>
+                  <input id="mcpOAuthServerUrl" className="custom-form-control" value={mcpOAuthClientCredentials.mcp_server_url} readOnly />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="claudeOAuthClientId">OAuthクライアントID</label>
-                  <input id="claudeOAuthClientId" className="custom-form-control" value={claudeOAuthClientCredentials.client_id} readOnly />
+                  <label className="form-label" htmlFor="mcpOAuthRedirectUri">コールバックURL（リダイレクトURI）</label>
+                  <input id="mcpOAuthRedirectUri" className="custom-form-control" value={mcpOAuthClientCredentials.redirect_uri} readOnly />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" htmlFor="claudeOAuthClientSecret">OAuthクライアントシークレット</label>
-                  <input id="claudeOAuthClientSecret" className="custom-form-control" value={claudeOAuthClientCredentials.client_secret} readOnly autoComplete="off" />
+                  <label className="form-label" htmlFor="mcpOAuthClientId">OAuthクライアントID</label>
+                  <input id="mcpOAuthClientId" className="custom-form-control" value={mcpOAuthClientCredentials.client_id} readOnly />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="mcpOAuthClientSecret">OAuthクライアントシークレット</label>
+                  <input id="mcpOAuthClientSecret" className="custom-form-control" value={mcpOAuthClientCredentials.client_secret} readOnly autoComplete="off" />
                 </div>
               </div>
             ) : null}
+            <div className="passkey-list" aria-live="polite">
+              {mcpOAuthClientsLoading ? (
+                <div className="passkey-empty">
+                  <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
+                  <span>連携用認証情報を読み込んでいます。</span>
+                </div>
+              ) : mcpOAuthClients.length === 0 ? (
+                <div className="passkey-empty">
+                  <i className="bi bi-key" aria-hidden="true"></i>
+                  <span>保存済みの認証情報はありません。</span>
+                </div>
+              ) : (
+                mcpOAuthClients.map((client) => (
+                  <div key={client.client_id} className="passkey-item">
+                    <span className="passkey-item__icon" aria-hidden="true">
+                      <i className="bi bi-key-fill"></i>
+                    </span>
+                    <div className="passkey-item__body">
+                      <strong className="passkey-item__title">{client.label || "（名前なし）"}</strong>
+                      <dl className="security-meta">
+                        <div className="security-meta__row">
+                          <dt>クライアントID</dt>
+                          <dd>{client.client_id}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>発行日時</dt>
+                          <dd>{formatPasskeyDateTime(client.created_at)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <button
+                      type="button"
+                      className="danger-ghost-button delete-passkey-btn"
+                      disabled={deletingMcpOAuthClientId === client.client_id}
+                      onClick={() => {
+                        void onDeleteMcpOAuthClient(client);
+                      }}
+                    >
+                      <i className="bi bi-trash3" aria-hidden="true"></i>
+                      {deletingMcpOAuthClientId === client.client_id ? "削除中..." : "削除"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}

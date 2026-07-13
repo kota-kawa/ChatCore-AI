@@ -131,20 +131,20 @@ const McpOAuthConnectionsResponseSchema = z.object({
   }))
 });
 
-const ClaudeOAuthClientStatusSchema = z.discriminatedUnion("configured", [
-  z.object({ configured: z.literal(false) }),
-  z.object({
-    configured: z.literal(true),
+const McpOAuthClientListSchema = z.object({
+  clients: z.array(z.object({
     client_id: z.string().trim().min(1),
-    created_at: z.string().trim().min(1),
-    redirect_uri: z.string().url(),
-    mcp_server_url: z.string().url()
-  })
-]);
+    label: z.string(),
+    created_at: z.string().trim().min(1)
+  })),
+  redirect_uri: z.string().url(),
+  mcp_server_url: z.string().url()
+});
 
-const ClaudeOAuthClientCredentialsSchema = z.object({
+const McpOAuthClientCredentialsSchema = z.object({
   client_id: z.string().trim().min(1),
   client_secret: z.string().trim().min(1),
+  label: z.string(),
   redirect_uri: z.string().url(),
   mcp_server_url: z.string().url()
 });
@@ -155,8 +155,9 @@ const McpOAuthConsentDecisionSchema = z.object({
 
 export type McpOAuthConsent = z.infer<typeof McpOAuthConsentSchema>;
 export type McpOAuthConnection = z.infer<typeof McpOAuthConnectionsResponseSchema>["connections"][number];
-export type ClaudeOAuthClientStatus = z.infer<typeof ClaudeOAuthClientStatusSchema>;
-export type ClaudeOAuthClientCredentials = z.infer<typeof ClaudeOAuthClientCredentialsSchema>;
+export type McpOAuthClientList = z.infer<typeof McpOAuthClientListSchema>;
+export type McpOAuthClient = McpOAuthClientList["clients"][number];
+export type McpOAuthClientCredentials = z.infer<typeof McpOAuthClientCredentialsSchema>;
 
 export function parseMcpOAuthConsent(raw: unknown): McpOAuthConsent {
   return parseWithSchema(McpOAuthConsentSchema, raw, "OAuth 同意情報の形式が不正です。");
@@ -170,17 +171,17 @@ export function parseMcpOAuthConnections(raw: unknown): McpOAuthConnection[] {
   ).connections;
 }
 
-export function parseClaudeOAuthClientStatus(raw: unknown): ClaudeOAuthClientStatus {
+export function parseMcpOAuthClientList(raw: unknown): McpOAuthClientList {
   return parseWithSchema(
-    ClaudeOAuthClientStatusSchema,
+    McpOAuthClientListSchema,
     raw,
-    "連携用認証情報の状態形式が不正です。"
+    "連携用認証情報一覧の形式が不正です。"
   );
 }
 
-export function parseClaudeOAuthClientCredentials(raw: unknown): ClaudeOAuthClientCredentials {
+export function parseMcpOAuthClientCredentials(raw: unknown): McpOAuthClientCredentials {
   return parseWithSchema(
-    ClaudeOAuthClientCredentialsSchema,
+    McpOAuthClientCredentialsSchema,
     raw,
     "連携用認証情報の形式が不正です。"
   );
