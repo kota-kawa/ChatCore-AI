@@ -125,6 +125,11 @@ services:
       - GOOGLE_JS_ORIGIN=${GOOGLE_JS_ORIGIN:-https://chatcore-ai.com}
       - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      # Remote MCP server and OAuth configuration.
+      - MCP_ENABLED=${MCP_ENABLED:-false}
+      - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}
+      - MCP_OAUTH_ENCRYPTION_KEYS=${MCP_OAUTH_ENCRYPTION_KEYS:-}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
       - PORT=5004
       - FRONTEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
       - POSTGRES_HOST=db
