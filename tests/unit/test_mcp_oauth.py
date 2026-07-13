@@ -1,9 +1,23 @@
 import unittest
 from unittest.mock import patch
 
+from mcp.server.auth.provider import AuthorizationParams, AuthorizeError
 from mcp.shared.auth import OAuthClientInformationFull
 
 from services import mcp_oauth
+
+SERVER_URL = "https://chat.example.test/mcp"
+
+
+def _make_params(resource):
+    return AuthorizationParams(
+        state="state",
+        scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+        code_challenge="challenge",
+        redirect_uri="https://client.example.test/callback",
+        redirect_uri_provided_explicitly=True,
+        resource=resource,
+    )
 
 
 class McpOAuthTestCase(unittest.TestCase):
@@ -40,3 +54,55 @@ class McpOAuthTestCase(unittest.TestCase):
         )
         with self.assertRaises(mcp_oauth.RegistrationError):
             mcp_oauth._validate_redirect_uris(client)
+
+    def test_resource_matches_server_accepts_missing_or_canonical(self):
+        with patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL):
+            # ChatGPT omits the resource indicator entirely.
+            self.assertTrue(mcp_oauth._resource_matches_server(None))
+            self.assertTrue(mcp_oauth._resource_matches_server(""))
+            self.assertTrue(mcp_oauth._resource_matches_server(SERVER_URL))
+            # Trailing slash differences must not break the match.
+            self.assertTrue(mcp_oauth._resource_matches_server(SERVER_URL + "/"))
+            # A different resource is rejected.
+            self.assertFalse(mcp_oauth._resource_matches_server("https://evil.example.test/mcp"))
+
+    def test_authorize_allows_missing_resource_and_stores_canonical(self):
+        client = OAuthClientInformationFull(
+            client_id="https://client.example.test/metadata.json",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+        )
+        provider = mcp_oauth.ChatCoreOAuthProvider()
+        captured = {}
+
+        def fake_dumps(payload):
+            captured["payload"] = payload
+            return "signed-token"
+
+        with (
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+            patch("services.mcp_oauth.get_mcp_public_base_url", return_value="https://chat.example.test"),
+            patch("services.mcp_oauth._consent_serializer") as serializer,
+        ):
+            serializer.return_value.dumps.side_effect = fake_dumps
+            import asyncio
+
+            redirect = asyncio.run(provider.authorize(client, _make_params(None)))
+
+        self.assertEqual(redirect, "https://chat.example.test/oauth/authorize?request=signed-token")
+        # Even without an incoming resource, the stored grant is pinned to this server.
+        self.assertEqual(captured["payload"]["params"]["resource"], SERVER_URL)
+
+    def test_authorize_rejects_foreign_resource(self):
+        client = OAuthClientInformationFull(
+            client_id="https://client.example.test/metadata.json",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+        )
+        provider = mcp_oauth.ChatCoreOAuthProvider()
+        with patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL):
+            import asyncio
+
+            with self.assertRaises(AuthorizeError) as ctx:
+                asyncio.run(provider.authorize(client, _make_params("https://evil.example.test/mcp")))
+        self.assertEqual(ctx.exception.error, "invalid_request")
