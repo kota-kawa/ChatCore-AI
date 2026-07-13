@@ -81,6 +81,18 @@ def _consent_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(secret, salt="chat-core.mcp-oauth-consent")
 
 
+def _resource_matches_server(requested: str | None) -> bool:
+    """Check an RFC 8707 resource indicator against this MCP server.
+
+    ChatGPT や一部のクライアントは認可リクエストで ``resource`` を送らないため、
+    未指定は「このサーバー向け」とみなして許容する。指定された場合は、末尾スラッシュの
+    有無を無視してこの MCP リソースを指しているときだけ受け付ける。
+    """
+    if not requested:
+        return True
+    return requested.rstrip("/") == get_mcp_server_url().rstrip("/")
+
+
 def _validate_redirect_uris(client: OAuthClientInformationFull) -> None:
     for redirect_uri in client.redirect_uris or []:
         parsed = urlparse(str(redirect_uri))
@@ -426,8 +438,13 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
         scopes = params.scopes or [MCP_PROMPTS_WRITE_SCOPE]
-        if scopes != [MCP_PROMPTS_WRITE_SCOPE] or params.resource != get_mcp_server_url():
+        if scopes != [MCP_PROMPTS_WRITE_SCOPE]:
             raise AuthorizeError("invalid_scope", "Only prompts:write for this MCP resource is available.")
+        if not _resource_matches_server(params.resource):
+            raise AuthorizeError(
+                "invalid_request",
+                "This authorization server only issues tokens for its own MCP resource.",
+            )
         request_data = {
             "client": _serialize_client(client),
             "params": {
@@ -435,7 +452,9 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
                 "scopes": scopes,
                 "code_challenge": params.code_challenge,
                 "redirect_uri": str(params.redirect_uri),
-                "resource": params.resource,
+                # 認可コードには常に正規リソースを保存し、トークン発行・検証を一貫させる。
+                # Persist the canonical resource so token issuance/validation stays consistent.
+                "resource": get_mcp_server_url(),
             },
         }
         token = _consent_serializer().dumps(request_data)
