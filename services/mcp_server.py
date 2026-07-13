@@ -36,6 +36,29 @@ _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
 
 
+class ChatCoreFastMCP(FastMCP):
+    """Expose the OAuth requirement on each tool for ChatGPT's linking UI.
+
+    ``mcp`` 1.28 does not expose ``securitySchemes`` as a typed constructor
+    argument, but its wire model preserves this standard extension field.
+    ChatGPT requires the tool-level declaration in addition to protected
+    resource metadata and the runtime WWW-Authenticate challenge.
+    """
+
+    async def list_tools(self):
+        tools = await super().list_tools()
+        security_schemes = [{"type": "oauth2", "scopes": [MCP_PROMPTS_WRITE_SCOPE]}]
+        return [
+            tool.model_validate(
+                {
+                    **tool.model_dump(by_alias=True, exclude_none=True),
+                    "securitySchemes": security_schemes,
+                }
+            )
+            for tool in tools
+        ]
+
+
 def _require_actor_user_id() -> int:
     token = get_access_token()
     if token is None or not token.subject:
@@ -84,7 +107,7 @@ def _create_mcp() -> FastMCP:
         Fernet(key.encode("ascii"))
     public_base_url = get_mcp_public_base_url()
     provider = ChatCoreOAuthProvider()
-    mcp = FastMCP(
+    mcp = ChatCoreFastMCP(
         "Chat-Core Prompt Sharing",
         instructions=(
             "登録済みChat-Coreユーザーの公開プロンプト共有へ投稿します。"

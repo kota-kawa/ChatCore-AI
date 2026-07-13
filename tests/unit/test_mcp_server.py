@@ -13,6 +13,7 @@ class McpServerTestCase(unittest.TestCase):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
             "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
+            "FASTAPI_ENV": "development",
         }
         with patch.dict(os.environ, environment, clear=False):
             server = mcp_server._create_mcp()
@@ -22,6 +23,11 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(set(by_name), {"publish_prompt", "publish_skill"})
         self.assertFalse(by_name["publish_prompt"].annotations.readOnlyHint)
         self.assertFalse(by_name["publish_prompt"].annotations.idempotentHint)
+        for tool in by_name.values():
+            self.assertEqual(
+                tool.model_dump(by_alias=True)["securitySchemes"],
+                [{"type": "oauth2", "scopes": ["prompts:write"]}],
+            )
 
     def test_authorization_metadata_advertises_cimd(self):
         with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test"}, clear=False):
@@ -47,6 +53,7 @@ class McpServerTestCase(unittest.TestCase):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
             "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
+            "FASTAPI_ENV": "development",
         }
         previous_app = mcp_server._mcp_asgi_app
         previous_server = mcp_server._mcp
