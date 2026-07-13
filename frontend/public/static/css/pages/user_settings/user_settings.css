@@ -1035,6 +1035,16 @@ body.settings-page,
   margin-top: 1.25rem;
 }
 
+/* 発行結果ブロックがアクション行の直後に続く場合の間隔を確保 / Keep the issued-credentials block clear of the action row above */
+:where(body.settings-page, .user-settings-page) .security-actions + .security-stack {
+  margin-top: 1.5rem;
+}
+
+/* 先頭のフィードバックは負の上マージンを持つため、直上のボタンへの重なりを打ち消す / Cancel the inline feedback's negative top margin so it doesn't overlap the buttons above */
+:where(body.settings-page, .user-settings-page) .security-actions + .security-stack > .settings-inline-feedback:first-child {
+  margin-top: 0;
+}
+
 /* パネル内の button-group（メール確認フォーム）は余白を詰める / Tighten button-group spacing inside panels */
 :where(body.settings-page, .user-settings-page) .security-panel .button-group {
   margin-top: 0.35rem;
