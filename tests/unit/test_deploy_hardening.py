@@ -6,6 +6,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "deploy" / "blue_green_deploy.sh"
+COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
+BLUE_GREEN_COMPOSE_FILE = REPO_ROOT / "deploy" / "docker-compose.bluegreen.yml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 
 
@@ -46,6 +48,30 @@ class DeployHardeningTest(unittest.TestCase):
         self.assertIn("require_noninteractive_sudo", script_text)
         self.assertIn("wait_for_postgres_accepting_queries", script_text)
         self.assertIn('psql -h 127.0.0.1', script_text)
+
+    # 日本語: MCP設定が通常構成と本番Blue/Green構成の両方でアプリへ渡されることを検証します。
+    # English: Verify that both Compose configurations pass MCP settings to the app.
+    def test_compose_files_forward_mcp_environment(self):
+        expected_entries = (
+            "MCP_ENABLED=${MCP_ENABLED:-false}",
+            "MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}",
+            "MCP_OAUTH_ENCRYPTION_KEYS=${MCP_OAUTH_ENCRYPTION_KEYS:-}",
+            "MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}",
+        )
+
+        for compose_file in (COMPOSE_FILE, BLUE_GREEN_COMPOSE_FILE):
+            compose_text = compose_file.read_text()
+            for entry in expected_entries:
+                with self.subTest(compose_file=compose_file.name, entry=entry):
+                    self.assertIn(entry, compose_text)
+
+    # 日本語: MCP有効時には暗号鍵を必須設定として検証することを確認します。
+    # English: Verify that deployment requires the encryption key when MCP is enabled.
+    def test_deploy_requires_mcp_encryption_key_when_enabled(self):
+        script_text = DEPLOY_SCRIPT.read_text()
+
+        self.assertIn('local mcp_enabled="${MCP_ENABLED:-false}"', script_text)
+        self.assertIn("required_vars+=(MCP_OAUTH_ENCRYPTION_KEYS)", script_text)
 
     # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
     # English: Verify that workflow forwards nginx test command to remote deploy.

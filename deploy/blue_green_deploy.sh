@@ -72,7 +72,12 @@ validate_required_env() {
     POSTGRES_PASSWORD
     FASTAPI_SECRET_KEY
   )
+  local mcp_enabled="${MCP_ENABLED:-false}"
   local var_name value missing=0
+
+  if [[ "${mcp_enabled,,}" =~ ^(1|true|yes|on)$ ]]; then
+    required_vars+=(MCP_OAUTH_ENCRYPTION_KEYS)
+  fi
 
   for var_name in "${required_vars[@]}"; do
     value="${!var_name:-}"
