@@ -41,3 +41,19 @@ def get_mcp_allowed_origins() -> list[str]:
     if configured:
         return configured
     return [get_mcp_public_base_url()]
+
+
+def get_mcp_allowed_hosts() -> list[str]:
+    """Host header values accepted by the MCP DNS-rebinding protection.
+
+    Defaults to the public host and its ``www``/apex sibling so a client
+    configured with either form works — matching the nginx ``server_name`` that
+    serves both. Override with ``MCP_ALLOWED_HOSTS`` (comma separated).
+    """
+    raw = os.getenv("MCP_ALLOWED_HOSTS", "")
+    configured = [value.strip() for value in raw.split(",") if value.strip()]
+    if configured:
+        return configured
+    host = urlparse(get_mcp_public_base_url()).netloc
+    sibling = host[4:] if host.startswith("www.") else f"www.{host}"
+    return [host, sibling]

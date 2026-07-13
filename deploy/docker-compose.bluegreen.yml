@@ -130,6 +130,7 @@ services:
       - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}
       - MCP_OAUTH_ENCRYPTION_KEYS=${MCP_OAUTH_ENCRYPTION_KEYS:-}
       - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-}
       - PORT=5004
       - FRONTEND_URL=${FRONTEND_URL:-https://chatcore-ai.com}
       - POSTGRES_HOST=db
