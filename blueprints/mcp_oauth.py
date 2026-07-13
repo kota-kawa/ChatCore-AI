@@ -93,7 +93,7 @@ async def post_claude_client(request: Request):
     try:
         credentials = await run_blocking(issue_claude_client, user_id)
     except ValueError:
-        return jsonify({"error": "メールアドレスの確認後にClaude用認証情報を発行できます。"}, status_code=403)
+        return jsonify({"error": "メールアドレスの確認後に連携用認証情報を発行できます。"}, status_code=403)
     return jsonify(credentials, status_code=201)
 
 

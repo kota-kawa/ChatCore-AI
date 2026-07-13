@@ -718,14 +718,14 @@ export function SecuritySettingsSection({
                 <i className="bi bi-key-fill"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>Claude接続用認証情報</h3>
+                <h3>AIサービス連携用認証情報</h3>
                 <p className="security-panel__description">
-                  Claudeで接続に失敗する場合に、詳細設定へ入力する専用のOAuth認証情報を発行します。再発行すると、以前の認証情報と連携は失効します。
+                  OAuth認証情報を手動入力できる外部AIサービスで接続に失敗する場合に、詳細設定へ入力する認証情報を発行します。再発行すると、以前の認証情報と連携は失効します。
                 </p>
               </div>
             </div>
             {claudeOAuthClientLoading ? (
-              <p className="security-panel__description">Claude用認証情報を確認しています。</p>
+              <p className="security-panel__description">連携用認証情報を確認しています。</p>
             ) : claudeOAuthClient?.configured ? (
               <dl className="security-meta">
                 <div className="security-meta__row">
@@ -742,7 +742,7 @@ export function SecuritySettingsSection({
                 </div>
               </dl>
             ) : (
-              <p className="security-panel__description">Claude用認証情報はまだ発行されていません。</p>
+              <p className="security-panel__description">連携用認証情報はまだ発行されていません。</p>
             )}
             <div className="button-group">
               <button
@@ -755,14 +755,14 @@ export function SecuritySettingsSection({
                   ? "発行中..."
                   : claudeOAuthClient?.configured
                     ? "認証情報を再発行"
-                    : "Claude用認証情報を発行"}
+                    : "認証情報を発行"}
               </button>
             </div>
             {claudeOAuthClientCredentials ? (
               <div className="security-stack">
                 <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
                   <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
-                  Claudeの「詳細設定」に、次の認証情報をコピーしてください。シークレットはページを再読み込みすると再表示できません。
+                  連携先サービスの「詳細設定」に、次の認証情報をコピーしてください。シークレットはページを再読み込みすると再表示できません。
                 </p>
                 <div className="form-group">
                   <label className="form-label" htmlFor="claudeMcpServerUrl">MCPサーバーURL</label>

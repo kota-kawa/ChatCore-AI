@@ -58,7 +58,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(screen.getByText("不明")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "連携を解除" }));
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Claude用認証情報を発行" }));
+    fireEvent.click(screen.getByRole("button", { name: "認証情報を発行" }));
     expect(onIssueClaudeOAuthClient).toHaveBeenCalledOnce();
   });
 });
