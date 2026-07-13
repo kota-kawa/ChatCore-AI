@@ -30,6 +30,19 @@ class McpServerTestCase(unittest.TestCase):
         self.assertTrue(metadata["client_id_metadata_document_supported"])
         self.assertEqual(metadata["scopes_supported"], ["prompts:write"])
 
+    def test_issuer_matches_protected_resource_authorization_server(self):
+        # RFC 8414 §3.3: the issuer must byte-match the authorization_servers value
+        # the SDK serializes via AnyHttpUrl (trailing slash on a bare host).
+        from pydantic import AnyHttpUrl
+
+        with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test"}, clear=False):
+            metadata = mcp_server.get_oauth_authorization_metadata()
+
+        self.assertEqual(metadata["issuer"], str(AnyHttpUrl("https://example.test")))
+        # Endpoints must not gain a double slash from the normalized issuer.
+        self.assertEqual(metadata["authorization_endpoint"], "https://example.test/authorize")
+        self.assertEqual(metadata["token_endpoint"], "https://example.test/token")
+
     def test_mcp_endpoint_challenges_unauthenticated_clients(self):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",

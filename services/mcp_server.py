@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
-from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -12,11 +11,12 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import Field, ValidationError
+from pydantic import AnyHttpUrl, Field, ValidationError
 
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit
 from services.mcp_config import (
+    get_mcp_allowed_hosts,
     get_mcp_allowed_origins,
     get_mcp_encryption_keys,
     get_mcp_public_base_url,
@@ -83,7 +83,6 @@ def _create_mcp() -> FastMCP:
     for key in get_mcp_encryption_keys():
         Fernet(key.encode("ascii"))
     public_base_url = get_mcp_public_base_url()
-    public_host = urlparse(public_base_url).netloc
     provider = ChatCoreOAuthProvider()
     mcp = FastMCP(
         "Chat-Core Prompt Sharing",
@@ -108,7 +107,7 @@ def _create_mcp() -> FastMCP:
         json_response=True,
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=[public_host],
+            allowed_hosts=get_mcp_allowed_hosts(),
             allowed_origins=get_mcp_allowed_origins(),
         ),
     )
@@ -197,13 +196,18 @@ def get_mcp_lifespan_context():
 
 def get_oauth_authorization_metadata() -> dict[str, Any]:
     """Expose CIMD support, which the v1 SDK metadata helper does not advertise."""
-    issuer = get_mcp_public_base_url()
+    base = get_mcp_public_base_url()
+    # RFC 8414 §3.3 requires the issuer to byte-match the value advertised in the
+    # protected resource metadata's authorization_servers, which the MCP SDK
+    # serializes via AnyHttpUrl (a trailing slash is appended to a bare host).
+    # Normalize the same way so strict clients (e.g. ChatGPT) accept discovery.
+    issuer = str(AnyHttpUrl(base))
     return {
         "issuer": issuer,
-        "authorization_endpoint": f"{issuer}/authorize",
-        "token_endpoint": f"{issuer}/token",
-        "registration_endpoint": f"{issuer}/register",
-        "revocation_endpoint": f"{issuer}/revoke",
+        "authorization_endpoint": f"{base}/authorize",
+        "token_endpoint": f"{base}/token",
+        "registration_endpoint": f"{base}/register",
+        "revocation_endpoint": f"{base}/revoke",
         "scopes_supported": [MCP_PROMPTS_WRITE_SCOPE],
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
