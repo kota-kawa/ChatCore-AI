@@ -174,7 +174,7 @@ export function parseClaudeOAuthClientStatus(raw: unknown): ClaudeOAuthClientSta
   return parseWithSchema(
     ClaudeOAuthClientStatusSchema,
     raw,
-    "Claude用認証情報の状態形式が不正です。"
+    "連携用認証情報の状態形式が不正です。"
   );
 }
 
@@ -182,7 +182,7 @@ export function parseClaudeOAuthClientCredentials(raw: unknown): ClaudeOAuthClie
   return parseWithSchema(
     ClaudeOAuthClientCredentialsSchema,
     raw,
-    "Claude用認証情報の形式が不正です。"
+    "連携用認証情報の形式が不正です。"
   );
 }
 

@@ -313,7 +313,7 @@ export default function UserSettingsPage() {
     } catch (error) {
       setClaudeOAuthClient(null);
       showToast(
-        error instanceof Error ? error.message : "Claude用認証情報の取得に失敗しました。",
+        error instanceof Error ? error.message : "連携用認証情報の取得に失敗しました。",
         { variant: "error" }
       );
     } finally {
@@ -965,7 +965,7 @@ export default function UserSettingsPage() {
   const handleIssueClaudeOAuthClient = useCallback(async () => {
     const configured = claudeOAuthClient?.configured;
     const confirmed = !configured || await showConfirmModal(
-      "Claude用認証情報を再発行しますか？以前の認証情報と、その認証情報で作成した連携はすぐに使えなくなります。"
+      "連携用認証情報を再発行しますか？以前の認証情報と、その認証情報で作成した連携はすぐに使えなくなります。"
     );
     if (!confirmed) {
       return;
@@ -982,10 +982,10 @@ export default function UserSettingsPage() {
         redirect_uri: credentials.redirect_uri,
         mcp_server_url: credentials.mcp_server_url
       });
-      showToast("Claude用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
+      showToast("連携用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "Claude用認証情報の発行に失敗しました。",
+        error instanceof Error ? error.message : "連携用認証情報の発行に失敗しました。",
         { variant: "error" }
       );
     } finally {
