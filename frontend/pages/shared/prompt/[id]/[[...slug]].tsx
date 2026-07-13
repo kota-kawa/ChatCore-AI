@@ -1,8 +1,10 @@
 import type { GetServerSideProps } from "next";
+import Link from "next/link";
 import MarkdownContent from "../../../../components/MarkdownContent";
 import { SeoHead } from "../../../../components/SeoHead";
 import { formatDateTime } from "../../../../lib/datetime";
 import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
+import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdown_ssr";
 import { resilientFetch } from "../../../../scripts/core/resilient_fetch";
 import {
   getPromptFormatLabel,
@@ -39,10 +41,21 @@ type SharedPromptPayload = {
   error?: string;
 };
 
+// SSRで事前サニタイズ済みの各セクションHTML（クローラにも本文が見えるようにするため）
+// Pre-sanitized HTML for each section rendered during SSR (so crawlers can see the body too)
+type SharedPromptHtml = {
+  content: string;
+  inputExamples: string;
+  outputExamples: string;
+  skillMarkdown: string;
+  skillPythonScript: string;
+};
+
 // ページコンポーネントのプロップス
 // Props for the page component
 type SharedPromptPageProps = {
   payload: SharedPromptPayload;
+  promptHtml: SharedPromptHtml;
   pageUrl: string;
   defaultOgImageUrl: string;
 };
@@ -107,6 +120,24 @@ function extractRequestedSlug(rawSlug: string | string[] | undefined) {
   return rawSlug ?? "";
 }
 
+// スキルの追加PythonスクリプトをMarkdownコードブロックとして整形する（SSRとクライアントで共通）
+// Format the skill's additional Python script as a Markdown code block (shared by SSR and client)
+function buildSkillScriptMarkdown(script: string) {
+  return `\`\`\`python\n${script}\n\`\`\``;
+}
+
+// 空のセクションHTMLセット（エラー時やプロンプト未取得時に使用）
+// Empty section HTML set (used on errors or when the prompt is missing)
+function emptyPromptHtml(): SharedPromptHtml {
+  return {
+    content: "",
+    inputExamples: "",
+    outputExamples: "",
+    skillMarkdown: "",
+    skillPythonScript: ""
+  };
+}
+
 // OGP用のmeta descriptionをプロンプト内容から生成する
 // Build the OGP meta description from the prompt content
 function buildMetaDescription(payload: SharedPromptPayload) {
@@ -131,8 +162,10 @@ function buildMetaDescription(payload: SharedPromptPayload) {
 
 // プロンプトIDでデータを取得してSSRで返す（IDが無効な場合は404）。
 // タイトル由来のスラッグが正規URLと一致しない場合は正規パスへ恒久リダイレクトする。
+// 本文Markdownはサーバー側でサニタイズ済みHTMLへ変換し、クローラにも本文が見えるようにする。
 // Fetch prompt data by ID for SSR (returns 404 if the ID is missing).
 // Permanently redirect to the canonical path when the title-derived slug does not match the requested one.
+// The body Markdown is converted to sanitized HTML on the server so crawlers can see it too.
 export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = async (context) => {
   const rawId = context.params?.id;
   const promptId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -184,6 +217,19 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     }
   }
 
+  // 本文の各セクションをサーバー側でサニタイズ済みHTMLへ変換する（SEO対策：SSR出力に本文を含める）
+  // Convert each body section to sanitized HTML on the server (SEO: include the body in the SSR output)
+  const promptHtml = emptyPromptHtml();
+  if (prompt) {
+    promptHtml.content = renderMarkdownToSafeHtmlOnServer(prompt.content);
+    promptHtml.inputExamples = renderMarkdownToSafeHtmlOnServer(prompt.input_examples);
+    promptHtml.outputExamples = renderMarkdownToSafeHtmlOnServer(prompt.output_examples);
+    promptHtml.skillMarkdown = renderMarkdownToSafeHtmlOnServer(prompt.skill_markdown);
+    promptHtml.skillPythonScript = prompt.skill_python_script
+      ? renderMarkdownToSafeHtmlOnServer(buildSkillScriptMarkdown(prompt.skill_python_script))
+      : "";
+  }
+
   // 正規パス（プロンプトが存在する場合はスラッグ付き、なければ要求パス）から絶対URLを組み立てる
   // Build the absolute canonical URL from the canonical path (slug-based when the prompt exists, otherwise the requested path)
   const canonicalPath = prompt && prompt.id !== undefined && prompt.id !== null
@@ -194,6 +240,7 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
   return {
     props: {
       payload,
+      promptHtml,
       pageUrl,
       defaultOgImageUrl
     }
@@ -202,47 +249,67 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
 
 // 共有プロンプト詳細ページ（フォーマット軸・メディア軸に応じて表示）
 // Shared prompt detail page (renders according to content format and media type axes)
-export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
+export default function SharedPromptPage({ payload, promptHtml, pageUrl, defaultOgImageUrl }: SharedPromptPageProps) {
   const prompt = payload.prompt;
   const contentFormat = normalizePromptContentFormat(prompt?.content_format || prompt?.prompt_type || "");
   const mediaType = normalizePromptMediaType(prompt?.media_type || prompt?.prompt_type || "");
   const isSkillPrompt = contentFormat === "skill";
-  const pageTitle = `${prompt?.title || "共有プロンプト"} | Chat Core 共有`;
+  const promptTitle = prompt?.title || "共有プロンプト";
+  const pageTitle = `${promptTitle} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
   const formatLabel = getPromptFormatLabel(contentFormat);
   const mediaLabel = getPromptMediaLabel(mediaType);
-  // 参照画像URLがある場合はそれをOG画像に使用し、ない場合はデフォルト画像を使う
-  // Use the reference image as OG image if available, otherwise fall back to the default
-  const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, (() => {
+  const categoryLabel = getCategoryLabelOrFallback(prompt?.category);
+  // ページURLからオリジンを取り出す（OG画像・パンくずの絶対URL組み立てに使用）
+  // Extract the origin from the page URL (used to build absolute URLs for the OG image and breadcrumb)
+  const pageOrigin = (() => {
     try {
       const parsed = new URL(pageUrl);
       return `${parsed.protocol}//${parsed.host}`;
     } catch {
       return "";
     }
-  })()) || defaultOgImageUrl;
+  })();
+  // 参照画像URLがある場合はそれをOG画像に使用し、ない場合はデフォルト画像を使う
+  // Use the reference image as OG image if available, otherwise fall back to the default
+  const ogImageUrl = resolveAbsoluteUrl(prompt?.reference_image_url, pageOrigin) || defaultOgImageUrl;
   // Schema.orgの構造化データ（プロンプトが存在する場合のみ付与）
   // Schema.org structured data (only included when prompt exists)
   const structuredData = prompt
-    ? {
-        "@context": "https://schema.org",
-        "@type": "CreativeWork",
-        headline: prompt.title || "共有プロンプト",
-        name: prompt.title || "共有プロンプト",
-        description,
-        author: {
-          "@type": "Person",
-          name: prompt.author || "匿名ユーザー"
+    ? [
+        {
+          "@context": "https://schema.org",
+          "@type": "CreativeWork",
+          headline: promptTitle,
+          name: promptTitle,
+          description,
+          genre: categoryLabel,
+          keywords: [formatLabel, mediaLabel, categoryLabel].filter(Boolean).join(","),
+          author: {
+            "@type": "Person",
+            name: prompt.author || "匿名ユーザー"
+          },
+          datePublished: prompt.created_at || undefined,
+          image: ogImageUrl,
+          url: pageUrl,
+          inLanguage: "ja",
+          isPartOf: {
+            "@type": "WebSite",
+            name: "Chat Core"
+          }
         },
-        datePublished: prompt.created_at || undefined,
-        image: ogImageUrl,
-        url: pageUrl,
-        inLanguage: "ja",
-        isPartOf: {
-          "@type": "WebSite",
-          name: "Chat Core"
+        // パンくずリストの構造化データ（検索結果での階層表示を助ける）
+        // BreadcrumbList structured data (helps hierarchical display in search results)
+        {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Chat Core", item: pageOrigin ? `${pageOrigin}/` : "/" },
+            { "@type": "ListItem", position: 2, name: "プロンプト共有", item: pageOrigin ? `${pageOrigin}/prompt_share` : "/prompt_share" },
+            { "@type": "ListItem", position: 3, name: promptTitle, item: pageUrl }
+          ]
         }
-      }
+      ]
     : undefined;
 
   return (
@@ -258,21 +325,31 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
       />
 
       <div className="shared-prompt-page">
+        {/* パンくずナビ（プロンプト共有トップへの内部リンク） / Breadcrumb nav (internal link back to the prompt share top) */}
+        <nav className="shared-prompt-breadcrumb" aria-label="パンくずリスト">
+          <ol>
+            <li><Link href="/">Chat Core</Link></li>
+            <li><Link href="/prompt_share">プロンプト共有</Link></li>
+            <li aria-current="page">{promptTitle}</li>
+          </ol>
+        </nav>
+
         {payload.error ? (
           <div className="shared-prompt-state shared-prompt-state--error">{payload.error}</div>
         ) : prompt ? (
           <article className="shared-prompt-shell">
             <header className="shared-prompt-header">
+              <p className="shared-prompt-kicker">Prompt Share</p>
               <div className="shared-prompt-pills" aria-label="投稿のフォーマットと生成メディア">
                 <span className="shared-prompt-pill">フォーマット: {formatLabel}</span>
                 <span className="shared-prompt-pill shared-prompt-pill--media">生成メディア: {mediaLabel}</span>
               </div>
-              <h1>{prompt.title || "共有プロンプト"}</h1>
+              <h1>{promptTitle}</h1>
               <div className="shared-prompt-meta">
-                <span>カテゴリ: {getCategoryLabelOrFallback(prompt.category)}</span>
-                <span>投稿者: {prompt.author || "匿名ユーザー"}</span>
-                {prompt.created_at ? <span>投稿日: {formatDate(prompt.created_at)}</span> : null}
-                {prompt.ai_model ? <span>使用AI: {prompt.ai_model}</span> : null}
+                <span><i className="bi bi-folder2-open" aria-hidden="true" /> カテゴリ: {categoryLabel}</span>
+                <span><i className="bi bi-person-circle" aria-hidden="true" /> 投稿者: {prompt.author || "匿名ユーザー"}</span>
+                {prompt.created_at ? <span><i className="bi bi-calendar3" aria-hidden="true" /> 投稿日: {formatDate(prompt.created_at)}</span> : null}
+                {prompt.ai_model ? <span><i className="bi bi-cpu" aria-hidden="true" /> 使用AI: {prompt.ai_model}</span> : null}
               </div>
             </header>
 
@@ -286,40 +363,53 @@ export default function SharedPromptPage({ payload, pageUrl, defaultOgImageUrl }
             {/* スキルプロンプト以外はプロンプト本文を表示 / Show prompt content for non-skill prompts */}
             {!isSkillPrompt ? (
               <section className="shared-prompt-section">
-                <h2>内容</h2>
-                <MarkdownContent text={prompt.content || ""} className="md-content" />
+                <h2><i className="bi bi-file-earmark-text" aria-hidden="true" /> 内容</h2>
+                <MarkdownContent text={prompt.content || ""} ssrHtml={promptHtml.content} className="md-content" />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.input_examples ? (
               <section className="shared-prompt-section">
-                <h2>入力例</h2>
-                <MarkdownContent text={prompt.input_examples} className="md-content" />
+                <h2><i className="bi bi-box-arrow-in-right" aria-hidden="true" /> 入力例</h2>
+                <MarkdownContent text={prompt.input_examples} ssrHtml={promptHtml.inputExamples} className="md-content" />
               </section>
             ) : null}
 
             {!isSkillPrompt && prompt.output_examples ? (
               <section className="shared-prompt-section">
-                <h2>出力例</h2>
-                <MarkdownContent text={prompt.output_examples} className="md-content" />
+                <h2><i className="bi bi-box-arrow-right" aria-hidden="true" /> 出力例</h2>
+                <MarkdownContent text={prompt.output_examples} ssrHtml={promptHtml.outputExamples} className="md-content" />
               </section>
             ) : null}
 
             {/* スキルプロンプトのMarkdown定義 / Skill prompt Markdown definition */}
             {prompt.skill_markdown ? (
               <section className="shared-prompt-section">
-                <h2>SKILL定義 (Markdown)</h2>
-                <MarkdownContent text={prompt.skill_markdown} className="md-content" />
+                <h2><i className="bi bi-stars" aria-hidden="true" /> SKILL定義 (Markdown)</h2>
+                <MarkdownContent text={prompt.skill_markdown} ssrHtml={promptHtml.skillMarkdown} className="md-content" />
               </section>
             ) : null}
 
             {/* スキルプロンプトの追加Pythonスクリプト / Additional Python script for skill prompts */}
             {prompt.skill_python_script ? (
               <section className="shared-prompt-section">
-                <h2>追加 Python スクリプト</h2>
-                <MarkdownContent text={`\`\`\`python\n${prompt.skill_python_script}\n\`\`\``} className="md-content" />
+                <h2><i className="bi bi-filetype-py" aria-hidden="true" /> 追加 Python スクリプト</h2>
+                <MarkdownContent
+                  text={buildSkillScriptMarkdown(prompt.skill_python_script)}
+                  ssrHtml={promptHtml.skillPythonScript}
+                  className="md-content"
+                />
               </section>
             ) : null}
+
+            {/* プロンプト共有トップへの誘導（内部リンク） / CTA back to the prompt share top (internal link) */}
+            <footer className="shared-prompt-cta">
+              <h2>ほかの公開プロンプトも見る</h2>
+              <p>Chat Core のプロンプト共有では、文章作成・画像生成・スキルなど、さまざまなカテゴリの公開プロンプトを検索・閲覧できます。</p>
+              <Link href="/prompt_share" className="shared-prompt-cta__button">
+                <i className="bi bi-collection" aria-hidden="true" /> プロンプト共有ページへ
+              </Link>
+            </footer>
           </article>
         ) : (
           <div className="shared-prompt-state shared-prompt-state--error">共有プロンプトの取得に失敗しました。</div>
