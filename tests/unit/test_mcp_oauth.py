@@ -46,6 +46,29 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(details["client_host"], "client.example.test")
         self.assertFalse(details["localhost_warning"])
 
+    def test_consent_details_uses_redirect_host_for_an_opaque_client_id(self):
+        client = OAuthClientInformationFull(
+            client_id="claude-personal-client",
+            redirect_uris=[mcp_oauth.CLAUDE_OAUTH_CALLBACK_URL],
+            client_name="Claude",
+            token_endpoint_auth_method="client_secret_post",
+        )
+        payload = {
+            "client": mcp_oauth._serialize_client(client),
+            "params": {
+                "state": "state",
+                "scopes": ["prompts:write"],
+                "code_challenge": "challenge",
+                "redirect_uri": mcp_oauth.CLAUDE_OAUTH_CALLBACK_URL,
+                "resource": "https://chat.example.test/mcp",
+            },
+        }
+        with patch("services.mcp_oauth.get_session_secret_key", return_value="test-secret"):
+            token = mcp_oauth._consent_serializer().dumps(payload)
+            details = mcp_oauth.consent_details(token)
+
+        self.assertEqual(details["client_host"], "claude.ai")
+
     def test_redirect_validation_rejects_non_loopback_http(self):
         client = OAuthClientInformationFull(
             client_id="client",

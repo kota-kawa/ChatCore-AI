@@ -74,6 +74,15 @@ def _parse_client(value: Any, secret: str | None = None) -> OAuthClientInformati
     return OAuthClientInformationFull.model_validate(raw)
 
 
+def _display_client_host(client: OAuthClientInformationFull, redirect_uri: str) -> str:
+    """Resolve a display host even when an OAuth client uses an opaque client ID."""
+    for candidate in (client.client_uri, client.client_id, redirect_uri):
+        hostname = urlparse(str(candidate or "")).hostname
+        if hostname:
+            return hostname
+    return "unknown"
+
+
 def _fernet() -> MultiFernet:
     return MultiFernet([Fernet(key.encode("ascii")) for key in get_mcp_encryption_keys()])
 
@@ -246,6 +255,7 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
         client_id=client_id,
         client_secret=client_secret,
         client_name="Claude (personal Chat-Core connector)",
+        client_uri="https://claude.ai",
         redirect_uris=[CLAUDE_OAUTH_CALLBACK_URL],
         grant_types=["authorization_code", "refresh_token"],
         response_types=["code"],
@@ -356,7 +366,7 @@ def _create_authorization_code(user_id: int, request_data: dict[str, Any]) -> st
     params = request_data["params"]
     grant_id = uuid4()
     now = _utc_now()
-    client_host = urlparse(str(client.client_uri or client.client_id)).hostname or ""
+    client_host = _display_client_host(client, params["redirect_uri"])
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -648,7 +658,7 @@ def consent_details(token: str) -> dict[str, Any] | None:
     return {
         "client_name": client.client_name or str(client.client_id),
         "client_id": str(client.client_id),
-        "client_host": urlparse(str(client.client_uri or client.client_id)).hostname or "",
+        "client_host": _display_client_host(client, request_data["params"]["redirect_uri"]),
         "redirect_host": redirect_host,
         "scope": MCP_PROMPTS_WRITE_SCOPE,
         "localhost_warning": redirect_host.lower() in {"localhost", "127.0.0.1", "::1"},

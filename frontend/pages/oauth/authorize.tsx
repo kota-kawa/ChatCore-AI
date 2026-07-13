@@ -114,7 +114,7 @@ export default function McpOAuthAuthorizePage() {
                   <dt>クライアントID</dt>
                   <dd>{consent.client_id}</dd>
                   <dt>接続元</dt>
-                  <dd>{consent.client_host}</dd>
+                  <dd>{consent.client_host || "不明"}</dd>
                   <dt>戻り先</dt>
                   <dd>{consent.redirect_host}</dd>
                   <dt>許可する操作</dt>

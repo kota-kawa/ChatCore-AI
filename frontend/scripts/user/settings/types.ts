@@ -115,7 +115,7 @@ export function parsePromptManageMutationResponse(raw: unknown): PromptManageMut
 const McpOAuthConsentSchema = z.object({
   client_name: z.string().trim().min(1),
   client_id: z.string().trim().min(1),
-  client_host: z.string().trim().min(1),
+  client_host: z.string().transform((value) => value.trim()),
   redirect_host: z.string().trim().min(1),
   scope: z.string().trim().min(1),
   localhost_warning: z.boolean()
@@ -125,7 +125,7 @@ const McpOAuthConnectionsResponseSchema = z.object({
   connections: z.array(z.object({
     id: z.union([z.string(), z.number()]).transform(String),
     client_name: z.string().trim().min(1),
-    client_host: z.string().trim().min(1),
+    client_host: z.string().transform((value) => value.trim()),
     created_at: z.string().trim().min(1),
     last_used_at: z.string().trim().min(1).nullable()
   }))
