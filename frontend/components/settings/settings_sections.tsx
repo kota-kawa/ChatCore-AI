@@ -16,6 +16,7 @@ import type {
   ProfileFormState,
   ProfileSaveStatus
 } from "../../scripts/user/settings/page_types";
+import type { McpOAuthConnection } from "../../scripts/user/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
 import { formatPasskeyDateTime } from "../../scripts/user/settings/utils";
 import { SettingsProfileSkeleton, SettingsPromptCardSkeletonGrid } from "./settings_skeletons";
@@ -347,6 +348,9 @@ export function SecuritySettingsSection({
   passkeysLoading,
   registeringPasskey,
   deletingPasskeyId,
+  mcpOAuthConnections,
+  mcpOAuthConnectionsLoading,
+  deletingMcpOAuthConnectionId,
   accountDeleteConfirmation,
   accountDeleting,
   accountDeleteError,
@@ -358,6 +362,8 @@ export function SecuritySettingsSection({
   onRegisterPasskey,
   onRefreshPasskeys,
   onDeletePasskey,
+  onRefreshMcpOAuthConnections,
+  onDeleteMcpOAuthConnection,
   onAccountDeleteConfirmationChange,
   onDeleteAccount
 }: {
@@ -374,6 +380,9 @@ export function SecuritySettingsSection({
   passkeysLoading: boolean;
   registeringPasskey: boolean;
   deletingPasskeyId: number | null;
+  mcpOAuthConnections: McpOAuthConnection[];
+  mcpOAuthConnectionsLoading: boolean;
+  deletingMcpOAuthConnectionId: string | null;
   accountDeleteConfirmation: string;
   accountDeleting: boolean;
   accountDeleteError: string | null;
@@ -385,6 +394,8 @@ export function SecuritySettingsSection({
   onRegisterPasskey: () => void;
   onRefreshPasskeys: () => void;
   onDeletePasskey: (passkeyId: number) => void;
+  onRefreshMcpOAuthConnections: () => void;
+  onDeleteMcpOAuthConnection: (connection: McpOAuthConnection) => void;
   onAccountDeleteConfirmationChange: (value: string) => void;
   onDeleteAccount: () => void;
 }) {
@@ -554,6 +565,57 @@ export function SecuritySettingsSection({
                       }}
                     >
                       削除
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="security-panel">
+            <h3>AIサービス連携</h3>
+            <p className="security-panel__description">
+              外部AIサービスに、公開プロンプトを投稿する権限を付与した連携です。不要になった連携は解除できます。
+            </p>
+            <div className="button-group">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={mcpOAuthConnectionsLoading}
+                onClick={() => {
+                  void onRefreshMcpOAuthConnections();
+                }}
+              >
+                一覧を更新
+              </button>
+            </div>
+            <div className="passkey-list" aria-live="polite">
+              {mcpOAuthConnectionsLoading ? (
+                <p className="passkey-empty">AIサービス連携を読み込んでいます。</p>
+              ) : mcpOAuthConnections.length === 0 ? (
+                <p className="passkey-empty">接続中のAIサービスはありません。</p>
+              ) : (
+                mcpOAuthConnections.map((connection) => (
+                  <div key={connection.id} className="passkey-item">
+                    <div>
+                      <strong>{connection.client_name}</strong>
+                      <div className="passkey-meta">
+                        接続先: {connection.client_host}
+                        <br />
+                        接続日時: {formatPasskeyDateTime(connection.created_at)}
+                        <br />
+                        最終利用: {connection.last_used_at ? formatPasskeyDateTime(connection.last_used_at) : "未使用"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button delete-passkey-btn"
+                      disabled={deletingMcpOAuthConnectionId === connection.id}
+                      onClick={() => {
+                        void onDeleteMcpOAuthConnection(connection);
+                      }}
+                    >
+                      {deletingMcpOAuthConnectionId === connection.id ? "解除中..." : "連携を解除"}
                     </button>
                   </div>
                 ))

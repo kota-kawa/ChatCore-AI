@@ -34,7 +34,11 @@ import {
   PASSKEY_INITIAL_SUPPORT_TEXT,
   PROFILE_SAVE_EFFECT_DURATION_MS
 } from "../scripts/user/settings/constants";
-import { settingsFetchJsonOrThrow } from "../scripts/user/settings/api";
+import {
+  loadMcpOAuthConnections as fetchMcpOAuthConnections,
+  revokeMcpOAuthConnection,
+  settingsFetchJsonOrThrow
+} from "../scripts/user/settings/api";
 import type {
   EditPromptFormState,
   EmailChangeStage,
@@ -47,6 +51,7 @@ import {
   parseLikedPromptsResponse,
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
+  type McpOAuthConnection,
   type LikedPrompt,
   type PromptRecord
 } from "../scripts/user/settings/types";
@@ -118,6 +123,9 @@ export default function UserSettingsPage() {
   const [passkeysLoading, setPasskeysLoading] = useState(false);
   const [registeringPasskey, setRegisteringPasskey] = useState(false);
   const [deletingPasskeyId, setDeletingPasskeyId] = useState<number | null>(null);
+  const [mcpOAuthConnections, setMcpOAuthConnections] = useState<McpOAuthConnection[]>([]);
+  const [mcpOAuthConnectionsLoading, setMcpOAuthConnectionsLoading] = useState(false);
+  const [deletingMcpOAuthConnectionId, setDeletingMcpOAuthConnectionId] = useState<string | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
@@ -273,6 +281,23 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  // 外部AIサービスへ許可した MCP 連携を取得する
+  // Fetch the MCP connections authorized for external AI services.
+  const loadMcpOAuthConnectionList = useCallback(async () => {
+    setMcpOAuthConnectionsLoading(true);
+    try {
+      setMcpOAuthConnections(await fetchMcpOAuthConnections());
+    } catch (error) {
+      setMcpOAuthConnections([]);
+      showToast(
+        error instanceof Error ? error.message : "AIサービス連携一覧の取得に失敗しました。",
+        { variant: "error" }
+      );
+    } finally {
+      setMcpOAuthConnectionsLoading(false);
+    }
+  }, []);
+
   // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする
   // On mount, add the page class and perform initial loads for theme, profile, and passkeys
   useEffect(() => {
@@ -364,8 +389,9 @@ export default function UserSettingsPage() {
     }
     if (section === "security") {
       void loadPasskeys();
+      void loadMcpOAuthConnectionList();
     }
-  }, [loadLikedPrompts, loadMyPrompts, loadPasskeys]);
+  }, [loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
@@ -887,6 +913,31 @@ export default function UserSettingsPage() {
     }
   }, [loadPasskeys]);
 
+  // 指定したAIサービスのMCP認可を失効し、以後の投稿を停止する
+  // Revoke an AI service's MCP authorization and prevent future publishing.
+  const handleDeleteMcpOAuthConnection = useCallback(async (connection: McpOAuthConnection) => {
+    const confirmed = await showConfirmModal(
+      `「${connection.client_name}」からのAIサービス連携を解除しますか？`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingMcpOAuthConnectionId(connection.id);
+    try {
+      await revokeMcpOAuthConnection(connection.id);
+      setMcpOAuthConnections((current) => current.filter((entry) => entry.id !== connection.id));
+      showToast("AIサービス連携を解除しました。", { variant: "success" });
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "AIサービス連携の解除に失敗しました。",
+        { variant: "error" }
+      );
+    } finally {
+      setDeletingMcpOAuthConnectionId(null);
+    }
+  }, []);
+
   // アカウントを完全削除する — 確認テキスト入力と二段階ダイアログで誤操作を防ぐ
   // Permanently delete the account — guarded by typed confirmation and a two-step dialog
   const handleDeleteAccount = useCallback(async () => {
@@ -1055,6 +1106,9 @@ export default function UserSettingsPage() {
               passkeysLoading={passkeysLoading}
               registeringPasskey={registeringPasskey}
               deletingPasskeyId={deletingPasskeyId}
+              mcpOAuthConnections={mcpOAuthConnections}
+              mcpOAuthConnectionsLoading={mcpOAuthConnectionsLoading}
+              deletingMcpOAuthConnectionId={deletingMcpOAuthConnectionId}
               accountDeleteConfirmation={accountDeleteConfirmation}
               accountDeleting={accountDeleting}
               accountDeleteError={accountDeleteError}
@@ -1072,6 +1126,8 @@ export default function UserSettingsPage() {
               onRegisterPasskey={handleRegisterPasskey}
               onRefreshPasskeys={loadPasskeys}
               onDeletePasskey={handleDeletePasskey}
+              onRefreshMcpOAuthConnections={loadMcpOAuthConnectionList}
+              onDeleteMcpOAuthConnection={handleDeleteMcpOAuthConnection}
               onAccountDeleteConfirmationChange={(value) => {
                 setAccountDeleteConfirmation(value);
                 setAccountDeleteError(null);

@@ -54,6 +54,9 @@ MAX_PROMPT_ASSIST_META_LENGTH = 256
 MAX_PROMPT_COMMENT_LENGTH = 1000
 MAX_PROMPT_COMMENT_REPORT_DETAILS_LENGTH = 500
 MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 30000
+MAX_SHARED_PROMPT_TITLE_LENGTH = 255
+MAX_SHARED_PROMPT_CONTENT_LENGTH = 30000
+MAX_SHARED_PROMPT_AI_MODEL_LENGTH = 100
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -273,16 +276,16 @@ class AiAgentRequest(RequestPayloadModel):
 # 日本語: 共有プロンプト（またはSKILL）を新しく投稿する際のリクエストペイロード。
 # English: Request payload for posting a new shared prompt or SKILL.
 class SharedPromptCreateRequest(RequestPayloadModel):
-    title: NonEmptyStr
+    title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)]
     category: str = ""
-    content: str = ""
+    content: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
     # 2軸モデル: フォーマット軸 (prompt/skill...) × メディア軸 (text/image...)。
     # Two-axis model: content format axis × media type axis. See services/prompt_types.py.
     content_format: str = DEFAULT_CONTENT_FORMAT
     media_type: str = DEFAULT_MEDIA_TYPE
-    input_examples: str = ""
-    output_examples: str = ""
-    ai_model: str = ""
+    input_examples: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    output_examples: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    ai_model: str = Field(default="", max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH)
     # フォーマット固有の構造化フィールド (例: skill_markdown)。許可キーのみ採用。
     # Format-specific structured fields (e.g. skill_markdown); only declared keys are kept.
     attributes: dict[str, str] = Field(default_factory=dict)

@@ -51,6 +51,7 @@ class PermanentSessionMiddleware:
         path: str = "/",
         same_site: str = "lax",
         https_only: bool = False,
+        bypass_paths: tuple[str, ...] = (),
     ) -> None:
         # 内部でハイブリッドミドルウェアを初期化する
         # Initialize the HybridSessionMiddleware internally
@@ -62,6 +63,7 @@ class PermanentSessionMiddleware:
             path=path,
             same_site=same_site,
             https_only=https_only,
+            bypass_paths=bypass_paths,
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -83,6 +85,7 @@ class HybridSessionMiddleware:
         path: str = "/",
         same_site: str = "lax",
         https_only: bool = False,
+        bypass_paths: tuple[str, ...] = (),
     ) -> None:
         # ミドルウェア設定の初期化
         # Initialize middleware configurations
@@ -92,12 +95,17 @@ class HybridSessionMiddleware:
         self.path = path
         self.same_site = same_site
         self.https_only = https_only
+        self.bypass_paths = tuple(bypass_paths)
         self.serializer = URLSafeSerializer(secret_key, salt="strike.session")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # HTTPリクエスト以外のタイプはスルーする
         # Skip non-HTTP request types
         if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = str(scope.get("path") or "")
+        if path in self.bypass_paths:
             return await self.app(scope, receive, send)
 
         # Cookieからセッション状態をロードし、Redisからデータを復元する

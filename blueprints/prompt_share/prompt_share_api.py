@@ -18,7 +18,6 @@ from services.prompt_types import (
     get_attachment_rule,
     media_allows_attachment,
     normalize_content_format,
-    normalize_media_type,
     serialize_axes,
 )
 from services.request_models import (
@@ -28,6 +27,7 @@ from services.request_models import (
     PromptTaskCreateRequest,
     SharedPromptCreateRequest,
 )
+from services.shared_prompt_service import create_shared_prompt
 from services.web import (
     BASE_DIR,
     jsonify,
@@ -470,64 +470,18 @@ def _create_prompt_for_user(
     投稿ユーザー情報と指定された属性値を用いて、新規プロンプトデータをデータベースに挿入する。
     Create and store a new public shared prompt record in the database for the active user.
     """
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        # 投稿者名は入力値ではなく投稿ユーザーの username を保存する。
-        # 表示時は users.username を JOIN して取得するため、username の変更にも追従する。
-        query = """
-            INSERT INTO prompts (
-                title,
-                category,
-                content,
-                author,
-                content_format,
-                media_type,
-                attributes,
-                attachments,
-                input_examples,
-                output_examples,
-                ai_model,
-                user_id,
-                is_public,
-                created_at,
-                updated_at
-            )
-            VALUES (
-                %s, %s, %s,
-                (SELECT COALESCE(username, 'ユーザー') FROM users WHERE id = %s),
-                %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, TRUE, NOW(), NOW()
-            )
-            RETURNING id
-        """
-        cursor.execute(
-            query,
-            (
-                title,
-                category,
-                content,
-                user_id,
-                normalize_content_format(content_format),
-                normalize_media_type(media_type),
-                json.dumps(attributes or {}),
-                json.dumps(attachments or []),
-                input_examples,
-                output_examples,
-                ai_model or None,
-                user_id,
-            ),
-        )
-        conn.commit()
-        # 新規作成されたレコードのIDを抽出して返却
-        # Extract and return the ID of the inserted prompt record.
-        return _extract_id(cursor.fetchone())
-    finally:
-        if cursor is not None:
-            cursor.close()
-        if conn is not None:
-            conn.close()
+    payload = SharedPromptCreateRequest(
+        title=title,
+        category=category,
+        content=content,
+        content_format=content_format,
+        media_type=media_type,
+        input_examples=input_examples,
+        output_examples=output_examples,
+        ai_model=ai_model,
+        attributes=attributes,
+    )
+    return create_shared_prompt(user_id, payload, attachments=attachments)
 
 
 # プロンプトタイプに応じたタスク用テンプレートテキストを構築する関数
