@@ -7,7 +7,14 @@ from fastapi import APIRouter, Depends, Request
 from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
-from services.mcp_oauth import complete_consent, consent_details, list_connections, revoke_connection
+from services.mcp_oauth import (
+    complete_consent,
+    consent_details,
+    get_claude_client_status,
+    issue_claude_client,
+    list_connections,
+    revoke_connection,
+)
 from services.web import jsonify, require_json_dict
 
 mcp_oauth_bp = APIRouter(prefix="/api/mcp/oauth", dependencies=[Depends(require_csrf)])
@@ -64,6 +71,30 @@ async def get_connections(request: Request):
         return jsonify({"error": "ログインしていません"}, status_code=401)
     connections = await run_blocking(list_connections, user_id)
     return jsonify({"connections": connections})
+
+
+@mcp_oauth_bp.get("/claude-client", name="mcp_oauth.claude_client_status")
+async def get_claude_client(request: Request):
+    if not is_mcp_enabled():
+        return _disabled_response()
+    user_id = _current_verified_user_id(request)
+    if user_id is None:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    return jsonify(await run_blocking(get_claude_client_status, user_id))
+
+
+@mcp_oauth_bp.post("/claude-client", name="mcp_oauth.issue_claude_client")
+async def post_claude_client(request: Request):
+    if not is_mcp_enabled():
+        return _disabled_response()
+    user_id = _current_verified_user_id(request)
+    if user_id is None:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    try:
+        credentials = await run_blocking(issue_claude_client, user_id)
+    except ValueError:
+        return jsonify({"error": "メールアドレスの確認後にClaude用認証情報を発行できます。"}, status_code=403)
+    return jsonify(credentials, status_code=201)
 
 
 @mcp_oauth_bp.delete("/connections/{grant_id}", name="mcp_oauth.revoke_connection")

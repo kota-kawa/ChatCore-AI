@@ -131,12 +131,32 @@ const McpOAuthConnectionsResponseSchema = z.object({
   }))
 });
 
+const ClaudeOAuthClientStatusSchema = z.discriminatedUnion("configured", [
+  z.object({ configured: z.literal(false) }),
+  z.object({
+    configured: z.literal(true),
+    client_id: z.string().trim().min(1),
+    created_at: z.string().trim().min(1),
+    redirect_uri: z.string().url(),
+    mcp_server_url: z.string().url()
+  })
+]);
+
+const ClaudeOAuthClientCredentialsSchema = z.object({
+  client_id: z.string().trim().min(1),
+  client_secret: z.string().trim().min(1),
+  redirect_uri: z.string().url(),
+  mcp_server_url: z.string().url()
+});
+
 const McpOAuthConsentDecisionSchema = z.object({
   redirect_url: z.string().url()
 });
 
 export type McpOAuthConsent = z.infer<typeof McpOAuthConsentSchema>;
 export type McpOAuthConnection = z.infer<typeof McpOAuthConnectionsResponseSchema>["connections"][number];
+export type ClaudeOAuthClientStatus = z.infer<typeof ClaudeOAuthClientStatusSchema>;
+export type ClaudeOAuthClientCredentials = z.infer<typeof ClaudeOAuthClientCredentialsSchema>;
 
 export function parseMcpOAuthConsent(raw: unknown): McpOAuthConsent {
   return parseWithSchema(McpOAuthConsentSchema, raw, "OAuth 同意情報の形式が不正です。");
@@ -148,6 +168,22 @@ export function parseMcpOAuthConnections(raw: unknown): McpOAuthConnection[] {
     raw,
     "AIサービス連携一覧の形式が不正です。"
   ).connections;
+}
+
+export function parseClaudeOAuthClientStatus(raw: unknown): ClaudeOAuthClientStatus {
+  return parseWithSchema(
+    ClaudeOAuthClientStatusSchema,
+    raw,
+    "Claude用認証情報の状態形式が不正です。"
+  );
+}
+
+export function parseClaudeOAuthClientCredentials(raw: unknown): ClaudeOAuthClientCredentials {
+  return parseWithSchema(
+    ClaudeOAuthClientCredentialsSchema,
+    raw,
+    "Claude用認証情報の形式が不正です。"
+  );
 }
 
 export function parseMcpOAuthConsentDecision(raw: unknown): string {

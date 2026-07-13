@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -33,6 +34,8 @@ from services.runtime_config import get_session_secret_key
 from services.url_fetcher import _pin_dns, _resolve_safe_ip
 
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
+CLAUDE_CLIENT_PROVIDER = "claude"
+CLAUDE_OAUTH_CALLBACK_URL = "https://claude.ai/api/mcp/auth_callback"
 AUTHORIZATION_CODE_TTL_SECONDS = 300
 ACCESS_TOKEN_TTL_SECONDS = 3600
 REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
@@ -41,6 +44,7 @@ MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
 
 _cimd_cache: dict[str, tuple[float, OAuthClientInformationFull]] = {}
+logger = logging.getLogger(__name__)
 
 
 class StoredAuthorizationCode(AuthorizationCode):
@@ -163,7 +167,16 @@ def _load_registered_client(client_id: str) -> OAuthClientInformationFull | None
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
-                "SELECT metadata, client_secret_encrypted FROM mcp_oauth_clients WHERE client_id = %s",
+                """
+                SELECT c.metadata, c.client_secret_encrypted
+                FROM mcp_oauth_clients c
+                WHERE c.client_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM mcp_oauth_user_clients uc
+                      WHERE uc.client_id = c.client_id AND uc.revoked_at IS NOT NULL
+                  )
+                """,
                 (client_id,),
             )
             row = cursor.fetchone()
@@ -193,6 +206,146 @@ def _store_client(client: OAuthClientInformationFull) -> None:
                 (str(client.client_id), json.dumps(_serialize_client(client)), encrypted),
             )
             conn.commit()
+        finally:
+            cursor.close()
+
+
+def _user_client_is_authorized_for_user(client_id: str, user_id: int) -> bool:
+    """Allow generic clients for every user and personal clients only for their owner."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT user_id, revoked_at
+                FROM mcp_oauth_user_clients
+                WHERE client_id = %s
+                """,
+                (client_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return True
+            return row["revoked_at"] is None and int(row["user_id"]) == user_id
+        finally:
+            cursor.close()
+
+
+def issue_claude_client(user_id: int) -> dict[str, str]:
+    """Create a personal OAuth client for Claude's manual connector configuration.
+
+    The secret is returned only to the caller so it can be shown once in the
+    settings UI. The database keeps only its encrypted form.
+    """
+    if not _user_is_verified(user_id):
+        raise ValueError("Only verified users can issue Claude credentials.")
+
+    client_id = f"claude-{secrets.token_urlsafe(24)}"
+    client_secret = secrets.token_urlsafe(48)
+    client = OAuthClientInformationFull(
+        client_id=client_id,
+        client_secret=client_secret,
+        client_name="Claude (personal Chat-Core connector)",
+        redirect_uris=[CLAUDE_OAUTH_CALLBACK_URL],
+        grant_types=["authorization_code", "refresh_token"],
+        response_types=["code"],
+        token_endpoint_auth_method="client_secret_post",
+        scope=MCP_PROMPTS_WRITE_SCOPE,
+    )
+    encrypted_secret = _fernet().encrypt(client_secret.encode("utf-8")).decode("ascii")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+            cursor.execute(
+                """
+                SELECT client_id
+                FROM mcp_oauth_user_clients
+                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
+                FOR UPDATE
+                """,
+                (user_id, CLAUDE_CLIENT_PROVIDER),
+            )
+            previous_client_ids = [str(row["client_id"]) for row in cursor.fetchall()]
+            for previous_client_id in previous_client_ids:
+                cursor.execute(
+                    """
+                    UPDATE mcp_oauth_grants SET revoked_at = NOW()
+                    WHERE user_id = %s AND client_id = %s AND revoked_at IS NULL
+                    """,
+                    (user_id, previous_client_id),
+                )
+                cursor.execute(
+                    """
+                    UPDATE mcp_oauth_tokens t SET revoked_at = NOW()
+                    FROM mcp_oauth_grants g
+                    WHERE t.grant_id = g.id AND g.user_id = %s AND g.client_id = %s
+                      AND t.revoked_at IS NULL
+                    """,
+                    (user_id, previous_client_id),
+                )
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_user_clients SET revoked_at = NOW()
+                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
+                """,
+                (user_id, CLAUDE_CLIENT_PROVIDER),
+            )
+            cursor.execute(
+                """
+                INSERT INTO mcp_oauth_clients (client_id, metadata, client_secret_encrypted, registration_method)
+                VALUES (%s, %s::jsonb, %s, 'pre_registered')
+                """,
+                (client_id, json.dumps(_serialize_client(client)), encrypted_secret),
+            )
+            cursor.execute(
+                """
+                INSERT INTO mcp_oauth_user_clients (client_id, user_id, provider)
+                VALUES (%s, %s, %s)
+                """,
+                (client_id, user_id, CLAUDE_CLIENT_PROVIDER),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
+        "mcp_server_url": get_mcp_server_url(),
+    }
+
+
+def get_claude_client_status(user_id: int) -> dict[str, Any]:
+    """Return personal-Claude client metadata without ever returning its secret."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT client_id, created_at
+                FROM mcp_oauth_user_clients
+                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (user_id, CLAUDE_CLIENT_PROVIDER),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return {"configured": False}
+            return {
+                "configured": True,
+                "client_id": str(row["client_id"]),
+                "created_at": row["created_at"].isoformat(),
+                "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
+                "mcp_server_url": get_mcp_server_url(),
+            }
         finally:
             cursor.close()
 
@@ -505,6 +658,10 @@ def consent_details(token: str) -> dict[str, Any] | None:
 def complete_consent(token: str, user_id: int, approved: bool) -> str | None:
     request_data = read_consent_request(token)
     if not request_data or not _user_is_verified(user_id):
+        return None
+    client_id = request_data.get("client", {}).get("client_id")
+    if not isinstance(client_id, str) or not _user_client_is_authorized_for_user(client_id, user_id):
+        logger.warning("Rejected MCP OAuth consent for a client not owned by user %s.", user_id)
         return None
     params = request_data["params"]
     if not approved:

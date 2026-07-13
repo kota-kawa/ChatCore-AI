@@ -35,6 +35,8 @@ import {
   PROFILE_SAVE_EFFECT_DURATION_MS
 } from "../scripts/user/settings/constants";
 import {
+  issueClaudeOAuthClient,
+  loadClaudeOAuthClientStatus,
   loadMcpOAuthConnections as fetchMcpOAuthConnections,
   revokeMcpOAuthConnection,
   settingsFetchJsonOrThrow
@@ -51,6 +53,8 @@ import {
   parseLikedPromptsResponse,
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
+  type ClaudeOAuthClientCredentials,
+  type ClaudeOAuthClientStatus,
   type McpOAuthConnection,
   type LikedPrompt,
   type PromptRecord
@@ -126,6 +130,10 @@ export default function UserSettingsPage() {
   const [mcpOAuthConnections, setMcpOAuthConnections] = useState<McpOAuthConnection[]>([]);
   const [mcpOAuthConnectionsLoading, setMcpOAuthConnectionsLoading] = useState(false);
   const [deletingMcpOAuthConnectionId, setDeletingMcpOAuthConnectionId] = useState<string | null>(null);
+  const [claudeOAuthClient, setClaudeOAuthClient] = useState<ClaudeOAuthClientStatus | null>(null);
+  const [claudeOAuthClientLoading, setClaudeOAuthClientLoading] = useState(false);
+  const [claudeOAuthClientIssuing, setClaudeOAuthClientIssuing] = useState(false);
+  const [claudeOAuthClientCredentials, setClaudeOAuthClientCredentials] = useState<ClaudeOAuthClientCredentials | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
@@ -298,6 +306,21 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  const loadClaudeOAuthClient = useCallback(async () => {
+    setClaudeOAuthClientLoading(true);
+    try {
+      setClaudeOAuthClient(await loadClaudeOAuthClientStatus());
+    } catch (error) {
+      setClaudeOAuthClient(null);
+      showToast(
+        error instanceof Error ? error.message : "Claude用認証情報の取得に失敗しました。",
+        { variant: "error" }
+      );
+    } finally {
+      setClaudeOAuthClientLoading(false);
+    }
+  }, []);
+
   // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする
   // On mount, add the page class and perform initial loads for theme, profile, and passkeys
   useEffect(() => {
@@ -390,8 +413,9 @@ export default function UserSettingsPage() {
     if (section === "security") {
       void loadPasskeys();
       void loadMcpOAuthConnectionList();
+      void loadClaudeOAuthClient();
     }
-  }, [loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
+  }, [loadClaudeOAuthClient, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
@@ -938,6 +962,37 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  const handleIssueClaudeOAuthClient = useCallback(async () => {
+    const configured = claudeOAuthClient?.configured;
+    const confirmed = !configured || await showConfirmModal(
+      "Claude用認証情報を再発行しますか？以前の認証情報と、その認証情報で作成した連携はすぐに使えなくなります。"
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setClaudeOAuthClientIssuing(true);
+    try {
+      const credentials = await issueClaudeOAuthClient();
+      setClaudeOAuthClientCredentials(credentials);
+      setClaudeOAuthClient({
+        configured: true,
+        client_id: credentials.client_id,
+        created_at: new Date().toISOString(),
+        redirect_uri: credentials.redirect_uri,
+        mcp_server_url: credentials.mcp_server_url
+      });
+      showToast("Claude用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Claude用認証情報の発行に失敗しました。",
+        { variant: "error" }
+      );
+    } finally {
+      setClaudeOAuthClientIssuing(false);
+    }
+  }, [claudeOAuthClient]);
+
   // アカウントを完全削除する — 確認テキスト入力と二段階ダイアログで誤操作を防ぐ
   // Permanently delete the account — guarded by typed confirmation and a two-step dialog
   const handleDeleteAccount = useCallback(async () => {
@@ -1109,6 +1164,10 @@ export default function UserSettingsPage() {
               mcpOAuthConnections={mcpOAuthConnections}
               mcpOAuthConnectionsLoading={mcpOAuthConnectionsLoading}
               deletingMcpOAuthConnectionId={deletingMcpOAuthConnectionId}
+              claudeOAuthClient={claudeOAuthClient}
+              claudeOAuthClientLoading={claudeOAuthClientLoading}
+              claudeOAuthClientIssuing={claudeOAuthClientIssuing}
+              claudeOAuthClientCredentials={claudeOAuthClientCredentials}
               accountDeleteConfirmation={accountDeleteConfirmation}
               accountDeleting={accountDeleting}
               accountDeleteError={accountDeleteError}
@@ -1128,6 +1187,7 @@ export default function UserSettingsPage() {
               onDeletePasskey={handleDeletePasskey}
               onRefreshMcpOAuthConnections={loadMcpOAuthConnectionList}
               onDeleteMcpOAuthConnection={handleDeleteMcpOAuthConnection}
+              onIssueClaudeOAuthClient={handleIssueClaudeOAuthClient}
               onAccountDeleteConfirmationChange={(value) => {
                 setAccountDeleteConfirmation(value);
                 setAccountDeleteError(null);

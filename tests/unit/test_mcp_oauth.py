@@ -106,3 +106,37 @@ class McpOAuthTestCase(unittest.TestCase):
             with self.assertRaises(AuthorizeError) as ctx:
                 asyncio.run(provider.authorize(client, _make_params("https://evil.example.test/mcp")))
         self.assertEqual(ctx.exception.error, "invalid_request")
+
+    def test_complete_consent_rejects_a_personal_client_owned_by_another_user(self):
+        request_data = {
+            "client": {"client_id": "claude-personal-client"},
+            "params": {"redirect_uri": "https://claude.ai/api/mcp/auth_callback", "state": "state"},
+        }
+        with (
+            patch("services.mcp_oauth.read_consent_request", return_value=request_data),
+            patch("services.mcp_oauth._user_is_verified", return_value=True),
+            patch("services.mcp_oauth._user_client_is_authorized_for_user", return_value=False),
+            patch("services.mcp_oauth._create_authorization_code") as create_code,
+        ):
+            redirect = mcp_oauth.complete_consent("signed-request", user_id=7, approved=True)
+
+        self.assertIsNone(redirect)
+        create_code.assert_not_called()
+
+    def test_complete_consent_allows_a_personal_client_owned_by_the_user(self):
+        request_data = {
+            "client": {"client_id": "claude-personal-client"},
+            "params": {"redirect_uri": "https://claude.ai/api/mcp/auth_callback", "state": "state"},
+        }
+        with (
+            patch("services.mcp_oauth.read_consent_request", return_value=request_data),
+            patch("services.mcp_oauth._user_is_verified", return_value=True),
+            patch("services.mcp_oauth._user_client_is_authorized_for_user", return_value=True),
+            patch("services.mcp_oauth._create_authorization_code", return_value="authorization-code"),
+        ):
+            redirect = mcp_oauth.complete_consent("signed-request", user_id=7, approved=True)
+
+        self.assertEqual(
+            redirect,
+            "https://claude.ai/api/mcp/auth_callback?code=authorization-code&state=state",
+        )
