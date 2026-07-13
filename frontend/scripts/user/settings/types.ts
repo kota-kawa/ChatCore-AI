@@ -109,3 +109,51 @@ export function parsePromptManageMutationResponse(raw: unknown): PromptManageMut
     "操作結果レスポンスの形式が不正です。"
   );
 }
+
+// MCP OAuth 同意画面と設定画面で使用する連携情報
+// MCP OAuth consent and connection data used by the consent and settings pages.
+const McpOAuthConsentSchema = z.object({
+  client_name: z.string().trim().min(1),
+  client_id: z.string().trim().min(1),
+  client_host: z.string().trim().min(1),
+  redirect_host: z.string().trim().min(1),
+  scope: z.string().trim().min(1),
+  localhost_warning: z.boolean()
+});
+
+const McpOAuthConnectionsResponseSchema = z.object({
+  connections: z.array(z.object({
+    id: z.union([z.string(), z.number()]).transform(String),
+    client_name: z.string().trim().min(1),
+    client_host: z.string().trim().min(1),
+    created_at: z.string().trim().min(1),
+    last_used_at: z.string().trim().min(1).nullable()
+  }))
+});
+
+const McpOAuthConsentDecisionSchema = z.object({
+  redirect_url: z.string().url()
+});
+
+export type McpOAuthConsent = z.infer<typeof McpOAuthConsentSchema>;
+export type McpOAuthConnection = z.infer<typeof McpOAuthConnectionsResponseSchema>["connections"][number];
+
+export function parseMcpOAuthConsent(raw: unknown): McpOAuthConsent {
+  return parseWithSchema(McpOAuthConsentSchema, raw, "OAuth 同意情報の形式が不正です。");
+}
+
+export function parseMcpOAuthConnections(raw: unknown): McpOAuthConnection[] {
+  return parseWithSchema(
+    McpOAuthConnectionsResponseSchema,
+    raw,
+    "AIサービス連携一覧の形式が不正です。"
+  ).connections;
+}
+
+export function parseMcpOAuthConsentDecision(raw: unknown): string {
+  return parseWithSchema(
+    McpOAuthConsentDecisionSchema,
+    raw,
+    "OAuth 同意結果の形式が不正です。"
+  ).redirect_url;
+}

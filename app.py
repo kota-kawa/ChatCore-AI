@@ -3,7 +3,7 @@ import logging
 import os
 import threading
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -42,11 +42,22 @@ from services.runtime_config import (  # noqa: E402
 from services.security_headers import SecurityHeadersMiddleware  # noqa: E402
 from services.session_middleware import PermanentSessionMiddleware  # noqa: E402
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, jsonify  # noqa: E402
+from services.mcp_config import is_mcp_enabled  # noqa: E402
 
 # ルートロガーにコンソール+ローテーションファイル出力を設定する
 # Configure console + rotating file logging on the root logger.
 configure_logging()
 logger = logging.getLogger(__name__)
+
+MCP_MACHINE_PATHS = (
+    "/mcp",
+    "/authorize",
+    "/token",
+    "/register",
+    "/revoke",
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource/mcp",
+)
 
 # セッション署名キーは起動時に必須チェックし、不足時は即時停止する
 # Validate session secret at boot and fail fast when it is missing.
@@ -135,49 +146,42 @@ async def lifespan(app_instance: FastAPI):
     # Start the ephemeral chat cleanup task in a background thread
     cleanup_future = submit_background_task(periodic_cleanup, cleanup_stop_event)
 
-    try:
-        # アプリケーションが実行中の状態となる
-        # Application runs and serves requests
-        yield
-    finally:
-        # シャットダウン時の処理: 各種リソースやスレッドの安全なクリーンアップ
-        # Shutdown processing: Safe cleanup of active resources and worker threads
-        shutdown_wait_safe = True
-        
-        # チャット生成サービスのインメモリ状態をリセットし、実行中のジョブをキャンセルする
-        # Reset in-memory state of the chat generation service and cancel running jobs
-        chat_generation_service = getattr(app_instance.state, "chat_generation_service", None)
-        if isinstance(chat_generation_service, ChatGenerationService):
-            chat_generation_service.reset_in_memory_state(cancel_running=True)
-            # ジョブが正常に終了するのを最大5秒待機する
-            # Wait up to 5 seconds for active generation jobs to finish
-            jobs_stopped = chat_generation_service.wait_for_running_jobs(timeout=5.0)
-            if not jobs_stopped:
-                shutdown_wait_safe = False
-                logger.warning("Timed out while waiting for chat generation jobs to finish.")
-        
-        # バックグラウンドのクリーンアップタスクを停止する
-        # Stop the background cleanup task
-        cleanup_stop_event.set()
+    async with AsyncExitStack() as exit_stack:
+        if is_mcp_enabled():
+            from services.mcp_server import get_mcp_lifespan_context
+
+            await exit_stack.enter_async_context(get_mcp_lifespan_context())
         try:
-            # クリーンアップタスクのスレッド終了を最大5秒待機する
-            # Wait up to 5 seconds for the cleanup task thread to exit
-            cleanup_future.result(timeout=5.0)
-        except FutureTimeoutError:
-            shutdown_wait_safe = False
-            logger.warning("Timed out while waiting for periodic cleanup to stop.")
-        except Exception:
-            logger.exception("Periodic cleanup worker exited with an unexpected error.")
-        
-        # バックグラウンドタスク実行用のスレッドプールをシャットダウンする
-        # Shutdown the background task executor pool
-        shutdown_background_executor(
-            wait=shutdown_wait_safe,
-            cancel_futures=not shutdown_wait_safe,
-        )
-        # データベース接続プールを閉じる
-        # Close the database connection pool
-        close_db_pool()
+            # アプリケーションが実行中の状態となる
+            # Application runs and serves requests
+            yield
+        finally:
+            # シャットダウン時の処理: 各種リソースやスレッドの安全なクリーンアップ
+            # Shutdown processing: Safe cleanup of active resources and worker threads
+            shutdown_wait_safe = True
+
+            chat_generation_service = getattr(app_instance.state, "chat_generation_service", None)
+            if isinstance(chat_generation_service, ChatGenerationService):
+                chat_generation_service.reset_in_memory_state(cancel_running=True)
+                jobs_stopped = chat_generation_service.wait_for_running_jobs(timeout=5.0)
+                if not jobs_stopped:
+                    shutdown_wait_safe = False
+                    logger.warning("Timed out while waiting for chat generation jobs to finish.")
+
+            cleanup_stop_event.set()
+            try:
+                cleanup_future.result(timeout=5.0)
+            except FutureTimeoutError:
+                shutdown_wait_safe = False
+                logger.warning("Timed out while waiting for periodic cleanup to stop.")
+            except Exception:
+                logger.exception("Periodic cleanup worker exited with an unexpected error.")
+
+            shutdown_background_executor(
+                wait=shutdown_wait_safe,
+                cancel_futures=not shutdown_wait_safe,
+            )
+            close_db_pool()
 
 
 # FastAPIアプリケーションの初期化とサービスの登録
@@ -196,6 +200,7 @@ app.add_middleware(
     max_age=permanent_max_age,
     same_site=same_site,
     https_only=https_only,
+    bypass_paths=MCP_MACHINE_PATHS,
 )
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -246,6 +251,7 @@ from blueprints.prompt_share.prompt_search import search_bp  # noqa: E402
 from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp  # noqa: E402
 from blueprints.admin import admin_bp  # noqa: E402
 from blueprints.memo import memo_bp  # noqa: E402
+from blueprints.mcp_oauth import mcp_oauth_bp  # noqa: E402
 
 # ルーティングテーブルに各 Router を登録する
 # Register all routers into the app routing table.
@@ -258,6 +264,19 @@ app.include_router(search_bp)
 app.include_router(prompt_manage_api_bp)
 app.include_router(admin_bp)
 app.include_router(memo_bp)
+app.include_router(mcp_oauth_bp)
+
+
+if is_mcp_enabled():
+    from services.mcp_server import get_mcp_asgi_app, get_oauth_authorization_metadata  # noqa: E402
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    async def mcp_oauth_authorization_metadata():
+        return jsonify(get_oauth_authorization_metadata())
+
+    # MCPのASGIアプリは最後にマウントし、既存のFastAPIルートを優先する。
+    # Mount the MCP ASGI app last so existing FastAPI routes retain precedence.
+    app.mount("/", get_mcp_asgi_app())
 
 
 # DB接続プール枯渇時はサーバー過負荷として 503 + Retry-After を返し、上流に再試行を促す

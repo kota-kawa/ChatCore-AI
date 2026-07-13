@@ -49,3 +49,7 @@ export const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
 // アカウント削除を確定させるためにユーザーが入力すべき文字列
 // Exact string the user must type to confirm account deletion
 export const ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT";
+
+// MCP 連携に認可する最小スコープの説明
+// Human-readable label for the minimum MCP authorization scope.
+export const MCP_PROMPTS_WRITE_SCOPE_LABEL = "公開プロンプトを投稿する";
