@@ -25,7 +25,7 @@ describe("SecuritySettingsSection MCP connections", () => {
         mcpOAuthConnections={[{
           id: "grant-1",
           client_name: "Example AI",
-          client_host: "ai.example.com",
+          client_host: "",
           created_at: "2026-07-13T10:00:00Z",
           last_used_at: null
         }]}
@@ -55,7 +55,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     );
 
     expect(screen.getByText("Example AI")).toBeInTheDocument();
-    expect(screen.getByText(/ai\.example\.com/)).toBeInTheDocument();
+    expect(screen.getByText("不明")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "連携を解除" }));
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
     fireEvent.click(screen.getByRole("button", { name: "Claude用認証情報を発行" }));

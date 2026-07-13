@@ -684,7 +684,7 @@ export function SecuritySettingsSection({
                       <dl className="security-meta">
                         <div className="security-meta__row">
                           <dt>接続先</dt>
-                          <dd>{connection.client_host}</dd>
+                          <dd>{connection.client_host || "不明"}</dd>
                         </div>
                         <div className="security-meta__row">
                           <dt>接続日時</dt>
