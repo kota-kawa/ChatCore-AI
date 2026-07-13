@@ -472,9 +472,10 @@ export function SecuritySettingsSection({
               {emailChangeStage === "idle" ? (
                 <button
                   type="submit"
-                  className="primary-button"
+                  className="primary-button security-action"
                   disabled={emailChangeSubmitting}
                 >
+                  <i className="bi bi-send" aria-hidden="true"></i>
                   現在のメールへ確認コードを送信
                 </button>
               ) : null}
@@ -506,17 +507,19 @@ export function SecuritySettingsSection({
                 <div className="button-group">
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="ghost-button security-action"
                     onClick={onCancelEmailChange}
                     disabled={emailChangeSubmitting}
                   >
+                    <i className="bi bi-x-lg" aria-hidden="true"></i>
                     中止
                   </button>
                   <button
                     type="submit"
-                    className="primary-button"
+                    className="primary-button security-action"
                     disabled={emailChangeSubmitting}
                   >
+                    <i className="bi bi-check2" aria-hidden="true"></i>
                     {emailChangeStage === "current_email"
                       ? "現在のメールを確認"
                       : "変更を完了"}
@@ -549,27 +552,32 @@ export function SecuritySettingsSection({
                 {passkeySupportStatus}
               </span>
             </div>
-            <div className="button-group">
+            <div className="security-actions">
               <button
                 type="button"
-                className="primary-button"
+                className="primary-button security-action"
                 id="registerPasskeyBtn"
                 disabled={!passkeySupported || registeringPasskey}
                 onClick={() => {
                   void onRegisterPasskey();
                 }}
               >
-                この端末にPasskeyを追加
+                <i className="bi bi-plus-lg" aria-hidden="true"></i>
+                {registeringPasskey ? "追加中..." : "この端末にPasskeyを追加"}
               </button>
               <button
                 type="button"
-                className="secondary-button"
+                className="ghost-button security-action"
                 id="refreshPasskeysBtn"
                 disabled={!passkeySupported || passkeysLoading}
                 onClick={() => {
                   void onRefreshPasskeys();
                 }}
               >
+                <i
+                  className={`bi bi-arrow-clockwise${passkeysLoading ? " security-action__spin" : ""}`}
+                  aria-hidden="true"
+                ></i>
                 一覧を更新
               </button>
             </div>
@@ -623,14 +631,15 @@ export function SecuritySettingsSection({
                     </div>
                     <button
                       type="button"
-                      className="secondary-button delete-passkey-btn"
+                      className="danger-ghost-button delete-passkey-btn"
                       data-passkey-id={String(passkey.id)}
                       disabled={deletingPasskeyId === passkey.id}
                       onClick={() => {
                         void onDeletePasskey(passkey.id);
                       }}
                     >
-                      削除
+                      <i className="bi bi-trash3" aria-hidden="true"></i>
+                      {deletingPasskeyId === passkey.id ? "削除中..." : "削除"}
                     </button>
                   </div>
                 ))
@@ -650,15 +659,19 @@ export function SecuritySettingsSection({
                 </p>
               </div>
             </div>
-            <div className="button-group">
+            <div className="security-actions">
               <button
                 type="button"
-                className="secondary-button"
+                className="ghost-button security-action"
                 disabled={mcpOAuthConnectionsLoading}
                 onClick={() => {
                   void onRefreshMcpOAuthConnections();
                 }}
               >
+                <i
+                  className={`bi bi-arrow-clockwise${mcpOAuthConnectionsLoading ? " security-action__spin" : ""}`}
+                  aria-hidden="true"
+                ></i>
                 一覧を更新
               </button>
             </div>
@@ -698,12 +711,13 @@ export function SecuritySettingsSection({
                     </div>
                     <button
                       type="button"
-                      className="secondary-button delete-passkey-btn"
+                      className="danger-ghost-button delete-passkey-btn"
                       disabled={deletingMcpOAuthConnectionId === connection.id}
                       onClick={() => {
                         void onDeleteMcpOAuthConnection(connection);
                       }}
                     >
+                      <i className="bi bi-x-circle" aria-hidden="true"></i>
                       {deletingMcpOAuthConnectionId === connection.id ? "解除中..." : "連携を解除"}
                     </button>
                   </div>
@@ -744,13 +758,17 @@ export function SecuritySettingsSection({
             ) : (
               <p className="security-panel__description">連携用認証情報はまだ発行されていません。</p>
             )}
-            <div className="button-group">
+            <div className="security-actions">
               <button
                 type="button"
-                className="primary-button"
+                className="primary-button security-action"
                 disabled={claudeOAuthClientLoading || claudeOAuthClientIssuing}
                 onClick={onIssueClaudeOAuthClient}
               >
+                <i
+                  className={`bi ${claudeOAuthClient?.configured ? "bi-arrow-repeat" : "bi-key"}`}
+                  aria-hidden="true"
+                ></i>
                 {claudeOAuthClientIssuing
                   ? "発行中..."
                   : claudeOAuthClient?.configured
@@ -813,7 +831,7 @@ export function SecuritySettingsSection({
               </div>
               <button
                 type="button"
-                className="danger-button"
+                className="danger-button security-action"
                 disabled={
                   accountDeleting ||
                   accountDeleteConfirmation.trim() !== ACCOUNT_DELETE_CONFIRMATION_TEXT
@@ -822,6 +840,7 @@ export function SecuritySettingsSection({
                   void onDeleteAccount();
                 }}
               >
+                <i className="bi bi-trash3" aria-hidden="true"></i>
                 {accountDeleting ? "削除中..." : "アカウントを削除"}
               </button>
             </div>
