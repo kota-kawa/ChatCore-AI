@@ -3,7 +3,8 @@
 ## プロジェクト構成とモジュール構成
 - `app.py` はメインサーバーの FastAPI エントリーポイントです。
 - `blueprints/` には機能モジュール（auth、chat、memo、prompt_share、admin）と、それぞれのルーティング、テンプレート、静的アセットが含まれています。
-- `services/` には、共通のインテグレーション（DB、LLM、メール、ユーザーヘルパー）が格納されています。
+- `services/` には、共通のインテグレーション（DB、LLM、メール、ユーザーヘルパー）が格納されています。DB アクセスは可能な限り `services/repositories/`（`chat_repository.py` など）のリポジトリ経由に寄せてください。
+- `frontend/` は独立した Next.js アプリ（`strike-frontend`）です。`components/`、`hooks/`、`contexts/`、`lib/` などで構成され、スタイル方針は `frontend/STYLING_STRATEGY.md` を参照してください。バックエンドの API とやり取りする UI はここに実装します。
 - `templates/` および `static/` はグローバルな HTML/CSS/JS アセットです。ブループリント固有のアセットは、各ブループリントの `templates/` および `static/` フォルダ配下にあります。
 - `alembic/versions/` には PostgreSQL のスキーマ移行履歴が保存されています。
 - `tests/` には `unit/` および `integration/` スイート（`unittest`）と、`tests/helpers/` 配下の共通ヘルパーが含まれています。
@@ -14,6 +15,18 @@
 - `python3 -m pip install -r requirements.txt` は、ローカル開発用の Python 依存関係をインストールします。
 - `python3 app.py` は、FastAPI アプリをローカルで起動します（必要な環境変数が設定されていることを確認してください）。
 - `python3 -m unittest` はテストスイートを実行します。特定のファイルをターゲットにする場合は、`python3 -m unittest tests.unit.test_edit_default_task` のように実行します。
+- フロントエンド（`frontend/`）は Node のコマンドを使用します。`npm run dev`（開発サーバー）、`npm run build`（ビルド）、`npm run typecheck`（型検査）、`npm run test`（ロジック + コンポーネントテスト）を実行してください。フロントエンドを変更したら、少なくとも `typecheck` と `test` を通してください。
+- 依存バージョンは完全固定（`==` および固定タグ）が必須です。`python3 scripts/check_version_locks.py` で requirements とロック、Docker イメージ、npm スペックの固定を検証できます。浮動バージョン（`^`、`~`、`latest` など）は追加しないでください。
+
+## バックエンド ↔ フロントエンドのスキーマ同期
+- API のリクエスト/レスポンスモデル（`services/request_models.py` などの Pydantic モデル）を変更したら、`frontend/` で `npm run generate:api-schemas`（内部で `python3 scripts/generate_frontend_zod_schemas.py` を実行）を走らせて Zod スキーマを再生成してください。
+- 生成物 `frontend/types/generated/api_schemas.ts` は自動生成ファイル（`AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.`）です。手で編集せず、必ず生成コマンドで更新してください。
+- モデル変更時にスキーマ再生成を忘れると、フロントとバックエンドの型がずれて実行時エラーの原因になります。PR には再生成済みの差分を含めてください。
+
+## 共通ユーティリティと実装規約
+- エラー処理: アドホックな例外ではなく `services/api_errors.py`（`ApiServiceError`、`ResourceNotFoundError`、`ForbiddenOperationError` など）を使用し、ユーザー向け文言は `services/error_messages.py` の定数へ集約してください。
+- ロギング: `print` ではなく `logging.getLogger(__name__)` を使用します。ロガー設定は `services/logging_config.py`（`configure_logging()`）が担うため、モジュール側で `basicConfig` を呼ばないでください。
+- CSRF: 状態を変更するルート（POST/PUT/DELETE など）には、既存の blueprint と同様に CSRF 保護を必ず適用してください。
 
 ## コーディングスタイルと命名規則
 - Python: 4スペースのインデント、関数や変数には `snake_case`、クラスには `CapWords` を使用します。
