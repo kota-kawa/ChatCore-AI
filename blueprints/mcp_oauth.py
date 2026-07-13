@@ -8,12 +8,14 @@ from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
+    ClientLimitReachedError,
     complete_consent,
     consent_details,
-    get_claude_client_status,
-    issue_claude_client,
+    issue_user_client,
     list_connections,
+    list_user_clients,
     revoke_connection,
+    revoke_user_client,
 )
 from services.web import jsonify, require_json_dict
 
@@ -73,28 +75,49 @@ async def get_connections(request: Request):
     return jsonify({"connections": connections})
 
 
-@mcp_oauth_bp.get("/claude-client", name="mcp_oauth.claude_client_status")
-async def get_claude_client(request: Request):
+@mcp_oauth_bp.get("/clients", name="mcp_oauth.list_clients")
+async def get_clients(request: Request):
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
-    return jsonify(await run_blocking(get_claude_client_status, user_id))
+    return jsonify(await run_blocking(list_user_clients, user_id))
 
 
-@mcp_oauth_bp.post("/claude-client", name="mcp_oauth.issue_claude_client")
-async def post_claude_client(request: Request):
+@mcp_oauth_bp.post("/clients", name="mcp_oauth.issue_client")
+async def post_client(request: Request):
     if not is_mcp_enabled():
         return _disabled_response()
     user_id = _current_verified_user_id(request)
     if user_id is None:
         return jsonify({"error": "ログインしていません"}, status_code=401)
+    body, error = await require_json_dict(request)
+    if error is not None:
+        return error
+    label = body.get("label") if body else None
+    if label is not None and not isinstance(label, str):
+        return jsonify({"error": "認証情報の名前が不正です。"}, status_code=400)
     try:
-        credentials = await run_blocking(issue_claude_client, user_id)
+        credentials = await run_blocking(issue_user_client, user_id, label)
     except ValueError:
         return jsonify({"error": "メールアドレスの確認後に連携用認証情報を発行できます。"}, status_code=403)
+    except ClientLimitReachedError:
+        return jsonify({"error": "保存できる認証情報の上限に達しました。不要な認証情報を削除してください。"}, status_code=409)
     return jsonify(credentials, status_code=201)
+
+
+@mcp_oauth_bp.delete("/clients/{client_id}", name="mcp_oauth.revoke_client")
+async def delete_client(client_id: str, request: Request):
+    if not is_mcp_enabled():
+        return _disabled_response()
+    user_id = _current_verified_user_id(request)
+    if user_id is None:
+        return jsonify({"error": "ログインしていません"}, status_code=401)
+    revoked = await run_blocking(revoke_user_client, user_id, client_id)
+    if not revoked:
+        return jsonify({"error": "対象の認証情報が見つかりません。"}, status_code=404)
+    return jsonify({"message": "認証情報を削除しました。"})
 
 
 @mcp_oauth_bp.delete("/connections/{grant_id}", name="mcp_oauth.revoke_connection")

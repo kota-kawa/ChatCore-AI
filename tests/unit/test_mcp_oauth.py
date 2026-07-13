@@ -104,6 +104,46 @@ class McpOAuthTestCase(unittest.TestCase):
         executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
         self.assertNotIn("revoked_at = NOW()", executed_sql)
 
+    def test_revoke_user_client_severs_connections(self):
+        """認証情報を削除したら、その grant とトークンも失効させることを保証する。"""
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            result = mcp_oauth.revoke_user_client(user_id=7, client_id="mcp-personal-client")
+
+        self.assertTrue(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        # クライアント・トークン・grant の3つを失効させている。
+        self.assertIn("UPDATE mcp_oauth_user_clients", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_tokens", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_grants", executed_sql)
+
+    def test_revoke_user_client_missing_credential_leaves_connections(self):
+        """存在しない認証情報の削除では grant/トークンを失効させず False を返す。"""
+        cursor = MagicMock()
+        cursor.rowcount = 0
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            result = mcp_oauth.revoke_user_client(user_id=7, client_id="mcp-missing")
+
+        self.assertFalse(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertNotIn("UPDATE mcp_oauth_grants", executed_sql)
+        self.assertNotIn("UPDATE mcp_oauth_tokens", executed_sql)
+
     def test_redirect_validation_rejects_non_loopback_http(self):
         client = OAuthClientInformationFull(
             client_id="client",

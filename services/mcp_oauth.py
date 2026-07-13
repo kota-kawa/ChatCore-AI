@@ -42,9 +42,15 @@ REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
 CONSENT_REQUEST_TTL_SECONDS = 600
 MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
+MAX_CLIENT_LABEL_LENGTH = 100
+MAX_CLIENTS_PER_USER = 20
 
 _cimd_cache: dict[str, tuple[float, OAuthClientInformationFull]] = {}
 logger = logging.getLogger(__name__)
+
+
+class ClientLimitReachedError(Exception):
+    """Raised when a user already holds the maximum number of connector credentials."""
 
 
 class StoredAuthorizationCode(AuthorizationCode):
@@ -240,15 +246,32 @@ def _user_client_is_authorized_for_user(client_id: str, user_id: int) -> bool:
             cursor.close()
 
 
-def issue_claude_client(user_id: int) -> dict[str, str]:
-    """Create a personal OAuth client for Claude's manual connector configuration.
+def _clean_client_label(label: str | None) -> str | None:
+    """Normalize a user-supplied credential label, or fall back to no label."""
+    if not isinstance(label, str):
+        return None
+    cleaned = label.strip()
+    if not cleaned:
+        return None
+    return cleaned[:MAX_CLIENT_LABEL_LENGTH]
 
-    The secret is returned only to the caller so it can be shown once in the
-    settings UI. The database keeps only its encrypted form.
+
+def issue_user_client(user_id: int, label: str | None = None) -> dict[str, str]:
+    """Create a personal OAuth client credential for a manual connector setup.
+
+    複数の認証情報を（サービスの API キーのように）保存できるように、既存の認証情報は
+    失効させずに新しいものを追加する。シークレットは一度だけ呼び出し元へ返し、DB には
+    暗号化した値だけを保存する。
+
+    Unlike a single-credential model, this appends a new credential without
+    revoking the user's existing ones, so several can be kept side by side. The
+    secret is returned only to the caller; the database keeps only its encrypted
+    form.
     """
     if not _user_is_verified(user_id):
-        raise ValueError("Only verified users can issue Claude credentials.")
+        raise ValueError("Only verified users can issue connector credentials.")
 
+    cleaned_label = _clean_client_label(label)
     # クライアント ID には "claude" などのサービス名を含めず、他社サービスの
     # コネクターからでも流用できる中立的な識別子にする。
     # Keep the client ID vendor-neutral (no "claude") so it can also be reused
@@ -258,7 +281,7 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
     client = OAuthClientInformationFull(
         client_id=client_id,
         client_secret=client_secret,
-        client_name="Claude (personal Chat-Core connector)",
+        client_name=cleaned_label or "Personal Chat-Core connector",
         client_uri="https://claude.ai",
         redirect_uris=[CLAUDE_OAUTH_CALLBACK_URL],
         grant_types=["authorization_code", "refresh_token"],
@@ -274,38 +297,17 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
             cursor.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
             cursor.execute(
                 """
-                SELECT client_id
+                SELECT COUNT(*) AS active
                 FROM mcp_oauth_user_clients
-                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
-                FOR UPDATE
+                WHERE user_id = %s AND revoked_at IS NULL
                 """,
-                (user_id, CLAUDE_CLIENT_PROVIDER),
+                (user_id,),
             )
-            previous_client_ids = [str(row["client_id"]) for row in cursor.fetchall()]
-            for previous_client_id in previous_client_ids:
-                cursor.execute(
-                    """
-                    UPDATE mcp_oauth_grants SET revoked_at = NOW()
-                    WHERE user_id = %s AND client_id = %s AND revoked_at IS NULL
-                    """,
-                    (user_id, previous_client_id),
+            active = int((cursor.fetchone() or {}).get("active", 0))
+            if active >= MAX_CLIENTS_PER_USER:
+                raise ClientLimitReachedError(
+                    f"You can keep at most {MAX_CLIENTS_PER_USER} credentials."
                 )
-                cursor.execute(
-                    """
-                    UPDATE mcp_oauth_tokens t SET revoked_at = NOW()
-                    FROM mcp_oauth_grants g
-                    WHERE t.grant_id = g.id AND g.user_id = %s AND g.client_id = %s
-                      AND t.revoked_at IS NULL
-                    """,
-                    (user_id, previous_client_id),
-                )
-            cursor.execute(
-                """
-                UPDATE mcp_oauth_user_clients SET revoked_at = NOW()
-                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
-                """,
-                (user_id, CLAUDE_CLIENT_PROVIDER),
-            )
             cursor.execute(
                 """
                 INSERT INTO mcp_oauth_clients (client_id, metadata, client_secret_encrypted, registration_method)
@@ -315,10 +317,10 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
             )
             cursor.execute(
                 """
-                INSERT INTO mcp_oauth_user_clients (client_id, user_id, provider)
-                VALUES (%s, %s, %s)
+                INSERT INTO mcp_oauth_user_clients (client_id, user_id, provider, label)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (client_id, user_id, CLAUDE_CLIENT_PROVIDER),
+                (client_id, user_id, CLAUDE_CLIENT_PROVIDER, cleaned_label),
             )
             conn.commit()
         except Exception:
@@ -330,36 +332,84 @@ def issue_claude_client(user_id: int) -> dict[str, str]:
     return {
         "client_id": client_id,
         "client_secret": client_secret,
+        "label": cleaned_label or "",
         "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
         "mcp_server_url": get_mcp_server_url(),
     }
 
 
-def get_claude_client_status(user_id: int) -> dict[str, Any]:
-    """Return personal-Claude client metadata without ever returning its secret."""
+def list_user_clients(user_id: int) -> dict[str, Any]:
+    """List the user's saved connector credentials without ever exposing secrets."""
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
                 """
-                SELECT client_id, created_at
+                SELECT client_id, label, created_at
                 FROM mcp_oauth_user_clients
-                WHERE user_id = %s AND provider = %s AND revoked_at IS NULL
+                WHERE user_id = %s AND revoked_at IS NULL
                 ORDER BY created_at DESC
-                LIMIT 1
                 """,
-                (user_id, CLAUDE_CLIENT_PROVIDER),
+                (user_id,),
             )
-            row = cursor.fetchone()
-            if not row:
-                return {"configured": False}
+            rows = cursor.fetchall()
+            clients = [
+                {
+                    "client_id": str(row["client_id"]),
+                    "label": row["label"] or "",
+                    "created_at": row["created_at"].isoformat(),
+                }
+                for row in rows
+            ]
             return {
-                "configured": True,
-                "client_id": str(row["client_id"]),
-                "created_at": row["created_at"].isoformat(),
+                "clients": clients,
                 "redirect_uri": CLAUDE_OAUTH_CALLBACK_URL,
                 "mcp_server_url": get_mcp_server_url(),
             }
+        finally:
+            cursor.close()
+
+
+def revoke_user_client(user_id: int, client_id: str) -> bool:
+    """Delete a saved credential and sever every connection made with it.
+
+    認証情報を削除したら、その認証情報で確立済みの接続（grant とトークン）も同時に
+    失効させ、外部サービス側の接続がすぐに切れるようにする。
+
+    Revoking a credential also revokes the grants and tokens created with it, so
+    the external connection stops working immediately.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_user_clients SET revoked_at = NOW()
+                WHERE client_id = %s AND user_id = %s AND revoked_at IS NULL
+                """,
+                (client_id, user_id),
+            )
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return False
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_tokens t SET revoked_at = NOW()
+                FROM mcp_oauth_grants g
+                WHERE t.grant_id = g.id AND g.user_id = %s AND g.client_id = %s
+                  AND t.revoked_at IS NULL
+                """,
+                (user_id, client_id),
+            )
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_grants SET revoked_at = NOW()
+                WHERE user_id = %s AND client_id = %s AND revoked_at IS NULL
+                """,
+                (user_id, client_id),
+            )
+            conn.commit()
+            return True
         finally:
             cursor.close()
 

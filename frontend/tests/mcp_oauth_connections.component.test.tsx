@@ -6,7 +6,8 @@ import { SecuritySettingsSection } from "../components/settings/settings_section
 describe("SecuritySettingsSection MCP connections", () => {
   it("lists an authorized AI service and delegates revocation", () => {
     const onDeleteMcpOAuthConnection = vi.fn();
-    const onIssueClaudeOAuthClient = vi.fn();
+    const onIssueMcpOAuthClient = vi.fn();
+    const onDeleteMcpOAuthClient = vi.fn();
     render(
       <SecuritySettingsSection
         isActive
@@ -31,10 +32,16 @@ describe("SecuritySettingsSection MCP connections", () => {
         }]}
         mcpOAuthConnectionsLoading={false}
         deletingMcpOAuthConnectionId={null}
-        claudeOAuthClient={null}
-        claudeOAuthClientLoading={false}
-        claudeOAuthClientIssuing={false}
-        claudeOAuthClientCredentials={null}
+        mcpOAuthClients={[{
+          client_id: "mcp-example-client",
+          label: "My connector",
+          created_at: "2026-07-14T10:00:00Z"
+        }]}
+        mcpOAuthClientsLoading={false}
+        mcpOAuthClientIssuing={false}
+        mcpOAuthClientLabel=""
+        deletingMcpOAuthClientId={null}
+        mcpOAuthClientCredentials={null}
         accountDeleteConfirmation=""
         accountDeleting={false}
         accountDeleteError={null}
@@ -48,7 +55,10 @@ describe("SecuritySettingsSection MCP connections", () => {
         onDeletePasskey={vi.fn()}
         onRefreshMcpOAuthConnections={vi.fn()}
         onDeleteMcpOAuthConnection={onDeleteMcpOAuthConnection}
-        onIssueClaudeOAuthClient={onIssueClaudeOAuthClient}
+        onRefreshMcpOAuthClients={vi.fn()}
+        onMcpOAuthClientLabelChange={vi.fn()}
+        onIssueMcpOAuthClient={onIssueMcpOAuthClient}
+        onDeleteMcpOAuthClient={onDeleteMcpOAuthClient}
         onAccountDeleteConfirmationChange={vi.fn()}
         onDeleteAccount={vi.fn()}
       />
@@ -58,7 +68,11 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(screen.getByText("不明")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "連携を解除" }));
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
+
+    expect(screen.getByText("My connector")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "認証情報を発行" }));
-    expect(onIssueClaudeOAuthClient).toHaveBeenCalledOnce();
+    expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "削除" }));
+    expect(onDeleteMcpOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: "mcp-example-client" }));
   });
 });

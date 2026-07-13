@@ -35,9 +35,10 @@ import {
   PROFILE_SAVE_EFFECT_DURATION_MS
 } from "../scripts/user/settings/constants";
 import {
-  issueClaudeOAuthClient,
-  loadClaudeOAuthClientStatus,
+  issueMcpOAuthClient,
+  loadMcpOAuthClients,
   loadMcpOAuthConnections as fetchMcpOAuthConnections,
+  revokeMcpOAuthClient,
   revokeMcpOAuthConnection,
   settingsFetchJsonOrThrow
 } from "../scripts/user/settings/api";
@@ -53,8 +54,8 @@ import {
   parseLikedPromptsResponse,
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
-  type ClaudeOAuthClientCredentials,
-  type ClaudeOAuthClientStatus,
+  type McpOAuthClient,
+  type McpOAuthClientCredentials,
   type McpOAuthConnection,
   type LikedPrompt,
   type PromptRecord
@@ -130,10 +131,12 @@ export default function UserSettingsPage() {
   const [mcpOAuthConnections, setMcpOAuthConnections] = useState<McpOAuthConnection[]>([]);
   const [mcpOAuthConnectionsLoading, setMcpOAuthConnectionsLoading] = useState(false);
   const [deletingMcpOAuthConnectionId, setDeletingMcpOAuthConnectionId] = useState<string | null>(null);
-  const [claudeOAuthClient, setClaudeOAuthClient] = useState<ClaudeOAuthClientStatus | null>(null);
-  const [claudeOAuthClientLoading, setClaudeOAuthClientLoading] = useState(false);
-  const [claudeOAuthClientIssuing, setClaudeOAuthClientIssuing] = useState(false);
-  const [claudeOAuthClientCredentials, setClaudeOAuthClientCredentials] = useState<ClaudeOAuthClientCredentials | null>(null);
+  const [mcpOAuthClients, setMcpOAuthClients] = useState<McpOAuthClient[]>([]);
+  const [mcpOAuthClientsLoading, setMcpOAuthClientsLoading] = useState(false);
+  const [mcpOAuthClientIssuing, setMcpOAuthClientIssuing] = useState(false);
+  const [mcpOAuthClientLabel, setMcpOAuthClientLabel] = useState("");
+  const [deletingMcpOAuthClientId, setDeletingMcpOAuthClientId] = useState<string | null>(null);
+  const [mcpOAuthClientCredentials, setMcpOAuthClientCredentials] = useState<McpOAuthClientCredentials | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
@@ -306,18 +309,19 @@ export default function UserSettingsPage() {
     }
   }, []);
 
-  const loadClaudeOAuthClient = useCallback(async () => {
-    setClaudeOAuthClientLoading(true);
+  const loadMcpOAuthClientList = useCallback(async () => {
+    setMcpOAuthClientsLoading(true);
     try {
-      setClaudeOAuthClient(await loadClaudeOAuthClientStatus());
+      const result = await loadMcpOAuthClients();
+      setMcpOAuthClients(result.clients);
     } catch (error) {
-      setClaudeOAuthClient(null);
+      setMcpOAuthClients([]);
       showToast(
         error instanceof Error ? error.message : "連携用認証情報の取得に失敗しました。",
         { variant: "error" }
       );
     } finally {
-      setClaudeOAuthClientLoading(false);
+      setMcpOAuthClientsLoading(false);
     }
   }, []);
 
@@ -413,9 +417,9 @@ export default function UserSettingsPage() {
     if (section === "security") {
       void loadPasskeys();
       void loadMcpOAuthConnectionList();
-      void loadClaudeOAuthClient();
+      void loadMcpOAuthClientList();
     }
-  }, [loadClaudeOAuthClient, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
+  }, [loadMcpOAuthClientList, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
@@ -962,26 +966,20 @@ export default function UserSettingsPage() {
     }
   }, []);
 
-  const handleIssueClaudeOAuthClient = useCallback(async () => {
-    const configured = claudeOAuthClient?.configured;
-    const confirmed = !configured || await showConfirmModal(
-      "連携用認証情報を再発行しますか？以前の認証情報と、その認証情報で作成した連携はすぐに使えなくなります。"
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    setClaudeOAuthClientIssuing(true);
+  const handleIssueMcpOAuthClient = useCallback(async () => {
+    setMcpOAuthClientIssuing(true);
     try {
-      const credentials = await issueClaudeOAuthClient();
-      setClaudeOAuthClientCredentials(credentials);
-      setClaudeOAuthClient({
-        configured: true,
-        client_id: credentials.client_id,
-        created_at: new Date().toISOString(),
-        redirect_uri: credentials.redirect_uri,
-        mcp_server_url: credentials.mcp_server_url
-      });
+      const credentials = await issueMcpOAuthClient(mcpOAuthClientLabel.trim());
+      setMcpOAuthClientCredentials(credentials);
+      setMcpOAuthClients((current) => [
+        {
+          client_id: credentials.client_id,
+          label: credentials.label,
+          created_at: new Date().toISOString()
+        },
+        ...current
+      ]);
+      setMcpOAuthClientLabel("");
       showToast("連携用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
     } catch (error) {
       showToast(
@@ -989,9 +987,39 @@ export default function UserSettingsPage() {
         { variant: "error" }
       );
     } finally {
-      setClaudeOAuthClientIssuing(false);
+      setMcpOAuthClientIssuing(false);
     }
-  }, [claudeOAuthClient]);
+  }, [mcpOAuthClientLabel]);
+
+  const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
+    const name = client.label || client.client_id;
+    const confirmed = await showConfirmModal(
+      `認証情報「${name}」を削除しますか？この認証情報で確立済みの接続もすぐに使えなくなります。`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingMcpOAuthClientId(client.client_id);
+    try {
+      await revokeMcpOAuthClient(client.client_id);
+      setMcpOAuthClients((current) => current.filter((entry) => entry.client_id !== client.client_id));
+      setMcpOAuthClientCredentials((current) =>
+        current && current.client_id === client.client_id ? null : current
+      );
+      // 認証情報を削除すると接続も切れるため、接続一覧を更新して反映する。
+      // Deleting a credential severs its connections, so refresh the connection list.
+      void loadMcpOAuthConnectionList();
+      showToast("認証情報を削除しました。", { variant: "success" });
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "認証情報の削除に失敗しました。",
+        { variant: "error" }
+      );
+    } finally {
+      setDeletingMcpOAuthClientId(null);
+    }
+  }, [loadMcpOAuthConnectionList]);
 
   // アカウントを完全削除する — 確認テキスト入力と二段階ダイアログで誤操作を防ぐ
   // Permanently delete the account — guarded by typed confirmation and a two-step dialog
@@ -1164,10 +1192,12 @@ export default function UserSettingsPage() {
               mcpOAuthConnections={mcpOAuthConnections}
               mcpOAuthConnectionsLoading={mcpOAuthConnectionsLoading}
               deletingMcpOAuthConnectionId={deletingMcpOAuthConnectionId}
-              claudeOAuthClient={claudeOAuthClient}
-              claudeOAuthClientLoading={claudeOAuthClientLoading}
-              claudeOAuthClientIssuing={claudeOAuthClientIssuing}
-              claudeOAuthClientCredentials={claudeOAuthClientCredentials}
+              mcpOAuthClients={mcpOAuthClients}
+              mcpOAuthClientsLoading={mcpOAuthClientsLoading}
+              mcpOAuthClientIssuing={mcpOAuthClientIssuing}
+              mcpOAuthClientLabel={mcpOAuthClientLabel}
+              deletingMcpOAuthClientId={deletingMcpOAuthClientId}
+              mcpOAuthClientCredentials={mcpOAuthClientCredentials}
               accountDeleteConfirmation={accountDeleteConfirmation}
               accountDeleting={accountDeleting}
               accountDeleteError={accountDeleteError}
@@ -1187,7 +1217,10 @@ export default function UserSettingsPage() {
               onDeletePasskey={handleDeletePasskey}
               onRefreshMcpOAuthConnections={loadMcpOAuthConnectionList}
               onDeleteMcpOAuthConnection={handleDeleteMcpOAuthConnection}
-              onIssueClaudeOAuthClient={handleIssueClaudeOAuthClient}
+              onRefreshMcpOAuthClients={loadMcpOAuthClientList}
+              onMcpOAuthClientLabelChange={setMcpOAuthClientLabel}
+              onIssueMcpOAuthClient={handleIssueMcpOAuthClient}
+              onDeleteMcpOAuthClient={handleDeleteMcpOAuthClient}
               onAccountDeleteConfirmationChange={(value) => {
                 setAccountDeleteConfirmation(value);
                 setAccountDeleteError(null);
