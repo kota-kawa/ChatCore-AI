@@ -67,6 +67,7 @@ PROMPT_COMMENT_DUPLICATE_WINDOW_SECONDS = 60
 PROMPT_COMMENT_LIST_LIMIT = 200
 PROMPT_COMMENT_AUTO_HIDE_REPORT_THRESHOLD = 3
 PROMPT_COMMENT_MAX_URLS = 3
+RECOMMENDED_PROMPT_LIMIT = 3
 
 # コメント内のURL検知用正規表現パターン
 # Regular expression pattern to detect URLs inside comments.
@@ -386,6 +387,46 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
             prompt["comment_count"] = int(prompt.get("comment_count") or 0)
             prompts.append(prompt)
         return prompts
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+# 共有プロンプト詳細ページ向けに、閲覧中の投稿を除いたおすすめをランダム取得する関数
+# Fetch random prompt recommendations for a shared prompt detail page, excluding the prompt being viewed.
+def _get_recommended_prompts(exclude_prompt_id: int | None, limit: int = RECOMMENDED_PROMPT_LIMIT) -> list[dict[str, Any]]:
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                p.id,
+                p.title,
+                p.category,
+                p.content,
+                COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.content_format,
+                p.media_type,
+                p.attributes,
+                p.attachments,
+                p.created_at
+            FROM prompts AS p
+            LEFT JOIN users AS u
+              ON u.id = p.user_id
+            WHERE p.is_public = TRUE
+              AND p.deleted_at IS NULL
+              AND COALESCE(p.id <> %s, TRUE)
+            ORDER BY RANDOM()
+            LIMIT %s
+            """,
+            (exclude_prompt_id, limit),
+        )
+        return [_serialize_prompt_row(dict(row)) for row in cursor.fetchall()]
     finally:
         if cursor is not None:
             cursor.close()
@@ -1224,6 +1265,20 @@ async def get_prompts(request: Request):
         return log_and_internal_server_error(
             logger,
             "Failed to load shared prompts.",
+        )
+
+
+# 共有プロンプト詳細ページ用のランダムなおすすめを取得するエンドポイント
+# Endpoint to retrieve random recommendations for a shared prompt detail page.
+@prompt_share_api_bp.get("/prompts/recommended", name="prompt_share_api.get_recommended_prompts")
+async def get_recommended_prompts(exclude_id: int | None = None):
+    try:
+        prompts = await run_blocking(_get_recommended_prompts, exclude_id)
+        return jsonify({"status": "success", "prompts": prompts})
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to load recommended shared prompts.",
         )
 
 
