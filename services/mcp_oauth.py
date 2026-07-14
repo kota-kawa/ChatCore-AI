@@ -50,6 +50,10 @@ DEFAULT_MCP_OAUTH_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 AUTHORIZATION_CODE_TTL_SECONDS = 300
 ACCESS_TOKEN_TTL_SECONDS = 3600
 REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
+# 回転したリフレッシュトークンを直後の再試行・並行リフレッシュのために短時間だけ有効に保つ猶予期間。
+# Grace window during which a just-rotated refresh token remains usable so that retried or
+# concurrent refreshes succeed instead of breaking the connection.
+REFRESH_TOKEN_ROTATION_GRACE_SECONDS = 60
 CONSENT_REQUEST_TTL_SECONDS = 600
 MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
@@ -693,13 +697,25 @@ def _consume_code_and_issue(code: StoredAuthorizationCode) -> OAuthToken:
     return _issue_tokens(code.grant_id, code.client_id, code.scopes, code.resource or get_mcp_server_url())
 
 
+def _revoke_grant_family(cursor: Any, grant_id: str) -> None:
+    """Revoke a grant and every token issued under it (refresh token reuse response)."""
+    cursor.execute(
+        "UPDATE mcp_oauth_grants SET revoked_at = NOW() WHERE id = %s AND revoked_at IS NULL",
+        (grant_id,),
+    )
+    cursor.execute(
+        "UPDATE mcp_oauth_tokens SET revoked_at = NOW() WHERE grant_id = %s AND revoked_at IS NULL",
+        (grant_id,),
+    )
+
+
 def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
                 """
-                SELECT t.grant_id, t.client_id, t.scopes, t.resource, t.expires_at, g.user_id
+                SELECT t.grant_id, t.client_id, t.scopes, t.resource, t.expires_at, t.replaced_at, g.user_id
                 FROM mcp_oauth_tokens t
                 JOIN mcp_oauth_grants g ON g.id = t.grant_id
                 JOIN users u ON u.id = g.user_id
@@ -712,6 +728,16 @@ def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
             row = cursor.fetchone()
             if not row:
                 return None
+            replaced_at = row.get("replaced_at")
+            if replaced_at is not None:
+                # 既に回転済みのトークン。猶予期間内なら再試行・並行リフレッシュとして許容し、
+                # 猶予を過ぎての再利用は盗難の兆候とみなして grant ごと失効させる。
+                # A already-rotated token: tolerate reuse within the grace window (retry/concurrency),
+                # but treat reuse after the window as a stolen-token signal and revoke the whole grant.
+                if replaced_at <= _utc_now() - timedelta(seconds=REFRESH_TOKEN_ROTATION_GRACE_SECONDS):
+                    _revoke_grant_family(cursor, str(row["grant_id"]))
+                    conn.commit()
+                    return None
             return StoredRefreshToken(
                 token=raw_token,
                 client_id=client_id,
@@ -726,49 +752,68 @@ def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
 
 
 def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAuthToken:
-    """Issue a fresh access token while keeping the same refresh token alive.
+    """Rotate the refresh token and issue a fresh access token, with a reuse grace window.
 
-    リフレッシュトークンを回転（毎回失効させて発行し直す）させると、リフレッシュ要求の
-    再試行や並行実行が発生したときに「既に使用済み」となって接続が切れ、外部サービスの
-    コネクターを繰り返し再接続する必要が生じる。ここでは同じリフレッシュトークンを再利用可能
-    のまま返し、使用のたびに有効期限を延長することで、一度接続したら切れないようにする。
+    リフレッシュのたびにリフレッシュトークンを回転（新しい値を発行）させ、盗まれたトークンの
+    悪用を検知できるようにする（public client 向けの OAuth 2.1 / RFC 9700 推奨）。
+    ただし単純な回転だと再試行や並行リフレッシュが「使用済み」で失敗し接続が切れてしまうため、
+    回転しても提示されたトークンを即失効させず ``replaced_at`` を立てて猶予期間だけ有効に保つ。
+    猶予期間内の再利用は回転をやり直して新しいトークンを返すので、一度つないだら切れない。
 
-    Instead of rotating (revoking and reissuing) the refresh token on every use,
-    keep it reusable and simply roll its expiry forward. Rotation makes retried or
-    concurrent refreshes fail as "already used", which drops the connection and
-    forces users to reconnect their MCP connector; keeping the refresh token stable
-    means a connection stays alive as long as it is used within the refresh TTL.
+    Rotate the refresh token on every use so a stolen refresh token can be detected
+    (recommended for public clients by OAuth 2.1 / RFC 9700). A naive rotation would
+    break connections when refreshes are retried or run concurrently, so instead of
+    revoking the presented token immediately we mark it ``replaced_at`` and keep it
+    valid for a short grace window. Reuse within the window simply rotates again and
+    returns fresh tokens, so an established connection never drops.
     """
+    new_refresh_token = secrets.token_urlsafe(32)
     access_token = secrets.token_urlsafe(32)
     now = _utc_now()
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
+            # 提示されたトークンに回転マーカーを立てる。既に回転済み（猶予期間内の再試行）なら
+            # 元の replaced_at を保ち猶予の起点を動かさない。
+            # Mark the presented token as rotated. If it was already rotated (a retry within
+            # the grace window), keep the original replaced_at so the grace clock does not reset.
             cursor.execute(
                 """
                 UPDATE mcp_oauth_tokens
-                SET expires_at = %s, last_used_at = NOW()
+                SET replaced_at = COALESCE(replaced_at, %s), last_used_at = NOW()
                 WHERE token_digest = %s AND token_type = 'refresh' AND revoked_at IS NULL
                 """,
-                (now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS), _digest(refresh.token)),
+                (now, _digest(refresh.token)),
             )
             if cursor.rowcount != 1:
                 conn.rollback()
                 raise TokenError("invalid_grant", "Refresh token is no longer valid.")
-            cursor.execute(
+            cursor.executemany(
                 """
                 INSERT INTO mcp_oauth_tokens
                     (token_digest, grant_id, client_id, token_type, scopes, resource, expires_at)
-                VALUES (%s, %s, %s, 'access', %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (
-                    _digest(access_token),
-                    str(refresh.grant_id),
-                    refresh.client_id,
-                    scopes,
-                    refresh.resource,
-                    now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
-                ),
+                [
+                    (
+                        _digest(new_refresh_token),
+                        str(refresh.grant_id),
+                        refresh.client_id,
+                        "refresh",
+                        scopes,
+                        refresh.resource,
+                        now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
+                    ),
+                    (
+                        _digest(access_token),
+                        str(refresh.grant_id),
+                        refresh.client_id,
+                        "access",
+                        scopes,
+                        refresh.resource,
+                        now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
+                    ),
+                ],
             )
             cursor.execute("UPDATE mcp_oauth_grants SET last_used_at = NOW() WHERE id = %s", (str(refresh.grant_id),))
             conn.commit()
@@ -776,7 +821,7 @@ def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAu
             cursor.close()
     return OAuthToken(
         access_token=access_token,
-        refresh_token=refresh.token,
+        refresh_token=new_refresh_token,
         expires_in=ACCESS_TOKEN_TTL_SECONDS,
         scope=" ".join(scopes),
     )
