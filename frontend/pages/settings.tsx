@@ -32,7 +32,8 @@ import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
   DEFAULT_AVATAR_URL,
   PASSKEY_INITIAL_SUPPORT_TEXT,
-  PROFILE_SAVE_EFFECT_DURATION_MS
+  PROFILE_SAVE_EFFECT_DURATION_MS,
+  SETTINGS_NAV_ITEMS
 } from "../scripts/user/settings/constants";
 import {
   issueMcpOAuthClient,
@@ -422,6 +423,16 @@ export default function UserSettingsPage() {
       void loadMcpOAuthClientList();
     }
   }, [loadMcpOAuthClientList, loadLikedPrompts, loadMcpOAuthConnectionList, loadMyPrompts, loadPasskeys]);
+
+  // 共有URLやブラウザ再読み込みから目的の設定へ直接移動できるよう、section クエリを初回表示へ反映する
+  // Apply the section query on first load so shared URLs and reloads open the intended settings area directly
+  useEffect(() => {
+    const requestedSection = new URLSearchParams(window.location.search).get("section");
+    const isKnownSection = SETTINGS_NAV_ITEMS.some((item) => item.section === requestedSection);
+    if (isKnownSection) {
+      handleSectionSelect(requestedSection as SettingsSection);
+    }
+  }, [handleSectionSelect]);
 
   // テーマ選択を React 状態と localStorage の両方に反映する
   // Apply the selected theme to both React state and localStorage
