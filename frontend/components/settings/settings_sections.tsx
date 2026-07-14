@@ -812,7 +812,7 @@ export function SecuritySettingsSection({
                   disabled={emailChangeSubmitting}
                 >
                   <i className="bi bi-send" aria-hidden="true"></i>
-                  現在のメールへ確認コードを送信
+                  確認コードを送信
                 </button>
               ) : null}
             </form>
@@ -857,7 +857,7 @@ export function SecuritySettingsSection({
                   >
                     <i className="bi bi-check2" aria-hidden="true"></i>
                     {emailChangeStage === "current_email"
-                      ? "現在のメールを確認"
+                      ? "コードを確認"
                       : "変更を完了"}
                   </button>
                 </div>
@@ -899,7 +899,7 @@ export function SecuritySettingsSection({
                 }}
               >
                 <i className="bi bi-plus-lg" aria-hidden="true"></i>
-                {registeringPasskey ? "追加中..." : "この端末にPasskeyを追加"}
+                {registeringPasskey ? "追加中..." : "Passkeyを追加"}
               </button>
               <button
                 type="button"
