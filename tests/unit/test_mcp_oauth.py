@@ -2,6 +2,7 @@ import asyncio
 import json
 import unittest
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -95,17 +96,20 @@ class McpOAuthTestCase(unittest.TestCase):
 
         self.assertEqual(details["client_host"], "claude.ai")
 
-    def test_refresh_keeps_same_token_alive_without_rotation(self):
-        """リフレッシュしても同じリフレッシュトークンを返し、失効させないことを保証する。"""
-        refresh = mcp_oauth.StoredRefreshToken(
+    def _refresh_token(self, grant_id=None):
+        return mcp_oauth.StoredRefreshToken(
             token="refresh-token-value",
             client_id="mcp-personal-client",
             scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
             expires_at=9999999999,
             subject="7",
-            grant_id=uuid4(),
+            grant_id=grant_id or uuid4(),
             resource=SERVER_URL,
         )
+
+    def test_refresh_rotates_the_refresh_token(self):
+        """リフレッシュすると新しいリフレッシュトークンを発行し、提示分は即失効させず猶予マーカーを立てる。"""
+        refresh = self._refresh_token()
         cursor = MagicMock()
         cursor.rowcount = 1
 
@@ -118,15 +122,72 @@ class McpOAuthTestCase(unittest.TestCase):
         with patch("services.mcp_oauth.get_db_connection", fake_connection):
             token = mcp_oauth._refresh_access_token(refresh, [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE])
 
-        # 同じリフレッシュトークンを返す（回転させない）。
-        self.assertEqual(token.refresh_token, "refresh-token-value")
-        # 新しいアクセストークンが発行される。
+        # 回転している：新しいリフレッシュトークンを返す。
+        self.assertTrue(token.refresh_token)
+        self.assertNotEqual(token.refresh_token, "refresh-token-value")
+        # 新しいアクセストークンも発行される（リフレッシュトークンとは別物）。
         self.assertTrue(token.access_token)
-        self.assertNotEqual(token.access_token, "refresh-token-value")
+        self.assertNotEqual(token.access_token, token.refresh_token)
         self.assertEqual(token.expires_in, mcp_oauth.ACCESS_TOKEN_TTL_SECONDS)
-        # 既存のリフレッシュトークンを失効させる UPDATE を発行していないこと。
         executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        # 提示されたトークンは replaced_at を立てるだけで即 revoke しない（猶予期間で接続を維持）。
+        self.assertIn("replaced_at = COALESCE(replaced_at", executed_sql)
         self.assertNotIn("revoked_at = NOW()", executed_sql)
+
+    def _load_refresh_row(self, replaced_at):
+        return {
+            "grant_id": uuid4(),
+            "client_id": "mcp-personal-client",
+            "scopes": [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+            "resource": SERVER_URL,
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
+            "replaced_at": replaced_at,
+            "user_id": 7,
+        }
+
+    def test_refresh_reuse_within_grace_is_allowed(self):
+        """回転直後（猶予期間内）の再利用は許容し、grant を失効させない。"""
+        row = self._load_refresh_row(datetime.now(timezone.utc) - timedelta(seconds=5))
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL), patch(
+            "services.mcp_oauth.get_db_connection", fake_connection
+        ):
+            result = mcp_oauth._load_refresh("mcp-personal-client", "refresh-token-value")
+
+        self.assertIsNotNone(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertNotIn("UPDATE mcp_oauth_grants SET revoked_at", executed_sql)
+
+    def test_refresh_reuse_after_grace_revokes_grant_family(self):
+        """猶予期間を過ぎた回転済みトークンの再利用は盗難とみなし、grant とトークンを失効させて None を返す。"""
+        stale = datetime.now(timezone.utc) - timedelta(
+            seconds=mcp_oauth.REFRESH_TOKEN_ROTATION_GRACE_SECONDS + 60
+        )
+        row = self._load_refresh_row(stale)
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            result = mcp_oauth._load_refresh("mcp-personal-client", "refresh-token-value")
+
+        self.assertIsNone(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertIn("UPDATE mcp_oauth_grants SET revoked_at = NOW()", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_tokens SET revoked_at = NOW()", executed_sql)
 
     def test_revoke_user_client_severs_connections(self):
         """認証情報を削除したら、その grant とトークンも失効させることを保証する。"""
