@@ -11,7 +11,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import AnyHttpUrl, Field, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
 
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit
@@ -23,6 +23,8 @@ from services.mcp_config import (
     get_mcp_server_url,
 )
 from services.mcp_oauth import ChatCoreOAuthProvider, MCP_PROMPTS_WRITE_SCOPE
+from services.mcp_request_protection import McpRequestProtectionMiddleware
+from services.prompt_categories import PROMPT_CATEGORIES
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
     MAX_SHARED_PROMPT_CONTENT_LENGTH,
@@ -34,6 +36,22 @@ from services.web_urls import build_frontend_url
 
 _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
+
+MCP_CATEGORY_KEYS = tuple(PROMPT_CATEGORIES)
+MCP_CATEGORY_DESCRIPTION = (
+    "投稿の用途カテゴリです。省略時は未分類です。"
+    "指定できる値: "
+    + ", ".join(MCP_CATEGORY_KEYS)
+)
+
+
+class McpPublishResult(BaseModel):
+    """Structured result returned after a public prompt or SKILL is published."""
+
+    prompt_id: int = Field(description="Chat-Core内で作成された公開投稿のID")
+    title: str = Field(description="公開された投稿のタイトル")
+    content_format: str = Field(description="公開形式。prompt または skill")
+    public_url: AnyHttpUrl = Field(description="公開済み投稿を開くURL")
 
 
 class ChatCoreFastMCP(FastMCP):
@@ -90,15 +108,23 @@ async def _consume_publish_limit(user_id: int) -> None:
         raise ToolError(f"1日の投稿上限に達しました。約{retry_after}秒後に再試行してください。")
 
 
-async def _publish(user_id: int, payload: SharedPromptCreateRequest) -> dict[str, Any]:
+async def _publish(user_id: int, payload: SharedPromptCreateRequest) -> McpPublishResult:
     await _consume_publish_limit(user_id)
     prompt_id = await run_blocking(create_shared_prompt, user_id, payload)
-    return {
-        "prompt_id": prompt_id,
-        "title": payload.title,
-        "content_format": payload.content_format,
-        "public_url": build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
-    }
+    return McpPublishResult(
+        prompt_id=prompt_id,
+        title=payload.title,
+        content_format=payload.content_format,
+        public_url=build_frontend_url(get_mcp_public_base_url(), f"/shared/prompt/{prompt_id}"),
+    )
+
+
+def _validation_tool_error(exc: ValidationError, subject: str) -> ToolError:
+    for error in exc.errors():
+        if tuple(error.get("loc", ())) == ("category",) or "カテゴリ" in str(error.get("msg", "")):
+            allowed = ", ".join(MCP_CATEGORY_KEYS)
+            return ToolError(f"カテゴリが不正です。未指定にするか、次のいずれかを指定してください: {allowed}")
+    return ToolError(f"{subject}の内容が不正です。必須項目と文字数制限を確認してください。")
 
 
 def _create_mcp() -> FastMCP:
@@ -149,13 +175,31 @@ def _create_mcp() -> FastMCP:
         structured_output=True,
     )
     async def publish_prompt(
-        title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)],
-        content: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)],
-        category: str = "",
-        input_examples: Annotated[str, Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)] = "",
-        output_examples: Annotated[str, Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)] = "",
-        ai_model: Annotated[str, Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH)] = "",
-    ) -> dict[str, Any]:
+        title: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="公開するプロンプトのタイトル"),
+        ],
+        content: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="公開するプロンプト本文"),
+        ],
+        category: Annotated[
+            str,
+            Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
+        ] = "",
+        input_examples: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="任意。プロンプトに渡す入力例"),
+        ] = "",
+        output_examples: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="任意。期待する出力例"),
+        ] = "",
+        ai_model: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="任意。作成・検証に使ったAIモデル名"),
+        ] = "",
+    ) -> McpPublishResult:
         try:
             payload = SharedPromptCreateRequest(
                 title=title,
@@ -168,7 +212,7 @@ def _create_mcp() -> FastMCP:
                 media_type="text",
             )
         except ValidationError as exc:
-            raise ToolError("投稿内容が不正です。") from exc
+            raise _validation_tool_error(exc, "投稿") from exc
         return await _publish(_require_actor_user_id(), payload)
 
     @mcp.tool(
@@ -179,12 +223,30 @@ def _create_mcp() -> FastMCP:
         structured_output=True,
     )
     async def publish_skill(
-        title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)],
-        skill_markdown: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)],
-        category: str = "",
-        skill_python_script: Annotated[str, Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)] = "",
-        ai_model: Annotated[str, Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH)] = "",
-    ) -> dict[str, Any]:
+        title: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="公開するSKILLのタイトル"),
+        ],
+        skill_markdown: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="SKILL.mdの本文"),
+        ],
+        category: Annotated[
+            str,
+            Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
+        ] = "",
+        skill_python_script: Annotated[
+            str,
+            Field(
+                max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH,
+                description="任意。SKILLに付属するPythonコード。Chat-Coreでは実行されません",
+            ),
+        ] = "",
+        ai_model: Annotated[
+            str,
+            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="任意。作成・検証に使ったAIモデル名"),
+        ] = "",
+    ) -> McpPublishResult:
         try:
             payload = SharedPromptCreateRequest(
                 title=title,
@@ -198,7 +260,7 @@ def _create_mcp() -> FastMCP:
                 },
             )
         except ValidationError as exc:
-            raise ToolError("SKILLの内容が不正です。") from exc
+            raise _validation_tool_error(exc, "SKILL") from exc
         return await _publish(_require_actor_user_id(), payload)
 
     return mcp
@@ -208,7 +270,7 @@ def get_mcp_asgi_app():
     global _mcp, _mcp_asgi_app
     if _mcp_asgi_app is None:
         _mcp = _create_mcp()
-        _mcp_asgi_app = _mcp.streamable_http_app()
+        _mcp_asgi_app = McpRequestProtectionMiddleware(_mcp.streamable_http_app())
     return _mcp_asgi_app
 
 

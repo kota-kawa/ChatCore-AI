@@ -4,8 +4,10 @@ import unittest
 from unittest.mock import patch
 
 import httpx
+from pydantic import ValidationError
 
 from services import mcp_server
+from services.request_models import SharedPromptCreateRequest
 
 
 class McpServerTestCase(unittest.TestCase):
@@ -28,6 +30,31 @@ class McpServerTestCase(unittest.TestCase):
                 tool.model_dump(by_alias=True)["securitySchemes"],
                 [{"type": "oauth2", "scopes": ["prompts:write"]}],
             )
+
+    def test_tools_publish_category_choices_and_structured_result_schema(self):
+        environment = {
+            "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
+            "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
+            "FASTAPI_ENV": "development",
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            tools = asyncio.run(mcp_server._create_mcp().list_tools())
+
+        for tool in tools:
+            definition = tool.model_dump(by_alias=True)
+            category = definition["inputSchema"]["properties"]["category"]
+            self.assertIn("coding", category["enum"])
+            self.assertIn("指定できる値", category["description"])
+            output = definition["outputSchema"]
+            self.assertEqual(set(output["required"]), {"prompt_id", "title", "content_format", "public_url"})
+
+    def test_invalid_category_error_includes_allowed_values(self):
+        with self.assertRaises(ValidationError) as context:
+            SharedPromptCreateRequest(title="title", content="content", category="invalid")
+
+        error = mcp_server._validation_tool_error(context.exception, "投稿")
+        self.assertIn("カテゴリが不正", str(error))
+        self.assertIn("coding", str(error))
 
     def test_authorization_metadata_advertises_cimd(self):
         with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test"}, clear=False):

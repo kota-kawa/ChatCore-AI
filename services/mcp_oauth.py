@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import secrets
+import threading
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
@@ -29,7 +34,13 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from services.async_utils import run_blocking
 from services.db import get_db_connection
-from services.mcp_config import get_mcp_encryption_keys, get_mcp_public_base_url, get_mcp_server_url
+from services.mcp_config import (
+    get_mcp_cimd_cache_entries,
+    get_mcp_cimd_max_concurrent_fetches,
+    get_mcp_encryption_keys,
+    get_mcp_public_base_url,
+    get_mcp_server_url,
+)
 from services.runtime_config import get_session_secret_key
 from services.url_fetcher import _pin_dns, _resolve_safe_ip
 
@@ -42,11 +53,16 @@ REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
 CONSENT_REQUEST_TTL_SECONDS = 600
 MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
+NEGATIVE_CIMD_CACHE_SECONDS = 300
 MAX_USER_LABEL_LENGTH = 100
 MAX_CLIENTS_PER_USER = 20
 MAX_REDIRECT_URI_LENGTH = 2048
 
-_cimd_cache: dict[str, tuple[float, OAuthClientInformationFull]] = {}
+_cimd_cache: OrderedDict[str, tuple[float, OAuthClientInformationFull | None]] = OrderedDict()
+_cimd_cache_lock = threading.Lock()
+_cimd_executor_lock = threading.Lock()
+_cimd_executor: ThreadPoolExecutor | None = None
+_cimd_fetch_slots: threading.BoundedSemaphore | None = None
 logger = logging.getLogger(__name__)
 
 
@@ -160,11 +176,48 @@ def _clean_redirect_uri(redirect_uri: str | None) -> str:
     return cleaned
 
 
+def _get_cimd_executor() -> tuple[ThreadPoolExecutor, threading.BoundedSemaphore]:
+    global _cimd_executor, _cimd_fetch_slots
+    with _cimd_executor_lock:
+        if _cimd_executor is None:
+            max_workers = get_mcp_cimd_max_concurrent_fetches()
+            _cimd_executor = ThreadPoolExecutor(
+                max_workers=max_workers,
+                thread_name_prefix="chat-core-cimd",
+            )
+            _cimd_fetch_slots = threading.BoundedSemaphore(max_workers)
+        if _cimd_fetch_slots is None:  # pragma: no cover - guarded by the branch above
+            raise RuntimeError("CIMD fetch limiter was not initialized.")
+        return _cimd_executor, _cimd_fetch_slots
+
+
+def _read_cimd_cache(client_id: str, now: float) -> tuple[bool, OAuthClientInformationFull | None]:
+    with _cimd_cache_lock:
+        expired = [key for key, (expires_at, _) in _cimd_cache.items() if expires_at <= now]
+        for key in expired:
+            _cimd_cache.pop(key, None)
+        cached = _cimd_cache.pop(client_id, None)
+        if cached is None:
+            return False, None
+        _cimd_cache[client_id] = cached
+        return True, cached[1]
+
+
+def _write_cimd_cache(client_id: str, client: OAuthClientInformationFull | None, ttl_seconds: int) -> None:
+    expires_at = _utc_now().timestamp() + ttl_seconds
+    max_entries = get_mcp_cimd_cache_entries()
+    with _cimd_cache_lock:
+        _cimd_cache.pop(client_id, None)
+        _cimd_cache[client_id] = (expires_at, client)
+        while len(_cimd_cache) > max_entries:
+            _cimd_cache.popitem(last=False)
+
+
 def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
-    cached = _cimd_cache.get(client_id)
     now = _utc_now().timestamp()
-    if cached and cached[0] > now:
-        return cached[1]
+    found, cached = _read_cimd_cache(client_id, now)
+    if found:
+        return cached
 
     parsed = urlparse(client_id)
     if parsed.scheme != "https" or not parsed.netloc or not parsed.path:
@@ -183,15 +236,18 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
             )
             try:
                 if response.status_code != 200:
+                    _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
                     return None
                 content_type = response.headers.get("content-type", "").lower()
                 if "json" not in content_type:
+                    _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
                     return None
                 chunks: list[bytes] = []
                 total = 0
                 for chunk in response.iter_content(chunk_size=8192, decode_unicode=False):
                     total += len(chunk)
                     if total > MAX_CIMD_BYTES:
+                        _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
                         return None
                     chunks.append(chunk)
                 body = b"".join(chunks)
@@ -200,15 +256,30 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
                 response.close()
         client = OAuthClientInformationFull.model_validate(data)
         if str(client.client_id) != client_id:
+            _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
             return None
         if client.token_endpoint_auth_method not in {None, "none"}:
+            _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
             return None
         client.token_endpoint_auth_method = "none"
         _validate_redirect_uris(client)
-        _cimd_cache[client_id] = (now + MAX_CIMD_CACHE_SECONDS, client)
+        _write_cimd_cache(client_id, client, MAX_CIMD_CACHE_SECONDS)
         return client
     except Exception:
+        _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
         return None
+
+
+async def _load_cimd_client(client_id: str) -> OAuthClientInformationFull | None:
+    executor, slots = _get_cimd_executor()
+    if not slots.acquire(blocking=False):
+        logger.warning("Rejected CIMD metadata fetch because the concurrency limit is full.")
+        return None
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(executor, partial(_cimd_client, client_id))
+    finally:
+        slots.release()
 
 
 def _load_registered_client(client_id: str) -> OAuthClientInformationFull | None:
@@ -751,7 +822,7 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
         client = await run_blocking(_load_registered_client, client_id)
         if client is not None:
             return client
-        return await run_blocking(_cimd_client, client_id)
+        return await _load_cimd_client(client_id)
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         method = client_info.token_endpoint_auth_method or "client_secret_post"

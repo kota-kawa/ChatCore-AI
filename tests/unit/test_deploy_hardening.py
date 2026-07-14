@@ -57,6 +57,8 @@ class DeployHardeningTest(unittest.TestCase):
             "MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://chatcore-ai.com}",
             "MCP_OAUTH_ENCRYPTION_KEYS=${MCP_OAUTH_ENCRYPTION_KEYS:-}",
             "MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}",
+            "MCP_DCR_RATE_LIMIT_PER_HOUR=${MCP_DCR_RATE_LIMIT_PER_HOUR:-20}",
+            "MCP_MACHINE_MAX_BODY_BYTES=${MCP_MACHINE_MAX_BODY_BYTES:-65536}",
         )
 
         for compose_file in (COMPOSE_FILE, BLUE_GREEN_COMPOSE_FILE):
