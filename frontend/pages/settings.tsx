@@ -41,7 +41,9 @@ import {
   loadMcpOAuthConnections as fetchMcpOAuthConnections,
   revokeMcpOAuthClient,
   revokeMcpOAuthConnection,
-  settingsFetchJsonOrThrow
+  settingsFetchJsonOrThrow,
+  updateMcpOAuthClientLabel,
+  updateMcpOAuthConnectionDisplayName
 } from "../scripts/user/settings/api";
 import type {
   EditPromptFormState,
@@ -979,6 +981,26 @@ export default function UserSettingsPage() {
     }
   }, []);
 
+  const handleUpdateMcpOAuthConnectionDisplayName = useCallback(
+    async (connection: McpOAuthConnection, displayName: string) => {
+      try {
+        await updateMcpOAuthConnectionDisplayName(connection.id, displayName);
+        const normalizedDisplayName = displayName.trim() || null;
+        setMcpOAuthConnections((current) => current.map((entry) => (
+          entry.id === connection.id ? { ...entry, display_name: normalizedDisplayName } : entry
+        )));
+        showToast("AIサービスの表示名を更新しました。", { variant: "success" });
+      } catch (error) {
+        showToast(
+          error instanceof Error ? error.message : "AIサービスの表示名を更新できませんでした。",
+          { variant: "error" }
+        );
+        throw error;
+      }
+    },
+    []
+  );
+
   const handleIssueMcpOAuthClient = useCallback(async () => {
     setMcpOAuthClientIssuing(true);
     try {
@@ -1037,6 +1059,26 @@ export default function UserSettingsPage() {
       setDeletingMcpOAuthClientId(null);
     }
   }, [loadMcpOAuthConnectionList]);
+
+  const handleUpdateMcpOAuthClientLabel = useCallback(
+    async (client: McpOAuthClient, label: string) => {
+      try {
+        await updateMcpOAuthClientLabel(client.client_id, label);
+        const normalizedLabel = label.trim();
+        setMcpOAuthClients((current) => current.map((entry) => (
+          entry.client_id === client.client_id ? { ...entry, label: normalizedLabel } : entry
+        )));
+        showToast("認証情報の名前を更新しました。", { variant: "success" });
+      } catch (error) {
+        showToast(
+          error instanceof Error ? error.message : "認証情報の名前を更新できませんでした。",
+          { variant: "error" }
+        );
+        throw error;
+      }
+    },
+    []
+  );
 
   // アカウントを完全削除する — 確認テキスト入力と二段階ダイアログで誤操作を防ぐ
   // Permanently delete the account — guarded by typed confirmation and a two-step dialog
@@ -1235,11 +1277,13 @@ export default function UserSettingsPage() {
               onDeletePasskey={handleDeletePasskey}
               onRefreshMcpOAuthConnections={loadMcpOAuthConnectionList}
               onDeleteMcpOAuthConnection={handleDeleteMcpOAuthConnection}
+              onUpdateMcpOAuthConnectionDisplayName={handleUpdateMcpOAuthConnectionDisplayName}
               onRefreshMcpOAuthClients={loadMcpOAuthClientList}
               onMcpOAuthClientLabelChange={setMcpOAuthClientLabel}
               onMcpOAuthClientRedirectUriChange={setMcpOAuthClientRedirectUri}
               onIssueMcpOAuthClient={handleIssueMcpOAuthClient}
               onDeleteMcpOAuthClient={handleDeleteMcpOAuthClient}
+              onUpdateMcpOAuthClientLabel={handleUpdateMcpOAuthClientLabel}
               onAccountDeleteConfirmationChange={(value) => {
                 setAccountDeleteConfirmation(value);
                 setAccountDeleteError(null);

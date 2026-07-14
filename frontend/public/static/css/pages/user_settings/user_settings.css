@@ -307,6 +307,65 @@
   overflow-wrap: anywhere;
 }
 
+/* ユーザーが管理する表示名 — 元のOAuth識別子はメタ情報に残し、名称だけを安全に編集する */
+:where(body.settings-page, .user-settings-page) .editable-security-name {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name .passkey-item__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--settings-text-muted);
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name__edit:hover {
+  border-color: rgba(25, 195, 125, 0.28);
+  color: var(--primary-dark, #0f7a51);
+  background: rgba(25, 195, 125, 0.08);
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name__edit:focus-visible {
+  outline: 3px solid rgba(25, 195, 125, 0.2);
+  outline-offset: 1px;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name--editing {
+  display: grid;
+  gap: 0.55rem;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+:where(body.settings-page, .user-settings-page) .editable-security-name__actions :where(.ghost-button, .primary-button) {
+  min-height: 36px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+}
+
 :where(body.settings-page, .user-settings-page) .passkey-item .delete-passkey-btn {
   flex-shrink: 0;
   align-self: flex-start;
@@ -2270,6 +2329,16 @@ body.settings-page :where(
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .passkey-item__title {
   color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .editable-security-name__edit {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .editable-security-name__edit:hover {
+  border-color: rgba(25, 195, 125, 0.34);
+  color: #6ee7b7;
+  background: rgba(25, 195, 125, 0.14);
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .security-meta__row dd {

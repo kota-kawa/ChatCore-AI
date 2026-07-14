@@ -42,7 +42,7 @@ REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
 CONSENT_REQUEST_TTL_SECONDS = 600
 MAX_CIMD_BYTES = 64 * 1024
 MAX_CIMD_CACHE_SECONDS = 3600
-MAX_CLIENT_LABEL_LENGTH = 100
+MAX_USER_LABEL_LENGTH = 100
 MAX_CLIENTS_PER_USER = 20
 MAX_REDIRECT_URI_LENGTH = 2048
 
@@ -280,14 +280,14 @@ def _user_client_is_authorized_for_user(client_id: str, user_id: int) -> bool:
             cursor.close()
 
 
-def _clean_client_label(label: str | None) -> str | None:
-    """Normalize a user-supplied credential label, or fall back to no label."""
+def _clean_user_label(label: str | None) -> str | None:
+    """Normalize a user-managed label, or fall back to no label."""
     if not isinstance(label, str):
         return None
     cleaned = label.strip()
     if not cleaned:
         return None
-    return cleaned[:MAX_CLIENT_LABEL_LENGTH]
+    return cleaned[:MAX_USER_LABEL_LENGTH]
 
 
 def issue_user_client(
@@ -309,7 +309,7 @@ def issue_user_client(
     if not _user_is_verified(user_id):
         raise ValueError("Only verified users can issue connector credentials.")
 
-    cleaned_label = _clean_client_label(label)
+    cleaned_label = _clean_user_label(label)
     cleaned_redirect_uri = _clean_redirect_uri(
         DEFAULT_MCP_OAUTH_REDIRECT_URI if redirect_uri is None else redirect_uri
     )
@@ -414,6 +414,27 @@ def list_user_clients(user_id: int) -> dict[str, Any]:
                 "default_redirect_uri": DEFAULT_MCP_OAUTH_REDIRECT_URI,
                 "mcp_server_url": get_mcp_server_url(),
             }
+        finally:
+            cursor.close()
+
+
+def update_user_client_label(user_id: int, client_id: str, label: str) -> bool:
+    """Update a personal credential's display label without rotating its secret."""
+    cleaned_label = _clean_user_label(label)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_user_clients
+                SET label = %s
+                WHERE client_id = %s AND user_id = %s AND revoked_at IS NULL
+                """,
+                (cleaned_label, client_id, user_id),
+            )
+            updated = cursor.rowcount == 1
+            conn.commit()
+            return updated
         finally:
             cursor.close()
 
@@ -825,7 +846,7 @@ def list_connections(user_id: int) -> list[dict[str, Any]]:
         try:
             cursor.execute(
                 """
-                SELECT id, client_name, client_host, created_at, last_used_at
+                SELECT id, client_name, client_host, display_name, created_at, last_used_at
                 FROM mcp_oauth_grants
                 WHERE user_id = %s AND revoked_at IS NULL
                 ORDER BY created_at DESC
@@ -860,6 +881,27 @@ def revoke_connection(user_id: int, grant_id: str) -> bool:
             updated = cursor.rowcount == 1
             if updated:
                 cursor.execute("UPDATE mcp_oauth_tokens SET revoked_at = NOW() WHERE grant_id = %s AND revoked_at IS NULL", (grant_id,))
+            conn.commit()
+            return updated
+        finally:
+            cursor.close()
+
+
+def update_connection_display_name(user_id: int, grant_id: str, display_name: str) -> bool:
+    """Set a user-facing alias while retaining the OAuth client's original name."""
+    cleaned_name = _clean_user_label(display_name)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE mcp_oauth_grants
+                SET display_name = %s
+                WHERE id = %s AND user_id = %s AND revoked_at IS NULL
+                """,
+                (cleaned_name, grant_id, user_id),
+            )
+            updated = cursor.rowcount == 1
             conn.commit()
             return updated
         finally:
