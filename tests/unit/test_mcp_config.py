@@ -22,6 +22,18 @@ class McpConfigTestCase(unittest.TestCase):
         with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test/"}, clear=True):
             self.assertEqual(get_mcp_public_base_url(), "https://example.test")
 
+    def test_public_base_url_rejects_components_that_break_discovery_urls(self):
+        invalid_urls = (
+            "https://example.test?tenant=x",
+            "https://example.test/#fragment",
+            "https://user:pass@example.test",
+            "https://example.test/mcp",
+        )
+        for url in invalid_urls:
+            with self.subTest(url=url), patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": url}, clear=True):
+                with self.assertRaises(ValueError):
+                    get_mcp_public_base_url()
+
     def test_allowed_hosts_default_includes_www_sibling(self):
         with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test"}, clear=True):
             self.assertEqual(get_mcp_allowed_hosts(), ["example.test", "www.example.test"])

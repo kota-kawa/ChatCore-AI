@@ -1,3 +1,4 @@
+import asyncio
 import json
 import unittest
 from contextlib import contextmanager
@@ -24,6 +25,28 @@ def _make_params(resource):
 
 
 class McpOAuthTestCase(unittest.TestCase):
+    def test_cimd_cache_is_bounded(self):
+        mcp_oauth._cimd_cache.clear()
+        try:
+            with patch("services.mcp_oauth.get_mcp_cimd_cache_entries", return_value=2):
+                mcp_oauth._write_cimd_cache("first", None, 60)
+                mcp_oauth._write_cimd_cache("second", None, 60)
+                mcp_oauth._write_cimd_cache("third", None, 60)
+
+            self.assertNotIn("first", mcp_oauth._cimd_cache)
+            self.assertEqual(set(mcp_oauth._cimd_cache), {"second", "third"})
+        finally:
+            mcp_oauth._cimd_cache.clear()
+
+    def test_cimd_fetch_is_rejected_when_concurrency_limit_is_full(self):
+        slots = MagicMock()
+        slots.acquire.return_value = False
+        with patch("services.mcp_oauth._get_cimd_executor", return_value=(MagicMock(), slots)):
+            result = asyncio.run(mcp_oauth._load_cimd_client("https://client.example/metadata.json"))
+
+        self.assertIsNone(result)
+        slots.release.assert_not_called()
+
     def test_consent_details_exposes_client_and_redirect_hosts(self):
         client = OAuthClientInformationFull(
             client_id="https://client.example.test/metadata.json",
