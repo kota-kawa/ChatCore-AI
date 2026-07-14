@@ -98,7 +98,7 @@ describe("SecuritySettingsSection MCP connections", () => {
         "個人用アシスタント"
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "連携を解除" }));
+    fireEvent.click(screen.getByRole("button", { name: "解除" }));
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
 
     expect(screen.getByText("My connector")).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(onMcpOAuthClientRedirectUriChange).toHaveBeenCalledWith(
       "https://client.example.test/changed-callback"
     );
-    fireEvent.click(screen.getByRole("button", { name: "認証情報を発行" }));
+    fireEvent.click(screen.getByRole("button", { name: "発行" }));
     expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
     expect(onDeleteMcpOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: "mcp-example-client" }));
