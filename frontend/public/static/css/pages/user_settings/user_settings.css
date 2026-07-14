@@ -1015,6 +1015,167 @@
 /* ─────────────────────────── */
 /* 投稿したプロンプト用スタイル（モダン改善） */
 /* ─────────────────────────── */
+
+/* セキュリティセンターと揃えた、投稿／いいねプロンプトのカード幅とヒーロー */
+/* Wider card + hero header aligned with the security center for the prompt sections */
+:where(body.settings-page, .user-settings-page) .settings-card.settings-card--prompts {
+  max-width: 1080px;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  margin-bottom: 2rem;
+  border: 1px solid rgba(25, 195, 125, 0.18);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(25, 195, 125, 0.22), transparent 30%),
+    linear-gradient(145deg, #f8fffc 0%, #effbf6 50%, #ffffff 100%);
+  box-shadow: 0 18px 50px rgba(15, 122, 81, 0.08);
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero::after {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  right: -100px;
+  bottom: -150px;
+  border: 38px solid rgba(25, 195, 125, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__intro {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 1.1rem;
+  max-width: 640px;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+  background: linear-gradient(145deg, var(--primary-color, #19c37d), #0f9f68);
+  color: #ffffff;
+  font-size: 1.55rem;
+  box-shadow: 0 12px 28px rgba(15, 159, 104, 0.24);
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--primary-dark, #0f7a51);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+:where(body.settings-page, .user-settings-page) .settings-card--prompts .prompts-hero h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 3.4vw, 2rem);
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+  color: var(--text-dark);
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__lead {
+  margin: 0.65rem 0 0;
+  color: var(--settings-text-muted);
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__stat {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.15rem;
+  align-content: center;
+  justify-items: center;
+  min-width: 108px;
+  padding: 0.9rem 1.35rem;
+  border: 1px solid rgba(25, 195, 125, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  text-align: center;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__stat-label {
+  color: var(--settings-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-hero__stat-value {
+  color: var(--primary-dark, #0f7a51);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 2.75rem 1.5rem;
+  border-radius: 18px;
+  border: 1px dashed var(--settings-border-color);
+  background: var(--settings-card-bg);
+  color: var(--settings-text-muted);
+  text-align: center;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  color: var(--primary-dark, #0f7a51);
+  background: rgba(25, 195, 125, 0.11);
+  font-size: 1.5rem;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-empty strong {
+  color: var(--text-dark);
+  font-size: 1.02rem;
+}
+
+:where(body.settings-page, .user-settings-page) .prompts-empty span:not(.prompts-empty__icon) {
+  max-width: 32ch;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  :where(body.settings-page, .user-settings-page) .prompts-hero__stat {
+    width: 100%;
+  }
+}
+
 :where(body.settings-page, .user-settings-page) .header-bar {
   display: flex;
   align-items: center;
@@ -2433,6 +2594,35 @@ body.settings-page :where(
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__footer {
   background: rgba(15, 23, 42, 0.5);
   border-top-color: rgba(148, 163, 184, 0.1);
+}
+
+/* ─── ダークモード: 投稿／いいねプロンプトのヒーロー・空状態 ─── */
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-hero {
+  border-color: rgba(52, 211, 153, 0.2);
+  background:
+    radial-gradient(circle at 92% 12%, rgba(16, 185, 129, 0.2), transparent 32%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(6, 78, 59, 0.28));
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.32);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-hero__eyebrow,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-hero__stat-value {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-hero__stat {
+  border-color: rgba(52, 211, 153, 0.22);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-empty {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(17, 24, 39, 0.6);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompts-empty__icon {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
 }
 
 /* ─── ダークモード: モーダルフォーム入力 ─── */

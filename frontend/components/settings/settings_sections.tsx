@@ -254,6 +254,65 @@ export function AppearanceSettingsSection({
   );
 }
 
+// 投稿／いいねプロンプト両セクションで共有するヒーローヘッダー
+// Shared hero header for both the authored and liked prompt sections — mirrors the security center layout
+function PromptsHero({
+  icon,
+  eyebrow,
+  title,
+  lead,
+  statLabel,
+  statValue
+}: {
+  icon: string;
+  eyebrow: string;
+  title: string;
+  lead: string;
+  statLabel: string;
+  statValue: string;
+}) {
+  return (
+    <header className="prompts-hero">
+      <div className="prompts-hero__intro">
+        <span className="prompts-hero__icon" aria-hidden="true">
+          <i className={`bi ${icon}`}></i>
+        </span>
+        <div>
+          <p className="prompts-hero__eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+          <p className="prompts-hero__lead">{lead}</p>
+        </div>
+      </div>
+      <div className="prompts-hero__stat" role="status" aria-live="polite">
+        <span className="prompts-hero__stat-label">{statLabel}</span>
+        <strong className="prompts-hero__stat-value">{statValue}</strong>
+      </div>
+    </header>
+  );
+}
+
+// プロンプト一覧が空のときに表示する案内カード
+// Guidance card shown when a prompt list is empty
+function PromptsEmptyState({
+  icon,
+  title,
+  description
+}: {
+  icon: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="prompts-empty">
+      <span className="prompts-empty__icon" aria-hidden="true">
+        <i className={`bi ${icon}`}></i>
+      </span>
+      <strong>{title}</strong>
+      <span>{description}</span>
+    </div>
+  );
+}
+
 export function AuthoredPromptsSection({
   isActive,
   loading,
@@ -269,21 +328,38 @@ export function AuthoredPromptsSection({
 }) {
   return (
     <div id="prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card">
-        <h2>投稿したプロンプト</h2>
-        <div className="header-bar">
-          <h3 className="section-title">投稿したプロンプト</h3>
-        </div>
+      <div className="settings-card settings-card--prompts">
+        <PromptsHero
+          icon="bi-megaphone"
+          eyebrow="Shared prompts"
+          title="投稿したプロンプト"
+          lead="あなたが公開したプロンプトを一覧で確認し、内容の編集や削除ができます。"
+          statLabel="公開数"
+          statValue={loading && promptCount === 0 ? "確認中" : `${promptCount}件`}
+        />
 
         {/* ローディング・エラー・空状態の 3 パターンを排他的に表示する / Show loading, error, or empty state exclusively — only one at a time */}
         {loading && promptCount > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
-        {!loading && error ? <p>{error}</p> : null}
-        {!loading && !error && promptCount === 0 ? <p>プロンプトが存在しません。</p> : null}
+        {!loading && error ? (
+          <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
+            <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+            {error}
+          </p>
+        ) : null}
+        {!loading && !error && promptCount === 0 ? (
+          <PromptsEmptyState
+            icon="bi-file-earmark-plus"
+            title="まだ投稿したプロンプトはありません"
+            description="共有ページからプロンプトを公開すると、ここに一覧で表示されます。"
+          />
+        ) : null}
 
-        <div id="promptList" className="prompt-grid">
-          {loading && promptCount === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
-          {promptCards}
-        </div>
+        {(loading && promptCount === 0) || promptCount > 0 ? (
+          <div id="promptList" className="prompt-grid">
+            {loading && promptCount === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
+            {promptCards}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -304,22 +380,37 @@ export function LikedPromptsSection({
 }) {
   return (
     <div id="liked-prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card">
-        <h2>いいねしたプロンプト</h2>
-        <div className="header-bar">
-          <h3 className="section-title">いいねしたプロンプト</h3>
-        </div>
+      <div className="settings-card settings-card--prompts">
+        <PromptsHero
+          icon="bi-heart-fill"
+          eyebrow="Liked prompts"
+          title="いいねしたプロンプト"
+          lead="気に入って保存したプロンプトの一覧です。内容を見返したり、いいねを解除できます。"
+          statLabel="保存数"
+          statValue={loading && promptCount === 0 ? "確認中" : `${promptCount}件`}
+        />
 
         {loading && promptCount > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
-        {!loading && error ? <p>{error}</p> : null}
+        {!loading && error ? (
+          <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
+            <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+            {error}
+          </p>
+        ) : null}
         {!loading && !error && promptCount === 0 ? (
-          <p>いいねしたプロンプトは存在しません。</p>
+          <PromptsEmptyState
+            icon="bi-heart"
+            title="いいねしたプロンプトはありません"
+            description="気になるプロンプトにいいねすると、ここにまとまって表示されます。"
+          />
         ) : null}
 
-        <div id="likedPromptEntries" className="prompt-grid">
-          {loading && promptCount === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
-          {promptCards}
-        </div>
+        {(loading && promptCount === 0) || promptCount > 0 ? (
+          <div id="likedPromptEntries" className="prompt-grid">
+            {loading && promptCount === 0 ? <SettingsPromptCardSkeletonGrid /> : null}
+            {promptCards}
+          </div>
+        ) : null}
       </div>
     </div>
   );
