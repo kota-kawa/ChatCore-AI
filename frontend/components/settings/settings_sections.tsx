@@ -812,7 +812,7 @@ export function SecuritySettingsSection({
                   disabled={emailChangeSubmitting}
                 >
                   <i className="bi bi-send" aria-hidden="true"></i>
-                  現在のメールへ確認コードを送信
+                  送信
                 </button>
               ) : null}
             </form>
@@ -857,8 +857,8 @@ export function SecuritySettingsSection({
                   >
                     <i className="bi bi-check2" aria-hidden="true"></i>
                     {emailChangeStage === "current_email"
-                      ? "現在のメールを確認"
-                      : "変更を完了"}
+                      ? "確認"
+                      : "完了"}
                   </button>
                 </div>
               </form>
@@ -899,7 +899,7 @@ export function SecuritySettingsSection({
                 }}
               >
                 <i className="bi bi-plus-lg" aria-hidden="true"></i>
-                {registeringPasskey ? "追加中..." : "この端末にPasskeyを追加"}
+                {registeringPasskey ? "追加中..." : "追加"}
               </button>
               <button
                 type="button"
@@ -914,7 +914,7 @@ export function SecuritySettingsSection({
                   className={`bi bi-arrow-clockwise${passkeysLoading ? " security-action__spin" : ""}`}
                   aria-hidden="true"
                 ></i>
-                一覧を更新
+                更新
               </button>
             </div>
             <div className="security-panel__subhead">
@@ -1019,7 +1019,7 @@ export function SecuritySettingsSection({
                   className={`bi bi-arrow-clockwise${mcpOAuthConnectionsLoading ? " security-action__spin" : ""}`}
                   aria-hidden="true"
                 ></i>
-                一覧を更新
+                更新
               </button>
             </div>
             <div className="passkey-list" aria-live="polite" aria-busy={mcpOAuthConnectionsLoading}>
@@ -1075,7 +1075,7 @@ export function SecuritySettingsSection({
                       }}
                     >
                       <i className="bi bi-x-circle" aria-hidden="true"></i>
-                      {deletingMcpOAuthConnectionId === connection.id ? "解除中..." : "連携を解除"}
+                      {deletingMcpOAuthConnectionId === connection.id ? "解除中..." : "解除"}
                     </button>
                   </div>
                 ))
@@ -1138,7 +1138,7 @@ export function SecuritySettingsSection({
                 onClick={onIssueMcpOAuthClient}
               >
                 <i className="bi bi-key" aria-hidden="true"></i>
-                {mcpOAuthClientIssuing ? "発行中..." : "認証情報を発行"}
+                {mcpOAuthClientIssuing ? "発行中..." : "発行"}
               </button>
             </div>
             {mcpOAuthClientCredentials ? (
