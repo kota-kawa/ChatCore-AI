@@ -145,6 +145,44 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertNotIn("UPDATE mcp_oauth_grants", executed_sql)
         self.assertNotIn("UPDATE mcp_oauth_tokens", executed_sql)
 
+    def test_update_user_client_label_keeps_credential_active(self):
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            updated = mcp_oauth.update_user_client_label(7, "mcp-personal-client", "仕事用")
+
+        self.assertTrue(updated)
+        executed_sql = cursor.execute.call_args.args[0]
+        self.assertIn("UPDATE mcp_oauth_user_clients", executed_sql)
+        self.assertNotIn("revoked_at = NOW()", executed_sql)
+        self.assertEqual(cursor.execute.call_args.args[1], ("仕事用", "mcp-personal-client", 7))
+
+    def test_update_connection_display_name_preserves_oauth_client_name(self):
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            updated = mcp_oauth.update_connection_display_name(7, "grant-1", "個人用Claude")
+
+        self.assertTrue(updated)
+        executed_sql = cursor.execute.call_args.args[0]
+        self.assertIn("SET display_name = %s", executed_sql)
+        self.assertNotIn("client_name =", executed_sql)
+        self.assertEqual(cursor.execute.call_args.args[1], ("個人用Claude", "grant-1", 7))
+
     def test_redirect_validation_rejects_non_loopback_http(self):
         client = OAuthClientInformationFull(
             client_id="client",

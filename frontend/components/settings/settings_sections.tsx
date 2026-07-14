@@ -391,6 +391,84 @@ function SecurityCredentialField({
   );
 }
 
+function EditableSecurityName({
+  value,
+  fallbackValue,
+  inputId,
+  inputLabel,
+  onSave
+}: {
+  value: string;
+  fallbackValue: string;
+  inputId: string;
+  inputLabel: string;
+  onSave: (value: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState(value);
+  const [saving, setSaving] = useState(false);
+  const displayValue = value || fallbackValue;
+
+  const saveName = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(draftValue);
+      setEditing(false);
+    } catch {
+      // The parent presents the API error as a toast; keep the field open for correction.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <form className="editable-security-name editable-security-name--editing" onSubmit={saveName}>
+        <label className="sr-only" htmlFor={inputId}>{inputLabel}</label>
+        <input
+          id={inputId}
+          type="text"
+          className="custom-form-control"
+          value={draftValue}
+          maxLength={100}
+          autoFocus
+          disabled={saving}
+          onChange={(event) => {
+            setDraftValue(event.target.value);
+          }}
+        />
+        <div className="editable-security-name__actions">
+          <button type="button" className="ghost-button" disabled={saving} onClick={() => setEditing(false)}>
+            キャンセル
+          </button>
+          <button type="submit" className="primary-button" disabled={saving}>
+            {saving ? "保存中..." : "保存"}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="editable-security-name">
+      <strong className="passkey-item__title">{displayValue}</strong>
+      <button
+        type="button"
+        className="editable-security-name__edit"
+        aria-label={`${inputLabel}を編集`}
+        onClick={() => {
+          setDraftValue(value || fallbackValue);
+          setEditing(true);
+        }}
+      >
+        <i className="bi bi-pencil" aria-hidden="true"></i>
+        編集
+      </button>
+    </div>
+  );
+}
+
 export function SecuritySettingsSection({
   isActive,
   profileEmail,
@@ -428,11 +506,13 @@ export function SecuritySettingsSection({
   onDeletePasskey,
   onRefreshMcpOAuthConnections,
   onDeleteMcpOAuthConnection,
+  onUpdateMcpOAuthConnectionDisplayName,
   onRefreshMcpOAuthClients,
   onMcpOAuthClientLabelChange,
   onMcpOAuthClientRedirectUriChange,
   onIssueMcpOAuthClient,
   onDeleteMcpOAuthClient,
+  onUpdateMcpOAuthClientLabel,
   onAccountDeleteConfirmationChange,
   onDeleteAccount
 }: {
@@ -472,11 +552,13 @@ export function SecuritySettingsSection({
   onDeletePasskey: (passkeyId: number) => void;
   onRefreshMcpOAuthConnections: () => void;
   onDeleteMcpOAuthConnection: (connection: McpOAuthConnection) => void;
+  onUpdateMcpOAuthConnectionDisplayName: (connection: McpOAuthConnection, displayName: string) => Promise<void>;
   onRefreshMcpOAuthClients: () => void;
   onMcpOAuthClientLabelChange: (value: string) => void;
   onMcpOAuthClientRedirectUriChange: (value: string) => void;
   onIssueMcpOAuthClient: () => void;
   onDeleteMcpOAuthClient: (client: McpOAuthClient) => void;
+  onUpdateMcpOAuthClientLabel: (client: McpOAuthClient, label: string) => Promise<void>;
   onAccountDeleteConfirmationChange: (value: string) => void;
   onDeleteAccount: () => void;
 }) {
@@ -867,8 +949,18 @@ export function SecuritySettingsSection({
                       <i className="bi bi-robot"></i>
                     </span>
                     <div className="passkey-item__body">
-                      <strong className="passkey-item__title">{connection.client_name}</strong>
+                      <EditableSecurityName
+                        value={connection.display_name || ""}
+                        fallbackValue={connection.client_name}
+                        inputId={`mcpOAuthConnection-${connection.id}`}
+                        inputLabel={`${connection.client_name}の表示名`}
+                        onSave={(displayName) => onUpdateMcpOAuthConnectionDisplayName(connection, displayName)}
+                      />
                       <dl className="security-meta">
+                        <div className="security-meta__row">
+                          <dt>連携先の名称</dt>
+                          <dd>{connection.client_name}</dd>
+                        </div>
                         <div className="security-meta__row">
                           <dt>接続先</dt>
                           <dd>{connection.client_host || "不明"}</dd>
@@ -1007,7 +1099,13 @@ export function SecuritySettingsSection({
                       <i className="bi bi-key-fill"></i>
                     </span>
                     <div className="passkey-item__body">
-                      <strong className="passkey-item__title">{client.label || "（名前なし）"}</strong>
+                      <EditableSecurityName
+                        value={client.label}
+                        fallbackValue="（名前なし）"
+                        inputId={`mcpOAuthClient-${client.client_id}`}
+                        inputLabel={`${client.label || "認証情報"}の名前`}
+                        onSave={(label) => onUpdateMcpOAuthClientLabel(client, label)}
+                      />
                       <dl className="security-meta">
                         <div className="security-meta__row">
                           <dt>クライアントID</dt>

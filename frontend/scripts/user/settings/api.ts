@@ -80,6 +80,18 @@ export async function revokeMcpOAuthConnection(connectionId: string): Promise<vo
   });
 }
 
+export async function updateMcpOAuthConnectionDisplayName(
+  connectionId: string,
+  displayName: string
+): Promise<void> {
+  await fetchMcpOauthJson(`/api/mcp/oauth/connections/${encodeURIComponent(connectionId)}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ display_name: displayName })
+  });
+}
+
 export async function loadMcpOAuthClients(): Promise<McpOAuthClientList> {
   const payload = await fetchMcpOauthJson("/api/mcp/oauth/clients", {
     credentials: "same-origin"
@@ -104,5 +116,14 @@ export async function revokeMcpOAuthClient(clientId: string): Promise<void> {
   await fetchMcpOauthJson(`/api/mcp/oauth/clients/${encodeURIComponent(clientId)}`, {
     method: "DELETE",
     credentials: "same-origin"
+  });
+}
+
+export async function updateMcpOAuthClientLabel(clientId: string, label: string): Promise<void> {
+  await fetchMcpOauthJson(`/api/mcp/oauth/clients/${encodeURIComponent(clientId)}`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label })
   });
 }
