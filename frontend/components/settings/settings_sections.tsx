@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ChangeEvent,
   FormEvent,
@@ -338,6 +339,58 @@ export function NotificationsSettingsSection({ isActive }: { isActive: boolean }
   );
 }
 
+function SecurityCredentialField({
+  id,
+  label,
+  value,
+  secret = false
+}: {
+  id: string;
+  label: string;
+  value: string;
+  secret?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copyValue = async () => {
+    if (!navigator.clipboard) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="form-group security-credential-field">
+      <label className="form-label" htmlFor={id}>{label}</label>
+      <div className="security-credential-field__control">
+        <input
+          id={id}
+          className="custom-form-control"
+          value={value}
+          readOnly
+          autoComplete={secret ? "off" : undefined}
+        />
+        <button
+          type="button"
+          className={`security-copy-button${copied ? " is-copied" : ""}`}
+          aria-label={`${label}をコピー`}
+          onClick={() => {
+            void copyValue();
+          }}
+        >
+          <i className={`bi ${copied ? "bi-check2" : "bi-copy"}`} aria-hidden="true"></i>
+          {copied ? "コピー済み" : "コピー"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function SecuritySettingsSection({
   isActive,
   profileEmail,
@@ -429,12 +482,87 @@ export function SecuritySettingsSection({
 }) {
   return (
     <div id="security-section" className={`settings-section${isActive ? " active" : ""}`}>
-      <div className="settings-card">
-        <h2>セキュリティ</h2>
+      <div className="settings-card settings-card--security">
+        <header className="security-hero">
+          <div className="security-hero__intro">
+            <span className="security-hero__icon" aria-hidden="true">
+              <i className="bi bi-shield-check"></i>
+            </span>
+            <div>
+              <p className="security-hero__eyebrow">Security center</p>
+              <h2>アカウントを安全に保つ</h2>
+              <p className="security-hero__lead">
+                サインイン方法、登録メール、外部サービスのアクセス権を一か所で確認・管理できます。
+              </p>
+            </div>
+          </div>
+
+          <div className="security-overview" role="list" aria-label="セキュリティ設定の概要">
+            <div className="security-overview__item" role="listitem">
+              <span className="security-overview__icon" aria-hidden="true">
+                <i className="bi bi-envelope-check"></i>
+              </span>
+              <span className="security-overview__copy">
+                <span>登録メール</span>
+                <strong>{profileEmail ? "設定済み" : "未設定"}</strong>
+              </span>
+            </div>
+            <div
+              className={`security-overview__item${passkeys.length === 0 ? " is-attention" : ""}`}
+              role="listitem"
+            >
+              <span className="security-overview__icon" aria-hidden="true">
+                <i className="bi bi-fingerprint"></i>
+              </span>
+              <span className="security-overview__copy">
+                <span>Passkey</span>
+                <strong>
+                  {passkeysLoading ? "確認中" : passkeys.length > 0 ? `${passkeys.length}件登録` : "未登録"}
+                </strong>
+              </span>
+            </div>
+            <div className="security-overview__item" role="listitem">
+              <span className="security-overview__icon" aria-hidden="true">
+                <i className="bi bi-plug"></i>
+              </span>
+              <span className="security-overview__copy">
+                <span>外部サービス</span>
+                <strong>
+                  {mcpOAuthConnectionsLoading
+                    ? "確認中"
+                    : mcpOAuthConnections.length > 0
+                      ? `${mcpOAuthConnections.length}件接続`
+                      : "接続なし"}
+                </strong>
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <nav className="security-jump-nav" aria-label="セキュリティ設定内のメニュー">
+          <a href="#security-sign-in">
+            <i className="bi bi-person-lock" aria-hidden="true"></i>サインインと本人確認
+          </a>
+          <a href="#security-connections">
+            <i className="bi bi-nodes" aria-hidden="true"></i>外部サービス連携
+          </a>
+          <a href="#security-danger-zone">
+            <i className="bi bi-exclamation-diamond" aria-hidden="true"></i>危険な操作
+          </a>
+        </nav>
 
         <div className="security-stack">
+          <section id="security-sign-in" className="security-group" aria-labelledby="security-sign-in-title">
+            <div className="security-group__heading">
+              <span className="security-group__number">01</span>
+              <div>
+                <h3 id="security-sign-in-title">サインインと本人確認</h3>
+                <p>ログインに使う情報と、安全な認証方法を管理します。</p>
+              </div>
+            </div>
+            <div className="security-grid security-grid--account">
           {/* メールアドレス変更パネル — 2 段階確認コードフローを含む / Email-change panel — includes two-step verification code flow */}
-          <div className="security-panel">
+          <div className="security-panel security-panel--email">
             <div className="security-panel__head">
               <span className="security-panel__icon" aria-hidden="true">
                 <i className="bi bi-envelope-at"></i>
@@ -450,6 +578,27 @@ export function SecuritySettingsSection({
               <span className="email-change-current__label">現在のアドレス</span>
               <strong>{profileEmail || "未取得"}</strong>
             </p>
+
+            <ol className="email-change-steps" aria-label="メールアドレス変更の手順">
+              <li className={emailChangeStage === "idle" ? "is-current" : "is-complete"}>
+                <span>1</span>
+                <small>新しいアドレス</small>
+              </li>
+              <li
+                className={emailChangeStage === "current_email"
+                  ? "is-current"
+                  : emailChangeStage === "new_email"
+                    ? "is-complete"
+                    : ""}
+              >
+                <span>2</span>
+                <small>本人確認</small>
+              </li>
+              <li className={emailChangeStage === "new_email" ? "is-current" : ""}>
+                <span>3</span>
+                <small>変更を確定</small>
+              </li>
+            </ol>
 
             {emailChangeStatus ? (
               <p
@@ -544,27 +693,27 @@ export function SecuritySettingsSection({
           </div>
 
           {/* Passkey 登録パネル — ブラウザ非対応時はボタンを無効化する / Passkey registration panel — buttons disabled when browser lacks support */}
-          <div className="security-panel">
+          <div className="security-panel security-panel--passkeys">
             <div className="security-panel__head">
               <span className="security-panel__icon" aria-hidden="true">
                 <i className="bi bi-fingerprint"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>Passkeys</h3>
+                <h3>Passkey</h3>
                 <p className="security-panel__description">
                   パスワードの代わりに、指紋・顔認証や端末のロック解除でサインインできます。
                 </p>
+                <span
+                  className={`security-status-pill security-status-pill--${passkeySupported ? "ok" : "muted"}`}
+                  id="passkeySupportStatus"
+                >
+                  <i
+                    className={`bi ${passkeySupported ? "bi-check-circle-fill" : "bi-info-circle-fill"}`}
+                    aria-hidden="true"
+                  ></i>
+                  {passkeySupportStatus}
+                </span>
               </div>
-              <span
-                className={`security-status-pill security-status-pill--${passkeySupported ? "ok" : "muted"}`}
-                id="passkeySupportStatus"
-              >
-                <i
-                  className={`bi ${passkeySupported ? "bi-check-circle-fill" : "bi-info-circle-fill"}`}
-                  aria-hidden="true"
-                ></i>
-                {passkeySupportStatus}
-              </span>
             </div>
             <div className="security-actions">
               <button
@@ -595,26 +744,25 @@ export function SecuritySettingsSection({
                 一覧を更新
               </button>
             </div>
-          </div>
-
-          {/* 登録済み Passkey の一覧パネル — 削除ボタンは操作中のキーのみ無効化する / Registered passkey list panel — only the key being deleted has its button disabled */}
-          <div className="security-panel">
-            <div className="security-panel__head">
-              <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-shield-lock"></i>
-              </span>
-              <div className="security-panel__heading">
-                <h3>登録済みPasskeys</h3>
-                <p className="security-panel__description">
-                  この端末やアカウントに登録されているPasskeyの一覧です。
-                </p>
+            <div className="security-panel__subhead">
+              <div>
+                <span className="security-panel__kicker">Trusted devices</span>
+                <h4>登録済みの端末</h4>
               </div>
+              <span className="security-count" aria-label={`登録済みPasskey ${passkeys.length}件`}>
+                {passkeys.length}
+              </span>
             </div>
-            <div id="passkeyList" className="passkey-list">
-              {passkeys.length === 0 ? (
+            <div id="passkeyList" className="passkey-list" aria-live="polite" aria-busy={passkeysLoading}>
+              {passkeysLoading && passkeys.length === 0 ? (
+                <div className="passkey-empty">
+                  <i className="bi bi-arrow-repeat security-action__spin" aria-hidden="true"></i>
+                  <span>登録済みの端末を確認しています。</span>
+                </div>
+              ) : passkeys.length === 0 ? (
                 <div className="passkey-empty">
                   <i className="bi bi-shield-slash" aria-hidden="true"></i>
-                  <span>まだPasskeyは登録されていません。</span>
+                  <span><strong>まだPasskeyはありません</strong>追加すると、パスワードを入力せず安全にログインできます。</span>
                 </div>
               ) : (
                 passkeys.map((passkey) => (
@@ -660,14 +808,26 @@ export function SecuritySettingsSection({
               )}
             </div>
           </div>
+            </div>
+          </section>
 
-          <div className="security-panel">
+          <section id="security-connections" className="security-group" aria-labelledby="security-connections-title">
+            <div className="security-group__heading">
+              <span className="security-group__number">02</span>
+              <div>
+                <h3 id="security-connections-title">外部サービス連携</h3>
+                <p>AIサービスに許可したアクセスと、連携用の認証情報を管理します。</p>
+              </div>
+            </div>
+            <div className="security-grid">
+
+          <div className="security-panel" id="connected-ai-services">
             <div className="security-panel__head">
               <span className="security-panel__icon" aria-hidden="true">
                 <i className="bi bi-robot"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>AIサービス連携</h3>
+                <h3>接続中のAIサービス</h3>
                 <p className="security-panel__description">
                   外部AIサービスに、公開プロンプトを投稿する権限を付与した連携です。不要になった連携は解除できます。
                 </p>
@@ -689,7 +849,7 @@ export function SecuritySettingsSection({
                 一覧を更新
               </button>
             </div>
-            <div className="passkey-list" aria-live="polite">
+            <div className="passkey-list" aria-live="polite" aria-busy={mcpOAuthConnectionsLoading}>
               {mcpOAuthConnectionsLoading ? (
                 <div className="passkey-empty">
                   <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
@@ -740,46 +900,54 @@ export function SecuritySettingsSection({
             </div>
           </div>
 
-          <div className="security-panel">
+          <div className="security-panel security-panel--advanced">
             <div className="security-panel__head">
               <span className="security-panel__icon" aria-hidden="true">
                 <i className="bi bi-key-fill"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>AIサービス連携用認証情報</h3>
+                <span className="security-panel__kicker">Advanced</span>
+                <h3>連携用の認証情報</h3>
                 <p className="security-panel__description">
-                  OAuth認証情報を手動入力できる外部AIサービスで接続に失敗する場合に、詳細設定へ入力する認証情報を発行します。認証情報は複数保存でき、APIキーのように用途ごとに使い分けられます。認証情報を削除すると、その認証情報で確立済みの接続もすぐに使えなくなります。
-                </p>
-                <p className="security-panel__description">
-                  コールバックURL（リダイレクトURI）は、接続先AIサービスが指定する値を発行時に入力してください。発行後は変更できないため、変更する場合は認証情報を新しく発行してください。
+                  手動設定が必要な外部AIサービス向けに、用途ごとのOAuth認証情報を発行します。
                 </p>
               </div>
             </div>
-            <div className="security-actions">
-              <input
-                type="text"
-                className="custom-form-control"
-                value={mcpOAuthClientLabel}
-                maxLength={100}
-                placeholder="名前（任意・例: 自分のClaude）"
-                aria-label="認証情報の名前"
-                disabled={mcpOAuthClientIssuing}
-                onChange={(event) => {
-                  onMcpOAuthClientLabelChange(event.target.value);
-                }}
-              />
-              <input
-                type="url"
-                className="custom-form-control"
-                value={mcpOAuthClientRedirectUri}
-                maxLength={2048}
-                placeholder="コールバックURL（リダイレクトURI）"
-                aria-label="コールバックURL（リダイレクトURI）"
-                disabled={mcpOAuthClientIssuing}
-                onChange={(event) => {
-                  onMcpOAuthClientRedirectUriChange(event.target.value);
-                }}
-              />
+            <div className="security-advisory">
+              <i className="bi bi-info-circle" aria-hidden="true"></i>
+              <p>接続先が指定するコールバックURLを入力してください。発行後は変更できません。</p>
+            </div>
+            <div className="security-client-form">
+              <div className="form-group">
+                <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>任意</span></label>
+                <input
+                  id="mcpOAuthClientLabel"
+                  type="text"
+                  className="custom-form-control"
+                  value={mcpOAuthClientLabel}
+                  maxLength={100}
+                  placeholder="例: 自分のClaude"
+                  disabled={mcpOAuthClientIssuing}
+                  onChange={(event) => {
+                    onMcpOAuthClientLabelChange(event.target.value);
+                  }}
+                />
+              </div>
+              <div className="form-group security-client-form__uri">
+                <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI）</label>
+                <input
+                  id="mcpOAuthClientRedirectUri"
+                  type="url"
+                  className="custom-form-control"
+                  value={mcpOAuthClientRedirectUri}
+                  maxLength={2048}
+                  placeholder="https://service.example/callback"
+                  disabled={mcpOAuthClientIssuing}
+                  onChange={(event) => {
+                    onMcpOAuthClientRedirectUriChange(event.target.value);
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 className="primary-button security-action"
@@ -789,46 +957,39 @@ export function SecuritySettingsSection({
                 <i className="bi bi-key" aria-hidden="true"></i>
                 {mcpOAuthClientIssuing ? "発行中..." : "認証情報を発行"}
               </button>
+            </div>
+            {mcpOAuthClientCredentials ? (
+              <div className="security-credentials-result">
+                <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
+                  <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
+                  <span><strong>認証情報を発行しました</strong>シークレットはページを離れると再表示できません。今すぐ安全な場所へコピーしてください。</span>
+                </p>
+                <div className="security-credentials-result__grid">
+                  <SecurityCredentialField id="mcpOAuthServerUrl" label="MCPサーバーURL" value={mcpOAuthClientCredentials.mcp_server_url} />
+                  <SecurityCredentialField id="mcpOAuthRedirectUri" label="コールバックURL（リダイレクトURI）" value={mcpOAuthClientCredentials.redirect_uri} />
+                  <SecurityCredentialField id="mcpOAuthClientId" label="OAuthクライアントID" value={mcpOAuthClientCredentials.client_id} />
+                  <SecurityCredentialField id="mcpOAuthClientSecret" label="OAuthクライアントシークレット" value={mcpOAuthClientCredentials.client_secret} secret />
+                </div>
+              </div>
+            ) : null}
+            <div className="security-panel__subhead">
+              <div>
+                <span className="security-panel__kicker">Credentials</span>
+                <h4>保存済みの認証情報</h4>
+              </div>
               <button
                 type="button"
-                className="ghost-button security-action"
+                className="security-icon-button"
+                aria-label="認証情報の一覧を更新"
                 disabled={mcpOAuthClientsLoading}
                 onClick={() => {
                   void onRefreshMcpOAuthClients();
                 }}
               >
-                <i
-                  className={`bi bi-arrow-clockwise${mcpOAuthClientsLoading ? " security-action__spin" : ""}`}
-                  aria-hidden="true"
-                ></i>
-                一覧を更新
+                <i className={`bi bi-arrow-clockwise${mcpOAuthClientsLoading ? " security-action__spin" : ""}`} aria-hidden="true"></i>
               </button>
             </div>
-            {mcpOAuthClientCredentials ? (
-              <div className="security-stack">
-                <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
-                  <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
-                  連携先サービスの「詳細設定」に、次の認証情報をコピーしてください。シークレットはページを再読み込みすると再表示できません。
-                </p>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="mcpOAuthServerUrl">MCPサーバーURL</label>
-                  <input id="mcpOAuthServerUrl" className="custom-form-control" value={mcpOAuthClientCredentials.mcp_server_url} readOnly />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="mcpOAuthRedirectUri">コールバックURL（リダイレクトURI）</label>
-                  <input id="mcpOAuthRedirectUri" className="custom-form-control" value={mcpOAuthClientCredentials.redirect_uri} readOnly />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="mcpOAuthClientId">OAuthクライアントID</label>
-                  <input id="mcpOAuthClientId" className="custom-form-control" value={mcpOAuthClientCredentials.client_id} readOnly />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="mcpOAuthClientSecret">OAuthクライアントシークレット</label>
-                  <input id="mcpOAuthClientSecret" className="custom-form-control" value={mcpOAuthClientCredentials.client_secret} readOnly autoComplete="off" />
-                </div>
-              </div>
-            ) : null}
-            <div className="passkey-list" aria-live="polite">
+            <div className="passkey-list" aria-live="polite" aria-busy={mcpOAuthClientsLoading}>
               {mcpOAuthClientsLoading ? (
                 <div className="passkey-empty">
                   <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
@@ -878,8 +1039,18 @@ export function SecuritySettingsSection({
               )}
             </div>
           </div>
+            </div>
+          </section>
 
           {/* 危険ゾーン: アカウント削除 — 確認テキスト入力でボタンを解除し、最終確認ダイアログを挟む / Danger zone: account deletion — text confirmation unlocks the button, then a dialog confirms */}
+          <section id="security-danger-zone" className="security-group security-group--danger" aria-labelledby="security-danger-title">
+            <div className="security-group__heading">
+              <span className="security-group__number">03</span>
+              <div>
+                <h3 id="security-danger-title">危険な操作</h3>
+                <p>アカウント全体に影響する、取り消しできない操作です。</p>
+              </div>
+            </div>
           <div className="security-panel security-panel--danger">
             <div className="account-delete-header">
               <span className="security-panel__icon security-panel__icon--danger" aria-hidden="true">
@@ -932,6 +1103,7 @@ export function SecuritySettingsSection({
               </p>
             ) : null}
           </div>
+          </section>
         </div>
       </div>
     </div>

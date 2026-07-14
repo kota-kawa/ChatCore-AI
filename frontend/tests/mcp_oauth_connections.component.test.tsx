@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SecuritySettingsSection } from "../components/settings/settings_sections";
@@ -67,6 +67,17 @@ describe("SecuritySettingsSection MCP connections", () => {
         onDeleteAccount={vi.fn()}
       />
     );
+
+    expect(screen.getByRole("heading", { name: "アカウントを安全に保つ" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "セキュリティ設定内のメニュー" })).toBeInTheDocument();
+    const overview = screen.getByRole("list", { name: "セキュリティ設定の概要" });
+    expect(within(overview).getByText("設定済み")).toBeInTheDocument();
+    expect(within(overview).getByText("未登録")).toBeInTheDocument();
+    expect(within(overview).getByText("1件接続")).toBeInTheDocument();
+    const emailSteps = screen.getByRole("list", { name: "メールアドレス変更の手順" });
+    expect(within(emailSteps).getByText("新しいアドレス")).toBeInTheDocument();
+    expect(within(emailSteps).getByText("本人確認")).toBeInTheDocument();
+    expect(within(emailSteps).getByText("変更を確定")).toBeInTheDocument();
 
     expect(screen.getByText("Example AI")).toBeInTheDocument();
     expect(screen.getByText("不明")).toBeInTheDocument();
