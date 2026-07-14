@@ -105,7 +105,7 @@ alembic upgrade head
 
 **LLM cost control** — Exposing LLM endpoints directly risked runaway API costs. Solved by implementing a centralized daily quota counter (shared across all users) that short-circuits requests at the service layer before any external API call is made.
 
-**Testing Redis-dependent code in CI** — The session middleware's Redis fallback behavior requires an actual Redis connection to test, which is not available in standard CI runners. Solved by separating the fallback tests into a quarantined job that runs on a best-effort basis (`continue-on-error: true`) on push to main, keeping the main test gate fast and reliable.
+**Testing Redis-dependent code in CI** — The session middleware's Redis fallback path is hard to exercise because it only triggers when Redis is down or fails mid-request. Solved by driving it with a mock Redis client that simulates outages and mid-request write failures, so the fallback-to-signed-cookie behavior is verified deterministically inside the standard integration test gate — no live Redis instance required.
 
 ## CI/CD & Testing
 
@@ -116,7 +116,7 @@ alembic upgrade head
 | Ruff Lint | Syntax errors and undefined names (fast gate) |
 | Unit Tests | 25+ unit tests covering services, auth, chat, rate limiting, security |
 | Integration Tests | Route-level endpoint tests against the full ASGI app |
-| Coverage Report | Combined unit + integration coverage, uploaded as XML artifact |
+| Coverage Report | Combined unit + integration coverage, uploaded as XML artifact (main push / scheduled runs) |
 | Frontend Checks | Import resolution, TypeScript type-check, and logic/component tests via `npm test` |
 | Deploy | SSH deploy to production — only runs after all jobs pass on `main` |
 
@@ -151,7 +151,7 @@ flowchart LR
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
     RD[(Redis Optional)]
-    LLM[Groq / Gemini APIs]
+    LLM[Groq / Gemini / OpenAI APIs]
     EM[Email Provider]
 
     U --> FE --> API
@@ -295,7 +295,7 @@ alembic upgrade head
 
 **LLMコスト制御** — LLMエンドポイントを直接公開すると外部API費用が青天井になるリスクがあります。全ユーザー合算の日次クォータカウンターをサービス層で一元管理し、外部API呼び出しの前段階でリクエストを遮断することで対処しています。
 
-**CI環境でのRedis依存テスト** — セッションのフォールバック挙動は実際のRedis接続が必要なため、通常のCIランナーではテストできません。フォールバックテストを独立した `continue-on-error: true` のジョブに隔離し、mainへのpush時のみベストエフォートで実行することで、メインのテストゲートを高速かつ信頼性の高い状態に保っています。
+**CI環境でのRedis依存テスト** — セッションのフォールバック挙動はRedisダウン時やリクエスト中の書き込み失敗時にしか発動せず、そのままでは再現が困難でした。障害や書き込み失敗を模擬するモックRedisクライアントで駆動することで、署名付きCookieへのフォールバック挙動を実Redisなしで決定論的に検証し、通常の統合テストゲート内で確実にテストしています。
 
 ## CI/CDとテスト（CI/CD & Testing）
 
@@ -306,7 +306,7 @@ alembic upgrade head
 | Ruff Lint | 構文エラー・未定義名の即時検出（高速ゲート） |
 | Unit Tests | サービス層・認証・チャット・レート制限・セキュリティなど25件以上 |
 | Integration Tests | 実際のASGIアプリに対するルートレベルのエンドポイントテスト |
-| Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存 |
+| Coverage Report | ユニット＋統合テストの合算カバレッジをXMLアーティファクトとして保存（mainへのpush・スケジュール実行時） |
 | Frontend Checks | import解決、TypeScript型チェック、`npm test`によるロジック／コンポーネントテスト |
 | Deploy | 全ジョブ通過後にSSHで本番デプロイ（mainのpush時のみ） |
 
@@ -340,7 +340,7 @@ flowchart LR
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
     RD[(Redis 任意)]
-    LLM[Groq / Gemini API]
+    LLM[Groq / Gemini / OpenAI API]
     EM[メールプロバイダ]
 
     U --> FE --> API
