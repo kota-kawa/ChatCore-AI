@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from mcp.server.auth.provider import AuthorizationParams, AuthorizeError
+from mcp.shared.auth import InvalidRedirectUriError as McpInvalidRedirectUriError
 from mcp.shared.auth import OAuthClientInformationFull
+from pydantic import AnyUrl
 
 from services import mcp_oauth
 
@@ -62,7 +64,30 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertIsNotNone(client)
         self.assertEqual(str(client.client_id), client_id)
         self.assertEqual(client.token_endpoint_auth_method, "none")
+        self.assertEqual(client.scope, mcp_oauth.MCP_PROMPTS_WRITE_SCOPE)
+        self.assertEqual(
+            client.validate_scope(mcp_oauth.MCP_PROMPTS_WRITE_SCOPE),
+            [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+        )
         response.close.assert_called_once()
+
+    def test_cimd_client_accepts_claude_code_ephemeral_loopback_port(self):
+        client = mcp_oauth.CimdOAuthClientInformation(
+            client_id="https://claude.ai/oauth/client-metadata",
+            redirect_uris=[
+                "http://localhost/callback",
+                "http://127.0.0.1/callback",
+            ],
+            token_endpoint_auth_method="none",
+        )
+
+        localhost = AnyUrl("http://localhost:3118/callback")
+        loopback_ip = AnyUrl("http://127.0.0.1:49231/callback")
+        self.assertEqual(client.validate_redirect_uri(localhost), localhost)
+        self.assertEqual(client.validate_redirect_uri(loopback_ip), loopback_ip)
+
+        with self.assertRaises(McpInvalidRedirectUriError):
+            client.validate_redirect_uri(AnyUrl("http://localhost:3118/different"))
 
     def test_cimd_cache_is_bounded(self):
         mcp_oauth._cimd_cache.clear()

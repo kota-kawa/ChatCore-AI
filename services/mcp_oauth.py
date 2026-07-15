@@ -30,7 +30,12 @@ from mcp.server.auth.provider import (
     TokenError,
     construct_redirect_uri,
 )
-from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp.shared.auth import (
+    InvalidRedirectUriError as McpInvalidRedirectUriError,
+    OAuthClientInformationFull,
+    OAuthToken,
+)
+from pydantic import AnyUrl
 
 from services.async_utils import run_blocking
 from services.db import get_db_connection
@@ -76,6 +81,58 @@ class ClientLimitReachedError(Exception):
 
 class InvalidRedirectUriError(ValueError):
     """Raised when a user-supplied OAuth redirect URI is unsafe or malformed."""
+
+
+def _loopback_redirect_uris_match(registered: str, requested: str) -> bool:
+    """Match native-client loopback callbacks while ignoring the ephemeral port."""
+    try:
+        registered_url = urlparse(registered)
+        requested_url = urlparse(requested)
+        registered_url.port
+        requested_url.port
+    except ValueError:
+        return False
+
+    loopback_hosts = {"localhost", "127.0.0.1", "::1"}
+    registered_host = (registered_url.hostname or "").lower()
+    requested_host = (requested_url.hostname or "").lower()
+    if (
+        registered_url.scheme.lower() != "http"
+        or requested_url.scheme.lower() != "http"
+        or registered_host not in loopback_hosts
+        or requested_host != registered_host
+        or registered_url.username is not None
+        or registered_url.password is not None
+        or requested_url.username is not None
+        or requested_url.password is not None
+    ):
+        return False
+    return (
+        registered_url.path,
+        registered_url.params,
+        registered_url.query,
+        registered_url.fragment,
+    ) == (
+        requested_url.path,
+        requested_url.params,
+        requested_url.query,
+        requested_url.fragment,
+    )
+
+
+class CimdOAuthClientInformation(OAuthClientInformationFull):
+    """CIMD client metadata with RFC 8252 loopback redirect compatibility."""
+
+    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
+        try:
+            return super().validate_redirect_uri(redirect_uri)
+        except McpInvalidRedirectUriError:
+            if redirect_uri is not None and any(
+                _loopback_redirect_uris_match(str(registered), str(redirect_uri))
+                for registered in self.redirect_uris or []
+            ):
+                return redirect_uri
+            raise
 
 
 class StoredAuthorizationCode(AuthorizationCode):
@@ -283,7 +340,7 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
                 data = json.loads(body.decode("utf-8"))
             finally:
                 response.close()
-        client = OAuthClientInformationFull.model_validate(data)
+        client = CimdOAuthClientInformation.model_validate(data)
         if str(client.client_id) != client_id:
             _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
             return None
@@ -291,6 +348,11 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
             _write_cimd_cache(client_id, None, NEGATIVE_CIMD_CACHE_SECONDS)
             return None
         client.token_endpoint_auth_method = "none"
+        # CIMD metadata is client-global and normally cannot name this server's
+        # private scopes. The authorization server owns the allowed scope set;
+        # make it available to the SDK's client-level validation before the
+        # provider applies its own strict scope check in authorize().
+        client.scope = MCP_PROMPTS_WRITE_SCOPE
         _validate_redirect_uris(client)
         _write_cimd_cache(client_id, client, MAX_CIMD_CACHE_SECONDS)
         return client
