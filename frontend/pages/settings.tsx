@@ -136,6 +136,7 @@ export default function UserSettingsPage() {
   const [deletingMcpOAuthConnectionId, setDeletingMcpOAuthConnectionId] = useState<string | null>(null);
   const [mcpOAuthClients, setMcpOAuthClients] = useState<McpOAuthClient[]>([]);
   const [mcpOAuthClientsLoading, setMcpOAuthClientsLoading] = useState(false);
+  const [mcpOAuthServerUrl, setMcpOAuthServerUrl] = useState("");
   const [mcpOAuthClientIssuing, setMcpOAuthClientIssuing] = useState(false);
   const [mcpOAuthClientLabel, setMcpOAuthClientLabel] = useState("");
   const [mcpOAuthClientRedirectUri, setMcpOAuthClientRedirectUri] = useState("");
@@ -319,6 +320,7 @@ export default function UserSettingsPage() {
     try {
       const result = await loadMcpOAuthClients();
       setMcpOAuthClients(result.clients);
+      setMcpOAuthServerUrl(result.mcp_server_url);
       setMcpOAuthClientRedirectUri((current) => current || result.default_redirect_uri);
     } catch (error) {
       setMcpOAuthClients([]);
@@ -1011,6 +1013,7 @@ export default function UserSettingsPage() {
         mcpOAuthClientSecretRequired
       );
       setMcpOAuthClientCredentials(credentials);
+      setMcpOAuthServerUrl(credentials.mcp_server_url);
       setMcpOAuthClients((current) => [
         {
           client_id: credentials.client_id,
@@ -1263,6 +1266,7 @@ export default function UserSettingsPage() {
               deletingMcpOAuthConnectionId={deletingMcpOAuthConnectionId}
               mcpOAuthClients={mcpOAuthClients}
               mcpOAuthClientsLoading={mcpOAuthClientsLoading}
+              mcpOAuthServerUrl={mcpOAuthServerUrl}
               mcpOAuthClientIssuing={mcpOAuthClientIssuing}
               mcpOAuthClientLabel={mcpOAuthClientLabel}
               mcpOAuthClientRedirectUri={mcpOAuthClientRedirectUri}

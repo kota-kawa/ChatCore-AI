@@ -46,6 +46,7 @@ describe("SecuritySettingsSection MCP connections", () => {
           created_at: "2026-07-14T10:00:00Z"
         }]}
         mcpOAuthClientsLoading={false}
+        mcpOAuthServerUrl="https://chat.example.test/mcp"
         mcpOAuthClientIssuing={false}
         mcpOAuthClientLabel="Manual connector"
         mcpOAuthClientRedirectUri=""
@@ -107,6 +108,9 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
 
     expect(screen.getByText("My connector")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "MCP接続" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://chat.example.test/mcp")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "MCPサーバーURLをコピー" })).toBeInTheDocument();
     expect(screen.getByText("対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "手動設定用の認証情報を発行" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "My connectorの名前を編集" }));
@@ -133,7 +137,7 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(onMcpOAuthClientLabelChange).toHaveBeenCalledWith("開発用コネクター");
     fireEvent.click(screen.getByRole("checkbox", { name: "OAuthクライアントシークレットを発行する" }));
     expect(onMcpOAuthClientSecretRequiredChange).toHaveBeenCalledWith(true);
-    fireEvent.click(screen.getByRole("button", { name: "手動用の認証情報を発行" }));
+    fireEvent.click(screen.getByRole("button", { name: "発行" }));
     expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
     expect(onDeleteMcpOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: "mcp-example-client" }));

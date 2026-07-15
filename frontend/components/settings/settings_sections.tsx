@@ -434,12 +434,14 @@ function SecurityCredentialField({
   id,
   label,
   value,
-  secret = false
+  secret = false,
+  placeholder
 }: {
   id: string;
   label: string;
   value: string;
   secret?: boolean;
+  placeholder?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -463,6 +465,7 @@ function SecurityCredentialField({
           id={id}
           className="custom-form-control"
           value={value}
+          placeholder={placeholder}
           readOnly
           autoComplete={secret ? "off" : undefined}
         />
@@ -470,6 +473,7 @@ function SecurityCredentialField({
           type="button"
           className={`security-copy-button${copied ? " is-copied" : ""}`}
           aria-label={`${label}をコピー`}
+          disabled={!value}
           onClick={() => {
             void copyValue();
           }}
@@ -579,6 +583,7 @@ export function SecuritySettingsSection({
   deletingMcpOAuthConnectionId,
   mcpOAuthClients,
   mcpOAuthClientsLoading,
+  mcpOAuthServerUrl,
   mcpOAuthClientIssuing,
   mcpOAuthClientLabel,
   mcpOAuthClientRedirectUri,
@@ -627,6 +632,7 @@ export function SecuritySettingsSection({
   deletingMcpOAuthConnectionId: string | null;
   mcpOAuthClients: McpOAuthClient[];
   mcpOAuthClientsLoading: boolean;
+  mcpOAuthServerUrl: string;
   mcpOAuthClientIssuing: boolean;
   mcpOAuthClientLabel: string;
   mcpOAuthClientRedirectUri: string;
@@ -1090,15 +1096,25 @@ export function SecuritySettingsSection({
           <div className="security-panel security-panel--advanced">
             <div className="security-panel__head">
               <span className="security-panel__icon" aria-hidden="true">
-                <i className="bi bi-key-fill"></i>
+                <i className="bi bi-plug-fill"></i>
               </span>
               <div className="security-panel__heading">
-                <span className="security-panel__kicker">Advanced</span>
-                <h3>連携用の認証情報</h3>
+                <h3>MCP接続</h3>
                 <p className="security-panel__description">
-                  通常は接続先の自動設定を使い、手動設定が必要な場合だけ認証情報を発行します。
+                  MCPクライアントとの接続に必要なURLと、手動設定用の認証情報を確認できます。
                 </p>
               </div>
+            </div>
+            <div className="security-server-endpoint">
+              <SecurityCredentialField
+                id="mcpOAuthServerUrl"
+                label="MCPサーバーURL"
+                value={mcpOAuthServerUrl}
+                placeholder={mcpOAuthClientsLoading ? "読み込み中..." : "URLを取得できませんでした"}
+              />
+              <p className="security-server-endpoint__description">
+                MCP対応クライアントに共通して使用する接続先です。このURLをクライアントのMCPサーバー設定に貼り付けてください。
+              </p>
             </div>
             <div className="security-advisory">
               <i className="bi bi-info-circle" aria-hidden="true"></i>
@@ -1111,7 +1127,7 @@ export function SecuritySettingsSection({
                   事前登録を要求するサービスだけに使います。コールバックURLを指定しない場合は既定値を使用します。
                 </p>
               </div>
-              <div className="form-group">
+              <div className="form-group security-client-form__name">
                 <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>必須</span></label>
                 <input
                   id="mcpOAuthClientLabel"
@@ -1159,12 +1175,12 @@ export function SecuritySettingsSection({
               </div>
               <button
                 type="button"
-                className="primary-button security-action"
+                className="primary-button security-action security-client-form__submit"
                 disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientLabel.trim()}
                 onClick={onIssueMcpOAuthClient}
               >
                 <i className="bi bi-key" aria-hidden="true"></i>
-                {mcpOAuthClientIssuing ? "発行中..." : "手動用の認証情報を発行"}
+                {mcpOAuthClientIssuing ? "発行中..." : "発行"}
               </button>
             </div>
             {mcpOAuthClientCredentials ? (
@@ -1174,7 +1190,6 @@ export function SecuritySettingsSection({
                   <span><strong>認証情報を発行しました</strong>{mcpOAuthClientCredentials.client_secret ? "シークレットはページを離れると再表示できません。今すぐ安全な場所へコピーしてください。" : "公開クライアントとして発行しました。シークレットは不要です。"}</span>
                 </p>
                 <div className="security-credentials-result__grid">
-                  <SecurityCredentialField id="mcpOAuthServerUrl" label="MCPサーバーURL" value={mcpOAuthClientCredentials.mcp_server_url} />
                   <SecurityCredentialField id="mcpOAuthRedirectUri" label="コールバックURL（リダイレクトURI）" value={mcpOAuthClientCredentials.redirect_uri} />
                   <SecurityCredentialField id="mcpOAuthClientId" label="OAuthクライアントID" value={mcpOAuthClientCredentials.client_id} />
                   {mcpOAuthClientCredentials.client_secret ? (
