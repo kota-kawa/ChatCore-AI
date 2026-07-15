@@ -839,6 +839,53 @@
   margin: 0;
 }
 
+:where(body.settings-page, .user-settings-page) .security-client-details {
+  border-top: 1px solid var(--settings-border-color);
+  border-bottom: 1px solid var(--settings-border-color);
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 52px;
+  padding: 0.8rem 0.15rem;
+  color: var(--settings-text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details > summary:hover {
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details > summary:focus-visible {
+  outline: 3px solid rgba(25, 195, 125, 0.2);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details > summary i {
+  flex: 0 0 auto;
+  color: var(--settings-text-muted);
+  transition: transform 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details[open] > summary i {
+  transform: rotate(180deg);
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-details__body {
+  padding: 0.35rem 0 1rem;
+}
+
 :where(body.settings-page, .user-settings-page) .security-client-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -916,7 +963,7 @@
 }
 
 :where(body.settings-page, .user-settings-page) .security-credential-field__control .custom-form-control {
-  padding-right: 6.5rem;
+  padding-right: 3.25rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.82rem;
 }
@@ -927,9 +974,10 @@
   right: 0.35rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  min-height: 34px;
-  padding: 0 0.65rem;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 0;
   border-radius: 9px;
   color: var(--settings-text-muted);
@@ -939,6 +987,11 @@
   cursor: pointer;
   transform: translateY(-50%);
   transition: color 0.2s ease, background 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .security-copy-button i {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 :where(body.settings-page, .user-settings-page) .security-copy-button:hover,

@@ -140,7 +140,6 @@ export default function UserSettingsPage() {
   const [mcpOAuthClientIssuing, setMcpOAuthClientIssuing] = useState(false);
   const [mcpOAuthClientLabel, setMcpOAuthClientLabel] = useState("");
   const [mcpOAuthClientRedirectUri, setMcpOAuthClientRedirectUri] = useState("");
-  const [mcpOAuthClientSecretRequired, setMcpOAuthClientSecretRequired] = useState(false);
   const [deletingMcpOAuthClientId, setDeletingMcpOAuthClientId] = useState<string | null>(null);
   const [mcpOAuthClientCredentials, setMcpOAuthClientCredentials] = useState<McpOAuthClientCredentials | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
@@ -1009,8 +1008,7 @@ export default function UserSettingsPage() {
     try {
       const credentials = await issueMcpOAuthClient(
         mcpOAuthClientLabel.trim(),
-        mcpOAuthClientRedirectUri.trim() || undefined,
-        mcpOAuthClientSecretRequired
+        mcpOAuthClientRedirectUri.trim() || undefined
       );
       setMcpOAuthClientCredentials(credentials);
       setMcpOAuthServerUrl(credentials.mcp_server_url);
@@ -1026,7 +1024,6 @@ export default function UserSettingsPage() {
       ]);
       setMcpOAuthClientLabel("");
       setMcpOAuthClientRedirectUri("");
-      setMcpOAuthClientSecretRequired(false);
       showToast(
         credentials.client_secret
           ? "連携用認証情報を発行しました。シークレットをコピーしてください。"
@@ -1041,7 +1038,7 @@ export default function UserSettingsPage() {
     } finally {
       setMcpOAuthClientIssuing(false);
     }
-  }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri, mcpOAuthClientSecretRequired]);
+  }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri]);
 
   const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
     const name = client.label || client.client_id;
@@ -1270,7 +1267,6 @@ export default function UserSettingsPage() {
               mcpOAuthClientIssuing={mcpOAuthClientIssuing}
               mcpOAuthClientLabel={mcpOAuthClientLabel}
               mcpOAuthClientRedirectUri={mcpOAuthClientRedirectUri}
-              mcpOAuthClientSecretRequired={mcpOAuthClientSecretRequired}
               deletingMcpOAuthClientId={deletingMcpOAuthClientId}
               mcpOAuthClientCredentials={mcpOAuthClientCredentials}
               accountDeleteConfirmation={accountDeleteConfirmation}
@@ -1296,7 +1292,6 @@ export default function UserSettingsPage() {
               onRefreshMcpOAuthClients={loadMcpOAuthClientList}
               onMcpOAuthClientLabelChange={setMcpOAuthClientLabel}
               onMcpOAuthClientRedirectUriChange={setMcpOAuthClientRedirectUri}
-              onMcpOAuthClientSecretRequiredChange={setMcpOAuthClientSecretRequired}
               onIssueMcpOAuthClient={handleIssueMcpOAuthClient}
               onDeleteMcpOAuthClient={handleDeleteMcpOAuthClient}
               onUpdateMcpOAuthClientLabel={handleUpdateMcpOAuthClientLabel}

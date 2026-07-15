@@ -472,14 +472,14 @@ function SecurityCredentialField({
         <button
           type="button"
           className={`security-copy-button${copied ? " is-copied" : ""}`}
-          aria-label={`${label}をコピー`}
+          aria-label={copied ? `${label}をコピーしました` : `${label}をコピー`}
+          title={copied ? "コピーしました" : "コピー"}
           disabled={!value}
           onClick={() => {
             void copyValue();
           }}
         >
           <i className={`bi ${copied ? "bi-check2" : "bi-copy"}`} aria-hidden="true"></i>
-          {copied ? "コピー済み" : "コピー"}
         </button>
       </div>
     </div>
@@ -587,7 +587,6 @@ export function SecuritySettingsSection({
   mcpOAuthClientIssuing,
   mcpOAuthClientLabel,
   mcpOAuthClientRedirectUri,
-  mcpOAuthClientSecretRequired,
   deletingMcpOAuthClientId,
   mcpOAuthClientCredentials,
   accountDeleteConfirmation,
@@ -607,7 +606,6 @@ export function SecuritySettingsSection({
   onRefreshMcpOAuthClients,
   onMcpOAuthClientLabelChange,
   onMcpOAuthClientRedirectUriChange,
-  onMcpOAuthClientSecretRequiredChange,
   onIssueMcpOAuthClient,
   onDeleteMcpOAuthClient,
   onUpdateMcpOAuthClientLabel,
@@ -636,7 +634,6 @@ export function SecuritySettingsSection({
   mcpOAuthClientIssuing: boolean;
   mcpOAuthClientLabel: string;
   mcpOAuthClientRedirectUri: string;
-  mcpOAuthClientSecretRequired: boolean;
   deletingMcpOAuthClientId: string | null;
   mcpOAuthClientCredentials: McpOAuthClientCredentials | null;
   accountDeleteConfirmation: string;
@@ -656,7 +653,6 @@ export function SecuritySettingsSection({
   onRefreshMcpOAuthClients: () => void;
   onMcpOAuthClientLabelChange: (value: string) => void;
   onMcpOAuthClientRedirectUriChange: (value: string) => void;
-  onMcpOAuthClientSecretRequiredChange: (value: boolean) => void;
   onIssueMcpOAuthClient: () => void;
   onDeleteMcpOAuthClient: (client: McpOAuthClient) => void;
   onUpdateMcpOAuthClientLabel: (client: McpOAuthClient, label: string) => Promise<void>;
@@ -1116,88 +1112,81 @@ export function SecuritySettingsSection({
                 MCP対応クライアントに共通して使用する接続先です。このURLをクライアントのMCPサーバー設定に貼り付けてください。
               </p>
             </div>
-            <div className="security-advisory">
-              <i className="bi bi-info-circle" aria-hidden="true"></i>
-              <p>対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。</p>
-            </div>
-            <div className="security-client-form">
-              <div className="security-client-form__intro">
-                <h4>手動設定用の認証情報を発行</h4>
-                <p className="security-panel__description">
-                  事前登録を要求するサービスだけに使います。コールバックURLを指定しない場合は既定値を使用します。
-                </p>
-              </div>
-              <div className="form-group security-client-form__name">
-                <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>必須</span></label>
-                <input
-                  id="mcpOAuthClientLabel"
-                  type="text"
-                  className="custom-form-control"
-                  value={mcpOAuthClientLabel}
-                  maxLength={100}
-                  placeholder="例: 社内AIコネクター"
-                  required
-                  disabled={mcpOAuthClientIssuing}
-                  onChange={(event) => {
-                    onMcpOAuthClientLabelChange(event.target.value);
-                  }}
-                />
-              </div>
-              <div className="form-group security-client-form__uri">
-                <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI） <span>任意</span></label>
-                <input
-                  id="mcpOAuthClientRedirectUri"
-                  type="url"
-                  className="custom-form-control"
-                  value={mcpOAuthClientRedirectUri}
-                  maxLength={2048}
-                  placeholder="https://service.example/callback"
-                  disabled={mcpOAuthClientIssuing}
-                  onChange={(event) => {
-                    onMcpOAuthClientRedirectUriChange(event.target.value);
-                  }}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="mcpOAuthClientSecretRequired">
-                  <input
-                    id="mcpOAuthClientSecretRequired"
-                    type="checkbox"
-                    checked={mcpOAuthClientSecretRequired}
-                    disabled={mcpOAuthClientIssuing}
-                    onChange={(event) => {
-                      onMcpOAuthClientSecretRequiredChange(event.target.checked);
-                    }}
-                  />
-                  OAuthクライアントシークレットを発行する
-                </label>
-                <p className="security-panel__description">接続先がクライアントシークレットを要求する場合だけ選択してください。未選択時はPKCE対応の公開クライアントとして発行します。</p>
-              </div>
-              <button
-                type="button"
-                className="primary-button security-action security-client-form__submit"
-                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientLabel.trim()}
-                onClick={onIssueMcpOAuthClient}
-              >
-                <i className="bi bi-key" aria-hidden="true"></i>
-                {mcpOAuthClientIssuing ? "発行中..." : "発行"}
-              </button>
-            </div>
-            {mcpOAuthClientCredentials ? (
-              <div className="security-credentials-result">
-                <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
-                  <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
-                  <span><strong>認証情報を発行しました</strong>{mcpOAuthClientCredentials.client_secret ? "シークレットはページを離れると再表示できません。今すぐ安全な場所へコピーしてください。" : "公開クライアントとして発行しました。シークレットは不要です。"}</span>
-                </p>
-                <div className="security-credentials-result__grid">
-                  <SecurityCredentialField id="mcpOAuthRedirectUri" label="コールバックURL（リダイレクトURI）" value={mcpOAuthClientCredentials.redirect_uri} />
-                  <SecurityCredentialField id="mcpOAuthClientId" label="OAuthクライアントID" value={mcpOAuthClientCredentials.client_id} />
-                  {mcpOAuthClientCredentials.client_secret ? (
-                    <SecurityCredentialField id="mcpOAuthClientSecret" label="OAuthクライアントシークレット" value={mcpOAuthClientCredentials.client_secret} secret />
-                  ) : null}
+            <details className="security-client-details">
+              <summary>
+                <span>詳細（OAuth認証情報の手動設定）</span>
+                <i className="bi bi-chevron-down" aria-hidden="true"></i>
+              </summary>
+              <div className="security-client-details__body">
+                <div className="security-advisory">
+                  <i className="bi bi-info-circle" aria-hidden="true"></i>
+                  <p>ほとんどのMCPクライアントは動的クライアント登録によって自動的に認証を設定します。接続先が静的なOAuth認証情報を要求する場合だけ発行してください。</p>
                 </div>
+                <div className="security-client-form">
+                  <div className="security-client-form__intro">
+                    <h4>OAuth認証情報を発行</h4>
+                    <p className="security-panel__description">
+                      認証情報の名前を入力してください。コールバックURLを指定しない場合は既定値を使用します。
+                    </p>
+                  </div>
+                  <div className="form-group security-client-form__name">
+                    <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>必須</span></label>
+                    <input
+                      id="mcpOAuthClientLabel"
+                      type="text"
+                      className="custom-form-control"
+                      value={mcpOAuthClientLabel}
+                      maxLength={100}
+                      placeholder="例: 社内AIコネクター"
+                      required
+                      disabled={mcpOAuthClientIssuing}
+                      onChange={(event) => {
+                        onMcpOAuthClientLabelChange(event.target.value);
+                      }}
+                    />
+                  </div>
+                  <div className="form-group security-client-form__uri">
+                    <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI） <span>任意</span></label>
+                    <input
+                      id="mcpOAuthClientRedirectUri"
+                      type="url"
+                      className="custom-form-control"
+                      value={mcpOAuthClientRedirectUri}
+                      maxLength={2048}
+                      placeholder="https://service.example/callback"
+                      disabled={mcpOAuthClientIssuing}
+                      onChange={(event) => {
+                        onMcpOAuthClientRedirectUriChange(event.target.value);
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button security-action security-client-form__submit"
+                    disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientLabel.trim()}
+                    onClick={onIssueMcpOAuthClient}
+                  >
+                    <i className="bi bi-key" aria-hidden="true"></i>
+                    {mcpOAuthClientIssuing ? "発行中..." : "発行"}
+                  </button>
+                </div>
+                {mcpOAuthClientCredentials ? (
+                  <div className="security-credentials-result">
+                    <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
+                      <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
+                      <span><strong>認証情報を発行しました</strong>クライアントシークレットはページを離れると再表示できません。今すぐ安全な場所へコピーしてください。</span>
+                    </p>
+                    <div className="security-credentials-result__grid">
+                      <SecurityCredentialField id="mcpOAuthRedirectUri" label="コールバックURL（リダイレクトURI）" value={mcpOAuthClientCredentials.redirect_uri} />
+                      <SecurityCredentialField id="mcpOAuthClientId" label="OAuthクライアントID" value={mcpOAuthClientCredentials.client_id} />
+                      {mcpOAuthClientCredentials.client_secret ? (
+                        <SecurityCredentialField id="mcpOAuthClientSecret" label="OAuthクライアントシークレット" value={mcpOAuthClientCredentials.client_secret} secret />
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </details>
             <div className="security-panel__subhead">
               <div>
                 <span className="security-panel__kicker">Credentials</span>

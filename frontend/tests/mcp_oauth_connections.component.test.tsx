@@ -10,7 +10,6 @@ describe("SecuritySettingsSection MCP connections", () => {
     const onDeleteMcpOAuthClient = vi.fn();
     const onMcpOAuthClientLabelChange = vi.fn();
     const onMcpOAuthClientRedirectUriChange = vi.fn();
-    const onMcpOAuthClientSecretRequiredChange = vi.fn();
     const onUpdateMcpOAuthConnectionDisplayName = vi.fn().mockResolvedValue(undefined);
     const onUpdateMcpOAuthClientLabel = vi.fn().mockResolvedValue(undefined);
     render(
@@ -50,7 +49,6 @@ describe("SecuritySettingsSection MCP connections", () => {
         mcpOAuthClientIssuing={false}
         mcpOAuthClientLabel="Manual connector"
         mcpOAuthClientRedirectUri=""
-        mcpOAuthClientSecretRequired={false}
         deletingMcpOAuthClientId={null}
         mcpOAuthClientCredentials={null}
         accountDeleteConfirmation=""
@@ -70,7 +68,6 @@ describe("SecuritySettingsSection MCP connections", () => {
         onRefreshMcpOAuthClients={vi.fn()}
         onMcpOAuthClientLabelChange={onMcpOAuthClientLabelChange}
         onMcpOAuthClientRedirectUriChange={onMcpOAuthClientRedirectUriChange}
-        onMcpOAuthClientSecretRequiredChange={onMcpOAuthClientSecretRequiredChange}
         onIssueMcpOAuthClient={onIssueMcpOAuthClient}
         onDeleteMcpOAuthClient={onDeleteMcpOAuthClient}
         onUpdateMcpOAuthClientLabel={onUpdateMcpOAuthClientLabel}
@@ -110,9 +107,16 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(screen.getByText("My connector")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "MCP接続" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("https://chat.example.test/mcp")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "MCPサーバーURLをコピー" })).toBeInTheDocument();
-    expect(screen.getByText("対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "手動設定用の認証情報を発行" })).toBeInTheDocument();
+    const copyButton = screen.getByRole("button", { name: "MCPサーバーURLをコピー" });
+    expect(copyButton).toBeInTheDocument();
+    expect(copyButton).not.toHaveTextContent("コピー");
+    const detailsSummary = screen.getByText("詳細（OAuth認証情報の手動設定）");
+    const details = detailsSummary.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(detailsSummary);
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByRole("heading", { name: "OAuth認証情報を発行" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "OAuthクライアントシークレットを発行する" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "My connectorの名前を編集" }));
     fireEvent.change(screen.getByRole("textbox", { name: "My connectorの名前" }), {
       target: { value: "開発用コネクター" }
@@ -135,8 +139,6 @@ describe("SecuritySettingsSection MCP connections", () => {
       target: { value: "開発用コネクター" }
     });
     expect(onMcpOAuthClientLabelChange).toHaveBeenCalledWith("開発用コネクター");
-    fireEvent.click(screen.getByRole("checkbox", { name: "OAuthクライアントシークレットを発行する" }));
-    expect(onMcpOAuthClientSecretRequiredChange).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: "発行" }));
     expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
