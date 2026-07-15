@@ -99,7 +99,6 @@ export default function McpOAuthAuthorizePage() {
             </div>
             {consent ? (
               <>
-                <span className="oauth-authorize-client-icon" aria-hidden="true"><i className="bi bi-stars"></i></span>
                 <h1 id="oauth-authorize-title">{consent.client_name} と連携しますか？</h1>
                 <p><strong>{consent.client_host || "不明な接続元"}</strong> がChat Coreへのアクセスを求めています。</p>
               </>

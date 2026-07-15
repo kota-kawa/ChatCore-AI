@@ -38,7 +38,7 @@ describe("McpOAuthAuthorizePage", () => {
       localhost_warning: false
     });
 
-    render(<McpOAuthAuthorizePage />);
+    const { container } = render(<McpOAuthAuthorizePage />);
 
     expect(screen.getByText("連携情報を安全に確認しています…")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Example AI と連携しますか？" })).toBeInTheDocument();
@@ -48,6 +48,8 @@ describe("McpOAuthAuthorizePage", () => {
     expect(screen.getByText("接続の詳細を表示")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "キャンセル" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "許可して接続" })).toBeInTheDocument();
+    expect(container.querySelector(".oauth-authorize-client-icon")).not.toBeInTheDocument();
+    expect(container.querySelector(".bi-stars")).not.toBeInTheDocument();
   });
 
   it.each([
