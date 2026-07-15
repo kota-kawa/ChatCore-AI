@@ -26,6 +26,44 @@ def _make_params(resource):
 
 
 class McpOAuthTestCase(unittest.TestCase):
+    def test_cimd_loads_a_public_client_from_its_metadata_url(self):
+        client_id = "https://client.example.test/oauth/client.json"
+        response = MagicMock()
+        response.status_code = 200
+        response.headers = {"content-type": "application/json"}
+        response.iter_content.return_value = [
+            json.dumps(
+                {
+                    "client_id": client_id,
+                    "client_name": "URL-only MCP client",
+                    "redirect_uris": ["https://client.example.test/oauth/callback"],
+                    "grant_types": ["authorization_code", "refresh_token"],
+                    "response_types": ["code"],
+                    "token_endpoint_auth_method": "none",
+                }
+            ).encode("utf-8")
+        ]
+
+        @contextmanager
+        def fake_dns_pin(_mapping):
+            yield
+
+        mcp_oauth._cimd_cache.clear()
+        try:
+            with (
+                patch("services.mcp_oauth._resolve_safe_ip", return_value="203.0.113.10"),
+                patch("services.mcp_oauth._pin_dns", fake_dns_pin),
+                patch("services.mcp_oauth.requests.get", return_value=response),
+            ):
+                client = mcp_oauth._cimd_client(client_id)
+        finally:
+            mcp_oauth._cimd_cache.clear()
+
+        self.assertIsNotNone(client)
+        self.assertEqual(str(client.client_id), client_id)
+        self.assertEqual(client.token_endpoint_auth_method, "none")
+        response.close.assert_called_once()
+
     def test_cimd_cache_is_bounded(self):
         mcp_oauth._cimd_cache.clear()
         try:
@@ -370,6 +408,8 @@ class McpOAuthTestCase(unittest.TestCase):
             self.assertTrue(mcp_oauth._resource_matches_server(SERVER_URL))
             # Trailing slash differences must not break the match.
             self.assertTrue(mcp_oauth._resource_matches_server(SERVER_URL + "/"))
+            # RFC 8707 canonicalization treats scheme and host as case-insensitive.
+            self.assertTrue(mcp_oauth._resource_matches_server("HTTPS://CHAT.EXAMPLE.TEST/mcp"))
             # A different resource is rejected.
             self.assertFalse(mcp_oauth._resource_matches_server("https://evil.example.test/mcp"))
 

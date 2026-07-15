@@ -62,6 +62,19 @@ class McpServerTestCase(unittest.TestCase):
 
         self.assertTrue(metadata["client_id_metadata_document_supported"])
         self.assertEqual(metadata["scopes_supported"], ["prompts:write"])
+        self.assertEqual(metadata["registration_endpoint"], "https://example.test/register")
+        self.assertEqual(
+            set(metadata["token_endpoint_auth_methods_supported"]),
+            {"none", "client_secret_post", "client_secret_basic"},
+        )
+
+    def test_protected_resource_metadata_supports_root_discovery(self):
+        with patch.dict(os.environ, {"MCP_PUBLIC_BASE_URL": "https://example.test"}, clear=False):
+            metadata = mcp_server.get_oauth_protected_resource_metadata()
+
+        self.assertEqual(metadata["resource"], "https://example.test/mcp")
+        self.assertEqual(metadata["authorization_servers"], ["https://example.test/"])
+        self.assertEqual(metadata["scopes_supported"], ["prompts:write"])
 
     def test_issuer_matches_protected_resource_authorization_server(self):
         # RFC 8414 §3.3: the issuer must byte-match the authorization_servers value
@@ -104,3 +117,47 @@ class McpServerTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertIn("resource_metadata", response.headers["www-authenticate"])
+        self.assertIn('scope="prompts:write"', response.headers["www-authenticate"])
+
+    def test_url_only_client_can_register_as_a_public_oauth_client(self):
+        environment = {
+            "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
+            "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
+            "FASTAPI_ENV": "development",
+        }
+        previous_app = mcp_server._mcp_asgi_app
+        previous_server = mcp_server._mcp
+        try:
+            with (
+                patch.dict(os.environ, environment, clear=False),
+                patch("services.mcp_oauth._store_client") as store_client,
+                patch(
+                    "services.mcp_request_protection.run_blocking",
+                    return_value=(True, 0, 0),
+                ),
+            ):
+                mcp_server._mcp_asgi_app = None
+                mcp_server._mcp = None
+
+                async def register_client():
+                    transport = httpx.ASGITransport(app=mcp_server.get_mcp_asgi_app())
+                    async with httpx.AsyncClient(transport=transport, base_url="http://localhost:5004") as client:
+                        return await client.post(
+                            "/register",
+                            json={
+                                "redirect_uris": ["http://127.0.0.1:43123/oauth/callback"],
+                                "token_endpoint_auth_method": "none",
+                                "client_name": "URL-only MCP client",
+                            },
+                        )
+
+                response = asyncio.run(register_client())
+        finally:
+            mcp_server._mcp_asgi_app = previous_app
+            mcp_server._mcp = previous_server
+
+        self.assertEqual(response.status_code, 201, response.text)
+        registration = response.json()
+        self.assertEqual(registration["token_endpoint_auth_method"], "none")
+        self.assertIsNone(registration.get("client_secret"))
+        store_client.assert_called_once()

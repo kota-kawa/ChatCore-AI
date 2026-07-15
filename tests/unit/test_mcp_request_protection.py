@@ -34,6 +34,37 @@ async def _single_body_receive(body: bytes):
 
 
 class McpRequestProtectionMiddlewareTestCase(unittest.TestCase):
+    def test_mcp_auth_challenge_includes_required_scope(self):
+        async def inner(scope, receive, send):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (
+                            b"www-authenticate",
+                            b'Bearer resource_metadata="https://example.test/.well-known/oauth-protected-resource/mcp"',
+                        )
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": b""})
+
+        middleware = McpRequestProtectionMiddleware(inner, required_scope="prompts:write")
+        messages = []
+
+        async def send(message):
+            messages.append(message)
+
+        async def run():
+            receive = await _single_body_receive(b"{}")
+            await middleware(_scope("/mcp"), receive, send)
+
+        asyncio.run(run())
+
+        headers = dict(messages[0]["headers"])
+        self.assertIn(b'scope="prompts:write"', headers[b"www-authenticate"])
+
     def test_rejects_oversized_content_length_before_calling_inner_app(self):
         inner_called = False
 
