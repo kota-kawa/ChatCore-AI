@@ -34,7 +34,6 @@
 }
 
 .oauth-authorize-brand__mark,
-.oauth-authorize-client-icon,
 .oauth-authorize-permission__icon {
   display: inline-flex;
   align-items: center;
@@ -47,17 +46,6 @@
   border-radius: var(--radius-s);
   color: var(--text-light);
   background: var(--primary-color);
-}
-
-.oauth-authorize-client-icon {
-  width: 3.5rem;
-  height: 3.5rem;
-  margin: 0 auto var(--space-4);
-  border: 1px solid var(--primary-border);
-  border-radius: var(--radius-l);
-  color: var(--primary-dark);
-  background: var(--primary-soft);
-  font-size: var(--text-xl);
 }
 
 .oauth-authorize-card__header h1 {
@@ -336,7 +324,6 @@
   }
 }
 
-:root[data-theme="dark"] .oauth-authorize-client-icon,
 :root[data-theme="dark"] .oauth-authorize-permission__icon {
   background: var(--primary-alpha-16);
 }
