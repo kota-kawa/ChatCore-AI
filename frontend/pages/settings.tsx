@@ -319,6 +319,7 @@ export default function UserSettingsPage() {
     try {
       const result = await loadMcpOAuthClients();
       setMcpOAuthClients(result.clients);
+      setMcpOAuthClientRedirectUri((current) => current || result.default_redirect_uri);
     } catch (error) {
       setMcpOAuthClients([]);
       showToast(
@@ -1006,7 +1007,7 @@ export default function UserSettingsPage() {
     try {
       const credentials = await issueMcpOAuthClient(
         mcpOAuthClientLabel.trim(),
-        mcpOAuthClientRedirectUri.trim(),
+        mcpOAuthClientRedirectUri.trim() || undefined,
         mcpOAuthClientSecretRequired
       );
       setMcpOAuthClientCredentials(credentials);
@@ -1023,7 +1024,12 @@ export default function UserSettingsPage() {
       setMcpOAuthClientLabel("");
       setMcpOAuthClientRedirectUri("");
       setMcpOAuthClientSecretRequired(false);
-      showToast("連携用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
+      showToast(
+        credentials.client_secret
+          ? "連携用認証情報を発行しました。シークレットをコピーしてください。"
+          : "連携用認証情報を発行しました。",
+        { variant: "success" }
+      );
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "連携用認証情報の発行に失敗しました。",

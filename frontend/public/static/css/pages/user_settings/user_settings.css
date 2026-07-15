@@ -829,6 +829,20 @@
   gap: 0.75rem;
 }
 
+:where(body.settings-page, .user-settings-page) .security-client-form__intro {
+  grid-column: 1 / -1;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-form__intro h4 {
+  margin: 0 0 0.25rem;
+  color: var(--settings-text-primary);
+  font-size: 0.95rem;
+}
+
+:where(body.settings-page, .user-settings-page) .security-client-form__intro p {
+  margin: 0;
+}
+
 :where(body.settings-page, .user-settings-page) .security-client-form .form-group {
   margin: 0;
 }

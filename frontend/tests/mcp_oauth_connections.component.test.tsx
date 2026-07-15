@@ -48,7 +48,7 @@ describe("SecuritySettingsSection MCP connections", () => {
         mcpOAuthClientsLoading={false}
         mcpOAuthClientIssuing={false}
         mcpOAuthClientLabel="Manual connector"
-        mcpOAuthClientRedirectUri="https://client.example.test/callback"
+        mcpOAuthClientRedirectUri=""
         mcpOAuthClientSecretRequired={false}
         deletingMcpOAuthClientId={null}
         mcpOAuthClientCredentials={null}
@@ -108,7 +108,7 @@ describe("SecuritySettingsSection MCP connections", () => {
 
     expect(screen.getByText("My connector")).toBeInTheDocument();
     expect(screen.getByText("対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("手動設定が必要なサービス向けに認証情報を発行"));
+    expect(screen.getByRole("heading", { name: "手動設定用の認証情報を発行" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "My connectorの名前を編集" }));
     fireEvent.change(screen.getByRole("textbox", { name: "My connectorの名前" }), {
       target: { value: "開発用コネクター" }

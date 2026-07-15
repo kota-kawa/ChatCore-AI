@@ -330,10 +330,33 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(stored_client["token_endpoint_auth_method"], "none")
         self.assertIsNone(cursor.execute.call_args_list[2].args[1][2])
 
-    def test_issue_user_client_requires_a_label(self):
-        with patch("services.mcp_oauth._user_is_verified", return_value=True):
-            with self.assertRaises(mcp_oauth.InvalidClientLabelError):
-                mcp_oauth.issue_user_client(7, "", "https://client.example.test/oauth/callback")
+    def test_issue_user_client_keeps_optional_label_compatibility(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"active": 0}
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        fernet = MagicMock()
+        fernet.encrypt.return_value = b"encrypted-secret"
+        with (
+            patch("services.mcp_oauth._user_is_verified", return_value=True),
+            patch("services.mcp_oauth.get_db_connection", fake_connection),
+            patch("services.mcp_oauth._fernet", return_value=fernet),
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+        ):
+            credentials = mcp_oauth.issue_user_client(
+                7,
+                None,
+                "https://client.example.test/oauth/callback",
+            )
+
+        stored_client = json.loads(cursor.execute.call_args_list[2].args[1][1])
+        self.assertEqual(credentials["label"], "")
+        self.assertEqual(stored_client["client_name"], "Personal Chat-Core connector")
 
     def test_clean_redirect_uri_rejects_non_loopback_http(self):
         with self.assertRaises(mcp_oauth.InvalidRedirectUriError):

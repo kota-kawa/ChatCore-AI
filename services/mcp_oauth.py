@@ -78,10 +78,6 @@ class InvalidRedirectUriError(ValueError):
     """Raised when a user-supplied OAuth redirect URI is unsafe or malformed."""
 
 
-class InvalidClientLabelError(ValueError):
-    """Raised when a manually registered OAuth client has no usable label."""
-
-
 class StoredAuthorizationCode(AuthorizationCode):
     grant_id: UUID
 
@@ -390,8 +386,6 @@ def issue_user_client(
         raise ValueError("Only verified users can issue connector credentials.")
 
     cleaned_label = _clean_user_label(label)
-    if cleaned_label is None:
-        raise InvalidClientLabelError("認証情報の名前を入力してください。")
     cleaned_redirect_uri = _clean_redirect_uri(
         DEFAULT_MCP_OAUTH_REDIRECT_URI if redirect_uri is None else redirect_uri
     )
@@ -405,7 +399,7 @@ def issue_user_client(
         client = OAuthClientInformationFull(
             client_id=client_id,
             client_secret=client_secret,
-            client_name=cleaned_label,
+            client_name=cleaned_label or "Personal Chat-Core connector",
             redirect_uris=[cleaned_redirect_uri],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
@@ -463,7 +457,7 @@ def issue_user_client(
     return {
         "client_id": client_id,
         "client_secret": client_secret,
-        "label": cleaned_label,
+        "label": cleaned_label or "",
         "redirect_uri": registered_redirect_uri,
         "token_endpoint_auth_method": "client_secret_post" if client_secret else "none",
         "mcp_server_url": get_mcp_server_url(),

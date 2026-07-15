@@ -94,12 +94,18 @@ export default function McpOAuthAuthorizePage() {
         <section className="oauth-authorize-card" aria-labelledby="oauth-authorize-title">
           <header className="oauth-authorize-card__header">
             <div className="oauth-authorize-brand" aria-label="Chat Core">
-              <span className="oauth-authorize-brand__mark" aria-hidden="true"><i className="bi bi-shield-check"></i></span>
+              <span className="oauth-authorize-brand__mark" aria-hidden="true"><i className="bi bi-chat-square-text-fill"></i></span>
               <span>Chat Core</span>
             </div>
-            <span className="oauth-authorize-card__eyebrow">CONNECT REQUEST</span>
-            <h1 id="oauth-authorize-title">AIサービス連携の確認</h1>
-            <p>接続先と許可する操作を確認してから、連携を完了してください。</p>
+            {consent ? (
+              <>
+                <span className="oauth-authorize-client-icon" aria-hidden="true"><i className="bi bi-stars"></i></span>
+                <h1 id="oauth-authorize-title">{consent.client_name} と連携しますか？</h1>
+                <p><strong>{consent.client_host || "不明な接続元"}</strong> がChat Coreへのアクセスを求めています。</p>
+              </>
+            ) : (
+              <h1 id="oauth-authorize-title">AIサービス連携の確認</h1>
+            )}
           </header>
 
           {errorMessage ? (
@@ -124,31 +130,19 @@ export default function McpOAuthAuthorizePage() {
 
           {consent ? (
             <div className="oauth-authorize-content">
-              <div className="oauth-authorize-connection" aria-label="連携先">
-                <div className="oauth-authorize-app oauth-authorize-app--client">
-                  <span className="oauth-authorize-app__icon" aria-hidden="true"><i className="bi bi-stars"></i></span>
-                  <span className="oauth-authorize-app__name">{consent.client_name}</span>
-                  <span className="oauth-authorize-app__host">{consent.client_host || "接続元を確認できません"}</span>
-                </div>
-                <span className="oauth-authorize-connection__link" aria-hidden="true"><i className="bi bi-arrow-right"></i></span>
-                <div className="oauth-authorize-app oauth-authorize-app--chat-core">
-                  <span className="oauth-authorize-app__icon" aria-hidden="true"><i className="bi bi-chat-square-heart-fill"></i></span>
-                  <span className="oauth-authorize-app__name">Chat Core</span>
-                  <span className="oauth-authorize-app__host">あなたのアカウント</span>
-                </div>
-              </div>
-
               <section className="oauth-authorize-permission" aria-labelledby="oauth-permission-title">
-                <div className="oauth-authorize-permission__icon" aria-hidden="true"><i className="bi bi-send-check-fill"></i></div>
-                <div>
-                  <p className="oauth-authorize-permission__eyebrow">REQUESTED PERMISSION</p>
-                  <h2 id="oauth-permission-title">{MCP_PROMPTS_WRITE_SCOPE_LABEL}</h2>
-                  <p>このAIサービスが、あなたの名前で公開プロンプトを投稿できるようになります。</p>
+                <h2 id="oauth-permission-title">この連携で許可されること</h2>
+                <div className="oauth-authorize-permission__item">
+                  <span className="oauth-authorize-permission__icon" aria-hidden="true"><i className="bi bi-send"></i></span>
+                  <div>
+                    <strong>{MCP_PROMPTS_WRITE_SCOPE_LABEL}</strong>
+                    <p>あなたの名前で公開プロンプトを投稿できます。</p>
+                  </div>
                 </div>
               </section>
 
               <div className="oauth-authorize-security-note">
-                <i className="bi bi-shield-lock-fill" aria-hidden="true"></i>
+                <i className="bi bi-info-circle" aria-hidden="true"></i>
                 <p>この許可はいつでも設定画面の「外部サービス連携」から取り消せます。</p>
               </div>
 
@@ -181,7 +175,7 @@ export default function McpOAuthAuthorizePage() {
                     void decide("deny");
                   }}
                 >
-                  接続しない
+                  キャンセル
                 </button>
                 <button
                   type="button"

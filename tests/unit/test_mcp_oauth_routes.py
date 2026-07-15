@@ -41,19 +41,24 @@ class McpOAuthRouteTestCase(unittest.TestCase):
             False,
         )
 
-    def test_post_client_requires_a_label(self):
+    def test_post_client_keeps_legacy_optional_fields_and_secret_default(self):
         request = build_request(
             method="POST",
             path="/api/mcp/oauth/clients",
-            json_body={"redirect_uri": "https://client.example.test/callback"},
+            json_body={},
             session={"user_id": 7},
         )
 
-        with patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True):
+        credentials = {"client_id": "mcp-client", "client_secret": "secret"}
+        with (
+            patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
+            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
+            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+        ):
             response = asyncio.run(post_client(request))
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(json.loads(response.body.decode())["error"], "認証情報の名前が不正です。")
+        self.assertEqual(response.status_code, 201)
+        issue_client.assert_called_once_with(7, None, None, True)
 
     def test_patch_client_updates_only_the_authenticated_users_label(self):
         request = build_request(
