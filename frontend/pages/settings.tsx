@@ -139,6 +139,7 @@ export default function UserSettingsPage() {
   const [mcpOAuthClientIssuing, setMcpOAuthClientIssuing] = useState(false);
   const [mcpOAuthClientLabel, setMcpOAuthClientLabel] = useState("");
   const [mcpOAuthClientRedirectUri, setMcpOAuthClientRedirectUri] = useState("");
+  const [mcpOAuthClientSecretRequired, setMcpOAuthClientSecretRequired] = useState(false);
   const [deletingMcpOAuthClientId, setDeletingMcpOAuthClientId] = useState<string | null>(null);
   const [mcpOAuthClientCredentials, setMcpOAuthClientCredentials] = useState<McpOAuthClientCredentials | null>(null);
   const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
@@ -318,7 +319,6 @@ export default function UserSettingsPage() {
     try {
       const result = await loadMcpOAuthClients();
       setMcpOAuthClients(result.clients);
-      setMcpOAuthClientRedirectUri((current) => current || result.default_redirect_uri);
     } catch (error) {
       setMcpOAuthClients([]);
       showToast(
@@ -1006,7 +1006,8 @@ export default function UserSettingsPage() {
     try {
       const credentials = await issueMcpOAuthClient(
         mcpOAuthClientLabel.trim(),
-        mcpOAuthClientRedirectUri.trim()
+        mcpOAuthClientRedirectUri.trim(),
+        mcpOAuthClientSecretRequired
       );
       setMcpOAuthClientCredentials(credentials);
       setMcpOAuthClients((current) => [
@@ -1014,11 +1015,14 @@ export default function UserSettingsPage() {
           client_id: credentials.client_id,
           label: credentials.label,
           redirect_uri: credentials.redirect_uri,
+          token_endpoint_auth_method: credentials.token_endpoint_auth_method,
           created_at: new Date().toISOString()
         },
         ...current
       ]);
       setMcpOAuthClientLabel("");
+      setMcpOAuthClientRedirectUri("");
+      setMcpOAuthClientSecretRequired(false);
       showToast("連携用認証情報を発行しました。シークレットをコピーしてください。", { variant: "success" });
     } catch (error) {
       showToast(
@@ -1028,7 +1032,7 @@ export default function UserSettingsPage() {
     } finally {
       setMcpOAuthClientIssuing(false);
     }
-  }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri]);
+  }, [mcpOAuthClientLabel, mcpOAuthClientRedirectUri, mcpOAuthClientSecretRequired]);
 
   const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
     const name = client.label || client.client_id;
@@ -1256,6 +1260,7 @@ export default function UserSettingsPage() {
               mcpOAuthClientIssuing={mcpOAuthClientIssuing}
               mcpOAuthClientLabel={mcpOAuthClientLabel}
               mcpOAuthClientRedirectUri={mcpOAuthClientRedirectUri}
+              mcpOAuthClientSecretRequired={mcpOAuthClientSecretRequired}
               deletingMcpOAuthClientId={deletingMcpOAuthClientId}
               mcpOAuthClientCredentials={mcpOAuthClientCredentials}
               accountDeleteConfirmation={accountDeleteConfirmation}
@@ -1281,6 +1286,7 @@ export default function UserSettingsPage() {
               onRefreshMcpOAuthClients={loadMcpOAuthClientList}
               onMcpOAuthClientLabelChange={setMcpOAuthClientLabel}
               onMcpOAuthClientRedirectUriChange={setMcpOAuthClientRedirectUri}
+              onMcpOAuthClientSecretRequiredChange={setMcpOAuthClientSecretRequired}
               onIssueMcpOAuthClient={handleIssueMcpOAuthClient}
               onDeleteMcpOAuthClient={handleDeleteMcpOAuthClient}
               onUpdateMcpOAuthClientLabel={handleUpdateMcpOAuthClientLabel}

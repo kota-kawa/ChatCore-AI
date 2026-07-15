@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from blueprints.mcp_oauth import patch_client, patch_connection
+from blueprints.mcp_oauth import patch_client, patch_connection, post_client
 from tests.helpers.request_helpers import build_request
 
 
@@ -12,6 +12,49 @@ async def run_blocking_inline(func, *args, **kwargs):
 
 
 class McpOAuthRouteTestCase(unittest.TestCase):
+    def test_post_client_issues_a_public_client_when_secret_is_not_requested(self):
+        request = build_request(
+            method="POST",
+            path="/api/mcp/oauth/clients",
+            json_body={
+                "label": "開発用コネクター",
+                "redirect_uri": "https://client.example.test/callback",
+                "issue_client_secret": False,
+            },
+            session={"user_id": 7},
+        )
+        credentials = {"client_id": "mcp-client", "client_secret": None}
+
+        with (
+            patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
+            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
+            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+        ):
+            response = asyncio.run(post_client(request))
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(json.loads(response.body.decode()), credentials)
+        issue_client.assert_called_once_with(
+            7,
+            "開発用コネクター",
+            "https://client.example.test/callback",
+            False,
+        )
+
+    def test_post_client_requires_a_label(self):
+        request = build_request(
+            method="POST",
+            path="/api/mcp/oauth/clients",
+            json_body={"redirect_uri": "https://client.example.test/callback"},
+            session={"user_id": 7},
+        )
+
+        with patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True):
+            response = asyncio.run(post_client(request))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(json.loads(response.body.decode())["error"], "認証情報の名前が不正です。")
+
     def test_patch_client_updates_only_the_authenticated_users_label(self):
         request = build_request(
             method="PATCH",

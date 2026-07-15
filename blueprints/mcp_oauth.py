@@ -9,6 +9,7 @@ from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
     ClientLimitReachedError,
+    InvalidClientLabelError,
     InvalidRedirectUriError,
     complete_consent,
     consent_details,
@@ -100,12 +101,23 @@ async def post_client(request: Request):
         return error
     label = body.get("label") if body else None
     redirect_uri = body.get("redirect_uri") if body else None
-    if label is not None and not isinstance(label, str):
+    issue_client_secret = body.get("issue_client_secret", False) if body else False
+    if not isinstance(label, str):
         return jsonify({"error": "認証情報の名前が不正です。"}, status_code=400)
-    if redirect_uri is not None and not isinstance(redirect_uri, str):
+    if not isinstance(redirect_uri, str):
         return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)
+    if not isinstance(issue_client_secret, bool):
+        return jsonify({"error": "OAuthクライアントシークレットの設定が不正です。"}, status_code=400)
     try:
-        credentials = await run_blocking(issue_user_client, user_id, label, redirect_uri)
+        credentials = await run_blocking(
+            issue_user_client,
+            user_id,
+            label,
+            redirect_uri,
+            issue_client_secret,
+        )
+    except InvalidClientLabelError:
+        return jsonify({"error": "認証情報の名前を入力してください。"}, status_code=400)
     except InvalidRedirectUriError:
         return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)
     except ValueError:

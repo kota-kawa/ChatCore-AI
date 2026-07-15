@@ -302,6 +302,39 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(stored_client["redirect_uris"], [redirect_uri])
         self.assertIsNone(stored_client.get("client_uri"))
 
+    def test_issue_user_client_uses_a_public_client_without_a_secret(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"active": 0}
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with (
+            patch("services.mcp_oauth._user_is_verified", return_value=True),
+            patch("services.mcp_oauth.get_db_connection", fake_connection),
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+        ):
+            credentials = mcp_oauth.issue_user_client(
+                7,
+                "Public connector",
+                "https://client.example.test/oauth/callback",
+                issue_client_secret=False,
+            )
+
+        stored_client = json.loads(cursor.execute.call_args_list[2].args[1][1])
+        self.assertIsNone(credentials["client_secret"])
+        self.assertEqual(credentials["token_endpoint_auth_method"], "none")
+        self.assertEqual(stored_client["token_endpoint_auth_method"], "none")
+        self.assertIsNone(cursor.execute.call_args_list[2].args[1][2])
+
+    def test_issue_user_client_requires_a_label(self):
+        with patch("services.mcp_oauth._user_is_verified", return_value=True):
+            with self.assertRaises(mcp_oauth.InvalidClientLabelError):
+                mcp_oauth.issue_user_client(7, "", "https://client.example.test/oauth/callback")
+
     def test_clean_redirect_uri_rejects_non_loopback_http(self):
         with self.assertRaises(mcp_oauth.InvalidRedirectUriError):
             mcp_oauth._clean_redirect_uri("http://client.example.test/callback")
