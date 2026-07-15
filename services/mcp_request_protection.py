@@ -39,8 +39,9 @@ async def _send_json(send: Send, status: int, payload: bytes, headers: list[tupl
 class McpRequestProtectionMiddleware:
     """Rate-limit public OAuth entry points and cap MCP request bodies."""
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, *, required_scope: str | None = None) -> None:
         self.app = app
+        self.required_scope = required_scope
 
     def __getattr__(self, name: str):
         return getattr(self.app, name)
@@ -54,8 +55,10 @@ class McpRequestProtectionMiddleware:
         if not await self._allow_request(scope, path, send):
             return
 
+        response_send = self._scope_aware_send(send) if path == "/mcp" else send
+
         if path not in MCP_BODY_LIMIT_PATHS or scope.get("method", "GET").upper() in {"GET", "HEAD"}:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, response_send)
             return
 
         max_bytes = get_mcp_machine_max_body_bytes()
@@ -78,7 +81,26 @@ class McpRequestProtectionMiddleware:
                 return {"type": "http.request", "body": body, "more_body": False}
             return {"type": "http.disconnect"}
 
-        await self.app(scope, replay_receive, send)
+        await self.app(scope, replay_receive, response_send)
+
+    def _scope_aware_send(self, send: Send) -> Send:
+        """Add RFC 6750 scope guidance to MCP authentication challenges."""
+        required_scope = self.required_scope
+        if not required_scope:
+            return send
+
+        async def send_with_scope(message: Message) -> None:
+            if message["type"] == "http.response.start" and message.get("status") in {401, 403}:
+                headers = list(message.get("headers", []))
+                updated_headers: list[tuple[bytes, bytes]] = []
+                for name, value in headers:
+                    if name.lower() == b"www-authenticate" and b"scope=" not in value.lower():
+                        value += f', scope="{required_scope}"'.encode("ascii")
+                    updated_headers.append((name, value))
+                message = {**message, "headers": updated_headers}
+            await send(message)
+
+        return send_with_scope
 
     async def _allow_request(self, scope: Scope, path: str, send: Send) -> bool:
         rate_limit = MCP_RATE_LIMITS.get(path)

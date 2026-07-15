@@ -270,7 +270,10 @@ def get_mcp_asgi_app():
     global _mcp, _mcp_asgi_app
     if _mcp_asgi_app is None:
         _mcp = _create_mcp()
-        _mcp_asgi_app = McpRequestProtectionMiddleware(_mcp.streamable_http_app())
+        _mcp_asgi_app = McpRequestProtectionMiddleware(
+            _mcp.streamable_http_app(),
+            required_scope=MCP_PROMPTS_WRITE_SCOPE,
+        )
     return _mcp_asgi_app
 
 
@@ -299,4 +302,16 @@ def get_oauth_authorization_metadata() -> dict[str, Any]:
         "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
         "code_challenge_methods_supported": ["S256"],
         "client_id_metadata_document_supported": True,
+    }
+
+
+def get_oauth_protected_resource_metadata() -> dict[str, Any]:
+    """Return RFC 9728 metadata for clients that probe the root well-known URI."""
+    base = get_mcp_public_base_url()
+    return {
+        "resource": get_mcp_server_url(),
+        "authorization_servers": [str(AnyHttpUrl(base))],
+        "scopes_supported": [MCP_PROMPTS_WRITE_SCOPE],
+        "bearer_methods_supported": ["header"],
+        "resource_name": "Chat-Core Prompt Sharing",
     }

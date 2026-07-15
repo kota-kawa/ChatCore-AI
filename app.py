@@ -56,6 +56,7 @@ MCP_MACHINE_PATHS = (
     "/register",
     "/revoke",
     "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/mcp",
 )
 
@@ -268,11 +269,33 @@ app.include_router(mcp_oauth_bp)
 
 
 if is_mcp_enabled():
-    from services.mcp_server import get_mcp_asgi_app, get_oauth_authorization_metadata  # noqa: E402
+    from services.mcp_server import (  # noqa: E402
+        get_mcp_asgi_app,
+        get_oauth_authorization_metadata,
+        get_oauth_protected_resource_metadata,
+    )
 
-    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    discovery_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Cache-Control": "public, max-age=3600",
+    }
+
+    @app.api_route(
+        "/.well-known/oauth-authorization-server",
+        methods=["GET", "OPTIONS"],
+        include_in_schema=False,
+    )
     async def mcp_oauth_authorization_metadata():
-        return jsonify(get_oauth_authorization_metadata())
+        return jsonify(get_oauth_authorization_metadata(), headers=discovery_headers)
+
+    @app.api_route(
+        "/.well-known/oauth-protected-resource",
+        methods=["GET", "OPTIONS"],
+        include_in_schema=False,
+    )
+    async def mcp_oauth_protected_resource_metadata():
+        return jsonify(get_oauth_protected_resource_metadata(), headers=discovery_headers)
 
     # MCPのASGIアプリは最後にマウントし、既存のFastAPIルートを優先する。
     # Mount the MCP ASGI app last so existing FastAPI routes retain precedence.

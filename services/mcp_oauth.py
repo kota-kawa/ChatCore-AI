@@ -134,7 +134,32 @@ def _resource_matches_server(requested: str | None) -> bool:
     """
     if not requested:
         return True
-    return requested.rstrip("/") == get_mcp_server_url().rstrip("/")
+
+    def normalized_parts(value: str) -> tuple[str, str, int | None, str, str, str] | None:
+        try:
+            parsed = urlparse(value)
+            port = parsed.port
+        except ValueError:
+            return None
+        if (
+            not parsed.scheme
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            return None
+        return (
+            parsed.scheme.lower(),
+            parsed.hostname.lower(),
+            port,
+            parsed.path.rstrip("/"),
+            parsed.params,
+            parsed.query,
+        )
+
+    requested_parts = normalized_parts(requested)
+    return requested_parts is not None and requested_parts == normalized_parts(get_mcp_server_url())
 
 
 def _validate_redirect_uri(redirect_uri: str) -> None:
