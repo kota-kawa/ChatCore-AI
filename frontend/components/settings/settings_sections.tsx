@@ -1104,11 +1104,13 @@ export function SecuritySettingsSection({
               <i className="bi bi-info-circle" aria-hidden="true"></i>
               <p>対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。</p>
             </div>
-            <details className="security-client-form">
-              <summary>手動設定が必要なサービス向けに認証情報を発行</summary>
-              <p className="security-panel__description">
-                事前登録を要求するサービスだけに使います。この場合、接続先が指定するコールバックURLが必要です。
-              </p>
+            <div className="security-client-form">
+              <div className="security-client-form__intro">
+                <h4>手動設定用の認証情報を発行</h4>
+                <p className="security-panel__description">
+                  事前登録を要求するサービスだけに使います。コールバックURLを指定しない場合は既定値を使用します。
+                </p>
+              </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>必須</span></label>
                 <input
@@ -1126,7 +1128,7 @@ export function SecuritySettingsSection({
                 />
               </div>
               <div className="form-group security-client-form__uri">
-                <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI） <span>手動設定では必須</span></label>
+                <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI） <span>任意</span></label>
                 <input
                   id="mcpOAuthClientRedirectUri"
                   type="url"
@@ -1134,7 +1136,6 @@ export function SecuritySettingsSection({
                   value={mcpOAuthClientRedirectUri}
                   maxLength={2048}
                   placeholder="https://service.example/callback"
-                  required
                   disabled={mcpOAuthClientIssuing}
                   onChange={(event) => {
                     onMcpOAuthClientRedirectUriChange(event.target.value);
@@ -1159,13 +1160,13 @@ export function SecuritySettingsSection({
               <button
                 type="button"
                 className="primary-button security-action"
-                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientLabel.trim() || !mcpOAuthClientRedirectUri.trim()}
+                disabled={mcpOAuthClientsLoading || mcpOAuthClientIssuing || !mcpOAuthClientLabel.trim()}
                 onClick={onIssueMcpOAuthClient}
               >
                 <i className="bi bi-key" aria-hidden="true"></i>
                 {mcpOAuthClientIssuing ? "発行中..." : "手動用の認証情報を発行"}
               </button>
-            </details>
+            </div>
             {mcpOAuthClientCredentials ? (
               <div className="security-credentials-result">
                 <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
