@@ -137,6 +137,7 @@ const McpOAuthClientListSchema = z.object({
     client_id: z.string().trim().min(1),
     label: z.string(),
     redirect_uri: z.string().url(),
+    token_endpoint_auth_method: z.enum(["none", "client_secret_post"]),
     created_at: z.string().trim().min(1)
   })),
   default_redirect_uri: z.string().url(),
@@ -145,9 +146,10 @@ const McpOAuthClientListSchema = z.object({
 
 const McpOAuthClientCredentialsSchema = z.object({
   client_id: z.string().trim().min(1),
-  client_secret: z.string().trim().min(1),
+  client_secret: z.string().trim().min(1).nullable(),
   label: z.string(),
   redirect_uri: z.string().url(),
+  token_endpoint_auth_method: z.enum(["none", "client_secret_post"]),
   mcp_server_url: z.string().url()
 });
 

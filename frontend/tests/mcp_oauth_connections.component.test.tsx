@@ -8,7 +8,9 @@ describe("SecuritySettingsSection MCP connections", () => {
     const onDeleteMcpOAuthConnection = vi.fn();
     const onIssueMcpOAuthClient = vi.fn();
     const onDeleteMcpOAuthClient = vi.fn();
+    const onMcpOAuthClientLabelChange = vi.fn();
     const onMcpOAuthClientRedirectUriChange = vi.fn();
+    const onMcpOAuthClientSecretRequiredChange = vi.fn();
     const onUpdateMcpOAuthConnectionDisplayName = vi.fn().mockResolvedValue(undefined);
     const onUpdateMcpOAuthClientLabel = vi.fn().mockResolvedValue(undefined);
     render(
@@ -40,12 +42,14 @@ describe("SecuritySettingsSection MCP connections", () => {
           client_id: "mcp-example-client",
           label: "My connector",
           redirect_uri: "https://client.example.test/oauth/callback",
+          token_endpoint_auth_method: "none",
           created_at: "2026-07-14T10:00:00Z"
         }]}
         mcpOAuthClientsLoading={false}
         mcpOAuthClientIssuing={false}
-        mcpOAuthClientLabel=""
-        mcpOAuthClientRedirectUri="https://claude.ai/api/mcp/auth_callback"
+        mcpOAuthClientLabel="Manual connector"
+        mcpOAuthClientRedirectUri="https://client.example.test/callback"
+        mcpOAuthClientSecretRequired={false}
         deletingMcpOAuthClientId={null}
         mcpOAuthClientCredentials={null}
         accountDeleteConfirmation=""
@@ -63,8 +67,9 @@ describe("SecuritySettingsSection MCP connections", () => {
         onDeleteMcpOAuthConnection={onDeleteMcpOAuthConnection}
         onUpdateMcpOAuthConnectionDisplayName={onUpdateMcpOAuthConnectionDisplayName}
         onRefreshMcpOAuthClients={vi.fn()}
-        onMcpOAuthClientLabelChange={vi.fn()}
+        onMcpOAuthClientLabelChange={onMcpOAuthClientLabelChange}
         onMcpOAuthClientRedirectUriChange={onMcpOAuthClientRedirectUriChange}
+        onMcpOAuthClientSecretRequiredChange={onMcpOAuthClientSecretRequiredChange}
         onIssueMcpOAuthClient={onIssueMcpOAuthClient}
         onDeleteMcpOAuthClient={onDeleteMcpOAuthClient}
         onUpdateMcpOAuthClientLabel={onUpdateMcpOAuthClientLabel}
@@ -102,6 +107,8 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(onDeleteMcpOAuthConnection).toHaveBeenCalledWith(expect.objectContaining({ id: "grant-1" }));
 
     expect(screen.getByText("My connector")).toBeInTheDocument();
+    expect(screen.getByText("対応するMCPクライアントは自動的に認証を設定します。OAuthクライアントIDやシークレットをここで発行する必要はありません。")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("手動設定が必要なサービス向けに認証情報を発行"));
     fireEvent.click(screen.getByRole("button", { name: "My connectorの名前を編集" }));
     fireEvent.change(screen.getByRole("textbox", { name: "My connectorの名前" }), {
       target: { value: "開発用コネクター" }
@@ -114,13 +121,19 @@ describe("SecuritySettingsSection MCP connections", () => {
       );
     });
     fireEvent.change(
-      screen.getByRole("textbox", { name: "コールバックURL（リダイレクトURI）" }),
+      screen.getByRole("textbox", { name: /コールバックURL（リダイレクトURI）/ }),
       { target: { value: "https://client.example.test/changed-callback" } }
     );
     expect(onMcpOAuthClientRedirectUriChange).toHaveBeenCalledWith(
       "https://client.example.test/changed-callback"
     );
-    fireEvent.click(screen.getByRole("button", { name: "発行" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "認証情報の名前 必須" }), {
+      target: { value: "開発用コネクター" }
+    });
+    expect(onMcpOAuthClientLabelChange).toHaveBeenCalledWith("開発用コネクター");
+    fireEvent.click(screen.getByRole("checkbox", { name: "OAuthクライアントシークレットを発行する" }));
+    expect(onMcpOAuthClientSecretRequiredChange).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByRole("button", { name: "手動用の認証情報を発行" }));
     expect(onIssueMcpOAuthClient).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "削除" }));
     expect(onDeleteMcpOAuthClient).toHaveBeenCalledWith(expect.objectContaining({ client_id: "mcp-example-client" }));

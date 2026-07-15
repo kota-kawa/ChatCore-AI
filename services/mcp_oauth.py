@@ -78,6 +78,10 @@ class InvalidRedirectUriError(ValueError):
     """Raised when a user-supplied OAuth redirect URI is unsafe or malformed."""
 
 
+class InvalidClientLabelError(ValueError):
+    """Raised when a manually registered OAuth client has no usable label."""
+
+
 class StoredAuthorizationCode(AuthorizationCode):
     grant_id: UUID
 
@@ -369,22 +373,25 @@ def issue_user_client(
     user_id: int,
     label: str | None = None,
     redirect_uri: str | None = None,
-) -> dict[str, str]:
+    issue_client_secret: bool = True,
+) -> dict[str, str | None]:
     """Create a personal OAuth client credential for a manual connector setup.
 
     複数の認証情報を（サービスの API キーのように）保存できるように、既存の認証情報は
-    失効させずに新しいものを追加する。シークレットは一度だけ呼び出し元へ返し、DB には
-    暗号化した値だけを保存する。
+    失効させずに新しいものを追加する。シークレットが必要な場合だけ一度だけ呼び出し元へ
+    返し、DB には暗号化した値だけを保存する。
 
     Unlike a single-credential model, this appends a new credential without
     revoking the user's existing ones, so several can be kept side by side. The
-    secret is returned only to the caller; the database keeps only its encrypted
-    form.
+    secret is returned only to the caller when requested; the database keeps
+    only its encrypted form.
     """
     if not _user_is_verified(user_id):
         raise ValueError("Only verified users can issue connector credentials.")
 
     cleaned_label = _clean_user_label(label)
+    if cleaned_label is None:
+        raise InvalidClientLabelError("認証情報の名前を入力してください。")
     cleaned_redirect_uri = _clean_redirect_uri(
         DEFAULT_MCP_OAUTH_REDIRECT_URI if redirect_uri is None else redirect_uri
     )
@@ -393,23 +400,27 @@ def issue_user_client(
     # Keep the client ID vendor-neutral (no "claude") so it can also be reused
     # by non-Claude MCP connectors.
     client_id = f"mcp-{secrets.token_urlsafe(24)}"
-    client_secret = secrets.token_urlsafe(48)
+    client_secret = secrets.token_urlsafe(48) if issue_client_secret else None
     try:
         client = OAuthClientInformationFull(
             client_id=client_id,
             client_secret=client_secret,
-            client_name=cleaned_label or "Personal Chat-Core connector",
+            client_name=cleaned_label,
             redirect_uris=[cleaned_redirect_uri],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
-            token_endpoint_auth_method="client_secret_post",
+            token_endpoint_auth_method="client_secret_post" if client_secret else "none",
             scope=MCP_PROMPTS_WRITE_SCOPE,
         )
     except ValueError as exc:
         raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。") from exc
     _validate_redirect_uris(client)
     registered_redirect_uri = str(client.redirect_uris[0])
-    encrypted_secret = _fernet().encrypt(client_secret.encode("utf-8")).decode("ascii")
+    encrypted_secret = (
+        _fernet().encrypt(client_secret.encode("utf-8")).decode("ascii")
+        if client_secret
+        else None
+    )
 
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -452,8 +463,9 @@ def issue_user_client(
     return {
         "client_id": client_id,
         "client_secret": client_secret,
-        "label": cleaned_label or "",
+        "label": cleaned_label,
         "redirect_uri": registered_redirect_uri,
+        "token_endpoint_auth_method": "client_secret_post" if client_secret else "none",
         "mcp_server_url": get_mcp_server_url(),
     }
 
@@ -466,7 +478,9 @@ def list_user_clients(user_id: int) -> dict[str, Any]:
             cursor.execute(
                 """
                 SELECT uc.client_id, uc.label, uc.created_at,
-                       c.metadata -> 'redirect_uris' ->> 0 AS redirect_uri
+                       c.metadata -> 'redirect_uris' ->> 0 AS redirect_uri,
+                       COALESCE(c.metadata ->> 'token_endpoint_auth_method', 'client_secret_post')
+                           AS token_endpoint_auth_method
                 FROM mcp_oauth_user_clients uc
                 JOIN mcp_oauth_clients c ON c.client_id = uc.client_id
                 WHERE uc.user_id = %s AND uc.revoked_at IS NULL
@@ -480,6 +494,7 @@ def list_user_clients(user_id: int) -> dict[str, Any]:
                     "client_id": str(row["client_id"]),
                     "label": row["label"] or "",
                     "redirect_uri": str(row["redirect_uri"]),
+                    "token_endpoint_auth_method": str(row["token_endpoint_auth_method"]),
                     "created_at": row["created_at"].isoformat(),
                 }
                 for row in rows

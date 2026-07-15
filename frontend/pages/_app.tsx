@@ -28,6 +28,7 @@ import "../public/prompt_share/static/css/pages/prompt_share.button-system.css";
 import "../public/prompt_share/static/css/pages/prompt_share.dark-mode.css";
 import "../public/prompt_share/static/css/pages/prompt_manage.css";
 import "../public/static/css/pages/user_settings/user_settings.css";
+import "../public/static/css/pages/oauth_authorize/oauth_authorize.css";
 import "../public/static/css/pages/shared_memo.css";
 import "../public/static/css/pages/shared_prompt.css";
 import "../public/static/css/pages/chat/shared_chat.css";
@@ -119,7 +120,7 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
 
 // 認証ページ（グローバルAIエージェントを非表示にするページ）のセット
 // Set of auth pages (pages that hide the global AI agent)
-const AUTH_PAGES = new Set(["/login", "/register"]);
+const AUTH_PAGES = new Set(["/login", "/register", "/oauth/authorize"]);
 // メニューナビゲーション対象のパス一覧
 // Paths that are targets for menu navigation
 const MENU_NAVIGATION_PATHS = ["/", "/memo", "/prompt_share"] as const;
