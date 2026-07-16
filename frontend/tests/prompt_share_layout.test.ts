@@ -60,6 +60,61 @@ test("prompt share layout renders crawlable page content before client API data 
   assert.match(html, /title="文章作成"/);
 });
 
+test("prompt share layout places load more after the final prompt card", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptSharePageLayout, {
+      authUiReady: true,
+      isLoggedIn: true,
+      searchInput: "",
+      onSearchInputChange: noop,
+      onSearchInputKeyDown: noop,
+      onSearch: noop,
+      onOpenComposerModal: noop,
+      categories: [],
+      selectedCategory: "all",
+      onCategoryClick: noop,
+      contentFormatFilters: [],
+      selectedContentFormatFilter: "all",
+      onContentFormatFilterClick: noop,
+      mediaTypeFilters: [],
+      selectedMediaTypeFilter: "all",
+      onMediaTypeFilterClick: noop,
+      selectedCategoryTitle: "全てのプロンプト",
+      promptCountMeta: "公開プロンプト: 1件を表示",
+      hasMoreResults: true,
+      isLoadingMoreResults: false,
+      onLoadMoreResults: noop,
+      isPromptsLoading: false,
+      hasPromptFeedback: false,
+      visiblePrompts: [{
+        id: 1,
+        clientId: "prompt-1",
+        title: "メール作成",
+        content: "メール本文を作成してください。",
+        content_format: "prompt",
+        media_type: "text",
+        liked: false,
+        used_in_chat: false
+      }],
+      feedbackToShow: null,
+      openDropdownPromptId: null,
+      likePendingIds: new Set<string>(),
+      actionEffectIds: new Set<string>(),
+      addAsTaskPendingIds: new Set<string>(),
+      onOpenDetail: noop,
+      onOpenComments: noop,
+      onOpenShare: noop,
+      onToggleDropdown: noop,
+      onCloseDropdown: noop,
+      onAddAsTask: noop,
+      onToggleLike: noop
+    })
+  );
+
+  assert.ok(html.indexOf("prompt-card") < html.indexOf("prompt-load-more-container"));
+  assert.match(html, /さらに読み込む/);
+});
+
 test("prompt share detail modal highlights prompt content and metadata", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptShareDetailModal, {

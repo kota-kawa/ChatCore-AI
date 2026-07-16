@@ -313,18 +313,6 @@ export function PromptSharePageLayout({
             <p id="promptCountMeta" className="prompt-count-meta">
               {promptCountMeta}
             </p>
-            {/* 追加ページが存在する場合のみ「さらに読み込む」ボタンを表示する */}
-            {/* Show "load more" only when the API indicates more pages exist */}
-            {hasMoreResults ? (
-              <button
-                type="button"
-                className="prompt-load-more cc-press"
-                onClick={onLoadMoreResults}
-                disabled={isLoadingMoreResults}
-              >
-                {isLoadingMoreResults ? "読み込み中..." : "さらに読み込む"}
-              </button>
-            ) : null}
           </div>
 
           {/* 非React（レガシー）スクリプトのマウントポイント */}
@@ -370,6 +358,21 @@ export function PromptSharePageLayout({
               );
             })}
           </div>
+
+          {/* 読了後の次の操作として、追加読み込みはカード一覧の末尾に表示する */}
+          {/* Put the next action after the last card, where readers naturally reach it */}
+          {hasMoreResults ? (
+            <div className="prompt-load-more-container">
+              <button
+                type="button"
+                className="prompt-load-more cc-press"
+                onClick={onLoadMoreResults}
+                disabled={isLoadingMoreResults}
+              >
+                {isLoadingMoreResults ? "読み込み中..." : "さらに読み込む"}
+              </button>
+            </div>
+          ) : null}
         </section>
       </main>
 
