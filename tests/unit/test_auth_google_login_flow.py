@@ -435,10 +435,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            response.headers["location"],
-            "https://chatcore-ai.com/login?flow=register&offer_passkey_setup=1&provider=google",
-        )
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/?auth=success")
         self.assertEqual(request.session["user_id"], 7)
         mock_create.assert_not_called()
         mock_link.assert_called_once_with(7, "google-user-123", "user@example.com")
@@ -450,9 +447,9 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_called_once_with(7)
         mock_copy_tasks.assert_called_once_with(7)
 
-    # 日本語: 検証済みの既存ユーザーが初めてGoogleアカウント連携を行った場合、パスキー設定を促す画面へ遷移することを検証します。
-    # English: Verify that an existing verified email user is prompted to set up a passkey after first Google link.
-    def test_existing_verified_email_user_is_prompted_for_passkey_after_first_google_link(self):
+    # 日本語: 検証済みの既存ユーザーが初めてGoogleアカウント連携を行った場合も、ログイン画面へ戻さず通常の遷移先へ進むことを検証します。
+    # English: Verify that a first Google link for an existing verified email user redirects to the normal destination, not back to login.
+    def test_existing_verified_email_user_redirects_to_normal_destination_after_first_google_link(self):
         request = make_request()
         fake_flow = FakeFlow()
         fake_flow_class = Mock()
@@ -512,10 +509,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
                                                         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            response.headers["location"],
-            "https://chatcore-ai.com/login?flow=register&offer_passkey_setup=1&provider=google",
-        )
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/?auth=success")
         self.assertEqual(request.session["user_id"], 8)
         mock_create.assert_not_called()
         mock_link.assert_called_once_with(8, "google-user-456", "user@example.com")
@@ -527,9 +521,9 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         mock_verify.assert_not_called()
         mock_copy_tasks.assert_called_once_with(8)
 
-    # 日本語: すでにパスキープロンプト表示済みまたは二回目以降のGoogleログインの場合、通常の遷移先へリダイレクトされることを検証します。
-    # English: Verify that an existing Google user bypasses passkey promotion on subsequent logins.
-    def test_existing_google_user_keeps_normal_redirect_after_passkey_prompt_was_already_shown(self):
+    # 日本語: 既存のGoogleユーザーは指定された通常の遷移先へリダイレクトされることを検証します。
+    # English: Verify that an existing Google user redirects to the requested normal destination.
+    def test_existing_google_user_redirects_to_requested_destination(self):
         request = make_request(
             session={
                 "google_oauth_state": "google-state",

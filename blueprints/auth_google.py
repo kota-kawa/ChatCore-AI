@@ -305,12 +305,10 @@ async def google_callback(request: Request):
     try:
         user = await dep("run_blocking")(dep("get_user_by_google_id"), google_user_id)
         should_mark_verified = False
-        should_offer_passkey_setup = False
         if user:
             user_id = user["id"]
             await dep("run_blocking")(dep("link_google_account"), user_id, google_user_id, email)
             should_mark_verified = not user.get("is_verified")
-            should_offer_passkey_setup = should_mark_verified
         else:
             user = await dep("run_blocking")(dep("get_user_by_email"), email)
             if user:
@@ -323,12 +321,8 @@ async def google_callback(request: Request):
                     _clear_google_oauth_session(session)
                     return dep("RedirectResponse")(login_redirect_url, status_code=302)
                 user_id = user["id"]
-                linked_google_account_for_first_time = not existing_google_user_id
                 await dep("run_blocking")(dep("link_google_account"), user_id, google_user_id, email)
                 should_mark_verified = not user.get("is_verified")
-                should_offer_passkey_setup = (
-                    linked_google_account_for_first_time or should_mark_verified
-                )
             else:
                 user_id = await dep("run_blocking")(
                     dep("create_user"),
@@ -380,25 +374,6 @@ async def google_callback(request: Request):
             session["user_email"] = persisted_user["email"]
     except Exception:
         dep("logger").exception("Google OAuth callback: failed to refresh email for user %s", user_id)
-
-    if should_offer_passkey_setup:
-        passkey_setup_url = _google_callback_redirect_target(
-            request,
-            "/login",
-            redirect_uri=redirect_uri,
-        )
-        passkey_setup_query = {
-            "flow": "register",
-            "offer_passkey_setup": "1",
-            "provider": "google",
-        }
-        if next_path:
-            passkey_setup_query["next"] = next_path
-        _clear_google_oauth_session(session)
-        return dep("RedirectResponse")(
-            _append_query_params(passkey_setup_url, **passkey_setup_query),
-            status_code=302,
-        )
 
     _clear_google_oauth_session(session)
     if next_path:
