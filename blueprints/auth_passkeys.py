@@ -11,7 +11,7 @@ from blueprints.auth_common import (
     _resolve_auth_limit_service,
     _user_id_from_session,
 )
-from blueprints.auth_support import dep
+from blueprints.auth_support import dep, get_auth_limit_service_dependency
 
 
 async def api_list_passkeys(request: Request):
@@ -169,7 +169,7 @@ async def api_passkey_register_verify(request: Request):
 
 async def api_passkey_authenticate_options(
     request: Request,
-    auth_limit_service: Any | None = Depends(lambda request: dep("get_auth_limit_service")(request)),
+    auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     if (
@@ -207,7 +207,7 @@ async def api_passkey_authenticate_options(
 
 async def api_passkey_authenticate_verify(
     request: Request,
-    auth_limit_service: Any | None = Depends(lambda request: dep("get_auth_limit_service")(request)),
+    auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     if dep("verify_authentication_response") is None or dep("base64url_to_bytes") is None:
