@@ -57,6 +57,11 @@ MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH = 30000
 MAX_SHARED_PROMPT_TITLE_LENGTH = 255
 MAX_SHARED_PROMPT_CONTENT_LENGTH = 30000
 MAX_SHARED_PROMPT_AI_MODEL_LENGTH = 100
+MAX_MCP_MEMO_TITLE_LENGTH = 255
+# MCP request bodies are capped at 64 KiB. Twenty thousand Unicode characters
+# remain within that limit even when most input uses three-byte UTF-8 characters.
+MAX_MCP_MEMO_CONTENT_LENGTH = 20000
+MAX_MEMO_STORED_CONTENT_LENGTH = 60000
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -390,6 +395,57 @@ class MemoUpdateRequest(RequestPayloadModel):
     clear_collection: bool = False
     background_color: str | None = Field(default=None, max_length=20, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
     clear_background_color: bool = False
+
+
+# 日本語: MCP経由でメモ本文またはタイトルを競合安全に更新するリクエスト。
+# English: Conflict-safe request for updating memo title or content through MCP.
+class McpMemoUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
+    title: str | None = Field(default=None, max_length=MAX_MCP_MEMO_TITLE_LENGTH)
+    content: str | None = Field(default=None, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)
+    allow_shared_content_change: bool = False
+
+    @model_validator(mode="after")
+    def _require_update(self) -> "McpMemoUpdateRequest":
+        if self.title is None and self.content is None:
+            raise ValueError("更新するタイトルまたは本文を指定してください。")
+        if self.content is not None and not self.content.strip():
+            raise ValueError("メモ本文を空にはできません。")
+        return self
+
+
+class McpMemoCreateRequest(BaseModel):
+    """Validated input for creating a private memo through MCP."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(default="", max_length=MAX_MCP_MEMO_TITLE_LENGTH)
+    content: str = Field(min_length=1, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)
+
+    @model_validator(mode="after")
+    def _require_content(self) -> "McpMemoCreateRequest":
+        if not self.content.strip():
+            raise ValueError("メモ本文を空にはできません。")
+        return self
+
+
+class McpMemoAppendRequest(BaseModel):
+    """Validated input for appending content to a private memo through MCP."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
+    text: str = Field(min_length=1, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)
+    separator: str = Field(default="\n\n", max_length=20)
+    allow_shared_content_change: bool = False
+
+    @model_validator(mode="after")
+    def _require_text(self) -> "McpMemoAppendRequest":
+        if not self.text.strip():
+            raise ValueError("追記内容を空にはできません。")
+        return self
 
 
 # 日本語: メモの有効化/無効化（アーカイブ状態等）を切り替える際のリクエストペイロード。

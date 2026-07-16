@@ -3,7 +3,7 @@ import json
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from mcp.server.auth.provider import AuthorizationParams, AuthorizeError
@@ -16,10 +16,10 @@ from services import mcp_oauth
 SERVER_URL = "https://chat.example.test/mcp"
 
 
-def _make_params(resource):
+def _make_params(resource, scopes=None):
     return AuthorizationParams(
         state="state",
-        scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+        scopes=[mcp_oauth.MCP_PROMPTS_WRITE_SCOPE] if scopes is None else scopes,
         code_challenge="challenge",
         redirect_uri="https://client.example.test/callback",
         redirect_uri_provided_explicitly=True,
@@ -64,10 +64,12 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertIsNotNone(client)
         self.assertEqual(str(client.client_id), client_id)
         self.assertEqual(client.token_endpoint_auth_method, "none")
-        self.assertEqual(client.scope, mcp_oauth.MCP_PROMPTS_WRITE_SCOPE)
+        self.assertEqual(client.scope, " ".join(mcp_oauth.MCP_ALLOWED_SCOPES))
         self.assertEqual(
-            client.validate_scope(mcp_oauth.MCP_PROMPTS_WRITE_SCOPE),
-            [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+            client.validate_scope(
+                f"{mcp_oauth.MCP_PROMPTS_READ_SCOPE} {mcp_oauth.MCP_MEMOS_READ_SCOPE}"
+            ),
+            [mcp_oauth.MCP_PROMPTS_READ_SCOPE, mcp_oauth.MCP_MEMOS_READ_SCOPE],
         )
         response.close.assert_called_once()
 
@@ -134,7 +136,45 @@ class McpOAuthTestCase(unittest.TestCase):
 
         self.assertEqual(details["client_name"], "Example AI")
         self.assertEqual(details["client_host"], "client.example.test")
+        self.assertEqual(details["scopes"], [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE])
+        self.assertEqual(
+            details["scope_labels"],
+            {mcp_oauth.MCP_PROMPTS_WRITE_SCOPE: "公開プロンプトを投稿する"},
+        )
         self.assertFalse(details["localhost_warning"])
+
+    def test_consent_details_exposes_each_requested_scope_and_label(self):
+        client = OAuthClientInformationFull(
+            client_id="https://client.example.test/metadata.json",
+            redirect_uris=["https://client.example.test/callback"],
+            client_name="Example AI",
+            token_endpoint_auth_method="none",
+        )
+        requested_scopes = [
+            mcp_oauth.MCP_PROMPTS_READ_SCOPE,
+            mcp_oauth.MCP_MEMOS_READ_SCOPE,
+            mcp_oauth.MCP_MEMOS_WRITE_SCOPE,
+        ]
+        payload = {
+            "client": mcp_oauth._serialize_client(client),
+            "params": {
+                "state": "state",
+                "scopes": requested_scopes,
+                "code_challenge": "challenge",
+                "redirect_uri": "https://client.example.test/callback",
+                "resource": SERVER_URL,
+            },
+        }
+        with patch("services.mcp_oauth.get_session_secret_key", return_value="test-secret"):
+            token = mcp_oauth._consent_serializer().dumps(payload)
+            details = mcp_oauth.consent_details(token)
+
+        self.assertEqual(details["scope"], " ".join(requested_scopes))
+        self.assertEqual(details["scopes"], requested_scopes)
+        self.assertEqual(
+            details["scope_labels"][mcp_oauth.MCP_MEMOS_READ_SCOPE],
+            "保存したメモを検索・閲覧する",
+        )
 
     def test_consent_details_uses_redirect_host_for_an_opaque_client_id(self):
         client = OAuthClientInformationFull(
@@ -196,6 +236,40 @@ class McpOAuthTestCase(unittest.TestCase):
         # 提示されたトークンは replaced_at を立てるだけで即 revoke しない（猶予期間で接続を維持）。
         self.assertIn("replaced_at = COALESCE(replaced_at", executed_sql)
         self.assertNotIn("revoked_at = NOW()", executed_sql)
+
+    def test_refresh_rejects_scope_escalation_before_writing_tokens(self):
+        refresh = self._refresh_token()
+        with (
+            patch("services.mcp_oauth.get_db_connection") as get_connection,
+            self.assertRaises(mcp_oauth.TokenError) as context,
+        ):
+            mcp_oauth._refresh_access_token(
+                refresh,
+                [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE, mcp_oauth.MCP_MEMOS_READ_SCOPE],
+            )
+
+        self.assertEqual(context.exception.error, "invalid_scope")
+        get_connection.assert_not_called()
+
+    def test_refresh_can_narrow_an_existing_multi_scope_grant(self):
+        refresh = self._refresh_token()
+        refresh.scopes = list(mcp_oauth.MCP_ALLOWED_SCOPES)
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            token = mcp_oauth._refresh_access_token(refresh, [mcp_oauth.MCP_MEMOS_READ_SCOPE])
+
+        self.assertEqual(token.scope, mcp_oauth.MCP_MEMOS_READ_SCOPE)
+        inserted_rows = cursor.executemany.call_args.args[1]
+        self.assertEqual(inserted_rows[0][4], [mcp_oauth.MCP_MEMOS_READ_SCOPE])
+        self.assertEqual(inserted_rows[1][4], [mcp_oauth.MCP_MEMOS_READ_SCOPE])
 
     def _load_refresh_row(self, replaced_at):
         return {
@@ -363,6 +437,8 @@ class McpOAuthTestCase(unittest.TestCase):
         stored_client = json.loads(cursor.execute.call_args_list[2].args[1][1])
         self.assertEqual(credentials["redirect_uri"], redirect_uri)
         self.assertEqual(stored_client["redirect_uris"], [redirect_uri])
+        self.assertEqual(stored_client["scope"], " ".join(mcp_oauth.MCP_ALLOWED_SCOPES))
+        self.assertEqual(credentials["scopes"], list(mcp_oauth.MCP_ALLOWED_SCOPES))
         self.assertIsNone(stored_client.get("client_uri"))
 
     def test_issue_user_client_uses_a_public_client_without_a_secret(self):
@@ -464,6 +540,143 @@ class McpOAuthTestCase(unittest.TestCase):
         self.assertEqual(redirect, "https://chat.example.test/oauth/authorize?request=signed-token")
         # Even without an incoming resource, the stored grant is pinned to this server.
         self.assertEqual(captured["payload"]["params"]["resource"], SERVER_URL)
+
+    def test_authorize_accepts_any_registered_scope_subset(self):
+        client = OAuthClientInformationFull(
+            client_id="https://client.example.test/metadata.json",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=" ".join(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+        requested_scopes = [mcp_oauth.MCP_PROMPTS_READ_SCOPE, mcp_oauth.MCP_MEMOS_READ_SCOPE]
+        captured = {}
+
+        def fake_dumps(payload):
+            captured["payload"] = payload
+            return "signed-token"
+
+        with (
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+            patch("services.mcp_oauth.get_mcp_public_base_url", return_value="https://chat.example.test"),
+            patch("services.mcp_oauth._consent_serializer") as serializer,
+        ):
+            serializer.return_value.dumps.side_effect = fake_dumps
+            asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().authorize(
+                    client,
+                    _make_params(None, requested_scopes),
+                )
+            )
+
+        self.assertEqual(captured["payload"]["params"]["scopes"], requested_scopes)
+
+    def test_authorize_without_scope_keeps_the_legacy_write_only_default(self):
+        client = OAuthClientInformationFull(
+            client_id="new-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=" ".join(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+        params = AuthorizationParams(
+            state="state",
+            scopes=None,
+            code_challenge="challenge",
+            redirect_uri="https://client.example.test/callback",
+            redirect_uri_provided_explicitly=True,
+            resource=None,
+        )
+        captured = {}
+
+        def fake_dumps(payload):
+            captured["payload"] = payload
+            return "signed-token"
+
+        with (
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+            patch("services.mcp_oauth.get_mcp_public_base_url", return_value="https://chat.example.test"),
+            patch("services.mcp_oauth._consent_serializer") as serializer,
+        ):
+            serializer.return_value.dumps.side_effect = fake_dumps
+            asyncio.run(mcp_oauth.ChatCoreOAuthProvider().authorize(client, params))
+
+        self.assertEqual(
+            captured["payload"]["params"]["scopes"],
+            [mcp_oauth.MCP_PROMPTS_WRITE_SCOPE],
+        )
+
+    def test_authorize_rejects_scope_not_registered_for_client(self):
+        client = OAuthClientInformationFull(
+            client_id="legacy-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=mcp_oauth.MCP_PROMPTS_WRITE_SCOPE,
+        )
+        with self.assertRaises(AuthorizeError) as context:
+            asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().authorize(
+                    client,
+                    _make_params(None, [mcp_oauth.MCP_MEMOS_READ_SCOPE]),
+                )
+            )
+
+        self.assertEqual(context.exception.error, "invalid_scope")
+
+    def test_authorize_rejects_unknown_scope(self):
+        client = OAuthClientInformationFull(
+            client_id="client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=" ".join(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+        with self.assertRaises(AuthorizeError) as context:
+            asyncio.run(
+                mcp_oauth.ChatCoreOAuthProvider().authorize(
+                    client,
+                    _make_params(None, ["admin:write"]),
+                )
+            )
+
+        self.assertEqual(context.exception.error, "invalid_scope")
+
+    def test_register_client_preserves_a_valid_scope_subset(self):
+        client = OAuthClientInformationFull(
+            client_id="dcr-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=f"{mcp_oauth.MCP_PROMPTS_READ_SCOPE} {mcp_oauth.MCP_MEMOS_READ_SCOPE}",
+        )
+        store_client = AsyncMock()
+        with patch("services.mcp_oauth.run_blocking", store_client):
+            asyncio.run(mcp_oauth.ChatCoreOAuthProvider().register_client(client))
+
+        self.assertEqual(
+            client.scope,
+            f"{mcp_oauth.MCP_PROMPTS_READ_SCOPE} {mcp_oauth.MCP_MEMOS_READ_SCOPE}",
+        )
+        store_client.assert_awaited_once_with(mcp_oauth._store_client, client)
+
+    def test_register_client_without_scope_can_request_any_supported_subset(self):
+        client = OAuthClientInformationFull(
+            client_id="dcr-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+        )
+        with patch("services.mcp_oauth.run_blocking", new_callable=AsyncMock):
+            asyncio.run(mcp_oauth.ChatCoreOAuthProvider().register_client(client))
+
+        self.assertEqual(client.scope, " ".join(mcp_oauth.MCP_ALLOWED_SCOPES))
+
+    def test_register_client_rejects_an_unknown_scope(self):
+        client = OAuthClientInformationFull(
+            client_id="dcr-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope="admin:write",
+        )
+        with self.assertRaises(mcp_oauth.RegistrationError) as context:
+            asyncio.run(mcp_oauth.ChatCoreOAuthProvider().register_client(client))
+
+        self.assertEqual(context.exception.error, "invalid_client_metadata")
 
     def test_authorize_rejects_foreign_resource(self):
         client = OAuthClientInformationFull(

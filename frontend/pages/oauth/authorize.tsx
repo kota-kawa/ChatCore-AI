@@ -8,7 +8,7 @@ import {
   loadMcpOAuthConsent,
   McpOAuthApiError
 } from "../../scripts/user/settings/api";
-import { MCP_PROMPTS_WRITE_SCOPE_LABEL } from "../../scripts/user/settings/constants";
+import { MCP_OAUTH_SCOPE_DEFINITIONS } from "../../scripts/user/settings/constants";
 import type { McpOAuthConsent } from "../../scripts/user/settings/types";
 
 // MCP OAuth の認可画面。外部AIサービスに投稿権限を渡す前に、ユーザーへ接続先を明示する。
@@ -22,6 +22,19 @@ export default function McpOAuthAuthorizePage() {
   const [consent, setConsent] = useState<McpOAuthConsent | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const requestedPermissions = useMemo(() => {
+    if (!consent) {
+      return [];
+    }
+    return consent.scope.split(/\s+/).filter(Boolean).map((scope) => ({
+      scope,
+      ...(MCP_OAUTH_SCOPE_DEFINITIONS[scope] ?? {
+        label: scope,
+        description: "この権限へのアクセスを許可します。",
+        iconClass: "bi bi-key"
+      })
+    }));
+  }, [consent]);
 
   useEffect(() => {
     if (!router.isReady) {
@@ -85,7 +98,7 @@ export default function McpOAuthAuthorizePage() {
     <>
       <SeoHead
         title="AIサービス連携の確認 | Chat Core"
-        description="外部AIサービスへの投稿権限を確認します。"
+        description="外部AIサービスへ許可するChat Coreの権限を確認します。"
         canonicalPath="/oauth/authorize"
         noindex
       />
@@ -131,13 +144,15 @@ export default function McpOAuthAuthorizePage() {
             <div className="oauth-authorize-content">
               <section className="oauth-authorize-permission" aria-labelledby="oauth-permission-title">
                 <h2 id="oauth-permission-title">この連携で許可されること</h2>
-                <div className="oauth-authorize-permission__item">
-                  <span className="oauth-authorize-permission__icon" aria-hidden="true"><i className="bi bi-send"></i></span>
-                  <div>
-                    <strong>{MCP_PROMPTS_WRITE_SCOPE_LABEL}</strong>
-                    <p>あなたの名前で公開プロンプトを投稿できます。</p>
+                {requestedPermissions.map((permission) => (
+                  <div className="oauth-authorize-permission__item" key={permission.scope}>
+                    <span className="oauth-authorize-permission__icon" aria-hidden="true"><i className={permission.iconClass}></i></span>
+                    <div>
+                      <strong>{permission.label}</strong>
+                      <p>{permission.description}</p>
+                    </div>
                   </div>
-                </div>
+                ))}
               </section>
 
               <div className="oauth-authorize-security-note">

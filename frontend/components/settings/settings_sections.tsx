@@ -9,6 +9,7 @@ import type {
 import { InlineLoading } from "../ui/inline_loading";
 import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
+  MCP_OAUTH_SCOPE_DEFINITIONS,
   THEME_OPTIONS
 } from "../../scripts/user/settings/constants";
 import type {
@@ -1008,7 +1009,7 @@ export function SecuritySettingsSection({
               <div className="security-panel__heading">
                 <h3>接続中のAIサービス</h3>
                 <p className="security-panel__description">
-                  外部AIサービスに、公開プロンプトを投稿する権限を付与した連携です。不要になった連携は解除できます。
+                  外部AIサービスに許可したChat-Core機能を確認できます。不要になった連携は解除できます。
                 </p>
               </div>
             </div>
@@ -1061,6 +1062,16 @@ export function SecuritySettingsSection({
                         <div className="security-meta__row">
                           <dt>接続先</dt>
                           <dd>{connection.client_host || "不明"}</dd>
+                        </div>
+                        <div className="security-meta__row">
+                          <dt>許可した機能</dt>
+                          <dd>
+                            {connection.scopes.map((scope) => (
+                              <span key={scope} className="d-block">
+                                {MCP_OAUTH_SCOPE_DEFINITIONS[scope]?.label || scope}
+                              </span>
+                            ))}
+                          </dd>
                         </div>
                         <div className="security-meta__row">
                           <dt>接続日時</dt>

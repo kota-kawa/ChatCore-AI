@@ -34,7 +34,7 @@ describe("McpOAuthAuthorizePage", () => {
       client_id: "https://client.example.test/metadata.json",
       client_host: "client.example.test",
       redirect_host: "client.example.test",
-      scope: "prompts:write",
+      scope: "prompts:read prompts:write memos:read memos:write",
       localhost_warning: false
     });
 
@@ -43,7 +43,11 @@ describe("McpOAuthAuthorizePage", () => {
     expect(screen.getByText("連携情報を安全に確認しています…")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Example AI と連携しますか？" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "この連携で許可されること" })).toBeInTheDocument();
+    expect(screen.getByText("公開プロンプトとSKILLを検索・閲覧する")).toBeInTheDocument();
     expect(screen.getByText("公開プロンプトを投稿する")).toBeInTheDocument();
+    expect(screen.getByText("保存したメモを検索・閲覧する")).toBeInTheDocument();
+    expect(screen.getByText("保存したメモを編集する")).toBeInTheDocument();
+    expect(screen.getByText("あなたの非公開メモのタイトルと内容を変更できます。")).toBeInTheDocument();
     expect(screen.getByText("この許可はいつでも設定画面の「外部サービス連携」から取り消せます。")).toBeInTheDocument();
     expect(screen.getByText("接続の詳細を表示")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "キャンセル" })).toBeInTheDocument();

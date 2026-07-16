@@ -127,6 +127,7 @@ const McpOAuthConnectionsResponseSchema = z.object({
     client_name: z.string().trim().min(1),
     client_host: z.string().transform((value) => value.trim()),
     display_name: z.string().trim().min(1).nullable(),
+    scopes: z.array(z.string()),
     created_at: z.string().trim().min(1),
     last_used_at: z.string().trim().min(1).nullable()
   }))
