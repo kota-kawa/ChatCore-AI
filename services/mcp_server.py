@@ -38,10 +38,12 @@ _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
 
 MCP_CATEGORY_KEYS = tuple(PROMPT_CATEGORIES)
+MCP_CATEGORY_LABELS = "; ".join(
+    f"{category.key}（{category.label}）" for category in PROMPT_CATEGORIES.values()
+)
 MCP_CATEGORY_DESCRIPTION = (
     "投稿の用途カテゴリです。省略時は未分類です。"
-    "指定できる値: "
-    + ", ".join(MCP_CATEGORY_KEYS)
+    "指定できる値（キーと表示名）: " + MCP_CATEGORY_LABELS
 )
 
 

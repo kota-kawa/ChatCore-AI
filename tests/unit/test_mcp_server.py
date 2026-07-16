@@ -45,6 +45,11 @@ class McpServerTestCase(unittest.TestCase):
             category = definition["inputSchema"]["properties"]["category"]
             self.assertIn("coding", category["enum"])
             self.assertIn("指定できる値", category["description"])
+            for expected_category in mcp_server.PROMPT_CATEGORIES.values():
+                self.assertIn(
+                    f"{expected_category.key}（{expected_category.label}）",
+                    category["description"],
+                )
             output = definition["outputSchema"]
             self.assertEqual(set(output["required"]), {"prompt_id", "title", "content_format", "public_url"})
 
