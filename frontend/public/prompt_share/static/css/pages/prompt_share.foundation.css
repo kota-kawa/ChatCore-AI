@@ -681,6 +681,12 @@ body.prompt-share-page.ps-modal-open #promptShareModal.show {
   transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
 }
 
+:where(body.prompt-share-page, .prompt-share-page) .prompt-load-more-container {
+  display: flex;
+  justify-content: center;
+  padding-top: 24px;
+}
+
 :where(body.prompt-share-page, .prompt-share-page) .prompt-load-more:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: rgba(69, 88, 110, 0.3);
