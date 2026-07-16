@@ -157,14 +157,21 @@ async def google_login(request: Request):
             client_config,
             scopes=dep("GOOGLE_SCOPES"),
             redirect_uri=redirect_uri,
+            autogenerate_code_verifier=True,
         )
         authorization_url, state = flow.authorization_url(prompt="consent")
     except _oauth_error_classes():
         dep("logger").exception("Failed to initialize Google OAuth authorization URL.")
         return _google_login_unavailable_response()
 
+    code_verifier = getattr(flow, "code_verifier", None)
+    if not isinstance(code_verifier, str) or not code_verifier:
+        dep("logger").error("Google OAuth login initialization did not produce a PKCE code verifier.")
+        return _google_login_unavailable_response()
+
     request.session["google_oauth_state"] = state
     request.session["google_redirect_uri"] = redirect_uri
+    request.session[dep("GOOGLE_CODE_VERIFIER_SESSION_KEY")] = code_verifier
     if safe_next_path:
         request.session[dep("GOOGLE_NEXT_PATH_SESSION_KEY")] = safe_next_path
     else:
@@ -209,6 +216,14 @@ async def google_callback(request: Request):
         )
         return _redirect_to_login_after_google_failure(request, session)
 
+    code_verifier = session.get(dep("GOOGLE_CODE_VERIFIER_SESSION_KEY"))
+    if not isinstance(code_verifier, str) or not code_verifier:
+        dep("logger").warning(
+            "Google OAuth callback: PKCE code verifier missing. Session ID: %s",
+            request.scope.get("session_id", "unknown"),
+        )
+        return _redirect_to_login_after_google_failure(request, session)
+
     redirect_uri = session.get("google_redirect_uri") or dep("os").getenv("GOOGLE_REDIRECT_URI")
     if not redirect_uri:
         redirect_uri = dep("url_for")(request, "auth.google_callback", _external=True)
@@ -248,6 +263,8 @@ async def google_callback(request: Request):
             scopes=dep("GOOGLE_SCOPES"),
             state=state,
             redirect_uri=redirect_uri,
+            code_verifier=code_verifier,
+            autogenerate_code_verifier=False,
         )
     except _oauth_error_classes():
         dep("logger").exception("Failed to initialize Google OAuth callback flow.")
