@@ -10,13 +10,17 @@ from blueprints.auth_common import (
     _resolve_auth_limit_service,
     _resolve_llm_daily_limit_service,
 )
-from blueprints.auth_support import dep
+from blueprints.auth_support import (
+    dep,
+    get_auth_limit_service_dependency,
+    get_llm_daily_limit_service_dependency,
+)
 
 
 async def api_send_email_code(
     request: Request,
-    auth_limit_service: Any | None = Depends(lambda request: dep("get_auth_limit_service")(request)),
-    llm_daily_limit_service: Any | None = Depends(lambda request: dep("get_llm_daily_limit_service")(request)),
+    auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
+    llm_daily_limit_service: Any | None = Depends(get_llm_daily_limit_service_dependency),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
@@ -66,8 +70,8 @@ async def api_verify_email_code(request: Request):
 
 async def api_send_login_code(
     request: Request,
-    auth_limit_service: Any | None = Depends(lambda request: dep("get_auth_limit_service")(request)),
-    llm_daily_limit_service: Any | None = Depends(lambda request: dep("get_llm_daily_limit_service")(request)),
+    auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
+    llm_daily_limit_service: Any | None = Depends(get_llm_daily_limit_service_dependency),
 ):
     resolved_auth_limit_service = _resolve_auth_limit_service(request, auth_limit_service)
     resolved_llm_daily_limit_service = _resolve_llm_daily_limit_service(
@@ -152,7 +156,7 @@ async def api_send_login_code(
 
 async def api_verify_login_code(
     request: Request,
-    auth_limit_service: Any | None = Depends(lambda request: dep("get_auth_limit_service")(request)),
+    auth_limit_service: Any | None = Depends(get_auth_limit_service_dependency),
 ):
     data, error_response = await dep("require_json_dict")(request, status="fail")
     if error_response is not None:
