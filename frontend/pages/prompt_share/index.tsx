@@ -24,10 +24,6 @@ import {
   deriveLegacyPromptType,
   mediaAllowsAttachment
 } from "../../scripts/prompt_share/prompt_type_registry";
-import {
-  readPromptCache,
-  writePromptCache
-} from "../../scripts/prompt_share/storage";
 import type {
   ContentFormat,
   MediaType,
@@ -38,16 +34,17 @@ import type {
 import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
 import { PromptShareDetailModal } from "../../components/prompt_share/prompt_share_detail_modal";
 import {
+  appendUniquePromptRecords,
   buildInitialPromptRecords,
   buildPromptCountMeta,
   filterPrompts,
-  getFilterEmptyMessage,
-  toCachedPromptData
+  getFilterEmptyMessage
 } from "../../components/prompt_share/prompt_share_page_feed_utils";
 import {
   PROMPT_CATEGORIES,
   PROMPT_CATEGORY_OPTIONS,
   PROMPT_CONTENT_FORMAT_FILTERS,
+  PROMPT_FEED_PAGE_SIZE,
   PROMPT_MEDIA_TYPE_FILTERS,
   SEARCH_RESULTS_PER_PAGE
 } from "../../components/prompt_share/prompt_share_page_constants";
@@ -85,7 +82,10 @@ export const getServerSideProps = getPromptShareServerSideProps;
 
 // プロンプト共有ページのメインコンポーネント。検索・フィルタ・モーダル・いいね・チャット追加など全機能を管理する
 // Main component for the prompt share page; manages search, filters, modals, likes, use-in-chat, and all other features
-export default function PromptSharePage({ initialPrompts = [] }: PromptSharePageProps) {
+export default function PromptSharePage({
+  initialPrompts = [],
+  initialPagination = null
+}: PromptSharePageProps) {
   // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
   // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
   const initialPromptRecords = useMemo<PromptRecord[]>(() => {
@@ -109,12 +109,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const [isPromptsLoading, setIsPromptsLoading] = useState(initialPromptRecords.length === 0);
   const [promptCountMeta, setPromptCountMeta] = useState(
     initialPromptRecords.length > 0
-      ? `全てのプロンプト: ${initialPromptRecords.length}件`
+      ? `公開プロンプト: ${initialPromptRecords.length}${initialPagination?.has_next ? "件を表示" : "件"}`
       : "公開プロンプトを読み込み中..."
   );
   const [promptFeedback, setPromptFeedback] = useState<PromptFeedback | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const [feedPagination, setFeedPagination] = useState<PromptPagination | null>(initialPagination);
   const [searchPagination, setSearchPagination] = useState<PromptPagination | null>(null);
+  const [isLoadingMoreFeedResults, setIsLoadingMoreFeedResults] = useState(false);
   const [isLoadingMoreSearchResults, setIsLoadingMoreSearchResults] = useState(false);
 
   // モーダルの状態。どのモーダルが開いているかと、詳細・コメントビューの切り替えを管理する
@@ -166,6 +168,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
   const selectedCategoryRef = useRef("all");
   const selectedContentFormatFilterRef = useRef<ContentFormatFilter>("all");
   const selectedMediaTypeFilterRef = useRef<MediaTypeFilter>("all");
+  const promptListRequestSequenceRef = useRef(0);
   // モーダルのDOM要素への参照。フォーカス管理とアクセシビリティのために使用する
   // Refs to modal DOM elements for focus management and accessibility
   const postModalRef = useRef<HTMLDivElement | null>(null);
@@ -281,10 +284,13 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     selectedMediaTypeFilter
   ]);
 
-  // 検索中かつ次ページが存在する場合に「もっと見る」ボタンを表示する
-  // Indicates whether a "load more" button should be shown for search results
-  const hasMoreSearchResults =
-    activeSearchQuery.trim().length > 0 && Boolean(searchPagination?.has_next);
+  const isSearchActive = activeSearchQuery.trim().length > 0;
+  const hasMoreResults = Boolean(
+    isSearchActive ? searchPagination?.has_next : feedPagination?.has_next
+  );
+  const isLoadingMoreResults = isSearchActive
+    ? isLoadingMoreSearchResults
+    : isLoadingMoreFeedResults;
 
   // 投稿モーダルのステータスと送信中フラグをリセットし、AI補助パネルも初期状態へ戻す
   // Resets the post modal status, the submitting flag, and the AI-assist panel to their initial states
@@ -309,7 +315,6 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
               }
             : prompt
         );
-        writePromptCache(toCachedPromptData(next));
         return next;
       });
       setDetailPrompt((current) => {
@@ -362,14 +367,12 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     postCloseTimerRef
   });
 
-  // 単一のプロンプトレコードを更新し、変更後の一覧をローカルキャッシュに書き込む
-  // Updates a single prompt record and writes the updated list to local cache
+  // 単一のプロンプトレコードを更新する。
+  // Update a single prompt record.
   const updatePromptRecord = useCallback(
     (clientId: string, updater: (prompt: PromptRecord) => PromptRecord) => {
       setPrompts((current) => {
-        const next = current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt));
-        writePromptCache(toCachedPromptData(next));
-        return next;
+        return current.map((prompt) => (prompt.clientId === clientId ? updater(prompt) : prompt));
       });
       setDetailPrompt((current) => {
         if (!current || current.clientId !== clientId) {
@@ -378,11 +381,11 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         return updater(current);
       });
     },
-    [toCachedPromptData]
+    []
   );
 
-  // APIからプロンプト一覧を取得し、フィルタ状態を適用した上でキャッシュに書き込む
-  // Fetches the full prompt list from the API, applies filter state, and writes the result to cache
+  // APIから指定条件の先頭ページを取得し、現在の一覧を置き換える。
+  // Fetch the first API page for the selected filters and replace the current feed.
   const loadPrompts = useCallback(
     async (options?: {
       categoryToApply?: string;
@@ -394,20 +397,29 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         options?.contentFormatToApply || selectedContentFormatFilterRef.current;
       const mediaTypeToApply =
         options?.mediaTypeToApply || selectedMediaTypeFilterRef.current;
-      if (promptsRef.current.length === 0) {
-        setIsPromptsLoading(true);
-      }
+      const requestSequence = ++promptListRequestSequenceRef.current;
+      setIsLoadingMoreFeedResults(false);
+      setIsLoadingMoreSearchResults(false);
+      setIsPromptsLoading(true);
 
       try {
-        const data = await fetchPromptList();
+        const data = await fetchPromptList({
+          limit: PROMPT_FEED_PAGE_SIZE,
+          category: categoryToApply,
+          contentFormat: contentFormatToApply,
+          mediaType: mediaTypeToApply
+        });
+        if (requestSequence !== promptListRequestSequenceRef.current) {
+          return;
+        }
         const normalizedPrompts = Array.isArray(data.prompts)
           ? data.prompts.map(normalizePromptData)
           : [];
 
-        writePromptCache(normalizedPrompts);
         const promptRecords = toPromptRecords(normalizedPrompts);
 
         setPrompts(promptRecords);
+        setFeedPagination(data.pagination || null);
         setActiveSearchQuery("");
         setSearchPagination(null);
         setSelectedCategory(categoryToApply);
@@ -426,9 +438,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         }
 
         setPromptCountMeta(
-          buildPromptCountMeta(promptRecords, categoryToApply, contentFormatToApply, mediaTypeToApply)
+          buildPromptCountMeta(promptRecords, categoryToApply, contentFormatToApply, mediaTypeToApply, {
+            hasMore: Boolean(data.pagination?.has_next)
+          })
         );
       } catch (error) {
+        if (requestSequence !== promptListRequestSequenceRef.current) {
+          return;
+        }
         console.error("プロンプト取得エラー:", error);
         const message = error instanceof Error ? error.message : String(error);
         setPromptCountMeta("読み込みに失敗しました");
@@ -437,7 +454,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           variant: "error"
         });
       } finally {
-        setIsPromptsLoading(false);
+        if (requestSequence === promptListRequestSequenceRef.current) {
+          setIsPromptsLoading(false);
+        }
       }
     },
     [buildPromptCountMeta, toPromptRecords]
@@ -461,9 +480,12 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       return;
     }
 
-    if (promptsRef.current.length === 0) {
-      setIsPromptsLoading(true);
-    }
+    // 通常フィードの進行中リクエストが検索結果を上書きしないよう無効化する。
+    // Invalidate an in-flight feed request so it cannot overwrite search results.
+    const requestSequence = ++promptListRequestSequenceRef.current;
+    setIsLoadingMoreFeedResults(false);
+    setIsLoadingMoreSearchResults(false);
+    setIsPromptsLoading(true);
     setSelectedCategoryTitle(`検索結果: 「${query}」`);
 
     try {
@@ -473,6 +495,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         contentFormat: contentFormatToApply,
         mediaType: mediaTypeToApply
       });
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
         : [];
@@ -501,6 +526,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         })
       );
     } catch (error) {
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
       console.error("検索エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
       setPromptCountMeta("検索に失敗しました");
@@ -509,7 +537,9 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         variant: "error"
       });
     } finally {
-      setIsPromptsLoading(false);
+      if (requestSequence === promptListRequestSequenceRef.current) {
+        setIsPromptsLoading(false);
+      }
     }
   }, [buildPromptCountMeta, loadPrompts, searchInput, toPromptRecords]);
 
@@ -522,6 +552,7 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
       return;
     }
 
+    const requestSequence = ++promptListRequestSequenceRef.current;
     setIsLoadingMoreSearchResults(true);
     try {
       const data = await fetchPromptSearchResults(query, {
@@ -531,11 +562,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         contentFormat: selectedContentFormatFilterRef.current,
         mediaType: selectedMediaTypeFilterRef.current
       });
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
       const normalizedPrompts = Array.isArray(data.prompts)
         ? data.prompts.map(normalizePromptData)
         : [];
       const promptRecords = toPromptRecords(normalizedPrompts);
-      const nextPrompts = [...promptsRef.current, ...promptRecords];
+      const nextPrompts = appendUniquePromptRecords(promptsRef.current, promptRecords);
 
       setPrompts(nextPrompts);
       setSearchPagination(data.pagination || null);
@@ -547,11 +581,14 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
           selectedContentFormatFilterRef.current,
           selectedMediaTypeFilterRef.current,
           {
-            searchTotal: Number(data.pagination?.total || nextPrompts.length)
+            searchTotal: Number(searchPagination.total ?? data.pagination?.total ?? nextPrompts.length)
           }
         )
       );
     } catch (error) {
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
       console.error("追加検索エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
       setPromptFeedback({
@@ -559,9 +596,74 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         variant: "error"
       });
     } finally {
-      setIsLoadingMoreSearchResults(false);
+      if (requestSequence === promptListRequestSequenceRef.current) {
+        setIsLoadingMoreSearchResults(false);
+      }
     }
   }, [activeSearchQuery, buildPromptCountMeta, searchPagination, toPromptRecords]);
+
+  // 通常フィードの次カーソルを取得し、重複を除いて既存カードへ追記する。
+  // Fetch the next regular-feed cursor and append unique prompt cards.
+  const loadMoreFeedResults = useCallback(async () => {
+    const nextCursor = feedPagination?.next_cursor;
+    if (!feedPagination?.has_next || !nextCursor) {
+      return;
+    }
+
+    const requestSequence = ++promptListRequestSequenceRef.current;
+    setIsLoadingMoreFeedResults(true);
+    try {
+      const data = await fetchPromptList({
+        limit: Number(feedPagination.limit || PROMPT_FEED_PAGE_SIZE),
+        cursor: nextCursor,
+        category: selectedCategoryRef.current,
+        contentFormat: selectedContentFormatFilterRef.current,
+        mediaType: selectedMediaTypeFilterRef.current
+      });
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
+      const normalizedPrompts = Array.isArray(data.prompts)
+        ? data.prompts.map(normalizePromptData)
+        : [];
+      const promptRecords = toPromptRecords(normalizedPrompts);
+      const nextPrompts = appendUniquePromptRecords(promptsRef.current, promptRecords);
+
+      setPrompts(nextPrompts);
+      setFeedPagination(data.pagination || null);
+      setPromptFeedback(null);
+      setPromptCountMeta(
+        buildPromptCountMeta(
+          nextPrompts,
+          selectedCategoryRef.current,
+          selectedContentFormatFilterRef.current,
+          selectedMediaTypeFilterRef.current,
+          { hasMore: Boolean(data.pagination?.has_next) }
+        )
+      );
+    } catch (error) {
+      if (requestSequence !== promptListRequestSequenceRef.current) {
+        return;
+      }
+      console.error("プロンプト追加取得エラー:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      setPromptFeedback({
+        message: `追加読み込みに失敗しました: ${message}`,
+        variant: "error"
+      });
+    } finally {
+      if (requestSequence === promptListRequestSequenceRef.current) {
+        setIsLoadingMoreFeedResults(false);
+      }
+    }
+  }, [buildPromptCountMeta, feedPagination, toPromptRecords]);
+
+  const loadMoreResults = useCallback(() => {
+    if (activeSearchQuery.trim()) {
+      return loadMoreSearchResults();
+    }
+    return loadMoreFeedResults();
+  }, [activeSearchQuery, loadMoreFeedResults, loadMoreSearchResults]);
 
   // 共有モーダルを開き、対象プロンプトの共有URLを非同期で生成する
   // Opens the share modal and asynchronously generates the share URL for the target prompt
@@ -654,18 +756,10 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
 
       if (searchInput.trim()) {
         setSearchInput("");
-        void loadPrompts({ categoryToApply: category, contentFormatToApply, mediaTypeToApply });
-        return;
       }
-
-      setAppliedCategoryFilter(category);
-      setSelectedCategoryTitle(getCategoryTitle(category));
-
-      setPromptCountMeta(
-        buildPromptCountMeta(promptsRef.current, category, contentFormatToApply, mediaTypeToApply)
-      );
+      void loadPrompts({ categoryToApply: category, contentFormatToApply, mediaTypeToApply });
     },
-    [buildPromptCountMeta, loadPrompts, searchInput]
+    [loadPrompts, searchInput]
   );
 
   // フォーマットフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
@@ -681,17 +775,13 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         void searchPrompts({ contentFormatToApply: contentFormatFilter, mediaTypeToApply: mediaTypeFilter });
         return;
       }
-
-      setPromptCountMeta(
-        buildPromptCountMeta(
-          promptsRef.current,
-          selectedCategoryRef.current,
-          contentFormatFilter,
-          mediaTypeFilter
-        )
-      );
+      void loadPrompts({
+        categoryToApply: selectedCategoryRef.current,
+        contentFormatToApply: contentFormatFilter,
+        mediaTypeToApply: mediaTypeFilter
+      });
     },
-    [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
+    [activeSearchQuery, loadPrompts, searchInput, searchPrompts]
   );
 
   // メディアフィルタをクリックしたとき、検索中なら再検索してフィルタを適用する
@@ -707,17 +797,13 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         void searchPrompts({ contentFormatToApply: contentFormatFilter, mediaTypeToApply: mediaTypeFilter });
         return;
       }
-
-      setPromptCountMeta(
-        buildPromptCountMeta(
-          promptsRef.current,
-          selectedCategoryRef.current,
-          contentFormatFilter,
-          mediaTypeFilter
-        )
-      );
+      void loadPrompts({
+        categoryToApply: selectedCategoryRef.current,
+        contentFormatToApply: contentFormatFilter,
+        mediaTypeToApply: mediaTypeFilter
+      });
     },
-    [activeSearchQuery, buildPromptCountMeta, searchInput, searchPrompts]
+    [activeSearchQuery, loadPrompts, searchInput, searchPrompts]
   );
 
   // Enterキーで検索を実行する。デフォルトのフォーム送信を防止する
@@ -859,28 +945,11 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
     ]
   );
 
-  // キャッシュからプロンプトをすぐに表示してから、APIで最新データを取得する（ストア・スワップ戦略）
-  // Renders cached prompts immediately, then fetches fresh data from the API (stale-while-revalidate)
+  // SSRの初期ページを表示しながら、クライアントの認証状態を含む先頭ページへ更新する。
+  // Keep the SSR page visible while refreshing the first page with client auth state.
   useEffect(() => {
-    const cachedPrompts = readPromptCache();
-    if (cachedPrompts && cachedPrompts.length > 0) {
-      const normalizedCache = cachedPrompts.map(normalizePromptData);
-      const promptRecords = toPromptRecords(normalizedCache);
-      setPrompts(promptRecords);
-      setPromptFeedback(null);
-      setIsPromptsLoading(false);
-      setPromptCountMeta(
-        buildPromptCountMeta(
-          promptRecords,
-          "all",
-          selectedContentFormatFilterRef.current,
-          selectedMediaTypeFilterRef.current
-        )
-      );
-    }
-
     void loadPrompts();
-  }, [buildPromptCountMeta, loadPrompts, toPromptRecords]);
+  }, [loadPrompts]);
 
   // 2軸が変わったときにAI補助パネルの表示を（派生した旧タイプで）更新する
   // Updates the AI-assist panel display whenever the axes change, using the derived legacy type
@@ -1038,10 +1107,10 @@ export default function PromptSharePage({ initialPrompts = [] }: PromptSharePage
         onMediaTypeFilterClick={handleMediaTypeFilterClick}
         selectedCategoryTitle={selectedCategoryTitle}
         promptCountMeta={promptCountMeta}
-        hasMoreSearchResults={hasMoreSearchResults}
-        isLoadingMoreSearchResults={isLoadingMoreSearchResults}
-        onLoadMoreSearchResults={() => {
-          void loadMoreSearchResults();
+        hasMoreResults={hasMoreResults}
+        isLoadingMoreResults={isLoadingMoreResults}
+        onLoadMoreResults={() => {
+          void loadMoreResults();
         }}
         isPromptsLoading={isPromptsLoading}
         hasPromptFeedback={Boolean(promptFeedback)}

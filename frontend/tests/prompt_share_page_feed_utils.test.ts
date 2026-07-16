@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  appendUniquePromptRecords,
   buildInitialPromptRecords,
   buildPromptCountMeta,
   filterPrompts,
@@ -100,4 +101,21 @@ test("initial records and cache data keep client-only fields separated", () => {
   assert.equal(cachedPrompt?.title, "Saved");
   assert.equal(cachedPrompt?.liked, true);
   assert.equal(cachedPrompt?.used_in_chat, true);
+});
+
+test("appendUniquePromptRecords keeps cursor page order and removes duplicate IDs", () => {
+  const appended = appendUniquePromptRecords(prompts.slice(0, 2), [
+    { ...prompts[1]!, clientId: "prompt-2-duplicate" },
+    { ...prompts[2]!, clientId: "prompt-3-new" },
+  ]);
+
+  assert.deepEqual(appended.map((prompt) => prompt.id), [1, 2, 3]);
+  assert.equal(appended[1]?.clientId, "prompt-2");
+});
+
+test("buildPromptCountMeta identifies a partially loaded feed", () => {
+  assert.equal(
+    buildPromptCountMeta(prompts, "all", "all", "all", { hasMore: true }),
+    "公開プロンプト: 3件を表示",
+  );
 });

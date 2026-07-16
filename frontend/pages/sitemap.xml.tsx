@@ -63,29 +63,41 @@ function normalizeLastmod(value: string | undefined): string | undefined {
 async function fetchPublicPromptRoutes(): Promise<SitemapRoute[]> {
   const backendUrl = (process.env.BACKEND_URL || "http://localhost:5004").replace(/\/+$/, "");
   try {
-    const response = await resilientFetch(`${backendUrl}/prompt_share/api/prompts`, {
-      headers: { Accept: "application/json" }
-    });
-    if (!response.ok) return [];
-
-    const data = (await response.json()) as { prompts?: Array<{ id?: string | number; title?: string; created_at?: string }> };
-    if (!Array.isArray(data.prompts)) return [];
-
     const routes: SitemapRoute[] = [];
-    for (const prompt of data.prompts) {
-      if (prompt.id === undefined || prompt.id === null || prompt.id === "") continue;
-      // 末尾のスラッシュやXMLエスケープはbuildSitemapXml側で処理されるため、ここではパスのみ生成する
-      // タイトル由来のスラッグを含む正規パスを出力し、SSR側の正規URLと一致させる
-      // Only build the path here; trailing-slash handling and XML escaping happen in buildSitemapXml.
-      // Emit the canonical slug-based path so it matches the canonical URL used during SSR.
-      routes.push({
-        path: buildPromptPath(prompt.id, prompt.title),
-        changefreq: "weekly",
-        priority: "0.6",
-        lastmod: normalizeLastmod(prompt.created_at)
-      });
-      if (routes.length >= MAX_PROMPT_ENTRIES) break;
-    }
+    let cursor: string | null = null;
+    do {
+      const params = new URLSearchParams({ limit: "100" });
+      if (cursor) params.set("cursor", cursor);
+      const response = await resilientFetch(
+        `${backendUrl}/prompt_share/api/prompts?${params.toString()}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!response.ok) return routes;
+
+      const data = (await response.json()) as {
+        prompts?: Array<{ id?: string | number; title?: string; created_at?: string }>;
+        pagination?: { has_next?: boolean; next_cursor?: string | null };
+      };
+      if (!Array.isArray(data.prompts)) return routes;
+
+      for (const prompt of data.prompts) {
+        if (prompt.id === undefined || prompt.id === null || prompt.id === "") continue;
+        // タイトル由来のスラッグを含む正規パスを出力し、SSR側の正規URLと一致させる。
+        // Emit the canonical slug-based path so it matches the canonical URL used during SSR.
+        routes.push({
+          path: buildPromptPath(prompt.id, prompt.title),
+          changefreq: "weekly",
+          priority: "0.6",
+          lastmod: normalizeLastmod(prompt.created_at)
+        });
+        if (routes.length >= MAX_PROMPT_ENTRIES) break;
+      }
+
+      const nextCursor = data.pagination?.has_next ? data.pagination.next_cursor || null : null;
+      if (!nextCursor || nextCursor === cursor) break;
+      cursor = nextCursor;
+    } while (routes.length < MAX_PROMPT_ENTRIES);
+
     return routes;
   } catch {
     // 取得に失敗しても静的ルートのみでサイトマップを返す

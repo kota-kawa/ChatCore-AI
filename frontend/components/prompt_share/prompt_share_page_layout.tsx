@@ -31,9 +31,9 @@ type PromptSharePageLayoutProps = {
   onMediaTypeFilterClick: (mediaTypeFilter: MediaTypeFilter) => void;
   selectedCategoryTitle: string;
   promptCountMeta: string;
-  hasMoreSearchResults: boolean;
-  isLoadingMoreSearchResults: boolean;
-  onLoadMoreSearchResults: () => void;
+  hasMoreResults: boolean;
+  isLoadingMoreResults: boolean;
+  onLoadMoreResults: () => void;
   isPromptsLoading: boolean;
   hasPromptFeedback: boolean;
   visiblePrompts: PromptRecord[];
@@ -102,9 +102,9 @@ export function PromptSharePageLayout({
   onMediaTypeFilterClick,
   selectedCategoryTitle,
   promptCountMeta,
-  hasMoreSearchResults,
-  isLoadingMoreSearchResults,
-  onLoadMoreSearchResults,
+  hasMoreResults,
+  isLoadingMoreResults,
+  onLoadMoreResults,
   isPromptsLoading,
   hasPromptFeedback,
   visiblePrompts,
@@ -315,14 +315,14 @@ export function PromptSharePageLayout({
             </p>
             {/* 追加ページが存在する場合のみ「さらに読み込む」ボタンを表示する */}
             {/* Show "load more" only when the API indicates more pages exist */}
-            {hasMoreSearchResults ? (
+            {hasMoreResults ? (
               <button
                 type="button"
                 className="prompt-load-more cc-press"
-                onClick={onLoadMoreSearchResults}
-                disabled={isLoadingMoreSearchResults}
+                onClick={onLoadMoreResults}
+                disabled={isLoadingMoreResults}
               >
-                {isLoadingMoreSearchResults ? "読み込み中..." : "さらに読み込む"}
+                {isLoadingMoreResults ? "読み込み中..." : "さらに読み込む"}
               </button>
             ) : null}
           </div>

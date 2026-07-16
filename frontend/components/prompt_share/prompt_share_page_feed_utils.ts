@@ -30,6 +30,25 @@ export function toCachedPromptData(items: PromptRecord[]) {
   return items.map(({ clientId, ...prompt }) => prompt);
 }
 
+// 追加ページをIDで重複排除しながら現在の一覧へ連結する。
+// Append another page while de-duplicating records by persisted prompt ID.
+export function appendUniquePromptRecords(current: PromptRecord[], incoming: PromptRecord[]) {
+  const knownIds = new Set(
+    current.map((prompt) => String(prompt.id ?? prompt.clientId))
+  );
+  return [
+    ...current,
+    ...incoming.filter((prompt) => {
+      const key = String(prompt.id ?? prompt.clientId);
+      if (knownIds.has(key)) {
+        return false;
+      }
+      knownIds.add(key);
+      return true;
+    })
+  ];
+}
+
 export function getContentFormatFilterLabel(contentFormatFilter: ContentFormatFilter) {
   return contentFormatFilter === "all" ? "全て" : getPromptFormatLabel(contentFormatFilter);
 }
@@ -74,7 +93,7 @@ export function buildPromptCountMeta(
   category: string | null,
   contentFormatFilter: ContentFormatFilter,
   mediaTypeFilter: MediaTypeFilter,
-  options?: { searchTotal?: number }
+  options?: { searchTotal?: number; hasMore?: boolean }
 ) {
   const visibleCount = countVisiblePrompts(items, category, contentFormatFilter, mediaTypeFilter);
   const formatSuffix =
@@ -87,7 +106,8 @@ export function buildPromptCountMeta(
     return `検索結果${filterSuffix}: ${visibleCount}件 / ${options.searchTotal}件`;
   }
 
-  return `${getCategoryCountLabel(category || "all")}${filterSuffix}: ${visibleCount}件`;
+  const loadedSuffix = options?.hasMore ? `${visibleCount}件を表示` : `${visibleCount}件`;
+  return `${getCategoryCountLabel(category || "all")}${filterSuffix}: ${loadedSuffix}`;
 }
 
 export function getFilterEmptyMessage(
