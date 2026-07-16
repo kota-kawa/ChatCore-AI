@@ -294,6 +294,11 @@ if is_mcp_enabled():
         methods=["GET", "OPTIONS"],
         include_in_schema=False,
     )
+    @app.api_route(
+        "/.well-known/oauth-protected-resource/mcp",
+        methods=["GET", "OPTIONS"],
+        include_in_schema=False,
+    )
     async def mcp_oauth_protected_resource_metadata():
         return jsonify(get_oauth_protected_resource_metadata(), headers=discovery_headers)
 

@@ -60,10 +60,11 @@ MCP_ALLOWED_SCOPES = (
     MCP_MEMOS_WRITE_SCOPE,
 )
 # Newly registered clients need to be able to request any supported subset.
-# Authorization requests that omit ``scope`` use the separate legacy default
-# below, so no existing connection silently gains access.
+# Authorization requests that omit ``scope`` use the scopes registered for
+# that client. Existing grants keep their persisted scopes and therefore never
+# gain access merely because the server's supported scope set grows.
 MCP_DEFAULT_SCOPES = MCP_ALLOWED_SCOPES
-MCP_LEGACY_AUTHORIZATION_SCOPES = (MCP_PROMPTS_WRITE_SCOPE,)
+MCP_OAUTH_SCOPE_VERSION = 2
 MCP_SCOPE_LABELS = {
     MCP_PROMPTS_READ_SCOPE: "公開プロンプトとSKILLを検索・閲覧する",
     MCP_PROMPTS_WRITE_SCOPE: "公開プロンプトを投稿する",
@@ -179,7 +180,7 @@ def _serialize_client(client: OAuthClientInformationFull) -> dict[str, Any]:
 def _normalize_scopes(
     scopes: list[str] | tuple[str, ...] | None,
     *,
-    default: tuple[str, ...] = MCP_LEGACY_AUTHORIZATION_SCOPES,
+    default: tuple[str, ...] = MCP_DEFAULT_SCOPES,
 ) -> list[str]:
     """Validate an OAuth scope subset while preserving the requested order."""
     requested = list(default if scopes is None else scopes)
@@ -723,8 +724,9 @@ def _create_authorization_code(user_id: int, request_data: dict[str, Any]) -> st
         try:
             cursor.execute(
                 """
-                INSERT INTO mcp_oauth_grants (id, user_id, client_id, client_name, client_host, scopes)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO mcp_oauth_grants
+                    (id, user_id, client_id, client_name, client_host, scopes, scope_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     str(grant_id),
@@ -733,6 +735,7 @@ def _create_authorization_code(user_id: int, request_data: dict[str, Any]) -> st
                     client.client_name or str(client.client_id),
                     client_host,
                     params["scopes"],
+                    MCP_OAUTH_SCOPE_VERSION,
                 ),
             )
             cursor.execute(
@@ -799,6 +802,28 @@ def _issue_tokens(grant_id: UUID, client_id: str, scopes: list[str], resource: s
     )
 
 
+def _revoke_grant_family(cursor: Any, grant_id: str) -> None:
+    """Revoke a grant and every token issued under it."""
+    cursor.execute(
+        "UPDATE mcp_oauth_grants SET revoked_at = NOW() WHERE id = %s AND revoked_at IS NULL",
+        (grant_id,),
+    )
+    cursor.execute(
+        "UPDATE mcp_oauth_tokens SET revoked_at = NOW() WHERE grant_id = %s AND revoked_at IS NULL",
+        (grant_id,),
+    )
+
+
+def _revoke_if_legacy_scope_grant(conn: Any, cursor: Any, row: dict[str, Any]) -> bool:
+    """Expire pre-fix grants lazily after blue/green traffic reaches the new app."""
+    scope_version = int(row.get("scope_version", MCP_OAUTH_SCOPE_VERSION))
+    if scope_version >= MCP_OAUTH_SCOPE_VERSION:
+        return False
+    _revoke_grant_family(cursor, str(row["grant_id"]))
+    conn.commit()
+    return True
+
+
 def _load_code(client_id: str, raw_code: str) -> StoredAuthorizationCode | None:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -806,7 +831,7 @@ def _load_code(client_id: str, raw_code: str) -> StoredAuthorizationCode | None:
             cursor.execute(
                 """
                 SELECT c.grant_id, c.client_id, c.redirect_uri, c.code_challenge, c.scopes,
-                       c.resource, c.expires_at, g.user_id
+                       c.resource, c.expires_at, g.user_id, g.scope_version
                 FROM mcp_oauth_authorization_codes c
                 JOIN mcp_oauth_grants g ON g.id = c.grant_id
                 WHERE c.code_digest = %s AND c.client_id = %s AND c.used_at IS NULL
@@ -816,6 +841,8 @@ def _load_code(client_id: str, raw_code: str) -> StoredAuthorizationCode | None:
             )
             row = cursor.fetchone()
             if not row:
+                return None
+            if _revoke_if_legacy_scope_grant(conn, cursor, row):
                 return None
             return StoredAuthorizationCode(
                 code=raw_code,
@@ -850,25 +877,14 @@ def _consume_code_and_issue(code: StoredAuthorizationCode) -> OAuthToken:
     return _issue_tokens(code.grant_id, code.client_id, code.scopes, code.resource or get_mcp_server_url())
 
 
-def _revoke_grant_family(cursor: Any, grant_id: str) -> None:
-    """Revoke a grant and every token issued under it (refresh token reuse response)."""
-    cursor.execute(
-        "UPDATE mcp_oauth_grants SET revoked_at = NOW() WHERE id = %s AND revoked_at IS NULL",
-        (grant_id,),
-    )
-    cursor.execute(
-        "UPDATE mcp_oauth_tokens SET revoked_at = NOW() WHERE grant_id = %s AND revoked_at IS NULL",
-        (grant_id,),
-    )
-
-
 def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
     with get_db_connection() as conn:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
                 """
-                SELECT t.grant_id, t.client_id, t.scopes, t.resource, t.expires_at, t.replaced_at, g.user_id
+                SELECT t.grant_id, t.client_id, t.scopes, t.resource, t.expires_at,
+                       t.replaced_at, g.user_id, g.scope_version
                 FROM mcp_oauth_tokens t
                 JOIN mcp_oauth_grants g ON g.id = t.grant_id
                 JOIN users u ON u.id = g.user_id
@@ -880,6 +896,8 @@ def _load_refresh(client_id: str, raw_token: str) -> StoredRefreshToken | None:
             )
             row = cursor.fetchone()
             if not row:
+                return None
+            if _revoke_if_legacy_scope_grant(conn, cursor, row):
                 return None
             replaced_at = row.get("replaced_at")
             if replaced_at is not None:
@@ -996,7 +1014,8 @@ def _load_access(raw_token: str) -> AccessToken | None:
         try:
             cursor.execute(
                 """
-                SELECT t.client_id, t.scopes, t.resource, t.expires_at, g.id AS grant_id, g.user_id
+                SELECT t.client_id, t.scopes, t.resource, t.expires_at,
+                       g.id AS grant_id, g.user_id, g.scope_version
                 FROM mcp_oauth_tokens t
                 JOIN mcp_oauth_grants g ON g.id = t.grant_id
                 JOIN users u ON u.id = g.user_id
@@ -1007,6 +1026,8 @@ def _load_access(raw_token: str) -> AccessToken | None:
             )
             row = cursor.fetchone()
             if not row or row["resource"] != get_mcp_server_url():
+                return None
+            if _revoke_if_legacy_scope_grant(conn, cursor, row):
                 return None
             cursor.execute("UPDATE mcp_oauth_tokens SET last_used_at = NOW() WHERE token_digest = %s", (_digest(raw_token),))
             cursor.execute("UPDATE mcp_oauth_grants SET last_used_at = NOW() WHERE id = %s", (str(row["grant_id"]),))
@@ -1047,14 +1068,18 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
         try:
-            scopes = _normalize_scopes(params.scopes)
-        except ValueError as exc:
-            raise AuthorizeError("invalid_scope", "One or more requested OAuth scopes are not available.") from exc
-        try:
-            client_scopes = set(_normalize_client_scope(client.scope).split())
+            registered_scopes = _normalize_client_scope(client.scope).split()
         except ValueError as exc:
             raise AuthorizeError("invalid_scope", "The OAuth client has invalid registered scopes.") from exc
-        if not set(scopes).issubset(client_scopes):
+        try:
+            # Some MCP clients, including clients that rely entirely on
+            # protected-resource discovery, omit ``scope`` from /authorize.
+            # In that case authorize the client's registered scope set rather
+            # than falling back to the server's former prompts:write-only era.
+            scopes = _normalize_scopes(params.scopes, default=tuple(registered_scopes))
+        except ValueError as exc:
+            raise AuthorizeError("invalid_scope", "One or more requested OAuth scopes are not available.") from exc
+        if not set(scopes).issubset(set(registered_scopes)):
             raise AuthorizeError("invalid_scope", "The OAuth client was not registered for every requested scope.")
         if not _resource_matches_server(params.resource):
             raise AuthorizeError(
@@ -1156,10 +1181,10 @@ def list_connections(user_id: int) -> list[dict[str, Any]]:
                 """
                 SELECT id, client_name, client_host, display_name, scopes, created_at, last_used_at
                 FROM mcp_oauth_grants
-                WHERE user_id = %s AND revoked_at IS NULL
+                WHERE user_id = %s AND revoked_at IS NULL AND scope_version >= %s
                 ORDER BY created_at DESC
                 """,
-                (user_id,),
+                (user_id, MCP_OAUTH_SCOPE_VERSION),
             )
             rows = cursor.fetchall()
             return [

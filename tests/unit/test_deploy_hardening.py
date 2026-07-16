@@ -9,6 +9,7 @@ DEPLOY_SCRIPT = REPO_ROOT / "deploy" / "blue_green_deploy.sh"
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 BLUE_GREEN_COMPOSE_FILE = REPO_ROOT / "deploy" / "docker-compose.bluegreen.yml"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+NGINX_CONFIG = REPO_ROOT / "deploy" / "chatcore-ai.conf"
 
 
 # 日本語: DeployHardeningTest のテストケースをまとめます。
@@ -74,6 +75,13 @@ class DeployHardeningTest(unittest.TestCase):
 
         self.assertIn('local mcp_enabled="${MCP_ENABLED:-false}"', script_text)
         self.assertIn("required_vars+=(MCP_OAUTH_ENCRYPTION_KEYS)", script_text)
+
+    # 日本語: OAuth discovery のルート版とMCPリソース版を両方バックエンドへ転送することを確認します。
+    # English: Verify nginx forwards both root and MCP-resource OAuth discovery paths.
+    def test_nginx_forwards_both_mcp_protected_resource_metadata_paths(self):
+        config_text = NGINX_CONFIG.read_text()
+
+        self.assertIn(r"\.well-known/oauth-protected-resource(?:/mcp)?", config_text)
 
     # 日本語: remoteデプロイへ、workflowforwardsnginxtestcommandことを検証します。
     # English: Verify that workflow forwards nginx test command to remote deploy.
