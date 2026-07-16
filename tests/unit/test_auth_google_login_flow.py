@@ -5,8 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
+from google_auth_oauthlib.flow import Flow as GoogleOAuthFlow
 
 from blueprints.auth import (
+    GOOGLE_CODE_VERIFIER_SESSION_KEY,
     GOOGLE_LOGIN_UNAVAILABLE_ERROR,
     google_callback,
     google_login,
@@ -21,6 +23,7 @@ class FakeFlow:
     # English: Initialize. Set dummy credentials and a list to record authorization responses.
     def __init__(self):
         self.credentials = SimpleNamespace(token="google-access-token")
+        self.code_verifier = "google-pkce-code-verifier"
         self.authorization_responses = []
 
     # 日本語: 認可応答を受け取り、トークンを取得します（履歴に記録）。
@@ -38,15 +41,18 @@ async def immediate_run_blocking(func, *args, **kwargs):
 # 日本語: コールバック用の擬似リクエストを構築します。
 # English: Build a mock request for the callback.
 def make_request(*, query_string=b"code=abc&state=google-state", session=None):
+    request_session = {
+        "google_oauth_state": "google-state",
+        "google_redirect_uri": "https://chatcore-ai.com/google-callback",
+        GOOGLE_CODE_VERIFIER_SESSION_KEY: "google-pkce-code-verifier",
+    }
+    if session is not None:
+        request_session.update(session)
     return build_request(
         method="GET",
         path="/google-callback",
         query_string=query_string,
-        session=session
-        or {
-            "google_oauth_state": "google-state",
-            "google_redirect_uri": "https://chatcore-ai.com/google-callback",
-        },
+        session=request_session,
     )
 
 
@@ -84,6 +90,44 @@ def valid_google_client_config():
 # 日本語: Google Login Flowの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Google Login Flow.
 class GoogleLoginFlowTestCase(unittest.TestCase):
+    # 日本語: 固定中のgoogle-auth-oauthlibが、復元したPKCE verifierをトークン交換へ渡すことを実ライブラリで検証します。
+    # English: Verify with the pinned google-auth-oauthlib that a restored PKCE verifier is forwarded to token exchange.
+    def test_google_oauth_library_forwards_restored_pkce_verifier(self):
+        redirect_uri = "https://chatcore-ai.com/google-callback"
+        start_flow = GoogleOAuthFlow.from_client_config(
+            valid_google_client_config(),
+            scopes=["openid"],
+            redirect_uri=redirect_uri,
+            autogenerate_code_verifier=True,
+        )
+        authorization_url, state = start_flow.authorization_url(prompt="consent")
+
+        self.assertIn("code_challenge=", authorization_url)
+        self.assertIsInstance(start_flow.code_verifier, str)
+        self.assertGreaterEqual(len(start_flow.code_verifier), 43)
+
+        callback_flow = GoogleOAuthFlow.from_client_config(
+            valid_google_client_config(),
+            scopes=["openid"],
+            state=state,
+            redirect_uri=redirect_uri,
+            code_verifier=start_flow.code_verifier,
+            autogenerate_code_verifier=False,
+        )
+        with patch.object(
+            callback_flow.oauth2session,
+            "fetch_token",
+            return_value={},
+        ) as mock_fetch_token:
+            callback_flow.fetch_token(
+                authorization_response=f"{redirect_uri}?code=authorization-code&state={state}"
+            )
+
+        self.assertEqual(
+            mock_fetch_token.call_args.kwargs["code_verifier"],
+            start_flow.code_verifier,
+        )
+
     # 日本語: Flowモジュールが欠損している場合、GoogleログインAPIが503を返却することを検証します。
     # English: Verify that google login returns 503 when Flow dependency is missing.
     def test_google_login_returns_503_when_dependency_is_missing(self):
@@ -178,6 +222,27 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
 
+    # 日本語: PKCE verifierがセッションから失われた場合、Googleへのトークン交換を開始せず安全に失敗することを検証します。
+    # English: Verify that a missing PKCE verifier fails safely before starting Google's token exchange.
+    def test_google_callback_rejects_missing_pkce_code_verifier(self):
+        request = build_request(
+            method="GET",
+            path="/google-callback",
+            query_string=b"code=abc&state=google-state",
+            session={
+                "google_oauth_state": "google-state",
+                "google_redirect_uri": "https://chatcore-ai.com/google-callback",
+            },
+        )
+        fake_flow_class = Mock()
+
+        with patch("blueprints.auth.Flow", fake_flow_class):
+            response = asyncio.run(google_callback(request))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login")
+        fake_flow_class.from_client_config.assert_not_called()
+
     # 日本語: クライアント設定からFlowを初期化する際にエラーが発生した場合、503エラーを返すことを検証します。
     # English: Verify that google login returns 503 when initializing the Flow from client config raises an error.
     def test_google_login_returns_503_when_flow_initialization_fails(self):
@@ -207,6 +272,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
     def test_google_login_stores_sanitized_next_path_in_session(self):
         request = make_google_login_request(query_string=b"next=%2Fmemo%3Ftab%3Drecent")
         fake_flow = Mock()
+        fake_flow.code_verifier = "google-pkce-code-verifier"
         fake_flow.authorization_url.return_value = ("https://accounts.google.com/o/oauth2/auth?state=google-state", "google-state")
         fake_flow_class = Mock()
         fake_flow_class.from_client_config.return_value = fake_flow
@@ -230,6 +296,10 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
             "https://accounts.google.com/o/oauth2/auth?state=google-state",
         )
         self.assertEqual(request.session["google_login_next_path"], "/memo?tab=recent")
+        self.assertEqual(
+            request.session[GOOGLE_CODE_VERIFIER_SESSION_KEY],
+            "google-pkce-code-verifier",
+        )
 
     # 日本語: トークン交換に失敗した場合、ログイン画面へリダイレクトされることを検証します。
     # English: Verify that google callback redirects to the login page when token exchange fails.
@@ -260,6 +330,7 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(response.headers["location"], "https://chatcore-ai.com/login?next=%2Fmemo")
         self.assertNotIn("google_oauth_state", request.session)
         self.assertNotIn("google_redirect_uri", request.session)
+        self.assertNotIn(GOOGLE_CODE_VERIFIER_SESSION_KEY, request.session)
         self.assertNotIn("google_login_next_path", request.session)
 
     # 日本語: ユーザー情報の取得に失敗した場合、ログイン画面へリダイレクトされることを検証します。
@@ -350,11 +421,15 @@ class GoogleLoginFlowTestCase(unittest.TestCase):
         self.assertEqual(request.session["user_email"], "user@example.com")
         self.assertNotIn("google_oauth_state", request.session)
         self.assertNotIn("google_redirect_uri", request.session)
+        self.assertNotIn(GOOGLE_CODE_VERIFIER_SESSION_KEY, request.session)
         self.assertNotIn("google_login_next_path", request.session)
         self.assertEqual(
             fake_flow.authorization_responses,
             ["https://chatcore-ai.com/google-callback?code=abc&state=google-state"],
         )
+        callback_kwargs = fake_flow_class.from_client_config.call_args.kwargs
+        self.assertEqual(callback_kwargs["code_verifier"], "google-pkce-code-verifier")
+        self.assertFalse(callback_kwargs["autogenerate_code_verifier"])
         mock_create.assert_called_once_with(
             "user@example.com",
             username="Alice Example",

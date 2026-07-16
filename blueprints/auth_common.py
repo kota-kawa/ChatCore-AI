@@ -19,12 +19,14 @@ def _clear_login_verification_session(session: dict[str, Any]) -> None:
 def _clear_google_oauth_session(session: dict[str, Any]) -> None:
     session.pop("google_oauth_state", None)
     session.pop("google_redirect_uri", None)
+    session.pop(dep("GOOGLE_CODE_VERIFIER_SESSION_KEY"), None)
     session.pop(dep("GOOGLE_NEXT_PATH_SESSION_KEY"), None)
 
 
 def _clear_google_oauth_state(session: dict[str, Any]) -> None:
     session.pop("google_oauth_state", None)
     session.pop("google_redirect_uri", None)
+    session.pop(dep("GOOGLE_CODE_VERIFIER_SESSION_KEY"), None)
 
 
 def _google_login_unavailable_response() -> Any:
