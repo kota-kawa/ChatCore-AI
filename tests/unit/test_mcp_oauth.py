@@ -282,6 +282,78 @@ class McpOAuthTestCase(unittest.TestCase):
             "user_id": 7,
         }
 
+    def test_legacy_scope_refresh_grant_is_revoked_and_requires_reauthorization(self):
+        row = self._load_refresh_row(None)
+        row["scope_version"] = mcp_oauth.MCP_OAUTH_SCOPE_VERSION - 1
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+
+        @contextmanager
+        def fake_connection():
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            result = mcp_oauth._load_refresh("mcp-personal-client", "refresh-token-value")
+
+        self.assertIsNone(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertIn("g.scope_version", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_grants SET revoked_at = NOW()", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_tokens SET revoked_at = NOW()", executed_sql)
+        conn.commit.assert_called_once()
+
+    def test_legacy_scope_access_grant_is_revoked_and_requires_reauthorization(self):
+        row = {
+            "grant_id": uuid4(),
+            "resource": SERVER_URL,
+            "scope_version": mcp_oauth.MCP_OAUTH_SCOPE_VERSION - 1,
+        }
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+
+        @contextmanager
+        def fake_connection():
+            yield conn
+
+        with (
+            patch("services.mcp_oauth.get_db_connection", fake_connection),
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+        ):
+            result = mcp_oauth._load_access("legacy-access-token")
+
+        self.assertIsNone(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertIn("g.scope_version", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_grants SET revoked_at = NOW()", executed_sql)
+        conn.commit.assert_called_once()
+
+    def test_legacy_scope_authorization_code_is_revoked_before_exchange(self):
+        row = {
+            "grant_id": uuid4(),
+            "scope_version": mcp_oauth.MCP_OAUTH_SCOPE_VERSION - 1,
+        }
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+
+        @contextmanager
+        def fake_connection():
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            result = mcp_oauth._load_code("legacy-client", "legacy-code")
+
+        self.assertIsNone(result)
+        executed_sql = " ".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+        self.assertIn("g.scope_version", executed_sql)
+        self.assertIn("UPDATE mcp_oauth_grants SET revoked_at = NOW()", executed_sql)
+        conn.commit.assert_called_once()
+
     def test_refresh_reuse_within_grace_is_allowed(self):
         """回転直後（猶予期間内）の再利用は許容し、grant を失効させない。"""
         row = self._load_refresh_row(datetime.now(timezone.utc) - timedelta(seconds=5))
@@ -570,12 +642,46 @@ class McpOAuthTestCase(unittest.TestCase):
 
         self.assertEqual(captured["payload"]["params"]["scopes"], requested_scopes)
 
-    def test_authorize_without_scope_keeps_the_legacy_write_only_default(self):
+    def test_authorize_without_scope_uses_every_registered_client_scope(self):
         client = OAuthClientInformationFull(
             client_id="new-client",
             redirect_uris=["https://client.example.test/callback"],
             token_endpoint_auth_method="none",
             scope=" ".join(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+        params = AuthorizationParams(
+            state="state",
+            scopes=None,
+            code_challenge="challenge",
+            redirect_uri="https://client.example.test/callback",
+            redirect_uri_provided_explicitly=True,
+            resource=None,
+        )
+        captured = {}
+
+        def fake_dumps(payload):
+            captured["payload"] = payload
+            return "signed-token"
+
+        with (
+            patch("services.mcp_oauth.get_mcp_server_url", return_value=SERVER_URL),
+            patch("services.mcp_oauth.get_mcp_public_base_url", return_value="https://chat.example.test"),
+            patch("services.mcp_oauth._consent_serializer") as serializer,
+        ):
+            serializer.return_value.dumps.side_effect = fake_dumps
+            asyncio.run(mcp_oauth.ChatCoreOAuthProvider().authorize(client, params))
+
+        self.assertEqual(
+            captured["payload"]["params"]["scopes"],
+            list(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+
+    def test_authorize_without_scope_preserves_a_registered_scope_subset(self):
+        client = OAuthClientInformationFull(
+            client_id="least-privilege-client",
+            redirect_uris=["https://client.example.test/callback"],
+            token_endpoint_auth_method="none",
+            scope=mcp_oauth.MCP_PROMPTS_WRITE_SCOPE,
         )
         params = AuthorizationParams(
             state="state",
@@ -725,3 +831,36 @@ class McpOAuthTestCase(unittest.TestCase):
             redirect,
             "https://claude.ai/api/mcp/auth_callback?code=authorization-code&state=state",
         )
+
+    def test_new_authorization_code_marks_the_current_scope_generation(self):
+        client = OAuthClientInformationFull(
+            client_id="current-client",
+            redirect_uris=["https://client.example.test/callback"],
+            client_name="Current client",
+            token_endpoint_auth_method="none",
+            scope=" ".join(mcp_oauth.MCP_ALLOWED_SCOPES),
+        )
+        request_data = {
+            "client": mcp_oauth._serialize_client(client),
+            "params": {
+                "scopes": list(mcp_oauth.MCP_ALLOWED_SCOPES),
+                "code_challenge": "challenge",
+                "redirect_uri": "https://client.example.test/callback",
+                "resource": SERVER_URL,
+            },
+        }
+        cursor = MagicMock()
+
+        @contextmanager
+        def fake_connection():
+            conn = MagicMock()
+            conn.cursor.return_value = cursor
+            yield conn
+
+        with patch("services.mcp_oauth.get_db_connection", fake_connection):
+            code = mcp_oauth._create_authorization_code(7, request_data)
+
+        self.assertTrue(code)
+        grant_insert = cursor.execute.call_args_list[0]
+        self.assertIn("scope_version", grant_insert.args[0])
+        self.assertEqual(grant_insert.args[1][-1], mcp_oauth.MCP_OAUTH_SCOPE_VERSION)

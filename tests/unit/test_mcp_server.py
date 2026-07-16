@@ -162,6 +162,33 @@ class McpServerTestCase(unittest.TestCase):
         self.assertIn("resource_metadata", response.headers["www-authenticate"])
         self.assertNotIn("scope=", response.headers["www-authenticate"])
 
+    def test_challenge_protected_resource_metadata_advertises_all_tool_scopes(self):
+        environment = {
+            "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
+            "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
+            "FASTAPI_ENV": "development",
+        }
+        previous_app = mcp_server._mcp_asgi_app
+        previous_server = mcp_server._mcp
+        try:
+            with patch.dict(os.environ, environment, clear=False):
+                mcp_server._mcp_asgi_app = None
+                mcp_server._mcp = None
+
+                async def request_metadata():
+                    transport = httpx.ASGITransport(app=mcp_server.get_mcp_asgi_app())
+                    async with httpx.AsyncClient(transport=transport, base_url="http://localhost:5004") as client:
+                        return await client.get("/.well-known/oauth-protected-resource/mcp")
+
+                response = asyncio.run(request_metadata())
+        finally:
+            mcp_server._mcp_asgi_app = previous_app
+            mcp_server._mcp = previous_server
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["scopes_supported"], list(mcp_server.MCP_ALLOWED_SCOPES))
+        self.assertEqual(response.json()["resource_name"], "Chat-Core")
+
     def test_url_only_client_can_register_as_a_public_oauth_client(self):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",

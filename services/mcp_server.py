@@ -89,6 +89,36 @@ class ChatCoreFastMCP(FastMCP):
             )
         return secured_tools
 
+    def streamable_http_app(self) -> Any:
+        """Advertise every tool scope without requiring every scope globally.
+
+        FastMCP 1.28 builds protected-resource metadata from
+        ``AuthSettings.required_scopes``. Chat-Core intentionally leaves that
+        list empty because each tool enforces its own least-privilege scope;
+        without this replacement the discovery document incorrectly advertises
+        ``scopes_supported: []`` and scope-omitting clients only authorize the
+        legacy publishing tools.
+        """
+        from mcp.server.auth.routes import create_protected_resource_routes
+
+        app = super().streamable_http_app()
+        auth = self.settings.auth
+        if auth is None or auth.resource_server_url is None:
+            return app
+
+        replacement_routes = create_protected_resource_routes(
+            resource_url=auth.resource_server_url,
+            authorization_servers=[auth.issuer_url],
+            scopes_supported=list(MCP_ALLOWED_SCOPES),
+            resource_name="Chat-Core",
+        )
+        replacements = {route.path: route for route in replacement_routes}
+        app.router.routes = [
+            replacements.get(getattr(route, "path", ""), route)
+            for route in app.router.routes
+        ]
+        return app
+
 
 async def _consume_publish_limit(user_id: int) -> None:
     allowed, _, retry_after = await run_blocking(
