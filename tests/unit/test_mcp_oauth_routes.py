@@ -39,6 +39,7 @@ class McpOAuthRouteTestCase(unittest.TestCase):
             "開発用コネクター",
             "https://client.example.test/callback",
             False,
+            None,
         )
 
     def test_post_client_keeps_legacy_optional_fields_and_secret_default(self):
@@ -58,7 +59,50 @@ class McpOAuthRouteTestCase(unittest.TestCase):
             response = asyncio.run(post_client(request))
 
         self.assertEqual(response.status_code, 201)
-        issue_client.assert_called_once_with(7, None, None, True)
+        issue_client.assert_called_once_with(7, None, None, True, None)
+
+    def test_post_client_accepts_an_explicit_scope_subset(self):
+        request = build_request(
+            method="POST",
+            path="/api/mcp/oauth/clients",
+            json_body={"scopes": ["prompts:read", "memos:read"]},
+            session={"user_id": 7},
+        )
+        credentials = {"client_id": "mcp-client", "client_secret": "secret"}
+
+        with (
+            patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
+            patch("blueprints.mcp_oauth.run_blocking", side_effect=run_blocking_inline),
+            patch("blueprints.mcp_oauth.issue_user_client", return_value=credentials) as issue_client,
+        ):
+            response = asyncio.run(post_client(request))
+
+        self.assertEqual(response.status_code, 201)
+        issue_client.assert_called_once_with(
+            7,
+            None,
+            None,
+            True,
+            ["prompts:read", "memos:read"],
+        )
+
+    def test_post_client_rejects_an_unknown_scope(self):
+        request = build_request(
+            method="POST",
+            path="/api/mcp/oauth/clients",
+            json_body={"scopes": ["admin:write"]},
+            session={"user_id": 7},
+        )
+
+        with (
+            patch("blueprints.mcp_oauth.is_mcp_enabled", return_value=True),
+            patch("blueprints.mcp_oauth.issue_user_client") as issue_client,
+        ):
+            response = asyncio.run(post_client(request))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(json.loads(response.body.decode())["error"], "OAuthスコープの指定が不正です。")
+        issue_client.assert_not_called()
 
     def test_patch_client_updates_only_the_authenticated_users_label(self):
         request = build_request(

@@ -11,7 +11,7 @@ from services.request_models import SharedPromptCreateRequest
 
 
 class McpServerTestCase(unittest.TestCase):
-    def test_server_exposes_only_the_two_publish_tools(self):
+    def test_server_exposes_scoped_content_and_memo_tools(self):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",
             "MCP_OAUTH_ENCRYPTION_KEYS": "5JZY8WHt_PU2CaUYi7ccVLq_rNfYQsg6dCXoyxa0Y0I=",
@@ -22,13 +22,49 @@ class McpServerTestCase(unittest.TestCase):
             tools = asyncio.run(server.list_tools())
 
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(set(by_name), {"publish_prompt", "publish_skill"})
+        self.assertEqual(
+            set(by_name),
+            {
+                "publish_prompt",
+                "publish_skill",
+                "list_shared_content",
+                "search_shared_content",
+                "get_shared_content",
+                "list_prompt_categories",
+                "list_memos",
+                "search_memos",
+                "get_memo",
+                "list_memo_collections",
+                "create_memo",
+                "update_memo",
+                "append_memo_content",
+            },
+        )
         self.assertFalse(by_name["publish_prompt"].annotations.readOnlyHint)
         self.assertFalse(by_name["publish_prompt"].annotations.idempotentHint)
-        for tool in by_name.values():
+        self.assertTrue(by_name["search_shared_content"].annotations.readOnlyHint)
+        self.assertTrue(by_name["get_memo"].annotations.readOnlyHint)
+        self.assertTrue(by_name["update_memo"].annotations.destructiveHint)
+
+        expected_scopes = {
+            "publish_prompt": "prompts:write",
+            "publish_skill": "prompts:write",
+            "list_shared_content": "prompts:read",
+            "search_shared_content": "prompts:read",
+            "get_shared_content": "prompts:read",
+            "list_prompt_categories": "prompts:read",
+            "list_memos": "memos:read",
+            "search_memos": "memos:read",
+            "get_memo": "memos:read",
+            "list_memo_collections": "memos:read",
+            "create_memo": "memos:write",
+            "update_memo": "memos:write",
+            "append_memo_content": "memos:write",
+        }
+        for name, tool in by_name.items():
             self.assertEqual(
                 tool.model_dump(by_alias=True)["securitySchemes"],
-                [{"type": "oauth2", "scopes": ["prompts:write"]}],
+                [{"type": "oauth2", "scopes": [expected_scopes[name]]}],
             )
 
     def test_tools_publish_category_choices_and_structured_result_schema(self):
@@ -41,6 +77,8 @@ class McpServerTestCase(unittest.TestCase):
             tools = asyncio.run(mcp_server._create_mcp().list_tools())
 
         for tool in tools:
+            if tool.name not in {"publish_prompt", "publish_skill"}:
+                continue
             definition = tool.model_dump(by_alias=True)
             category = definition["inputSchema"]["properties"]["category"]
             self.assertIn("coding", category["enum"])
@@ -66,7 +104,7 @@ class McpServerTestCase(unittest.TestCase):
             metadata = mcp_server.get_oauth_authorization_metadata()
 
         self.assertTrue(metadata["client_id_metadata_document_supported"])
-        self.assertEqual(metadata["scopes_supported"], ["prompts:write"])
+        self.assertEqual(metadata["scopes_supported"], list(mcp_server.MCP_ALLOWED_SCOPES))
         self.assertEqual(metadata["registration_endpoint"], "https://example.test/register")
         self.assertEqual(
             set(metadata["token_endpoint_auth_methods_supported"]),
@@ -79,7 +117,7 @@ class McpServerTestCase(unittest.TestCase):
 
         self.assertEqual(metadata["resource"], "https://example.test/mcp")
         self.assertEqual(metadata["authorization_servers"], ["https://example.test/"])
-        self.assertEqual(metadata["scopes_supported"], ["prompts:write"])
+        self.assertEqual(metadata["scopes_supported"], list(mcp_server.MCP_ALLOWED_SCOPES))
 
     def test_issuer_matches_protected_resource_authorization_server(self):
         # RFC 8414 §3.3: the issuer must byte-match the authorization_servers value
@@ -122,7 +160,7 @@ class McpServerTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertIn("resource_metadata", response.headers["www-authenticate"])
-        self.assertIn('scope="prompts:write"', response.headers["www-authenticate"])
+        self.assertNotIn("scope=", response.headers["www-authenticate"])
 
     def test_url_only_client_can_register_as_a_public_oauth_client(self):
         environment = {
@@ -165,4 +203,5 @@ class McpServerTestCase(unittest.TestCase):
         registration = response.json()
         self.assertEqual(registration["token_endpoint_auth_method"], "none")
         self.assertIsNone(registration.get("client_secret"))
+        self.assertEqual(registration["scope"].split(), list(mcp_server.MCP_ALLOWED_SCOPES))
         store_client.assert_called_once()

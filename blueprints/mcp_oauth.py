@@ -8,6 +8,7 @@ from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.mcp_config import is_mcp_enabled
 from services.mcp_oauth import (
+    MCP_ALLOWED_SCOPES,
     ClientLimitReachedError,
     InvalidRedirectUriError,
     complete_consent,
@@ -101,12 +102,19 @@ async def post_client(request: Request):
     label = body.get("label") if body else None
     redirect_uri = body.get("redirect_uri") if body else None
     issue_client_secret = body.get("issue_client_secret", True) if body else True
+    scopes = body.get("scopes") if body else None
     if label is not None and not isinstance(label, str):
         return jsonify({"error": "認証情報の名前が不正です。"}, status_code=400)
     if redirect_uri is not None and not isinstance(redirect_uri, str):
         return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)
     if not isinstance(issue_client_secret, bool):
         return jsonify({"error": "OAuthクライアントシークレットの設定が不正です。"}, status_code=400)
+    if scopes is not None and (
+        not isinstance(scopes, list)
+        or not scopes
+        or any(not isinstance(scope, str) or scope not in MCP_ALLOWED_SCOPES for scope in scopes)
+    ):
+        return jsonify({"error": "OAuthスコープの指定が不正です。"}, status_code=400)
     try:
         credentials = await run_blocking(
             issue_user_client,
@@ -114,6 +122,7 @@ async def post_client(request: Request):
             label,
             redirect_uri,
             issue_client_secret,
+            scopes,
         )
     except InvalidRedirectUriError:
         return jsonify({"error": "コールバックURL（リダイレクトURI）が不正です。"}, status_code=400)

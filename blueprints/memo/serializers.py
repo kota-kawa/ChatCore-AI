@@ -116,6 +116,7 @@ def serialize_memo_summary(memo: dict[str, Any]) -> dict[str, Any]:
         "title": memo.get("title") or "保存したメモ",
         "created_at": serialize_datetime_iso(memo.get("created_at")),
         "updated_at": serialize_datetime_iso(memo.get("updated_at")),
+        "revision": int(memo.get("revision") or 1),
         "archived_at": serialize_datetime_iso(memo.get("archived_at")),
         "pinned_at": serialize_datetime_iso(memo.get("pinned_at")),
         "is_archived": memo.get("archived_at") is not None,
@@ -153,6 +154,7 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         "title": memo.get("title") or "保存したメモ",
         "created_at": serialize_datetime_iso(memo.get("created_at")),
         "updated_at": serialize_datetime_iso(memo.get("updated_at")),
+        "revision": int(memo.get("revision") or 1),
         "archived_at": serialize_datetime_iso(memo.get("archived_at")),
         "pinned_at": serialize_datetime_iso(memo.get("pinned_at")),
         "is_archived": memo.get("archived_at") is not None,
@@ -164,4 +166,3 @@ def serialize_memo_detail(memo: dict[str, Any]) -> dict[str, Any]:
         "background_color": memo.get("background_color"),
         **share_meta,
     }
-

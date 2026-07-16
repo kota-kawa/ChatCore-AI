@@ -49,7 +49,27 @@ from services.mcp_config import (
 from services.runtime_config import get_session_secret_key
 from services.url_fetcher import _pin_dns, _resolve_safe_ip
 
+MCP_PROMPTS_READ_SCOPE = "prompts:read"
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
+MCP_MEMOS_READ_SCOPE = "memos:read"
+MCP_MEMOS_WRITE_SCOPE = "memos:write"
+MCP_ALLOWED_SCOPES = (
+    MCP_PROMPTS_READ_SCOPE,
+    MCP_PROMPTS_WRITE_SCOPE,
+    MCP_MEMOS_READ_SCOPE,
+    MCP_MEMOS_WRITE_SCOPE,
+)
+# Newly registered clients need to be able to request any supported subset.
+# Authorization requests that omit ``scope`` use the separate legacy default
+# below, so no existing connection silently gains access.
+MCP_DEFAULT_SCOPES = MCP_ALLOWED_SCOPES
+MCP_LEGACY_AUTHORIZATION_SCOPES = (MCP_PROMPTS_WRITE_SCOPE,)
+MCP_SCOPE_LABELS = {
+    MCP_PROMPTS_READ_SCOPE: "公開プロンプトとSKILLを検索・閲覧する",
+    MCP_PROMPTS_WRITE_SCOPE: "公開プロンプトを投稿する",
+    MCP_MEMOS_READ_SCOPE: "保存したメモを検索・閲覧する",
+    MCP_MEMOS_WRITE_SCOPE: "保存したメモを編集する",
+}
 MANUAL_CLIENT_PROVIDER = "manual"
 DEFAULT_MCP_OAUTH_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 AUTHORIZATION_CODE_TTL_SECONDS = 300
@@ -154,6 +174,33 @@ def _digest(value: str) -> str:
 
 def _serialize_client(client: OAuthClientInformationFull) -> dict[str, Any]:
     return client.model_dump(mode="json", exclude={"client_secret"})
+
+
+def _normalize_scopes(
+    scopes: list[str] | tuple[str, ...] | None,
+    *,
+    default: tuple[str, ...] = MCP_LEGACY_AUTHORIZATION_SCOPES,
+) -> list[str]:
+    """Validate an OAuth scope subset while preserving the requested order."""
+    requested = list(default if scopes is None else scopes)
+    normalized: list[str] = []
+    for scope in requested:
+        if not isinstance(scope, str) or scope not in MCP_ALLOWED_SCOPES:
+            raise ValueError(f"Unsupported MCP OAuth scope: {scope}")
+        if scope not in normalized:
+            normalized.append(scope)
+    if not normalized:
+        raise ValueError("At least one MCP OAuth scope is required.")
+    return normalized
+
+
+def _normalize_client_scope(
+    scope: str | None,
+    *,
+    default: tuple[str, ...] = MCP_DEFAULT_SCOPES,
+) -> str:
+    requested = scope.split() if isinstance(scope, str) and scope.strip() else list(default)
+    return " ".join(_normalize_scopes(requested, default=default))
 
 
 def _parse_client(value: Any, secret: str | None = None) -> OAuthClientInformationFull:
@@ -352,7 +399,7 @@ def _cimd_client(client_id: str) -> OAuthClientInformationFull | None:
         # private scopes. The authorization server owns the allowed scope set;
         # make it available to the SDK's client-level validation before the
         # provider applies its own strict scope check in authorize().
-        client.scope = MCP_PROMPTS_WRITE_SCOPE
+        client.scope = " ".join(MCP_ALLOWED_SCOPES)
         _validate_redirect_uris(client)
         _write_cimd_cache(client_id, client, MAX_CIMD_CACHE_SECONDS)
         return client
@@ -402,6 +449,10 @@ def _load_registered_client(client_id: str) -> OAuthClientInformationFull | None
 
 def _store_client(client: OAuthClientInformationFull) -> None:
     _validate_redirect_uris(client)
+    try:
+        client.scope = _normalize_client_scope(client.scope)
+    except ValueError as exc:
+        raise RegistrationError("invalid_client_metadata", "Requested OAuth scopes are not supported.") from exc
     encrypted = None
     if client.client_secret:
         encrypted = _fernet().encrypt(client.client_secret.encode("utf-8")).decode("ascii")
@@ -457,7 +508,8 @@ def issue_user_client(
     label: str | None = None,
     redirect_uri: str | None = None,
     issue_client_secret: bool = True,
-) -> dict[str, str | None]:
+    scopes: list[str] | None = None,
+) -> dict[str, Any]:
     """Create a personal OAuth client credential for a manual connector setup.
 
     複数の認証情報を（サービスの API キーのように）保存できるように、既存の認証情報は
@@ -476,6 +528,10 @@ def issue_user_client(
     cleaned_redirect_uri = _clean_redirect_uri(
         DEFAULT_MCP_OAUTH_REDIRECT_URI if redirect_uri is None else redirect_uri
     )
+    client_scopes = _normalize_scopes(
+        scopes,
+        default=MCP_ALLOWED_SCOPES,
+    )
     # クライアント ID には "claude" などのサービス名を含めず、他社サービスの
     # コネクターからでも流用できる中立的な識別子にする。
     # Keep the client ID vendor-neutral (no "claude") so it can also be reused
@@ -491,7 +547,7 @@ def issue_user_client(
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             token_endpoint_auth_method="client_secret_post" if client_secret else "none",
-            scope=MCP_PROMPTS_WRITE_SCOPE,
+            scope=" ".join(client_scopes),
         )
     except ValueError as exc:
         raise InvalidRedirectUriError("コールバックURL（リダイレクトURI）が不正です。") from exc
@@ -548,6 +604,7 @@ def issue_user_client(
         "redirect_uri": registered_redirect_uri,
         "token_endpoint_auth_method": "client_secret_post" if client_secret else "none",
         "mcp_server_url": get_mcp_server_url(),
+        "scopes": client_scopes,
     }
 
 
@@ -863,6 +920,16 @@ def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAu
     valid for a short grace window. Reuse within the window simply rotates again and
     returns fresh tokens, so an established connection never drops.
     """
+    try:
+        requested_scopes = _normalize_scopes(scopes, default=tuple(refresh.scopes))
+    except ValueError as exc:
+        raise TokenError("invalid_scope", "Requested OAuth scopes are not supported.") from exc
+    if not set(requested_scopes).issubset(set(refresh.scopes)):
+        raise TokenError(
+            "invalid_scope",
+            "Refresh tokens cannot be exchanged for broader OAuth scopes.",
+        )
+
     new_refresh_token = secrets.token_urlsafe(32)
     access_token = secrets.token_urlsafe(32)
     now = _utc_now()
@@ -896,7 +963,7 @@ def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAu
                         str(refresh.grant_id),
                         refresh.client_id,
                         "refresh",
-                        scopes,
+                        requested_scopes,
                         refresh.resource,
                         now + timedelta(seconds=REFRESH_TOKEN_TTL_SECONDS),
                     ),
@@ -905,7 +972,7 @@ def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAu
                         str(refresh.grant_id),
                         refresh.client_id,
                         "access",
-                        scopes,
+                        requested_scopes,
                         refresh.resource,
                         now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
                     ),
@@ -919,7 +986,7 @@ def _refresh_access_token(refresh: StoredRefreshToken, scopes: list[str]) -> OAu
         access_token=access_token,
         refresh_token=new_refresh_token,
         expires_in=ACCESS_TOKEN_TTL_SECONDS,
-        scope=" ".join(scopes),
+        scope=" ".join(requested_scopes),
     )
 
 
@@ -969,12 +1036,26 @@ class ChatCoreOAuthProvider(OAuthAuthorizationServerProvider[StoredAuthorization
         method = client_info.token_endpoint_auth_method or "client_secret_post"
         if method not in {"none", "client_secret_post", "client_secret_basic"}:
             raise RegistrationError("invalid_client_metadata", "Unsupported token endpoint auth method.")
+        try:
+            client_info.scope = _normalize_client_scope(client_info.scope)
+        except ValueError as exc:
+            raise RegistrationError(
+                "invalid_client_metadata",
+                "Requested OAuth scopes are not supported.",
+            ) from exc
         await run_blocking(_store_client, client_info)
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
-        scopes = params.scopes or [MCP_PROMPTS_WRITE_SCOPE]
-        if scopes != [MCP_PROMPTS_WRITE_SCOPE]:
-            raise AuthorizeError("invalid_scope", "Only prompts:write for this MCP resource is available.")
+        try:
+            scopes = _normalize_scopes(params.scopes)
+        except ValueError as exc:
+            raise AuthorizeError("invalid_scope", "One or more requested OAuth scopes are not available.") from exc
+        try:
+            client_scopes = set(_normalize_client_scope(client.scope).split())
+        except ValueError as exc:
+            raise AuthorizeError("invalid_scope", "The OAuth client has invalid registered scopes.") from exc
+        if not set(scopes).issubset(client_scopes):
+            raise AuthorizeError("invalid_scope", "The OAuth client was not registered for every requested scope.")
         if not _resource_matches_server(params.resource):
             raise AuthorizeError(
                 "invalid_request",
@@ -1025,6 +1106,10 @@ def consent_details(token: str) -> dict[str, Any] | None:
     request_data = read_consent_request(token)
     if not request_data:
         return None
+    try:
+        scopes = _normalize_scopes(request_data.get("params", {}).get("scopes"))
+    except (TypeError, ValueError):
+        return None
     client = _parse_client(request_data["client"])
     redirect_host = urlparse(request_data["params"]["redirect_uri"]).hostname or ""
     return {
@@ -1032,7 +1117,12 @@ def consent_details(token: str) -> dict[str, Any] | None:
         "client_id": str(client.client_id),
         "client_host": _display_client_host(client, request_data["params"]["redirect_uri"]),
         "redirect_host": redirect_host,
-        "scope": MCP_PROMPTS_WRITE_SCOPE,
+        # ``scope`` remains the OAuth-standard, space-delimited compatibility
+        # field. The structured fields let browser clients present each grant
+        # separately without parsing or inventing labels.
+        "scope": " ".join(scopes),
+        "scopes": scopes,
+        "scope_labels": {scope: MCP_SCOPE_LABELS[scope] for scope in scopes},
         "localhost_warning": redirect_host.lower() in {"localhost", "127.0.0.1", "::1"},
     }
 
@@ -1040,6 +1130,12 @@ def consent_details(token: str) -> dict[str, Any] | None:
 def complete_consent(token: str, user_id: int, approved: bool) -> str | None:
     request_data = read_consent_request(token)
     if not request_data or not _user_is_verified(user_id):
+        return None
+    try:
+        request_data["params"]["scopes"] = _normalize_scopes(
+            request_data.get("params", {}).get("scopes")
+        )
+    except (KeyError, TypeError, ValueError):
         return None
     client_id = request_data.get("client", {}).get("client_id")
     if not isinstance(client_id, str) or not _user_client_is_authorized_for_user(client_id, user_id):
@@ -1058,7 +1154,7 @@ def list_connections(user_id: int) -> list[dict[str, Any]]:
         try:
             cursor.execute(
                 """
-                SELECT id, client_name, client_host, display_name, created_at, last_used_at
+                SELECT id, client_name, client_host, display_name, scopes, created_at, last_used_at
                 FROM mcp_oauth_grants
                 WHERE user_id = %s AND revoked_at IS NULL
                 ORDER BY created_at DESC
@@ -1070,6 +1166,7 @@ def list_connections(user_id: int) -> list[dict[str, Any]]:
                 {
                     **dict(row),
                     "id": str(row["id"]),
+                    "scopes": list(row.get("scopes") or []),
                     "created_at": row["created_at"].isoformat(),
                     "last_used_at": row["last_used_at"].isoformat() if row["last_used_at"] else None,
                 }

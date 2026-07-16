@@ -32,6 +32,7 @@ describe("SecuritySettingsSection MCP connections", () => {
           client_name: "Example AI",
           client_host: "",
           display_name: "仕事用アシスタント",
+          scopes: ["prompts:read", "memos:read"],
           created_at: "2026-07-13T10:00:00Z",
           last_used_at: null
         }]}
@@ -90,6 +91,8 @@ describe("SecuritySettingsSection MCP connections", () => {
     expect(screen.getByText("仕事用アシスタント")).toBeInTheDocument();
     expect(screen.getByText("Example AI")).toBeInTheDocument();
     expect(screen.getByText("不明")).toBeInTheDocument();
+    expect(screen.getByText("公開プロンプトとSKILLを検索・閲覧する")).toBeInTheDocument();
+    expect(screen.getByText("保存したメモを検索・閲覧する")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Example AIの表示名を編集" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Example AIの表示名" }), {
       target: { value: "個人用アシスタント" }

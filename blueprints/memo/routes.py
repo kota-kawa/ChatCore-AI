@@ -204,7 +204,7 @@ async def api_create_memo(request: Request):
         # セマンティック検索用の埋め込みベクトル生成タスクをスケジュール
         # Schedule the vector embedding generation task for semantic search.
         if memo_id:
-            _memo_attr("_schedule_embedding")(memo_id, resolved_title, payload.ai_response)
+            _memo_attr("_schedule_embedding")(memo_id, resolved_title, payload.ai_response, 1)
         return jsonify({"status": "success", "memo_id": memo_id})
     except Error:
         # DB登録エラー時の共通エラーハンドリング
@@ -816,6 +816,7 @@ async def api_update_memo(request: Request, memo_id: int):
                 memo_id,
                 memo.get("title", ""),
                 memo.get("ai_response", ""),
+                memo.get("revision"),
             )
         return jsonify({"status": "success", "memo": memo})
     except ApiServiceError as exc:

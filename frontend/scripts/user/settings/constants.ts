@@ -50,6 +50,34 @@ export const PROFILE_SAVE_EFFECT_DURATION_MS = 2200;
 // Exact string the user must type to confirm account deletion
 export const ACCOUNT_DELETE_CONFIRMATION_TEXT = "DELETE ACCOUNT";
 
-// MCP 連携に認可する最小スコープの説明
-// Human-readable label for the minimum MCP authorization scope.
-export const MCP_PROMPTS_WRITE_SCOPE_LABEL = "公開プロンプトを投稿する";
+// MCP OAuth の各スコープを、同意画面で利用者が判断できる説明へ対応付ける。
+// Map each MCP OAuth scope to a user-facing description for informed consent.
+export const MCP_OAUTH_SCOPE_DEFINITIONS: Record<string, {
+  label: string;
+  description: string;
+  iconClass: string;
+}> = {
+  "prompts:read": {
+    label: "公開プロンプトとSKILLを検索・閲覧する",
+    description: "公開されているプロンプトとSKILLを検索し、内容を閲覧できます。",
+    iconClass: "bi bi-search"
+  },
+  "prompts:write": {
+    label: "公開プロンプトを投稿する",
+    description: "あなたの名前で公開プロンプトやSKILLを投稿できます。",
+    iconClass: "bi bi-send"
+  },
+  "memos:read": {
+    label: "保存したメモを検索・閲覧する",
+    description: "あなたの非公開メモのタイトルと内容を検索・閲覧できます。",
+    iconClass: "bi bi-journal-text"
+  },
+  "memos:write": {
+    label: "保存したメモを編集する",
+    description: "あなたの非公開メモのタイトルと内容を変更できます。",
+    iconClass: "bi bi-pencil-square"
+  }
+};
+
+// Existing imports keep working while the consent page moves to the complete map.
+export const MCP_PROMPTS_WRITE_SCOPE_LABEL = MCP_OAUTH_SCOPE_DEFINITIONS["prompts:write"].label;

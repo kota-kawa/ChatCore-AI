@@ -140,7 +140,7 @@ def fetch_memo_summaries(
             # Retrieve only the requested nearest neighbours through the HNSW index.
             sem_sql = f"""
                 SELECT
-                    me.id, me.title, me.created_at, me.updated_at,
+                    me.id, me.title, me.created_at, me.updated_at, me.revision,
                     me.archived_at, me.pinned_at,
                     LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                     me.collection_id,
@@ -184,7 +184,7 @@ def fetch_memo_summaries(
         # Retrieve paginated memo records.
         list_sql = f"""
             SELECT
-                me.id, me.title, me.created_at, me.updated_at,
+                me.id, me.title, me.created_at, me.updated_at, me.revision,
                 me.archived_at, me.pinned_at,
                 LEFT(COALESCE(me.ai_response, ''), 400) AS preview_response,
                 me.collection_id,
@@ -234,7 +234,7 @@ def fetch_memo_detail(user_id: int, memo_id: int) -> dict[str, Any]:
             """
             SELECT
                 me.id, me.title, me.ai_response,
-                me.created_at, me.updated_at, me.archived_at, me.pinned_at,
+                me.created_at, me.updated_at, me.revision, me.archived_at, me.pinned_at,
                 me.collection_id,
                 me.background_color,
                 mc.name AS collection_name,
@@ -366,6 +366,8 @@ def update_memo(
     clear_collection: bool,
     background_color: str | None = None,
     clear_background_color: bool = False,
+    expected_revision: int | None = None,
+    allow_shared_content_change: bool = True,
 ) -> dict[str, Any]:
     """
     メモの属性情報（タイトル、コンテンツ、コレクション等）を更新する関数
@@ -391,9 +393,21 @@ def update_memo(
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT title, ai_response, collection_id, background_color
-            FROM memo_entries
-            WHERE id = %s AND user_id = %s
+            SELECT
+                me.title,
+                me.ai_response,
+                me.collection_id,
+                me.background_color,
+                me.revision,
+                EXISTS (
+                    SELECT 1
+                    FROM shared_memo_entries sme
+                    WHERE sme.memo_entry_id = me.id
+                      AND sme.revoked_at IS NULL
+                      AND (sme.expires_at IS NULL OR sme.expires_at > CURRENT_TIMESTAMP)
+                ) AS is_shared
+            FROM memo_entries me
+            WHERE me.id = %s AND me.user_id = %s
             LIMIT 1
             """,
             (memo_id, user_id),
@@ -401,6 +415,10 @@ def update_memo(
         existing = cursor.fetchone()
         if not existing:
             raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+        if expected_revision is not None and int(existing.get("revision") or 0) != expected_revision:
+            raise ApiServiceError("メモが別の操作で更新されています。再読み込みしてからやり直してください。", 409, status="fail")
+        if not allow_shared_content_change and bool(existing.get("is_shared")):
+            raise ApiServiceError("共有中のメモを更新するには、公開内容の変更を明示的に許可してください。", 409, status="fail")
 
         # メモ本文の更新判定とバリデーション
         # Determine updated content value and validate.
@@ -438,24 +456,68 @@ def update_memo(
 
         # データベースに更新を書き込み
         # Write updates to the database.
-        cursor.execute(
+        revision_clause = ""
+        revision_params: list[Any] = []
+        if expected_revision is not None:
+            revision_clause = " AND revision = %s"
+            revision_params.append(expected_revision)
+
+        sharing_clause = ""
+        if not allow_shared_content_change:
+            sharing_clause = """
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM shared_memo_entries sme
+                    WHERE sme.memo_entry_id = memo_entries.id
+                      AND sme.revoked_at IS NULL
+                      AND (sme.expires_at IS NULL OR sme.expires_at > CURRENT_TIMESTAMP)
+                )
             """
+
+        cursor.execute(
+            f"""
             UPDATE memo_entries
             SET title = %s, ai_response = %s,
                 collection_id = %s,
                 background_color = %s,
+                revision = revision + 1,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s AND user_id = %s
+            WHERE id = %s AND user_id = %s{revision_clause}{sharing_clause}
+            RETURNING revision
             """,
-            (
+            tuple([
                 resolved_title,
                 resolved_ai_response,
                 resolved_collection,
                 resolved_background_color,
                 memo_id,
                 user_id,
-            ),
+                *revision_params,
+            ]),
         )
+        if not cursor.fetchone():
+            cursor.execute(
+                """
+                SELECT
+                    revision,
+                    EXISTS (
+                        SELECT 1
+                        FROM shared_memo_entries sme
+                        WHERE sme.memo_entry_id = memo_entries.id
+                          AND sme.revoked_at IS NULL
+                          AND (sme.expires_at IS NULL OR sme.expires_at > CURRENT_TIMESTAMP)
+                    ) AS is_shared
+                FROM memo_entries
+                WHERE id = %s AND user_id = %s
+                """,
+                (memo_id, user_id),
+            )
+            current = cursor.fetchone()
+            if not current:
+                raise ResourceNotFoundError(MEMO_NOT_FOUND_ERROR)
+            if not allow_shared_content_change and bool(current.get("is_shared")):
+                raise ApiServiceError("共有中のメモを更新するには、公開内容の変更を明示的に許可してください。", 409, status="fail")
+            raise ApiServiceError("メモが別の操作で更新されています。再読み込みしてからやり直してください。", 409, status="fail")
         connection.commit()
     finally:
         if cursor is not None:
@@ -488,6 +550,7 @@ def set_memo_archive_state(user_id: int, memo_id: int, enabled: bool) -> dict[st
             """
             UPDATE memo_entries
             SET archived_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END,
+                revision = revision + 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             RETURNING id
@@ -538,6 +601,7 @@ def set_memo_pin_state(user_id: int, memo_id: int, enabled: bool) -> dict[str, A
                     ), 0) + 1
                     ELSE sort_order
                 END,
+                revision = revision + 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             RETURNING id
@@ -678,7 +742,9 @@ def reorder_memo(
         cursor.execute(
             """
             UPDATE memo_entries
-            SET sort_order = %s
+            SET sort_order = %s,
+                revision = revision + 1,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
             RETURNING id
             """,
@@ -781,25 +847,25 @@ def bulk_action(
             affected = max(cursor.rowcount, 0)
         elif action == "archive":
             cursor.execute(
-                f"UPDATE memo_entries SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                f"UPDATE memo_entries SET archived_at = CURRENT_TIMESTAMP, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
         elif action == "unarchive":
             cursor.execute(
-                f"UPDATE memo_entries SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                f"UPDATE memo_entries SET archived_at = NULL, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
         elif action == "pin":
             cursor.execute(
-                f"UPDATE memo_entries SET pinned_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                f"UPDATE memo_entries SET pinned_at = CURRENT_TIMESTAMP, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
         elif action == "unpin":
             cursor.execute(
-                f"UPDATE memo_entries SET pinned_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                f"UPDATE memo_entries SET pinned_at = NULL, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
@@ -812,13 +878,13 @@ def bulk_action(
             )
             if cursor.fetchone():
                 cursor.execute(
-                    f"UPDATE memo_entries SET collection_id = %s, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                    f"UPDATE memo_entries SET collection_id = %s, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                     tuple([collection_id, *owned_ids]),
                 )
                 affected = max(cursor.rowcount, 0)
         elif action == "clear_collection":
             cursor.execute(
-                f"UPDATE memo_entries SET collection_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
+                f"UPDATE memo_entries SET collection_id = NULL, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({owned_ph})",
                 tuple(owned_ids),
             )
             affected = max(cursor.rowcount, 0)
@@ -1010,6 +1076,18 @@ def delete_collection(user_id: int, collection_id: int) -> None:
     try:
         connection = _get_db_connection()
         cursor = connection.cursor()
+        # コレクション削除による関連解除もメモの競合検知対象に含める。
+        # Treat collection removal as a memo revision change for optimistic concurrency.
+        cursor.execute(
+            """
+            UPDATE memo_entries
+            SET collection_id = NULL,
+                revision = revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE collection_id = %s AND user_id = %s
+            """,
+            (collection_id, user_id),
+        )
         cursor.execute(
             "DELETE FROM memo_collections WHERE id = %s AND user_id = %s RETURNING id",
             (collection_id, user_id),
