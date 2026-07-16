@@ -67,6 +67,20 @@ class McpServerTestCase(unittest.TestCase):
                 [{"type": "oauth2", "scopes": [expected_scopes[name]]}],
             )
 
+        self.assertIn("Markdown形式", server.instructions)
+        markdown_inputs = {
+            "create_memo": "content",
+            "update_memo": "content",
+            "append_memo_content": "text",
+        }
+        for tool_name, input_name in markdown_inputs.items():
+            definition = by_name[tool_name].model_dump(by_alias=True)
+            self.assertIn("Markdown形式", definition["description"])
+            self.assertIn(
+                "Markdown形式",
+                definition["inputSchema"]["properties"][input_name]["description"],
+            )
+
     def test_tools_publish_category_choices_and_structured_result_schema(self):
         environment = {
             "MCP_PUBLIC_BASE_URL": "http://localhost:5004",

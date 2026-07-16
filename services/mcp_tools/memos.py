@@ -76,6 +76,9 @@ EDIT_ANNOTATIONS = ToolAnnotations(
     idempotentHint=False,
     openWorldHint=False,
 )
+MEMO_MARKDOWN_INSTRUCTION = (
+    "メモ本文はMarkdown形式で記述してください。見出し、箇条書き、リンク、コードなどはMarkdown構文を使用します。"
+)
 
 
 def _tool_error(exc: Exception) -> ToolError:
@@ -232,12 +235,22 @@ def register_memo_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         name="create_memo",
         title="非公開メモを作成",
-        description="認証ユーザーの非公開メモを新規作成します。同じ呼び出しの再実行は別メモになります。",
+        description=(
+            "認証ユーザーの非公開メモを新規作成します。同じ呼び出しの再実行は別メモになります。"
+            + MEMO_MARKDOWN_INSTRUCTION
+        ),
         annotations=CREATE_ANNOTATIONS,
         structured_output=True,
     )
     async def create_memo_tool(
-        content: Annotated[str, Field(min_length=1, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)],
+        content: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=MAX_MCP_MEMO_CONTENT_LENGTH,
+                description=MEMO_MARKDOWN_INSTRUCTION,
+            ),
+        ],
         title: Annotated[str, Field(max_length=MAX_MCP_MEMO_TITLE_LENGTH)] = "",
     ) -> McpMemoMutationResult:
         actor = require_actor(MCP_MEMOS_WRITE_SCOPE)
@@ -256,6 +269,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         description=(
             "expected_revisionが現在値と一致する場合だけタイトルまたは本文を置換します。"
             "共有中メモは公開内容も変わるため、明示許可なしでは更新しません。"
+            + MEMO_MARKDOWN_INSTRUCTION
         ),
         annotations=EDIT_ANNOTATIONS,
         structured_output=True,
@@ -264,7 +278,13 @@ def register_memo_tools(mcp: FastMCP) -> None:
         memo_id: Annotated[int, Field(ge=1)],
         expected_revision: Annotated[int, Field(ge=1)],
         title: Annotated[str | None, Field(max_length=MAX_MCP_MEMO_TITLE_LENGTH)] = None,
-        content: Annotated[str | None, Field(max_length=MAX_MCP_MEMO_CONTENT_LENGTH)] = None,
+        content: Annotated[
+            str | None,
+            Field(
+                max_length=MAX_MCP_MEMO_CONTENT_LENGTH,
+                description=MEMO_MARKDOWN_INSTRUCTION,
+            ),
+        ] = None,
         allow_shared_content_change: bool = False,
     ) -> McpMemoMutationResult:
         actor = require_actor(MCP_MEMOS_WRITE_SCOPE)
@@ -288,6 +308,7 @@ def register_memo_tools(mcp: FastMCP) -> None:
         description=(
             "expected_revisionが現在値と一致する場合だけ本文末尾へ追記します。"
             "全文置換を避けたい追記ワークフロー向けです。"
+            + MEMO_MARKDOWN_INSTRUCTION
         ),
         annotations=EDIT_ANNOTATIONS,
         structured_output=True,
@@ -295,7 +316,14 @@ def register_memo_tools(mcp: FastMCP) -> None:
     async def append_memo_content(
         memo_id: Annotated[int, Field(ge=1)],
         expected_revision: Annotated[int, Field(ge=1)],
-        text: Annotated[str, Field(min_length=1, max_length=MAX_MCP_MEMO_CONTENT_LENGTH)],
+        text: Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=MAX_MCP_MEMO_CONTENT_LENGTH,
+                description=MEMO_MARKDOWN_INSTRUCTION,
+            ),
+        ],
         separator: Annotated[str, Field(max_length=20)] = "\n\n",
         allow_shared_content_change: bool = False,
     ) -> McpMemoMutationResult:
