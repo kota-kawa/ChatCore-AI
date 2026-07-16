@@ -18,10 +18,12 @@ export type PromptAttachment = {
 export type PromptPagination = {
   page?: number;
   per_page?: number;
+  limit?: number;
   total?: number | null;
   total_pages?: number | null;
   has_next?: boolean;
   has_prev?: boolean;
+  next_cursor?: string | null;
 };
 
 export type PromptData = {

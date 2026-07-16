@@ -1,8 +1,11 @@
 # prompt_share/prompt_share_api.py
+import base64
+import binascii
 import json
 import logging
 import os
 import re
+from datetime import datetime
 from uuid import uuid4
 from typing import Any
 
@@ -11,10 +14,18 @@ from werkzeug.utils import secure_filename
 
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit, get_request_client_ip
+from services.api_errors import ApiServiceError
 from services.csrf import require_csrf
 from services.db import get_db_connection
+from services.error_messages import (
+    ERROR_INVALID_PROMPT_FEED_CURSOR,
+    ERROR_INVALID_PROMPT_FEED_FILTER,
+)
+from services.prompt_categories import normalize_category
 from services.prompt_types import (
+    CONTENT_FORMATS,
     CONTENT_FORMAT_SKILL,
+    MEDIA_TYPES,
     get_attachment_rule,
     media_allows_attachment,
     normalize_content_format,
@@ -32,6 +43,7 @@ from services.web import (
     BASE_DIR,
     jsonify,
     jsonify_rate_limited,
+    jsonify_service_error,
     log_and_internal_server_error,
     require_json_dict,
     validate_payload_model,
@@ -68,10 +80,95 @@ PROMPT_COMMENT_LIST_LIMIT = 200
 PROMPT_COMMENT_AUTO_HIDE_REPORT_THRESHOLD = 3
 PROMPT_COMMENT_MAX_URLS = 3
 RECOMMENDED_PROMPT_LIMIT = 3
+PROMPT_FEED_DEFAULT_LIMIT = 24
+PROMPT_FEED_MAX_LIMIT = 100
 
 # コメント内のURL検知用正規表現パターン
 # Regular expression pattern to detect URLs inside comments.
 PROMPT_COMMENT_LINK_PATTERN = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
+
+
+def _parse_prompt_feed_limit(value: str | None) -> int:
+    """一覧の取得件数を1〜上限の範囲へ正規化する。"""
+    try:
+        parsed = int(value) if value is not None else PROMPT_FEED_DEFAULT_LIMIT
+    except (TypeError, ValueError):
+        return PROMPT_FEED_DEFAULT_LIMIT
+    if parsed <= 0:
+        return PROMPT_FEED_DEFAULT_LIMIT
+    return min(parsed, PROMPT_FEED_MAX_LIMIT)
+
+
+def _decode_prompt_feed_cursor(value: str | None) -> tuple[datetime, int] | None:
+    """URL-safe Base64カーソルを(created_at, id)へ復元する。"""
+    if not value:
+        return None
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        payload = json.loads(decoded)
+        if not isinstance(payload, dict):
+            raise ValueError
+        created_at = payload.get("created_at")
+        prompt_id = payload.get("id")
+        if not isinstance(created_at, str) or isinstance(prompt_id, bool):
+            raise ValueError
+        parsed_id = int(prompt_id)
+        if parsed_id <= 0:
+            raise ValueError
+        return datetime.fromisoformat(created_at.replace("Z", "+00:00")), parsed_id
+    except (
+        ValueError,
+        TypeError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        binascii.Error,
+    ) as exc:
+        raise ApiServiceError(ERROR_INVALID_PROMPT_FEED_CURSOR, 400) from exc
+
+
+def _encode_prompt_feed_cursor(prompt: dict[str, Any]) -> str | None:
+    """プロンプトの(created_at, id)から次ページ用カーソルを作る。"""
+    created_at = prompt.get("created_at")
+    prompt_id = prompt.get("id")
+    if not isinstance(created_at, str) or prompt_id is None:
+        return None
+    payload = json.dumps(
+        {"created_at": created_at, "id": int(prompt_id)},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _normalize_prompt_feed_filters(
+    category: str | None,
+    content_format: str | None,
+    media_type: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    """一覧APIの任意フィルターを検証して正準キーへ揃える。"""
+    raw_category = str(category or "").strip()
+    normalized_category = None
+    if raw_category and raw_category.lower() != "all":
+        normalized_category = normalize_category(raw_category)
+        if normalized_category is None:
+            raise ApiServiceError(ERROR_INVALID_PROMPT_FEED_FILTER, 400)
+
+    raw_content_format = str(content_format or "").strip().lower()
+    normalized_content_format = None
+    if raw_content_format and raw_content_format != "all":
+        if raw_content_format not in CONTENT_FORMATS:
+            raise ApiServiceError(ERROR_INVALID_PROMPT_FEED_FILTER, 400)
+        normalized_content_format = raw_content_format
+
+    raw_media_type = str(media_type or "").strip().lower()
+    normalized_media_type = None
+    if raw_media_type and raw_media_type != "all":
+        if raw_media_type not in MEDIA_TYPES:
+            raise ApiServiceError(ERROR_INVALID_PROMPT_FEED_FILTER, 400)
+        normalized_media_type = raw_media_type
+
+    return normalized_category, normalized_content_format, normalized_media_type
 
 
 # レコード辞書またはタプルからIDフィールド値を安全に抽出する関数
@@ -316,21 +413,49 @@ def _save_prompt_attachment(upload_file: Any, user_id: int, media_type: str) -> 
 
 # 共有中プロンプトの一覧を、コメント数と利用状態を含めてDBから取得する関数
 # Fetch public shared prompts including comment counts and contextual interaction state.
-def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
+def _get_prompts_with_flags(
+    user_id: int | None,
+    *,
+    limit: int = PROMPT_FEED_DEFAULT_LIMIT,
+    cursor: tuple[datetime, int] | None = None,
+    category: str | None = None,
+    content_format: str | None = None,
+    media_type: str | None = None,
+) -> dict[str, Any]:
     """
-    公開中プロンプトの一覧を、コメント総数、および現在ログイン中ユーザーの操作状態と結合して取得する。
-    Fetch all public, non-deleted prompts joined with interaction state for the optional user ID.
+    公開中プロンプトをカーソルページ単位で確定し、コメント数とユーザー操作状態を付加する。
+    Fetch one cursor page of public prompts and attach interaction metadata.
     """
     conn = None
-    cursor = None
+    db_cursor = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        # 公開プロンプトとユーザーごとのLike/チャット利用状態をJOINで取得
-        # Execute query to select public prompts with flags joined with the specific user ID.
-        cursor.execute(
-            """
-            SELECT
+        db_cursor = conn.cursor(dictionary=True)
+        conditions = []
+        params: list[Any] = []
+        if category is not None:
+            conditions.append("AND p.category = %s")
+            params.append(category)
+        if content_format is not None:
+            conditions.append("AND p.content_format = %s")
+            params.append(content_format)
+        if media_type is not None:
+            conditions.append("AND p.media_type = %s")
+            params.append(media_type)
+        if cursor is not None:
+            conditions.append("AND (p.created_at, p.id) < (%s, %s)")
+            params.extend(cursor)
+        filter_sql = "\n                ".join(conditions)
+        limit = min(max(int(limit), 1), PROMPT_FEED_MAX_LIMIT)
+        fetch_limit = limit + 1
+        params.extend([fetch_limit, user_id, user_id])
+
+        # 先にページ対象を確定し、その少数行だけにユーザー状態とコメント数を付加する。
+        # Select the page first, then calculate metadata only for those rows.
+        db_cursor.execute(
+            f"""
+            WITH page_prompts AS (
+              SELECT
                 p.id,
                 p.title,
                 p.category,
@@ -343,53 +468,75 @@ def _get_prompts_with_flags(user_id: int | None) -> list[dict[str, Any]]:
                 p.media_type,
                 p.attributes,
                 p.attachments,
-                p.created_at,
+                p.created_at
+              FROM prompts AS p
+              LEFT JOIN users AS u
+                ON u.id = p.user_id
+              WHERE p.is_public = TRUE
+                AND p.deleted_at IS NULL
+                {filter_sql}
+              ORDER BY p.created_at DESC, p.id DESC
+              LIMIT %s
+            )
+            SELECT
+                p.*,
                 COALESCE(pc.comment_count, 0) AS comment_count,
-                CASE WHEN pl.id IS NOT NULL THEN TRUE ELSE FALSE END AS liked,
-                CASE WHEN used_tasks.id IS NOT NULL THEN TRUE ELSE FALSE END AS used_in_chat
-            FROM prompts AS p
-            LEFT JOIN users AS u
-              ON u.id = p.user_id
-            LEFT JOIN (
-                SELECT prompt_id, COUNT(*) AS comment_count
+                EXISTS (
+                  SELECT 1
+                  FROM prompt_likes AS pl
+                  WHERE pl.user_id = %s
+                    AND pl.prompt_id = p.id
+                ) AS liked,
+                EXISTS (
+                  SELECT 1
+                  FROM task_with_examples AS used_tasks
+                  WHERE used_tasks.user_id = %s
+                    AND used_tasks.deleted_at IS NULL
+                    AND (
+                      used_tasks.source_prompt_id = p.id
+                      OR (
+                        used_tasks.source_prompt_id IS NULL
+                        AND used_tasks.name = p.title
+                      )
+                    )
+                ) AS used_in_chat
+            FROM page_prompts AS p
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS comment_count
                 FROM prompt_comments
                 WHERE deleted_at IS NULL
                   AND hidden_by_reports_at IS NULL
-                GROUP BY prompt_id
+                  AND prompt_id = p.id
             ) AS pc
-              ON pc.prompt_id = p.id
-            LEFT JOIN prompt_likes AS pl
-              ON pl.user_id = %s
-             AND pl.prompt_id = p.id
-            LEFT JOIN task_with_examples AS used_tasks
-              ON used_tasks.user_id = %s
-             AND used_tasks.deleted_at IS NULL
-             AND (
-                  used_tasks.source_prompt_id = p.id
-                  OR (
-                       used_tasks.source_prompt_id IS NULL
-                       AND used_tasks.name = p.title
-                     )
-                 )
-            WHERE p.is_public = TRUE
-              AND p.deleted_at IS NULL
-            ORDER BY p.created_at DESC
+              ON TRUE
+            ORDER BY p.created_at DESC, p.id DESC
             """,
-            (user_id, user_id),
+            tuple(params),
         )
-        prompts = []
+        rows = [dict(row) for row in db_cursor.fetchall()]
+        has_next = len(rows) > limit
+        rows = rows[:limit]
+        prompts: list[dict[str, Any]] = []
         # 結果の整形・真偽値キャストを実行
         # Normalize and serialize each result row.
-        for row in cursor.fetchall():
-            prompt = _serialize_prompt_row(dict(row))
+        for row in rows:
+            prompt = _serialize_prompt_row(row)
             prompt["liked"] = bool(prompt.get("liked"))
             prompt["used_in_chat"] = bool(prompt.get("used_in_chat"))
             prompt["comment_count"] = int(prompt.get("comment_count") or 0)
             prompts.append(prompt)
-        return prompts
+        next_cursor = _encode_prompt_feed_cursor(prompts[-1]) if has_next and prompts else None
+        return {
+            "prompts": prompts,
+            "pagination": {
+                "limit": limit,
+                "has_next": has_next,
+                "next_cursor": next_cursor,
+            },
+        }
     finally:
-        if cursor is not None:
-            cursor.close()
+        if db_cursor is not None:
+            db_cursor.close()
         if conn is not None:
             conn.close()
 
@@ -1244,21 +1391,39 @@ def _report_prompt_comment_for_user(
             conn.close()
 
 
-# 保存されている全プロンプトを取得するエンドポイント
-# Endpoint to retrieve all public prompts.
+# 公開プロンプトをカーソルページ単位で取得するエンドポイント
+# Endpoint to retrieve a cursor page of public prompts.
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
 async def get_prompts(request: Request):
     """
-    保存されているすべての公開プロンプト一覧を取得して返却するエンドポイント。
-    GET API endpoint to retrieve all shared public prompts with interaction flags.
+    公開プロンプトを絞り込み条件とカーソルに基づいて取得する。
+    Retrieve one filtered cursor page of public prompts with interaction flags.
     """
     session = getattr(request, "session", {}) or {}
     user_id = session.get("user_id")
     try:
+        limit = _parse_prompt_feed_limit(request.query_params.get("limit"))
+        cursor = _decode_prompt_feed_cursor(request.query_params.get("cursor"))
+        category, content_format, media_type = _normalize_prompt_feed_filters(
+            request.query_params.get("category"),
+            request.query_params.get("content_format"),
+            request.query_params.get("media_type"),
+        )
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
+    try:
         # 非ブロッキングスレッドプールでDB検索処理を実行
         # Run database operation in a separate thread.
-        prompts = await run_blocking(_get_prompts_with_flags, user_id)
-        return jsonify({"status": "success", "prompts": prompts})
+        payload = await run_blocking(
+            _get_prompts_with_flags,
+            user_id,
+            limit=limit,
+            cursor=cursor,
+            category=category,
+            content_format=content_format,
+            media_type=media_type,
+        )
+        return jsonify({"status": "success", **payload})
     except Exception:
         # エラー発生時はログに記録し、500内部サーバーエラーを返却
         # Log error and return 500 internal server error.

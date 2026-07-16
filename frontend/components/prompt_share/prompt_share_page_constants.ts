@@ -18,6 +18,10 @@ import type {
 // Items per search results page; must match the limit parameter used in API requests
 export const SEARCH_RESULTS_PER_PAGE = 20;
 
+// 通常フィードの1ページあたりの取得件数。
+// Items fetched per page for the regular prompt feed.
+export const PROMPT_FEED_PAGE_SIZE = 24;
+
 // カテゴリフィルターの定義。value="all"は全件表示のための特別値。
 // カテゴリの追加はレジストリへの1エントリ追加で吸収する。
 // Category filter definitions; "all" is a sentinel that shows every prompt.

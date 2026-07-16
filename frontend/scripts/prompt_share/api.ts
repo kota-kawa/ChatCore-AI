@@ -141,10 +141,38 @@ export function removePromptAsTask(prompt: PromptData) {
   }).then(({ payload }) => payload);
 }
 
-export function fetchPromptList() {
-  return promptShareFetchJsonOrThrow<PromptFeedResponse>("/prompt_share/api/prompts", undefined, {
-    defaultMessage: "プロンプト一覧の取得に失敗しました。",
-  }).then(({ payload }) => payload);
+export function fetchPromptList(options?: {
+  limit?: number;
+  cursor?: string | null;
+  category?: string;
+  contentFormat?: ContentFormat | "all";
+  mediaType?: MediaType | "all";
+}) {
+  const params = new URLSearchParams();
+  if (options?.limit) {
+    params.set("limit", String(options.limit));
+  }
+  if (options?.cursor) {
+    params.set("cursor", options.cursor);
+  }
+  if (options?.category && options.category !== "all") {
+    params.set("category", options.category);
+  }
+  if (options?.contentFormat && options.contentFormat !== "all") {
+    params.set("content_format", options.contentFormat);
+  }
+  if (options?.mediaType && options.mediaType !== "all") {
+    params.set("media_type", options.mediaType);
+  }
+  const query = params.toString();
+
+  return promptShareFetchJsonOrThrow<PromptFeedResponse>(
+    `/prompt_share/api/prompts${query ? `?${query}` : ""}`,
+    undefined,
+    {
+      defaultMessage: "プロンプト一覧の取得に失敗しました。"
+    }
+  ).then(({ payload }) => payload);
 }
 
 export function fetchPromptSearchResults(
