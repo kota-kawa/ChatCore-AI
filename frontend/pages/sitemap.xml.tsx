@@ -32,6 +32,7 @@ function xmlEscape(value: string) {
 // Public route definitions included in the sitemap (with change frequency and priority)
 export const PUBLIC_SITEMAP_ROUTES = [
   { path: "/", changefreq: "daily", priority: "1.0" },
+  { path: "/lp", changefreq: "weekly", priority: "0.8" },
   { path: "/prompt_share", changefreq: "daily", priority: "0.9" },
   { path: "/memo", changefreq: "weekly", priority: "0.5" }
 ] as const;
