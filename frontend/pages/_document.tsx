@@ -2,7 +2,7 @@ import { Html, Head, Main, NextScript } from "next/document";
 
 // フラッシュを防ぐために<head>内で同期的にテーマを適用するインラインスクリプト
 // Inline script to synchronously apply the theme in <head> to prevent flash
-const themeBootstrapScript = `(function(){try{var k='chatcore-theme';var v=localStorage.getItem(k);if(v!=='dark'&&v!=='light'){v=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',v);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+const themeBootstrapScript = `(function(){try{var k='chatcore-theme';var v=localStorage.getItem(k);if(v==='auto'){v=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}else if(v!=='dark'&&v!=='light'){v='light';}document.documentElement.setAttribute('data-theme',v);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 // トップページ再読込時、直前がチャット画面ならハイドレーション前に <html> へ
 // フラグを立て、CSS でセットアップ画面の一瞬の表示（フラッシュ）を防ぐ。

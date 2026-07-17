@@ -121,7 +121,7 @@ export default function UserSettingsPage() {
   const [editPromptForm, setEditPromptForm] = useState<EditPromptFormState | null>(null);
   const [promptSaving, setPromptSaving] = useState(false);
 
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("auto");
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
 
   // Passkey 関連の状態 — 対応有無・一覧・ローディング・操作中フラグを管理する
   // Passkey-related state — tracks support, list, loading, and in-progress operation flags
