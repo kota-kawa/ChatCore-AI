@@ -166,6 +166,7 @@ class _FakeRedisWithPubSub(_FakeRedis):
     # 日本語: 関連付けられた疑似PubSubインスタンスを返却します。
     # English: Return the associated fake PubSub instance.
     def pubsub(self, ignore_subscribe_messages=True):
+        del ignore_subscribe_messages
         return self.pubsub_instance
 
 
@@ -448,8 +449,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         def fake_stream(*_args, **_kwargs):
             first_call.set()
             release.wait(timeout=2)
-            return
-            yield  # pragma: no cover - generator marker
+            yield from ()
 
         with patch(
             "services.chat_generation.get_llm_response_stream",

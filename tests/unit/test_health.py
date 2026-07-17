@@ -59,7 +59,7 @@ class DummyConnection:
         """
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, _exc_type, _exc, _tb):
         """
         コンテキストを抜ける時のクリーンアップ処理を行います。
         Clean up when leaving the context.

@@ -129,6 +129,33 @@ jobs:
           set -euo pipefail
           python -m ruff check app.py blueprints services tests
 
+  dead_code:
+    name: Dead Code Check (Vulture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-build.txt
+            requirements-dev.txt
+
+      - name: Install dead-code check dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-build.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Detect proven dead code
+        run: |
+          set -euo pipefail
+          python -m vulture app.py blueprints services scripts tests --min-confidence 100
+
   unit_test_shards:
     name: Unit Test Shard ${{ matrix.shard_number }}/${{ matrix.shard_total }} (Python 3.14)
     runs-on: ubuntu-latest
@@ -392,7 +419,7 @@ jobs:
   deploy:
     name: Deploy (main push)
     runs-on: ubuntu-latest
-    needs: [version_lock_check, dependency_audit, lint, lint_full, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
+    needs: [version_lock_check, dependency_audit, lint, lint_full, dead_code, unittest, integration_tests, frontend_checks, docker_backend_build, docker_frontend_build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # The first PostgreSQL 15 -> 18 logical dump/restore can legitimately take
     # longer than an ordinary blue/green application deployment.

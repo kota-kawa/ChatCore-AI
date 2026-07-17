@@ -134,9 +134,9 @@ class _ConnectionProxy:
     # Exit the context manager, closing (returning) the connection.
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _tb: TracebackType | None,
     ) -> bool:
         self.close()
         return False

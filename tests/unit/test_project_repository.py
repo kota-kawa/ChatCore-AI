@@ -45,7 +45,7 @@ class FakeConnection:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, _exc_type, _exc, _tb):
         return False
 
 

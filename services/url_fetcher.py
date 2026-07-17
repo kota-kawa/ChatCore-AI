@@ -114,7 +114,7 @@ class _TextExtractor(HTMLParser):
         self._skip_depth = 0
         self._parts: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list) -> None:  # type: ignore[override]
+    def handle_starttag(self, tag: str, _attrs: list) -> None:  # type: ignore[override]
         # 無視対象のタグの開始時の処理
         # Handle the start of skip tags
         if tag in self._SKIP_TAGS:
