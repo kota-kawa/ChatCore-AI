@@ -5,26 +5,26 @@
 /* ホームページ（chat-page）内のボタン質感を
    「新しいプロンプト作成（＋）」系の立体感にそろえる */
 body.chat-page {
-  --primary-color: #0f766e;
-  --primary-hover: #115e59;
-  --primary-dark: #134e4a;
-  --primary-dark-hover: #0f3f3b;
-  --primary-strong: #0d9488;
-  --primary-soft: #ecfdfa;
+  --primary-color: #005633;
+  --primary-hover: #004526;
+  --primary-dark: #003d22;
+  --primary-dark-hover: #002e19;
+  --primary-strong: #006b3f;
+  --primary-soft: #e6f2ec;
   --primary-gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
-  --primary-alpha-06: rgba(15, 118, 110, 0.06);
-  --primary-subtle: rgba(15, 118, 110, 0.08);
-  --primary-alpha-12: rgba(15, 118, 110, 0.12);
-  --primary-alpha-16: rgba(15, 118, 110, 0.16);
-  --primary-border: rgba(15, 118, 110, 0.2);
-  --primary-alpha-22: rgba(15, 118, 110, 0.22);
-  --primary-alpha-28: rgba(15, 118, 110, 0.28);
-  --success-color: #0f766e;
-  --success-strong: #134e4a;
-  --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.22);
+  --primary-alpha-06: rgba(0, 86, 51, 0.06);
+  --primary-subtle: rgba(0, 86, 51, 0.08);
+  --primary-alpha-12: rgba(0, 86, 51, 0.12);
+  --primary-alpha-16: rgba(0, 86, 51, 0.16);
+  --primary-border: rgba(0, 86, 51, 0.2);
+  --primary-alpha-22: rgba(0, 86, 51, 0.22);
+  --primary-alpha-28: rgba(0, 86, 51, 0.28);
+  --success-color: #005633;
+  --success-strong: #003d22;
+  --focus-ring: 0 0 0 3px rgba(0, 86, 51, 0.22);
   --shadow-focus: var(--focus-ring);
-  --shadow-focus-strong: 0 0 0 4px rgba(15, 118, 110, 0.18);
-  --chat-border-soft: rgba(15, 118, 110, 0.2);
+  --shadow-focus-strong: 0 0 0 4px rgba(0, 86, 51, 0.18);
+  --chat-border-soft: rgba(0, 86, 51, 0.2);
   --chat-surface-muted: #f1f7f6;
   --surface: var(--chat-surface);
   --surface-strong: var(--chat-surface-strong);
