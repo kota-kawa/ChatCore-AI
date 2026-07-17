@@ -976,7 +976,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .task-selection-header #edit-task-order-btn {
   --chat-button-base: var(--primary-color);
   --chat-button-accent: var(--primary-hover);
-  --chat-button-shadow-color: rgba(0, 86, 51, 0.28);
+  --chat-button-shadow-color: rgba(80, 163, 91, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.26);
 }
 
