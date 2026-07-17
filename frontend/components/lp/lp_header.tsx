@@ -10,10 +10,12 @@ export function LpHeader() {
           </span>
           <span className="lp-header__brand-name">ChatCore-AI</span>
         </a>
+        {/* /lp以外のページ（/help・/privacy・/terms）からも共有するため絶対パスのアンカーにする
+            Use absolute-path anchors so pages other than /lp (/help, /privacy, /terms) can share this header */}
         <nav className="lp-header__nav" aria-label="ページ内リンク">
-          <a href="#features">できること</a>
-          <a href="#flow">使い方</a>
-          <a href="#faq">よくある質問</a>
+          <a href="/lp#features">できること</a>
+          <a href="/lp#flow">使い方</a>
+          <a href="/help">ヘルプ</a>
         </nav>
         <div className="lp-header__actions">
           <a href="/login" className="lp-btn lp-btn--ghost">

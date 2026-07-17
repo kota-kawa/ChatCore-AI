@@ -15,6 +15,10 @@ test("sitemap includes public crawlable application pages", () => {
 
   assert.match(sitemap, /<loc>https:\/\/example\.com\/prompt_share<\/loc>/);
   assert.match(sitemap, /<loc>https:\/\/example\.com\/memo<\/loc>/);
+  // 静的ドキュメントページも含まれる / Static document pages are also included
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/help<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/terms<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/example\.com\/privacy<\/loc>/);
 });
 
 test("sitemap escapes XML-sensitive origin values", () => {
