@@ -29,6 +29,9 @@ export function LpFooter() {
           <a href="/">AIチャット</a>
           <a href="/prompt_share">プロンプト共有</a>
           <a href="/memo">メモ</a>
+          <a href="/help">ヘルプ</a>
+          <a href="/terms">利用規約</a>
+          <a href="/privacy">プライバシーポリシー</a>
           <a href="/login">ログイン</a>
           <a href="/register">新規登録</a>
         </nav>
