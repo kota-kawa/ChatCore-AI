@@ -1,6 +1,7 @@
 export type ThemePreference = "light" | "dark" | "auto";
 
 const STORAGE_KEY = "chatcore-theme";
+const DEFAULT_THEME_PREFERENCE: ThemePreference = "light";
 const VALID_PREFERENCES: ThemePreference[] = ["light", "dark", "auto"];
 
 function isThemePreference(value: unknown): value is ThemePreference {
@@ -9,7 +10,7 @@ function isThemePreference(value: unknown): value is ThemePreference {
 
 export function getStoredThemePreference(): ThemePreference {
   if (typeof window === "undefined") {
-    return "auto";
+    return DEFAULT_THEME_PREFERENCE;
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -19,7 +20,7 @@ export function getStoredThemePreference(): ThemePreference {
   } catch {
     // localStorage unavailable
   }
-  return "auto";
+  return DEFAULT_THEME_PREFERENCE;
 }
 
 export function resolveTheme(preference: ThemePreference): "light" | "dark" {
@@ -44,11 +45,7 @@ export function setThemePreference(preference: ThemePreference): void {
     return;
   }
   try {
-    if (preference === "auto") {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, preference);
-    }
+    window.localStorage.setItem(STORAGE_KEY, preference);
   } catch {
     // localStorage unavailable
   }
