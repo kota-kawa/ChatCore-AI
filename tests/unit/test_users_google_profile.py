@@ -78,7 +78,7 @@ class FakeConnection:
         return self
 
     # Clean up when leaving the context.
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, _exc_type, _exc, _tb):
         self.close()
         return False
 

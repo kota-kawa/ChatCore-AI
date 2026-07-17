@@ -75,7 +75,7 @@ class FakeConnection:
 
     # 日本語: コンテキストマネージャ終了時にコネクションをクローズします。
     # English: Close the connection when exiting a context manager block.
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, _exc_type, _exc, _tb):
         self.close()
         return False
 

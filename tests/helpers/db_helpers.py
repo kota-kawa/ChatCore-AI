@@ -36,7 +36,6 @@ class TransactionTrackingConnection:
 
     # 日本語: コンテキストマネージャの終了時に、接続のクローズ処理を自動的に実行します。
     # English: Exit the context block, automatically closing the connection.
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, _exc_type, _exc, _tb):
         self.close()
         return False
-

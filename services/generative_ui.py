@@ -245,7 +245,7 @@ class GenerativeUiArtifactV1(BaseModel):
     # Validate and sanitize HTML content, ensuring no prohibited tags (e.g. script, iframe) are present.
     @field_validator("html")
     @classmethod
-    def _validate_html(cls, value: str) -> str:
+    def _validate_html(_cls, value: str) -> str:
         sanitized = _sanitize_html(value)
         if _BANNED_HTML_TAG_RE.search(sanitized):
             raise ValueError("HTML contains a forbidden tag.")
@@ -255,14 +255,14 @@ class GenerativeUiArtifactV1(BaseModel):
     # Sanitize CSS content to remove hazardous URL schemes or @import rules.
     @field_validator("css")
     @classmethod
-    def _validate_css(cls, value: str) -> str:
+    def _validate_css(_cls, value: str) -> str:
         return _sanitize_css(value)
 
     # JavaScriptコード内の安全性を検証し、不完全なscriptタグ終了をクリーンアップします。
     # Validate the safety of JavaScript fragments and sanitize unclosed script tag remnants.
     @field_validator("js")
     @classmethod
-    def _validate_js(cls, value: str) -> str:
+    def _validate_js(_cls, value: str) -> str:
         sanitized = _sanitize_script_end(value)
         _validate_javascript_safety(sanitized)
         return sanitized
