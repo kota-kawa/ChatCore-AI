@@ -44,8 +44,14 @@
   width: 1.75rem;
   height: 1.75rem;
   border-radius: var(--radius-s);
-  color: var(--text-light);
-  background: var(--primary-color);
+  overflow: hidden;
+}
+
+.oauth-authorize-brand__mark img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .oauth-authorize-card__header h1 {

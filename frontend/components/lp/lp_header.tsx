@@ -6,7 +6,7 @@ export function LpHeader() {
       <div className="lp-container lp-header__inner">
         <a href="/lp" className="lp-header__brand" aria-label="ChatCore-AI ランディングページ">
           <span className="lp-header__brand-mark" aria-hidden="true">
-            <i className="bi bi-chat-square-text-fill"></i>
+            <img src="/static/favicon.png" alt="" />
           </span>
           <span className="lp-header__brand-name">ChatCore-AI</span>
         </a>

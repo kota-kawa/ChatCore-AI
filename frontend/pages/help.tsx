@@ -13,7 +13,8 @@ const HELP_DESCRIPTION =
 const QUICKSTART_CARDS = [
   {
     href: "/",
-    icon: "bi-chat-square-text-fill",
+    icon: "",
+    useFavicon: true,
     name: "AI CHAT",
     title: "AIチャットを始める",
     description: "調べもの・文章作成・アイデア出しを、日本語で自然に相談できます。"
@@ -113,7 +114,7 @@ export default function HelpPage() {
               {QUICKSTART_CARDS.map((card) => (
                 <a key={card.href} href={card.href} className="lp-feature-card">
                   <span className="lp-feature-card__icon" aria-hidden="true">
-                    <i className={`bi ${card.icon}`}></i>
+                    {card.useFavicon ? <img src="/static/favicon.png" alt="" /> : <i className={`bi ${card.icon}`}></i>}
                   </span>
                   <span className="lp-feature-card__name">{card.name}</span>
                   <span className="lp-feature-card__title">{card.title}</span>
