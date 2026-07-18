@@ -179,14 +179,20 @@
 
 .lp-header__brand-mark {
   align-items: center;
-  background: var(--lp-green);
   border-radius: var(--radius-sm);
-  color: #ffffff;
   display: inline-flex;
-  font-size: 0.95rem;
   height: 30px;
   justify-content: center;
+  overflow: hidden;
   width: 30px;
+}
+
+.lp-header__brand-mark img,
+.lp-feature-card__icon img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .lp-header__brand-name {

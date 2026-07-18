@@ -107,7 +107,7 @@ export default function McpOAuthAuthorizePage() {
         <section className="oauth-authorize-card" aria-labelledby="oauth-authorize-title">
           <header className="oauth-authorize-card__header">
             <div className="oauth-authorize-brand" aria-label="Chat Core">
-              <span className="oauth-authorize-brand__mark" aria-hidden="true"><i className="bi bi-chat-square-text-fill"></i></span>
+              <span className="oauth-authorize-brand__mark" aria-hidden="true"><img src="/static/favicon.png" alt="" /></span>
               <span>Chat Core</span>
             </div>
             {consent ? (
