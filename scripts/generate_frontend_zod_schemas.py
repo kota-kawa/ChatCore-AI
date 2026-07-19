@@ -19,6 +19,8 @@ from services.request_models import (  # noqa: E402
     ChatMessageRequest,
     ChatRoomIdRequest,
     ChatRoomIdsRequest,
+    ContextFactCreateRequest,
+    ContextFactUpdateRequest,
     DeleteTaskRequest,
     EditTaskRequest,
     EmailRequest,
@@ -48,6 +50,10 @@ from services.response_models import (  # noqa: E402
     ChatGenerationStatusResponse,
     ChatHistoryResponse,
     ChatJsonResponse,
+    ContextDigestGroup,
+    ContextDigestResponse,
+    ContextFactListResponse,
+    ContextFactResponse,
     LikedPromptApi,
     LikedPromptsApiResponse,
     MemoSaveResponse,
@@ -88,6 +94,8 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("MemoBulkActionRequest", MemoBulkActionRequest),
     ("MemoCollectionCreateRequest", MemoCollectionCreateRequest),
     ("MemoCollectionUpdateRequest", MemoCollectionUpdateRequest),
+    ("ContextFactCreateRequest", ContextFactCreateRequest),
+    ("ContextFactUpdateRequest", ContextFactUpdateRequest),
     # Response payloads (source of truth: services/response_models.py)
     ("ApiErrorPayload", ApiErrorPayload),
     ("ApiDetailObject", ApiDetailObject),
@@ -104,6 +112,10 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     ("LikedPromptsApiResponse", LikedPromptsApiResponse),
     ("PromptManageMutationApiResponse", PromptManageMutationApiResponse),
     ("MemoSaveResponse", MemoSaveResponse),
+    ("ContextFactResponse", ContextFactResponse),
+    ("ContextFactListResponse", ContextFactListResponse),
+    ("ContextDigestGroup", ContextDigestGroup),
+    ("ContextDigestResponse", ContextDigestResponse),
 ]
 
 

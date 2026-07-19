@@ -53,11 +53,15 @@ MCP_PROMPTS_READ_SCOPE = "prompts:read"
 MCP_PROMPTS_WRITE_SCOPE = "prompts:write"
 MCP_MEMOS_READ_SCOPE = "memos:read"
 MCP_MEMOS_WRITE_SCOPE = "memos:write"
+MCP_CONTEXT_READ_SCOPE = "context:read"
+MCP_CONTEXT_WRITE_SCOPE = "context:write"
 MCP_ALLOWED_SCOPES = (
     MCP_PROMPTS_READ_SCOPE,
     MCP_PROMPTS_WRITE_SCOPE,
     MCP_MEMOS_READ_SCOPE,
     MCP_MEMOS_WRITE_SCOPE,
+    MCP_CONTEXT_READ_SCOPE,
+    MCP_CONTEXT_WRITE_SCOPE,
 )
 # Newly registered clients need to be able to request any supported subset.
 # Authorization requests that omit ``scope`` use the scopes registered for
@@ -70,6 +74,8 @@ MCP_SCOPE_LABELS = {
     MCP_PROMPTS_WRITE_SCOPE: "公開プロンプトを投稿する",
     MCP_MEMOS_READ_SCOPE: "保存したメモを検索・閲覧する",
     MCP_MEMOS_WRITE_SCOPE: "保存したメモを編集する",
+    MCP_CONTEXT_READ_SCOPE: "パーソナル・コンテキストを読み取る",
+    MCP_CONTEXT_WRITE_SCOPE: "パーソナル・コンテキストを保存・編集する",
 }
 MANUAL_CLIENT_PROVIDER = "manual"
 DEFAULT_MCP_OAUTH_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"

@@ -29,6 +29,7 @@ from services.mcp_oauth import (
 )
 from services.mcp_request_protection import McpRequestProtectionMiddleware
 from services.mcp_tools.common import TOOL_REQUIRED_SCOPES, audit_tool_success, require_actor
+from services.mcp_tools.context_vault import register_context_vault_tools
 from services.mcp_tools.memos import register_memo_tools
 from services.mcp_tools.shared_content import register_shared_content_tools
 from services.prompt_categories import PROMPT_CATEGORIES
@@ -308,6 +309,7 @@ def _create_mcp() -> FastMCP:
 
     register_shared_content_tools(mcp)
     register_memo_tools(mcp)
+    register_context_vault_tools(mcp)
 
     return mcp
 

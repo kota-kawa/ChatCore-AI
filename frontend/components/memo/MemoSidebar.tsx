@@ -14,6 +14,8 @@ type MemoSidebarProps = {
   setSortMode: Dispatch<SetStateAction<string>>;
   collections: Collection[];
   setIsCollectionPanelOpen: (value: boolean) => void;
+  activeView: "memos" | "context";
+  setActiveView: Dispatch<SetStateAction<"memos" | "context">>;
 };
 
 export function MemoSidebar({
@@ -27,7 +29,10 @@ export function MemoSidebar({
   setSortMode,
   collections,
   setIsCollectionPanelOpen,
+  activeView,
+  setActiveView,
 }: MemoSidebarProps) {
+  const isMemosView = activeView === "memos";
   return (
           <aside className="memo-sidebar">
             <header className="memo-sidebar-header">
@@ -53,72 +58,84 @@ export function MemoSidebar({
               <nav className="memo-sidebar-nav">
                 <button
                   type="button"
-                  className={`memo-sidebar-nav__item${activeCollectionId === null && archiveScope === "active" ? " is-active" : ""}`}
-                  onClick={() => { setActiveCollectionId(null); setArchiveScope("active"); }}
+                  className={`memo-sidebar-nav__item${isMemosView && activeCollectionId === null && archiveScope === "active" ? " is-active" : ""}`}
+                  onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("active"); }}
                 >
                   <i className="bi bi-lightning-charge" aria-hidden="true"></i>
                   <span>すべてのメモ</span>
                 </button>
                 <button
                   type="button"
-                  className={`memo-sidebar-nav__item${archiveScope === "archived" ? " is-active" : ""}`}
-                  onClick={() => { setActiveCollectionId(null); setArchiveScope("archived"); }}
+                  className={`memo-sidebar-nav__item${isMemosView && archiveScope === "archived" ? " is-active" : ""}`}
+                  onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("archived"); }}
                 >
                   <i className="bi bi-archive" aria-hidden="true"></i>
                   <span>アーカイブ</span>
                 </button>
-              </nav>
-
-              <div className="memo-sidebar-divider" role="separator"></div>
-
-              <section className="memo-sidebar-section">
-                <h3 className="memo-sidebar-section__title">並び順</h3>
-                <div className="memo-sidebar-sort">
-                  <MemoSelect
-                    value={sortMode}
-                    onChange={(v) => setSortMode(v)}
-                    options={[
-                      { value: "manual", label: "手動順" },
-                      { value: "recent", label: "新しい順" },
-                      { value: "updated", label: "更新順" },
-                      { value: "oldest", label: "古い順" },
-                      { value: "title", label: "タイトル順" },
-                      { value: "semantic", label: "AI類似検索" },
-                    ]}
-                  />
-                </div>
-              </section>
-
-              <div className="memo-sidebar-divider" role="separator"></div>
-
-              <section className="memo-sidebar-section">
-                <h3 className="memo-sidebar-section__title">コレクション</h3>
-                <div className="memo-sidebar-collection-list">
-                  {collections.map((col) => (
-                    <button
-                      key={col.id}
-                      type="button"
-                      className={`memo-sidebar-collection-item${activeCollectionId === col.id ? " is-active" : ""}`}
-                      onClick={() => setActiveCollectionId(col.id)}
-                    >
-                      <span className="memo-sidebar-collection-dot" style={{ background: col.color }}></span>
-                      <span className="memo-sidebar-collection-name">{col.name}</span>
-                      <span className="memo-sidebar-collection-count">{col.memo_count}</span>
-                    </button>
-                  ))}
-                  {collections.length === 0 && (
-                    <p className="memo-sidebar-collection-empty">コレクションなし</p>
-                  )}
-                </div>
                 <button
                   type="button"
-                  className="memo-sidebar-manage-btn"
-                  onClick={() => setIsCollectionPanelOpen(true)}
+                  className={`memo-sidebar-nav__item${activeView === "context" ? " is-active" : ""}`}
+                  onClick={() => setActiveView("context")}
                 >
-                  <i className="bi bi-plus-circle" aria-hidden="true"></i>
-                  <span>コレクションを管理</span>
+                  <i className="bi bi-safe" aria-hidden="true"></i>
+                  <span>マイコンテキスト</span>
                 </button>
-              </section>
+              </nav>
+
+              {isMemosView && (
+                <>
+                  <div className="memo-sidebar-divider" role="separator"></div>
+
+                  <section className="memo-sidebar-section">
+                    <h3 className="memo-sidebar-section__title">並び順</h3>
+                    <div className="memo-sidebar-sort">
+                      <MemoSelect
+                        value={sortMode}
+                        onChange={(v) => setSortMode(v)}
+                        options={[
+                          { value: "manual", label: "手動順" },
+                          { value: "recent", label: "新しい順" },
+                          { value: "updated", label: "更新順" },
+                          { value: "oldest", label: "古い順" },
+                          { value: "title", label: "タイトル順" },
+                          { value: "semantic", label: "AI類似検索" },
+                        ]}
+                      />
+                    </div>
+                  </section>
+
+                  <div className="memo-sidebar-divider" role="separator"></div>
+
+                  <section className="memo-sidebar-section">
+                    <h3 className="memo-sidebar-section__title">コレクション</h3>
+                    <div className="memo-sidebar-collection-list">
+                      {collections.map((col) => (
+                        <button
+                          key={col.id}
+                          type="button"
+                          className={`memo-sidebar-collection-item${activeCollectionId === col.id ? " is-active" : ""}`}
+                          onClick={() => { setActiveView("memos"); setActiveCollectionId(col.id); }}
+                        >
+                          <span className="memo-sidebar-collection-dot" style={{ background: col.color }}></span>
+                          <span className="memo-sidebar-collection-name">{col.name}</span>
+                          <span className="memo-sidebar-collection-count">{col.memo_count}</span>
+                        </button>
+                      ))}
+                      {collections.length === 0 && (
+                        <p className="memo-sidebar-collection-empty">コレクションなし</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="memo-sidebar-manage-btn"
+                      onClick={() => setIsCollectionPanelOpen(true)}
+                    >
+                      <i className="bi bi-plus-circle" aria-hidden="true"></i>
+                      <span>コレクションを管理</span>
+                    </button>
+                  </section>
+                </>
+              )}
             </div>
           </aside>
   );

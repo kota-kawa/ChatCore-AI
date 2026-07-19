@@ -33,6 +33,41 @@ class McpToolAuthorizationTestCase(unittest.TestCase):
 
         self.assertIn("memos:read", str(context.exception))
 
+    def test_context_read_token_grants_context_read(self):
+        token = SimpleNamespace(
+            subject="7",
+            client_id="context-client",
+            scopes=["context:read"],
+        )
+        with patch("services.mcp_tools.common.get_access_token", return_value=token):
+            actor = require_actor("context:read")
+
+        self.assertEqual(actor.user_id, 7)
+
+    def test_memos_write_token_cannot_write_context(self):
+        token = SimpleNamespace(
+            subject="7",
+            client_id="memo-client",
+            scopes=["memos:read", "memos:write"],
+        )
+        with patch("services.mcp_tools.common.get_access_token", return_value=token):
+            with self.assertRaises(ToolError) as context:
+                require_actor("context:write")
+
+        self.assertIn("context:write", str(context.exception))
+
+    def test_context_read_token_cannot_write_context(self):
+        token = SimpleNamespace(
+            subject="7",
+            client_id="context-client",
+            scopes=["context:read"],
+        )
+        with patch("services.mcp_tools.common.get_access_token", return_value=token):
+            with self.assertRaises(ToolError) as context:
+                require_actor("context:write")
+
+        self.assertIn("context:write", str(context.exception))
+
     def test_tool_limit_is_partitioned_by_user_and_client(self):
         actor = SimpleNamespace(user_id=42, client_id="client-a")
         with patch(

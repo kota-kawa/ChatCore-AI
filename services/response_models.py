@@ -134,3 +134,39 @@ class PromptManageMutationApiResponse(ResponsePayloadModel):
 # English: Response model returning status after saving a memo.
 class MemoSaveResponse(ResponsePayloadModel):
     status: str | None = None
+
+
+# 日本語: パーソナル・コンテキスト金庫の1件の事実を表す応答モデル。
+# English: Response model representing a single personal context vault fact.
+class ContextFactResponse(ResponsePayloadModel):
+    id: int
+    fact_type: str
+    title: str
+    content: str
+    status: str
+    revision: int
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+# 日本語: コンテキスト事実の一覧と keyset ページングカーソルを返す応答モデル。
+# English: Response model returning a list of context facts with a keyset cursor.
+class ContextFactListResponse(ResponsePayloadModel):
+    facts: list[ContextFactResponse] = Field(default_factory=list)
+    total_active: int = 0
+    next_cursor: str | None = None
+
+
+# 日本語: fact_type ごとにまとめた active な事実のグループ。
+# English: Group of active facts collected under one fact_type.
+class ContextDigestGroup(ResponsePayloadModel):
+    fact_type: str
+    facts: list[ContextFactResponse] = Field(default_factory=list)
+
+
+# 日本語: get_personal_context が返す軽量ダイジェスト応答モデル。
+# English: Compact digest response returned by get_personal_context.
+class ContextDigestResponse(ResponsePayloadModel):
+    facts_total: int = 0
+    truncated: bool = False
+    groups: list[ContextDigestGroup] = Field(default_factory=list)

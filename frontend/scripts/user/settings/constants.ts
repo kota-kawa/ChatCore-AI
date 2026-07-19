@@ -76,6 +76,16 @@ export const MCP_OAUTH_SCOPE_DEFINITIONS: Record<string, {
     label: "保存したメモを編集する",
     description: "あなたの非公開メモのタイトルと内容を変更できます。",
     iconClass: "bi bi-pencil-square"
+  },
+  "context:read": {
+    label: "パーソナル・コンテキストを読み取る",
+    description: "あなたの好み・経歴・プロジェクト文脈・過去の決定などのコンテキストを読み取れます。",
+    iconClass: "bi bi-safe"
+  },
+  "context:write": {
+    label: "パーソナル・コンテキストを保存・編集する",
+    description: "あなたのパーソナル・コンテキストを追加・更新・無効化できます。",
+    iconClass: "bi bi-safe2"
   }
 };
 
