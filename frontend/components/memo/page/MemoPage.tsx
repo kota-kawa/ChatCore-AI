@@ -29,6 +29,7 @@ import { MemoHistoryPanel } from "../MemoHistoryPanel";
 import { MemoShareModal } from "../MemoShareModal";
 import { MemoSidebar } from "../MemoSidebar";
 import { MemoToolbar } from "../MemoToolbar";
+import { MyContextPanel } from "../MyContextPanel";
 import {
   loadCollections,
   loadMemoDetail,
@@ -101,6 +102,9 @@ export default function MemoPage() {
   const [sortMode, setSortMode] = useState("manual");
   const [archiveScope, setArchiveScope] = useState("active");
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
+  // Notebook 画面内の表示切替。"memos" は従来のメモ、"context" はマイコンテキスト金庫。
+  // View switch inside the notebook: "memos" is the classic memo list, "context" is the vault.
+  const [activeView, setActiveView] = useState<"memos" | "context">("memos");
 
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
@@ -1387,9 +1391,15 @@ export default function MemoPage() {
             setSortMode={setSortMode}
             collections={collections}
             setIsCollectionPanelOpen={setIsCollectionPanelOpen}
+            activeView={activeView}
+            setActiveView={setActiveView}
           />
 
           <div className="memo-container">
+            {activeView === "context" ? (
+            <MyContextPanel isLoggedIn={isLoggedIn} />
+            ) : (
+            <>
             {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
             {/* Short feature intro shown only when logged out (provides crawlable public content) */}
             {!isLoggedIn && (
@@ -1500,6 +1510,8 @@ export default function MemoPage() {
               handleMemoDrop={handleMemoDrop}
             />
           </div>
+            </>
+            )}
           </div>
         </div>
 

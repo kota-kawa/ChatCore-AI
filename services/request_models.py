@@ -62,6 +62,13 @@ MAX_MCP_MEMO_TITLE_LENGTH = 255
 # remain within that limit even when most input uses three-byte UTF-8 characters.
 MAX_MCP_MEMO_CONTENT_LENGTH = 20000
 MAX_MEMO_STORED_CONTENT_LENGTH = 60000
+# パーソナル・コンテキスト金庫の1件あたりの上限。事実は小さな単位に保つ。
+# Per-fact limits for the personal context vault; facts are kept small.
+MAX_CONTEXT_FACT_TITLE_LENGTH = 100
+MAX_CONTEXT_FACT_CONTENT_LENGTH = 2000
+
+ContextFactType = Literal["preference", "profile", "project", "decision", "reference"]
+ContextFactStatus = Literal["active", "deprecated"]
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -446,6 +453,97 @@ class McpMemoAppendRequest(BaseModel):
         if not self.text.strip():
             raise ValueError("追記内容を空にはできません。")
         return self
+
+
+# --- パーソナル・コンテキスト金庫 / Personal context vault ---------------------
+
+# 日本語: Web UI からコンテキスト事実を新規作成するリクエスト。
+# English: Request to create a new context fact from the web UI.
+class ContextFactCreateRequest(RequestPayloadModel):
+    fact_type: ContextFactType
+    title: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
+    content: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+
+    @model_validator(mode="after")
+    def _require_values(self) -> "ContextFactCreateRequest":
+        if not self.title.strip():
+            raise ValueError("タイトルを入力してください。")
+        if not self.content.strip():
+            raise ValueError("内容を入力してください。")
+        return self
+
+
+# 日本語: Web UI からコンテキスト事実を競合安全に更新するリクエスト。status で無効化/復元も行う。
+# English: Conflict-safe request to update a context fact from the web UI; status also
+# handles deprecate/restore.
+class ContextFactUpdateRequest(RequestPayloadModel):
+    revision: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
+    content: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    fact_type: ContextFactType | None = None
+    status: ContextFactStatus | None = None
+
+    @model_validator(mode="after")
+    def _require_change(self) -> "ContextFactUpdateRequest":
+        if (
+            self.title is None
+            and self.content is None
+            and self.fact_type is None
+            and self.status is None
+        ):
+            raise ValueError("更新する項目を指定してください。")
+        if self.title is not None and not self.title.strip():
+            raise ValueError("タイトルを空にはできません。")
+        if self.content is not None and not self.content.strip():
+            raise ValueError("内容を空にはできません。")
+        return self
+
+
+# 日本語: MCP 経由でコンテキスト事実を保存するリクエスト。
+# English: Request for saving a context fact through MCP.
+class McpContextFactSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fact_type: ContextFactType
+    title: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
+    content: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+
+    @model_validator(mode="after")
+    def _require_values(self) -> "McpContextFactSaveRequest":
+        if not self.title.strip():
+            raise ValueError("タイトルを空にはできません。")
+        if not self.content.strip():
+            raise ValueError("内容を空にはできません。")
+        return self
+
+
+# 日本語: MCP 経由でコンテキスト事実を競合安全に更新するリクエスト。
+# English: Conflict-safe request for updating a context fact through MCP.
+class McpContextFactUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
+    content: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    fact_type: ContextFactType | None = None
+
+    @model_validator(mode="after")
+    def _require_update(self) -> "McpContextFactUpdateRequest":
+        if self.title is None and self.content is None and self.fact_type is None:
+            raise ValueError("更新するタイトル・内容・種類のいずれかを指定してください。")
+        if self.title is not None and not self.title.strip():
+            raise ValueError("タイトルを空にはできません。")
+        if self.content is not None and not self.content.strip():
+            raise ValueError("内容を空にはできません。")
+        return self
+
+
+# 日本語: MCP 経由でコンテキスト事実を無効化（deprecate）するリクエスト。
+# English: Request for deprecating a context fact through MCP.
+class McpContextFactDeprecateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_revision: int = Field(ge=1)
 
 
 # 日本語: メモの有効化/無効化（アーカイブ状態等）を切り替える際のリクエストペイロード。

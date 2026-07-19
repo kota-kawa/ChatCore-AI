@@ -11,6 +11,8 @@ from mcp.server.fastmcp.exceptions import ToolError
 from services.async_utils import run_blocking
 from services.auth_limits import consume_rate_limit
 from services.mcp_oauth import (
+    MCP_CONTEXT_READ_SCOPE,
+    MCP_CONTEXT_WRITE_SCOPE,
     MCP_MEMOS_READ_SCOPE,
     MCP_MEMOS_WRITE_SCOPE,
     MCP_PROMPTS_READ_SCOPE,
@@ -34,6 +36,11 @@ TOOL_REQUIRED_SCOPES: dict[str, str] = {
     "create_memo": MCP_MEMOS_WRITE_SCOPE,
     "update_memo": MCP_MEMOS_WRITE_SCOPE,
     "append_memo_content": MCP_MEMOS_WRITE_SCOPE,
+    "get_personal_context": MCP_CONTEXT_READ_SCOPE,
+    "search_context": MCP_CONTEXT_READ_SCOPE,
+    "save_context_fact": MCP_CONTEXT_WRITE_SCOPE,
+    "update_context_fact": MCP_CONTEXT_WRITE_SCOPE,
+    "deprecate_context_fact": MCP_CONTEXT_WRITE_SCOPE,
 }
 
 

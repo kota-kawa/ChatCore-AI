@@ -252,6 +252,7 @@ from blueprints.prompt_share.prompt_search import search_bp  # noqa: E402
 from blueprints.prompt_share.prompt_manage_api import prompt_manage_api_bp  # noqa: E402
 from blueprints.admin import admin_bp  # noqa: E402
 from blueprints.memo import memo_bp  # noqa: E402
+from blueprints.context_vault import context_vault_bp  # noqa: E402
 from blueprints.mcp_oauth import mcp_oauth_bp  # noqa: E402
 
 # ルーティングテーブルに各 Router を登録する
@@ -265,6 +266,7 @@ app.include_router(search_bp)
 app.include_router(prompt_manage_api_bp)
 app.include_router(admin_bp)
 app.include_router(memo_bp)
+app.include_router(context_vault_bp)
 app.include_router(mcp_oauth_bp)
 
 

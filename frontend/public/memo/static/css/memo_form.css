@@ -7317,3 +7317,282 @@ body.memo-page {
     transform: none;
   }
 }
+
+/* ============================================================
+   マイコンテキスト（パーソナル・コンテキスト金庫）
+   Personal context vault ("My Context") tab
+   ============================================================ */
+:where(body.memo-page, .memo-page-shell) .memo-context {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.4rem 0.4rem 1.5rem;
+  color: var(--memo-text);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__subtitle {
+  margin: 0.3rem 0 0;
+  font-size: 0.86rem;
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+  background: var(--memo-amber-strong);
+  cursor: pointer;
+  transition: transform 0.15s var(--memo-spring), box-shadow 0.15s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__add-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__filters {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__filter-select {
+  min-width: 12rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__status-toggle {
+  display: inline-flex;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__status-btn {
+  border: none;
+  background: transparent;
+  color: var(--memo-text-muted);
+  padding: 0.45rem 0.9rem;
+  font-weight: 700;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__status-btn.is-active {
+  background: var(--memo-amber);
+  color: #fff;
+}
+
+/* Inline editor */
+:where(body.memo-page, .memo-page-shell) .memo-context-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 16px;
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__select {
+  min-width: 12rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__title,
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__content {
+  width: 100%;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  color: var(--memo-text);
+  background: var(--memo-card-strong);
+  box-sizing: border-box;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__content {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__cancel,
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__save {
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+  border: 1px solid var(--memo-border);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__cancel {
+  background: transparent;
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__save {
+  border-color: transparent;
+  background: var(--memo-amber-strong);
+  color: #fff;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__save:disabled,
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Fact cards */
+:where(body.memo-page, .memo-page-shell) .memo-context-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 0.85rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 16px;
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card.is-deprecated {
+  opacity: 0.62;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--memo-amber-strong);
+  background: var(--memo-card-accent);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__body {
+  font-size: 0.9rem;
+  color: var(--memo-detail-color);
+  word-break: break-word;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.3rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--memo-text-muted);
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__action:hover {
+  color: var(--memo-text);
+  border-color: var(--memo-amber);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Empty / guest states */
+:where(body.memo-page, .memo-page-shell) .memo-context-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.6rem;
+  padding: 2.5rem 1rem;
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-empty i {
+  font-size: 2rem;
+  color: var(--memo-amber);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-empty__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--memo-text);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-empty__text {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}

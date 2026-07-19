@@ -38,6 +38,11 @@ class McpServerTestCase(unittest.TestCase):
                 "create_memo",
                 "update_memo",
                 "append_memo_content",
+                "get_personal_context",
+                "search_context",
+                "save_context_fact",
+                "update_context_fact",
+                "deprecate_context_fact",
             },
         )
         self.assertFalse(by_name["publish_prompt"].annotations.readOnlyHint)
@@ -60,6 +65,11 @@ class McpServerTestCase(unittest.TestCase):
             "create_memo": "memos:write",
             "update_memo": "memos:write",
             "append_memo_content": "memos:write",
+            "get_personal_context": "context:read",
+            "search_context": "context:read",
+            "save_context_fact": "context:write",
+            "update_context_fact": "context:write",
+            "deprecate_context_fact": "context:write",
         }
         for name, tool in by_name.items():
             self.assertEqual(
