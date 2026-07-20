@@ -66,9 +66,12 @@ MAX_MEMO_STORED_CONTENT_LENGTH = 60000
 # Per-fact limits for the personal context vault; facts are kept small.
 MAX_CONTEXT_FACT_TITLE_LENGTH = 100
 MAX_CONTEXT_FACT_CONTENT_LENGTH = 2000
+MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH = 128
+DEFAULT_CONTEXT_FACT_IMPORTANCE = 50
 
 ContextFactType = Literal["preference", "profile", "project", "decision", "reference"]
 ContextFactStatus = Literal["active", "deprecated"]
+ContextFactSourceKind = Literal["manual", "chat", "mcp", "import"]
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -463,6 +466,7 @@ class ContextFactCreateRequest(RequestPayloadModel):
     fact_type: ContextFactType
     title: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
     content: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    importance: int = Field(default=DEFAULT_CONTEXT_FACT_IMPORTANCE, ge=0, le=100)
 
     @model_validator(mode="after")
     def _require_values(self) -> "ContextFactCreateRequest":
@@ -482,6 +486,7 @@ class ContextFactUpdateRequest(RequestPayloadModel):
     content: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
     fact_type: ContextFactType | None = None
     status: ContextFactStatus | None = None
+    importance: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
     def _require_change(self) -> "ContextFactUpdateRequest":
@@ -490,6 +495,7 @@ class ContextFactUpdateRequest(RequestPayloadModel):
             and self.content is None
             and self.fact_type is None
             and self.status is None
+            and self.importance is None
         ):
             raise ValueError("更新する項目を指定してください。")
         if self.title is not None and not self.title.strip():
@@ -507,6 +513,12 @@ class McpContextFactSaveRequest(BaseModel):
     fact_type: ContextFactType
     title: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
     content: str = Field(min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    importance: int = Field(default=DEFAULT_CONTEXT_FACT_IMPORTANCE, ge=0, le=100)
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
+    )
 
     @model_validator(mode="after")
     def _require_values(self) -> "McpContextFactSaveRequest":
@@ -526,10 +538,16 @@ class McpContextFactUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
     content: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
     fact_type: ContextFactType | None = None
+    importance: int | None = Field(default=None, ge=0, le=100)
 
     @model_validator(mode="after")
     def _require_update(self) -> "McpContextFactUpdateRequest":
-        if self.title is None and self.content is None and self.fact_type is None:
+        if (
+            self.title is None
+            and self.content is None
+            and self.fact_type is None
+            and self.importance is None
+        ):
             raise ValueError("更新するタイトル・内容・種類のいずれかを指定してください。")
         if self.title is not None and not self.title.strip():
             raise ValueError("タイトルを空にはできません。")

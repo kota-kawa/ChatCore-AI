@@ -8,6 +8,7 @@ from typing import Any
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
+from services.error_messages import ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT
 
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
@@ -24,6 +25,9 @@ ERROR_CONTEXT_FACT_LIMIT_REACHED = (
     f"保存できる有効なコンテキストは{MAX_ACTIVE_CONTEXT_FACTS}件までです。"
     "不要な項目を無効化してから追加してください。"
 )
+# Advisory locks share a database-wide namespace. Use a dedicated first key so
+# an integer user ID cannot collide with another feature's one-key lock.
+_CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"
 
 # context_facts の全カラム。返却順を固定してタプル→dict 変換を安全にする。
 # All context_facts columns, in a fixed order so tuple→dict mapping stays stable.
@@ -33,6 +37,12 @@ _FACT_COLUMNS = (
     "fact_type",
     "title",
     "content",
+    "source_kind",
+    "source_ref",
+    "source_client_id",
+    "importance",
+    "idempotency_key_hash",
+    "idempotency_payload_hash",
     "status",
     "revision",
     "created_at",
@@ -99,6 +109,28 @@ class ContextFactRepository:
             "fact_type": str(record["fact_type"]),
             "title": str(record["title"] or ""),
             "content": str(record["content"] or ""),
+            "source_kind": str(record["source_kind"] or "manual"),
+            "source_ref": (
+                str(record["source_ref"]) if record["source_ref"] is not None else None
+            ),
+            "source_client_id": (
+                str(record["source_client_id"])
+                if record["source_client_id"] is not None
+                else None
+            ),
+            "importance": int(
+                record["importance"] if record["importance"] is not None else 50
+            ),
+            "idempotency_key_hash": (
+                str(record["idempotency_key_hash"])
+                if record["idempotency_key_hash"] is not None
+                else None
+            ),
+            "idempotency_payload_hash": (
+                str(record["idempotency_payload_hash"])
+                if record["idempotency_payload_hash"] is not None
+                else None
+            ),
             "status": str(record["status"] or "active"),
             "revision": max(int(record["revision"] or 1), 1),
             "created_at": serialize_datetime_iso(record["created_at"]),
@@ -107,6 +139,14 @@ class ContextFactRepository:
         }
 
     # ----- reads -------------------------------------------------------------
+
+    @staticmethod
+    def _lock_user_writes(cursor: Any, user_id: int) -> None:
+        """Serialize cap-sensitive writes for one user until transaction end."""
+        cursor.execute(
+            "SELECT pg_advisory_xact_lock(%s, %s)",
+            (_CONTEXT_FACT_LOCK_NAMESPACE, user_id),
+        )
 
     def count_active(self, user_id: int) -> int:
         with self._connection_getter() as conn:
@@ -159,7 +199,7 @@ class ContextFactRepository:
                 cursor.close()
 
     def list_active_for_digest(self, user_id: int) -> list[dict[str, Any]]:
-        """全 active 事実を updated_at 降順で返す。件数上限があるため一括取得で足りる。"""
+        """全 active 事実を重要度・更新日時順で返す。件数上限があるため一括取得で足りる。"""
         with self._connection_getter() as conn:
             cursor = conn.cursor()
             try:
@@ -168,7 +208,7 @@ class ContextFactRepository:
                     SELECT {_SELECT_COLUMNS}
                       FROM context_facts
                      WHERE user_id = %s AND status = 'active'
-                     ORDER BY updated_at DESC, id DESC
+                     ORDER BY importance DESC, updated_at DESC, id DESC
                      LIMIT %s
                     """,
                     (user_id, MAX_ACTIVE_CONTEXT_FACTS),
@@ -261,8 +301,36 @@ class ContextFactRepository:
         fact_type: str,
         title: str,
         content: str,
+        source_kind: str = "manual",
+        source_ref: str | None = None,
+        source_client_id: str | None = None,
+        importance: int = 50,
+        idempotency_key_hash: str | None = None,
+        idempotency_payload_hash: str | None = None,
     ) -> dict[str, Any]:
         def op(cursor: Any) -> dict[str, Any]:
+            self._lock_user_writes(cursor, user_id)
+            if idempotency_key_hash is not None:
+                cursor.execute(
+                    f"""
+                    SELECT {_SELECT_COLUMNS}
+                      FROM context_facts
+                     WHERE user_id = %s AND idempotency_key_hash = %s
+                    """,
+                    (user_id, idempotency_key_hash),
+                )
+                existing = cursor.fetchone()
+                if existing is not None:
+                    serialized = self._serialize_row(existing)
+                    if serialized["idempotency_payload_hash"] != idempotency_payload_hash:
+                        raise ApiServiceError(
+                            ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
+                            409,
+                            status="fail",
+                        )
+                    serialized["_idempotent_replay"] = True
+                    return serialized
+
             cursor.execute(
                 "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
                 (user_id,),
@@ -272,13 +340,65 @@ class ContextFactRepository:
                 raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
             cursor.execute(
                 f"""
-                INSERT INTO context_facts (user_id, fact_type, title, content)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO context_facts (
+                    user_id,
+                    fact_type,
+                    title,
+                    content,
+                    source_kind,
+                    source_ref,
+                    source_client_id,
+                    importance,
+                    idempotency_key_hash,
+                    idempotency_payload_hash
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (idempotency_key_hash) DO NOTHING
                 RETURNING {_SELECT_COLUMNS}
                 """,
-                (user_id, fact_type, title, content),
+                (
+                    user_id,
+                    fact_type,
+                    title,
+                    content,
+                    source_kind,
+                    source_ref,
+                    source_client_id,
+                    importance,
+                    idempotency_key_hash,
+                    idempotency_payload_hash,
+                ),
             )
-            return self._serialize_row(cursor.fetchone())
+            row = cursor.fetchone()
+            if row is not None:
+                return self._serialize_row(row)
+
+            # A concurrent request may have committed the same key. Never
+            # return another user's fact even in the event of a hash collision.
+            cursor.execute(
+                f"""
+                SELECT {_SELECT_COLUMNS}
+                  FROM context_facts
+                 WHERE user_id = %s AND idempotency_key_hash = %s
+                """,
+                (user_id, idempotency_key_hash),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                serialized = self._serialize_row(existing)
+                if serialized["idempotency_payload_hash"] != idempotency_payload_hash:
+                    raise ApiServiceError(
+                        ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
+                        409,
+                        status="fail",
+                    )
+                serialized["_idempotent_replay"] = True
+                return serialized
+            raise ApiServiceError(
+                ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
+                409,
+                status="fail",
+            )
 
         return self._run_write(op, error_message="Failed to create context fact after retry attempts.")
 
@@ -292,10 +412,12 @@ class ContextFactRepository:
         content: str | None = None,
         fact_type: str | None = None,
         status: str | None = None,
+        importance: int | None = None,
     ) -> dict[str, Any]:
         def op(cursor: Any) -> dict[str, Any]:
             # Enforce the active cap when re-activating a deprecated fact.
             if status == "active":
+                self._lock_user_writes(cursor, user_id)
                 cursor.execute(
                     """
                     SELECT status FROM context_facts
@@ -327,6 +449,9 @@ class ContextFactRepository:
             if status is not None:
                 fields.append("status = %s")
                 params.append(status)
+            if importance is not None:
+                fields.append("importance = %s")
+                params.append(importance)
             fields.append("revision = revision + 1")
             params.extend([fact_id, user_id, expected_revision])
             cursor.execute(

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
 from services.context_vault_service import (
+    DEFAULT_DIGEST_MAX_CHARS,
     ContextSearchResult,
     build_digest,
     create_fact,
@@ -27,6 +28,7 @@ from services.mcp_oauth import MCP_CONTEXT_READ_SCOPE, MCP_CONTEXT_WRITE_SCOPE
 from services.mcp_tools.common import audit_tool_success, consume_tool_limit, require_actor
 from services.request_models import (
     MAX_CONTEXT_FACT_CONTENT_LENGTH,
+    MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH,
     MAX_CONTEXT_FACT_TITLE_LENGTH,
     ContextFactType,
     McpContextFactDeprecateRequest,
@@ -105,11 +107,17 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
     )
     async def get_personal_context_tool(
         limit_per_type: Annotated[int, Field(ge=1, le=50)] = 20,
+        max_chars: Annotated[int, Field(ge=2_000, le=20_000)] = DEFAULT_DIGEST_MAX_CHARS,
     ) -> ContextDigestResponse:
         actor = require_actor(MCP_CONTEXT_READ_SCOPE)
         await consume_tool_limit(actor, "context_read", limit=120, window_seconds=60)
         try:
-            return await run_blocking(build_digest, actor.user_id, limit_per_type=limit_per_type)
+            return await run_blocking(
+                build_digest,
+                actor.user_id,
+                limit_per_type=limit_per_type,
+                max_chars=max_chars,
+            )
         except Exception as exc:
             raise _tool_error(exc) from exc
 
@@ -145,6 +153,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
         description=(
             "認証ユーザーのパーソナル・コンテキストを1件保存します。"
             "fact_typeはpreference/profile/project/decision/referenceから選びます。"
+            "再試行時は同じidempotency_keyを指定すると重複保存を防げます。"
             + CONTEXT_MARKDOWN_INSTRUCTION
         ),
         annotations=CREATE_ANNOTATIONS,
@@ -161,17 +170,32 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
                 description=CONTEXT_MARKDOWN_INSTRUCTION,
             ),
         ],
+        importance: Annotated[int, Field(ge=0, le=100)] = 50,
+        idempotency_key: Annotated[
+            str | None,
+            Field(min_length=1, max_length=MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH),
+        ] = None,
     ) -> McpContextFactMutationResult:
         actor = require_actor(MCP_CONTEXT_WRITE_SCOPE)
         await consume_tool_limit(actor, "context_write", limit=60, window_seconds=3600)
         try:
-            payload = McpContextFactSaveRequest(fact_type=fact_type, title=title, content=content)
+            payload = McpContextFactSaveRequest(
+                fact_type=fact_type,
+                title=title,
+                content=content,
+                importance=importance,
+                idempotency_key=idempotency_key,
+            )
             fact = await run_blocking(
                 create_fact,
                 actor.user_id,
                 fact_type=payload.fact_type,
                 title=payload.title,
                 content=payload.content,
+                importance=payload.importance,
+                source_kind="mcp",
+                source_client_id=actor.client_id,
+                idempotency_key=payload.idempotency_key,
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "save_context_fact", result.id)
@@ -204,6 +228,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
             ),
         ] = None,
         fact_type: ContextFactType | None = None,
+        importance: Annotated[int | None, Field(ge=0, le=100)] = None,
     ) -> McpContextFactMutationResult:
         actor = require_actor(MCP_CONTEXT_WRITE_SCOPE)
         await consume_tool_limit(actor, "context_write", limit=60, window_seconds=3600)
@@ -213,6 +238,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
                 title=title,
                 content=content,
                 fact_type=fact_type,
+                importance=importance,
             )
             fact = await run_blocking(
                 update_fact,
@@ -222,6 +248,7 @@ def register_context_vault_tools(mcp: FastMCP) -> None:
                 title=payload.title,
                 content=payload.content,
                 fact_type=payload.fact_type,
+                importance=payload.importance,
             )
             result = _mutation_result(fact)
             audit_tool_success(actor, "update_context_fact", fact_id)

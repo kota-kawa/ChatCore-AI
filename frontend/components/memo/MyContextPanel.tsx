@@ -7,9 +7,14 @@ import {
   updateContextFact as defaultUpdate,
 } from "../../lib/memo/context_api";
 import {
+  CONTEXT_FACT_IMPORTANCE_OPTIONS,
+  CONTEXT_FACT_SOURCE_LABELS,
   CONTEXT_FACT_TYPE_LABELS,
   CONTEXT_FACT_TYPE_OPTIONS,
+  getContextFactImportanceLabel,
+  toContextFactImportancePreset,
   type ContextFact,
+  type ContextFactImportancePreset,
   type ContextFactStatus,
   type ContextFactType,
 } from "../../lib/memo/context_types";
@@ -33,6 +38,8 @@ type EditorState = {
   factId: number | null;
   revision: number;
   factType: ContextFactType;
+  importance: ContextFactImportancePreset;
+  importanceDirty: boolean;
   title: string;
   content: string;
 };
@@ -42,6 +49,8 @@ const EMPTY_EDITOR: EditorState = {
   factId: null,
   revision: 0,
   factType: "preference",
+  importance: 50,
+  importanceDirty: false,
   title: "",
   content: "",
 };
@@ -89,6 +98,8 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
       factId: fact.id,
       revision: fact.revision,
       factType: fact.fact_type,
+      importance: toContextFactImportancePreset(fact.importance),
+      importanceDirty: false,
       title: fact.title,
       content: fact.content,
     });
@@ -113,6 +124,7 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
           fact_type: editor.factType,
           title: editor.title.trim(),
           content: editor.content.trim(),
+          importance: editor.importance,
         });
       } else if (editor.factId !== null) {
         await update(editor.factId, {
@@ -120,6 +132,7 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
           fact_type: editor.factType,
           title: editor.title.trim(),
           content: editor.content.trim(),
+          ...(editor.importanceDirty ? { importance: editor.importance } : {}),
         });
       }
       closeEditor();
@@ -210,33 +223,55 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
       {editor && (
         <section className="memo-context-editor" aria-label="コンテキスト編集">
           <div className="memo-context-editor__row">
-            <label className="memo-context-editor__label" htmlFor="context-fact-type">
-              種類
-            </label>
+            <span className="memo-context-editor__label">種類</span>
             <MemoSelect
               id="context-fact-type"
+              ariaLabel="種類"
               value={editor.factType}
               onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
               options={CONTEXT_FACT_TYPE_OPTIONS}
               className="memo-context-editor__select"
             />
+            <span className="memo-context-editor__label">重要度</span>
+            <MemoSelect
+              id="context-fact-importance"
+              ariaLabel="重要度"
+              value={String(editor.importance)}
+              onChange={(value) =>
+                setEditor({
+                  ...editor,
+                  importance: Number(value) as ContextFactImportancePreset,
+                  importanceDirty: true,
+                })
+              }
+              options={CONTEXT_FACT_IMPORTANCE_OPTIONS}
+              className="memo-context-editor__importance-select"
+            />
           </div>
-          <input
-            className="memo-context-editor__title"
-            type="text"
-            maxLength={100}
-            placeholder="タイトル（例: エディタの好み）"
-            value={editor.title}
-            onChange={(e) => setEditor({ ...editor, title: e.target.value })}
-          />
-          <textarea
-            className="memo-context-editor__content"
-            maxLength={2000}
-            rows={4}
-            placeholder="内容（Markdown可、2000文字まで）"
-            value={editor.content}
-            onChange={(e) => setEditor({ ...editor, content: e.target.value })}
-          />
+          <label className="memo-context-editor__field" htmlFor="context-fact-title">
+            <span className="memo-context-editor__label">タイトル</span>
+            <input
+              id="context-fact-title"
+              className="memo-context-editor__title"
+              type="text"
+              maxLength={100}
+              placeholder="例: エディタの好み"
+              value={editor.title}
+              onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+            />
+          </label>
+          <label className="memo-context-editor__field" htmlFor="context-fact-content">
+            <span className="memo-context-editor__label">内容</span>
+            <textarea
+              id="context-fact-content"
+              className="memo-context-editor__content"
+              maxLength={2000}
+              rows={4}
+              placeholder="Markdown可、2000文字まで"
+              value={editor.content}
+              onChange={(e) => setEditor({ ...editor, content: e.target.value })}
+            />
+          </label>
           <div className="memo-context-editor__actions">
             <button
               type="button"
@@ -287,6 +322,10 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
                   <h3 className="memo-context-card__title">{fact.title}</h3>
                 </div>
                 <MemoMarkdown className="memo-context-card__body md-content" text={fact.content} />
+                <div className="memo-context-card__meta">
+                  <span>出典: {CONTEXT_FACT_SOURCE_LABELS[fact.source_kind]}</span>
+                  <span>重要度: {getContextFactImportanceLabel(fact.importance)}</span>
+                </div>
                 <div className="memo-context-card__actions">
                   <button
                     type="button"

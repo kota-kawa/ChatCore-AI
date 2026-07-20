@@ -16,6 +16,7 @@ export function MemoSelect({
   className,
   disabled,
   id,
+  ariaLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -23,6 +24,7 @@ export function MemoSelect({
   className?: string;
   disabled?: boolean;
   id?: string;
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -68,6 +70,7 @@ export function MemoSelect({
         className="memo-select__trigger"
         onClick={toggleOpen}
         disabled={disabled}
+        aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

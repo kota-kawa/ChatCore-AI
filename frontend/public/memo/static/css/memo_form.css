@@ -7458,6 +7458,7 @@ body.memo-page {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-editor__label {
@@ -7468,6 +7469,16 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-context-editor__select {
   min-width: 12rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__importance-select {
+  min-width: 7rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-editor__title,
@@ -7573,6 +7584,14 @@ body.memo-page {
   font-size: 0.9rem;
   color: var(--memo-detail-color);
   word-break: break-word;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--memo-text-muted);
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-card__actions {
