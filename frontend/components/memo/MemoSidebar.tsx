@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction } from "react";
 
 import type { Collection } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
+import type { MemoView } from "./MemoViewSwitcher";
 
 type MemoSidebarProps = {
   isSidebarCollapsed: boolean;
@@ -14,8 +15,8 @@ type MemoSidebarProps = {
   setSortMode: Dispatch<SetStateAction<string>>;
   collections: Collection[];
   setIsCollectionPanelOpen: (value: boolean) => void;
-  activeView: "memos" | "context";
-  setActiveView: Dispatch<SetStateAction<"memos" | "context">>;
+  activeView: MemoView;
+  setActiveView: Dispatch<SetStateAction<MemoView>>;
 };
 
 export function MemoSidebar({

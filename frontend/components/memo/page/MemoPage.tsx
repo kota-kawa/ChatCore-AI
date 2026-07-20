@@ -30,6 +30,7 @@ import { MemoShareModal } from "../MemoShareModal";
 import { MemoSidebar } from "../MemoSidebar";
 import { MemoToolbar } from "../MemoToolbar";
 import { MyContextPanel } from "../MyContextPanel";
+import { MemoViewSwitcher, type MemoView } from "../MemoViewSwitcher";
 import {
   loadCollections,
   loadMemoDetail,
@@ -104,7 +105,7 @@ export default function MemoPage() {
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
   // Notebook 画面内の表示切替。"memos" は従来のメモ、"context" はマイコンテキスト金庫。
   // View switch inside the notebook: "memos" is the classic memo list, "context" is the vault.
-  const [activeView, setActiveView] = useState<"memos" | "context">("memos");
+  const [activeView, setActiveView] = useState<MemoView>("memos");
 
   // Keep-style board state
   const [isComposeExpanded, setIsComposeExpanded] = useState(false);
@@ -1396,6 +1397,7 @@ export default function MemoPage() {
           />
 
           <div className="memo-container">
+            <MemoViewSwitcher activeView={activeView} setActiveView={setActiveView} />
             {activeView === "context" ? (
             <MyContextPanel isLoggedIn={isLoggedIn} />
             ) : (
