@@ -450,6 +450,11 @@ body.memo-page.modal-open {
   gap: 1rem;
 }
 
+/* The desktop sidebar owns this navigation above the tablet breakpoint. */
+:where(body.memo-page, .memo-page-shell) .memo-view-switcher {
+  display: none;
+}
+
 /* 未ログイン時に表示する機能紹介テキスト（控えめなトーンで既存デザインに馴染ませる） */
 /* Feature intro shown to logged-out visitors; kept subtle to blend with the existing design */
 :where(body.memo-page, .memo-page-shell) .memo-guest-intro {
@@ -469,6 +474,40 @@ body.memo-page.modal-open {
 
   :where(body.memo-page, .memo-page-shell) .memo-layout {
     gap: 0;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem;
+    padding: 0.35rem;
+    border: 1px solid var(--memo-border);
+    border-radius: 14px;
+    background: var(--memo-card);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher__item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 0;
+    border: 0;
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    color: var(--memo-text-muted);
+    background: transparent;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher__item.is-active {
+    color: #fff;
+    background: var(--memo-amber-strong);
+    box-shadow: 0 2px 8px rgba(180, 83, 9, 0.24);
   }
 }
 
