@@ -20,6 +20,7 @@ import { useHomePageGenerationActions } from "./use_home_page_generation_actions
 import { useHomePageRoomActions } from "./use_home_page_room_actions";
 import { useHomePageProjects } from "./use_home_page_projects";
 import { setLoggedInState } from "../../scripts/core/app_state";
+import { releaseAuthBootAttribute } from "../../scripts/core/auth_state_cache";
 import { CurrentUserAuthError, readCurrentUserLoggedIn } from "../../lib/chat_page/auth_status";
 import { CHAT_ROOMS_PAGE_SIZE } from "../../lib/chat_page/constants";
 import {
@@ -65,9 +66,6 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
 // チャット画面復元のプリハイドレーションフラグ（_document.tsx のブートスクリプトが設定）。
 // Pre-hydration flag for chat-view restores, set by the bootstrap script in _document.tsx.
 const HOME_BOOT_VIEW_ATTRIBUTE = "data-cc-home-boot-view";
-// 認証状態のプリハイドレーションフラグ（_document.tsx のブートスクリプトが設定）。
-// Pre-hydration flag for the auth state, set by the bootstrap script in _document.tsx.
-const AUTH_BOOT_ATTRIBUTE = "data-cc-auth";
 // 入場アニメーション（最長 0.73s = chat-area の delay 0.18s + duration 0.55s）の
 // 元の再生時間を過ぎてからフラグを解除するための待機時間。
 // Wait long enough to exceed the entrance animations' original play time
@@ -791,7 +789,7 @@ export function useHomePageController() {
       setAuthHintApplied(true);
     }
 
-    document.documentElement.removeAttribute(AUTH_BOOT_ATTRIBUTE);
+    releaseAuthBootAttribute();
   }, [setAuthHintApplied, setLoggedIn]);
 
   useEffect(() => {
