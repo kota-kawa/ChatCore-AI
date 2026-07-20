@@ -44,7 +44,7 @@ export default function HomePage() {
 
   const {
     loggedIn,
-    authResolved,
+    authDisplayReady,
     pageViewState,
     isNewPromptModalOpen,
     closeNewPromptModal,
@@ -126,7 +126,7 @@ export default function HomePage() {
             id="auth-buttons"
             style={{
               ...floatingAuthUiStyle,
-              display: authResolved && !loggedIn ? "" : "none"
+              display: authDisplayReady && !loggedIn ? "" : "none"
             }}
           >
             {/* ログイン/登録ボタン */}
@@ -145,7 +145,7 @@ export default function HomePage() {
             id="userIcon"
             style={{
               ...floatingAuthUiStyle,
-              display: authResolved && loggedIn ? "" : "none"
+              display: authDisplayReady && loggedIn ? "" : "none"
             }}
           ></user-icon>
 

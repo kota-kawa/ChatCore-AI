@@ -845,6 +845,34 @@ html[data-cc-home-boot-view="chat"] #chat-container .chat-area {
   animation-delay: 0ms;
 }
 
+/* 認証状態のプリハイドレーションガード。
+   サーバーが返す静的HTMLは常に未ログイン状態のため、ログイン済みユーザーでも
+   ハイドレーション完了までゲスト向けUIが描画されてしまう。_document.tsx の
+   ブートスクリプトが直近の認証状態を <html data-cc-auth="in|out"> として立て、
+   ここでゲスト専用要素を隠し、ログイン時のみ現れる要素の領域を先に確保する。
+   フラグは認証キャッシュ適用時に use_home_page_controller が解除する。
+
+   ログイン時のみ現れる要素（タスク並び替え・チャット履歴ボタン）の領域確保は
+   意図的に行っていない。ボタン実寸を複製することになるうえ、実際のサイズは
+   ハイドレーション後に付く setup-fit-* クラス次第で変わり、静的CSSでは予測
+   できないため。認証由来のガタつきは認証キャッシュをペイント前に反映すること
+   で解消済み（use_home_page_controller の layout effect）。
+   Pre-hydration guard for the auth state. The statically served HTML is always
+   the logged-out view, so logged-in users would otherwise see the guest UI
+   until hydration completes. The bootstrap script in _document.tsx exposes the
+   last known auth state as <html data-cc-auth="in|out">; here we hide the
+   guest-only copy. The controller removes the flag once the cached auth state
+   is applied.
+
+   We deliberately do not reserve space for logged-in-only controls (reorder /
+   chat-history buttons): it would duplicate their pixel sizes, and the real
+   size depends on the setup-fit-* class applied after hydration, which static
+   CSS cannot predict. The auth-driven shift is already removed by applying the
+   cached auth state before paint (layout effect in use_home_page_controller). */
+html[data-cc-auth="in"] .setup-form-subtitle {
+  display: none;
+}
+
 :where(body.chat-page, .chat-page-shell) .chat-page-stage #chat-container {
   width: min(100%, var(--chat-shell-max-width-wide, 1520px));
   z-index: 2;
