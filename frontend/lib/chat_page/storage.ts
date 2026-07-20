@@ -1,4 +1,4 @@
-import { CACHE_TTL_MS, STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
+import { STORAGE_KEYS, AUTH_SUCCESS_HINT } from "../../scripts/core/constants";
 import { parseJsonText } from "../../scripts/core/runtime_validation";
 import type { ChatRoomMode, ChatSender, StoredGenerationState, StoredHistoryEntry } from "./types";
 
@@ -342,37 +342,19 @@ export function normalizeStoredSender(sender: string): ChatSender {
   return sender === "user" ? "user" : "assistant";
 }
 
-export function readCachedAuthState() {
-  try {
-    const cached = localStorage.getItem(STORAGE_KEYS.authStateCache);
-    if (cached === "1") return true;
-    if (cached === "0") return false;
-  } catch {
-    // ignore localStorage failures
-  }
-  return null;
-}
+// 認証状態キャッシュはトップページ以外（メモなど）とも共有するため
+// scripts/core/auth_state_cache.ts が実体。既存の import 経路を保つため再公開する。
+// The auth state cache is shared with non-home pages (memo, ...), so
+// scripts/core/auth_state_cache.ts owns it. Re-exported to keep import paths.
+export {
+  isCachedAuthStateFresh,
+  readCachedAuthState,
+  writeCachedAuthState,
+} from "../../scripts/core/auth_state_cache";
 
-export function isCachedAuthStateFresh() {
-  try {
-    const cachedAtRaw = localStorage.getItem(STORAGE_KEYS.authStateCachedAt);
-    if (!cachedAtRaw) return false;
-    const cachedAt = Number(cachedAtRaw);
-    if (!Number.isFinite(cachedAt)) return false;
-    return Date.now() - cachedAt <= CACHE_TTL_MS.authState;
-  } catch {
-    return false;
-  }
-}
-
-export function writeCachedAuthState(loggedIn: boolean) {
-  try {
-    localStorage.setItem(STORAGE_KEYS.authStateCache, loggedIn ? "1" : "0");
-    localStorage.setItem(STORAGE_KEYS.authStateCachedAt, String(Date.now()));
-  } catch {
-    // ignore localStorage failures
-  }
-}
+// consumeAuthSuccessHint がローカルで使うため、再公開とは別に import する。
+// Imported separately from the re-export above because consumeAuthSuccessHint uses it locally.
+import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
 
 export function consumeAuthSuccessHint() {
   if (typeof window === "undefined") return false;

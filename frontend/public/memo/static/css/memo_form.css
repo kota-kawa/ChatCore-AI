@@ -467,6 +467,24 @@ body.memo-page.modal-open {
   line-height: 1.7;
 }
 
+/* 認証状態のプリハイドレーションガード。
+   サーバーが返す静的HTMLは常に未ログイン状態のため、ログイン済みユーザーでも
+   ハイドレーション完了までこの紹介文が描画されてしまう。_document.tsx の
+   ブートスクリプトが直近の認証状態を <html data-cc-auth="in|out"> として立てる
+   ので、ログイン済みなら隠す。フラグは認証キャッシュ適用時に MemoPage が解除する。
+   紹介文自体はクロール可能な公開コンテンツとして残す必要があるため、JSX 側では
+   条件分岐せず CSS のみで隠している（トップページの .setup-form-subtitle と同方針）。
+   Pre-hydration guard for the auth state. The statically served HTML is always
+   the logged-out view, so this intro would render for signed-in users until
+   hydration completes. The bootstrap script in _document.tsx exposes the last
+   known auth state as <html data-cc-auth="in|out">; hide the intro when signed
+   in. MemoPage releases the flag once the cached state is applied.
+   The intro must stay crawlable, so it is hidden via CSS rather than removed in
+   JSX (same approach as .setup-form-subtitle on the home page). */
+html[data-cc-auth="in"] .memo-guest-intro {
+  display: none;
+}
+
 @media (max-width: 1024px) {
   :where(body.memo-page, .memo-page-shell) .memo-sidebar {
     display: none;
