@@ -77,6 +77,16 @@ class McpServerTestCase(unittest.TestCase):
                 [{"type": "oauth2", "scopes": [expected_scopes[name]]}],
             )
 
+        digest_input = by_name["get_personal_context"].model_dump(by_alias=True)["inputSchema"]
+        self.assertEqual(digest_input["properties"]["max_chars"]["default"], 12_000)
+        self.assertEqual(digest_input["properties"]["max_chars"]["minimum"], 2_000)
+        self.assertEqual(digest_input["properties"]["max_chars"]["maximum"], 20_000)
+        save_input = by_name["save_context_fact"].model_dump(by_alias=True)["inputSchema"]
+        idempotency_variants = save_input["properties"]["idempotency_key"]["anyOf"]
+        string_variant = next(item for item in idempotency_variants if item.get("type") == "string")
+        self.assertEqual(string_variant["maxLength"], 128)
+        self.assertEqual(save_input["properties"]["importance"]["default"], 50)
+
         self.assertIn("Markdown形式", server.instructions)
         markdown_inputs = {
             "create_memo": "content",

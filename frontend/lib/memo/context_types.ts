@@ -10,11 +10,17 @@ export type ContextFactType =
 
 export type ContextFactStatus = "active" | "deprecated";
 
+export type ContextFactSourceKind = "manual" | "mcp" | "chat" | "import";
+
+export type ContextFactImportancePreset = 25 | 50 | 75;
+
 export type ContextFact = {
   id: number;
   fact_type: ContextFactType;
   title: string;
   content: string;
+  source_kind: ContextFactSourceKind;
+  importance: number;
   status: ContextFactStatus;
   revision: number;
   created_at: string | null;
@@ -38,6 +44,7 @@ export type ContextFactCreateInput = {
   fact_type: ContextFactType;
   title: string;
   content: string;
+  importance: number;
 };
 
 export type ContextFactUpdateInput = {
@@ -45,6 +52,7 @@ export type ContextFactUpdateInput = {
   title?: string;
   content?: string;
   fact_type?: ContextFactType;
+  importance?: number;
   status?: ContextFactStatus;
 };
 
@@ -63,3 +71,31 @@ export const CONTEXT_FACT_TYPE_OPTIONS: { value: ContextFactType; label: string 
   { value: "decision", label: CONTEXT_FACT_TYPE_LABELS.decision },
   { value: "reference", label: CONTEXT_FACT_TYPE_LABELS.reference },
 ];
+
+export const CONTEXT_FACT_SOURCE_LABELS: Record<ContextFactSourceKind, string> = {
+  manual: "手動",
+  mcp: "MCP",
+  chat: "チャット",
+  import: "インポート",
+};
+
+export const CONTEXT_FACT_IMPORTANCE_OPTIONS: {
+  value: `${ContextFactImportancePreset}`;
+  label: string;
+}[] = [
+  { value: "25", label: "低" },
+  { value: "50", label: "標準" },
+  { value: "75", label: "高" },
+];
+
+export function getContextFactImportanceLabel(importance: number): string {
+  if (importance <= 33) return "低";
+  if (importance >= 67) return "高";
+  return "標準";
+}
+
+export function toContextFactImportancePreset(importance: number): ContextFactImportancePreset {
+  if (importance <= 33) return 25;
+  if (importance >= 67) return 75;
+  return 50;
+}

@@ -1,4 +1,5 @@
 import unittest
+from hashlib import sha256
 from unittest.mock import MagicMock, patch
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ from services.context_vault_service import (
 from services.request_models import (
     ContextFactCreateRequest,
     ContextFactUpdateRequest,
+    McpContextFactSaveRequest,
     McpContextFactUpdateRequest,
 )
 
@@ -26,6 +28,10 @@ def fact_row(**overrides):
         "fact_type": "preference",
         "title": "Editor",
         "content": "Uses vim keybindings",
+        "source_kind": "manual",
+        "source_ref": None,
+        "source_client_id": None,
+        "importance": 50,
         "status": "active",
         "revision": 2,
         "created_at": "2026-07-18T01:00:00",
@@ -54,6 +60,39 @@ class ContextFactRequestModelTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             McpContextFactUpdateRequest(expected_revision=1)
 
+    def test_importance_is_bounded_and_counts_as_an_update(self):
+        self.assertEqual(
+            ContextFactCreateRequest(
+                fact_type="preference", title="Editor", content="Vim"
+            ).importance,
+            50,
+        )
+        self.assertEqual(ContextFactUpdateRequest(revision=1, importance=0).importance, 0)
+        self.assertEqual(
+            McpContextFactUpdateRequest(expected_revision=1, importance=100).importance,
+            100,
+        )
+        with self.assertRaises(ValidationError):
+            ContextFactCreateRequest(
+                fact_type="preference", title="Editor", content="Vim", importance=101
+            )
+
+    def test_mcp_idempotency_key_is_limited(self):
+        payload = McpContextFactSaveRequest(
+            fact_type="preference",
+            title="Editor",
+            content="Vim",
+            idempotency_key="retry-1",
+        )
+        self.assertEqual(payload.idempotency_key, "retry-1")
+        with self.assertRaises(ValidationError):
+            McpContextFactSaveRequest(
+                fact_type="preference",
+                title="Editor",
+                content="Vim",
+                idempotency_key="x" * 129,
+            )
+
 
 class ContextVaultServiceTestCase(unittest.TestCase):
     def _patch_repo(self, repo):
@@ -61,19 +100,72 @@ class ContextVaultServiceTestCase(unittest.TestCase):
 
     def test_create_schedules_embedding_and_hides_internal_fields(self):
         repo = MagicMock()
-        repo.create_fact.return_value = fact_row(revision=1)
+        repo.create_fact.return_value = fact_row(
+            revision=1,
+            source_kind="mcp",
+            source_ref="conversation:3",
+            source_client_id="cursor",
+            importance=80,
+        )
         with self._patch_repo(repo), patch(
             "services.context_vault_service.schedule_embedding"
         ) as schedule:
-            result = create_fact(7, fact_type="preference", title="Editor", content="Uses vim")
+            result = create_fact(
+                7,
+                fact_type="preference",
+                title="Editor",
+                content="Uses vim",
+                importance=80,
+                source_kind="mcp",
+                source_ref="conversation:3",
+                source_client_id="cursor",
+                idempotency_key="retry-1",
+            )
 
         serialized = result.model_dump()
         self.assertEqual(serialized["id"], 3)
         self.assertEqual(serialized["revision"], 1)
+        self.assertEqual(serialized["source_kind"], "mcp")
+        self.assertEqual(serialized["importance"], 80)
+        self.assertNotIn("source_ref", serialized)
+        self.assertNotIn("source_client_id", serialized)
         self.assertNotIn("_updated_at_raw", serialized)
         self.assertNotIn("user_id", serialized)
         schedule.assert_called_once()
         self.assertEqual(schedule.call_args.args[0], 3)
+        create_kwargs = repo.create_fact.call_args.kwargs
+        self.assertEqual(create_kwargs["importance"], 80)
+        self.assertEqual(create_kwargs["source_kind"], "mcp")
+        self.assertEqual(create_kwargs["source_ref"], "conversation:3")
+        self.assertEqual(create_kwargs["source_client_id"], "cursor")
+        self.assertEqual(
+            create_kwargs["idempotency_key_hash"],
+            sha256(b"7\0mcp\0cursor\0retry-1").hexdigest(),
+        )
+        self.assertEqual(
+            create_kwargs["idempotency_payload_hash"],
+            sha256(
+                b'{"content":"Uses vim","fact_type":"preference","importance":80,'
+                b'"source_kind":"mcp","source_ref":"conversation:3","title":"Editor"}'
+            ).hexdigest(),
+        )
+
+    def test_create_idempotent_replay_skips_embedding(self):
+        repo = MagicMock()
+        repo.create_fact.return_value = fact_row(_idempotent_replay=True)
+        with self._patch_repo(repo), patch(
+            "services.context_vault_service.schedule_embedding"
+        ) as schedule:
+            result = create_fact(
+                7,
+                fact_type="preference",
+                title="Editor",
+                content="Uses vim",
+                idempotency_key="retry-1",
+            )
+
+        self.assertEqual(result.id, 3)
+        schedule.assert_not_called()
 
     def test_update_passes_revision_and_reembeds_on_content_change(self):
         repo = MagicMock()
@@ -81,10 +173,11 @@ class ContextVaultServiceTestCase(unittest.TestCase):
         with self._patch_repo(repo), patch(
             "services.context_vault_service.schedule_embedding"
         ) as schedule:
-            result = update_fact(7, 3, expected_revision=2, content="new")
+            result = update_fact(7, 3, expected_revision=2, content="new", importance=90)
 
         self.assertEqual(result.revision, 3)
         self.assertEqual(repo.update_fact.call_args.kwargs["expected_revision"], 2)
+        self.assertEqual(repo.update_fact.call_args.kwargs["importance"], 90)
         schedule.assert_called_once()
 
     def test_deprecate_sets_status_and_skips_reembedding(self):
@@ -116,6 +209,24 @@ class ContextVaultServiceTestCase(unittest.TestCase):
         self.assertEqual(len(digest.groups[1].facts), 2)
         self.assertTrue(digest.truncated)
         self.assertEqual(digest.facts_total, 3)
+        self.assertEqual(digest.total_active, 4)
+        self.assertEqual(digest.returned_count, 3)
+        self.assertEqual(digest.omitted_count, 1)
+
+    def test_build_digest_prioritizes_importance_within_character_budget(self):
+        rows = [
+            fact_row(id=1, title="high", content="H" * 1_200, importance=90),
+            fact_row(id=2, title="low", content="L" * 1_200, importance=10),
+        ]
+        repo = MagicMock()
+        repo.list_active_for_digest.return_value = rows
+        with self._patch_repo(repo):
+            digest = build_digest(7, max_chars=2_000)
+
+        self.assertEqual(digest.returned_count, 1)
+        self.assertEqual(digest.groups[0].facts[0].title, "high")
+        self.assertEqual(digest.omitted_count, 1)
+        self.assertLessEqual(len(digest.model_dump_json()), 2_000)
 
     def test_search_uses_semantic_then_falls_back_to_keyword(self):
         repo = MagicMock()

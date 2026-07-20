@@ -18,6 +18,8 @@ const sampleFact: ContextFact = {
   fact_type: "preference",
   title: "エディタの好み",
   content: "vim キーバインドを使う",
+  source_kind: "manual",
+  importance: 75,
   status: "active",
   revision: 2,
   created_at: null,
@@ -42,6 +44,8 @@ describe("MyContextPanel", () => {
     renderPanel({ isLoggedIn: true, api: { load } });
 
     await waitFor(() => expect(screen.getByText("エディタの好み")).toBeInTheDocument());
+    expect(screen.getByText("出典: 手動")).toBeInTheDocument();
+    expect(screen.getByText("重要度: 高")).toBeInTheDocument();
     expect(load).toHaveBeenCalledWith({ factType: null, status: "active" });
   });
 
@@ -54,18 +58,72 @@ describe("MyContextPanel", () => {
     renderPanel({ isLoggedIn: true, api: { load, create } });
 
     fireEvent.click(screen.getByRole("button", { name: /コンテキストを追加/ }));
-    fireEvent.change(screen.getByPlaceholderText(/タイトル/), {
+    fireEvent.change(screen.getByLabelText("タイトル"), {
       target: { value: "エディタの好み" },
     });
-    fireEvent.change(screen.getByPlaceholderText(/内容/), {
+    fireEvent.change(screen.getByLabelText("内容"), {
       target: { value: "vim キーバインドを使う" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "重要度" }));
+    fireEvent.click(screen.getByRole("option", { name: "高" }));
     fireEvent.click(screen.getByRole("button", { name: "追加" }));
 
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith({
         fact_type: "preference",
         title: "エディタの好み",
+        content: "vim キーバインドを使う",
+        importance: 75,
+      }),
+    );
+  });
+
+  it("updates the importance when editing a fact", async () => {
+    const load = vi.fn().mockResolvedValue({
+      facts: [sampleFact],
+      totalActive: 1,
+      nextCursor: null,
+    });
+    const update = vi.fn().mockResolvedValue({ ...sampleFact, importance: 25 });
+    renderPanel({ isLoggedIn: true, api: { load, update } });
+
+    await waitFor(() => expect(screen.getByText("エディタの好み")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
+    fireEvent.click(screen.getByRole("button", { name: "重要度" }));
+    fireEvent.click(screen.getByRole("option", { name: "低" }));
+    fireEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(3, {
+        revision: 2,
+        fact_type: "preference",
+        title: "エディタの好み",
+        content: "vim キーバインドを使う",
+        importance: 25,
+      }),
+    );
+  });
+
+  it("preserves a non-preset importance when editing other fields", async () => {
+    const exactImportanceFact = { ...sampleFact, importance: 100 };
+    const load = vi.fn().mockResolvedValue({
+      facts: [exactImportanceFact],
+      totalActive: 1,
+      nextCursor: null,
+    });
+    const update = vi.fn().mockResolvedValue({ ...exactImportanceFact, title: "更新済み" });
+    renderPanel({ isLoggedIn: true, api: { load, update } });
+
+    await waitFor(() => expect(screen.getByText("エディタの好み")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "編集" }));
+    fireEvent.change(screen.getByLabelText("タイトル"), { target: { value: "更新済み" } });
+    fireEvent.click(screen.getByRole("button", { name: "更新" }));
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(3, {
+        revision: 2,
+        fact_type: "preference",
+        title: "更新済み",
         content: "vim キーバインドを使う",
       }),
     );

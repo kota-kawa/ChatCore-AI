@@ -16,3 +16,6 @@ ERROR_SHARED_LINK_NOT_FOUND = "共有リンクが見つかりません"
 ERROR_MEMO_NOT_FOUND_FOR_SHARE = "共有対象のメモが見つかりません。"
 ERROR_INVALID_PROMPT_FEED_CURSOR = "プロンプト一覧のカーソルが不正です。"
 ERROR_INVALID_PROMPT_FEED_FILTER = "プロンプト一覧の絞り込み条件が不正です。"
+ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT = (
+    "同じ冪等キーが別のコンテキスト保存に使用されています。"
+)

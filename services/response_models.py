@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -140,11 +142,13 @@ class MemoSaveResponse(ResponsePayloadModel):
 # English: Response model representing a single personal context vault fact.
 class ContextFactResponse(ResponsePayloadModel):
     id: int
-    fact_type: str
+    fact_type: Literal["preference", "profile", "project", "decision", "reference"]
     title: str
     content: str
-    status: str
+    status: Literal["active", "deprecated"]
     revision: int
+    source_kind: Literal["manual", "chat", "mcp", "import"] = "manual"
+    importance: int = Field(default=50, ge=0, le=100)
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -168,5 +172,8 @@ class ContextDigestGroup(ResponsePayloadModel):
 # English: Compact digest response returned by get_personal_context.
 class ContextDigestResponse(ResponsePayloadModel):
     facts_total: int = 0
+    total_active: int = 0
+    returned_count: int = 0
+    omitted_count: int = 0
     truncated: bool = False
     groups: list[ContextDigestGroup] = Field(default_factory=list)
