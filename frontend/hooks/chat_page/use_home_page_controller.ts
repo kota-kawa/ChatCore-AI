@@ -65,6 +65,9 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
 // チャット画面復元のプリハイドレーションフラグ（_document.tsx のブートスクリプトが設定）。
 // Pre-hydration flag for chat-view restores, set by the bootstrap script in _document.tsx.
 const HOME_BOOT_VIEW_ATTRIBUTE = "data-cc-home-boot-view";
+// 認証状態のプリハイドレーションフラグ（_document.tsx のブートスクリプトが設定）。
+// Pre-hydration flag for the auth state, set by the bootstrap script in _document.tsx.
+const AUTH_BOOT_ATTRIBUTE = "data-cc-auth";
 // 入場アニメーション（最長 0.73s = chat-area の delay 0.18s + duration 0.55s）の
 // 元の再生時間を過ぎてからフラグを解除するための待機時間。
 // Wait long enough to exceed the entrance animations' original play time
@@ -103,6 +106,8 @@ export function useHomePageController() {
     setLoggedIn,
     authResolved,
     setAuthResolved,
+    authHintApplied,
+    setAuthHintApplied,
     pageViewState,
     setPageViewState,
     isChatVisible,
@@ -765,18 +770,32 @@ export function useHomePageController() {
     container.scrollTop = container.scrollHeight;
   }, [messages]);
 
-  useEffect(() => {
+  // キャッシュ済みの認証状態はペイント前に反映する。useEffect で反映すると
+  // 未ログイン状態の初期stateが一度描画され、直後に差し替わってガタつく。
+  // 反映と同時にプリハイドレーション用のフラグを外し、以降はReactが表示を制御する。
+  // Apply the cached auth state before the browser paints. Doing this in a
+  // plain useEffect would paint the logged-out initial state once and then
+  // swap it, causing a visible flash and layout shift. Releasing the
+  // pre-hydration flag here hands display control back to React.
+  useIsomorphicLayoutEffect(() => {
     const applyCachedAuth = consumeAuthSuccessHint();
     const cachedAuthState = readCachedAuthState();
-    const canFallback = isCachedAuthStateFresh() && cachedAuthState !== null;
 
     if (cachedAuthState !== null) {
       setLoggedIn(cachedAuthState);
+      setAuthHintApplied(true);
     }
 
     if (applyCachedAuth && cachedAuthState === null) {
       setLoggedIn(true);
+      setAuthHintApplied(true);
     }
+
+    document.documentElement.removeAttribute(AUTH_BOOT_ATTRIBUTE);
+  }, [setAuthHintApplied, setLoggedIn]);
+
+  useEffect(() => {
+    const canFallback = isCachedAuthStateFresh() && readCachedAuthState() !== null;
 
     let cancelled = false;
 
@@ -1163,6 +1182,11 @@ export function useHomePageController() {
   return {
     loggedIn,
     authResolved,
+    // 右上の認証UIはサーバー確認を待たずキャッシュ反映時点で描画してよい。
+    // 待つと一瞬だけ何も表示されず、後からポップインして見える。
+    // The top-right auth UI can render as soon as the cached state is applied.
+    // Waiting for the server leaves the corner briefly empty, then pops in.
+    authDisplayReady: authResolved || authHintApplied,
     // プロジェクト機能（一覧・詳細・CRUD・新規チャット紐づけ）
     // Projects feature (list, detail, CRUD, new-chat association)
     ...projectActions,

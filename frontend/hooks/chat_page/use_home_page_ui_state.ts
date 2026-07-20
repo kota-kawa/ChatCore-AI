@@ -68,6 +68,11 @@ function readInitialPageViewState(): HomePageViewState {
 export function useHomePageUiState() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
+  // キャッシュ由来の認証状態を反映済みかどうか。サーバー確認を待たずに
+  // ログイン/ユーザーアイコンを描画してよいかの判定に使う。
+  // Whether the cached auth state has been applied. Used to decide if the
+  // login button / user icon can render without waiting for server confirmation.
+  const [authHintApplied, setAuthHintApplied] = useState(false);
   const [pageViewState, setRawPageViewState] = useState<HomePageViewState>(readInitialPageViewState);
   const [setupInfo, setSetupInfo] = useState("");
   const [temporaryModeEnabled, setTemporaryModeEnabled] = useState(false);
@@ -165,6 +170,8 @@ export function useHomePageUiState() {
     setLoggedIn,
     authResolved,
     setAuthResolved,
+    authHintApplied,
+    setAuthHintApplied,
     pageViewState,
     setPageViewState,
     isChatVisible,
