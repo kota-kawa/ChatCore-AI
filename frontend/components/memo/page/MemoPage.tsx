@@ -1451,7 +1451,10 @@ export default function MemoPage() {
             {/* ── Toolbar ── */}
             <MemoToolbar
               activeCollection={activeCollection}
+              activeCollectionId={activeCollectionId}
               archiveScope={archiveScope}
+              sortMode={sortMode}
+              collections={collections}
               totalMemoCount={totalMemoCount}
               query={query}
               setQuery={setQuery}
@@ -1465,6 +1468,9 @@ export default function MemoPage() {
               exitBulkMode={exitBulkMode}
               setIsBulkMode={setIsBulkMode}
               setIsExportModalOpen={setIsExportModalOpen}
+              isFiltersOpen={isFiltersOpen}
+              setIsFiltersOpen={setIsFiltersOpen}
+              setIsCollectionPanelOpen={setIsCollectionPanelOpen}
             />
 
           {flashState && (
