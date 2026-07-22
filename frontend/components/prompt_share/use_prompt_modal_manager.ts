@@ -82,6 +82,14 @@ export function usePromptModalManager({
         return false;
       }
 
+      // aria-hidden が反映される前にモーダル外へフォーカスを戻す。
+      // React の state 更新後に復元すると、非表示になったモーダル内に
+      // フォーカスが一時的に残り、支援技術向けの警告が発生する。
+      const previousFocusedElement = previousFocusedElementRef.current;
+      if (previousFocusedElement?.isConnected) {
+        previousFocusedElement.focus();
+      }
+
       setActiveModal(null);
       if (modal === "post") {
         onClosePost();
@@ -123,9 +131,6 @@ export function usePromptModalManager({
       window.scrollTo(0, lockedScrollYRef.current);
       hasModalLockRef.current = false;
 
-      if (previousFocusedElementRef.current) {
-        previousFocusedElementRef.current.focus();
-      }
       previousFocusedElementRef.current = null;
       preferredFocusElementRef.current = null;
       return;

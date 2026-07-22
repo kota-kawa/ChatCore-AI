@@ -13,6 +13,7 @@ import {
   removeChatRoomsById,
   updateChatRoomTitle,
 } from "../../lib/chat_page/home_page_controller_utils";
+import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
 import type { AttachedFile, ChatRoom, ChatRoomMode, ChatRoomsPage, NormalizedTask, UiChatMessage } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
@@ -338,6 +339,9 @@ export function useHomePageRoomActions({
   );
 
   const showSetupForm = useCallback(() => {
+    // 戻るボタンを含むチャット領域を隠す前にフォーカスを外す。
+    // Blur focus before hiding the chat container from assistive technologies.
+    moveFocusOutOfHiddenRegion(document.getElementById("chat-container"));
     setPageViewState("setup");
     closeOverlaySidebar();
     setLaunchingTaskName(null);
