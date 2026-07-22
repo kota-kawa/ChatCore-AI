@@ -30,6 +30,13 @@ export function LpFooter() {
           <a href="/prompt_share">プロンプト共有</a>
           <a href="/memo">メモ</a>
           <a href="/help">ヘルプ</a>
+          <a
+            href="https://docs.google.com/forms/d/e/1FAIpQLSe2QqacIPAnKeZtFGHxb61YYjVjrrixcIsV2wDPoyFMXG-F2w/viewform?usp=publish-editor"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            お問い合わせ
+          </a>
           <a href="/terms">利用規約</a>
           <a href="/privacy">プライバシーポリシー</a>
           <a href="/login">ログイン</a>
