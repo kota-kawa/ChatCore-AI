@@ -6351,6 +6351,9 @@ body.memo-page {
 
 @media (max-width: 768px) {
   :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card {
+    /* On phones the toolbar should scroll with the memo content instead of
+       staying pinned to the viewport. */
+    position: static;
     top: 0.4rem;
     width: calc(100% - 1rem);
     padding: 0.5rem 0.7rem;
