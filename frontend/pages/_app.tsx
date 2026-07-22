@@ -39,13 +39,13 @@ import type { AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
 import { useRouter } from "next/router";
-import { SWRConfig } from "swr";
+import { SWRConfig, useSWRConfig } from "swr";
 import { GoogleAnalytics } from "../components/GoogleAnalytics";
 import { GlobalAiAgent } from "../components/GlobalAiAgent";
 import { NetworkStatusBanner } from "../components/NetworkStatusBanner";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 import { swrFetcher } from "../lib/data/swr_fetcher";
-import { createPersistentCacheProvider } from "../lib/data/persistent_cache";
+import { createPersistentCacheProvider, loadPersistentCacheEntries } from "../lib/data/persistent_cache";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -165,6 +165,21 @@ const swrGlobalConfig = {
   errorRetryCount: 2,
 } as const;
 
+// 永続SWRキャッシュは初回クライアント描画では読まず、ReactがSSR HTMLを
+// ハイドレートした後に反映する。これによりサーバーとクライアントの初期HTMLが
+// 常に一致し、localStorage由来のハイドレーション不整合を防ぐ。
+function PersistentCacheHydrator() {
+  const { mutate } = useSWRConfig();
+
+  useEffect(() => {
+    for (const [key, data] of loadPersistentCacheEntries()) {
+      void mutate(key, data, { revalidate: true });
+    }
+  }, [mutate]);
+
+  return null;
+}
+
 // Next.jsのカスタムAppコンポーネント（テーマ管理と共通プロバイダーを統括する）
 // Next.js custom App component (manages theme and shared providers)
 export default function App({ Component, pageProps }: AppProps) {
@@ -246,6 +261,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <SWRConfig value={swrGlobalConfig}>
+      <PersistentCacheHydrator />
       <div className={appSansFont.variable}>
         <GlobalErrorBoundary>
           <GoogleAnalytics />

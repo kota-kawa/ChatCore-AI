@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { __test__, createPersistentCacheProvider, clearPersistentCache } from "../lib/data/persistent_cache";
+import {
+  __test__,
+  createPersistentCacheProvider,
+  clearPersistentCache,
+  loadPersistentCacheEntries,
+} from "../lib/data/persistent_cache";
 
 const { canPersistKey, pruneShape, STORAGE_KEY } = __test__;
 
@@ -48,7 +53,7 @@ function withFakeStorage(run: (store: Map<string, string>) => void) {
   }
 }
 
-test("provider hydrates allowlisted entries from storage and persists sets", () => {
+test("provider defers storage hydration and persists allowlisted sets", () => {
   withFakeStorage((store) => {
     store.set(
       STORAGE_KEY,
@@ -58,8 +63,12 @@ test("provider hydrates allowlisted entries from storage and persists sets", () 
     const provider = createPersistentCacheProvider();
     const cache = provider(new Map() as never);
 
-    // 復元された data が読める / hydrated data is readable
-    assert.deepEqual(cache.get("/memo/api/list")?.data, { memos: ["a"] });
+    // 初回レンダリング中にlocalStorageを読むとSSR HTMLと不一致になるため、
+    // provider自体は空のまま返す。/ The provider stays empty during hydration.
+    assert.equal(cache.get("/memo/api/list"), undefined);
+
+    // ハイドレーション完了後にだけ、復元対象をSWR mutateへ渡す。
+    assert.deepEqual(loadPersistentCacheEntries(), [["/memo/api/list", { memos: ["a"] }]]);
 
     // allowlist 外のキーは永続化されない / non-allowlisted keys are not persisted
     cache.set("/api/get_chat_rooms", { data: ["secret"], isLoading: false } as never);

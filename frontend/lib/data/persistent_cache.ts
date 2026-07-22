@@ -86,18 +86,6 @@ export function createPersistentCacheProvider(ttlMs: number = DEFAULT_TTL_MS) {
   return (defaultCache: Readonly<Cache>): Cache => {
     const map = defaultCache as unknown as Map<string, State>;
 
-    // 起動時に localStorage から data を復元する。
-    // Hydrate `data` from localStorage on startup.
-    if (typeof window !== "undefined") {
-      const persisted = pruneShape(readStorage(), ttlMs);
-      writeStorage(persisted);
-      for (const [key, entry] of Object.entries(persisted)) {
-        if (!map.has(key) && canPersistKey(key)) {
-          map.set(key, { data: entry.data, isLoading: false } as State);
-        }
-      }
-    }
-
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     const dirty = new Set<string>();
 
@@ -138,6 +126,22 @@ export function createPersistentCacheProvider(ttlMs: number = DEFAULT_TTL_MS) {
       },
     };
   };
+}
+
+/**
+ * localStorage のキャッシュを、React のハイドレーション完了後に適用するための
+ * 安全なエントリ一覧を返す。
+ *
+ * Reading browser storage while SWR creates its cache would make the first
+ * client render differ from the server-rendered HTML. The caller must invoke
+ * this from a client-side effect and publish each entry through SWR's mutate.
+ */
+export function loadPersistentCacheEntries(ttlMs: number = DEFAULT_TTL_MS): Array<[string, unknown]> {
+  const persisted = pruneShape(readStorage(), ttlMs);
+  writeStorage(persisted);
+  return Object.entries(persisted)
+    .filter(([key]) => canPersistKey(key))
+    .map(([key, entry]) => [key, entry.data]);
 }
 
 /**
