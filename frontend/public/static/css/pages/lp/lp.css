@@ -112,7 +112,7 @@
 }
 
 .lp-page .lp-btn--primary {
-  background: var(--lp-green);
+  background: var(--lp-green-deep);
   box-shadow: 0 10px 24px rgba(80, 163, 91, 0.32);
   color: #ffffff;
 }
@@ -142,8 +142,9 @@
 }
 
 .lp-page .lp-btn--inverse {
-  background: var(--lp-paper);
-  color: var(--lp-ink);
+  /* 最終CTAではテーマにかかわらず十分な文字コントラストを確保する */
+  background: #f9fbf8;
+  color: #182d1e;
 }
 
 .lp-page .lp-btn--inverse:hover {
