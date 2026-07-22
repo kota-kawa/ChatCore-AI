@@ -29,6 +29,7 @@ import {
 import {
   mergeUniqueChatRooms,
 } from "../../lib/chat_page/home_page_controller_utils";
+import { moveFocusOutOfHiddenRegion } from "../../lib/chat_page/focus_management";
 import {
   consumeAuthSuccessHint,
   isCachedAuthStateFresh,
@@ -382,6 +383,12 @@ export function useHomePageController() {
 
   const closeOverlaySidebar = useCallback(() => {
     if (isOverlaySidebarViewport()) {
+      // サイドバーを支援技術から隠す前に、内部のフォーカスを開閉ボタンへ戻す。
+      // Move focus before aria-hidden is applied to prevent hiding the focused room card.
+      moveFocusOutOfHiddenRegion(
+        document.getElementById("chat-room-sidebar"),
+        document.getElementById("sidebar-toggle"),
+      );
       setSidebarOpen(false);
     }
   }, [setSidebarOpen]);
