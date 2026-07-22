@@ -6552,6 +6552,13 @@ body.memo-page {
       "mobile-controls";
   }
 
+  /* Keep the mobile view switcher visually separate from the toolbar below it.
+     The parent container intentionally has no generic gap, so the tab control
+     needs its own spacing before the search and action controls. */
+  :where(body.memo-page, .memo-page-shell) .memo-view-switcher {
+    margin-bottom: 0.75rem;
+  }
+
   @media (max-width: 420px) {
     :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card {
       padding-inline: 0.55rem;
