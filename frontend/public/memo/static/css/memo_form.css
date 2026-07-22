@@ -5392,6 +5392,70 @@ body.memo-page {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.96);
 }
 
+/* The desktop sidebar is replaced by this panel on phones. Keep it out of
+   the desktop layout, where the sidebar already provides the same controls. */
+:where(body.memo-page, .memo-page-shell) .memo-toolbar__mobile-controls {
+  display: none;
+  grid-area: mobile-controls;
+  border-top: 1px solid rgba(60, 64, 67, 0.12);
+  padding-top: 0.7rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__scope .memo-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-height: 38px;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__field {
+  display: grid;
+  grid-template-columns: minmax(5.8rem, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__label {
+  color: #5f6368;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__field .memo-select {
+  min-width: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__manage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 0.7rem;
+  border: 1px solid rgba(217, 119, 6, 0.24);
+  border-radius: 10px;
+  background: rgba(217, 119, 6, 0.06);
+  color: #8f5a17;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-mobile-controls__manage:hover {
+  border-color: rgba(217, 119, 6, 0.42);
+  background: rgba(217, 119, 6, 0.12);
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-toolbar__search {
   grid-area: search;
   width: 100%;
@@ -6452,6 +6516,10 @@ body.memo-page {
     display: inline-flex;
   }
 
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open .memo-toolbar__mobile-controls {
+    display: grid;
+  }
+
   :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card:not(.is-filters-open) .memo-toolbar__collapsible {
     display: none;
   }
@@ -6470,8 +6538,18 @@ body.memo-page {
     grid-template-columns: 1fr;
     grid-template-areas:
       "brand"
-      "actions";
+      "actions"
+      "search";
     row-gap: 0.5rem;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-toolbar.memo-card.is-filters-open {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "actions"
+      "search"
+      "mobile-controls";
   }
 
   @media (max-width: 420px) {
