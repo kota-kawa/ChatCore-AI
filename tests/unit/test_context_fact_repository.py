@@ -1,7 +1,12 @@
 import unittest
 from datetime import datetime
 
-from services.api_errors import ApiServiceError
+from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.error_messages import (
+    ERROR_CONTEXT_FACT_LIMIT_REACHED,
+    ERROR_CONTEXT_FACT_NOT_FOUND,
+    ERROR_CONTEXT_FACT_REVISION_CONFLICT,
+)
 from services.repositories.context_fact_repository import (
     MAX_ACTIVE_CONTEXT_FACTS,
     ContextFactRepository,
@@ -190,6 +195,7 @@ class ContextFactRepositoryTestCase(unittest.TestCase):
             )
 
         self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(error.exception.message, ERROR_CONTEXT_FACT_LIMIT_REACHED)
         self.assertIn("pg_advisory_xact_lock", cursor.executed[0][0])
         self.assertTrue(connection.rolled_back)
         self.assertFalse(connection.committed)
@@ -226,6 +232,60 @@ class ContextFactRepositoryTestCase(unittest.TestCase):
         self.assertIn("importance = %s", cursor.executed[3][0])
         self.assertEqual(cursor.executed[3][1][:2], ("active", 95))
         self.assertEqual(fact["status"], "active")
+
+    def test_reactivation_rejects_active_limit_while_holding_user_lock(self):
+        cursor = FakeCursor(
+            fetchone_results=[("deprecated",), (MAX_ACTIVE_CONTEXT_FACTS,)]
+        )
+        repository, connection = _make_repo(cursor)
+
+        with self.assertRaises(ApiServiceError) as error:
+            repository.update_fact(
+                7,
+                10,
+                expected_revision=1,
+                status="active",
+            )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(error.exception.message, ERROR_CONTEXT_FACT_LIMIT_REACHED)
+        self.assertIn("pg_advisory_xact_lock", cursor.executed[0][0])
+        self.assertFalse(any(sql.startswith("UPDATE") for sql, _ in cursor.executed))
+        self.assertTrue(connection.rolled_back)
+        self.assertFalse(connection.committed)
+
+    def test_update_fact_distinguishes_not_found_from_revision_conflict(self):
+        not_found_cursor = FakeCursor(fetchone_results=[None, None])
+        not_found_repository, not_found_connection = _make_repo(not_found_cursor)
+
+        with self.assertRaises(ResourceNotFoundError) as not_found_error:
+            not_found_repository.update_fact(
+                7,
+                10,
+                expected_revision=3,
+                title="Updated title",
+            )
+
+        self.assertEqual(not_found_error.exception.message, ERROR_CONTEXT_FACT_NOT_FOUND)
+        self.assertTrue(not_found_connection.rolled_back)
+
+        conflict_cursor = FakeCursor(fetchone_results=[None, (1,)])
+        conflict_repository, conflict_connection = _make_repo(conflict_cursor)
+
+        with self.assertRaises(ApiServiceError) as conflict_error:
+            conflict_repository.update_fact(
+                7,
+                10,
+                expected_revision=3,
+                title="Updated title",
+            )
+
+        self.assertEqual(conflict_error.exception.status_code, 409)
+        self.assertEqual(
+            conflict_error.exception.message,
+            ERROR_CONTEXT_FACT_REVISION_CONFLICT,
+        )
+        self.assertTrue(conflict_connection.rolled_back)
 
 
 if __name__ == "__main__":

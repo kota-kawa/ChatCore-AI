@@ -44,6 +44,18 @@ class McpToolAuthorizationTestCase(unittest.TestCase):
 
         self.assertEqual(actor.user_id, 7)
 
+    def test_context_write_token_grants_context_write(self):
+        token = SimpleNamespace(
+            subject="7",
+            client_id="context-editor",
+            scopes=["context:write"],
+        )
+        with patch("services.mcp_tools.common.get_access_token", return_value=token):
+            actor = require_actor("context:write")
+
+        self.assertEqual(actor.user_id, 7)
+        self.assertEqual(actor.client_id, "context-editor")
+
     def test_memos_write_token_cannot_write_context(self):
         token = SimpleNamespace(
             subject="7",

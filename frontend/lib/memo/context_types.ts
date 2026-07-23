@@ -1,36 +1,20 @@
 // パーソナル・コンテキスト金庫（マイコンテキスト）のフロント型定義。
 // Frontend types for the personal context vault ("My Context").
+import type {
+  ContextFactCreateRequest,
+  ContextFactListResponse,
+  ContextFactResponse,
+  ContextFactUpdateRequest,
+} from "../../types/generated/api_schemas";
 
-export type ContextFactType =
-  | "preference"
-  | "profile"
-  | "project"
-  | "decision"
-  | "reference";
-
-export type ContextFactStatus = "active" | "deprecated";
-
-export type ContextFactSourceKind = "manual" | "mcp" | "chat" | "import";
+export type ContextFact = ContextFactResponse;
+export type ContextFactType = ContextFact["fact_type"];
+export type ContextFactStatus = ContextFact["status"];
+export type ContextFactSourceKind = ContextFact["source_kind"];
 
 export type ContextFactImportancePreset = 25 | 50 | 75;
 
-export type ContextFact = {
-  id: number;
-  fact_type: ContextFactType;
-  title: string;
-  content: string;
-  source_kind: ContextFactSourceKind;
-  importance: number;
-  status: ContextFactStatus;
-  revision: number;
-  created_at: string | null;
-  updated_at: string | null;
-};
-
-export type ContextFactListPayload = {
-  facts?: ContextFact[];
-  total_active?: number;
-  next_cursor?: string | null;
+export type ContextFactListPayload = ContextFactListResponse & {
   error?: string;
 };
 
@@ -40,20 +24,15 @@ export type ContextFactMutationPayload = {
   error?: string;
 };
 
-export type ContextFactCreateInput = {
-  fact_type: ContextFactType;
-  title: string;
-  content: string;
-  importance: number;
-};
+export type ContextFactCreateInput = ContextFactCreateRequest;
 
-export type ContextFactUpdateInput = {
-  revision: number;
-  title?: string;
-  content?: string;
-  fact_type?: ContextFactType;
-  importance?: number;
-  status?: ContextFactStatus;
+type ContextFactUpdateFields = Pick<
+  ContextFactUpdateRequest,
+  "title" | "content" | "fact_type" | "importance" | "status"
+>;
+
+export type ContextFactUpdateInput = Pick<ContextFactUpdateRequest, "revision"> & {
+  [Field in keyof ContextFactUpdateFields]?: Exclude<ContextFactUpdateFields[Field], null>;
 };
 
 export const CONTEXT_FACT_TYPE_LABELS: Record<ContextFactType, string> = {
