@@ -27,3 +27,21 @@ ERROR_CONTEXT_FACT_LIMIT_REACHED = (
     "保存できる有効なコンテキストは200件までです。"
     "不要な項目を無効化してから追加してください。"
 )
+ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND = (
+    "該当するコンテキスト候補が見つかりません。"
+)
+ERROR_CONTEXT_FACT_CANDIDATE_REVISION_CONFLICT = (
+    "候補は他の場所で先に更新されました。最新の一覧を読み込み直してください。"
+)
+ERROR_CONTEXT_FACT_CANDIDATE_CURSOR_INVALID = (
+    "候補一覧のページングカーソルが不正です。"
+)
+ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID = "候補状態の指定が不正です。"
+ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID = (
+    "revisionと有効な候補内容を指定してください。"
+)
+ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID = "revisionを指定してください。"
+ERROR_CONTEXT_EXTRACTION_SETTINGS_NOT_FOUND = "抽出設定の対象ユーザーが見つかりません。"
+ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID = (
+    "enabledにはtrueまたはfalseを指定してください。"
+)

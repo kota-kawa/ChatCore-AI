@@ -11,11 +11,14 @@ from fastapi import Depends, Request
 from starlette.responses import StreamingResponse
 
 from services.async_utils import run_blocking
+from services.background_executor import submit_background_task
 from services.attached_files import (
     decode_attached_files_from_storage,
     format_attached_files_for_prompt,
 )
 from services.chat_use_case import ChatPostUseCase, ChatPostUseCaseDependencies
+from services.context_vault_candidate_service import should_extract_context
+from services.context_vault_extraction import schedule_context_extraction
 from services.repositories.chat_repository import ChatRepository
 from services.chat_service import (
     delete_chat_room_if_no_assistant_messages,
@@ -999,6 +1002,9 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             get_llm_response=get_llm_response,
             is_retryable_llm_error=is_retryable_llm_error,
             rebuild_room_summary=rebuild_room_summary,
+            should_extract_context=should_extract_context,
+            schedule_context_extraction=schedule_context_extraction,
+            submit_background_task=submit_background_task,
             get_session_id=get_session_id,
             logger=logger,
         ),

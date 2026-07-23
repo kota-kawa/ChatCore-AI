@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: 8aca7fcf3d264e6c14cc98504dd1c3ea1e56b9712026d864433dbf0041cd3d73
+// Schema fingerprint: e8b49fbea455c08be2e1800321609562f050988dd4866c5c0d1aef39baea0c62
 
 import { z } from "zod";
 
@@ -86,6 +86,15 @@ export type ContextFactCreateRequest = z.infer<typeof ContextFactCreateRequestSc
 export const ContextFactUpdateRequestSchema = z.object({ "revision": z.number().int().gte(1), "title": z.union([z.string().min(1).max(100), z.null()]).default(null), "content": z.union([z.string().min(1).max(2000), z.null()]).default(null), "fact_type": z.union([z.enum(["preference","profile","project","decision","reference"]), z.null()]).default(null), "status": z.union([z.enum(["active","deprecated"]), z.null()]).default(null), "importance": z.union([z.number().int().gte(0).lte(100), z.null()]).default(null) });
 export type ContextFactUpdateRequest = z.infer<typeof ContextFactUpdateRequestSchema>;
 
+export const ContextFactCandidateApproveRequestSchema = z.object({ "revision": z.number().int().gte(1), "title": z.union([z.string().min(1).max(100), z.null()]).default(null), "content": z.union([z.string().min(1).max(2000), z.null()]).default(null), "fact_type": z.union([z.enum(["preference","profile","project","decision","reference"]), z.null()]).default(null), "importance": z.union([z.number().int().gte(0).lte(100), z.null()]).default(null) });
+export type ContextFactCandidateApproveRequest = z.infer<typeof ContextFactCandidateApproveRequestSchema>;
+
+export const ContextFactCandidateRejectRequestSchema = z.object({ "revision": z.number().int().gte(1) });
+export type ContextFactCandidateRejectRequest = z.infer<typeof ContextFactCandidateRejectRequestSchema>;
+
+export const ContextExtractionSettingsUpdateRequestSchema = z.object({ "enabled": z.boolean() });
+export type ContextExtractionSettingsUpdateRequest = z.infer<typeof ContextExtractionSettingsUpdateRequestSchema>;
+
 export const ApiErrorPayloadSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null) }).catchall(z.any());
 export type ApiErrorPayload = z.infer<typeof ApiErrorPayloadSchema>;
 
@@ -136,6 +145,18 @@ export type ContextFactResponse = z.infer<typeof ContextFactResponseSchema>;
 
 export const ContextFactListResponseSchema = z.object({ "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional(), "total_active": z.number().int().default(0), "next_cursor": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ContextFactListResponse = z.infer<typeof ContextFactListResponseSchema>;
+
+export const ContextFactCandidateResponseSchema = z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("chat"), "source_ref": z.union([z.string(), z.null()]).default(null), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.number().gte(0).lte(1).default(0), "status": z.enum(["pending","approved","rejected"]), "revision": z.number().int().gte(1), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export type ContextFactCandidateResponse = z.infer<typeof ContextFactCandidateResponseSchema>;
+
+export const ContextFactCandidateListResponseSchema = z.object({ "candidates": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("chat"), "source_ref": z.union([z.string(), z.null()]).default(null), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.number().gte(0).lte(1).default(0), "status": z.enum(["pending","approved","rejected"]), "revision": z.number().int().gte(1), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional(), "next_cursor": z.union([z.string(), z.null()]).default(null), "total_pending": z.number().int().default(0) }).catchall(z.any());
+export type ContextFactCandidateListResponse = z.infer<typeof ContextFactCandidateListResponseSchema>;
+
+export const ContextFactCandidateApprovalResponseSchema = z.object({ "candidate": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("chat"), "source_ref": z.union([z.string(), z.null()]).default(null), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.number().gte(0).lte(1).default(0), "status": z.enum(["pending","approved","rejected"]), "revision": z.number().int().gte(1), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()), "fact": z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any()) }).catchall(z.any());
+export type ContextFactCandidateApprovalResponse = z.infer<typeof ContextFactCandidateApprovalResponseSchema>;
+
+export const ContextExtractionSettingsResponseSchema = z.object({ "enabled": z.boolean().default(false) }).catchall(z.any());
+export type ContextExtractionSettingsResponse = z.infer<typeof ContextExtractionSettingsResponseSchema>;
 
 export const ContextDigestGroupSchema = z.object({ "fact_type": z.string(), "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional() }).catchall(z.any());
 export type ContextDigestGroup = z.infer<typeof ContextDigestGroupSchema>;

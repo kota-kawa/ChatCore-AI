@@ -72,6 +72,7 @@ DEFAULT_CONTEXT_FACT_IMPORTANCE = 50
 ContextFactType = Literal["preference", "profile", "project", "decision", "reference"]
 ContextFactStatus = Literal["active", "deprecated"]
 ContextFactSourceKind = Literal["manual", "chat", "mcp", "import"]
+ContextFactCandidateStatus = Literal["pending", "approved", "rejected"]
 
 ChatMessageStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_MESSAGE_LENGTH)]
 ChatRoomIdStr = Annotated[str, Field(min_length=1, max_length=MAX_CHAT_ROOM_ID_LENGTH)]
@@ -503,6 +504,36 @@ class ContextFactUpdateRequest(RequestPayloadModel):
         if self.content is not None and not self.content.strip():
             raise ValueError("内容を空にはできません。")
         return self
+
+
+# 日本語: 自動抽出候補を編集して承認するリクエスト。
+# English: Conflict-safe request for editing and approving an extracted candidate.
+class ContextFactCandidateApproveRequest(RequestPayloadModel):
+    revision: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_TITLE_LENGTH)
+    content: str | None = Field(default=None, min_length=1, max_length=MAX_CONTEXT_FACT_CONTENT_LENGTH)
+    fact_type: ContextFactType | None = None
+    importance: int | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _require_non_blank_edits(self) -> "ContextFactCandidateApproveRequest":
+        if self.title is not None and not self.title.strip():
+            raise ValueError("タイトルを空にはできません。")
+        if self.content is not None and not self.content.strip():
+            raise ValueError("内容を空にはできません。")
+        return self
+
+
+# 日本語: 自動抽出候補を競合安全に却下するリクエスト。
+# English: Conflict-safe request for rejecting an extracted candidate.
+class ContextFactCandidateRejectRequest(RequestPayloadModel):
+    revision: int = Field(ge=1)
+
+
+# 日本語: 会話からのコンテキスト自動抽出のopt-in設定。
+# English: User opt-in setting for automatic context extraction from chats.
+class ContextExtractionSettingsUpdateRequest(RequestPayloadModel):
+    enabled: bool
 
 
 # 日本語: MCP 経由でコンテキスト事実を保存するリクエスト。

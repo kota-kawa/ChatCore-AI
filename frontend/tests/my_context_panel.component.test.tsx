@@ -3,12 +3,21 @@ import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";
 
 import { MyContextPanel } from "../components/memo/MyContextPanel";
+import type { ContextCandidateApi } from "../components/memo/ContextCandidatePanel";
 import type { ContextFact } from "../lib/memo/context_types";
 
 function renderPanel(props: Parameters<typeof MyContextPanel>[0]) {
+  const candidateApi: ContextCandidateApi = {
+    load: vi.fn().mockResolvedValue({ candidates: [], totalPending: 0, nextCursor: null }),
+    approve: vi.fn().mockResolvedValue(null),
+    reject: vi.fn().mockResolvedValue(undefined),
+    loadSettings: vi.fn().mockResolvedValue({ enabled: false }),
+    updateSettings: vi.fn().mockImplementation(async ({ enabled }) => ({ enabled })),
+    ...props.candidateApi,
+  };
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <MyContextPanel {...props} />
+      <MyContextPanel {...props} candidateApi={candidateApi} />
     </SWRConfig>,
   );
 }
@@ -35,6 +44,21 @@ const projectFact: ContextFact = {
   revision: 1,
 };
 
+const candidateFact = {
+  id: 30,
+  fact_type: "decision" as const,
+  title: "API互換性を優先する",
+  content: "段階移行中は既存クライアントとの互換性を維持する",
+  importance: 75,
+  confidence: 0.9,
+  status: "pending" as const,
+  revision: 1,
+  source_kind: "chat" as const,
+  source_ref: "chat:100",
+  created_at: null,
+  updated_at: null,
+};
+
 describe("MyContextPanel", () => {
   it("shows a login prompt when logged out and does not fetch", () => {
     const load = vi.fn();
@@ -56,6 +80,33 @@ describe("MyContextPanel", () => {
     expect(screen.getByText("出典: 手動")).toBeInTheDocument();
     expect(screen.getByText("重要度: 高")).toBeInTheDocument();
     expect(load).toHaveBeenCalledWith({ factType: null, status: "active" });
+  });
+
+  it("revalidates the fact list after approving an AI suggestion", async () => {
+    const load = vi.fn().mockResolvedValue({
+      facts: [sampleFact],
+      totalActive: 1,
+      nextCursor: null,
+    });
+    const approve = vi.fn().mockResolvedValue(null);
+    renderPanel({
+      isLoggedIn: true,
+      api: { load },
+      candidateApi: {
+        load: vi.fn().mockResolvedValue({
+          candidates: [candidateFact],
+          totalPending: 1,
+          nextCursor: null,
+        }),
+        approve,
+      },
+    });
+
+    await screen.findByText(candidateFact.title);
+    fireEvent.click(screen.getByRole("button", { name: "承認" }));
+
+    await waitFor(() => expect(approve).toHaveBeenCalledWith(candidateFact.id, { revision: 1 }));
+    await waitFor(() => expect(load.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
   it("creates a fact through the editor and reloads", async () => {
