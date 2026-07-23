@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   approveContextCandidate,
+  createContextFact,
   loadContextCandidates,
   loadContextExtractionSettings,
   loadContextFacts,
   rejectContextCandidate,
+  updateContextFact,
   updateContextExtractionSettings,
 } from "../lib/memo/context_api";
 
@@ -45,14 +47,35 @@ test("loadContextFacts sends filters and an opaque cursor", async () => {
   }
 });
 
-test("loadContextFacts maps an unauthenticated response to an empty list", async () => {
+test("loadContextFacts exposes an expired session and updates the shared auth cache", async () => {
+  const storedValues = new Map<string, string>();
+  const originalLocalStorage = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => storedValues.get(key) ?? null,
+      setItem: (key: string, value: string) => storedValues.set(key, value),
+    },
+  });
   globalThis.fetch = (async () => jsonResponse({ error: "ログインが必要です。" }, 401)) as typeof fetch;
 
   try {
-    const result = await loadContextFacts({ status: "active" });
-    assert.deepEqual(result, { facts: [], totalActive: 0, nextCursor: null });
+    await assert.rejects(
+      () => loadContextFacts({ status: "active" }),
+      (error: Error & { status?: number }) => {
+        assert.match(error.message, /ログインセッションが切れました。再ログインしてください。/);
+        assert.equal(error.status, 401);
+        return true;
+      },
+    );
+    assert.equal(storedValues.get("chatcore.auth.loggedIn"), "0");
+    assert.ok(storedValues.has("chatcore.auth.cachedAt"));
   } finally {
     globalThis.fetch = originalFetch;
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: originalLocalStorage,
+    });
   }
 });
 
@@ -63,6 +86,118 @@ test("loadContextFacts exposes the API error message", async () => {
     await assert.rejects(
       () => loadContextFacts({ status: "active" }),
       /状態の指定が不正です。/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createContextFact sends the POST payload and returns the created fact", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const createdFact = {
+    id: 21,
+    fact_type: "project" as const,
+    title: "Chat-Core",
+    content: "Context Vaultを実装する。",
+    status: "active" as const,
+    revision: 1,
+    source_kind: "manual" as const,
+    importance: 75,
+    created_at: "2026-07-23T12:00:00Z",
+    updated_at: "2026-07-23T12:00:00Z",
+  };
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse({ status: "success", fact: createdFact });
+  }) as typeof fetch;
+
+  try {
+    const input = {
+      fact_type: "project" as const,
+      title: "Chat-Core",
+      content: "Context Vaultを実装する。",
+      importance: 75,
+    };
+    const result = await createContextFact(input);
+
+    assert.deepEqual(result, createdFact);
+    assert.equal(requests[0]?.url, "/api/context-facts");
+    assert.equal(requests[0]?.init?.method, "POST");
+    assert.equal(new Headers(requests[0]?.init?.headers).get("Content-Type"), "application/json");
+    assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), input);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createContextFact exposes backend errors", async () => {
+  globalThis.fetch = (async () =>
+    jsonResponse({ error: "有効なコンテキストは200件までです。" }, 409)) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () =>
+        createContextFact({
+          fact_type: "profile",
+          title: "プロフィール",
+          content: "サンプル",
+          importance: 50,
+        }),
+      /有効なコンテキストは200件までです。/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateContextFact sends the revision-guarded PUT payload and returns the updated fact", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const updatedFact = {
+    id: 21,
+    fact_type: "decision" as const,
+    title: "権限分離",
+    content: "メモとコンテキストの権限を分離する。",
+    status: "deprecated" as const,
+    revision: 4,
+    source_kind: "manual" as const,
+    importance: 75,
+    created_at: "2026-07-23T12:00:00Z",
+    updated_at: "2026-07-23T12:30:00Z",
+  };
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse({ status: "success", fact: updatedFact });
+  }) as typeof fetch;
+
+  try {
+    const input = {
+      revision: 3,
+      fact_type: "decision" as const,
+      title: "権限分離",
+      content: "メモとコンテキストの権限を分離する。",
+      status: "deprecated" as const,
+      importance: 75,
+    };
+    const result = await updateContextFact(21, input);
+
+    assert.deepEqual(result, updatedFact);
+    assert.equal(requests[0]?.url, "/api/context-facts/21");
+    assert.equal(requests[0]?.init?.method, "PUT");
+    assert.equal(new Headers(requests[0]?.init?.headers).get("Content-Type"), "application/json");
+    assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), input);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateContextFact exposes revision conflict errors", async () => {
+  globalThis.fetch = (async () =>
+    jsonResponse({ error: "コンテキストが更新されています。再読み込みしてください。" }, 409)) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => updateContextFact(21, { revision: 3, status: "active" }),
+      /コンテキストが更新されています。再読み込みしてください。/,
     );
   } finally {
     globalThis.fetch = originalFetch;

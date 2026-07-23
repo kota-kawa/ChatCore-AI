@@ -240,10 +240,13 @@ def update_fact(
         status=status,
         importance=(max(0, min(int(importance), 100)) if importance is not None else None),
     )
-    # Re-embed when the searchable text changed and the fact remains active.
-    if str(fact.get("status")) == "active" and (
-        title is not None or content is not None or fact_type is not None
-    ):
+    # Every active revision gets an embedding task, even when only metadata
+    # changed. A task for the previous revision may still be in flight and its
+    # revision-guarded write will then be rejected. Scheduling the returned
+    # snapshot prevents that race from leaving the latest revision without a
+    # vector. It also regenerates from edits made while deprecated when a fact is
+    # restored with a status-only update.
+    if str(fact.get("status")) == "active":
         schedule_embedding(
             int(fact["id"]),
             str(fact["fact_type"]),

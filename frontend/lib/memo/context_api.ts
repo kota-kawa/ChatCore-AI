@@ -1,5 +1,8 @@
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { setLoggedInState } from "../../scripts/core/app_state";
+import { writeCachedAuthState } from "../../scripts/core/auth_state_cache";
 import { memoFetchJsonOrThrow } from "./api";
+import type { HttpError } from "./types";
 import type {
   ContextCandidateApproveInput,
   ContextCandidateListPayload,
@@ -30,6 +33,25 @@ export type ContextCandidateListResult = {
   nextCursor: string | null;
 };
 
+function createContextApiError(message: string, status: number): HttpError {
+  const error = new Error(message) as HttpError;
+  error.status = status;
+  return error;
+}
+
+// 認証切れを空データとして扱わず、ページ間で共有する認証状態にも反映する。
+// Do not disguise an expired session as empty data; propagate it to shared auth state.
+function handleExpiredContextSession(): never {
+  writeCachedAuthState(false);
+  if (typeof document !== "undefined") {
+    setLoggedInState(false);
+  }
+  throw createContextApiError(
+    "ログインセッションが切れました。再ログインしてください。",
+    401,
+  );
+}
+
 // マイコンテキスト一覧を種類・状態で絞り込んで取得する。
 // Load the context vault list, filtered by fact type / status.
 export async function loadContextFacts(params: {
@@ -46,9 +68,12 @@ export async function loadContextFacts(params: {
     credentials: "same-origin",
   });
   const data: ContextFactListPayload = await res.json().catch(() => ({}));
-  if (res.status === 401) return { facts: [], totalActive: 0, nextCursor: null };
+  if (res.status === 401) handleExpiredContextSession();
   if (!res.ok) {
-    throw new Error(data.error || `コンテキストの取得に失敗しました (${res.status})`);
+    throw createContextApiError(
+      data.error || `コンテキストの取得に失敗しました (${res.status})`,
+      res.status,
+    );
   }
   return {
     facts: Array.isArray(data.facts) ? data.facts : [],

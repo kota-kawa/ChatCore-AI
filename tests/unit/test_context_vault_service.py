@@ -180,6 +180,66 @@ class ContextVaultServiceTestCase(unittest.TestCase):
         self.assertEqual(repo.update_fact.call_args.kwargs["importance"], 90)
         schedule.assert_called_once()
 
+    def test_active_metadata_update_reembeds_latest_revision(self):
+        repo = MagicMock()
+        repo.update_fact.return_value = fact_row(importance=90, revision=3)
+        with self._patch_repo(repo), patch(
+            "services.context_vault_service.schedule_embedding"
+        ) as schedule:
+            result = update_fact(7, 3, expected_revision=2, importance=90)
+
+        self.assertEqual(result.revision, 3)
+        schedule.assert_called_once_with(
+            3,
+            "preference",
+            "Editor",
+            "Uses vim keybindings",
+            3,
+        )
+
+    def test_edit_while_deprecated_then_restore_embeds_latest_snapshot(self):
+        repo = MagicMock()
+        repo.update_fact.side_effect = [
+            fact_row(
+                title="Current editor",
+                content="Uses Helix",
+                status="deprecated",
+                revision=3,
+            ),
+            fact_row(
+                title="Current editor",
+                content="Uses Helix",
+                status="active",
+                revision=4,
+            ),
+        ]
+        with self._patch_repo(repo), patch(
+            "services.context_vault_service.schedule_embedding"
+        ) as schedule:
+            deprecated = update_fact(
+                7,
+                3,
+                expected_revision=2,
+                title="Current editor",
+                content="Uses Helix",
+            )
+            restored = update_fact(
+                7,
+                3,
+                expected_revision=3,
+                status="active",
+            )
+
+        self.assertEqual(deprecated.status, "deprecated")
+        self.assertEqual(restored.status, "active")
+        schedule.assert_called_once_with(
+            3,
+            "preference",
+            "Current editor",
+            "Uses Helix",
+            4,
+        )
+
     def test_deprecate_sets_status_and_skips_reembedding(self):
         repo = MagicMock()
         repo.update_fact.return_value = fact_row(status="deprecated", revision=3)
