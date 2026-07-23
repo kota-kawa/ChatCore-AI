@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 
+import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
+import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import {
   createContextFact as defaultCreate,
   loadContextFacts as defaultLoad,
@@ -66,8 +69,16 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [busyFactId, setBusyFactId] = useState<number | null>(null);
+  const [additionalFacts, setAdditionalFacts] = useState<ContextFact[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const activeLoadMoreRef = useRef<string | null>(null);
+  const activeFilterKeyRef = useRef<string | null>(null);
+  const modalRef = useRef<HTMLElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   const swrKey = isLoggedIn ? `context-facts|${statusFilter}|${typeFilter}` : null;
+  activeFilterKeyRef.current = swrKey;
   const { data, error, isLoading, mutate } = useSWR(
     swrKey,
     () =>
@@ -78,7 +89,24 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
     { revalidateOnFocus: false },
   );
 
-  const facts = data?.facts ?? [];
+  useEffect(() => {
+    setAdditionalFacts([]);
+    setNextCursor(data?.nextCursor ?? null);
+    setLoadingMore(false);
+    activeLoadMoreRef.current = null;
+  }, [data, swrKey]);
+
+  useEffect(() => {
+    setErrorText(null);
+  }, [swrKey]);
+
+  const facts = useMemo(() => {
+    const uniqueFacts = new Map<number, ContextFact>();
+    for (const fact of [...(data?.facts ?? []), ...additionalFacts]) {
+      if (!uniqueFacts.has(fact.id)) uniqueFacts.set(fact.id, fact);
+    }
+    return [...uniqueFacts.values()];
+  }, [additionalFacts, data?.facts]);
   const totalActive = data?.totalActive ?? 0;
 
   const typeOptions = useMemo(
@@ -105,10 +133,28 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
     });
   };
 
-  const closeEditor = () => {
+  const closeEditor = useCallback(() => {
     setEditor(null);
     setSubmitting(false);
-  };
+    setErrorText(null);
+  }, []);
+
+  const getInitialModalFocus = useCallback(
+    () => titleInputRef.current ?? modalRef.current,
+    [],
+  );
+
+  const closeEditorWithEscape = useCallback(() => {
+    if (!submitting) closeEditor();
+  }, [closeEditor, submitting]);
+
+  useModalFocusTrap({
+    isOpen: editor !== null,
+    containerRef: modalRef,
+    getInitialFocus: getInitialModalFocus,
+    onEscape: closeEditorWithEscape,
+  });
+  useBodyScrollLock(editor !== null);
 
   const handleSubmit = async () => {
     if (!editor) return;
@@ -156,6 +202,41 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
       setErrorText(err instanceof Error ? err.message : "状態の変更に失敗しました。");
     } finally {
       setBusyFactId(null);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!nextCursor || loadingMore || activeLoadMoreRef.current) return;
+
+    const requestedCursor = nextCursor;
+    const requestedFilterKey = swrKey;
+    activeLoadMoreRef.current = requestedCursor;
+    setLoadingMore(true);
+    setErrorText(null);
+    try {
+      const page = await load({
+        factType: typeFilter === "all" ? null : typeFilter,
+        status: statusFilter,
+        cursor: requestedCursor,
+      });
+      if (activeFilterKeyRef.current !== requestedFilterKey) return;
+
+      const knownIds = new Set(facts.map((fact) => fact.id));
+      const newFacts: ContextFact[] = [];
+      for (const fact of page.facts) {
+        if (knownIds.has(fact.id)) continue;
+        knownIds.add(fact.id);
+        newFacts.push(fact);
+      }
+      setAdditionalFacts((currentFacts) => [...currentFacts, ...newFacts]);
+      setNextCursor(page.nextCursor === requestedCursor ? null : page.nextCursor);
+    } catch (err) {
+      if (activeFilterKeyRef.current === requestedFilterKey) {
+        setErrorText(err instanceof Error ? err.message : "追加のコンテキストを取得できませんでした。");
+      }
+    } finally {
+      if (activeFilterKeyRef.current === requestedFilterKey) setLoadingMore(false);
+      if (activeLoadMoreRef.current === requestedCursor) activeLoadMoreRef.current = null;
     }
   };
 
@@ -214,90 +295,145 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
         </div>
       </div>
 
-      {errorText && (
+      {errorText && editor === null && (
         <div className="memo-flash memo-flash--error" role="alert">
           {errorText}
         </div>
       )}
 
-      {editor && (
-        <section className="memo-context-editor" aria-label="コンテキスト編集">
-          <div className="memo-context-editor__row">
-            <span className="memo-context-editor__label">種類</span>
-            <MemoSelect
-              id="context-fact-type"
-              ariaLabel="種類"
-              value={editor.factType}
-              onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
-              options={CONTEXT_FACT_TYPE_OPTIONS}
-              className="memo-context-editor__select"
-            />
-            <span className="memo-context-editor__label">重要度</span>
-            <MemoSelect
-              id="context-fact-importance"
-              ariaLabel="重要度"
-              value={String(editor.importance)}
-              onChange={(value) =>
-                setEditor({
-                  ...editor,
-                  importance: Number(value) as ContextFactImportancePreset,
-                  importanceDirty: true,
-                })
-              }
-              options={CONTEXT_FACT_IMPORTANCE_OPTIONS}
-              className="memo-context-editor__importance-select"
-            />
-          </div>
-          <label className="memo-context-editor__field" htmlFor="context-fact-title">
-            <span className="memo-context-editor__label">タイトル</span>
-            <input
-              id="context-fact-title"
-              className="memo-context-editor__title"
-              type="text"
-              maxLength={100}
-              placeholder="例: エディタの好み"
-              value={editor.title}
-              onChange={(e) => setEditor({ ...editor, title: e.target.value })}
-            />
-          </label>
-          <label className="memo-context-editor__field" htmlFor="context-fact-content">
-            <span className="memo-context-editor__label">内容</span>
-            <textarea
-              id="context-fact-content"
-              className="memo-context-editor__content"
-              maxLength={2000}
-              rows={4}
-              placeholder="Markdown可、2000文字まで"
-              value={editor.content}
-              onChange={(e) => setEditor({ ...editor, content: e.target.value })}
-            />
-          </label>
-          <div className="memo-context-editor__actions">
-            <button
-              type="button"
-              className="memo-context-editor__cancel"
-              onClick={closeEditor}
-              disabled={submitting}
+      {editor && typeof document !== "undefined" && createPortal(
+        <div className="memo-context-modal">
+          <div
+            className="memo-context-modal__overlay"
+            onClick={() => {
+              if (!submitting) closeEditor();
+            }}
+            aria-hidden="true"
+          />
+          <section
+            ref={modalRef}
+            className="memo-context-modal__content memo-context-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="context-editor-title"
+            aria-describedby="context-editor-description"
+            aria-busy={submitting}
+            tabIndex={-1}
+          >
+            <header className="memo-context-modal__header">
+              <div>
+                <h2 id="context-editor-title">
+                  {editor.mode === "create" ? "コンテキストを追加" : "コンテキストを編集"}
+                </h2>
+                <p id="context-editor-description">
+                  AIに引き継ぎたい事実を2000文字以内で保存します。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="memo-context-modal__close"
+                aria-label="閉じる"
+                onClick={closeEditor}
+                disabled={submitting}
+              >
+                <i className="bi bi-x-lg" aria-hidden="true" />
+              </button>
+            </header>
+            <form
+              className="memo-context-editor__form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSubmit();
+              }}
             >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              className="memo-context-editor__save"
-              onClick={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? "保存中…" : editor.mode === "create" ? "追加" : "更新"}
-            </button>
-          </div>
-        </section>
+              {errorText && (
+                <div className="memo-flash memo-flash--error" role="alert">
+                  {errorText}
+                </div>
+              )}
+              <div className="memo-context-editor__row">
+                <span className="memo-context-editor__label">種類</span>
+                <MemoSelect
+                  id="context-fact-type"
+                  ariaLabel="種類"
+                  value={editor.factType}
+                  onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
+                  options={CONTEXT_FACT_TYPE_OPTIONS}
+                  className="memo-context-editor__select"
+                />
+                <span className="memo-context-editor__label">重要度</span>
+                <MemoSelect
+                  id="context-fact-importance"
+                  ariaLabel="重要度"
+                  value={String(editor.importance)}
+                  onChange={(value) =>
+                    setEditor({
+                      ...editor,
+                      importance: Number(value) as ContextFactImportancePreset,
+                      importanceDirty: true,
+                    })
+                  }
+                  options={CONTEXT_FACT_IMPORTANCE_OPTIONS}
+                  className="memo-context-editor__importance-select"
+                />
+              </div>
+              <label className="memo-context-editor__field" htmlFor="context-fact-title">
+                <span className="memo-context-editor__label">タイトル</span>
+                <input
+                  ref={titleInputRef}
+                  id="context-fact-title"
+                  className="memo-context-editor__title"
+                  type="text"
+                  maxLength={100}
+                  required
+                  placeholder="例: エディタの好み"
+                  value={editor.title}
+                  onChange={(e) => setEditor({ ...editor, title: e.target.value })}
+                />
+              </label>
+              <label className="memo-context-editor__field" htmlFor="context-fact-content">
+                <span className="memo-context-editor__label">内容</span>
+                <textarea
+                  id="context-fact-content"
+                  className="memo-context-editor__content"
+                  maxLength={2000}
+                  rows={4}
+                  required
+                  placeholder="Markdown可、2000文字まで"
+                  value={editor.content}
+                  onChange={(e) => setEditor({ ...editor, content: e.target.value })}
+                />
+              </label>
+              <div className="memo-context-editor__actions">
+                <button
+                  type="button"
+                  className="memo-context-editor__cancel"
+                  onClick={closeEditor}
+                  disabled={submitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  className="memo-context-editor__save"
+                  disabled={submitting}
+                >
+                  {submitting ? "保存中…" : editor.mode === "create" ? "追加" : "更新"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>,
+        document.body,
       )}
 
       {isLoading ? (
         <MemoListSkeleton />
       ) : error ? (
-        <div className="memo-context-empty">
-          <p className="memo-context-empty__text">コンテキストを取得できませんでした。</p>
+        <div className="memo-context-empty" role="alert">
+          <p className="memo-context-empty__text">
+            {error instanceof Error ? error.message : "コンテキストを取得できませんでした。"}
+          </p>
         </div>
       ) : facts.length === 0 ? (
         <div className="memo-context-empty">
@@ -309,50 +445,69 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
           </p>
         </div>
       ) : (
-        <ul className="memo-context-list">
-          {facts.map((fact) => (
-            <li key={fact.id}>
-              <article
-                className={`memo-context-card${fact.status === "deprecated" ? " is-deprecated" : ""}`}
+        <>
+          <ul className="memo-context-list">
+            {facts.map((fact) => (
+              <li key={fact.id}>
+                <article
+                  className={`memo-context-card${fact.status === "deprecated" ? " is-deprecated" : ""}`}
+                >
+                  <div className="memo-context-card__head">
+                    <span
+                      className={`memo-context-card__badge memo-context-card__badge--${fact.fact_type}`}
+                    >
+                      {CONTEXT_FACT_TYPE_LABELS[fact.fact_type]}
+                    </span>
+                    <h3 className="memo-context-card__title">{fact.title}</h3>
+                  </div>
+                  <MemoMarkdown
+                    className="memo-context-card__body md-content"
+                    text={fact.content}
+                  />
+                  <div className="memo-context-card__meta">
+                    <span>出典: {CONTEXT_FACT_SOURCE_LABELS[fact.source_kind]}</span>
+                    <span>重要度: {getContextFactImportanceLabel(fact.importance)}</span>
+                  </div>
+                  <div className="memo-context-card__actions">
+                    <button
+                      type="button"
+                      className="memo-context-card__action"
+                      onClick={() => openEdit(fact)}
+                      disabled={busyFactId === fact.id}
+                    >
+                      <i className="bi bi-pencil" aria-hidden="true"></i>
+                      <span>編集</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="memo-context-card__action"
+                      onClick={() => handleToggleStatus(fact)}
+                      disabled={busyFactId === fact.id}
+                    >
+                      <i
+                        className={`bi ${fact.status === "active" ? "bi-archive" : "bi-arrow-counterclockwise"}`}
+                        aria-hidden="true"
+                      ></i>
+                      <span>{fact.status === "active" ? "無効化" : "復元"}</span>
+                    </button>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ul>
+          {nextCursor && (
+            <div className="memo-context__pagination">
+              <button
+                type="button"
+                className="memo-context__load-more"
+                onClick={() => void handleLoadMore()}
+                disabled={loadingMore}
               >
-                <div className="memo-context-card__head">
-                  <span className={`memo-context-card__badge memo-context-card__badge--${fact.fact_type}`}>
-                    {CONTEXT_FACT_TYPE_LABELS[fact.fact_type]}
-                  </span>
-                  <h3 className="memo-context-card__title">{fact.title}</h3>
-                </div>
-                <MemoMarkdown className="memo-context-card__body md-content" text={fact.content} />
-                <div className="memo-context-card__meta">
-                  <span>出典: {CONTEXT_FACT_SOURCE_LABELS[fact.source_kind]}</span>
-                  <span>重要度: {getContextFactImportanceLabel(fact.importance)}</span>
-                </div>
-                <div className="memo-context-card__actions">
-                  <button
-                    type="button"
-                    className="memo-context-card__action"
-                    onClick={() => openEdit(fact)}
-                    disabled={busyFactId === fact.id}
-                  >
-                    <i className="bi bi-pencil" aria-hidden="true"></i>
-                    <span>編集</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="memo-context-card__action"
-                    onClick={() => handleToggleStatus(fact)}
-                    disabled={busyFactId === fact.id}
-                  >
-                    <i
-                      className={`bi ${fact.status === "active" ? "bi-archive" : "bi-arrow-counterclockwise"}`}
-                      aria-hidden="true"
-                    ></i>
-                    <span>{fact.status === "active" ? "無効化" : "復元"}</span>
-                  </button>
-                </div>
-              </article>
-            </li>
-          ))}
-        </ul>
+                {loadingMore ? "読み込み中…" : "さらに読み込む"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

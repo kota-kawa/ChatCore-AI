@@ -8,7 +8,12 @@ from typing import Any
 from services.api_errors import ApiServiceError, ResourceNotFoundError
 from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
-from services.error_messages import ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT
+from services.error_messages import (
+    ERROR_CONTEXT_FACT_IDEMPOTENCY_CONFLICT,
+    ERROR_CONTEXT_FACT_LIMIT_REACHED,
+    ERROR_CONTEXT_FACT_NOT_FOUND,
+    ERROR_CONTEXT_FACT_REVISION_CONFLICT,
+)
 
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
@@ -17,14 +22,6 @@ DB_RETRY_BACKOFF_SECONDS = 0.05
 # Cap on active facts so the personal-context digest and injected context stay bounded.
 MAX_ACTIVE_CONTEXT_FACTS = 200
 
-ERROR_CONTEXT_FACT_NOT_FOUND = "該当するコンテキストが見つかりません。"
-ERROR_CONTEXT_FACT_REVISION_CONFLICT = (
-    "他の場所で先に更新されました。最新の内容を読み込み直してからやり直してください。"
-)
-ERROR_CONTEXT_FACT_LIMIT_REACHED = (
-    f"保存できる有効なコンテキストは{MAX_ACTIVE_CONTEXT_FACTS}件までです。"
-    "不要な項目を無効化してから追加してください。"
-)
 # Advisory locks share a database-wide namespace. Use a dedicated first key so
 # an integer user ID cannot collide with another feature's one-key lock.
 _CONTEXT_FACT_LOCK_NAMESPACE = 1129601108  # ASCII "CTXT"

@@ -7548,7 +7548,67 @@ body.memo-page {
   color: #fff;
 }
 
-/* Inline editor */
+/* Context editor modal */
+:where(body.memo-page, .memo-page-shell) .memo-context-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(3px);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 42rem);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__header p {
+  margin: 0.25rem 0 0;
+  color: var(--memo-text-muted);
+  font-size: 0.82rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  color: var(--memo-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-modal__close:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-context-editor {
   display: flex;
   flex-direction: column;
@@ -7558,6 +7618,12 @@ body.memo-page {
   border-radius: 16px;
   background: var(--memo-card);
   box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-editor__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-editor__row {
@@ -7728,6 +7794,32 @@ body.memo-page {
 
 :where(body.memo-page, .memo-page-shell) .memo-context-card__action:disabled {
   opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__pagination {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.25rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__load-more {
+  min-width: 10rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  color: var(--memo-text);
+  background: var(--memo-card);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__load-more:hover:not(:disabled) {
+  border-color: var(--memo-amber);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__load-more:disabled {
+  opacity: 0.6;
   cursor: default;
 }
 
