@@ -7495,21 +7495,39 @@ body.memo-page {
   color: var(--memo-text-muted);
 }
 
+:where(body.memo-page, .memo-page-shell) .memo-context__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__portability-btn,
 :where(body.memo-page, .memo-page-shell) .memo-context__add-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  border: none;
   border-radius: 12px;
   padding: 0.6rem 1rem;
   font-weight: 700;
   font-size: 0.9rem;
-  color: #fff;
-  background: var(--memo-amber-strong);
   cursor: pointer;
   transition: transform 0.15s var(--memo-spring), box-shadow 0.15s ease;
 }
 
+:where(body.memo-page, .memo-page-shell) .memo-context__portability-btn {
+  border: 1px solid var(--memo-border);
+  color: var(--memo-text);
+  background: var(--memo-card);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__add-btn {
+  border: none;
+  color: #fff;
+  background: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context__portability-btn:hover,
 :where(body.memo-page, .memo-page-shell) .memo-context__add-btn:hover {
   transform: translateY(-1px);
   box-shadow: var(--memo-shadow);
@@ -7805,6 +7823,376 @@ body.memo-page {
 :where(body.memo-page, .memo-page-shell) .memo-context-modal__close:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* Context export / import modal */
+:where(body.memo-page, .memo-page-shell) .memo-context-portability {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 16px;
+  color: var(--memo-text);
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0.2rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 11px;
+  background: var(--memo-card-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  color: var(--memo-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__tabs button.is-active {
+  color: var(--memo-text);
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__tabs button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  color: var(--memo-text-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-height: 4.3rem;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 11px;
+  color: var(--memo-text-muted);
+  background: var(--memo-card-strong);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format label.is-active {
+  border-color: var(--memo-amber);
+  color: var(--memo-text);
+  background: var(--memo-card-accent);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format label span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__format label strong {
+  font-size: 0.9rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__file {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--memo-border);
+  border-radius: 12px;
+  background: var(--memo-card-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__file > label {
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__file input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  padding: 0.5rem;
+  color: var(--memo-text);
+  background: var(--memo-card);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__file > p {
+  margin: 0;
+  color: var(--memo-text-muted);
+  font-size: 0.75rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__selected-file {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--memo-text) !important;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.6rem 0.35rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  background: var(--memo-card-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__summary strong {
+  color: var(--memo-amber-strong);
+  font-size: 1.15rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__summary span {
+  color: var(--memo-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__warnings {
+  padding: 0.75rem;
+  border: 1px solid var(--memo-amber);
+  border-radius: 10px;
+  background: var(--memo-card-accent);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__warnings h3,
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples h3 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__warnings ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--memo-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples ul {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples li {
+  padding: 0.65rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  background: var(--memo-card-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples li > div {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples li > div span {
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  color: var(--memo-amber-strong);
+  background: var(--memo-card-accent);
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__samples li > div strong {
+  font-size: 0.82rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__sample-content {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  color: var(--memo-text-muted);
+  font-size: 0.76rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 10px;
+  color: var(--memo-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__confirmation input {
+  margin-top: 0.2rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__actions button,
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  padding: 0.52rem 0.85rem;
+  color: var(--memo-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__actions button.is-primary,
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result button.is-primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result > i {
+  color: var(--memo-amber-strong);
+  font-size: 2rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result h3,
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result p {
+  margin: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result p {
+  color: var(--memo-text-muted);
+  font-size: 0.84rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result dl {
+  display: flex;
+  gap: 1.2rem;
+  margin: 0;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result dl > div {
+  display: flex;
+  gap: 0.3rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result dt {
+  color: var(--memo-text-muted);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-portability__result dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  :where(body.memo-page, .memo-page-shell) .memo-context__header-actions {
+    width: 100%;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-context__portability-btn,
+  :where(body.memo-page, .memo-page-shell) .memo-context__add-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-context-portability__format {
+    grid-template-columns: 1fr;
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-context-portability__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :where(body.memo-page, .memo-page-shell) .memo-context-portability__actions {
+    flex-direction: column;
+  }
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal {

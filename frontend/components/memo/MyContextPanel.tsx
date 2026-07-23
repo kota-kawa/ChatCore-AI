@@ -28,6 +28,10 @@ import {
   ContextCandidatePanel,
   type ContextCandidateApi,
 } from "./ContextCandidatePanel";
+import {
+  ContextPortabilityModal,
+  type ContextPortabilityApi,
+} from "./ContextPortabilityModal";
 
 type ContextApi = {
   load: typeof defaultLoad;
@@ -39,6 +43,7 @@ type MyContextPanelProps = {
   isLoggedIn: boolean;
   api?: Partial<ContextApi>;
   candidateApi?: Partial<ContextCandidateApi>;
+  portabilityApi?: Partial<ContextPortabilityApi>;
 };
 
 type EditorState = {
@@ -63,7 +68,12 @@ const EMPTY_EDITOR: EditorState = {
   content: "",
 };
 
-export function MyContextPanel({ isLoggedIn, api, candidateApi }: MyContextPanelProps) {
+export function MyContextPanel({
+  isLoggedIn,
+  api,
+  candidateApi,
+  portabilityApi,
+}: MyContextPanelProps) {
   const load = api?.load ?? defaultLoad;
   const create = api?.create ?? defaultCreate;
   const update = api?.update ?? defaultUpdate;
@@ -77,6 +87,7 @@ export function MyContextPanel({ isLoggedIn, api, candidateApi }: MyContextPanel
   const [additionalFacts, setAdditionalFacts] = useState<ContextFact[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [isPortabilityOpen, setIsPortabilityOpen] = useState(false);
   const activeLoadMoreRef = useRef<string | null>(null);
   const activeFilterKeyRef = useRef<string | null>(null);
   const modalRef = useRef<HTMLElement | null>(null);
@@ -273,11 +284,31 @@ export function MyContextPanel({ isLoggedIn, api, candidateApi }: MyContextPanel
             保存した事実は、接続したAIサービスにMCP経由で共有できます（有効: {totalActive} 件）。
           </p>
         </div>
-        <button type="button" className="memo-context__add-btn" onClick={openCreate}>
-          <i className="bi bi-plus-lg" aria-hidden="true"></i>
-          <span>コンテキストを追加</span>
-        </button>
+        <div className="memo-context__header-actions">
+          <button
+            type="button"
+            className="memo-context__portability-btn"
+            onClick={() => setIsPortabilityOpen(true)}
+          >
+            <i className="bi bi-arrow-left-right" aria-hidden="true" />
+            <span>持ち運び</span>
+          </button>
+          <button type="button" className="memo-context__add-btn" onClick={openCreate}>
+            <i className="bi bi-plus-lg" aria-hidden="true"></i>
+            <span>コンテキストを追加</span>
+          </button>
+        </div>
       </header>
+
+      <ContextPortabilityModal
+        isOpen={isPortabilityOpen}
+        onClose={() => setIsPortabilityOpen(false)}
+        onImported={async () => {
+          setAdditionalFacts([]);
+          await mutate();
+        }}
+        api={portabilityApi}
+      />
 
       <ContextCandidatePanel
         api={candidateApi}

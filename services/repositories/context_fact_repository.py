@@ -214,6 +214,87 @@ class ContextFactRepository:
             finally:
                 cursor.close()
 
+    def list_all_facts(
+        self,
+        user_id: int,
+        *,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return every active/deprecated fact for a full owner export."""
+        limit_clause = " LIMIT %s" if limit is not None else ""
+        params: list[Any] = [user_id]
+        if limit is not None:
+            params.append(limit)
+        with self._connection_getter() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"""
+                    SELECT {_SELECT_COLUMNS}
+                      FROM context_facts
+                     WHERE user_id = %s
+                     ORDER BY created_at ASC, id ASC
+                     {limit_clause}
+                    """,
+                    tuple(params),
+                )
+                return [self._serialize_row(row) for row in cursor.fetchall()]
+            finally:
+                cursor.close()
+
+    def find_existing_portable_signatures(
+        self,
+        user_id: int,
+        facts: list[dict[str, Any]],
+    ) -> set[tuple[str, str, str, str, int]]:
+        """Return exact portable signatures already owned without loading the full vault."""
+        if not facts:
+            return set()
+        values_sql = ", ".join(["(%s, %s, %s, %s, %s)"] * len(facts))
+        params: list[Any] = []
+        for fact in facts:
+            params.extend(
+                [
+                    fact["fact_type"],
+                    fact["title"],
+                    fact["content"],
+                    fact["status"],
+                    fact["importance"],
+                ]
+            )
+        params.append(user_id)
+        with self._connection_getter() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"""
+                    WITH imported (fact_type, title, content, status, importance) AS (
+                        VALUES {values_sql}
+                    )
+                    SELECT DISTINCT
+                           imported.fact_type,
+                           imported.title,
+                           imported.content,
+                           imported.status,
+                           imported.importance
+                      FROM imported
+                      JOIN context_facts AS existing
+                        ON existing.user_id = %s
+                       AND existing.fact_type = imported.fact_type
+                       AND existing.title = imported.title
+                       AND existing.content = imported.content
+                       AND existing.status = imported.status
+                       AND existing.importance = imported.importance
+                    """,
+                    tuple(params),
+                )
+                return {
+                    (str(row[0]), str(row[1]), str(row[2]), str(row[3]), int(row[4]))
+                    for row in cursor.fetchall()
+                }
+            finally:
+                cursor.close()
+
     def get_fact(self, user_id: int, fact_id: int) -> dict[str, Any]:
         with self._connection_getter() as conn:
             cursor = conn.cursor()
@@ -398,6 +479,126 @@ class ContextFactRepository:
             )
 
         return self._run_write(op, error_message="Failed to create context fact after retry attempts.")
+
+    def bulk_import_facts(
+        self,
+        user_id: int,
+        facts: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Append a portable fact batch atomically, skipping exact duplicates."""
+
+        def portable_signature(fact: dict[str, Any]) -> tuple[str, str, str, str, int]:
+            return (
+                str(fact["fact_type"]),
+                str(fact["title"]),
+                str(fact["content"]),
+                str(fact["status"]),
+                int(fact["importance"]),
+            )
+
+        def op(cursor: Any) -> dict[str, Any]:
+            self._lock_user_writes(cursor, user_id)
+            unique_facts: list[dict[str, Any]] = []
+            seen: set[tuple[str, str, str, str, int]] = set()
+            skipped_duplicate_count = 0
+            for fact in facts:
+                signature = portable_signature(fact)
+                if signature in seen:
+                    skipped_duplicate_count += 1
+                    continue
+                seen.add(signature)
+                unique_facts.append(fact)
+
+            values_sql = ", ".join(["(%s, %s, %s, %s, %s)"] * len(unique_facts))
+            duplicate_params: list[Any] = []
+            for fact in unique_facts:
+                duplicate_params.extend(portable_signature(fact))
+            duplicate_params.append(user_id)
+            cursor.execute(
+                f"""
+                WITH imported (fact_type, title, content, status, importance) AS (
+                    VALUES {values_sql}
+                )
+                SELECT DISTINCT
+                       imported.fact_type,
+                       imported.title,
+                       imported.content,
+                       imported.status,
+                       imported.importance
+                  FROM imported
+                  JOIN context_facts AS existing
+                    ON existing.user_id = %s
+                   AND existing.fact_type = imported.fact_type
+                   AND existing.title = imported.title
+                   AND existing.content = imported.content
+                   AND existing.status = imported.status
+                   AND existing.importance = imported.importance
+                """,
+                tuple(duplicate_params),
+            )
+            existing_signatures = {
+                (str(row[0]), str(row[1]), str(row[2]), str(row[3]), int(row[4]))
+                for row in cursor.fetchall()
+            }
+            skipped_duplicate_count += len(existing_signatures)
+            importable = [
+                fact
+                for fact in unique_facts
+                if portable_signature(fact) not in existing_signatures
+            ]
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM context_facts WHERE user_id = %s AND status = 'active'",
+                (user_id,),
+            )
+            current_active = int((cursor.fetchone() or [0])[0])
+            active_to_insert = sum(1 for fact in importable if fact["status"] == "active")
+            if current_active + active_to_insert > MAX_ACTIVE_CONTEXT_FACTS:
+                raise ApiServiceError(ERROR_CONTEXT_FACT_LIMIT_REACHED, 409, status="fail")
+
+            imported: list[dict[str, Any]] = []
+            for fact in importable:
+                cursor.execute(
+                    f"""
+                    INSERT INTO context_facts (
+                        user_id,
+                        fact_type,
+                        title,
+                        content,
+                        source_kind,
+                        importance,
+                        status
+                    )
+                    VALUES (%s, %s, %s, %s, 'import', %s, %s)
+                    RETURNING {_SELECT_COLUMNS}
+                    """,
+                    (
+                        user_id,
+                        fact["fact_type"],
+                        fact["title"],
+                        fact["content"],
+                        fact["importance"],
+                        fact["status"],
+                    ),
+                )
+                row = cursor.fetchone()
+                if row is None:  # pragma: no cover - PostgreSQL RETURNING invariant
+                    raise RuntimeError("Context fact import did not return the inserted row.")
+                imported.append(self._serialize_row(row))
+
+            return {
+                "facts": imported,
+                "skipped_duplicate_count": skipped_duplicate_count,
+                "active_count": sum(1 for fact in imported if fact["status"] == "active"),
+                "deprecated_count": sum(
+                    1 for fact in imported if fact["status"] == "deprecated"
+                ),
+            }
+
+        return self._run_write(
+            op,
+            error_message="Failed to import context facts after retry attempts.",
+        )
 
     def update_fact(
         self,

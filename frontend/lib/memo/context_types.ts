@@ -12,6 +12,11 @@ import type {
   ContextFactListResponse,
   ContextFactResponse,
   ContextFactUpdateRequest,
+  ContextVaultImportConfirmRequest,
+  ContextVaultImportPreviewRequest,
+  ContextVaultImportPreviewResponse,
+  ContextVaultImportResponse,
+  ContextVaultPortableFact,
 } from "../../types/generated/api_schemas";
 
 export type ContextFact = ContextFactResponse;
@@ -73,6 +78,19 @@ export type ContextCandidateMutationPayload = Partial<ContextFactCandidateApprov
 
 export type ContextExtractionSettings = ContextExtractionSettingsResponse;
 export type ContextExtractionSettingsUpdateInput = ContextExtractionSettingsUpdateRequest;
+
+export type ContextVaultExportFormat = ContextVaultImportPreviewRequest["format"];
+export type ContextVaultImportPreviewInput = ContextVaultImportPreviewRequest;
+export type ContextVaultImportConfirmInput = ContextVaultImportConfirmRequest;
+export type ContextVaultImportPreview = Omit<
+  ContextVaultImportPreviewResponse,
+  "sample_facts" | "warnings"
+> & {
+  sample_facts: NonNullable<ContextVaultImportPreviewResponse["sample_facts"]>;
+  warnings: NonNullable<ContextVaultImportPreviewResponse["warnings"]>;
+};
+export type ContextVaultImportResult = ContextVaultImportResponse;
+export type ContextVaultImportSampleFact = ContextVaultPortableFact;
 
 export const CONTEXT_FACT_TYPE_LABELS: Record<ContextFactType, string> = {
   profile: "経歴・プロフィール",

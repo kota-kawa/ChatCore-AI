@@ -287,6 +287,72 @@ class ContextFactRepositoryTestCase(unittest.TestCase):
         )
         self.assertTrue(conflict_connection.rolled_back)
 
+    def test_bulk_import_is_locked_deduplicated_and_committed_once(self):
+        duplicate = ("project", "Chat-Core", "Existing", "active", 50)
+        inserted_row = list(_fact_row(fact_id=31, importance=70))
+        inserted_row[4] = "Imported"
+        inserted_row[11] = "deprecated"
+        cursor = FakeCursor(
+            fetchall_results=[[duplicate]],
+            fetchone_results=[(3,), tuple(inserted_row)],
+        )
+        repository, connection = _make_repo(cursor)
+
+        result = repository.bulk_import_facts(
+            7,
+            [
+                {
+                    "fact_type": "project",
+                    "title": "Chat-Core",
+                    "content": "Existing",
+                    "status": "active",
+                    "importance": 50,
+                },
+                {
+                    "fact_type": "project",
+                    "title": "Chat-Core",
+                    "content": "Imported",
+                    "status": "deprecated",
+                    "importance": 70,
+                },
+            ],
+        )
+
+        self.assertIn("pg_advisory_xact_lock", cursor.executed[0][0])
+        self.assertIn("WITH imported", cursor.executed[1][0])
+        self.assertIn("SELECT COUNT(*)", cursor.executed[2][0])
+        self.assertIn("INSERT INTO context_facts", cursor.executed[3][0])
+        self.assertEqual(result["skipped_duplicate_count"], 1)
+        self.assertEqual(result["active_count"], 0)
+        self.assertEqual(result["deprecated_count"], 1)
+        self.assertTrue(connection.committed)
+
+    def test_bulk_import_rejects_whole_batch_before_insert_when_cap_would_be_exceeded(self):
+        cursor = FakeCursor(
+            fetchall_results=[[]],
+            fetchone_results=[(MAX_ACTIVE_CONTEXT_FACTS,)],
+        )
+        repository, connection = _make_repo(cursor)
+
+        with self.assertRaises(ApiServiceError) as error:
+            repository.bulk_import_facts(
+                7,
+                [
+                    {
+                        "fact_type": "preference",
+                        "title": "Editor",
+                        "content": "Use Vim",
+                        "status": "active",
+                        "importance": 50,
+                    }
+                ],
+            )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertFalse(any(sql.startswith("INSERT") for sql, _ in cursor.executed))
+        self.assertTrue(connection.rolled_back)
+        self.assertFalse(connection.committed)
+
 
 if __name__ == "__main__":
     unittest.main()

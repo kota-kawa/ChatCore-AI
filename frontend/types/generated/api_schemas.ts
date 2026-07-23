@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: e8b49fbea455c08be2e1800321609562f050988dd4866c5c0d1aef39baea0c62
+// Schema fingerprint: d1f683ae51b8f5f9997f195daa1ef106d12626a8cd607af780e3d557315994cb
 
 import { z } from "zod";
 
@@ -86,6 +86,12 @@ export type ContextFactCreateRequest = z.infer<typeof ContextFactCreateRequestSc
 export const ContextFactUpdateRequestSchema = z.object({ "revision": z.number().int().gte(1), "title": z.union([z.string().min(1).max(100), z.null()]).default(null), "content": z.union([z.string().min(1).max(2000), z.null()]).default(null), "fact_type": z.union([z.enum(["preference","profile","project","decision","reference"]), z.null()]).default(null), "status": z.union([z.enum(["active","deprecated"]), z.null()]).default(null), "importance": z.union([z.number().int().gte(0).lte(100), z.null()]).default(null) });
 export type ContextFactUpdateRequest = z.infer<typeof ContextFactUpdateRequestSchema>;
 
+export const ContextVaultImportPreviewRequestSchema = z.object({ "format": z.enum(["json","markdown"]), "content": z.string().min(1).max(10485760) }).strict();
+export type ContextVaultImportPreviewRequest = z.infer<typeof ContextVaultImportPreviewRequestSchema>;
+
+export const ContextVaultImportConfirmRequestSchema = z.object({ "format": z.enum(["json","markdown"]), "content": z.string().min(1).max(10485760), "preview_token": z.string().min(1).max(2048) }).strict();
+export type ContextVaultImportConfirmRequest = z.infer<typeof ContextVaultImportConfirmRequestSchema>;
+
 export const ContextFactCandidateApproveRequestSchema = z.object({ "revision": z.number().int().gte(1), "title": z.union([z.string().min(1).max(100), z.null()]).default(null), "content": z.union([z.string().min(1).max(2000), z.null()]).default(null), "fact_type": z.union([z.enum(["preference","profile","project","decision","reference"]), z.null()]).default(null), "importance": z.union([z.number().int().gte(0).lte(100), z.null()]).default(null) });
 export type ContextFactCandidateApproveRequest = z.infer<typeof ContextFactCandidateApproveRequestSchema>;
 
@@ -145,6 +151,18 @@ export type ContextFactResponse = z.infer<typeof ContextFactResponseSchema>;
 
 export const ContextFactListResponseSchema = z.object({ "facts": z.array(z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "status": z.enum(["active","deprecated"]), "revision": z.number().int(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("manual"), "importance": z.number().int().gte(0).lte(100).default(50), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())).optional(), "total_active": z.number().int().default(0), "next_cursor": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ContextFactListResponse = z.infer<typeof ContextFactListResponseSchema>;
+
+export const ContextVaultPortableFactSchema = z.object({ "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string().min(1).max(100), "content": z.string().min(1).max(2000), "status": z.enum(["active","deprecated"]), "importance": z.number().int().gte(0).lte(100) }).strict();
+export type ContextVaultPortableFact = z.infer<typeof ContextVaultPortableFactSchema>;
+
+export const ContextVaultExportDocumentSchema = z.object({ "format": z.literal("chat-core-personal-context"), "version": z.literal(1), "exported_at": z.string(), "facts": z.array(z.object({ "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string().min(1).max(100), "content": z.string().min(1).max(2000), "status": z.enum(["active","deprecated"]), "importance": z.number().int().gte(0).lte(100) }).strict()) }).strict();
+export type ContextVaultExportDocument = z.infer<typeof ContextVaultExportDocumentSchema>;
+
+export const ContextVaultImportPreviewResponseSchema = z.object({ "preview_token": z.string(), "total_count": z.number().int().gte(0), "active_count": z.number().int().gte(0), "deprecated_count": z.number().int().gte(0), "duplicate_count": z.number().int().gte(0), "importable_count": z.number().int().gte(0), "can_import": z.boolean(), "sample_facts": z.array(z.object({ "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string().min(1).max(100), "content": z.string().min(1).max(2000), "status": z.enum(["active","deprecated"]), "importance": z.number().int().gte(0).lte(100) }).strict()).optional(), "warnings": z.array(z.string()).optional(), "expires_at": z.string() }).catchall(z.any());
+export type ContextVaultImportPreviewResponse = z.infer<typeof ContextVaultImportPreviewResponseSchema>;
+
+export const ContextVaultImportResponseSchema = z.object({ "status": z.literal("success").default("success"), "imported_count": z.number().int().gte(0), "skipped_duplicate_count": z.number().int().gte(0), "active_count": z.number().int().gte(0), "deprecated_count": z.number().int().gte(0) }).catchall(z.any());
+export type ContextVaultImportResponse = z.infer<typeof ContextVaultImportResponseSchema>;
 
 export const ContextFactCandidateResponseSchema = z.object({ "id": z.number().int(), "fact_type": z.enum(["preference","profile","project","decision","reference"]), "title": z.string(), "content": z.string(), "source_kind": z.enum(["manual","chat","mcp","import"]).default("chat"), "source_ref": z.union([z.string(), z.null()]).default(null), "importance": z.number().int().gte(0).lte(100).default(50), "confidence": z.number().gte(0).lte(1).default(0), "status": z.enum(["pending","approved","rejected"]), "revision": z.number().int().gte(1), "created_at": z.union([z.string(), z.null()]).default(null), "updated_at": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ContextFactCandidateResponse = z.infer<typeof ContextFactCandidateResponseSchema>;

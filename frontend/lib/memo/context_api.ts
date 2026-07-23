@@ -19,6 +19,11 @@ import type {
   ContextFactStatus,
   ContextFactType,
   ContextFactUpdateInput,
+  ContextVaultExportFormat,
+  ContextVaultImportConfirmInput,
+  ContextVaultImportPreview,
+  ContextVaultImportPreviewInput,
+  ContextVaultImportResult,
 } from "./context_types";
 
 export type ContextFactListResult = {
@@ -31,6 +36,11 @@ export type ContextCandidateListResult = {
   candidates: ContextFactCandidate[];
   totalPending: number;
   nextCursor: string | null;
+};
+
+export type ContextVaultExportResult = {
+  blob: Blob;
+  filename: string;
 };
 
 function createContextApiError(message: string, status: number): HttpError {
@@ -50,6 +60,30 @@ function handleExpiredContextSession(): never {
     "ログインセッションが切れました。再ログインしてください。",
     401,
   );
+}
+
+function parseAttachmentFilename(headerValue: string | null): string | null {
+  if (!headerValue) return null;
+  const encodedMatch = headerValue.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1].trim());
+    } catch {
+      // Fall through to the plain filename parameter.
+    }
+  }
+  const plainMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return plainMatch?.[1]?.trim() || null;
+}
+
+async function throwContextResponseError(response: Response, defaultMessage: string): Promise<never> {
+  if (response.status === 401) handleExpiredContextSession();
+  const payload = (await response.json().catch(() => ({}))) as { error?: unknown; message?: unknown };
+  const message =
+    (typeof payload.error === "string" && payload.error.trim()) ||
+    (typeof payload.message === "string" && payload.message.trim()) ||
+    `${defaultMessage} (${response.status})`;
+  throw createContextApiError(message, response.status);
 }
 
 // マイコンテキスト一覧を種類・状態で絞り込んで取得する。
@@ -213,4 +247,67 @@ export async function updateContextExtractionSettings(
     { defaultMessage: "自動抽出設定を更新できませんでした。" },
   );
   return { enabled: payload.enabled === true };
+}
+
+// 金庫の全事実をポータブルなJSONまたはMarkdownとして取得する。
+// Fetch every vault fact as a portable JSON or Markdown attachment.
+export async function exportContextVault(
+  format: ContextVaultExportFormat,
+): Promise<ContextVaultExportResult> {
+  const response = await resilientFetch(
+    `/api/context-facts/export?${new URLSearchParams({ format }).toString()}`,
+    { credentials: "same-origin" },
+  );
+  if (!response.ok) {
+    await throwContextResponseError(response, "コンテキストを書き出せませんでした");
+  }
+  return {
+    blob: await response.blob(),
+    filename:
+      parseAttachmentFilename(response.headers.get("Content-Disposition")) ??
+      `chat-core-context.${format === "json" ? "json" : "md"}`,
+  };
+}
+
+// インポート内容を保存せず検証し、件数・重複・警告・サンプルを返す。
+// Validate an import without saving and return counts, duplicates, warnings, and samples.
+export async function previewContextVaultImport(
+  input: ContextVaultImportPreviewInput,
+): Promise<ContextVaultImportPreview> {
+  const { payload } = await memoFetchJsonOrThrow<
+    Omit<ContextVaultImportPreview, "sample_facts" | "warnings"> &
+      Partial<Pick<ContextVaultImportPreview, "sample_facts" | "warnings">>
+  >(
+    "/api/context-facts/import/preview",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    { defaultMessage: "インポート内容を確認できませんでした。" },
+  );
+  return {
+    ...payload,
+    sample_facts: Array.isArray(payload.sample_facts) ? payload.sample_facts : [],
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+  };
+}
+
+// preview_tokenで確認済みの同一内容だけを明示的に取り込む。
+// Import only the same payload explicitly confirmed through its preview token.
+export async function confirmContextVaultImport(
+  input: ContextVaultImportConfirmInput,
+): Promise<ContextVaultImportResult> {
+  const { payload } = await memoFetchJsonOrThrow<ContextVaultImportResult>(
+    "/api/context-facts/import",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+    { defaultMessage: "コンテキストをインポートできませんでした。" },
+  );
+  return payload;
 }
