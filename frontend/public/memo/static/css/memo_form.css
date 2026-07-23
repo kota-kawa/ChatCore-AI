@@ -7548,6 +7548,204 @@ body.memo-page {
   color: #fff;
 }
 
+/* AI-extracted context candidates */
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 16px;
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__header p,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__state {
+  margin: 0.25rem 0 0;
+  color: var(--memo-text-muted);
+  font-size: 0.82rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__count {
+  display: inline-grid;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 0.35rem;
+  color: #fff;
+  background: var(--memo-amber-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: var(--memo-card-accent);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__copy strong {
+  font-size: 0.86rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__copy p {
+  margin: 0.2rem 0 0;
+  color: var(--memo-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 999px;
+  padding: 0;
+  background: var(--memo-card-strong);
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle > span:first-child {
+  position: absolute;
+  top: 0.18rem;
+  left: 0.2rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--memo-text-muted);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle.is-enabled {
+  border-color: var(--memo-amber-strong);
+  background: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle.is-enabled > span:first-child {
+  background: #fff;
+  transform: translateX(1.2rem);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-extraction-setting__toggle:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  padding: 0.85rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 12px;
+  background: var(--memo-card-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__head,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__confidence {
+  margin-left: auto;
+  color: var(--memo-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__body {
+  color: var(--memo-detail-color);
+  font-size: 0.84rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__meta {
+  color: var(--memo-text-muted);
+  font-size: 0.72rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions {
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions button,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__load-more {
+  border: 1px solid var(--memo-border);
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  color: var(--memo-text-muted);
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions button:hover:not(:disabled),
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__load-more:hover:not(:disabled) {
+  border-color: var(--memo-amber);
+  color: var(--memo-text);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions .memo-context-candidate-card__approve {
+  border-color: transparent;
+  color: #fff;
+  background: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions .memo-context-candidate-card__reject {
+  color: var(--memo-danger, #b91c1c);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-card__actions button:disabled,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__load-more:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidates__load-more {
+  align-self: center;
+  min-width: 11rem;
+}
+
 /* Context editor modal */
 :where(body.memo-page, .memo-page-shell) .memo-context-modal {
   position: fixed;
@@ -7605,6 +7803,89 @@ body.memo-page {
 }
 
 :where(body.memo-page, .memo-page-shell) .memo-context-modal__close:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--memo-border);
+  border-radius: 16px;
+  color: var(--memo-text);
+  background: var(--memo-card);
+  box-shadow: var(--memo-shadow);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__form,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--memo-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__form input,
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  padding: 0.55rem 0.65rem;
+  color: var(--memo-text);
+  background: var(--memo-card-strong);
+  font: inherit;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__form textarea {
+  resize: vertical;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__confirmation p {
+  margin: 0;
+  color: var(--memo-text-muted);
+  line-height: 1.6;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__actions button {
+  border: 1px solid var(--memo-border);
+  border-radius: 9px;
+  padding: 0.5rem 0.85rem;
+  color: var(--memo-text-muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__actions button.is-primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--memo-amber-strong);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__actions button.is-danger {
+  border-color: transparent;
+  color: #fff;
+  background: var(--memo-danger, #b91c1c);
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-context-candidate-modal__actions button:disabled {
   opacity: 0.55;
   cursor: default;
 }

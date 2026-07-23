@@ -71,6 +71,9 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
 
         # 依存関係モックオブジェクトの作成
         # Create mocked dependency container for the chat post usecase
+        submitted_context_checks = Mock(
+            side_effect=lambda task, *args, **kwargs: task(*args, **kwargs)
+        )
         deps = ChatPostUseCaseDependencies(
             cleanup_ephemeral_chats=Mock(),
             require_json_dict=require_json_dict,
@@ -125,6 +128,9 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             get_llm_response=Mock(return_value="assistant reply"),
             is_retryable_llm_error=Mock(return_value=False),
             rebuild_room_summary=Mock(),
+            should_extract_context=Mock(return_value=True),
+            schedule_context_extraction=Mock(),
+            submit_background_task=submitted_context_checks,
             get_session_id=Mock(return_value="sid-1"),
             logger=Mock(),
         )
@@ -174,6 +180,82 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             [{"role": "user", "content": user_message}],
         )
         self.assertEqual(captured_context["memory_facts"], ["remembered fact"])
+        deps.should_extract_context.assert_called_once_with(42)
+        submitted_context_checks.assert_called_once()
+        deps.schedule_context_extraction.assert_called_once_with(
+            42,
+            room_id="room-1",
+            assistant_message_id=2,
+            user_message=user_message,
+            assistant_response="assistant reply",
+            model="test-model",
+        )
+
+        # Each eligibility gate independently prevents an extraction LLM task.
+        deps.schedule_context_extraction.reset_mock()
+        deps.should_extract_context.return_value = False
+        use_case._maybe_schedule_context_extraction(
+            user_id=42,
+            room_mode="normal",
+            chat_room_id="room-1",
+            assistant_message_id=2,
+            user_message=user_message,
+            assistant_response="assistant reply",
+            model="test-model",
+        )
+        deps.schedule_context_extraction.assert_not_called()
+
+        deps.should_extract_context.return_value = True
+        submitted_context_checks.reset_mock()
+        for gate_values in (
+            {"user_id": None, "room_mode": "normal", "assistant_message_id": 2},
+            {"user_id": 42, "room_mode": "temporary", "assistant_message_id": 2},
+            {"user_id": 42, "room_mode": "normal", "assistant_message_id": None},
+        ):
+            with self.subTest(gate_values=gate_values):
+                use_case._defer_context_extraction(
+                    **gate_values,
+                    chat_room_id="room-1",
+                    user_message=user_message,
+                    assistant_response="assistant reply",
+                    model="test-model",
+                )
+        submitted_context_checks.assert_not_called()
+        deps.schedule_context_extraction.assert_not_called()
+
+        deps.should_extract_context.side_effect = RuntimeError("settings unavailable")
+        use_case._maybe_schedule_context_extraction(
+            user_id=42,
+            room_mode="normal",
+            chat_room_id="room-1",
+            assistant_message_id=2,
+            user_message=user_message,
+            assistant_response="assistant reply",
+            model="test-model",
+        )
+        deps.logger.warning.assert_any_call(
+            "Failed to schedule context extraction for chat room %s.",
+            "room-1",
+            exc_info=True,
+        )
+
+        deps.should_extract_context.side_effect = None
+        deps.should_extract_context.return_value = True
+        deps.schedule_context_extraction.side_effect = RuntimeError("executor unavailable")
+        use_case._maybe_schedule_context_extraction(
+            user_id=42,
+            room_mode="normal",
+            chat_room_id="room-1",
+            assistant_message_id=2,
+            user_message=user_message,
+            assistant_response="assistant reply",
+            model="test-model",
+        )
+        deps.logger.warning.assert_any_call(
+            "Failed to schedule context extraction for chat room %s.",
+            "room-1",
+            exc_info=True,
+        )
 
 
 if __name__ == "__main__":

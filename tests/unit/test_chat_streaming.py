@@ -193,10 +193,19 @@ class ChatStreamingTestCase(unittest.TestCase):
             return_value=None,
         )
         self._project_context_patch.start()
+        # コンテキスト抽出は専用テストで検証し、チャットルートのテストを実DB設定から分離する。
+        # Context extraction is covered by dedicated use-case tests. Keep unrelated
+        # chat route tests isolated from the real database-backed opt-in lookup.
+        self._context_extraction_patch = patch(
+            "blueprints.chat.messages.should_extract_context",
+            return_value=False,
+        )
+        self._context_extraction_patch.start()
 
     # 日本語: テスト終了後に実行中の一時ジョブ情報をクリアして後片付けします。
     # English: Clear running temporary job state and clean up after each test completes.
     def tearDown(self):
+        self._context_extraction_patch.stop()
         self._project_context_patch.stop()
         clear_generation_job_state(cancel_running=True)
 

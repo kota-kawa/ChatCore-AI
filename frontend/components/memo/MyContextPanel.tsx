@@ -24,6 +24,10 @@ import {
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import {
+  ContextCandidatePanel,
+  type ContextCandidateApi,
+} from "./ContextCandidatePanel";
 
 type ContextApi = {
   load: typeof defaultLoad;
@@ -34,6 +38,7 @@ type ContextApi = {
 type MyContextPanelProps = {
   isLoggedIn: boolean;
   api?: Partial<ContextApi>;
+  candidateApi?: Partial<ContextCandidateApi>;
 };
 
 type EditorState = {
@@ -58,7 +63,7 @@ const EMPTY_EDITOR: EditorState = {
   content: "",
 };
 
-export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
+export function MyContextPanel({ isLoggedIn, api, candidateApi }: MyContextPanelProps) {
   const load = api?.load ?? defaultLoad;
   const create = api?.create ?? defaultCreate;
   const update = api?.update ?? defaultUpdate;
@@ -113,6 +118,10 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
     () => [{ value: "all", label: "すべての種類" }, ...CONTEXT_FACT_TYPE_OPTIONS],
     [],
   );
+
+  const refreshFactsAfterCandidateApproval = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
 
   const openCreate = () => {
     setErrorText(null);
@@ -269,6 +278,11 @@ export function MyContextPanel({ isLoggedIn, api }: MyContextPanelProps) {
           <span>コンテキストを追加</span>
         </button>
       </header>
+
+      <ContextCandidatePanel
+        api={candidateApi}
+        onApproved={refreshFactsAfterCandidateApproval}
+      />
 
       <div className="memo-context__filters">
         <MemoSelect

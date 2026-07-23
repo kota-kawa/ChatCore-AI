@@ -7,6 +7,15 @@ from fastapi import APIRouter, Depends, Request
 from blueprints.memo.helpers import user_id_from_session
 from services.api_errors import ApiServiceError
 from services.async_utils import run_blocking
+from services.context_vault_candidate_service import (
+    DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
+    MAX_CONTEXT_CANDIDATE_LIST_LIMIT,
+    approve_candidate,
+    get_extraction_settings,
+    list_candidates,
+    reject_candidate,
+    update_extraction_settings,
+)
 from services.context_vault_service import (
     MAX_CONTEXT_LIST_LIMIT,
     create_fact,
@@ -14,8 +23,20 @@ from services.context_vault_service import (
     update_fact,
 )
 from services.csrf import require_csrf
-from services.error_messages import ERROR_LOGIN_REQUIRED
-from services.request_models import ContextFactCreateRequest, ContextFactUpdateRequest
+from services.error_messages import (
+    ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID,
+    ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID,
+    ERROR_LOGIN_REQUIRED,
+)
+from services.request_models import (
+    ContextExtractionSettingsUpdateRequest,
+    ContextFactCandidateApproveRequest,
+    ContextFactCandidateRejectRequest,
+    ContextFactCreateRequest,
+    ContextFactUpdateRequest,
+)
 from services.web import (
     jsonify,
     jsonify_service_error,
@@ -37,6 +58,7 @@ logger = logging.getLogger("blueprints.context_vault")
 
 _VALID_FACT_TYPES = {"preference", "profile", "project", "decision", "reference"}
 _VALID_STATUSES = {"active", "deprecated"}
+_VALID_CANDIDATE_STATUSES = {"pending", "approved", "rejected"}
 
 
 @context_vault_bp.get("", name="context_vault.api_list")
@@ -68,6 +90,156 @@ async def api_list_context_facts(
             cursor=cursor,
         )
         return jsonify(result.model_dump())
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+
+
+@context_vault_bp.get("/candidates", name="context_vault.api_list_candidates")
+async def api_list_context_fact_candidates(
+    request: Request,
+    status: str = "pending",
+    limit: int = DEFAULT_CONTEXT_CANDIDATE_LIST_LIMIT,
+    cursor: str | None = None,
+):
+    """ユーザー確認待ちの抽出候補をkeysetページングで取得する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    if status not in _VALID_CANDIDATE_STATUSES:
+        return jsonify(
+            {"status": "fail", "error": ERROR_CONTEXT_FACT_CANDIDATE_STATUS_INVALID},
+            status_code=400,
+        )
+
+    safe_limit = max(1, min(int(limit), MAX_CONTEXT_CANDIDATE_LIST_LIMIT))
+    try:
+        result = await run_blocking(
+            list_candidates,
+            user_id,
+            status=status,
+            limit=safe_limit,
+            cursor=cursor,
+        )
+        return jsonify(result.model_dump())
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+
+
+@context_vault_bp.put(
+    "/candidates/{candidate_id:int}/approve",
+    name="context_vault.api_approve_candidate",
+)
+async def api_approve_context_fact_candidate(request: Request, candidate_id: int):
+    """候補を必要に応じて編集し、activeなコンテキスト事実へ昇格する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        ContextFactCandidateApproveRequest,
+        error_message=ERROR_CONTEXT_FACT_CANDIDATE_APPROVE_PAYLOAD_INVALID,
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        result = await run_blocking(
+            approve_candidate,
+            user_id,
+            candidate_id,
+            expected_revision=payload.revision,
+            fact_type=payload.fact_type,
+            title=payload.title,
+            content=payload.content,
+            importance=payload.importance,
+        )
+        return jsonify({"status": "success", **result.model_dump()})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, CONTEXT_FACT_CREATE_ERROR, status="fail")
+
+
+@context_vault_bp.put(
+    "/candidates/{candidate_id:int}/reject",
+    name="context_vault.api_reject_candidate",
+)
+async def api_reject_context_fact_candidate(request: Request, candidate_id: int):
+    """候補をrevision競合安全に却下する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        ContextFactCandidateRejectRequest,
+        error_message=ERROR_CONTEXT_FACT_CANDIDATE_REJECT_PAYLOAD_INVALID,
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+
+    try:
+        candidate = await run_blocking(
+            reject_candidate,
+            user_id,
+            candidate_id,
+            expected_revision=payload.revision,
+        )
+        return jsonify({"status": "success", "candidate": candidate.model_dump()})
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
+
+
+@context_vault_bp.get(
+    "/extraction-settings",
+    name="context_vault.api_get_extraction_settings",
+)
+async def api_get_context_extraction_settings(request: Request):
+    """現在の会話コンテキスト自動抽出opt-in設定を取得する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    try:
+        result = await run_blocking(get_extraction_settings, user_id)
+        return jsonify(result.model_dump())
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc, status="fail")
+    except Exception:
+        return log_and_internal_server_error(logger, CONTEXT_FACT_UPDATE_ERROR, status="fail")
+
+
+@context_vault_bp.put(
+    "/extraction-settings",
+    name="context_vault.api_update_extraction_settings",
+)
+async def api_update_context_extraction_settings(request: Request):
+    """会話コンテキスト自動抽出をユーザーの明示操作で有効・無効化する。"""
+    user_id = user_id_from_session(request.session)
+    if user_id is None:
+        return jsonify({"status": "fail", "error": ERROR_LOGIN_REQUIRED}, status_code=401)
+    data, error_response = await require_json_dict(request, status="fail")
+    if error_response is not None:
+        return error_response
+    payload, validation_error = validate_payload_model(
+        data,
+        ContextExtractionSettingsUpdateRequest,
+        error_message=ERROR_CONTEXT_EXTRACTION_SETTINGS_PAYLOAD_INVALID,
+        status="fail",
+    )
+    if validation_error is not None:
+        return validation_error
+    try:
+        result = await run_blocking(update_extraction_settings, user_id, payload.enabled)
+        return jsonify({"status": "success", **result.model_dump()})
     except ApiServiceError as exc:
         return jsonify_service_error(exc, status="fail")
 

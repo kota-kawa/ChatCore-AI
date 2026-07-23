@@ -161,6 +161,38 @@ class ContextFactListResponse(ResponsePayloadModel):
     next_cursor: str | None = None
 
 
+# 日本語: ユーザー確認待ちの自動抽出候補。内部fingerprint等は公開しない。
+# English: Allowlisted extracted candidate awaiting user review.
+class ContextFactCandidateResponse(ResponsePayloadModel):
+    id: int
+    fact_type: Literal["preference", "profile", "project", "decision", "reference"]
+    title: str
+    content: str
+    source_kind: Literal["manual", "chat", "mcp", "import"] = "chat"
+    source_ref: str | None = None
+    importance: int = Field(default=50, ge=0, le=100)
+    confidence: float = Field(default=0, ge=0, le=1)
+    status: Literal["pending", "approved", "rejected"]
+    revision: int = Field(ge=1)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ContextFactCandidateListResponse(ResponsePayloadModel):
+    candidates: list[ContextFactCandidateResponse] = Field(default_factory=list)
+    next_cursor: str | None = None
+    total_pending: int = 0
+
+
+class ContextFactCandidateApprovalResponse(ResponsePayloadModel):
+    candidate: ContextFactCandidateResponse
+    fact: ContextFactResponse
+
+
+class ContextExtractionSettingsResponse(ResponsePayloadModel):
+    enabled: bool = False
+
+
 # 日本語: fact_type ごとにまとめた active な事実のグループ。
 # English: Group of active facts collected under one fact_type.
 class ContextDigestGroup(ResponsePayloadModel):

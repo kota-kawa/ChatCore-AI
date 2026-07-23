@@ -87,6 +87,9 @@ class ChatPostUseCaseDependencies:
     get_llm_response: Callable[..., Any]
     is_retryable_llm_error: Callable[[BaseException], bool]
     rebuild_room_summary: Callable[..., Any]
+    should_extract_context: Callable[[int], bool]
+    schedule_context_extraction: Callable[..., Any]
+    submit_background_task: Callable[..., Any]
     get_session_id: Callable[[dict], str]
     logger: Any
 
@@ -104,6 +107,70 @@ class ChatPostUseCase:
     ) -> None:
         self.deps = dependencies
         self.default_model = default_model
+
+    def _maybe_schedule_context_extraction(
+        self,
+        *,
+        user_id: int | None,
+        room_mode: str,
+        chat_room_id: str,
+        assistant_message_id: int | None,
+        user_message: str,
+        assistant_response: str,
+        model: str,
+    ) -> None:
+        """Schedule candidate extraction only for eligible, persisted normal-room turns."""
+        if user_id is None or room_mode != "normal" or assistant_message_id is None:
+            return
+        try:
+            if not self.deps.should_extract_context(user_id):
+                return
+            self.deps.schedule_context_extraction(
+                user_id,
+                room_id=chat_room_id,
+                assistant_message_id=assistant_message_id,
+                user_message=user_message,
+                assistant_response=assistant_response,
+                model=model,
+            )
+        except Exception:
+            self.deps.logger.warning(
+                "Failed to schedule context extraction for chat room %s.",
+                chat_room_id,
+                exc_info=True,
+            )
+
+    def _defer_context_extraction(
+        self,
+        *,
+        user_id: int | None,
+        room_mode: str,
+        chat_room_id: str,
+        assistant_message_id: int | None,
+        user_message: str,
+        assistant_response: str,
+        model: str,
+    ) -> None:
+        """Run eligibility checking off the response path, then schedule extraction."""
+        if user_id is None or room_mode != "normal" or assistant_message_id is None:
+            return
+        try:
+            self.deps.submit_background_task(
+                self._maybe_schedule_context_extraction,
+                user_id=user_id,
+                room_mode=room_mode,
+                chat_room_id=chat_room_id,
+                assistant_message_id=assistant_message_id,
+                user_message=user_message,
+                assistant_response=assistant_response,
+                model=model,
+            )
+        except Exception:
+            self.deps.logger.warning(
+                "Failed to defer context extraction for chat room %s.",
+                chat_room_id,
+                exc_info=True,
+            )
 
     # リクエストを受け取り、メッセージの検証・コンテキスト補強・AI応答生成・DB保存などの一連の流れを実行する
     # Receive a request and execute the entire workflow including validation, context augmentation, AI generation, and database updates
@@ -457,7 +524,7 @@ class ChatPostUseCase:
                     message_parts: list[dict[str, Any]] | None = None,
                     web_search_context: list[dict[str, Any]] | None = None,
                 ) -> dict[str, Any] | None:
-                    deps.save_message_to_db(
+                    assistant_message_id = deps.save_message_to_db(
                         chat_room_id,
                         response,
                         "assistant",
@@ -466,6 +533,15 @@ class ChatPostUseCase:
                         message_parts,
                         None,
                         web_search_context,
+                    )
+                    self._defer_context_extraction(
+                        user_id=user_id,
+                        room_mode=room_mode,
+                        chat_room_id=chat_room_id,
+                        assistant_message_id=assistant_message_id,
+                        user_message=user_message,
+                        assistant_response=response,
+                        model=model,
                     )
                     # 初回応答を保存できた後にだけタイトルを自動生成する。
                     # ユーザーが先に改名していた場合は conditional rename が更新を拒否する。
@@ -657,6 +733,15 @@ class ChatPostUseCase:
                 message_parts or None,
                 None,
                 this_turn_web_search,
+            )
+            self._defer_context_extraction(
+                user_id=user_id,
+                room_mode=room_mode,
+                chat_room_id=chat_room_id,
+                assistant_message_id=saved_assistant_message_id,
+                user_message=user_message,
+                assistant_response=bot_reply,
+                model=model,
             )
             if should_auto_title_room:
                 title_candidates = build_initial_title_candidates(
