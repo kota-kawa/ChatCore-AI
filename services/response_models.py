@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # 日本語: すべてのAPIレスポンスペイロードの共通基底モデル。将来の拡張キーを許容します。
@@ -159,6 +159,63 @@ class ContextFactListResponse(ResponsePayloadModel):
     facts: list[ContextFactResponse] = Field(default_factory=list)
     total_active: int = 0
     next_cursor: str | None = None
+
+
+# 日本語: export/importで公開してよい、DB内部値を含まない可搬な事実。
+# English: Portable fact safe for export/import, excluding all database-internal fields.
+class ContextVaultPortableFact(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    fact_type: Literal["preference", "profile", "project", "decision", "reference"]
+    title: str = Field(min_length=1, max_length=100)
+    content: str = Field(min_length=1, max_length=2000)
+    status: Literal["active", "deprecated"]
+    importance: int = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _require_non_blank_text(self) -> "ContextVaultPortableFact":
+        if not self.title.strip() or not self.content.strip():
+            raise ValueError("Portable context title and content must not be blank.")
+        if "\x00" in self.title or "\x00" in self.content:
+            raise ValueError("Portable context text must not contain NUL characters.")
+        try:
+            self.title.encode("utf-8")
+            self.content.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("Portable context text must be valid UTF-8.") from exc
+        return self
+
+
+# 日本語: Chat-Coreパーソナル・コンテキスト金庫のversion付きJSON形式。
+# English: Versioned JSON document for Chat-Core personal context portability.
+class ContextVaultExportDocument(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    format: Literal["chat-core-personal-context"]
+    version: Literal[1]
+    exported_at: str
+    facts: list[ContextVaultPortableFact]
+
+
+class ContextVaultImportPreviewResponse(ResponsePayloadModel):
+    preview_token: str
+    total_count: int = Field(ge=0)
+    active_count: int = Field(ge=0)
+    deprecated_count: int = Field(ge=0)
+    duplicate_count: int = Field(ge=0)
+    importable_count: int = Field(ge=0)
+    can_import: bool
+    sample_facts: list[ContextVaultPortableFact] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    expires_at: str
+
+
+class ContextVaultImportResponse(ResponsePayloadModel):
+    status: Literal["success"] = "success"
+    imported_count: int = Field(ge=0)
+    skipped_duplicate_count: int = Field(ge=0)
+    active_count: int = Field(ge=0)
+    deprecated_count: int = Field(ge=0)
 
 
 # 日本語: ユーザー確認待ちの自動抽出候補。内部fingerprint等は公開しない。

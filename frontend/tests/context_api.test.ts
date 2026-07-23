@@ -3,10 +3,13 @@ import test from "node:test";
 
 import {
   approveContextCandidate,
+  confirmContextVaultImport,
   createContextFact,
+  exportContextVault,
   loadContextCandidates,
   loadContextExtractionSettings,
   loadContextFacts,
+  previewContextVaultImport,
   rejectContextCandidate,
   updateContextFact,
   updateContextExtractionSettings,
@@ -198,6 +201,101 @@ test("updateContextFact exposes revision conflict errors", async () => {
     await assert.rejects(
       () => updateContextFact(21, { revision: 3, status: "active" }),
       /コンテキストが更新されています。再読み込みしてください。/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("exportContextVault requests the selected format and keeps the attachment filename", async () => {
+  let requestedUrl = "";
+  globalThis.fetch = (async (input) => {
+    requestedUrl = String(input);
+    return new Response('{"version":1}', {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": "attachment; filename*=UTF-8''my%20context.json",
+      },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await exportContextVault("json");
+    const parsed = new URL(requestedUrl, "https://example.com");
+    assert.equal(parsed.pathname, "/api/context-facts/export");
+    assert.equal(parsed.searchParams.get("format"), "json");
+    assert.equal(result.filename, "my context.json");
+    assert.equal(await result.blob.text(), '{"version":1}');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("context import preview and confirmation send the reviewed content and preview token", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const preview = {
+    preview_token: "signed-preview",
+    total_count: 2,
+    active_count: 1,
+    deprecated_count: 1,
+    duplicate_count: 0,
+    importable_count: 2,
+    can_import: true,
+    sample_facts: [],
+    warnings: [],
+    expires_at: "2026-07-23T13:00:00Z",
+  };
+  const imported = {
+    status: "success" as const,
+    imported_count: 2,
+    skipped_duplicate_count: 0,
+    active_count: 1,
+    deprecated_count: 1,
+  };
+  globalThis.fetch = (async (input, init) => {
+    requests.push({ url: String(input), init });
+    return jsonResponse(requests.length === 1 ? preview : imported);
+  }) as typeof fetch;
+
+  try {
+    const content = '{"facts":[]}';
+    assert.deepEqual(await previewContextVaultImport({ format: "json", content }), preview);
+    assert.deepEqual(
+      await confirmContextVaultImport({
+        format: "json",
+        content,
+        preview_token: "signed-preview",
+      }),
+      imported,
+    );
+    assert.equal(requests[0]?.url, "/api/context-facts/import/preview");
+    assert.equal(requests[0]?.init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), { format: "json", content });
+    assert.equal(requests[1]?.url, "/api/context-facts/import");
+    assert.equal(requests[1]?.init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), {
+      format: "json",
+      content,
+      preview_token: "signed-preview",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("context portability APIs expose backend validation errors", async () => {
+  globalThis.fetch = (async () =>
+    jsonResponse({ error: "インポートできる事実は1000件までです。" }, 400)) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => previewContextVaultImport({ format: "markdown", content: "# context" }),
+      /インポートできる事実は1000件までです。/,
+    );
+    await assert.rejects(
+      () => exportContextVault("markdown"),
+      /インポートできる事実は1000件までです。/,
     );
   } finally {
     globalThis.fetch = originalFetch;

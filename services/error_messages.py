@@ -27,6 +27,51 @@ ERROR_CONTEXT_FACT_LIMIT_REACHED = (
     "保存できる有効なコンテキストは200件までです。"
     "不要な項目を無効化してから追加してください。"
 )
+ERROR_CONTEXT_VAULT_IMPORT_TOO_LARGE = "インポートファイルは10MiB以下にしてください。"
+ERROR_CONTEXT_VAULT_IMPORT_REQUEST_TOO_LARGE = (
+    "インポートリクエストのサイズが上限を超えています。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_TOO_MANY = (
+    "一度にインポートできるコンテキストは1000件までです。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_EMPTY = "インポート対象のコンテキストがありません。"
+ERROR_CONTEXT_VAULT_IMPORT_JSON_INVALID = "JSONインポート形式が不正です。"
+ERROR_CONTEXT_VAULT_IMPORT_MARKDOWN_VERSION_INVALID = (
+    "Markdownインポートの形式またはバージョンが不正です。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_MARKDOWN_BLOCK_INVALID = (
+    "Markdown内のcontext-factブロックが不正です。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_MARKDOWN_FACT_INVALID = (
+    "Markdown内のコンテキスト形式が不正です。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_FORMAT_INVALID = "インポート形式が不正です。"
+ERROR_CONTEXT_VAULT_IMPORT_PAYLOAD_INVALID = (
+    "format、content、preview_tokenの指定を確認してください。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_PREVIEW_UNAVAILABLE = (
+    "インポートの確認情報を作成できません。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_PREVIEW_EXPIRED = (
+    "インポートの確認期限が切れました。もう一度プレビューしてください。"
+)
+ERROR_CONTEXT_VAULT_IMPORT_PREVIEW_INVALID = "インポートの確認情報が不正です。"
+ERROR_CONTEXT_VAULT_IMPORT_PREVIEW_MISMATCH = (
+    "プレビューした内容とインポート内容が一致しません。"
+)
+ERROR_CONTEXT_VAULT_EXPORT_TOO_MANY = (
+    "コンテキストが1000件を超えるため、一括エクスポートできません。"
+)
+ERROR_CONTEXT_VAULT_EXPORT_TOO_LARGE = (
+    "エクスポートデータが10MiBを超えるため、一括ダウンロードできません。"
+)
+ERROR_CONTEXT_VAULT_EXPORT_FORMAT_INVALID = "エクスポート形式が不正です。"
+ERROR_CONTEXT_VAULT_PORTABILITY_FAILED = (
+    "コンテキストのエクスポートまたはインポートを完了できませんでした。"
+)
+WARNING_CONTEXT_VAULT_IMPORT_ACTIVE_LIMIT = (
+    "有効なコンテキストが200件を超えるため、この内容はインポートできません。"
+)
 ERROR_CONTEXT_FACT_CANDIDATE_NOT_FOUND = (
     "該当するコンテキスト候補が見つかりません。"
 )

@@ -82,6 +82,27 @@ describe("MyContextPanel", () => {
     expect(load).toHaveBeenCalledWith({ factType: null, status: "active" });
   });
 
+  it("opens the accessible export and import modal from the header", async () => {
+    const load = vi.fn().mockResolvedValue({
+      facts: [sampleFact],
+      totalActive: 1,
+      nextCursor: null,
+    });
+    renderPanel({ isLoggedIn: true, api: { load } });
+
+    await screen.findByText("エディタの好み");
+    fireEvent.click(screen.getByRole("button", { name: "持ち運び" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "コンテキストの持ち運び" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /書き出し/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: /取り込み/ })).toBeInTheDocument();
+  });
+
   it("revalidates the fact list after approving an AI suggestion", async () => {
     const load = vi.fn().mockResolvedValue({
       facts: [sampleFact],

@@ -68,6 +68,8 @@ MAX_CONTEXT_FACT_TITLE_LENGTH = 100
 MAX_CONTEXT_FACT_CONTENT_LENGTH = 2000
 MAX_CONTEXT_IDEMPOTENCY_KEY_LENGTH = 128
 DEFAULT_CONTEXT_FACT_IMPORTANCE = 50
+MAX_CONTEXT_VAULT_IMPORT_CONTENT_LENGTH = 10 * 1024 * 1024
+MAX_CONTEXT_VAULT_PREVIEW_TOKEN_LENGTH = 2048
 
 ContextFactType = Literal["preference", "profile", "project", "decision", "reference"]
 ContextFactStatus = Literal["active", "deprecated"]
@@ -504,6 +506,25 @@ class ContextFactUpdateRequest(RequestPayloadModel):
         if self.content is not None and not self.content.strip():
             raise ValueError("内容を空にはできません。")
         return self
+
+
+# 日本語: JSON/Markdown形式のコンテキスト金庫インポートを検証するリクエスト。
+# English: Request for validating a JSON/Markdown context-vault import.
+class ContextVaultImportPreviewRequest(RequestPayloadModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["json", "markdown"]
+    content: str = Field(min_length=1, max_length=MAX_CONTEXT_VAULT_IMPORT_CONTENT_LENGTH)
+
+
+# 日本語: 直前のdry-runと同一内容を明示確認して追記するリクエスト。
+# English: Request for explicitly confirming and appending the exact dry-run payload.
+class ContextVaultImportConfirmRequest(RequestPayloadModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    format: Literal["json", "markdown"]
+    content: str = Field(min_length=1, max_length=MAX_CONTEXT_VAULT_IMPORT_CONTENT_LENGTH)
+    preview_token: str = Field(min_length=1, max_length=MAX_CONTEXT_VAULT_PREVIEW_TOKEN_LENGTH)
 
 
 # 日本語: 自動抽出候補を編集して承認するリクエスト。
