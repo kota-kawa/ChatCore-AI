@@ -1,4 +1,5 @@
 # prompt_manage_api.py
+import json
 import logging
 from typing import Any
 
@@ -8,6 +9,7 @@ from services.async_utils import run_blocking
 from services.csrf import require_csrf
 from services.db import get_db_connection
 from services.prompt_types import serialize_axes
+from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.request_models import PromptUpdateRequest
 from services.web import (
     jsonify,
@@ -33,7 +35,7 @@ def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
     # Parse and convert datetime fields to ISO 8601 format strings.
     prompt_created_at = row.get("prompt_created_at")
     liked_at = row.get("liked_at")
-    return {
+    serialized = {
         "id": row.get("like_id"),
         "like_id": row.get("like_id"),
         "prompt_id": row.get("prompt_id"),
@@ -59,6 +61,21 @@ def _serialize_liked_prompt(row: dict[str, Any]) -> dict[str, Any]:
         "liked_at": liked_at.isoformat() if hasattr(liked_at, "isoformat") else liked_at,
         "liked": True,
     }
+    resources = row.get("resources")
+    serialized["resources"] = resources if isinstance(resources, list) else []
+    if not serialized.get("skill_python_script") and row.get("resource_python_script"):
+        serialized["skill_python_script"] = str(row["resource_python_script"])
+    if not serialized.get("skill_python_script"):
+        for resource in serialized["resources"]:
+            if (
+                isinstance(resource, dict)
+                and resource.get("path") == "scripts/main.py"
+                and isinstance(resource.get("content"), str)
+            ):
+                serialized["skill_python_script"] = resource["content"]
+                break
+    serialized.pop("resource_python_script", None)
+    return serialized
 
 
 # ユーザー自身が投稿・公開したプロンプト一覧をDBから取得する関数
@@ -75,26 +92,75 @@ def _fetch_my_prompts(user_id: int) -> list[dict[str, Any]]:
             # Fetch prompts created by the user, ordered by creation time descending.
             query = """
                 SELECT
-                    id,
-                    title,
-                    category,
-                    content,
-                    input_examples,
-                    output_examples,
-                    content_format,
-                    media_type,
-                    attributes,
-                    attachments,
-                    created_at
-                FROM prompts
-                WHERE user_id = %s
-                  AND deleted_at IS NULL
-                ORDER BY created_at DESC
+                    p.id,
+                    p.title,
+                    p.category,
+                    p.content,
+                    p.input_examples,
+                    p.output_examples,
+                    p.content_format,
+                    p.media_type,
+                    p.attributes,
+                    p.attachments,
+                    COALESCE(
+                      (
+                        SELECT jsonb_agg(
+                          jsonb_build_object(
+                            'id', pr.id,
+                            'path', pr.path,
+                            'role', pr.role,
+                            'language', COALESCE(pr.language, ''),
+                            'media_type', pr.media_type,
+                            'size_bytes', pr.size_bytes,
+                            'sha256', pr.sha256,
+                            'sort_order', pr.sort_order
+                          )
+                          ORDER BY pr.sort_order, pr.id
+                        )
+                        FROM prompt_resources AS pr
+                        WHERE pr.prompt_id = p.id
+                      ),
+                      '[]'::jsonb
+                    ) AS resources,
+                    COALESCE(
+                      (
+                        SELECT pr.text_content
+                        FROM prompt_resources AS pr
+                        WHERE pr.prompt_id = p.id
+                          AND lower(pr.path) = 'scripts/main.py'
+                        LIMIT 1
+                      ),
+                      ''
+                    ) AS resource_python_script,
+                    p.created_at
+                FROM prompts AS p
+                WHERE p.user_id = %s
+                  AND p.deleted_at IS NULL
+                ORDER BY p.created_at DESC
             """
             cursor.execute(query, (user_id,))
             # 2軸フィールドを正準化し、後方互換の派生フィールドを付与する。
             # Normalize the two-axis fields and attach derived legacy fields.
-            return [{**dict(row), **serialize_axes(dict(row))} for row in cursor.fetchall()]
+            prompts = []
+            for row in cursor.fetchall():
+                prompt = dict(row)
+                prompt.update(serialize_axes(prompt))
+                resources = prompt.get("resources")
+                prompt["resources"] = resources if isinstance(resources, list) else []
+                if not prompt.get("skill_python_script") and prompt.get("resource_python_script"):
+                    prompt["skill_python_script"] = str(prompt["resource_python_script"])
+                if not prompt.get("skill_python_script"):
+                    for resource in prompt["resources"]:
+                        if (
+                            isinstance(resource, dict)
+                            and resource.get("path") == "scripts/main.py"
+                            and isinstance(resource.get("content"), str)
+                        ):
+                            prompt["skill_python_script"] = resource["content"]
+                            break
+                prompt.pop("resource_python_script", None)
+                prompts.append(prompt)
+            return prompts
         finally:
             # カーソルを確実にクローズ
             # Ensure the cursor is closed properly.
@@ -158,6 +224,36 @@ def _fetch_liked_prompts(user_id: int) -> list[dict[str, Any]]:
                        p.media_type,
                        p.attributes,
                        p.attachments,
+                       COALESCE(
+                         (
+                           SELECT jsonb_agg(
+                             jsonb_build_object(
+                               'id', pr.id,
+                               'path', pr.path,
+                               'role', pr.role,
+                               'language', COALESCE(pr.language, ''),
+                               'media_type', pr.media_type,
+                               'size_bytes', pr.size_bytes,
+                               'sha256', pr.sha256,
+                               'sort_order', pr.sort_order
+                             )
+                             ORDER BY pr.sort_order, pr.id
+                           )
+                           FROM prompt_resources AS pr
+                           WHERE pr.prompt_id = p.id
+                         ),
+                         '[]'::jsonb
+                       ) AS resources,
+                       COALESCE(
+                         (
+                           SELECT pr.text_content
+                           FROM prompt_resources AS pr
+                           WHERE pr.prompt_id = p.id
+                             AND lower(pr.path) = 'scripts/main.py'
+                           LIMIT 1
+                         ),
+                         ''
+                       ) AS resource_python_script,
                        p.input_examples,
                        p.output_examples,
                        p.created_at AS prompt_created_at,
@@ -215,11 +311,7 @@ def _delete_saved_prompt_for_user(user_id: int, prompt_id: int) -> int:
 def _update_prompt_for_user(
     user_id: int,
     prompt_id: int,
-    title: str,
-    category: str,
-    content: str,
-    input_examples: str,
-    output_examples: str,
+    payload: PromptUpdateRequest,
 ) -> int:
     """
     ユーザーが投稿した公開プロンプトの内容（タイトル、カテゴリ、本文、入出力例など）を更新する。
@@ -232,27 +324,50 @@ def _update_prompt_for_user(
             # Update title, category, content, input_examples, and output_examples columns.
             query = """
                 UPDATE prompts
-                SET title = %s, category = %s, content = %s, input_examples = %s, output_examples = %s
+                SET title = %s,
+                    category = %s,
+                    content = %s,
+                    content_format = %s,
+                    media_type = %s,
+                    attributes = %s::jsonb,
+                    input_examples = %s,
+                    output_examples = %s,
+                    updated_at = NOW()
                 WHERE id = %s
                   AND user_id = %s
                   AND deleted_at IS NULL
+                RETURNING id
             """
             cursor.execute(
                 query,
                 (
-                    title,
-                    category,
-                    content,
-                    input_examples,
-                    output_examples,
+                    payload.title,
+                    payload.category,
+                    payload.content,
+                    payload.content_format,
+                    payload.media_type,
+                    json.dumps(payload.attributes),
+                    payload.input_examples,
+                    payload.output_examples,
                     prompt_id,
                     user_id,
                 ),
             )
+            updated_row = cursor.fetchone()
+            if not updated_row:
+                conn.rollback()
+                return 0
+            resources_to_replace = payload.resources
+            if resources_to_replace is None and payload.content_format != "skill":
+                resources_to_replace = []
+            if resources_to_replace is not None:
+                PromptResourceRepository().replace_for_prompt(
+                    cursor,
+                    prompt_id,
+                    resources_to_replace,
+                )
             conn.commit()
-            # 影響を受けた行数を返す
-            # Return the count of affected rows.
-            return cursor.rowcount
+            return 1
         finally:
             # カーソルを確実にクローズ
             # Ensure the cursor is closed properly.
@@ -443,11 +558,7 @@ async def update_prompt(prompt_id: int, request: Request):
             _update_prompt_for_user,
             user_id,
             prompt_id,
-            payload.title,
-            payload.category,
-            payload.content,
-            payload.input_examples,
-            payload.output_examples,
+            payload,
         )
         if updated == 0:
             # 対象のプロンプトが存在しない、または別ユーザーの作成だった場合

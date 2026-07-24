@@ -15,6 +15,17 @@ export type PromptAttachment = {
   media_type?: string;
 };
 
+export type PromptResourceRole = "script" | "reference" | "config" | "other";
+
+// SKILLに同梱するUTF-8テキストリソース。
+// A UTF-8 text resource bundled with a SKILL.
+export type PromptResource = {
+  path: string;
+  role: PromptResourceRole;
+  language?: string;
+  content: string;
+};
+
 export type PromptPagination = {
   page?: number;
   per_page?: number;
@@ -38,6 +49,7 @@ export type PromptData = {
   media_type?: MediaType | string;
   attributes?: Record<string, string>;
   attachments?: PromptAttachment[];
+  resources?: PromptResource[];
   // 旧フィールドは後方互換の派生値 (サーバが算出して返す)。
   // Legacy fields are derived values returned by the server for compatibility.
   prompt_type?: PromptType | string;

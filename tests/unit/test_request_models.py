@@ -153,8 +153,8 @@ class RequestModelsTestCase(unittest.TestCase):
                 },
             )
 
-    # skill フォーマットで Python スクリプトを含んだペイロードが正常に受け入れられることを検証します。
-    # Verify that the skill format accepts a payload containing a python script.
+    # 旧Pythonフィールドを正準リソースへ変換し、新規属性書き込みを停止することを検証します。
+    # Verify that the legacy Python field becomes a canonical resource and is not newly persisted as an attribute.
     def test_prompt_create_accepts_skill_payload_with_python_script(self):
         # skill用属性とPythonスクリプトを指定してバリデーションを実行
         # Run validation with skill attributes and a python script
@@ -174,7 +174,135 @@ class RequestModelsTestCase(unittest.TestCase):
         )
         self.assertEqual(result.content_format, "skill")
         self.assertEqual(result.attributes["skill_markdown"], "# Skill")
-        self.assertEqual(result.attributes["skill_python_script"], "print('hello')")
+        self.assertNotIn("skill_python_script", result.attributes)
+        self.assertEqual(len(result.resources), 1)
+        self.assertEqual(result.resources[0].path, "scripts/main.py")
+        self.assertEqual(result.resources[0].language, "python")
+        self.assertEqual(result.resources[0].content, "print('hello')")
+
+    def test_prompt_create_accepts_multiple_skill_resources(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {
+                "title": "Skill title",
+                "category": "",
+                "content_format": "skill",
+                "attributes": {"skill_markdown": "# Skill"},
+                "resources": [
+                    {
+                        "path": "scripts/run.ts",
+                        "role": "script",
+                        "language": "typescript",
+                        "content": "export const run = () => true;",
+                    },
+                    {
+                        "path": "references/api.md",
+                        "role": "reference",
+                        "content": "# API",
+                    },
+                ],
+            },
+        )
+
+        self.assertEqual([item.path for item in result.resources], ["scripts/run.ts", "references/api.md"])
+        self.assertEqual(result.resources[1].language, "markdown")
+        self.assertEqual(result.resources[1].media_type, "text/markdown")
+
+    def test_prompt_create_infers_powershell_resource_language(self):
+        result = _validate(
+            SharedPromptCreateRequest,
+            {
+                "title": "PowerShell skill",
+                "content_format": "skill",
+                "attributes": {"skill_markdown": "# Skill"},
+                "resources": [
+                    {
+                        "path": "scripts/setup.ps1",
+                        "role": "script",
+                        "content": "Write-Output 'ready'",
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(result.resources[0].language, "powershell")
+
+    def test_prompt_create_rejects_resources_for_non_skill_format(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {
+                    "title": "Prompt",
+                    "content": "body",
+                    "resources": [
+                        {"path": "scripts/run.py", "role": "script", "content": "print(1)"}
+                    ],
+                },
+            )
+
+    def test_prompt_create_rejects_unsafe_or_secret_resource_paths(self):
+        for path in ("../secret.py", "/tmp/run.py", r"scripts\\run.py", ".env", "keys/id_rsa"):
+            with self.subTest(path=path), self.assertRaises(ValidationError):
+                _validate(
+                    SharedPromptCreateRequest,
+                    {
+                        "title": "Skill",
+                        "content_format": "skill",
+                        "attributes": {"skill_markdown": "# Skill"},
+                        "resources": [{"path": path, "role": "other", "content": "x"}],
+                    },
+                )
+
+    def test_prompt_create_rejects_case_insensitive_duplicate_resource_paths(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {
+                    "title": "Skill",
+                    "content_format": "skill",
+                    "attributes": {"skill_markdown": "# Skill"},
+                    "resources": [
+                        {"path": "scripts/Run.py", "role": "script", "content": "a"},
+                        {"path": "scripts/run.py", "role": "script", "content": "b"},
+                    ],
+                },
+            )
+
+    def test_prompt_create_rejects_reserved_unsupported_and_oversized_resources(self):
+        for path, content in (
+            ("SKILL.md", "reserved"),
+            ("scripts/program.exe", "binary-like"),
+            ("scripts/large.py", "x" * (256 * 1024 + 1)),
+        ):
+            with self.subTest(path=path), self.assertRaises(ValidationError):
+                _validate(
+                    SharedPromptCreateRequest,
+                    {
+                        "title": "Skill",
+                        "content_format": "skill",
+                        "attributes": {"skill_markdown": "# Skill"},
+                        "resources": [{"path": path, "role": "other", "content": content}],
+                    },
+                )
+
+    def test_prompt_create_rejects_oversized_resource_collection(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                SharedPromptCreateRequest,
+                {
+                    "title": "Skill",
+                    "content_format": "skill",
+                    "attributes": {"skill_markdown": "# Skill"},
+                    "resources": [
+                        {
+                            "path": f"references/{index}.txt",
+                            "role": "reference",
+                            "content": "x" * (220 * 1024),
+                        }
+                        for index in range(5)
+                    ],
+                },
+            )
 
     # プロンプトからのタスク作成リクエストで、プロンプトIDをパースして認識できることを検証します。
     # Verify that creating a task from a prompt parses the prompt_id successfully.

@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 from services import mcp_server
 from services.mcp_memo_service import McpMemoDetail
-from services.shared_content_service import PublicSharedContentDetail, PublicSharedContentPage
+from services.shared_content_service import (
+    PublicSharedContentDetail,
+    PublicSharedContentPage,
+    PublicSkillResourceDetail,
+    PublicSkillResourceMetadata,
+)
 
 
 MCP_ENVIRONMENT = {
@@ -50,6 +55,50 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(structured["has_next"], False)
         self.assertEqual(run_blocking.call_args.kwargs["query"], "skill")
         self.assertEqual(run_blocking.call_args.kwargs["content_format"], "skill")
+
+    def test_publish_skill_uses_resources_as_canonical_input(self):
+        server = self._server()
+        publish_result = mcp_server.McpPublishResult(
+            prompt_id=91,
+            title="TypeScript Skill",
+            content_format="skill",
+            public_url="https://example.test/shared/prompt/91",
+        )
+        with (
+            patch(
+                "services.mcp_server.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_server._publish",
+                new=AsyncMock(return_value=publish_result),
+            ) as publish,
+            patch("services.mcp_server.audit_tool_success"),
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "publish_skill",
+                    {
+                        "title": "TypeScript Skill",
+                        "skill_markdown": "# TypeScript Skill",
+                        "resources": [
+                            {
+                                "path": "scripts/run.ts",
+                                "role": "script",
+                                "language": "typescript",
+                                "content": "export const run = () => true;",
+                            }
+                        ],
+                    },
+                )
+            )
+
+        structured = result[1]
+        self.assertEqual(structured["prompt_id"], 91)
+        payload = publish.call_args.args[1]
+        self.assertEqual(payload.resources[0].path, "scripts/run.ts")
+        self.assertEqual(payload.resources[0].language, "typescript")
+        self.assertEqual(payload.attributes, {"skill_markdown": "# TypeScript Skill"})
 
     def test_get_memo_returns_only_the_requested_content_slice(self):
         server = self._server()
@@ -130,6 +179,87 @@ class McpContentToolTestCase(unittest.TestCase):
         self.assertEqual(structured["text"], "cdef")
         self.assertEqual(structured["next_offset"], 6)
         self.assertNotIn("attributes", structured)
+
+    def test_list_skill_resources_returns_metadata_without_content(self):
+        server = self._server()
+        resources = [
+            PublicSkillResourceMetadata(
+                path="scripts/run.ts",
+                role="script",
+                language="typescript",
+                media_type="text/typescript",
+                size_bytes=42,
+                sha256="abc",
+            )
+        ]
+        with (
+            patch(
+                "services.mcp_tools.shared_content.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_tools.shared_content.consume_tool_limit",
+                new=AsyncMock(),
+            ),
+            patch(
+                "services.mcp_tools.shared_content.run_blocking",
+                new=AsyncMock(return_value=resources),
+            ),
+        ):
+            result = asyncio.run(
+                server.call_tool("list_skill_resources", {"prompt_id": 8})
+            )
+
+        structured = result[1]
+        self.assertEqual(structured["prompt_id"], 8)
+        self.assertEqual(structured["resources"][0]["path"], "scripts/run.ts")
+        self.assertNotIn("content", structured["resources"][0])
+
+    def test_get_skill_resource_returns_only_requested_content_slice(self):
+        server = self._server()
+        resource = PublicSkillResourceDetail(
+            path="references/api.md",
+            role="reference",
+            language="markdown",
+            media_type="text/markdown",
+            size_bytes=10,
+            sha256="def",
+            content="0123456789",
+        )
+        with (
+            patch(
+                "services.mcp_tools.shared_content.require_actor",
+                return_value=SimpleNamespace(user_id=7, client_id="client-a"),
+            ),
+            patch(
+                "services.mcp_tools.shared_content.consume_tool_limit",
+                new=AsyncMock(),
+            ),
+            patch(
+                "services.mcp_tools.shared_content.run_blocking",
+                new=AsyncMock(return_value=resource),
+            ) as run_blocking,
+        ):
+            result = asyncio.run(
+                server.call_tool(
+                    "get_skill_resource",
+                    {
+                        "prompt_id": 8,
+                        "path": "references/api.md",
+                        "content_offset": 3,
+                        "content_limit": 4,
+                    },
+                )
+            )
+
+        structured = result[1]
+        self.assertEqual(structured["text"], "3456")
+        self.assertEqual(structured["total_characters"], 10)
+        self.assertEqual(structured["next_offset"], 7)
+        self.assertEqual(
+            run_blocking.call_args.args[1:],
+            (8, "references/api.md"),
+        )
 
 
 if __name__ == "__main__":

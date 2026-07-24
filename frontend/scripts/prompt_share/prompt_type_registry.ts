@@ -15,7 +15,6 @@ import type { ContentFormat, MediaType, PromptType } from "./types";
 export const PROMPT_ATTRIBUTE_MAX_LENGTH = 30000;
 
 export const SKILL_MARKDOWN_KEY = "skill_markdown";
-export const SKILL_PYTHON_SCRIPT_KEY = "skill_python_script";
 
 // レジストリが描画を駆動する、フォーマット固有フィールドの宣言。
 // Declaration of a format-specific field that the registry uses to drive rendering.
@@ -101,16 +100,6 @@ export const CONTENT_FORMATS: ContentFormatDescriptor[] = [
         required: true,
         maxLength: PROMPT_ATTRIBUTE_MAX_LENGTH,
         placeholder: "# SKILL名\n\n## 目的\n- ...\n\n## 手順\n1. ..."
-      },
-      {
-        key: SKILL_PYTHON_SCRIPT_KEY,
-        label: "追加 Python スクリプト（任意）",
-        hint: "必要なら補助スクリプトを貼り付け。",
-        input: "textarea",
-        rows: 8,
-        required: false,
-        maxLength: PROMPT_ATTRIBUTE_MAX_LENGTH,
-        placeholder: "def run(input_text: str) -> str:\n    return input_text"
       }
     ],
     requiresContent: false,

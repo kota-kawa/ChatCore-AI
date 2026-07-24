@@ -7,6 +7,8 @@ import { formatDateTime } from "../../../../lib/datetime";
 import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
 import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdown_ssr";
 import { resilientFetch } from "../../../../scripts/core/resilient_fetch";
+import { showToast } from "../../../../scripts/core/toast";
+import { copyTextToClipboard } from "../../../../scripts/chat/message_utils";
 import {
   getPromptFormatLabel,
   getPromptMediaLabel,
@@ -14,6 +16,11 @@ import {
   normalizePromptMediaType
 } from "../../../../scripts/prompt_share/formatters";
 import { getCategoryLabelOrFallback } from "../../../../scripts/prompt_share/prompt_category_registry";
+import {
+  getSkillResourceRoleLabel,
+  normalizeSkillResources
+} from "../../../../scripts/prompt_share/skill_resources";
+import type { PromptResource } from "../../../../scripts/prompt_share/types";
 
 // 共有プロンプトのデータ型（スキルプロンプトのフィールドも含む）
 // Type for shared prompt data (including skill prompt fields)
@@ -29,6 +36,7 @@ type SharedPrompt = {
   reference_image_url?: string | null;
   skill_markdown?: string;
   skill_python_script?: string;
+  resources?: PromptResource[];
   input_examples?: string;
   output_examples?: string;
   ai_model?: string;
@@ -128,12 +136,6 @@ function extractRequestedSlug(rawSlug: string | string[] | undefined) {
   return rawSlug ?? "";
 }
 
-// スキルの追加PythonスクリプトをMarkdownコードブロックとして整形する（SSRとクライアントで共通）
-// Format the skill's additional Python script as a Markdown code block (shared by SSR and client)
-function buildSkillScriptMarkdown(script: string) {
-  return `\`\`\`python\n${script}\n\`\`\``;
-}
-
 // 空のセクションHTMLセット（エラー時やプロンプト未取得時に使用）
 // Empty section HTML set (used on errors or when the prompt is missing)
 function emptyPromptHtml(): SharedPromptHtml {
@@ -157,9 +159,10 @@ function buildMetaDescription(payload: SharedPromptPayload) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
   const isSkillPrompt = normalizePromptContentFormat(prompt.content_format || prompt.prompt_type || "") === "skill";
+  const skillResources = normalizeSkillResources(prompt.resources, prompt.skill_python_script || "");
   const summarySource =
     (isSkillPrompt
-      ? prompt.skill_markdown || prompt.skill_python_script || ""
+      ? prompt.skill_markdown || skillResources[0]?.content || ""
       : prompt.content || prompt.output_examples || prompt.input_examples || "") || "";
   const normalized = stripPreviewText(summarySource);
   if (!normalized) {
@@ -251,9 +254,6 @@ export const getServerSideProps: GetServerSideProps<SharedPromptPageProps> = asy
     promptHtml.inputExamples = renderMarkdownToSafeHtmlOnServer(prompt.input_examples);
     promptHtml.outputExamples = renderMarkdownToSafeHtmlOnServer(prompt.output_examples);
     promptHtml.skillMarkdown = renderMarkdownToSafeHtmlOnServer(prompt.skill_markdown);
-    promptHtml.skillPythonScript = prompt.skill_python_script
-      ? renderMarkdownToSafeHtmlOnServer(buildSkillScriptMarkdown(prompt.skill_python_script))
-      : "";
   }
 
   // 正規パス（プロンプトが存在する場合はスラッグ付き、なければ要求パス）から絶対URLを組み立てる
@@ -293,6 +293,9 @@ export default function SharedPromptPage({
   const contentFormat = normalizePromptContentFormat(prompt?.content_format || prompt?.prompt_type || "");
   const mediaType = normalizePromptMediaType(prompt?.media_type || prompt?.prompt_type || "");
   const isSkillPrompt = contentFormat === "skill";
+  const skillResources = isSkillPrompt
+    ? normalizeSkillResources(prompt?.resources, prompt?.skill_python_script || "")
+    : [];
   const promptTitle = prompt?.title || "共有プロンプト";
   const pageTitle = `${promptTitle} | Chat Core 共有`;
   const description = buildMetaDescription(payload);
@@ -350,6 +353,15 @@ export default function SharedPromptPage({
         }
       ]
     : undefined;
+
+  const copyResource = async (resource: PromptResource) => {
+    try {
+      await copyTextToClipboard(resource.content);
+      showToast(`${resource.path} をコピーしました。`, { variant: "success" });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "コピーに失敗しました。", { variant: "error" });
+    }
+  };
 
   return (
     <>
@@ -432,15 +444,41 @@ export default function SharedPromptPage({
               </section>
             ) : null}
 
-            {/* スキルプロンプトの追加Pythonスクリプト / Additional Python script for skill prompts */}
-            {prompt.skill_python_script ? (
-              <section className="shared-prompt-section">
-                <h2><i className="bi bi-filetype-py" aria-hidden="true" /> 追加 Python スクリプト</h2>
-                <MarkdownContent
-                  text={buildSkillScriptMarkdown(prompt.skill_python_script)}
-                  ssrHtml={promptHtml.skillPythonScript}
-                  className="md-content"
-                />
+            {skillResources.length > 0 ? (
+              <section className="shared-prompt-section shared-prompt-resources">
+                <h2>
+                  <i className="bi bi-files" aria-hidden="true" />
+                  追加リソース
+                  <span className="shared-prompt-resources__count">{skillResources.length}ファイル</span>
+                </h2>
+                <div className="shared-prompt-resources__list">
+                  {skillResources.map((resource, index) => (
+                    <article
+                      className="shared-prompt-resource"
+                      key={`${resource.path}-${index}`}
+                    >
+                      <header className="shared-prompt-resource__header">
+                        <div>
+                          <strong>{resource.path}</strong>
+                          <span>
+                            {getSkillResourceRoleLabel(resource.role)}
+                            {resource.language ? ` · ${resource.language}` : ""}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void copyResource(resource);
+                          }}
+                        >
+                          <i className="bi bi-clipboard" aria-hidden="true" />
+                          コピー
+                        </button>
+                      </header>
+                      <pre><code>{resource.content}</code></pre>
+                    </article>
+                  ))}
+                </div>
               </section>
             ) : null}
 

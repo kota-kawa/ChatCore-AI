@@ -67,22 +67,54 @@ class PromptUseInChatApiTestCase(unittest.TestCase):
         self.assertFalse(payload["used_in_chat"])
         mock_remove.assert_called_once_with(5, 10)
 
-    # スキル型プロンプトからタスク用テンプレートを生成する際、説明文やPythonスクリプトが欠落せず維持されることを検証します。
-    # Verify that composing a task template from a skill-type prompt preserves both description markdown and Python script.
-    def test_compose_task_prompt_template_keeps_skill_body_and_script(self):
+    # SKILLからタスク用テンプレートを生成する際、Markdownと複数の名前付きリソースを維持することを検証します。
+    # Verify that composing a task template preserves Markdown and named resources.
+    def test_compose_task_prompt_template_keeps_skill_body_and_resources(self):
         template = _compose_task_prompt_template(
             {
                 "content_format": "skill",
                 "content": "",
-                "attributes": {
-                    "skill_markdown": "# SKILL\n\n使い方",
-                    "skill_python_script": "print('hello')",
-                },
+                "attributes": {"skill_markdown": "# SKILL\n\n使い方"},
+                "resources": [
+                    {
+                        "path": "scripts/main.py",
+                        "role": "script",
+                        "language": "python",
+                        "content": "print('hello')",
+                    },
+                    {
+                        "path": "config/example.json",
+                        "role": "config",
+                        "language": "json",
+                        "content": '{"enabled": true}',
+                    },
+                ],
             }
         )
 
         self.assertIn("# SKILL", template)
+        self.assertIn("## Resource: `scripts/main.py`", template)
         self.assertIn("```python\nprint('hello')\n```", template)
+        self.assertIn("## Resource: `config/example.json`", template)
+        self.assertIn('```json\n{"enabled": true}\n```', template)
+
+    def test_compose_task_prompt_template_uses_safe_longer_fence(self):
+        template = _compose_task_prompt_template(
+            {
+                "content_format": "skill",
+                "attributes": {"skill_markdown": "# SKILL"},
+                "resources": [
+                    {
+                        "path": "references/fences.md",
+                        "language": "markdown",
+                        "content": "```python\nprint('nested')\n```",
+                    }
+                ],
+            }
+        )
+
+        self.assertIn("````markdown", template)
+        self.assertIn("```python", template)
 
 
 if __name__ == "__main__":

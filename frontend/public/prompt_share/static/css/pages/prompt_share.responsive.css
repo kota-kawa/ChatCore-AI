@@ -9,6 +9,19 @@
 }
 
 @media (max-width: 768px) {
+  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__add {
+    align-self: flex-start;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .skill-resource-editor__meta {
+    grid-template-columns: 1fr;
+  }
+
   .prompt-share-page #auth-buttons {
     z-index: var(--z-floating-controls, 65) !important;
   }

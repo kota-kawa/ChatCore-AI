@@ -19,8 +19,9 @@ import {
   normalizeContentFormat,
   normalizeMediaType
 } from "../../scripts/prompt_share/prompt_type_registry";
-import type { ContentFormat, MediaType } from "../../scripts/prompt_share/types";
+import type { ContentFormat, MediaType, PromptResource } from "../../scripts/prompt_share/types";
 import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
+import { SkillResourceEditor } from "./skill_resource_editor";
 
 // レジストリ駆動で描画する属性フィールドの、親が用意する状態バインディング。
 // State binding (provided by the parent) for a registry-driven attribute field.
@@ -58,6 +59,8 @@ type PromptShareComposerModalProps = {
   setPostInputExample: (value: string) => void;
   postOutputExample: string;
   setPostOutputExample: (value: string) => void;
+  postResources: PromptResource[];
+  setPostResources: (resources: PromptResource[]) => void;
   // フォーマット固有の属性フィールド (キー -> 状態バインディング)。
   // Format-specific attribute fields (key -> state binding).
   attributeBindings: Record<string, AttributeBinding>;
@@ -505,6 +508,8 @@ export function PromptShareComposerModal({
   setPostInputExample,
   postOutputExample,
   setPostOutputExample,
+  postResources,
+  setPostResources,
   attributeBindings,
   updatePromptFeedbackErrorIfNeeded,
   categoryOptions,
@@ -694,7 +699,7 @@ export function PromptShareComposerModal({
                 </div>
                 {contentFormat === "skill" && showSkillInfo ? (
                   <p className="composer-section__description">
-                    AI補助でMarkdown定義と必要なPythonスクリプトを作成できます。
+                    Markdownで手順を定義し、必要なスクリプト・参照資料・設定をリソースとして追加できます。
                   </p>
                 ) : null}
               </div>
@@ -835,6 +840,13 @@ export function PromptShareComposerModal({
                     </div>
                   );
                 })}
+                {contentFormat === "skill" ? (
+                  <SkillResourceEditor
+                    resources={postResources}
+                    setResources={setPostResources}
+                    onEdit={updatePromptFeedbackErrorIfNeeded}
+                  />
+                ) : null}
               </div>
             </section>
 

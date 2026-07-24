@@ -44,3 +44,48 @@ test("shared prompt page renders links to random prompt recommendations", () => 
   assert.match(html, /おすすめの会議メモ要約/);
   assert.match(html, /href="\/shared\/prompt\/21/);
 });
+
+test("shared skill page renders multiple named resources with copy actions", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SharedPromptPage, {
+      payload: {
+        prompt: {
+          id: 34,
+          title: "複数ファイルのSKILL",
+          category: "development",
+          content_format: "skill",
+          media_type: "text",
+          skill_markdown: "# 手順",
+          resources: [
+            {
+              path: "scripts/run.ts",
+              role: "script",
+              language: "typescript",
+              content: "console.log('run');"
+            },
+            {
+              path: "references/api.md",
+              role: "reference",
+              language: "markdown",
+              content: "# API"
+            }
+          ]
+        }
+      },
+      recommendedPrompts: [],
+      promptHtml: {
+        content: "",
+        inputExamples: "",
+        outputExamples: "",
+        skillMarkdown: "<h1>手順</h1>",
+        skillPythonScript: ""
+      },
+      pageUrl: "https://chatcore-ai.com/shared/prompt/34/multi-resource-skill",
+      defaultOgImageUrl: "https://chatcore-ai.com/static/img.jpg"
+    })
+  );
+
+  assert.match(html, /scripts\/run\.ts/);
+  assert.match(html, /references\/api\.md/);
+  assert.equal((html.match(/コピー/g) || []).length, 2);
+});

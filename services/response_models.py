@@ -90,6 +90,22 @@ class PromptRecordApi(ResponsePayloadModel):
     created_at: str | None = None
 
 
+# 日本語: SKILL投稿に同梱された1件のテキストリソース。
+# English: One text resource bundled with a SKILL post.
+class PromptResourceApi(ResponsePayloadModel):
+    id: int | None = None
+    path: str
+    role: Literal["script", "reference", "config", "other"] = "other"
+    language: str = "text"
+    media_type: str = "text/plain"
+    content: str = ""
+    size_bytes: int = 0
+    sha256: str = ""
+    sort_order: int = 0
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 # 日本語: いいねしたプロンプト要素レコードを表すモデル。
 # English: Model representing a liked prompt list entry.
 class LikedPromptApi(PromptRecordApi):
@@ -109,6 +125,7 @@ class LikedPromptApi(PromptRecordApi):
     reference_image_url: str | None = None
     skill_markdown: str | None = ""
     skill_python_script: str | None = ""
+    resources: list[PromptResourceApi] = Field(default_factory=list)
     prompt_created_at: str | None = None
     liked_at: str | None = None
     liked: bool = True

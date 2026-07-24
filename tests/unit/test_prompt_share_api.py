@@ -4,12 +4,42 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from blueprints.prompt_share.prompt_share_api import get_prompt_detail, get_recommended_prompts
+from blueprints.prompt_share.prompt_share_api import (
+    _serialize_prompt_row,
+    get_prompt_detail,
+    get_recommended_prompts,
+)
 
 
 # 公開されているプロンプトの詳細情報を取得するAPIの挙動を検証するテストクラス。
 # Test case class to verify the functionality and specifications of the prompt detail retrieval API.
 class PromptShareApiTestCase(unittest.TestCase):
+    def test_serializer_returns_resources_and_legacy_python_compatibility(self):
+        serialized = _serialize_prompt_row(
+            {
+                "id": 12,
+                "title": "Skill",
+                "content": "",
+                "content_format": "skill",
+                "media_type": "text",
+                "attributes": {"skill_markdown": "# Skill"},
+                "attachments": [],
+                "resources": [
+                    {
+                        "path": "scripts/main.py",
+                        "role": "script",
+                        "language": "python",
+                        "size_bytes": 8,
+                    }
+                ],
+                "resource_python_script": "print(1)",
+            }
+        )
+
+        self.assertEqual(serialized["resources"][0]["path"], "scripts/main.py")
+        self.assertEqual(serialized["skill_python_script"], "print(1)")
+        self.assertNotIn("resource_python_script", serialized)
+
     # ID指定で正常に公開プロンプトの詳細情報がJSON形式で取得できることを検証します。
     # Verify that get prompt detail returns the requested public prompt payload successfully.
     def test_get_prompt_detail_returns_public_prompt(self):

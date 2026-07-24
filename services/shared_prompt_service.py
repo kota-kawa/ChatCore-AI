@@ -6,7 +6,12 @@ import json
 from typing import Any
 
 from services.db import get_db_connection
-from services.prompt_types import normalize_content_format, normalize_media_type
+from services.prompt_types import (
+    SKILL_PYTHON_SCRIPT_KEY,
+    normalize_content_format,
+    normalize_media_type,
+)
+from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.request_models import SharedPromptCreateRequest
 
 
@@ -15,8 +20,14 @@ def create_shared_prompt(
     payload: SharedPromptCreateRequest,
     *,
     attachments: list[dict[str, str]] | None = None,
+    resource_repository: PromptResourceRepository | None = None,
 ) -> int:
     """Persist a validated public prompt on behalf of an authenticated user."""
+    repository = resource_repository or PromptResourceRepository()
+    persisted_attributes = dict(payload.attributes or {})
+    # Legacy input is converted to resources by SharedPromptCreateRequest and is never
+    # written back into the attributes JSON of a newly created post.
+    persisted_attributes.pop(SKILL_PYTHON_SCRIPT_KEY, None)
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
@@ -41,7 +52,7 @@ def create_shared_prompt(
                     user_id,
                     normalize_content_format(payload.content_format),
                     normalize_media_type(payload.media_type),
-                    json.dumps(payload.attributes or {}),
+                    json.dumps(persisted_attributes),
                     json.dumps(attachments or []),
                     payload.input_examples,
                     payload.output_examples,
@@ -50,9 +61,14 @@ def create_shared_prompt(
                 ),
             )
             row: tuple[Any, ...] | None = cursor.fetchone()
-            conn.commit()
             if not row:
                 raise RuntimeError("Shared prompt insert did not return an ID.")
-            return int(row[0])
+            prompt_id = int(row[0])
+            repository.insert_many(cursor, prompt_id, payload.resources)
+            conn.commit()
+            return prompt_id
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             cursor.close()

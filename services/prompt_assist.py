@@ -8,7 +8,7 @@ from services.llm import LlmProviderError, get_llm_response
 from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
-SHARED_PROMPT_SKILL_ALLOWED_FIELDS = ("title", "skill_markdown", "skill_python_script")
+SHARED_PROMPT_SKILL_ALLOWED_FIELDS = ("title", "skill_markdown")
 SHARED_PROMPT_CONTEXT_FIELDS = (
     "title",
     "category",
@@ -19,7 +19,6 @@ SHARED_PROMPT_CONTEXT_FIELDS = (
     "output_examples",
     "ai_model",
     "skill_markdown",
-    "skill_python_script",
 )
 PROMPT_ASSIST_TARGETS = {
     "task_modal": {
@@ -50,7 +49,6 @@ PROMPT_ASSIST_FIELD_LABELS = {
     "author": "投稿者名",
     "prompt_type": "互換タイプ",
     "skill_markdown": "SKILL定義",
-    "skill_python_script": "追加Pythonスクリプト",
     "input_examples": "入力例",
     "output_examples": "出力例",
     "ai_model": "使用AIモデル",
@@ -190,7 +188,7 @@ def _build_prompt_assist_messages(
             [
                 "shared_prompt_modal で prompt_type=skill の場合、content・input_examples・output_examples は提案しない。",
                 "skill_markdown を主フィールドとして扱い、Markdown で目的・使い方・手順・期待出力が伝わる構成にする。",
-                "skill_python_script は必要な場合のみ提案し、Pythonコードのみを記載する。",
+                "追加リソースは投稿フォームのリソースエディターでユーザーが個別に登録するため、suggested_fields には含めない。",
                 "shared_prompt_modal では category, author, prompt_type, ai_model は文脈としてのみ使い、suggested_fields に含めない。",
             ]
         )
