@@ -67,14 +67,6 @@ export function MemoSidebar({
                 </button>
                 <button
                   type="button"
-                  className={`memo-sidebar-nav__item${isMemosView && archiveScope === "archived" ? " is-active" : ""}`}
-                  onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("archived"); }}
-                >
-                  <i className="bi bi-archive" aria-hidden="true"></i>
-                  <span>アーカイブ</span>
-                </button>
-                <button
-                  type="button"
                   className={`memo-sidebar-nav__item${activeView === "context" ? " is-active" : ""}`}
                   onClick={() => setActiveView("context")}
                 >
@@ -110,6 +102,16 @@ export function MemoSidebar({
                   <section className="memo-sidebar-section">
                     <h3 className="memo-sidebar-section__title">コレクション</h3>
                     <div className="memo-sidebar-collection-list">
+                      <button
+                        type="button"
+                        className={`memo-sidebar-collection-item memo-sidebar-collection-item--system${archiveScope === "archived" ? " is-active" : ""}`}
+                        onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("archived"); }}
+                      >
+                        <span className="memo-sidebar-collection-icon" aria-hidden="true">
+                          <i className="bi bi-archive"></i>
+                        </span>
+                        <span className="memo-sidebar-collection-name">アーカイブ</span>
+                      </button>
                       {collections.map((col) => (
                         <button
                           key={col.id}
