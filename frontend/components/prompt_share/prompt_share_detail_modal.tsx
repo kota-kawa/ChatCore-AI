@@ -14,6 +14,10 @@ import {
   normalizePromptMediaType
 } from "../../scripts/prompt_share/formatters";
 import type { PromptCommentData } from "../../scripts/prompt_share/types";
+import {
+  getSkillResourceRoleLabel,
+  normalizeSkillResources
+} from "../../scripts/prompt_share/skill_resources";
 import type { PromptRecord } from "./prompt_card";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -104,6 +108,9 @@ export function PromptShareDetailModal({
   const authorLabel = detailPrompt?.author || "投稿者未設定";
   const promptBodyLength = Array.from(promptBody).length;
   const hasExamples = !isSkillFormat && Boolean(detailPrompt?.input_examples || detailPrompt?.output_examples);
+  const skillResources = isSkillFormat
+    ? normalizeSkillResources(detailPrompt?.resources, detailPrompt?.skill_python_script || "")
+    : [];
 
   const copyPromptBody = async () => {
     if (!promptBody.trim()) {
@@ -113,6 +120,15 @@ export function PromptShareDetailModal({
     try {
       await copyTextToClipboard(promptBody);
       showToast("プロンプト本文をコピーしました。", { variant: "success" });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "コピーに失敗しました。", { variant: "error" });
+    }
+  };
+
+  const copyResource = async (path: string, content: string) => {
+    try {
+      await copyTextToClipboard(content);
+      showToast(`${path} をコピーしました。`, { variant: "success" });
     } catch (error) {
       showToast(error instanceof Error ? error.message : "コピーに失敗しました。", { variant: "error" });
     }
@@ -330,20 +346,50 @@ export function PromptShareDetailModal({
               </div>
             ) : null}
 
-            {/* Pythonスクリプトはpreタグで等幅フォント表示し、コードの可読性を保つ */}
-            {/* Python script shown in a <pre> block to preserve monospace formatting */}
-            {isSkillFormat && detailPrompt?.skill_python_script ? (
-              <article id="modalSkillPythonScriptGroup" className="prompt-detail-section prompt-detail-section--code">
-                <div className="prompt-detail-section__header">
+            {skillResources.length > 0 ? (
+              <section className="prompt-detail-resources" aria-labelledby="modalSkillResourcesTitle">
+                <div className="prompt-detail-resources__heading">
                   <div>
-                    <span className="prompt-detail-section__label">追加 Python スクリプト</span>
-                    <span className="prompt-detail-section__meta">実行補助コード</span>
+                    <span className="prompt-detail-section__label" id="modalSkillResourcesTitle">
+                      追加リソース
+                    </span>
+                    <span className="prompt-detail-section__meta">
+                      {skillResources.length}ファイル
+                    </span>
                   </div>
                 </div>
-                <pre className="prompt-detail-code">
-                  <code>{detailPrompt.skill_python_script}</code>
-                </pre>
-              </article>
+                <div className="prompt-detail-resources__list">
+                  {skillResources.map((resource, index) => (
+                    <article
+                      className="prompt-detail-section prompt-detail-section--code"
+                      key={`${resource.path}-${index}`}
+                    >
+                      <div className="prompt-detail-section__header">
+                        <div>
+                          <span className="prompt-detail-section__label">{resource.path}</span>
+                          <span className="prompt-detail-section__meta">
+                            {getSkillResourceRoleLabel(resource.role)}
+                            {resource.language ? ` · ${resource.language}` : ""}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="prompt-detail-copy-btn"
+                          onClick={() => {
+                            void copyResource(resource.path, resource.content);
+                          }}
+                        >
+                          <i className="bi bi-clipboard" aria-hidden="true"></i>
+                          <span>コピー</span>
+                        </button>
+                      </div>
+                      <pre className="prompt-detail-code">
+                        <code>{resource.content}</code>
+                      </pre>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ) : null}
           </section>
 

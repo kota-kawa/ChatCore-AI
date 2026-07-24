@@ -11,9 +11,21 @@ from services.attached_files import (
     MAX_ATTACHED_FILES,
 )
 from services.prompt_categories import normalize_category
+from services.prompt_resources import (
+    MAX_SKILL_RESOURCES,
+    MAX_SKILL_RESOURCES_TOTAL_BYTES,
+    SKILL_RESOURCE_ROLES,
+    infer_resource_language,
+    infer_resource_media_type,
+    resource_size_bytes,
+    validate_resource_content,
+    validate_resource_path,
+)
 from services.prompt_types import (
+    CONTENT_FORMAT_SKILL,
     DEFAULT_CONTENT_FORMAT,
     DEFAULT_MEDIA_TYPE,
+    SKILL_PYTHON_SCRIPT_KEY,
     normalize_content_format,
     normalize_media_type,
     requires_content,
@@ -257,7 +269,6 @@ class PromptAssistFields(RequestPayloadModel):
     content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
     prompt_content: str = Field(default="", max_length=MAX_PROMPT_ASSIST_TEXT_LENGTH)
     skill_markdown: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
-    skill_python_script: str = Field(default="", max_length=MAX_SHARED_PROMPT_SKILL_TEXT_LENGTH)
     category: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     author: str = Field(default="", max_length=MAX_PROMPT_ASSIST_META_LENGTH)
     prompt_type: str = "text"
@@ -291,6 +302,88 @@ class AiAgentRequest(RequestPayloadModel):
     memo_id: int | None = Field(default=None, ge=1)
 
 
+# 日本語: SKILL投稿に同梱するUTF-8テキストリソース。
+# English: UTF-8 text resource bundled with a SKILL post.
+class SkillResourceInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    role: Literal["script", "reference", "config", "other"] = "other"
+    language: str = Field(default="", max_length=64)
+    content: str
+    media_type: str = Field(default="", max_length=128)
+
+    @model_validator(mode="after")
+    def validate_text_resource(self) -> "SkillResourceInput":
+        self.path = validate_resource_path(self.path)
+        self.content = validate_resource_content(self.content)
+        if self.role not in SKILL_RESOURCE_ROLES:
+            raise ValueError("リソースの role が不正です。")
+        language = self.language.strip().lower()
+        if language and not re.fullmatch(r"[a-z0-9][a-z0-9_+.#-]{0,63}", language):
+            raise ValueError("リソースの language が不正です。")
+        self.language = language or infer_resource_language(self.path)
+        media_type = self.media_type.strip().lower()
+        if media_type and not (
+            media_type.startswith("text/")
+            or media_type
+            in {
+                "application/json",
+                "application/javascript",
+                "application/toml",
+                "application/xml",
+                "application/yaml",
+            }
+        ):
+            raise ValueError("テキストリソースとして扱えない media_type です。")
+        self.media_type = media_type or infer_resource_media_type(self.path)
+        return self
+
+
+def _validate_skill_resources(
+    *,
+    content_format: str,
+    attributes: dict[str, str],
+    resources: list[SkillResourceInput],
+) -> tuple[dict[str, str], list[SkillResourceInput]]:
+    """Normalize legacy Python input and enforce collection-wide resource constraints."""
+    legacy_python = str(attributes.pop(SKILL_PYTHON_SCRIPT_KEY, "") or "")
+    normalized_resources = list(resources)
+    if (
+        content_format == CONTENT_FORMAT_SKILL
+        and legacy_python
+        and all(item.path.casefold() != "scripts/main.py" for item in normalized_resources)
+    ):
+        normalized_resources.append(
+            SkillResourceInput(
+                path="scripts/main.py",
+                role="script",
+                language="python",
+                content=legacy_python,
+                media_type="text/x-python",
+            )
+        )
+    if content_format != CONTENT_FORMAT_SKILL and normalized_resources:
+        raise ValueError("resources はSKILL投稿でのみ指定できます。")
+    if len(normalized_resources) > MAX_SKILL_RESOURCES:
+        raise ValueError(f"SKILLリソースは最大 {MAX_SKILL_RESOURCES} 件までです。")
+
+    seen_paths: set[str] = set()
+    total_size = 0
+    for resource in normalized_resources:
+        path_key = resource.path.casefold()
+        if path_key in seen_paths:
+            raise ValueError(f"リソースの path が重複しています: {resource.path}")
+        seen_paths.add(path_key)
+        total_size += resource_size_bytes(resource.content)
+    if total_size > MAX_SKILL_RESOURCES_TOTAL_BYTES:
+        raise ValueError(
+            "SKILLリソースの合計サイズは "
+            f"{MAX_SKILL_RESOURCES_TOTAL_BYTES} バイト以内にしてください。"
+        )
+    return attributes, normalized_resources
+
+
 # 日本語: 共有プロンプト（またはSKILL）を新しく投稿する際のリクエストペイロード。
 # English: Request payload for posting a new shared prompt or SKILL.
 class SharedPromptCreateRequest(RequestPayloadModel):
@@ -307,6 +400,10 @@ class SharedPromptCreateRequest(RequestPayloadModel):
     # フォーマット固有の構造化フィールド (例: skill_markdown)。許可キーのみ採用。
     # Format-specific structured fields (e.g. skill_markdown); only declared keys are kept.
     attributes: dict[str, str] = Field(default_factory=dict)
+    resources: list[SkillResourceInput] = Field(
+        default_factory=list,
+        max_length=MAX_SKILL_RESOURCES,
+    )
 
     @model_validator(mode="after")
     def validate_two_axis(self) -> "SharedPromptCreateRequest":
@@ -324,6 +421,11 @@ class SharedPromptCreateRequest(RequestPayloadModel):
         errors = validate_attributes(self.content_format, self.attributes)
         if errors:
             raise ValueError(errors[0])
+        self.attributes, self.resources = _validate_skill_resources(
+            content_format=self.content_format,
+            attributes=self.attributes,
+            resources=self.resources,
+        )
         if requires_content(self.content_format) and not self.content:
             raise ValueError("通常投稿では content が必須です。")
         return self
@@ -357,11 +459,19 @@ class PromptCommentReportRequest(RequestPayloadModel):
 # 日本語: 投稿済みの共有プロンプトの内容を更新する際のリクエストペイロード。
 # English: Request payload for updating an already posted shared prompt.
 class PromptUpdateRequest(RequestPayloadModel):
-    title: NonEmptyStr
+    title: Annotated[str, Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH)]
     category: NonEmptyStr
-    content: NonEmptyStr
-    input_examples: str = ""
-    output_examples: str = ""
+    content: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    content_format: str = DEFAULT_CONTENT_FORMAT
+    media_type: str = DEFAULT_MEDIA_TYPE
+    attributes: dict[str, str] = Field(default_factory=dict)
+    # None means "leave existing resources unchanged"; [] explicitly removes all resources.
+    resources: list[SkillResourceInput] | None = Field(
+        default=None,
+        max_length=MAX_SKILL_RESOURCES,
+    )
+    input_examples: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
+    output_examples: str = Field(default="", max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH)
 
     @model_validator(mode="after")
     def validate_category(self) -> "PromptUpdateRequest":
@@ -371,6 +481,22 @@ class PromptUpdateRequest(RequestPayloadModel):
         if not normalized_category:
             raise ValueError("カテゴリの指定が不正です。")
         self.category = normalized_category
+        self.content_format = normalize_content_format(self.content_format)
+        self.media_type = normalize_media_type(self.media_type)
+        self.attributes = sanitize_attributes(self.content_format, self.attributes)
+        errors = validate_attributes(self.content_format, self.attributes)
+        if errors:
+            raise ValueError(errors[0])
+        if self.resources is not None:
+            self.attributes, self.resources = _validate_skill_resources(
+                content_format=self.content_format,
+                attributes=self.attributes,
+                resources=self.resources,
+            )
+        else:
+            self.attributes.pop(SKILL_PYTHON_SCRIPT_KEY, None)
+        if requires_content(self.content_format) and not self.content:
+            raise ValueError("通常投稿では content が必須です。")
         return self
 
 

@@ -5,12 +5,13 @@ import binascii
 import hashlib
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Mapping
 
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 from services.prompt_categories import category_keys_matching, normalize_category
 from services.prompt_types import CONTENT_FORMATS, MEDIA_TYPES, serialize_axes
+from services.repositories.prompt_resource_repository import PromptResourceRepository
 from services.repositories.shared_content_repository import SharedContentRepository
 from services.web_urls import build_frontend_url
 
@@ -44,6 +45,19 @@ class PublicSharedContentPage(BaseModel):
     next_cursor: str | None = None
 
 
+class PublicSkillResourceMetadata(BaseModel):
+    path: str
+    role: str
+    language: str = ""
+    media_type: str = "text/plain"
+    size_bytes: int = Field(default=0, ge=0)
+    sha256: str = ""
+
+
+class PublicSkillResourceDetail(PublicSkillResourceMetadata):
+    content: str = ""
+
+
 class PublicSharedContentDetail(BaseModel):
     prompt_id: int
     title: str
@@ -54,6 +68,8 @@ class PublicSharedContentDetail(BaseModel):
     media_type: str
     attachments: list[dict[str, str]] = Field(default_factory=list)
     skill_markdown: str = ""
+    resources: list[PublicSkillResourceMetadata] = Field(default_factory=list)
+    # 旧クライアント向け。scripts/main.py の本文から派生し、新規保存には使用しない。
     skill_python_script: str = ""
     input_examples: str = ""
     output_examples: str = ""
@@ -71,9 +87,11 @@ class SharedContentService:
         *,
         public_base_url: str,
         repository: SharedContentRepository | None = None,
+        resource_repository: PromptResourceRepository | None = None,
     ) -> None:
         self._public_base_url = public_base_url
         self._repository = repository or SharedContentRepository()
+        self._resource_repository = resource_repository or PromptResourceRepository()
 
     def list_public_content(
         self,
@@ -141,6 +159,15 @@ class SharedContentService:
             return None
 
         axes = serialize_axes(row)
+        resources = self._resource_metadata_for_prompt(int(row["id"]))
+        skill_python_script = str(axes["skill_python_script"])
+        if axes["content_format"] == "skill":
+            legacy_resource = self._resource_repository.get_for_prompt(
+                int(row["id"]),
+                "scripts/main.py",
+            )
+            if legacy_resource is not None:
+                skill_python_script = self._resource_content(legacy_resource)
         return PublicSharedContentDetail(
             prompt_id=int(row["id"]),
             title=str(row.get("title") or ""),
@@ -151,7 +178,8 @@ class SharedContentService:
             media_type=str(axes["media_type"]),
             attachments=list(axes["attachments"]),
             skill_markdown=str(axes["skill_markdown"]),
-            skill_python_script=str(axes["skill_python_script"]),
+            resources=resources,
+            skill_python_script=skill_python_script,
             input_examples=str(row.get("input_examples") or ""),
             output_examples=str(row.get("output_examples") or ""),
             ai_model=str(row.get("ai_model") or ""),
@@ -159,6 +187,82 @@ class SharedContentService:
             updated_at=row.get("updated_at"),
             public_url=self._public_url(int(row["id"])),
         )
+
+    def list_public_skill_resources(
+        self,
+        prompt_id: int,
+    ) -> list[PublicSkillResourceMetadata] | None:
+        row = self._get_public_skill_row(prompt_id)
+        if row is None:
+            return None
+        return self._resource_metadata_for_prompt(int(row["id"]))
+
+    def get_public_skill_resource(
+        self,
+        prompt_id: int,
+        path: str,
+    ) -> PublicSkillResourceDetail | None:
+        row = self._get_public_skill_row(prompt_id)
+        if row is None:
+            return None
+        normalized_path = str(path or "").strip()
+        if not normalized_path:
+            raise ValueError("path must not be blank.")
+        resource = self._resource_repository.get_for_prompt(int(row["id"]), normalized_path)
+        if resource is None:
+            return None
+        metadata = self._resource_metadata(resource)
+        return PublicSkillResourceDetail(
+            **metadata.model_dump(),
+            content=self._resource_content(resource),
+        )
+
+    def _get_public_skill_row(self, prompt_id: int) -> dict[str, Any] | None:
+        if isinstance(prompt_id, bool) or int(prompt_id) <= 0:
+            raise ValueError("prompt_id must be a positive integer.")
+        row = self._repository.get_public_content(int(prompt_id))
+        if row is None:
+            return None
+        axes = serialize_axes(row)
+        if axes["content_format"] != "skill":
+            raise ValueError("指定された投稿はSKILLではありません。")
+        return row
+
+    def _resource_metadata_for_prompt(
+        self,
+        prompt_id: int,
+    ) -> list[PublicSkillResourceMetadata]:
+        return [
+            self._resource_metadata(resource)
+            for resource in self._resource_repository.list_for_prompt(prompt_id)
+        ]
+
+    @classmethod
+    def _resource_metadata(cls, resource: object) -> PublicSkillResourceMetadata:
+        data = cls._resource_mapping(resource)
+        content = str(data.get("text_content") or data.get("content") or "")
+        return PublicSkillResourceMetadata(
+            path=str(data.get("path") or ""),
+            role=str(data.get("role") or "other"),
+            language=str(data.get("language") or ""),
+            media_type=str(data.get("media_type") or "text/plain"),
+            size_bytes=int(data.get("size_bytes") or len(content.encode("utf-8"))),
+            sha256=str(data.get("sha256") or ""),
+        )
+
+    @classmethod
+    def _resource_content(cls, resource: object) -> str:
+        data = cls._resource_mapping(resource)
+        return str(data.get("text_content") or data.get("content") or "")
+
+    @staticmethod
+    def _resource_mapping(resource: object) -> Mapping[str, Any]:
+        if isinstance(resource, Mapping):
+            return resource
+        model_dump = getattr(resource, "model_dump", None)
+        if callable(model_dump):
+            return model_dump()
+        raise TypeError("resource must be a mapping or Pydantic model.")
 
     @staticmethod
     def _normalize_limit(value: int) -> int:

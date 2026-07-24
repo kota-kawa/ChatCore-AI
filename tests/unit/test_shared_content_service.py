@@ -146,6 +146,24 @@ class StubSharedContentRepository:
         return self.detail
 
 
+class StubPromptResourceRepository:
+    def __init__(self, *, resources=None):
+        self.resources = list(resources or [])
+        self.list_calls = []
+        self.get_calls = []
+
+    def list_for_prompt(self, prompt_id):
+        self.list_calls.append(prompt_id)
+        return self.resources
+
+    def get_for_prompt(self, prompt_id, path):
+        self.get_calls.append((prompt_id, path))
+        return next(
+            (resource for resource in self.resources if resource["path"] == path),
+            None,
+        )
+
+
 class SharedContentServiceTestCase(unittest.TestCase):
     def test_list_normalizes_filters_clamps_limit_and_returns_bounded_snippets(self):
         created_at = datetime(2026, 7, 16, 12, 0, 0)
@@ -270,21 +288,99 @@ class SharedContentServiceTestCase(unittest.TestCase):
                 "updated_at": updated_at,
             }
         )
+        resource_repository = StubPromptResourceRepository(
+            resources=[
+                {
+                    "path": "scripts/main.py",
+                    "role": "script",
+                    "language": "python",
+                    "media_type": "text/x-python",
+                    "text_content": "print('derived resource')",
+                    "size_bytes": 25,
+                    "sha256": "abc123",
+                }
+            ]
+        )
         service = SharedContentService(
             public_base_url="https://example.com",
             repository=repository,
+            resource_repository=resource_repository,
         )
 
         detail = service.get_public_content(31)
 
         self.assertIsNotNone(detail)
         self.assertEqual(detail.skill_markdown, "# Git Skill\n\nFull instructions")
-        self.assertEqual(detail.skill_python_script, "print('safe string only')")
+        self.assertEqual(detail.skill_python_script, "print('derived resource')")
+        self.assertEqual(len(detail.resources), 1)
+        self.assertEqual(detail.resources[0].path, "scripts/main.py")
+        self.assertNotIn("content", detail.resources[0].model_dump())
         self.assertNotIn("attributes", detail.model_dump())
         self.assertEqual(detail.input_examples, "")
         self.assertEqual(detail.updated_at, updated_at)
         self.assertEqual(str(detail.public_url), "https://example.com/shared/prompt/31")
         self.assertEqual(repository.detail_calls, [31])
+        self.assertEqual(resource_repository.list_calls, [31])
+        self.assertEqual(resource_repository.get_calls, [(31, "scripts/main.py")])
+
+    def test_skill_resources_are_listed_without_content_and_loaded_by_path(self):
+        repository = StubSharedContentRepository(
+            detail={
+                "id": 44,
+                "title": "Multi-file Skill",
+                "content_format": "skill",
+                "media_type": "text",
+                "attributes": {"skill_markdown": "# Skill"},
+                "created_at": datetime(2026, 7, 16, 12, 0, 0),
+            }
+        )
+        resource_repository = StubPromptResourceRepository(
+            resources=[
+                {
+                    "path": "references/api.md",
+                    "role": "reference",
+                    "language": "markdown",
+                    "media_type": "text/markdown",
+                    "text_content": "0123456789",
+                    "size_bytes": 10,
+                    "sha256": "hash",
+                }
+            ]
+        )
+        service = SharedContentService(
+            public_base_url="https://example.com",
+            repository=repository,
+            resource_repository=resource_repository,
+        )
+
+        resources = service.list_public_skill_resources(44)
+        resource = service.get_public_skill_resource(44, "references/api.md")
+
+        self.assertEqual([item.path for item in resources], ["references/api.md"])
+        self.assertNotIn("content", resources[0].model_dump())
+        self.assertEqual(resource.content, "0123456789")
+        self.assertEqual(resource.role, "reference")
+        self.assertEqual(repository.detail_calls, [44, 44])
+
+    def test_skill_resource_lookup_rejects_non_skill_posts(self):
+        repository = StubSharedContentRepository(
+            detail={
+                "id": 45,
+                "title": "Prompt",
+                "content": "text",
+                "content_format": "prompt",
+                "media_type": "text",
+                "created_at": datetime(2026, 7, 16, 12, 0, 0),
+            }
+        )
+        service = SharedContentService(
+            public_base_url="https://example.com",
+            repository=repository,
+            resource_repository=StubPromptResourceRepository(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "SKILLではありません"):
+            service.list_public_skill_resources(45)
 
     def test_detail_returns_none_for_invisible_or_missing_content(self):
         repository = StubSharedContentRepository(detail=None)

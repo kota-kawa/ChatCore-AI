@@ -30,6 +30,8 @@ class McpServerTestCase(unittest.TestCase):
                 "list_shared_content",
                 "search_shared_content",
                 "get_shared_content",
+                "list_skill_resources",
+                "get_skill_resource",
                 "list_prompt_categories",
                 "list_memos",
                 "search_memos",
@@ -57,6 +59,8 @@ class McpServerTestCase(unittest.TestCase):
             "list_shared_content": "prompts:read",
             "search_shared_content": "prompts:read",
             "get_shared_content": "prompts:read",
+            "list_skill_resources": "prompts:read",
+            "get_skill_resource": "prompts:read",
             "list_prompt_categories": "prompts:read",
             "list_memos": "memos:read",
             "search_memos": "memos:read",
@@ -124,6 +128,16 @@ class McpServerTestCase(unittest.TestCase):
                 )
             output = definition["outputSchema"]
             self.assertEqual(set(output["required"]), {"prompt_id", "title", "content_format", "public_url"})
+
+        skill_definition = next(
+            tool.model_dump(by_alias=True)
+            for tool in tools
+            if tool.name == "publish_skill"
+        )
+        skill_properties = skill_definition["inputSchema"]["properties"]
+        self.assertIn("resources", skill_properties)
+        self.assertNotIn("skill_python_script", skill_properties)
+        self.assertIn("実行しません", skill_properties["resources"]["description"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:

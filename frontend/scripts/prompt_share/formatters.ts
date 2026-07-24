@@ -8,6 +8,7 @@ import {
   normalizeContentFormat,
   normalizeMediaType
 } from "./prompt_type_registry";
+import { normalizeSkillResources } from "./skill_resources";
 
 export function truncateText(text: string, limit: number) {
   const safeText = text || "";
@@ -81,6 +82,7 @@ export function normalizePromptData(prompt: PromptData): PromptData {
     media_type: mediaType,
     attributes: prompt.attributes || {},
     attachments: Array.isArray(prompt.attachments) ? prompt.attachments : [],
+    resources: normalizeSkillResources(prompt.resources, prompt.skill_python_script || ""),
     prompt_type: normalizePromptType(prompt.prompt_type),
     reference_image_url: prompt.reference_image_url || "",
     skill_markdown: prompt.skill_markdown || "",

@@ -33,11 +33,13 @@ from services.mcp_tools.context_vault import register_context_vault_tools
 from services.mcp_tools.memos import register_memo_tools
 from services.mcp_tools.shared_content import register_shared_content_tools
 from services.prompt_categories import PROMPT_CATEGORIES
+from services.prompt_resources import MAX_SKILL_RESOURCES
 from services.request_models import (
     MAX_SHARED_PROMPT_AI_MODEL_LENGTH,
     MAX_SHARED_PROMPT_CONTENT_LENGTH,
     MAX_SHARED_PROMPT_TITLE_LENGTH,
     SharedPromptCreateRequest,
+    SkillResourceInput,
 )
 from services.shared_prompt_service import create_shared_prompt
 from services.web_urls import build_frontend_url
@@ -276,13 +278,17 @@ def _create_mcp() -> FastMCP:
             str,
             Field(description=MCP_CATEGORY_DESCRIPTION, json_schema_extra={"enum": ["", *MCP_CATEGORY_KEYS]}),
         ] = "",
-        skill_python_script: Annotated[
-            str,
+        resources: Annotated[
+            list[SkillResourceInput] | None,
             Field(
-                max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH,
-                description="任意。SKILLに付属するPythonコード。Chat-Coreでは実行されません",
+                max_length=MAX_SKILL_RESOURCES,
+                description=(
+                    "任意。SKILLに付属するテキストリソースの一覧。"
+                    "各要素にpath、role、language、contentを指定します。"
+                    "Chat-Coreではコードを実行しません"
+                ),
             ),
-        ] = "",
+        ] = None,
         ai_model: Annotated[
             str,
             Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="任意。作成・検証に使ったAIモデル名"),
@@ -295,10 +301,8 @@ def _create_mcp() -> FastMCP:
                 content_format="skill",
                 media_type="text",
                 ai_model=ai_model,
-                attributes={
-                    "skill_markdown": skill_markdown,
-                    "skill_python_script": skill_python_script,
-                },
+                attributes={"skill_markdown": skill_markdown},
+                resources=resources or [],
             )
         except ValidationError as exc:
             raise _validation_tool_error(exc, "SKILL") from exc

@@ -96,6 +96,36 @@ class PayloadValidationRoutesTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         mock_create.assert_called_once()
 
+    def test_create_skill_passes_canonical_resources_to_persistence(self):
+        request = make_request(
+            "/prompt_share/api/prompts",
+            {
+                "title": "multi resource skill",
+                "category": "",
+                "content_format": "skill",
+                "media_type": "text",
+                "attributes": {"skill_markdown": "# Skill"},
+                "resources": [
+                    {
+                        "path": "scripts/main.ts",
+                        "role": "script",
+                        "language": "typescript",
+                        "content": "export const run = () => true;",
+                    }
+                ],
+            },
+            session={"user_id": 1},
+        )
+
+        with patch("blueprints.prompt_share.prompt_share_api._create_prompt_for_user") as mock_create:
+            mock_create.return_value = 1
+            response = asyncio.run(create_prompt(request))
+
+        self.assertEqual(response.status_code, 201)
+        resources = mock_create.call_args.args[-2]
+        self.assertEqual(resources[0]["path"], "scripts/main.ts")
+        self.assertEqual(resources[0]["language"], "typescript")
+
 
 if __name__ == "__main__":
     unittest.main()

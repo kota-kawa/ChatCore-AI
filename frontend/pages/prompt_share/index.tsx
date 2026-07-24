@@ -29,6 +29,7 @@ import type {
   MediaType,
   PromptData,
   PromptPagination,
+  PromptResource,
   PromptType
 } from "../../scripts/prompt_share/types";
 import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
@@ -154,7 +155,7 @@ export default function PromptSharePage({
   const [postInputExample, setPostInputExample] = useState("");
   const [postOutputExample, setPostOutputExample] = useState("");
   const [postSkillMarkdown, setPostSkillMarkdown] = useState("");
-  const [postSkillPythonScript, setPostSkillPythonScript] = useState("");
+  const [postResources, setPostResources] = useState<PromptResource[]>([]);
   const [isPostSubmitting, setIsPostSubmitting] = useState(false);
   const [promptPostStatus, setPromptPostStatusState] = useState<PromptPostStatus>({
     message: "",
@@ -186,7 +187,6 @@ export default function PromptSharePage({
   const promptPostInputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostOutputExamplesRef = useRef<HTMLTextAreaElement | null>(null);
   const promptPostSkillMarkdownRef = useRef<HTMLTextAreaElement | null>(null);
-  const promptPostSkillPythonScriptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
     clearPromptImageSelection,
@@ -855,8 +855,7 @@ export default function PromptSharePage({
       // レジストリが宣言するキーのみを属性として送る (JSON文字列)。
       // Send only the keys the format declares, as a JSON string.
       const attributes = buildAttributes(contentFormat, {
-        skill_markdown: postSkillMarkdown,
-        skill_python_script: postSkillPythonScript
+        skill_markdown: postSkillMarkdown
       });
 
       const formData = new FormData();
@@ -869,6 +868,7 @@ export default function PromptSharePage({
       formData.append("output_examples", includeExamples ? postOutputExample : "");
       formData.append("ai_model", postAiModel);
       formData.append("attributes", JSON.stringify(attributes));
+      formData.append("resources", JSON.stringify(isSkill ? postResources : []));
 
       if (mediaAllowsAttachment(mediaType) && referenceImageFile) {
         formData.append("reference_image", referenceImageFile);
@@ -894,7 +894,7 @@ export default function PromptSharePage({
         setPostInputExample("");
         setPostOutputExample("");
         setPostSkillMarkdown("");
-        setPostSkillPythonScript("");
+        setPostResources([]);
         clearPromptImageSelection();
 
         await loadPrompts({
@@ -934,8 +934,8 @@ export default function PromptSharePage({
       postContent,
       postInputExample,
       postOutputExample,
+      postResources,
       postSkillMarkdown,
-      postSkillPythonScript,
       postTitle,
       contentFormat,
       mediaType,
@@ -984,8 +984,7 @@ export default function PromptSharePage({
       !promptPostAiModelSelectRef.current ||
       !promptPostInputExamplesRef.current ||
       !promptPostOutputExamplesRef.current ||
-      !promptPostSkillMarkdownRef.current ||
-      !promptPostSkillPythonScriptRef.current
+      !promptPostSkillMarkdownRef.current
     ) {
       return;
     }
@@ -1001,11 +1000,6 @@ export default function PromptSharePage({
           label: "SKILL定義",
           element: promptPostSkillMarkdownRef.current,
           setValue: setPostSkillMarkdown
-        },
-        skill_python_script: {
-          label: "追加Pythonスクリプト",
-          element: promptPostSkillPythonScriptRef.current,
-          setValue: setPostSkillPythonScript
         },
         ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {
@@ -1156,16 +1150,13 @@ export default function PromptSharePage({
           setPostInputExample={setPostInputExample}
           postOutputExample={postOutputExample}
           setPostOutputExample={setPostOutputExample}
+          postResources={postResources}
+          setPostResources={setPostResources}
           attributeBindings={{
             skill_markdown: {
               value: postSkillMarkdown,
               setValue: setPostSkillMarkdown,
               ref: promptPostSkillMarkdownRef
-            },
-            skill_python_script: {
-              value: postSkillPythonScript,
-              setValue: setPostSkillPythonScript,
-              ref: promptPostSkillPythonScriptRef
             }
           }}
           updatePromptFeedbackErrorIfNeeded={updatePromptFeedbackErrorIfNeeded}

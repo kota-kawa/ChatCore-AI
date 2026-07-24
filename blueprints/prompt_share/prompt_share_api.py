@@ -206,6 +206,24 @@ def _serialize_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # 後方互換の派生フィールドを付与する。
     # Attach the canonical two-axis fields plus derived legacy fields.
     prompt.update(serialize_axes(prompt))
+    resources = prompt.get("resources")
+    if not isinstance(resources, list):
+        resources = []
+    prompt["resources"] = resources
+    # 旧クライアント向けに、移行済みの標準Pythonリソースから互換フィールドを派生する。
+    # Derive the legacy field from the migrated canonical Python resource.
+    if not prompt.get("skill_python_script") and prompt.get("resource_python_script"):
+        prompt["skill_python_script"] = str(prompt["resource_python_script"])
+    if not prompt.get("skill_python_script"):
+        for resource in resources:
+            if (
+                isinstance(resource, dict)
+                and resource.get("path") == "scripts/main.py"
+                and isinstance(resource.get("content"), str)
+            ):
+                prompt["skill_python_script"] = resource["content"]
+                break
+    prompt.pop("resource_python_script", None)
     prompt["comment_count"] = int(prompt.get("comment_count") or 0)
     return prompt
 
@@ -468,6 +486,36 @@ def _get_prompts_with_flags(
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(
+                  (
+                    SELECT jsonb_agg(
+                      jsonb_build_object(
+                        'id', pr.id,
+                        'path', pr.path,
+                        'role', pr.role,
+                        'language', COALESCE(pr.language, ''),
+                        'media_type', pr.media_type,
+                        'size_bytes', pr.size_bytes,
+                        'sha256', pr.sha256,
+                        'sort_order', pr.sort_order
+                      )
+                      ORDER BY pr.sort_order, pr.id
+                    )
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                  ),
+                  '[]'::jsonb
+                ) AS resources,
+                COALESCE(
+                  (
+                    SELECT pr.text_content
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                      AND lower(pr.path) = 'scripts/main.py'
+                    LIMIT 1
+                  ),
+                  ''
+                ) AS resource_python_script,
                 p.created_at
               FROM prompts AS p
               LEFT JOIN users AS u
@@ -561,6 +609,36 @@ def _get_recommended_prompts(exclude_prompt_id: int | None, limit: int = RECOMME
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(
+                  (
+                    SELECT jsonb_agg(
+                      jsonb_build_object(
+                        'id', pr.id,
+                        'path', pr.path,
+                        'role', pr.role,
+                        'language', COALESCE(pr.language, ''),
+                        'media_type', pr.media_type,
+                        'size_bytes', pr.size_bytes,
+                        'sha256', pr.sha256,
+                        'sort_order', pr.sort_order
+                      )
+                      ORDER BY pr.sort_order, pr.id
+                    )
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                  ),
+                  '[]'::jsonb
+                ) AS resources,
+                COALESCE(
+                  (
+                    SELECT pr.text_content
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                      AND lower(pr.path) = 'scripts/main.py'
+                    LIMIT 1
+                  ),
+                  ''
+                ) AS resource_python_script,
                 p.created_at
             FROM prompts AS p
             LEFT JOIN users AS u
@@ -610,6 +688,37 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(
+                  (
+                    SELECT jsonb_agg(
+                      jsonb_build_object(
+                        'id', pr.id,
+                        'path', pr.path,
+                        'role', pr.role,
+                        'language', COALESCE(pr.language, ''),
+                        'media_type', pr.media_type,
+                        'content', COALESCE(pr.text_content, ''),
+                        'size_bytes', pr.size_bytes,
+                        'sha256', pr.sha256,
+                        'sort_order', pr.sort_order
+                      )
+                      ORDER BY pr.sort_order, pr.id
+                    )
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                  ),
+                  '[]'::jsonb
+                ) AS resources,
+                COALESCE(
+                  (
+                    SELECT pr.text_content
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                      AND lower(pr.path) = 'scripts/main.py'
+                    LIMIT 1
+                  ),
+                  ''
+                ) AS resource_python_script,
                 (
                     SELECT COUNT(*)
                     FROM prompt_comments AS pc
@@ -652,6 +761,7 @@ def _create_prompt_for_user(
     output_examples: str,
     ai_model: str,
     attributes: dict[str, str],
+    resources: list[dict[str, Any]],
     attachments: list[dict[str, str]],
 ) -> Any:
     """
@@ -668,8 +778,21 @@ def _create_prompt_for_user(
         output_examples=output_examples,
         ai_model=ai_model,
         attributes=attributes,
+        resources=resources,
     )
     return create_shared_prompt(user_id, payload, attachments=attachments)
+
+
+def _resource_code_fence(resource: dict[str, Any]) -> str:
+    """テキストリソースをファイル名付きMarkdownコードブロックへ変換する。"""
+    path = str(resource.get("path") or "").strip()
+    content = str(resource.get("content") or "")
+    if not path or not content:
+        return ""
+    language = re.sub(r"[^a-zA-Z0-9_+.-]", "", str(resource.get("language") or "text"))
+    longest_run = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
+    fence = "`" * max(3, longest_run + 1)
+    return f"## Resource: `{path}`\n\n{fence}{language}\n{content}\n{fence}"
 
 
 # プロンプトタイプに応じたタスク用テンプレートテキストを構築する関数
@@ -685,16 +808,33 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     if content_format != CONTENT_FORMAT_SKILL:
         return prompt.get("content") or ""
 
-    # スキルプロンプトの場合はマークダウン解説とPythonスクリプトを連結
-    # If it's a skill, combine markdown text and Python scripts.
+    # SKILL Markdownと、正準化された複数テキストリソースを順番に連結する。
+    # Combine SKILL Markdown with canonical named text resources.
     parts = []
     attributes = prompt.get("attributes") if isinstance(prompt.get("attributes"), dict) else {}
     skill_markdown = attributes.get("skill_markdown") or ""
-    skill_python_script = attributes.get("skill_python_script") or ""
     if skill_markdown:
         parts.append(skill_markdown)
-    if skill_python_script:
-        parts.append("```python\n" + skill_python_script + "\n```")
+    resources = prompt.get("resources") if isinstance(prompt.get("resources"), list) else []
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        rendered = _resource_code_fence(resource)
+        if rendered:
+            parts.append(rendered)
+    # migration適用前や旧テストデータに限り、旧属性へフォールバックする。
+    if not resources:
+        skill_python_script = attributes.get("skill_python_script") or ""
+        if skill_python_script:
+            parts.append(
+                _resource_code_fence(
+                    {
+                        "path": "scripts/main.py",
+                        "language": "python",
+                        "content": skill_python_script,
+                    }
+                )
+            )
     return "\n\n".join(parts) or (prompt.get("content") or "")
 
 
@@ -723,7 +863,27 @@ def _add_prompt_as_task_for_user(
                    output_examples,
                    content_format,
                    media_type,
-                   attributes
+                   attributes,
+                   COALESCE(
+                     (
+                       SELECT jsonb_agg(
+                         jsonb_build_object(
+                           'path', pr.path,
+                           'role', pr.role,
+                           'language', COALESCE(pr.language, ''),
+                           'media_type', pr.media_type,
+                           'content', COALESCE(pr.text_content, ''),
+                           'size_bytes', pr.size_bytes,
+                           'sha256', pr.sha256,
+                           'sort_order', pr.sort_order
+                         )
+                         ORDER BY pr.sort_order, pr.id
+                       )
+                       FROM prompt_resources AS pr
+                       WHERE pr.prompt_id = prompts.id
+                     ),
+                     '[]'::jsonb
+                   ) AS resources
             FROM prompts
             WHERE id = %s
               AND is_public = TRUE
@@ -1694,6 +1854,11 @@ async def create_prompt(request: Request):
             parsed_attributes = json.loads(attributes_raw) if attributes_raw else {}
         except (ValueError, TypeError):
             parsed_attributes = {}
+        resources_raw = form.get("resources", "")
+        try:
+            parsed_resources = json.loads(resources_raw) if resources_raw else []
+        except (ValueError, TypeError):
+            parsed_resources = []
         data = {
             "title": form.get("title", ""),
             "category": form.get("category", ""),
@@ -1704,6 +1869,7 @@ async def create_prompt(request: Request):
             "output_examples": form.get("output_examples", ""),
             "ai_model": form.get("ai_model", ""),
             "attributes": parsed_attributes if isinstance(parsed_attributes, dict) else {},
+            "resources": parsed_resources if isinstance(parsed_resources, list) else [],
         }
     else:
         data, error_response = await require_json_dict(request)
@@ -1751,6 +1917,7 @@ async def create_prompt(request: Request):
             payload.output_examples,
             payload.ai_model,
             payload.attributes,
+            [resource.model_dump(mode="python") for resource in payload.resources],
             attachments,
         )
         return jsonify({"message": "プロンプトが作成されました。", "prompt_id": prompt_id}, status_code=201)

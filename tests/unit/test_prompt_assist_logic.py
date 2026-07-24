@@ -220,7 +220,6 @@ class PromptAssistLogicTestCase(unittest.TestCase):
                 "title": "Git Helper",
                 "prompt_type": "skill",
                 "skill_markdown": "",
-                "skill_python_script": "",
                 "content": "",
                 "input_examples": "",
                 "output_examples": "",
@@ -232,7 +231,9 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         user_content = messages[1]["content"]
         self.assertIn("skill_markdown", user_content)
         self.assertIn("SKILL定義", user_content)
-        self.assertNotIn('"content"', user_content.split("<allowed_fields>")[1].split("</allowed_fields>")[0])
+        allowed_fields = user_content.split("<allowed_fields>")[1].split("</allowed_fields>")[0]
+        self.assertNotIn('"content"', allowed_fields)
+        self.assertNotIn("skill_python_script", allowed_fields)
 
     # 日本語: skillに対して、normalizeプロンプトアシストレスポンス除外するcontentことを検証します。
     # English: Verify that normalize prompt assist response excludes content for skill.
@@ -240,7 +241,6 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         current_fields = {
             "title": "Git Helper",
             "skill_markdown": "",
-            "skill_python_script": "",
             "prompt_type": "skill",
             "content": "",
             "input_examples": "",

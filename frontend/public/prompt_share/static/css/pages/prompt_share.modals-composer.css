@@ -1814,3 +1814,119 @@
 :where(body.prompt-share-page, .prompt-share-page) .new-prompt-btn i.rotating {
   animation: newPromptIconSpin 0.72s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
+.prompt-share-page .skill-resource-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(196, 215, 236, 0.88);
+}
+
+.prompt-share-page .skill-resource-editor__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.prompt-share-page .skill-resource-editor__header h4 {
+  margin: 0;
+  color: var(--ps-text-strong);
+  font-size: 1rem;
+}
+
+.prompt-share-page .skill-resource-editor__header p,
+.prompt-share-page .skill-resource-editor__empty {
+  margin: 0.28rem 0 0;
+  color: var(--ps-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.prompt-share-page .skill-resource-editor__add,
+.prompt-share-page .skill-resource-editor__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem;
+  min-height: 38px;
+  padding: 0.45rem 0.78rem;
+  border: 1px solid rgba(26, 115, 232, 0.24);
+  border-radius: 999px;
+  background: rgba(26, 115, 232, 0.1);
+  color: #185abc;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.prompt-share-page .skill-resource-editor__add:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.prompt-share-page .skill-resource-editor__empty {
+  padding: 0.82rem 0.9rem;
+  border: 1px dashed rgba(174, 198, 224, 0.9);
+  border-radius: 14px;
+  background: rgba(247, 251, 255, 0.72);
+}
+
+.prompt-share-page .skill-resource-editor__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.prompt-share-page .skill-resource-editor__item {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 2.6rem 0.9rem 0.9rem;
+  border: 1px solid rgba(192, 214, 237, 0.9);
+  border-radius: 16px;
+  background: rgba(248, 251, 255, 0.82);
+}
+
+.prompt-share-page .skill-resource-editor__item legend {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.9rem;
+  padding: 0;
+  color: #31597f;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.prompt-share-page .skill-resource-editor__remove {
+  position: absolute;
+  top: 0.56rem;
+  right: 0.68rem;
+  min-height: 32px;
+  border-color: rgba(190, 66, 66, 0.22);
+  background: rgba(190, 66, 66, 0.08);
+  color: #a63636;
+}
+
+.prompt-share-page .skill-resource-editor__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(130px, 0.7fr) minmax(130px, 0.7fr);
+  gap: 0.72rem;
+  margin-bottom: 0.72rem;
+}
+
+.prompt-share-page .prompt-detail-resources,
+.prompt-share-page .prompt-detail-resources__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+}
+
+.prompt-share-page .prompt-detail-resources__heading > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+}

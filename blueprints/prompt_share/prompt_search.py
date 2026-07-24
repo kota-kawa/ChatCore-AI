@@ -80,6 +80,20 @@ def _normalize_search_prompt_row(row: dict[str, Any]) -> dict[str, Any]:
     # 後方互換の派生フィールド (prompt_type/reference_image_url/skill_*) を付与する。
     # Normalize the two-axis fields and attach derived legacy fields.
     prompt.update(serialize_axes(prompt))
+    resources = prompt.get("resources")
+    prompt["resources"] = resources if isinstance(resources, list) else []
+    if not prompt.get("skill_python_script") and prompt.get("resource_python_script"):
+        prompt["skill_python_script"] = str(prompt["resource_python_script"])
+    if not prompt.get("skill_python_script"):
+        for resource in prompt["resources"]:
+            if (
+                isinstance(resource, dict)
+                and resource.get("path") == "scripts/main.py"
+                and isinstance(resource.get("content"), str)
+            ):
+                prompt["skill_python_script"] = resource["content"]
+                break
+    prompt.pop("resource_python_script", None)
 
     # 評価・チャット利用状態の真偽値キャストと、コメント数キャストを実行
     # Cast interaction flags to Boolean and cast comment count to integer.
@@ -217,6 +231,36 @@ def _search_public_prompts(
                 p.media_type,
                 p.attributes,
                 p.attachments,
+                COALESCE(
+                  (
+                    SELECT jsonb_agg(
+                      jsonb_build_object(
+                        'id', pr.id,
+                        'path', pr.path,
+                        'role', pr.role,
+                        'language', COALESCE(pr.language, ''),
+                        'media_type', pr.media_type,
+                        'size_bytes', pr.size_bytes,
+                        'sha256', pr.sha256,
+                        'sort_order', pr.sort_order
+                      )
+                      ORDER BY pr.sort_order, pr.id
+                    )
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                  ),
+                  '[]'::jsonb
+                ) AS resources,
+                COALESCE(
+                  (
+                    SELECT pr.text_content
+                    FROM prompt_resources AS pr
+                    WHERE pr.prompt_id = p.id
+                      AND lower(pr.path) = 'scripts/main.py'
+                    LIMIT 1
+                  ),
+                  ''
+                ) AS resource_python_script,
                 p.created_at
               FROM prompts AS p
               LEFT JOIN users AS u

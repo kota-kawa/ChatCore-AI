@@ -28,6 +28,8 @@ TOOL_REQUIRED_SCOPES: dict[str, str] = {
     "list_shared_content": MCP_PROMPTS_READ_SCOPE,
     "search_shared_content": MCP_PROMPTS_READ_SCOPE,
     "get_shared_content": MCP_PROMPTS_READ_SCOPE,
+    "list_skill_resources": MCP_PROMPTS_READ_SCOPE,
+    "get_skill_resource": MCP_PROMPTS_READ_SCOPE,
     "list_prompt_categories": MCP_PROMPTS_READ_SCOPE,
     "list_memos": MCP_MEMOS_READ_SCOPE,
     "search_memos": MCP_MEMOS_READ_SCOPE,

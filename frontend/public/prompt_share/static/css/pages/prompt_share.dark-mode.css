@@ -1045,3 +1045,16 @@
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .composer-footer__note {
   color: #64748b;
 }
+[data-theme="dark"] .prompt-share-page .skill-resource-editor {
+  border-top-color: rgba(111, 139, 173, 0.42);
+}
+
+[data-theme="dark"] .prompt-share-page .skill-resource-editor__item,
+[data-theme="dark"] .prompt-share-page .skill-resource-editor__empty {
+  border-color: rgba(111, 139, 173, 0.42);
+  background: rgba(24, 35, 50, 0.76);
+}
+
+[data-theme="dark"] .prompt-share-page .skill-resource-editor__item legend {
+  color: #b7d7fb;
+}
