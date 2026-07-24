@@ -331,6 +331,23 @@ body.memo-page.modal-open {
   transform: scale(1.25);
 }
 
+/* System collection entries (e.g. アーカイブ) use an icon instead of a color dot. */
+:where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  flex-shrink: 0;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  transition: color 0.15s;
+}
+
+:where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-item:hover .memo-sidebar-collection-icon,
+:where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-item.is-active .memo-sidebar-collection-icon {
+  color: inherit;
+}
+
 :where(body.memo-page, .memo-page-shell) .memo-sidebar-collection-name {
   flex: 1;
   min-width: 0;
