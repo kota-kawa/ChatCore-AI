@@ -1068,6 +1068,16 @@ a.cc-texture-btn:active {
     bottom 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* チャットビュー（トップページのチャット画面）ではフローティングのAIエージェント
+   ボタンを非表示にする。タスク一覧ビューでは従来どおり表示する。 */
+/* Hide the floating AI agent button while the chat view is active (it stays
+   visible on the task list view). */
+body.chat-page.chat-view-active .global-ai-agent-button,
+body.chat-page:has(.chat-page-stage[data-view="chat"]) .global-ai-agent-button,
+body.chat-page:has(.chat-page-stage[data-view="launching"]) .global-ai-agent-button {
+  display: none !important;
+}
+
 .global-ai-agent-button::before,
 .global-ai-agent-button::after {
   content: "";

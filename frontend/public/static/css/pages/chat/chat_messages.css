@@ -12,9 +12,12 @@
   overflow: hidden;
 }
 
-/* カスタム要素がフレックスレイアウトで場所を取らないようにする */
+/* チャットビューでは右下のメニューボタン（チャット専用 FAB）を非表示にする。
+   要素ごと display:none にすることで内部の position:fixed メニューも描画されない。 */
+/* Hide the chat-specific bottom-right menu FAB in the chat view. Setting the host to
+   display:none also prevents its inner position:fixed menu from rendering. */
 :where(body.chat-page, .chat-page-shell) chat-action-menu {
-  display: contents;
+  display: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-messages {

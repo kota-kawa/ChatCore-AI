@@ -113,6 +113,12 @@ template.innerHTML = `
       bottom: max(40px, env(safe-area-inset-bottom));
     }
 
+    /* チャットビューではメニューボタンを全幅で非表示にする（タスク一覧ビューでは表示）。 */
+    /* Hide the menu button on all widths while in the chat view (shown on the task list view). */
+    :host([data-context="chat"]) .actions-menu {
+      display: none;
+    }
+
     @keyframes popIn {
       0% {
         transform: scale(0.5) rotate(0deg);
