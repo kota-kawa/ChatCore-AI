@@ -5,15 +5,18 @@ import {
 } from "../../scripts/prompt_share/prompt_category_registry";
 import type { LikedPrompt, PromptRecord } from "../../scripts/user/settings/types";
 import { normalizePreviewText, toDisplayDate, truncateTitle } from "../../scripts/user/settings/utils";
+import type { PromptPreview } from "./prompt_preview_modal";
 
 // ユーザーが投稿したプロンプト 1 件を表示するカードコンポーネント
 // Card component displaying a single user-authored prompt
 export function PromptCard({
   prompt,
+  onPreview,
   onEdit,
   onDelete
 }: {
   prompt: PromptRecord;
+  onPreview: (prompt: PromptPreview) => void;
   onEdit: (prompt: PromptRecord) => void;
   onDelete: (prompt: PromptRecord) => void;
 }) {
@@ -28,7 +31,19 @@ export function PromptCard({
 
   return (
     <article className="prompt-card cc-press" data-prompt-id={promptId}>
-      <div className="prompt-card__main">
+      <div
+        className="prompt-card__main"
+        role="button"
+        tabIndex={0}
+        aria-label={`「${prompt.title}」の詳細を表示`}
+        onClick={() => onPreview(prompt)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onPreview(prompt);
+          }
+        }}
+      >
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
             <span className="prompt-card__badge prompt-card__badge--category">{categoryLabel}</span>
@@ -61,6 +76,9 @@ export function PromptCard({
             </div>
           ) : null}
         </div>
+        <span className="prompt-card__view-hint">
+          詳細を見る<i className="bi bi-arrow-up-right" aria-hidden="true"></i>
+        </span>
       </div>
       <div className="prompt-card__footer">
         <div className="prompt-card__actions">
@@ -92,9 +110,11 @@ export function PromptCard({
 // Card component displaying a single liked prompt entry
 export function LikedPromptCard({
   entry,
+  onPreview,
   onDelete
 }: {
   entry: LikedPrompt;
+  onPreview: (prompt: PromptPreview) => void;
   onDelete: (entry: LikedPrompt) => void;
 }) {
   const entryId = asId(entry.id);
@@ -108,7 +128,19 @@ export function LikedPromptCard({
 
   return (
     <article className="prompt-card cc-press" data-liked-prompt-id={entryId}>
-      <div className="prompt-card__main">
+      <div
+        className="prompt-card__main"
+        role="button"
+        tabIndex={0}
+        aria-label={`「${entry.title}」の詳細を表示`}
+        onClick={() => onPreview(entry)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onPreview(entry);
+          }
+        }}
+      >
         <div className="prompt-card__header">
           <div className="prompt-card__eyebrow">
             {/* いいね済みバッジを常に表示し、カテゴリがある場合のみカテゴリバッジも表示する / Always show the liked badge; show category badge only when a category is set */}
@@ -145,6 +177,9 @@ export function LikedPromptCard({
             </div>
           ) : null}
         </div>
+        <span className="prompt-card__view-hint">
+          詳細を見る<i className="bi bi-arrow-up-right" aria-hidden="true"></i>
+        </span>
       </div>
       <div className="prompt-card__footer">
         <div className="prompt-card__actions">
