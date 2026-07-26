@@ -88,6 +88,12 @@ class PromptRecordApi(ResponsePayloadModel):
     input_examples: str | None = ""
     output_examples: str | None = ""
     created_at: str | None = None
+    # SKILL 投稿では本文を attributes.skill_markdown に保持するため、
+    # 設定画面の一覧・閲覧モーダルでもこの派生フィールドを明示的に返す。
+    # Skill posts store their body in attributes.skill_markdown, so expose this
+    # derived field explicitly for the settings list and preview modal.
+    content_format: str | None = "prompt"
+    skill_markdown: str | None = ""
 
 
 # 日本語: SKILL投稿に同梱された1件のテキストリソース。

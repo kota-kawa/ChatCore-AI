@@ -35,6 +35,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
   id?: string | number;
   title: string;
   content: string;
+  contentFormat: string;
+  skillMarkdown: string;
   category: string;
   inputExamples: string;
   outputExamples: string;
@@ -44,6 +46,8 @@ function normalizePromptRecord(prompt: PromptRecordApi): {
     id: prompt.id ?? undefined,
     title: prompt.title,
     content: prompt.content,
+    contentFormat: normalizeNullableString(prompt.content_format),
+    skillMarkdown: normalizeNullableString(prompt.skill_markdown),
     category: normalizeNullableString(prompt.category),
     inputExamples: normalizeNullableString(prompt.input_examples),
     outputExamples: normalizeNullableString(prompt.output_examples),
@@ -59,6 +63,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     id: entry.prompt_id,
     title: entry.title,
     content: entry.content,
+    content_format: entry.content_format,
+    skill_markdown: entry.skill_markdown,
     category: entry.category,
     input_examples: entry.input_examples,
     output_examples: entry.output_examples,
@@ -71,6 +77,8 @@ function normalizeLikedPrompt(entry: LikedPromptApi) {
     prompt,
     title: prompt.title,
     content: prompt.content,
+    contentFormat: prompt.contentFormat,
+    skillMarkdown: prompt.skillMarkdown,
     category: prompt.category,
     inputExamples: prompt.inputExamples,
     outputExamples: prompt.outputExamples,

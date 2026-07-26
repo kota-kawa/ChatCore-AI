@@ -23,7 +23,8 @@ export function PromptCard({
   // プレビュー用に各テキストを正規化・整形する
   // Normalize each text field for preview display
   const promptId = asId(prompt.id);
-  const contentPreview = normalizePreviewText(prompt.content);
+  const isSkill = prompt.contentFormat === "skill";
+  const contentPreview = normalizePreviewText(isSkill ? prompt.skillMarkdown : prompt.content);
   const inputPreview = normalizePreviewText(prompt.inputExamples);
   const outputPreview = normalizePreviewText(prompt.outputExamples);
   const categoryLabel = getCategoryLabelOrFallback(normalizePreviewText(prompt.category));
@@ -55,7 +56,7 @@ export function PromptCard({
           <h3 className="prompt-card__title" title={prompt.title}>{truncateTitle(prompt.title)}</h3>
         </div>
         <div className="prompt-card__body">
-          <p className="prompt-card__description" title={prompt.content}>
+          <p className="prompt-card__description" title={isSkill ? prompt.skillMarkdown : prompt.content}>
             {contentPreview || "内容が設定されていません。"}
           </p>
           {/* 入出力例が存在する場合のみプレビューセクションを表示する / Show the preview section only when input or output examples exist */}
@@ -118,7 +119,8 @@ export function LikedPromptCard({
   onDelete: (entry: LikedPrompt) => void;
 }) {
   const entryId = asId(entry.id);
-  const contentPreview = normalizePreviewText(entry.content);
+  const isSkill = entry.contentFormat === "skill";
+  const contentPreview = normalizePreviewText(isSkill ? entry.skillMarkdown : entry.content);
   const inputPreview = normalizePreviewText(entry.inputExamples);
   const outputPreview = normalizePreviewText(entry.outputExamples);
   // カテゴリ未設定時はバッジ自体を出さないため、フォールバックなしでラベルを解決する
@@ -157,7 +159,7 @@ export function LikedPromptCard({
           <h3 className="prompt-card__title" title={entry.title}>{truncateTitle(entry.title)}</h3>
         </div>
         <div className="prompt-card__body">
-          <p className="prompt-card__description" title={entry.content}>
+          <p className="prompt-card__description" title={isSkill ? entry.skillMarkdown : entry.content}>
             {contentPreview || "内容が設定されていません。"}
           </p>
           {(inputPreview || outputPreview) ? (
