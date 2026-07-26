@@ -209,7 +209,6 @@ export function PromptShareDetailModal({
         {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
         {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
         <header className="prompt-detail-header">
-          <span className="prompt-detail-header__eyebrow">プロンプト詳細</span>
           <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
 
           <dl className="prompt-detail-meta" aria-label="プロンプト概要">
