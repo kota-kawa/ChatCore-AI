@@ -157,11 +157,11 @@ export function PromptCategorySelect({
   };
 
   return (
-    <div ref={rootRef} className="relative w-full">
+    <div ref={rootRef} className="prompt-category-select">
       {/* ネイティブ select はスクリーンリーダー向けにのみ保持し、見た目は非表示にする / Native select is kept for screen-reader compatibility but hidden visually */}
       <select
         id={selectId}
-        className="pointer-events-none absolute h-px w-px opacity-0"
+        className="prompt-category-select__native"
         value={selectedValue}
         disabled={disabled}
         onChange={(event) => {
@@ -178,21 +178,7 @@ export function PromptCategorySelect({
       <button
         ref={triggerRef}
         type="button"
-        className={[
-          "flex min-h-[52px] w-full items-center justify-between gap-3 rounded-[18px] border px-4 py-3 text-left",
-          "border-[#ccdbed] bg-gradient-to-b from-white to-[#f7fbff] text-[0.93rem] font-bold text-[#263f57]",
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_22px_rgba(42,87,135,0.06)] transition",
-          "hover:border-[#80aee5] hover:bg-white hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_14px_28px_rgba(50,109,171,0.1)]",
-          "focus:outline-none focus:ring-4 focus:ring-[#1a73e8]/15",
-          isOpen ? "border-[#98bff0] bg-white ring-4 ring-[#1a73e8]/15" : "",
-          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
-          "[html[data-theme='dark']_&]:border-slate-700",
-          "[html[data-theme='dark']_&]:from-slate-900",
-          "[html[data-theme='dark']_&]:to-slate-900/90",
-          "[html[data-theme='dark']_&]:text-slate-100",
-          "[html[data-theme='dark']_&]:hover:border-emerald-400/60",
-          "[html[data-theme='dark']_&]:focus:ring-emerald-400/15"
-        ].join(" ")}
+        className={`prompt-category-select__trigger${isOpen ? " is-open" : ""}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen ? "true" : "false"}
         aria-controls={listboxId}
@@ -206,7 +192,7 @@ export function PromptCategorySelect({
       >
         <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
         <i
-          className={`bi bi-chevron-down shrink-0 text-sm text-[#4f7eb6] transition [html[data-theme='dark']_&]:text-emerald-300${isOpen ? " rotate-180 text-[#1a73e8]" : ""}`}
+          className={`bi bi-chevron-down prompt-category-select__chevron${isOpen ? " is-open" : ""}`}
           aria-hidden="true"
         ></i>
       </button>
@@ -217,13 +203,7 @@ export function PromptCategorySelect({
           id={listboxId}
           role="listbox"
           aria-label="カテゴリを選択"
-          className={[
-            "absolute left-0 right-0 top-[calc(100%+0.48rem)] z-[var(--z-dropdown)] max-h-[min(330px,48vh)] overflow-y-auto rounded-[18px] border p-1.5",
-            "border-[#9abee7]/50 bg-gradient-to-b from-white/95 to-[#f6faff]/95 shadow-[0_22px_48px_rgba(17,24,39,0.18),0_8px_18px_rgba(37,99,235,0.1)] backdrop-blur-xl",
-            "[html[data-theme='dark']_&]:border-slate-700",
-            "[html[data-theme='dark']_&]:from-slate-900/95",
-            "[html[data-theme='dark']_&]:to-slate-950/95"
-          ].join(" ")}
+          className="prompt-category-select__menu"
         >
           {categoryOptions.map((category, index) => {
             const selected = selectedValue === category.value;
@@ -237,14 +217,7 @@ export function PromptCategorySelect({
                 role="option"
                 aria-selected={selected ? "true" : "false"}
                 tabIndex={activeIndex === index ? 0 : -1}
-                className={[
-                  "flex min-h-[42px] w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition",
-                  selected
-                    ? "border-[#1a73e8]/70 bg-gradient-to-br from-[#0f4aa6] to-[#1a73e8] font-extrabold text-white shadow-[0_10px_20px_rgba(26,115,232,0.18)]"
-                    : "border-transparent bg-transparent text-[#263f57] hover:border-[#1a73e8]/20 hover:bg-[#1a73e8]/10 hover:text-[#1559b4] focus:border-[#1a73e8]/20 focus:bg-[#1a73e8]/10 focus:text-[#1559b4] focus:outline-none",
-                  "[html[data-theme='dark']_&]:text-slate-100",
-                  !selected ? "[html[data-theme='dark']_&]:hover:bg-emerald-400/10 [html[data-theme='dark']_&]:hover:text-emerald-200 [html[data-theme='dark']_&]:focus:bg-emerald-400/10" : ""
-                ].join(" ")}
+                className={`prompt-category-select__option${selected ? " is-selected" : ""}`}
                 onClick={() => {
                   selectOption(index);
                 }}

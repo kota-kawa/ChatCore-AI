@@ -1,15 +1,18 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LikedPromptCard, PromptCard } from "../components/settings/prompt_cards";
+import { PromptCategorySelect } from "../components/settings/prompt_category_select";
 import { PromptPreviewModal } from "../components/settings/prompt_preview_modal";
-import type { LikedPrompt, PromptRecord } from "../scripts/user/settings/types";
+import { parseMyPromptsResponse, type LikedPrompt, type PromptRecord } from "../scripts/user/settings/types";
 
 const authoredPrompt: PromptRecord = {
   id: "prompt-1",
   title: "会議メモを要約する",
   category: "business",
   content: "会議メモを要点、決定事項、次のアクションに分けて要約してください。",
+  contentFormat: "prompt",
+  skillMarkdown: "",
   inputExamples: "会議メモの本文",
   outputExamples: "要点: ...",
   createdAt: "2026-07-26T09:00:00Z"
@@ -23,6 +26,8 @@ const likedPrompt: LikedPrompt = {
   title: authoredPrompt.title,
   category: authoredPrompt.category,
   content: authoredPrompt.content,
+  contentFormat: authoredPrompt.contentFormat,
+  skillMarkdown: authoredPrompt.skillMarkdown,
   inputExamples: authoredPrompt.inputExamples,
   outputExamples: authoredPrompt.outputExamples,
   createdAt: "2026-07-26T09:00:00Z",
@@ -30,6 +35,45 @@ const likedPrompt: LikedPrompt = {
 };
 
 describe("設定画面のプロンプトカード詳細", () => {
+  it("カテゴリ選択メニューで選択肢を読みやすく表示して変更できる", () => {
+    const onChange = vi.fn();
+    render(
+      <PromptCategorySelect
+        selectId="category-test"
+        value="business"
+        disabled={false}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "カテゴリを選択" }));
+    const listbox = screen.getByRole("listbox", { name: "カテゴリを選択" });
+    expect(listbox).toBeInTheDocument();
+    fireEvent.click(within(listbox).getByRole("option", { name: "文章作成" }));
+    expect(onChange).toHaveBeenCalledWith("writing");
+  });
+
+  it("Skill形式の本文を一覧レスポンスから保持する", () => {
+    const [skillPrompt] = parseMyPromptsResponse({
+      prompts: [{
+        id: "skill-1",
+        title: "議事録整形 SKILL",
+        category: "business",
+        content: "",
+        content_format: "skill",
+        skill_markdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する",
+        input_examples: "",
+        output_examples: "",
+        created_at: "2026-07-26T09:00:00Z"
+      }]
+    });
+
+    expect(skillPrompt).toMatchObject({
+      contentFormat: "skill",
+      skillMarkdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する"
+    });
+  });
+
   it("投稿したプロンプトの本文領域をクリック・キーボード操作で開ける", () => {
     const onPreview = vi.fn();
     const onEdit = vi.fn();
@@ -78,5 +122,22 @@ describe("設定画面のプロンプトカード詳細", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "詳細を閉じる" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Skill形式ではSKILL定義を本文として表示する", () => {
+    const skillPrompt: PromptRecord = {
+      ...authoredPrompt,
+      title: "議事録整形 SKILL",
+      content: "",
+      contentFormat: "skill",
+      skillMarkdown: "# 議事録整形\n\n## 手順\n1. 決定事項を抽出する",
+      inputExamples: "",
+      outputExamples: ""
+    };
+    render(<PromptPreviewModal prompt={skillPrompt} source="liked" onClose={vi.fn()} />);
+
+    expect(screen.getByText("SKILL定義")).toBeInTheDocument();
+    expect(screen.getByText(/決定事項を抽出する/)).toBeInTheDocument();
+    expect(screen.queryByText("入出力例")).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,8 @@ import { toDisplayDate } from "../../scripts/user/settings/utils";
 export type PromptPreview = {
   title: string;
   content: string;
+  contentFormat: string;
+  skillMarkdown: string;
   category: string;
   inputExamples: string;
   outputExamples: string;
@@ -25,7 +27,10 @@ export function PromptPreviewModal({
 }) {
   const categoryLabel = getCategoryLabelOrFallback(prompt.category);
   const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : "日時未設定";
-  const hasExamples = Boolean(prompt.inputExamples.trim() || prompt.outputExamples.trim());
+  const isSkill = prompt.contentFormat === "skill";
+  const promptBody = isSkill ? prompt.skillMarkdown : prompt.content;
+  const promptBodyLabel = isSkill ? "SKILL定義" : "プロンプト本文";
+  const hasExamples = !isSkill && Boolean(prompt.inputExamples.trim() || prompt.outputExamples.trim());
   const sourceLabel = source === "authored" ? "投稿したプロンプト" : "いいねしたプロンプト";
 
   return (
@@ -54,6 +59,12 @@ export function PromptPreviewModal({
               <p className="prompt-preview-modal__eyebrow">{sourceLabel}</p>
               <h2 id="promptPreviewModalTitle">{prompt.title || "無題のプロンプト"}</h2>
               <div className="prompt-preview-modal__meta" aria-label="プロンプト情報">
+                {isSkill ? (
+                  <span>
+                    <i className="bi bi-code-slash" aria-hidden="true"></i>
+                    SKILL
+                  </span>
+                ) : null}
                 <span>
                   <i className="bi bi-tag" aria-hidden="true"></i>
                   {categoryLabel}
@@ -78,11 +89,11 @@ export function PromptPreviewModal({
         <div className="prompt-preview-modal__body">
           <section className="prompt-preview-modal__section" aria-labelledby="promptPreviewContentTitle">
             <div className="prompt-preview-modal__section-heading">
-              <p>プロンプト本文</p>
-              <span>{prompt.content.length.toLocaleString("ja-JP")}文字</span>
+              <p>{promptBodyLabel}</p>
+              <span>{promptBody.length.toLocaleString("ja-JP")}文字</span>
             </div>
             <p id="promptPreviewContentTitle" className="prompt-preview-modal__content">
-              {prompt.content || "内容が設定されていません。"}
+              {promptBody || "内容が設定されていません。"}
             </p>
           </section>
 
