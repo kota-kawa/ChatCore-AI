@@ -20,26 +20,10 @@ export function EditPromptModal({
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  // 複数の入力欄で共通利用するクラス名をまとめて管理する
-  // Reusable class string shared across all text inputs and textareas in the modal
-  const inputClassName = [
-    "w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5",
-    "text-sm text-slate-900 shadow-sm outline-none transition",
-    "placeholder:text-slate-400",
-    "focus:border-primary focus:ring-4 focus:ring-primary/10",
-    "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
-    "[html[data-theme='dark']_&]:border-slate-700",
-    "[html[data-theme='dark']_&]:bg-slate-900/80",
-    "[html[data-theme='dark']_&]:text-slate-100",
-    "[html[data-theme='dark']_&]:focus:border-emerald-400",
-    "[html[data-theme='dark']_&]:focus:ring-emerald-400/15"
-  ].join(" ");
-  const labelClassName = "mb-2 block text-sm font-semibold text-slate-700 [html[data-theme='dark']_&]:text-slate-200";
-
   return (
     <div
       id="editModal"
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm [html[data-theme='dark']_&]:bg-slate-950/75"
+      className="edit-prompt-modal"
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
@@ -52,119 +36,138 @@ export function EditPromptModal({
         }
       }}
     >
-      <div className="flex max-h-[min(92vh,820px)] w-full max-w-3xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl shadow-slate-950/25 [html[data-theme='dark']_&]:border-slate-700/80 [html[data-theme='dark']_&]:bg-slate-950" role="document">
-        <div className="flex min-h-0 w-full flex-col">
-          <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 bg-slate-50 px-6 py-5 [html[data-theme='dark']_&]:border-slate-800 [html[data-theme='dark']_&]:bg-slate-900">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg text-primary ring-1 ring-primary/15 [html[data-theme='dark']_&]:bg-emerald-400/10 [html[data-theme='dark']_&]:text-emerald-300 [html[data-theme='dark']_&]:ring-emerald-400/20" aria-hidden="true">
+      <div className="edit-prompt-modal__dialog" role="document">
+        <div className="edit-prompt-modal__surface">
+          <header className="edit-prompt-modal__header">
+            <div className="edit-prompt-modal__heading">
+              <span className="edit-prompt-modal__icon" aria-hidden="true">
                 <i className="bi bi-pencil-square"></i>
               </span>
               <div>
-                <p className="mb-1 text-xs font-bold uppercase tracking-[0.22em] text-primary [html[data-theme='dark']_&]:text-emerald-300">投稿したプロンプト</p>
-                <h5 id="editPromptModalTitle" className="m-0 text-xl font-semibold text-slate-950 [html[data-theme='dark']_&]:text-slate-50">
+                <p className="edit-prompt-modal__eyebrow">投稿したプロンプト</p>
+                <h2 id="editPromptModalTitle">
                   プロンプトを編集
-                </h5>
+                </h2>
+                <p className="edit-prompt-modal__lead">公開中の内容を更新します。変更は保存後すぐに反映されます。</p>
               </div>
             </div>
             <button
               type="button"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 [html[data-theme='dark']_&]:border-slate-700 [html[data-theme='dark']_&]:bg-slate-900 [html[data-theme='dark']_&]:text-slate-300 [html[data-theme='dark']_&]:hover:bg-slate-800 [html[data-theme='dark']_&]:hover:text-white"
+              className="edit-prompt-modal__close"
               aria-label="閉じる"
               onClick={onClose}
               disabled={saving}
             >
               <i className="bi bi-x-lg" aria-hidden="true"></i>
             </button>
-          </div>
+          </header>
 
-          <form id="editForm" className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          <form id="editForm" className="edit-prompt-modal__form" onSubmit={onSubmit}>
+            <div className="edit-prompt-modal__body">
               {/* 編集対象のプロンプト ID を hidden フィールドで保持する / Hold the target prompt ID in a hidden field for form submission */}
               <input type="hidden" id="editPromptId" value={formState.id} readOnly />
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="editTitle" className={labelClassName}>
-                    タイトル
-                  </label>
-                  <input
-                    type="text"
-                    className={inputClassName}
-                    id="editTitle"
-                    name="title"
+              <section className="edit-prompt-modal__section" aria-labelledby="editPromptBasicsTitle">
+                <div className="edit-prompt-modal__section-heading">
+                  <div>
+                    <p className="edit-prompt-modal__section-kicker">基本情報</p>
+                    <h3 id="editPromptBasicsTitle">見つけやすい情報を整える</h3>
+                  </div>
+                </div>
+                <div className="edit-prompt-modal__grid">
+                  <div className="edit-prompt-modal__field">
+                    <label htmlFor="editTitle">タイトル <span aria-hidden="true">*</span></label>
+                    <p className="edit-prompt-modal__field-help">一覧で表示される名前です。</p>
+                    <input
+                      type="text"
+                      className="edit-prompt-modal__input"
+                      id="editTitle"
+                      name="title"
+                      required
+                      value={formState.title}
+                      onChange={onChange}
+                      disabled={saving}
+                    />
+                  </div>
+
+                  <div className="edit-prompt-modal__field">
+                    <label htmlFor="editCategory">カテゴリ <span aria-hidden="true">*</span></label>
+                    <p className="edit-prompt-modal__field-help">探している人に届きやすくなります。</p>
+                    <PromptCategorySelect
+                      selectId="editCategory"
+                      value={formState.category}
+                      disabled={saving}
+                      onChange={onCategoryChange}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="edit-prompt-modal__section" aria-labelledby="editPromptContentTitle">
+                <div className="edit-prompt-modal__section-heading">
+                  <div>
+                    <p className="edit-prompt-modal__section-kicker">プロンプト本文</p>
+                    <h3 id="editPromptContentTitle">AI に伝えたい内容</h3>
+                  </div>
+                  <span className="edit-prompt-modal__required">必須</span>
+                </div>
+                <div className="edit-prompt-modal__field">
+                  <label htmlFor="editContent" className="sr-only">内容</label>
+                  <textarea
+                    className="edit-prompt-modal__input edit-prompt-modal__textarea edit-prompt-modal__textarea--content"
+                    id="editContent"
+                    name="content"
+                    rows={5}
                     required
-                    value={formState.title}
-                    onChange={onChange}
-                    disabled={saving}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="editCategory" className={labelClassName}>
-                    カテゴリ
-                  </label>
-                  <PromptCategorySelect
-                    selectId="editCategory"
-                    value={formState.category}
-                    disabled={saving}
-                    onChange={onCategoryChange}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="editContent" className={labelClassName}>
-                  内容
-                </label>
-                <textarea
-                  className={`${inputClassName} min-h-44 resize-y leading-6`}
-                  id="editContent"
-                  name="content"
-                  rows={5}
-                  required
-                  value={formState.content}
-                  onChange={onChange}
-                  disabled={saving}
-                ></textarea>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="editInputExamples" className={labelClassName}>
-                    入力例
-                  </label>
-                  <textarea
-                    className={`${inputClassName} min-h-32 resize-y leading-6`}
-                    id="editInputExamples"
-                    name="inputExamples"
-                    rows={3}
-                    value={formState.inputExamples}
+                    value={formState.content}
                     onChange={onChange}
                     disabled={saving}
                   ></textarea>
                 </div>
+              </section>
 
-                <div>
-                  <label htmlFor="editOutputExamples" className={labelClassName}>
-                    出力例
-                  </label>
-                  <textarea
-                    className={`${inputClassName} min-h-32 resize-y leading-6`}
-                    id="editOutputExamples"
-                    name="outputExamples"
-                    rows={3}
-                    value={formState.outputExamples}
-                    onChange={onChange}
-                    disabled={saving}
-                  ></textarea>
+              <section className="edit-prompt-modal__section edit-prompt-modal__section--examples" aria-labelledby="editPromptExamplesTitle">
+                <div className="edit-prompt-modal__section-heading">
+                  <div>
+                    <p className="edit-prompt-modal__section-kicker">入出力例</p>
+                    <h3 id="editPromptExamplesTitle">使い方を補足する</h3>
+                  </div>
+                  <span className="edit-prompt-modal__optional">任意</span>
                 </div>
-              </div>
+                <div className="edit-prompt-modal__grid">
+                  <div className="edit-prompt-modal__field">
+                    <label htmlFor="editInputExamples">入力例</label>
+                    <textarea
+                      className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                      id="editInputExamples"
+                      name="inputExamples"
+                      rows={3}
+                      value={formState.inputExamples}
+                      onChange={onChange}
+                      disabled={saving}
+                    ></textarea>
+                  </div>
+
+                  <div className="edit-prompt-modal__field">
+                    <label htmlFor="editOutputExamples">出力例</label>
+                    <textarea
+                      className="edit-prompt-modal__input edit-prompt-modal__textarea"
+                      id="editOutputExamples"
+                      name="outputExamples"
+                      rows={3}
+                      value={formState.outputExamples}
+                      onChange={onChange}
+                      disabled={saving}
+                    ></textarea>
+                  </div>
+                </div>
+              </section>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-200/80 bg-white px-6 py-4 sm:flex-row sm:justify-end [html[data-theme='dark']_&]:border-slate-800 [html[data-theme='dark']_&]:bg-slate-950">
+            <footer className="edit-prompt-modal__footer">
               <button
                 type="button"
-                className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50 [html[data-theme='dark']_&]:border-slate-700 [html[data-theme='dark']_&]:bg-slate-900 [html[data-theme='dark']_&]:text-slate-200 [html[data-theme='dark']_&]:hover:bg-slate-800"
+                className="edit-prompt-modal__button edit-prompt-modal__button--secondary"
                 onClick={onClose}
                 disabled={saving}
               >
@@ -172,13 +175,13 @@ export function EditPromptModal({
               </button>
               <button
                 type="submit"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/10 transition hover:bg-primary-hover focus:outline-none focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 [html[data-theme='dark']_&]:shadow-emerald-950/30"
+                className="edit-prompt-modal__button edit-prompt-modal__button--primary"
                 disabled={saving}
               >
                 <i className="bi bi-save" aria-hidden="true"></i>
-                {saving ? "更新中..." : "更新する"}
+                {saving ? "保存中..." : "変更を保存"}
               </button>
-            </div>
+            </footer>
           </form>
         </div>
       </div>

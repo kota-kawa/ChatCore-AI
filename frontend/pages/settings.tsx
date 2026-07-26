@@ -19,6 +19,7 @@ import { getStoredThemePreference, setThemePreference, type ThemePreference } fr
 import { asId, asString } from "../lib/utils";
 import { EditPromptModal } from "../components/settings/edit_prompt_modal";
 import { LikedPromptCard, PromptCard } from "../components/settings/prompt_cards";
+import { PromptPreviewModal, type PromptPreview } from "../components/settings/prompt_preview_modal";
 import {
   AppearanceSettingsSection,
   AuthoredPromptsSection,
@@ -120,6 +121,8 @@ export default function UserSettingsPage() {
   // Controls the edit modal; null means the modal is hidden
   const [editPromptForm, setEditPromptForm] = useState<EditPromptFormState | null>(null);
   const [promptSaving, setPromptSaving] = useState(false);
+  const [previewPrompt, setPreviewPrompt] = useState<PromptPreview | null>(null);
+  const [previewPromptSource, setPreviewPromptSource] = useState<"authored" | "liked">("authored");
 
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
 
@@ -384,12 +387,19 @@ export default function UserSettingsPage() {
   // 編集モーダルが開いている間、Escape キーでモーダルを閉じられるようにする
   // While the edit modal is open, allow closing it with the Escape key
   useEffect(() => {
-    if (!editPromptForm) {
+    if (!editPromptForm && !previewPrompt) {
       return;
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !promptSaving) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (previewPrompt) {
+        setPreviewPrompt(null);
+        return;
+      }
+      if (!promptSaving) {
         setEditPromptForm(null);
       }
     };
@@ -397,16 +407,16 @@ export default function UserSettingsPage() {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [editPromptForm, promptSaving]);
+  }, [editPromptForm, previewPrompt, promptSaving]);
 
   // モーダルの開閉に合わせて body に modal-open クラスを付け外しし、背景スクロールを制御する
   // Toggle modal-open on body to prevent background scrolling when the modal is shown
   useEffect(() => {
-    document.body.classList.toggle("modal-open", Boolean(editPromptForm));
+    document.body.classList.toggle("modal-open", Boolean(editPromptForm || previewPrompt));
     return () => {
       document.body.classList.remove("modal-open");
     };
-  }, [editPromptForm]);
+  }, [editPromptForm, previewPrompt]);
 
   // セクション切り替え時に必要なデータを遅延ロードする
   // Lazily load section-specific data when the user navigates to that section
@@ -727,6 +737,13 @@ export default function UserSettingsPage() {
       inputExamples: prompt.inputExamples,
       outputExamples: prompt.outputExamples
     });
+  }, []);
+
+  // カードの本文領域から閲覧用モーダルを開き、投稿・いいねの出所も表示する
+  // Open the read-only modal from a card and retain whether it was authored or liked
+  const handleOpenPromptPreview = useCallback((prompt: PromptPreview, source: "authored" | "liked") => {
+    setPreviewPrompt(prompt);
+    setPreviewPromptSource(source);
   }, []);
 
   // 確認ダイアログを経てプロンプトを削除し、成功後に一覧を再取得する
@@ -1146,12 +1163,13 @@ export default function UserSettingsPage() {
         <PromptCard
           key={key}
           prompt={prompt}
+          onPreview={(entry) => handleOpenPromptPreview(entry, "authored")}
           onEdit={handleOpenPromptEdit}
           onDelete={handleDeletePrompt}
         />
       );
     }),
-    [handleDeletePrompt, handleOpenPromptEdit, myPrompts]
+    [handleDeletePrompt, handleOpenPromptEdit, handleOpenPromptPreview, myPrompts]
   );
 
   // いいねしたプロンプトのカードリストをメモ化して不要な再レンダリングを防ぐ
@@ -1163,11 +1181,12 @@ export default function UserSettingsPage() {
         <LikedPromptCard
           key={key}
           entry={entry}
+          onPreview={(prompt) => handleOpenPromptPreview(prompt, "liked")}
           onDelete={handleUnlikePrompt}
         />
       );
     }),
-    [handleUnlikePrompt, likedPrompts]
+    [handleOpenPromptPreview, handleUnlikePrompt, likedPrompts]
   );
 
   return (
@@ -1317,6 +1336,15 @@ export default function UserSettingsPage() {
             onCategoryChange={handleEditPromptCategoryChange}
             onChange={handleEditPromptChange}
             onSubmit={handleEditPromptSubmit}
+          />
+        ) : null}
+
+        {/* カードから開く閲覧専用モーダル / Read-only preview opened from a prompt card */}
+        {previewPrompt ? (
+          <PromptPreviewModal
+            prompt={previewPrompt}
+            source={previewPromptSource}
+            onClose={() => setPreviewPrompt(null)}
           />
         ) : null}
       </div>
