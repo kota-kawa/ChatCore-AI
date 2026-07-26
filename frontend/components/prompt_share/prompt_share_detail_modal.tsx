@@ -18,7 +18,9 @@ import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
 } from "../../scripts/prompt_share/skill_resources";
+import type { ReadingSize } from "../../scripts/prompt_share/storage";
 import type { PromptRecord } from "./prompt_card";
+import { usePromptReadingSize } from "./use_prompt_reading_size";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
 // All props required by the detail modal including prompt data, comment state, and handlers
@@ -45,21 +47,58 @@ type PromptShareDetailModalProps = {
   onClose: () => void;
 };
 
-type DetailSummaryItemProps = {
+type DetailMetaItemProps = {
   iconClass: string;
   label: string;
   value: string;
   id?: string;
 };
 
-function DetailSummaryItem({ iconClass, label, value, id }: DetailSummaryItemProps) {
+// 見出し直下の署名行に並ぶ1項目。ラベルはアイコンで示し、読み上げ用にテキストも残す
+// One item in the byline under the title; the icon carries the label visually, text stays for screen readers
+function DetailMetaItem({ iconClass, label, value, id }: DetailMetaItemProps) {
   return (
-    <div className="prompt-detail-summary__item">
+    <div className="prompt-detail-meta__item">
       <dt>
         <i className={`bi ${iconClass}`} aria-hidden="true"></i>
-        <span>{label}</span>
+        <span className="sr-only">{label}</span>
       </dt>
       <dd id={id}>{value}</dd>
+    </div>
+  );
+}
+
+const READING_SIZE_OPTIONS: { value: ReadingSize; mark: string; label: string }[] = [
+  { value: "compact", mark: "小", label: "本文を小さめで表示" },
+  { value: "default", mark: "中", label: "本文を標準の大きさで表示" },
+  { value: "large", mark: "大", label: "本文を大きめで表示" }
+];
+
+type ReadingSizeControlProps = {
+  value: ReadingSize;
+  onChange: (size: ReadingSize) => void;
+};
+
+// 本文の文字サイズを3段階で切り替える。選択はlocalStorageに残り次回以降も適用される
+// Switches the body text between three sizes; the choice persists in localStorage
+function ReadingSizeControl({ value, onChange }: ReadingSizeControlProps) {
+  return (
+    <div className="prompt-detail-readsize" role="group" aria-label="文字サイズ">
+      {READING_SIZE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`prompt-detail-readsize__button${value === option.value ? " is-active" : ""}`}
+          aria-pressed={value === option.value}
+          title={option.label}
+          onClick={() => {
+            onChange(option.value);
+          }}
+        >
+          <span aria-hidden="true">{option.mark}</span>
+          <span className="sr-only">{option.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -88,6 +127,7 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
+  const { readingSize, changeReadingSize } = usePromptReadingSize();
   // promptがnullのときは安全なデフォルト値を使い、2軸表示を崩さない
   // Fall back to default axes when no prompt is loaded to keep axis-dependent rendering stable
   const detailContentFormat = detailPrompt
@@ -151,7 +191,11 @@ export function PromptShareDetailModal({
         }
       }}
     >
-      <div className="post-modal-content post-modal-content--detail" tabIndex={-1}>
+      <div
+        className="post-modal-content post-modal-content--detail"
+        data-reading-size={readingSize}
+        tabIndex={-1}
+      >
         <button
           type="button"
           className="close-btn"
@@ -162,35 +206,54 @@ export function PromptShareDetailModal({
         >
           &times;
         </button>
+        {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
+        {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
         <header className="prompt-detail-header">
-          <div className="prompt-detail-heading">
-            <span className="prompt-detail-heading__eyebrow">プロンプト詳細</span>
-            <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
-          </div>
-          <div className="prompt-detail-header__chips" aria-label="プロンプト属性">
-            <span className="prompt-detail-chip">
-              <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
-              <span>形式</span>
-              <strong id="modalPromptFormat">
-                {detailPrompt ? getPromptFormatLabel(detailContentFormat) : ""}
-              </strong>
-            </span>
-            <span className="prompt-detail-chip">
-              <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
-              <span>生成</span>
-              <strong id="modalPromptMediaType">
-                {detailPrompt ? getPromptMediaLabel(detailMediaType) : ""}
-              </strong>
-            </span>
-            <span className="prompt-detail-chip">
-              <i className="bi bi-chat-dots" aria-hidden="true"></i>
-              <span>コメント</span>
-              <strong>{Number(detailPrompt?.comment_count || 0)}</strong>
-            </span>
-          </div>
-        </header>
+          <span className="prompt-detail-header__eyebrow">プロンプト詳細</span>
+          <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
 
-        <div className="modal-content-body">
+          <dl className="prompt-detail-meta" aria-label="プロンプト概要">
+            <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+              <dt>
+                <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
+                <span className="sr-only">形式</span>
+              </dt>
+              <dd id="modalPromptFormat">
+                {detailPrompt ? getPromptFormatLabel(detailContentFormat) : ""}
+              </dd>
+            </div>
+            <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+              <dt>
+                <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
+                <span className="sr-only">生成</span>
+              </dt>
+              <dd id="modalPromptMediaType">
+                {detailPrompt ? getPromptMediaLabel(detailMediaType) : ""}
+              </dd>
+            </div>
+            <DetailMetaItem
+              iconClass="bi-hash"
+              label="カテゴリ"
+              value={categoryLabel}
+              id="modalPromptCategory"
+            />
+            <DetailMetaItem
+              iconClass="bi-person"
+              label="投稿者"
+              value={authorLabel}
+              id="modalPromptAuthor"
+            />
+            <DetailMetaItem iconClass="bi-calendar3" label="投稿日" value={formattedDate} />
+            {detailPrompt?.ai_model ? (
+              <DetailMetaItem
+                iconClass="bi-cpu"
+                label="使用AIモデル"
+                value={detailPrompt.ai_model}
+                id="modalAiModel"
+              />
+            ) : null}
+          </dl>
+
           {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
           {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
           <div className="prompt-detail-tabs" role="tablist" aria-label="プロンプト詳細表示">
@@ -222,7 +285,11 @@ export function PromptShareDetailModal({
               <span>{Number(detailPrompt?.comment_count || 0)}</span>
             </button>
           </div>
+        </header>
 
+        {/* モーダル内のスクロールはこの1箇所だけに集約し、本文の入れ子スクロールをなくす */}
+        {/* The single scroll container in the modal, so the body no longer scrolls inside a scroller */}
+        <div className="modal-content-body prompt-detail-scroll">
           {/* 詳細パネル: hidden属性でDOM上は残しつつ非表示にする */}
           {/* Detail panel: kept in DOM via hidden attribute for fast tab switching */}
           <section
@@ -232,35 +299,7 @@ export function PromptShareDetailModal({
             hidden={activeView !== "detail"}
             className="prompt-detail-panel"
           >
-            <dl className="prompt-detail-summary" aria-label="プロンプト概要">
-              <DetailSummaryItem
-                iconClass="bi-hash"
-                label="カテゴリ"
-                value={categoryLabel}
-                id="modalPromptCategory"
-              />
-              <DetailSummaryItem
-                iconClass="bi-person"
-                label="投稿者"
-                value={authorLabel}
-                id="modalPromptAuthor"
-              />
-              <DetailSummaryItem
-                iconClass="bi-calendar3"
-                label="投稿日"
-                value={formattedDate}
-              />
-              {detailPrompt?.ai_model ? (
-                <DetailSummaryItem
-                  iconClass="bi-cpu"
-                  label="使用AIモデル"
-                  value={detailPrompt.ai_model}
-                  id="modalAiModel"
-                />
-              ) : null}
-            </dl>
-
-            <div className={`prompt-detail-primary${detailPrompt?.reference_image_url ? " prompt-detail-primary--with-media" : ""}`}>
+            <div className="prompt-detail-primary">
               {/* 作例メディアはURLが存在するプロンプトにのみ表示する（現状は画像プレビュー対応） */}
               {/* Reference media is only rendered when the prompt has a URL (currently image preview) */}
               {detailPrompt?.reference_image_url ? (
@@ -285,24 +324,29 @@ export function PromptShareDetailModal({
                 id={isSkillFormat ? "modalSkillMarkdownGroup" : undefined}
                 className="prompt-detail-section prompt-detail-section--body"
               >
-                <div className="prompt-detail-section__header">
+                {/* 本文が長くてもコピーと文字サイズに手が届くよう、見出し行をスクロール内で固定する */}
+                {/* Sticky within the scroller so copy and text size stay reachable through a long body */}
+                <div className="prompt-detail-section__header prompt-detail-section__header--sticky">
                   <div>
                     <span className="prompt-detail-section__label">{promptBodyLabel}</span>
                     <span className="prompt-detail-section__meta">
                       {promptBodyLength > 0 ? `${promptBodyLength.toLocaleString("ja-JP")}文字` : promptBodyHelper}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="prompt-detail-copy-btn"
-                    onClick={() => {
-                      void copyPromptBody();
-                    }}
-                    disabled={!promptBody.trim()}
-                  >
-                    <i className="bi bi-clipboard" aria-hidden="true"></i>
-                    <span>コピー</span>
-                  </button>
+                  <div className="prompt-detail-section__actions">
+                    <ReadingSizeControl value={readingSize} onChange={changeReadingSize} />
+                    <button
+                      type="button"
+                      className="prompt-detail-copy-btn"
+                      onClick={() => {
+                        void copyPromptBody();
+                      }}
+                      disabled={!promptBody.trim()}
+                    >
+                      <i className="bi bi-clipboard" aria-hidden="true"></i>
+                      <span>コピー</span>
+                    </button>
+                  </div>
                 </div>
                 {isSkillFormat && promptBody ? (
                   <MarkdownContent text={promptBody} className="prompt-detail-markdown md-content" />
@@ -405,10 +449,8 @@ export function PromptShareDetailModal({
             ref={commentsSectionRef}
             tabIndex={-1}
           >
-            <div className="prompt-detail-comments__summary">
-              <span>{categoryLabel}</span>
-              <strong>{detailPrompt?.title || "プロンプト"}</strong>
-            </div>
+            {/* タイトルと概要はヘッダーに固定表示されるため、ここでは繰り返さない */}
+            {/* The title and byline stay pinned in the header, so they are not repeated here */}
             <div className="prompt-detail-comments__header">
               <h3>コメント</h3>
               {/* 読み込み中はボタンを無効化して重複フェッチを防ぐ */}
