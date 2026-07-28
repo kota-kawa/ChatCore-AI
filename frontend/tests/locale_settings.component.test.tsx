@@ -57,4 +57,21 @@ describe("locale switching", () => {
     expect(onSave).toHaveBeenCalledWith("en");
     expect(english).toHaveAttribute("aria-checked", "true");
   });
+
+  // 選択状態のスタイルは CSS の .is-selected に依存するため、クラス名の付け替えを検知できるようにする
+  // The selected styling hangs off the .is-selected CSS class, so guard against the class name drifting
+  it("marks the selected language card with the styling hook the stylesheet expects", () => {
+    render(<SettingsHarness />);
+
+    const japanese = screen.getByRole("radio", { name: /日本語/ });
+    const english = screen.getByRole("radio", { name: /English/ });
+    expect(japanese).toHaveClass("language-option", "is-selected");
+    expect(english).toHaveClass("language-option");
+    expect(english).not.toHaveClass("is-selected");
+
+    fireEvent.click(english);
+
+    expect(english).toHaveClass("is-selected");
+    expect(japanese).not.toHaveClass("is-selected");
+  });
 });
