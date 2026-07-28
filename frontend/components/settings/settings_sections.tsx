@@ -9,6 +9,7 @@ import type {
 import { InlineLoading } from "../ui/inline_loading";
 import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
+  LANGUAGE_OPTIONS,
   MCP_OAUTH_SCOPE_DEFINITIONS,
   MCP_OAUTH_SCOPE_DEFINITIONS_EN,
   THEME_OPTIONS
@@ -41,37 +42,57 @@ export function LanguageSettingsSection({
   onLocaleSelect: (locale: Locale) => void;
 }) {
   const { t } = useTranslation();
-  const options: Array<{ value: Locale; label: string; description: string }> = [
-    { value: "ja", label: t("settings.japanese"), description: t("settings.japaneseDescription") },
-    { value: "en", label: t("settings.english"), description: t("settings.englishDescription") }
-  ];
   return (
-    <section className={`settings-section${isActive ? " active" : ""}`} data-section="language" hidden={!isActive}>
-      <div className="settings-section-header">
-        <div>
-          <h2><i className="bi bi-translate" aria-hidden="true"></i> {t("settings.languageHeading")}</h2>
-          <p>{t("settings.languageDescription")}</p>
+    <section
+      id="language-section"
+      className={`settings-section${isActive ? " active" : ""}`}
+      data-section="language"
+      hidden={!isActive}
+    >
+      <div className="settings-card">
+        <h2>{t("settings.languageHeading")}</h2>
+        <p className="settings-section-lead">{t("settings.languageDescription")}</p>
+
+        {/* radiogroup ロールでスクリーンリーダーに言語の選択グループを認識させる / radiogroup role helps screen readers recognize the group of language choices */}
+        <div
+          className="language-options"
+          role="radiogroup"
+          aria-label={t("settings.languageHeading")}
+          aria-busy={saving}
+        >
+          {LANGUAGE_OPTIONS.map((option) => {
+            const isSelected = locale === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                className={`language-option${isSelected ? " is-selected" : ""}`}
+                data-agent-id={`settings.language.${option.value}`}
+                lang={option.value}
+                disabled={saving}
+                onClick={() => onLocaleSelect(option.value)}
+              >
+                {/* 書記体系のグリフを大きく見せることで、言語が読めなくてもカードを判別できる / A large script glyph keeps each card identifiable even when its language is unreadable */}
+                <span className="language-option__glyph" aria-hidden="true">{option.glyph}</span>
+                <span className="language-option__body">
+                  <span className="language-option__label">
+                    {t(option.labelKey)}
+                    <span className="language-option__code" aria-hidden="true">{option.code}</span>
+                  </span>
+                  <span className="language-option__description">{t(option.descriptionKey)}</span>
+                </span>
+                <span className="language-option__check" aria-hidden="true">
+                  <i className="bi bi-check-circle-fill"></i>
+                </span>
+              </button>
+            );
+          })}
         </div>
+
+        {saving ? <InlineLoading className="language-options__status" label={t("common.saving")} /> : null}
       </div>
-      <div className="theme-options" role="radiogroup" aria-label={t("settings.languageHeading")} aria-busy={saving}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={locale === option.value}
-            className={`theme-option${locale === option.value ? " selected" : ""}`}
-            data-agent-id={`settings.language.${option.value}`}
-            disabled={saving}
-            onClick={() => onLocaleSelect(option.value)}
-          >
-            <i className={option.value === "ja" ? "bi bi-translate" : "bi bi-alphabet-uppercase"} aria-hidden="true"></i>
-            <span className="theme-option-name">{option.label}</span>
-            <span className="theme-option-description">{option.description}</span>
-          </button>
-        ))}
-      </div>
-      {saving ? <InlineLoading label={t("common.saving")} /> : null}
     </section>
   );
 }
