@@ -10,7 +10,6 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from services.async_utils import run_blocking
 from services.i18n import (
-    DEFAULT_LOCALE,
     LOCALE_COOKIE_NAME,
     PREFERRED_LOCALE_LOADED_SESSION_KEY,
     PREFERRED_LOCALE_SESSION_KEY,
