@@ -14,7 +14,7 @@ from services.auth_limits import (
     get_auth_limit_service,
 )
 from services.db import get_db_connection
-from services.email_service import send_email
+from services.email_service import resolve_request_email_locale, send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -433,8 +433,10 @@ async def _send_email_change_code(
     *,
     request: Request,
     to_email: str,
-    subject: str,
-    body_text: str,
+    template_kind: str,
+    code: str,
+    locale: str,
+    context: dict[str, object] | None = None,
     auth_limit_service: AuthLimitService | None,
     llm_daily_limit_service: LlmDailyLimitService | None,
 ) -> str | None:
@@ -469,8 +471,10 @@ async def _send_email_change_code(
     await run_blocking(
         send_email,
         to_address=to_email,
-        subject=subject,
-        body_text=body_text,
+        template_kind=template_kind,
+        code=code,
+        locale=locale,
+        context=context,
     )
     return None
 
@@ -591,6 +595,7 @@ async def request_email_change(
     
     # セッションに進捗状態・コード・タイムスタンプ等を記録
     # Record change progress state, code, and timestamps in session
+    locale = resolve_request_email_locale(request)
     request.session[EMAIL_CHANGE_SESSION_KEY] = {
         'stage': EMAIL_CHANGE_STAGE_CURRENT,
         'code': code,
@@ -598,25 +603,18 @@ async def request_email_change(
         'new_email': new_email,
         'issued_at': int(time.time()),
         'attempts': 0,
+        'locale': locale,
     }
-
-    subject = 'AIチャットサービス: メールアドレス変更の確認'
-    body_text = (
-        'メールアドレス変更のリクエストを受け付けました。\n'
-        'まず現在のメールアドレスの確認が必要です。以下の確認コードを設定画面に入力してください。\n\n'
-        f'確認コード: {code}\n\n'
-        f'変更先メールアドレス: {new_email}\n\n'
-        'この確認後、変更先メールアドレスにも確認コードを送信します。\n'
-        '心当たりがない場合はこのメールを無視してください。'
-    )
     try:
         # メール送信を実行
         # Send confirmation email
         send_error = await _send_email_change_code(
             request=request,
             to_email=current_email,
-            subject=subject,
-            body_text=body_text,
+            template_kind='email_change_current',
+            code=code,
+            locale=locale,
+            context={'new_email': new_email},
             auth_limit_service=auth_limit_service,
             llm_daily_limit_service=llm_daily_limit_service,
         )
@@ -750,21 +748,16 @@ async def confirm_email_change(
         )
         request.session[EMAIL_CHANGE_SESSION_KEY] = state
 
-        subject = 'AIチャットサービス: メールアドレス変更の確認'
-        body_text = (
-            '変更先メールアドレスの確認が必要です。\n'
-            '以下の確認コードを設定画面に入力すると、メールアドレスの変更が完了します。\n\n'
-            f'確認コード: {code}\n\n'
-            '心当たりがない場合はこのメールを無視してください。'
-        )
+        locale = str(state.get('locale') or resolve_request_email_locale(request))
         try:
             # 変更先アドレス宛にコード送信
             # Send verification code to the new email address
             send_error = await _send_email_change_code(
                 request=request,
                 to_email=new_email,
-                subject=subject,
-                body_text=body_text,
+                template_kind='email_change_new',
+                code=code,
+                locale=locale,
                 auth_limit_service=auth_limit_service,
                 llm_daily_limit_service=llm_daily_limit_service,
             )

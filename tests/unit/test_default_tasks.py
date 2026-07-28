@@ -5,7 +5,9 @@ from services.default_tasks import (
     default_task_payloads,
     default_task_rows,
     ensure_default_tasks_seeded,
+    localize_system_task,
     load_default_tasks,
+    resolve_system_task_key,
 )
 from tests.helpers.db_helpers import TransactionTrackingConnection
 
@@ -13,8 +15,9 @@ from tests.helpers.db_helpers import TransactionTrackingConnection
 # 日本語: テスト用の擬似Fake Cursorクラスです。
 # English: Mock Fake Cursor class for testing.
 class FakeCursor:
-    def __init__(self, *, existing_names=None):
+    def __init__(self, *, existing_names=None, existing_keys=None):
         self.existing_names = set(existing_names or [])
+        self.existing_keys = set(existing_keys or [])
         self.inserted_names = []
         self.executed_queries = []
         self._fetchall_result = []
@@ -26,14 +29,21 @@ class FakeCursor:
 
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.
-        if "SELECT name FROM task_with_examples WHERE user_id IS NULL" in normalized:
-            self._fetchall_result = [(name,) for name in sorted(self.existing_names)]
+        if "SELECT system_task_key, name FROM task_with_examples WHERE user_id IS NULL" in normalized:
+            self._fetchall_result = [
+                (key, name)
+                for key, name in zip(sorted(self.existing_keys), sorted(self.existing_names))
+            ]
+            if not self.existing_keys:
+                self._fetchall_result = [(None, name) for name in sorted(self.existing_names)]
             return
 
         # 日本語: 条件に基づいて処理の流れを切り替えます。
         # English: Switch the execution flow based on the condition.
         if "INSERT INTO task_with_examples" in normalized:
-            name = params[0]
+            key, name = params[:2]
+            if key:
+                self.existing_keys.add(key)
             self.inserted_names.append(name)
             self.existing_names.add(name)
 
@@ -133,6 +143,20 @@ class DefaultTasksTestCase(unittest.TestCase):
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)
 
+    def test_seed_prefers_stable_key_over_localized_name(self):
+        keyed_tasks = [
+            {**SAMPLE_TASKS[0], "system_task_key": "task_a"},
+        ]
+        fake_cursor = FakeCursor(existing_names=["Localized A"], existing_keys=["task_a"])
+        fake_conn = TransactionTrackingConnection(fake_cursor)
+
+        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
+            "services.default_tasks.load_default_tasks", return_value=keyed_tasks
+        ):
+            inserted = ensure_default_tasks_seeded()
+
+        self.assertEqual(inserted, 0)
+
     # 日本語: repositoryデフォルトtasksincludefullseedsetことを検証します。
     # English: Verify that repository default tasks include full seed set.
     def test_repository_default_tasks_include_full_seed_set(self):
@@ -162,6 +186,62 @@ class DefaultTasksTestCase(unittest.TestCase):
         task_names = {task["name"] for task in tasks}
         self.assertEqual(len(tasks), len(expected_names))
         self.assertSetEqual(task_names, expected_names)
+
+    def test_english_catalog_uses_same_stable_keys(self):
+        load_default_tasks.cache_clear()
+        try:
+            japanese = load_default_tasks("ja")
+            english = load_default_tasks("en")
+        finally:
+            load_default_tasks.cache_clear()
+
+        self.assertEqual(
+            [task["system_task_key"] for task in japanese],
+            [task["system_task_key"] for task in english],
+        )
+        self.assertEqual(english[0]["name"], "ℹ️ Explain a topic")
+        self.assertTrue(all(task["system_task_key"] for task in english))
+
+    def test_localizes_only_rows_with_a_stable_system_key(self):
+        localized = localize_system_task(
+            {
+                "system_task_key": "information",
+                "name": "ℹ️ 情報提供",
+                "prompt_template": "Japanese prompt",
+                "is_default": False,
+            },
+            "en",
+        )
+        custom = localize_system_task(
+            {
+                "system_task_key": None,
+                "name": "ℹ️ 情報提供",
+                "prompt_template": "User-edited prompt",
+                "is_default": False,
+            },
+            "en",
+        )
+
+        self.assertEqual(localized["name"], "ℹ️ Explain a topic")
+        self.assertNotEqual(localized["prompt_template"], "Japanese prompt")
+        self.assertEqual(custom["name"], "ℹ️ 情報提供")
+        self.assertEqual(custom["prompt_template"], "User-edited prompt")
+
+    def test_resolves_system_key_from_either_localized_name(self):
+        self.assertEqual(resolve_system_task_key("information"), "information")
+        self.assertEqual(resolve_system_task_key("ℹ️ 情報提供"), "information")
+        self.assertEqual(resolve_system_task_key("ℹ️ Explain a topic"), "information")
+        self.assertIsNone(resolve_system_task_key("My custom task"))
+
+    def test_payloads_and_optional_rows_expose_stable_key(self):
+        keyed_tasks = [{**task, "system_task_key": f"task_{index}"} for index, task in enumerate(SAMPLE_TASKS)]
+        with patch("services.default_tasks.load_default_tasks", return_value=keyed_tasks):
+            payloads = default_task_payloads("en")
+            rows = default_task_rows("en", include_key=True)
+
+        self.assertEqual(payloads[0]["system_task_key"], "task_0")
+        self.assertEqual(rows[0][0], "task_0")
+        self.assertEqual(rows[0][1], "Task A")
 
     # 日本語: readyに対して、送信bodyへ、repositoryメールタスクusesコードblockことを検証します。
     # English: Verify that repository email task uses code block for ready to send body.

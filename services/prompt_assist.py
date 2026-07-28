@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from services.llm import LlmProviderError, get_llm_response
+from services.i18n import normalize_locale
 from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
@@ -157,6 +158,7 @@ def _build_prompt_assist_messages(
     action: str,
     fields: dict[str, str],
     instruction: str = "",
+    locale: str = "ja",
 ) -> list[dict[str, str]]:
     # 日本語: ターゲット設定やルールを組み立て、ユーザー要求とシステムプロンプトのメッセージリストを作成します。
     # English: Compose target settings, rules, user request, and system prompt into a message list.
@@ -176,10 +178,13 @@ def _build_prompt_assist_messages(
     user_brief_block = ""
     if instruction:
         user_brief_block = f"<user_brief>\n{instruction}\n</user_brief>\n"
+    resolved_locale = normalize_locale(locale, default="ja") or "ja"
+    fallback_language = "English" if resolved_locale == "en" else "Japanese"
     rules = [
         "suggested_fields には更新提案があるフィールドだけを含める。",
         "title は簡潔で具体的にする。空ならわかりやすいタイトルを提案する。",
-        "本文は日本語で、役割・前提・出力形式まで書いた、すぐ使える完成度を目指す。",
+        "ユーザーが言語を明示した場合はその言語を使う。明示がなければ user_brief と current_values の主要な入力言語を使い、判別できない場合だけ設定言語を使う。",
+        f"設定言語（入力言語が判別できない場合のフォールバック）は {fallback_language}。",
         "user_brief があれば、それをユーザーの作りたいプロンプトの意図として最優先で反映する。",
         "generate_draft で本文が既にある場合は、それを土台に整理・加筆して作り込む。本文が空の場合は user_brief や title をもとに新規作成する。",
     ]
@@ -329,6 +334,7 @@ def create_prompt_assist_payload(
     action: str,
     fields: dict[str, Any],
     instruction: str = "",
+    locale: str = "ja",
 ) -> dict[str, Any]:
     # 日本語: 引数の検証、メッセージの構築、LLMプロバイダの呼び出し、および応答の正規化を順次行い、最終的なアシスト結果を取得します。
     # English: Run inputs validation, message construction, LLM provider invocation, and response normalization to get final assist results.
@@ -340,7 +346,13 @@ def create_prompt_assist_payload(
     normalized_instruction = _normalize_field_value(instruction)
     normalized_fields = _normalize_fields(target, fields)
     _validate_prompt_assist_request(target, action, normalized_fields, normalized_instruction)
-    messages = _build_prompt_assist_messages(target, action, normalized_fields, normalized_instruction)
+    messages = _build_prompt_assist_messages(
+        target,
+        action,
+        normalized_fields,
+        normalized_instruction,
+        locale,
+    )
     raw_response = get_llm_response(messages, PROMPT_ASSIST_MODEL)
     return _normalize_prompt_assist_response(
         target,

@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 
 import { CHAT_HISTORY_PAGE_SIZE } from "../../lib/chat_page/constants";
 import {
@@ -56,6 +56,7 @@ import {
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
 import { stopGenerationBeforeDisconnect } from "../../lib/chat_page/stop_generation";
+import { useTranslation } from "../../contexts/locale_context";
 
 const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 
@@ -133,6 +134,10 @@ export function useHomePageGenerationActions({
   setIsLoadingOlder,
   setMessages,
 }: UseHomePageGenerationActionsParams) {
+  const { locale } = useTranslation();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
   const scheduleAutoScrollIfNeeded = useCallback((force = false) => {
     const container = chatMessagesRef.current;
     if (!container) {
@@ -187,7 +192,7 @@ export function useHomePageGenerationActions({
     if (localStorageWarningShownRef.current) return;
     localStorageWarningShownRef.current = true;
     showToast(
-      "ブラウザの保存容量が不足しているため、この端末に現在のチャット状態を保存できませんでした。",
+      localize("ブラウザの保存容量が不足しているため、この端末に現在のチャット状態を保存できませんでした。", "This device does not have enough browser storage to save the current chat state."),
       { variant: "error" },
     );
   }, []);
@@ -260,14 +265,14 @@ export function useHomePageGenerationActions({
     localStorageWarningShownRef.current = true;
     if (result.stored) {
       showToast(
-        "ブラウザの保存容量が不足したため、この端末に保存するチャット表示キャッシュの古い一部を削除しました。",
+        localize("ブラウザの保存容量が不足したため、この端末に保存するチャット表示キャッシュの古い一部を削除しました。", "Browser storage was low, so some older local chat cache entries were removed."),
         { variant: "error" },
       );
       return;
     }
 
     showToast(
-      "ブラウザの保存容量が不足しているため、この端末にチャット履歴を保存できませんでした。リロード前に必要な内容を控えてください。",
+      localize("ブラウザの保存容量が不足しているため、この端末にチャット履歴を保存できませんでした。リロード前に必要な内容を控えてください。", "This device does not have enough browser storage to save chat history. Copy anything important before reloading."),
       { variant: "error" },
     );
   }, []);
@@ -336,7 +341,7 @@ export function useHomePageGenerationActions({
     const payload = normalizeChatHistoryPayload(rawPayload);
 
     if (!response.ok || payload.error) {
-      throw new Error(extractApiErrorMessage(rawPayload, "履歴取得に失敗しました。", response.status));
+      throw new Error(extractApiErrorMessage(rawPayload, localize("履歴取得に失敗しました。", "Could not load chat history."), response.status));
     }
 
     const normalizedPagination: ChatHistoryPagination = {
@@ -633,34 +638,34 @@ export function useHomePageGenerationActions({
         }
 
         if (parsed.event === "web_search_planning_started") {
-          updateThinkingStatus("検索が必要か判断しています", "web-search");
+          updateThinkingStatus(localize("検索が必要か判断しています", "Checking whether web search is needed"), "web-search");
           return;
         }
 
         if (parsed.event === "web_search_started") {
-          updateThinkingStatus("関連情報を取得しています", "web-search");
+          updateThinkingStatus(localize("関連情報を取得しています", "Finding relevant information"), "web-search");
           return;
         }
 
         if (parsed.event === "web_search_completed") {
-          updateThinkingStatus("検索結果を読み込んでいます", "web-search");
+          updateThinkingStatus(localize("検索結果を読み込んでいます", "Reading search results"), "web-search");
           return;
         }
 
         if (parsed.event === "web_search_failed") {
           const message = typeof parsed.data.message === "string" ? parsed.data.message.trim() : "";
           if (message.includes("APIキー") || message.includes("設定")) {
-            updateThinkingStatus("検索設定を確認できませんでした。回答を作成しています", "generating");
+            updateThinkingStatus(localize("検索設定を確認できませんでした。回答を作成しています", "Search settings were unavailable. Preparing an answer"), "generating");
           } else if (message.includes("上限")) {
-            updateThinkingStatus("Web検索の上限に達しました。回答を作成しています", "generating");
+            updateThinkingStatus(localize("Web検索の上限に達しました。回答を作成しています", "The web search limit was reached. Preparing an answer"), "generating");
           } else {
-            updateThinkingStatus("Web検索に失敗しました。回答を作成しています", "generating");
+            updateThinkingStatus(localize("Web検索に失敗しました。回答を作成しています", "Web search failed. Preparing an answer"), "generating");
           }
           return;
         }
 
         if (parsed.event === "response_generation_started") {
-          updateThinkingStatus("回答を作成しています", "generating");
+          updateThinkingStatus(localize("回答を作成しています", "Preparing an answer"), "generating");
           return;
         }
 
@@ -689,13 +694,13 @@ export function useHomePageGenerationActions({
           streamState.streamError =
             typeof parsed.data.message === "string"
               ? parsed.data.message
-              : "ストリーミング生成中にエラーが発生しました。";
+              : localize("ストリーミング生成中にエラーが発生しました。", "An error occurred while streaming the response.");
         }
       };
 
       const readStreamResponse = async (streamResponse: Response) => {
         if (!streamResponse.body) {
-          throw new Error("ストリーム応答を受信できませんでした。");
+          throw new Error(localize("ストリーム応答を受信できませんでした。", "No streaming response was received."));
         }
 
         const reader = streamResponse.body.getReader();
@@ -769,8 +774,8 @@ export function useHomePageGenerationActions({
           if (!streamedText || reconnectDelay === undefined) {
             persistInterruptedStream(
               streamedText
-                ? "ストリームが途中で終了しました。ここまでの応答を保存しました。"
-                : "ストリームが途中で終了しました。",
+                ? localize("ストリームが途中で終了しました。ここまでの応答を保存しました。", "The stream ended early. The response received so far was saved.")
+                : localize("ストリームが途中で終了しました。", "The stream ended early."),
             );
             return false;
           }
@@ -780,7 +785,7 @@ export function useHomePageGenerationActions({
 
           const reconnectResponse = await openReconnectStream();
           if (!reconnectResponse) {
-            persistInterruptedStream("ストリームが途中で終了しました。ここまでの応答を保存しました。");
+            persistInterruptedStream(localize("ストリームが途中で終了しました。ここまでの応答を保存しました。", "The stream ended early. The response received so far was saved."));
             return false;
           }
           activeResponse = reconnectResponse;
@@ -821,7 +826,7 @@ export function useHomePageGenerationActions({
           {
             id: thinkingId,
             sender: "thinking",
-            text: "AIが応答を準備しています",
+            text: localize("AIが応答を準備しています", "AI is preparing a response"),
             generationPhase: "preparing",
           },
         ];
@@ -856,7 +861,7 @@ export function useHomePageGenerationActions({
           if (isGenerationActive(generation)) {
             appendAssistantErrorMessage(
               roomId,
-              extractApiErrorMessage(rawPayload, "チャットの応答取得に失敗しました。", response.status),
+              extractApiErrorMessage(rawPayload, localize("チャットの応答取得に失敗しました。", "Could not get a chat response."), response.status),
             );
           }
           return;
@@ -867,7 +872,7 @@ export function useHomePageGenerationActions({
         if (isGenerationActive(generation) && !(error instanceof DOMException && error.name === "AbortError")) {
           appendAssistantErrorMessage(
             roomId,
-            error instanceof Error ? error.message : "チャットの応答取得に失敗しました。",
+            error instanceof Error ? error.message : localize("チャットの応答取得に失敗しました。", "Could not get a chat response."),
           );
         }
       } finally {
@@ -1073,7 +1078,7 @@ export function useHomePageGenerationActions({
         const rawPayload = await readJsonBodySafe(response);
         if (!response.ok) {
           showToast(
-            extractApiErrorMessage(rawPayload, "分岐の切り替えに失敗しました。", response.status),
+            extractApiErrorMessage(rawPayload, localize("分岐の切り替えに失敗しました。", "Could not switch branches."), response.status),
             { variant: "error" },
           );
           return;
@@ -1087,7 +1092,7 @@ export function useHomePageGenerationActions({
         setMessages(uiMessages);
         saveUiMessagesToLocalStorage(roomId, uiMessages);
       } catch {
-        showToast("分岐の切り替えに失敗しました。", { variant: "error" });
+        showToast(localize("分岐の切り替えに失敗しました。", "Could not switch branches."), { variant: "error" });
       }
     },
     [mapHistoryEntriesToUi, saveUiMessagesToLocalStorage],
@@ -1115,7 +1120,7 @@ export function useHomePageGenerationActions({
 
     const payload = (await readJsonBodySafe(response)) as { error?: string };
     if (!response.ok || payload.error) {
-      throw new Error(extractApiErrorMessage(payload, "チャットルーム作成に失敗しました。", response.status));
+      throw new Error(extractApiErrorMessage(payload, localize("チャットルーム作成に失敗しました。", "Could not create a chat."), response.status));
     }
   }, []);
 
@@ -1139,7 +1144,7 @@ export function useHomePageGenerationActions({
       const thinkingMessage: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
-        text: "AIが応答を準備しています",
+        text: localize("AIが応答を準備しています", "AI is preparing a response"),
         generationPhase: "preparing",
       };
 
@@ -1211,7 +1216,7 @@ export function useHomePageGenerationActions({
             {
               id: nextMessageId("assistant-error", messageSeqRef),
               sender: "assistant",
-              text: `エラー: ${extractApiErrorMessage(rawPayload, "予期しないエラーが発生しました。", response.status)}`,
+              text: `${localize("エラー", "Error")}: ${extractApiErrorMessage(rawPayload, localize("予期しないエラーが発生しました。", "An unexpected error occurred."), response.status)}`,
               error: true,
             },
           ];
@@ -1316,7 +1321,7 @@ export function useHomePageGenerationActions({
       const thinkingMsg: UiChatMessage = {
         id: nextMessageId("thinking", messageSeqRef),
         sender: "thinking",
-        text: "AIが応答を準備しています",
+        text: localize("AIが応答を準備しています", "AI is preparing a response"),
         generationPhase: "preparing",
       };
 
@@ -1391,7 +1396,7 @@ export function useHomePageGenerationActions({
             {
               id: nextMessageId("assistant-error", messageSeqRef),
               sender: "assistant",
-              text: `エラー: ${extractApiErrorMessage(rawPayload, "編集・再生成に失敗しました。", response.status)}`,
+              text: `${localize("エラー", "Error")}: ${extractApiErrorMessage(rawPayload, localize("編集・再生成に失敗しました。", "Could not edit and regenerate."), response.status)}`,
               error: true,
             },
           ];
@@ -1468,7 +1473,7 @@ export function useHomePageGenerationActions({
           {
             id: thinkingId,
             sender: "thinking",
-            text: "AIが応答を準備しています",
+            text: localize("AIが応答を準備しています", "AI is preparing a response"),
             generationPhase: "preparing",
           },
         ];
@@ -1534,7 +1539,7 @@ export function useHomePageGenerationActions({
             {
               id: nextMessageId("assistant-error", messageSeqRef),
               sender: "assistant",
-              text: `エラー: ${extractApiErrorMessage(rawPayload, "再生成に失敗しました。", response.status)}`,
+              text: `${localize("エラー", "Error")}: ${extractApiErrorMessage(rawPayload, localize("再生成に失敗しました。", "Could not regenerate the response."), response.status)}`,
               error: true,
             },
           ];

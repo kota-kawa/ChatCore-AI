@@ -10,6 +10,7 @@ import { NewProjectModal } from "../components/chat_page/modals/new_project_moda
 import { HomePageContextProvider } from "../contexts/chat_page/home_page_context";
 import { useHomePageController } from "../hooks/chat_page/use_home_page_controller";
 import { absoluteUrl, DEFAULT_SEO_DESCRIPTION } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 const homeStructuredData = [
   {
@@ -38,6 +39,7 @@ const homeStructuredData = [
 // ホームページのメインコンポーネント
 // Main component for the home page
 export default function HomePage() {
+  const { locale, t } = useTranslation();
   // ホームページのコントローラーフックを使用して状態とアクションを取得
   // Get state and actions using the home page controller hook
   const controller = useHomePageController();
@@ -110,7 +112,8 @@ export default function HomePage() {
   return (
     <>
       <SeoHead
-        title="ChatCore-AI | 日本語AIチャット・プロンプト共有・メモ管理"
+        title={t("home.seoTitle")}
+        description={t("home.seoDescription")}
         canonicalPath="/"
         structuredData={homeStructuredData}
       />
@@ -119,7 +122,7 @@ export default function HomePage() {
         <div className="chat-page-shell cc-page-rise">
           {/* 検索エンジン・支援技術向けのページ見出し（視覚的には非表示） */}
           {/* Page heading for search engines and assistive tech (visually hidden) */}
-          <h1 className="sr-only">ChatCore-AI ― 日本語AIチャット・プロンプト共有・メモ管理</h1>
+          <h1 className="sr-only">{t("home.seoTitle")}</h1>
           <action-menu></action-menu>
 
           <div
@@ -137,7 +140,7 @@ export default function HomePage() {
               window.location.href = "/login";
             }}>
               <i className="bi bi-person-circle"></i>
-              <span>ログイン / 登録</span>
+              <span>{locale === "en" ? "Log in / Sign up" : "ログイン / 登録"}</span>
             </button>
           </div>
 

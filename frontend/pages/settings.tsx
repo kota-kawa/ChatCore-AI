@@ -26,7 +26,8 @@ import {
   LikedPromptsSection,
   NotificationsSettingsSection,
   ProfileSettingsSection,
-  SecuritySettingsSection
+  SecuritySettingsSection,
+  LanguageSettingsSection
 } from "../components/settings/settings_sections";
 import { SettingsSidebar } from "../components/settings/settings_sidebar";
 import {
@@ -38,14 +39,18 @@ import {
 } from "../scripts/user/settings/constants";
 import {
   issueMcpOAuthClient,
+  loadLocalePreference,
   loadMcpOAuthClients,
   loadMcpOAuthConnections as fetchMcpOAuthConnections,
   revokeMcpOAuthClient,
   revokeMcpOAuthConnection,
   settingsFetchJsonOrThrow,
   updateMcpOAuthClientLabel,
-  updateMcpOAuthConnectionDisplayName
+  updateMcpOAuthConnectionDisplayName,
+  updateLocalePreference
 } from "../scripts/user/settings/api";
+import { useTranslation } from "../contexts/locale_context";
+import type { Locale } from "../lib/i18n/config";
 import type {
   EditPromptFormState,
   EmailChangeStage,
@@ -72,6 +77,7 @@ import {
 // ユーザー設定ページのメインコンポーネント — すべての設定セクションを統括する
 // Main component for the user settings page — orchestrates all settings sections
 export default function UserSettingsPage() {
+  const { locale, setLocale, t } = useTranslation();
   // 現在表示中のセクションを管理する
   // Track which section is currently displayed
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
@@ -125,6 +131,7 @@ export default function UserSettingsPage() {
   const [previewPromptSource, setPreviewPromptSource] = useState<"authored" | "liked">("authored");
 
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("light");
+  const [localeSaving, setLocaleSaving] = useState(false);
 
   // Passkey 関連の状態 — 対応有無・一覧・ローディング・操作中フラグを管理する
   // Passkey-related state — tracks support, list, loading, and in-progress operation flags
@@ -177,7 +184,7 @@ export default function UserSettingsPage() {
       const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
         { credentials: "same-origin" },
-        { defaultMessage: "プロフィール情報の取得に失敗しました。" }
+        { defaultMessage: t("settings.profileLoadFailed") }
       );
 
       const nextProfile: ProfileFormState = {
@@ -191,7 +198,7 @@ export default function UserSettingsPage() {
       // Auto-generate LLM context from profile fields when llm_profile_context is null/undefined
       const shouldUseGeneratedDefault = rawLlmProfileContext === null || rawLlmProfileContext === undefined;
       const nextLlmProfileContext = shouldUseGeneratedDefault
-        ? buildDefaultLlmProfileContext(nextProfile)
+        ? buildDefaultLlmProfileContext(nextProfile, locale)
         : asString(rawLlmProfileContext);
       const nextResolvedProfile: ProfileFormState = {
         ...nextProfile,
@@ -214,7 +221,31 @@ export default function UserSettingsPage() {
     } finally {
       setProfileLoading(false);
     }
-  }, []);
+  }, [locale, t]);
+
+  const loadLanguagePreference = useCallback(async () => {
+    try {
+      setLocale(await loadLocalePreference());
+    } catch (error) {
+      console.error("loadLanguagePreference:", error instanceof Error ? error.message : String(error));
+    }
+  }, [setLocale]);
+
+  const handleLocaleSelect = useCallback(async (nextLocale: Locale) => {
+    if (nextLocale === locale || localeSaving) return;
+    const previousLocale = locale;
+    setLocale(nextLocale);
+    setLocaleSaving(true);
+    try {
+      setLocale(await updateLocalePreference(nextLocale));
+      showToast(t("settings.languageSaved"), { variant: "success" });
+    } catch (error) {
+      setLocale(previousLocale);
+      showToast(t("settings.languageSaveFailed"), { variant: "error" });
+    } finally {
+      setLocaleSaving(false);
+    }
+  }, [locale, localeSaving, setLocale, t]);
 
   // ユーザーが投稿したプロンプト一覧を取得する
   // Fetch the list of prompts authored by the current user
@@ -229,17 +260,17 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "プロンプトの取得に失敗しました。"
+          defaultMessage: t("settings.promptLoadFailed")
         }
       );
       setMyPrompts(parseMyPromptsResponse(payload));
     } catch (error) {
       setMyPrompts([]);
-      setMyPromptsError(error instanceof Error ? error.message : "プロンプトの取得に失敗しました。");
+      setMyPromptsError(error instanceof Error ? error.message : t("settings.promptLoadFailed"));
     } finally {
       setMyPromptsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // ユーザーがいいねしたプロンプト一覧を取得する
   // Fetch the list of prompts liked by the current user
@@ -253,30 +284,30 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "いいねしたプロンプトの取得に失敗しました。"
+          defaultMessage: t("settings.likedLoadFailed")
         }
       );
       setLikedPrompts(parseLikedPromptsResponse(payload));
     } catch (error) {
       setLikedPrompts([]);
-      setLikedPromptsError(error instanceof Error ? error.message : "いいねしたプロンプトの取得に失敗しました。");
+      setLikedPromptsError(error instanceof Error ? error.message : t("settings.likedLoadFailed"));
     } finally {
       setLikedPromptsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // ブラウザの Passkey 対応を確認してから登録済み Passkey 一覧を取得する
   // Check browser passkey support, then fetch the list of registered passkeys
   const loadPasskeys = useCallback(async () => {
     if (!browserSupportsPasskeys()) {
       setPasskeySupported(false);
-      setPasskeySupportStatus("このブラウザではPasskeyを利用できません。");
+      setPasskeySupportStatus(t("settings.passkeyUnsupported"));
       setPasskeys([]);
       return;
     }
 
     setPasskeySupported(true);
-    setPasskeySupportStatus("このブラウザはPasskeyに対応しています。");
+    setPasskeySupportStatus(t("settings.passkeySupported"));
     setPasskeysLoading(true);
 
     try {
@@ -286,19 +317,19 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "Passkey一覧の取得に失敗しました。",
+          defaultMessage: t("settings.passkeyLoadFailed"),
           hasApplicationError: (data) => data.status === "fail"
         }
       );
       const passkeyRecords = Array.isArray(payload.passkeys) ? payload.passkeys : [];
-      setPasskeys(normalizePasskeyRecords(passkeyRecords));
+      setPasskeys(normalizePasskeyRecords(passkeyRecords, locale));
     } catch (error) {
       setPasskeys([]);
-      showToast(error instanceof Error ? error.message : "Passkey一覧の取得に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : t("settings.passkeyLoadFailed"), { variant: "error" });
     } finally {
       setPasskeysLoading(false);
     }
-  }, []);
+  }, [locale, t]);
 
   // 外部AIサービスへ許可した MCP 連携を取得する
   // Fetch the MCP connections authorized for external AI services.
@@ -309,13 +340,13 @@ export default function UserSettingsPage() {
     } catch (error) {
       setMcpOAuthConnections([]);
       showToast(
-        error instanceof Error ? error.message : "AIサービス連携一覧の取得に失敗しました。",
+        error instanceof Error ? error.message : (locale === "en" ? "Could not load AI service connections." : "AIサービス連携一覧の取得に失敗しました。"),
         { variant: "error" }
       );
     } finally {
       setMcpOAuthConnectionsLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   const loadMcpOAuthClientList = useCallback(async () => {
     setMcpOAuthClientsLoading(true);
@@ -327,13 +358,13 @@ export default function UserSettingsPage() {
     } catch (error) {
       setMcpOAuthClients([]);
       showToast(
-        error instanceof Error ? error.message : "連携用認証情報の取得に失敗しました。",
+        error instanceof Error ? error.message : (locale === "en" ? "Could not load integration credentials." : "連携用認証情報の取得に失敗しました。"),
         { variant: "error" }
       );
     } finally {
       setMcpOAuthClientsLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする
   // On mount, add the page class and perform initial loads for theme, profile, and passkeys
@@ -348,6 +379,7 @@ export default function UserSettingsPage() {
     void importCustomElements();
 
     void loadProfile();
+    void loadLanguagePreference();
     void loadPasskeys();
 
     return () => {
@@ -357,7 +389,7 @@ export default function UserSettingsPage() {
       document.body.classList.remove("settings-page");
       document.body.classList.remove("modal-open");
     };
-  }, [loadPasskeys, loadProfile]);
+  }, [loadLanguagePreference, loadPasskeys, loadProfile]);
 
   // 保存成功トークンが変わるたびにアニメーションを一定時間表示して自動消灯する
   // Show the save-success animation for a fixed duration each time the token increments
@@ -478,12 +510,12 @@ export default function UserSettingsPage() {
         // 他のフィールドが変わったとき、自動生成中なら LLM コンテキストも再生成する
         // When other fields change and auto-default is active, regenerate the LLM context
         if (llmProfileContextUsesGeneratedDefault) {
-          nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+          nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile, locale);
         }
         return nextProfile;
       });
     },
-    [llmProfileContextUsesGeneratedDefault]
+    [llmProfileContextUsesGeneratedDefault, locale]
   );
 
   // アバター画像ファイルを選択し、FileReader でプレビュー表示する
@@ -554,11 +586,11 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "更新失敗"
+          defaultMessage: t("settings.updateFailed")
         }
       );
 
-      const successMessage = asString(payload.message) || "プロフィールを更新しました";
+      const successMessage = t("settings.profileUpdated");
       setProfileSaveStatus({ tone: "success", message: successMessage });
       // トークンをインクリメントして保存成功アニメーションを再起動する
       // Increment the token to restart the save-success animation
@@ -591,7 +623,7 @@ export default function UserSettingsPage() {
     } finally {
       setProfileSaving(false);
     }
-  }, [avatarPreviewUrl, profileForm, selectedAvatarFile]);
+  }, [avatarPreviewUrl, profileForm, selectedAvatarFile, t]);
 
   // メールアドレス変更が完了したとき、フォームと初期値の両方に新しいアドレスを反映する
   // After an email change is committed, apply the new address to both form state and initial state
@@ -599,18 +631,18 @@ export default function UserSettingsPage() {
     setProfileForm((prev) => {
       const nextProfile = { ...prev, email };
       if (llmProfileContextUsesGeneratedDefault) {
-        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile, locale);
       }
       return nextProfile;
     });
     setInitialProfileForm((prev) => {
       const nextProfile = { ...prev, email };
       if (initialLlmProfileContextUsesGeneratedDefault) {
-        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile);
+        nextProfile.llmProfileContext = buildDefaultLlmProfileContext(nextProfile, locale);
       }
       return nextProfile;
     });
-  }, [initialLlmProfileContextUsesGeneratedDefault, llmProfileContextUsesGeneratedDefault]);
+  }, [initialLlmProfileContextUsesGeneratedDefault, llmProfileContextUsesGeneratedDefault, locale]);
 
   // メールアドレス変更の第 1 ステップ — 新しいアドレスへの確認コード送信をリクエストする
   // First step of the email-change flow — request a verification code sent to the new address
@@ -618,7 +650,7 @@ export default function UserSettingsPage() {
     event.preventDefault();
     const nextEmail = emailChangeNewEmail.trim();
     if (!nextEmail) {
-      setEmailChangeStatus({ tone: "error", message: "新しいメールアドレスを入力してください。" });
+      setEmailChangeStatus({ tone: "error", message: t("settings.newEmailRequired") });
       return;
     }
 
@@ -633,7 +665,7 @@ export default function UserSettingsPage() {
           credentials: "same-origin",
           body: JSON.stringify({ new_email: nextEmail })
         },
-        { defaultMessage: "確認メールの送信に失敗しました。" }
+        { defaultMessage: t("settings.emailSendFailed") }
       );
       // 現在のメールへの確認コード入力ステージに進む
       // Advance to the stage that collects the verification code sent to the current email
@@ -641,17 +673,17 @@ export default function UserSettingsPage() {
       setEmailChangeCode("");
       setEmailChangeStatus({
         tone: "success",
-        message: "現在のメールアドレスに確認コードを送信しました。"
+        message: t("settings.currentEmailSent")
       });
     } catch (error) {
       setEmailChangeStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "確認メールの送信に失敗しました。"
+        message: error instanceof Error ? error.message : t("settings.emailSendFailed")
       });
     } finally {
       setEmailChangeSubmitting(false);
     }
-  }, [emailChangeNewEmail]);
+  }, [emailChangeNewEmail, t]);
 
   // メールアドレス変更の第 2・第 3 ステップ — 確認コードを検証して変更を完了させる
   // Second and third steps — verify the confirmation code and finalize the email change
@@ -659,7 +691,7 @@ export default function UserSettingsPage() {
     event.preventDefault();
     const authCode = emailChangeCode.trim();
     if (!authCode) {
-      setEmailChangeStatus({ tone: "error", message: "確認コードを入力してください。" });
+      setEmailChangeStatus({ tone: "error", message: t("settings.emailCodeRequired") });
       return;
     }
 
@@ -674,7 +706,7 @@ export default function UserSettingsPage() {
           credentials: "same-origin",
           body: JSON.stringify({ auth_code: authCode })
         },
-        { defaultMessage: "確認コードの検証に失敗しました。" }
+        { defaultMessage: t("settings.emailVerifyFailed") }
       );
 
       const committedEmail = asString(payload.email);
@@ -687,7 +719,7 @@ export default function UserSettingsPage() {
         setEmailChangeStage("idle");
         setEmailChangeStatus({
           tone: "success",
-          message: "メールアドレスを変更しました。"
+          message: t("settings.emailChanged")
         });
         return;
       }
@@ -699,24 +731,24 @@ export default function UserSettingsPage() {
         setEmailChangeCode("");
         setEmailChangeStatus({
           tone: "success",
-          message: "新しいメールアドレスに確認コードを送信しました。"
+          message: t("settings.newEmailSent")
         });
         return;
       }
 
       setEmailChangeStatus({
         tone: "success",
-        message: asString(payload.message) || "確認しました。"
+        message: t("settings.verified")
       });
     } catch (error) {
       setEmailChangeStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "確認コードの検証に失敗しました。"
+        message: error instanceof Error ? error.message : t("settings.emailVerifyFailed")
       });
     } finally {
       setEmailChangeSubmitting(false);
     }
-  }, [applyCommittedEmail, emailChangeCode]);
+  }, [applyCommittedEmail, emailChangeCode, t]);
 
   // メールアドレス変更フローを中断してアイドル状態に戻す
   // Abort the email-change flow and reset to idle state
@@ -751,11 +783,11 @@ export default function UserSettingsPage() {
   const handleDeletePrompt = useCallback(async (prompt: PromptRecord) => {
     const promptId = asId(prompt.id);
     if (!promptId) {
-      showToast("削除対象のプロンプトが見つかりませんでした。", { variant: "error" });
+      showToast(locale === "en" ? "The prompt to delete was not found." : "削除対象のプロンプトが見つかりませんでした。", { variant: "error" });
       return;
     }
 
-    const confirmed = await showConfirmModal("このプロンプトを削除しますか？");
+    const confirmed = await showConfirmModal(locale === "en" ? "Delete this prompt?" : "このプロンプトを削除しますか？");
     if (!confirmed) {
       return;
     }
@@ -771,15 +803,15 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "プロンプトの削除に失敗しました。"
+          defaultMessage: locale === "en" ? "Could not delete the prompt." : "プロンプトの削除に失敗しました。"
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "削除しました。", { variant: "success" });
+      showToast(response.message || (locale === "en" ? "Deleted." : "削除しました。"), { variant: "success" });
       void loadMyPrompts();
     } catch (error) {
       setMyPrompts(previousPrompts);
-      showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : (locale === "en" ? "Could not delete the prompt." : "プロンプトの削除に失敗しました。"), { variant: "error" });
     }
   }, [loadMyPrompts, myPrompts]);
 
@@ -830,7 +862,7 @@ export default function UserSettingsPage() {
       !editPromptForm.category.trim() ||
       !editPromptForm.content.trim()
     ) {
-      showToast("編集フォームの値が不足しています。", { variant: "error" });
+      showToast(locale === "en" ? "Some required edit fields are missing." : "編集フォームの値が不足しています。", { variant: "error" });
       return;
     }
 
@@ -869,16 +901,16 @@ export default function UserSettingsPage() {
           })
         },
         {
-          defaultMessage: "プロンプトの更新に失敗しました。"
+          defaultMessage: locale === "en" ? "Could not update the prompt." : "プロンプトの更新に失敗しました。"
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "更新しました。", { variant: "success" });
+      showToast(response.message || (locale === "en" ? "Updated." : "更新しました。"), { variant: "success" });
       setEditPromptForm(null);
       void loadMyPrompts();
     } catch (error) {
       setMyPrompts(previousPrompts);
-      showToast(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : (locale === "en" ? "Could not update the prompt." : "プロンプトの更新に失敗しました。"), { variant: "error" });
     } finally {
       setPromptSaving(false);
     }
@@ -889,11 +921,11 @@ export default function UserSettingsPage() {
   const handleUnlikePrompt = useCallback(async (entry: LikedPrompt) => {
     const promptId = asId(entry.promptId);
     if (!promptId) {
-      showToast("いいね解除対象のプロンプトが見つかりませんでした。", { variant: "error" });
+      showToast(locale === "en" ? "The liked prompt was not found." : "いいね解除対象のプロンプトが見つかりませんでした。", { variant: "error" });
       return;
     }
 
-    const confirmed = await showConfirmModal("このプロンプトのいいねを解除しますか？");
+    const confirmed = await showConfirmModal(locale === "en" ? "Remove your like from this prompt?" : "このプロンプトのいいねを解除しますか？");
     if (!confirmed) {
       return;
     }
@@ -911,14 +943,14 @@ export default function UserSettingsPage() {
           body: JSON.stringify({ prompt_id: promptId })
         },
         {
-          defaultMessage: "いいねの解除に失敗しました。"
+          defaultMessage: locale === "en" ? "Could not remove the like." : "いいねの解除に失敗しました。"
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "いいねを解除しました。", { variant: "success" });
+      showToast(response.message || (locale === "en" ? "Like removed." : "いいねを解除しました。"), { variant: "success" });
     } catch (error) {
       setLikedPrompts(previousLikedPrompts);
-      showToast(error instanceof Error ? error.message : "いいねの解除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : (locale === "en" ? "Could not remove the like." : "いいねの解除に失敗しました。"), { variant: "error" });
     }
   }, [likedPrompts]);
 
@@ -928,7 +960,7 @@ export default function UserSettingsPage() {
     setRegisteringPasskey(true);
     try {
       await registerPasskey();
-      showToast("Passkeyを追加しました。", { variant: "success" });
+      showToast(locale === "en" ? "Passkey added." : "Passkeyを追加しました。", { variant: "success" });
       await loadPasskeys();
     } catch (error) {
       // ユーザーが自らキャンセルした場合はエラートーストを表示しない
@@ -936,7 +968,7 @@ export default function UserSettingsPage() {
       if (error instanceof PasskeyCancelledError) {
         return;
       }
-      showToast(error instanceof Error ? error.message : "Passkey登録に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : (locale === "en" ? "Could not register the passkey." : "Passkey登録に失敗しました。"), { variant: "error" });
     } finally {
       setRegisteringPasskey(false);
     }
@@ -945,7 +977,7 @@ export default function UserSettingsPage() {
   // 確認ダイアログを経て指定の Passkey を削除する
   // Delete the specified passkey after user confirmation
   const handleDeletePasskey = useCallback(async (passkeyId: number) => {
-    const confirmed = await showConfirmModal("このPasskeyを削除しますか？");
+    const confirmed = await showConfirmModal(locale === "en" ? "Delete this passkey?" : "このPasskeyを削除しますか？");
     if (!confirmed) {
       return;
     }
@@ -963,13 +995,13 @@ export default function UserSettingsPage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "Passkeyの削除に失敗しました。",
+          defaultMessage: locale === "en" ? "Could not delete the passkey." : "Passkeyの削除に失敗しました。",
           hasApplicationError: (payload) => payload.status === "fail"
         }
       );
       await loadPasskeys();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Passkeyの削除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : (locale === "en" ? "Could not delete the passkey." : "Passkeyの削除に失敗しました。"), { variant: "error" });
     } finally {
       setDeletingPasskeyId(null);
     }
@@ -979,7 +1011,7 @@ export default function UserSettingsPage() {
   // Revoke an AI service's MCP authorization and prevent future publishing.
   const handleDeleteMcpOAuthConnection = useCallback(async (connection: McpOAuthConnection) => {
     const confirmed = await showConfirmModal(
-      `「${connection.client_name}」からのAIサービス連携を解除しますか？`
+      locale === "en" ? `Disconnect the AI service “${connection.client_name}”?` : `「${connection.client_name}」からのAIサービス連携を解除しますか？`
     );
     if (!confirmed) {
       return;
@@ -989,10 +1021,10 @@ export default function UserSettingsPage() {
     try {
       await revokeMcpOAuthConnection(connection.id);
       setMcpOAuthConnections((current) => current.filter((entry) => entry.id !== connection.id));
-      showToast("AIサービス連携を解除しました。", { variant: "success" });
+      showToast(locale === "en" ? "AI service disconnected." : "AIサービス連携を解除しました。", { variant: "success" });
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "AIサービス連携の解除に失敗しました。",
+        error instanceof Error ? error.message : (locale === "en" ? "Could not disconnect the AI service." : "AIサービス連携の解除に失敗しました。"),
         { variant: "error" }
       );
     } finally {
@@ -1008,10 +1040,10 @@ export default function UserSettingsPage() {
         setMcpOAuthConnections((current) => current.map((entry) => (
           entry.id === connection.id ? { ...entry, display_name: normalizedDisplayName } : entry
         )));
-        showToast("AIサービスの表示名を更新しました。", { variant: "success" });
+        showToast(locale === "en" ? "AI service display name updated." : "AIサービスの表示名を更新しました。", { variant: "success" });
       } catch (error) {
         showToast(
-          error instanceof Error ? error.message : "AIサービスの表示名を更新できませんでした。",
+          error instanceof Error ? error.message : (locale === "en" ? "Could not update the AI service display name." : "AIサービスの表示名を更新できませんでした。"),
           { variant: "error" }
         );
         throw error;
@@ -1043,13 +1075,13 @@ export default function UserSettingsPage() {
       setMcpOAuthClientRedirectUri("");
       showToast(
         credentials.client_secret
-          ? "連携用認証情報を発行しました。シークレットをコピーしてください。"
-          : "連携用認証情報を発行しました。",
+          ? (locale === "en" ? "Integration credentials issued. Copy the secret now." : "連携用認証情報を発行しました。シークレットをコピーしてください。")
+          : (locale === "en" ? "Integration credentials issued." : "連携用認証情報を発行しました。"),
         { variant: "success" }
       );
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "連携用認証情報の発行に失敗しました。",
+        error instanceof Error ? error.message : (locale === "en" ? "Could not issue integration credentials." : "連携用認証情報の発行に失敗しました。"),
         { variant: "error" }
       );
     } finally {
@@ -1060,7 +1092,7 @@ export default function UserSettingsPage() {
   const handleDeleteMcpOAuthClient = useCallback(async (client: McpOAuthClient) => {
     const name = client.label || client.client_id;
     const confirmed = await showConfirmModal(
-      `認証情報「${name}」を削除しますか？この認証情報で確立済みの接続もすぐに使えなくなります。`
+      locale === "en" ? `Delete the credential “${name}”? Existing connections using it will stop working immediately.` : `認証情報「${name}」を削除しますか？この認証情報で確立済みの接続もすぐに使えなくなります。`
     );
     if (!confirmed) {
       return;
@@ -1076,10 +1108,10 @@ export default function UserSettingsPage() {
       // 認証情報を削除すると接続も切れるため、接続一覧を更新して反映する。
       // Deleting a credential severs its connections, so refresh the connection list.
       void loadMcpOAuthConnectionList();
-      showToast("認証情報を削除しました。", { variant: "success" });
+      showToast(locale === "en" ? "Credential deleted." : "認証情報を削除しました。", { variant: "success" });
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "認証情報の削除に失敗しました。",
+        error instanceof Error ? error.message : (locale === "en" ? "Could not delete the credential." : "認証情報の削除に失敗しました。"),
         { variant: "error" }
       );
     } finally {
@@ -1095,10 +1127,10 @@ export default function UserSettingsPage() {
         setMcpOAuthClients((current) => current.map((entry) => (
           entry.client_id === client.client_id ? { ...entry, label: normalizedLabel } : entry
         )));
-        showToast("認証情報の名前を更新しました。", { variant: "success" });
+        showToast(locale === "en" ? "Credential name updated." : "認証情報の名前を更新しました。", { variant: "success" });
       } catch (error) {
         showToast(
-          error instanceof Error ? error.message : "認証情報の名前を更新できませんでした。",
+          error instanceof Error ? error.message : (locale === "en" ? "Could not update the credential name." : "認証情報の名前を更新できませんでした。"),
           { variant: "error" }
         );
         throw error;
@@ -1114,12 +1146,12 @@ export default function UserSettingsPage() {
     // 入力テキストが正確に一致しない場合はボタンが無効になるが、防衛的にチェックする
     // Button is already disabled unless text matches, but check defensively
     if (normalizedConfirmation !== ACCOUNT_DELETE_CONFIRMATION_TEXT) {
-      setAccountDeleteError(`確認のため「${ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力してください。`);
+      setAccountDeleteError(locale === "en" ? `Type “${ACCOUNT_DELETE_CONFIRMATION_TEXT}” to confirm.` : `確認のため「${ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力してください。`);
       return;
     }
 
     const confirmed = await showConfirmModal(
-      "アカウントと保存済みデータを削除します。この操作は取り消せません。本当に削除しますか？"
+      locale === "en" ? "Delete your account and all saved data? This action cannot be undone." : "アカウントと保存済みデータを削除します。この操作は取り消せません。本当に削除しますか？"
     );
     if (!confirmed) {
       return;
@@ -1139,17 +1171,17 @@ export default function UserSettingsPage() {
           body: JSON.stringify({ confirmation: normalizedConfirmation })
         },
         {
-          defaultMessage: "アカウント削除に失敗しました。"
+          defaultMessage: locale === "en" ? "Could not delete the account." : "アカウント削除に失敗しました。"
         }
       );
-      showToast("アカウントを削除しました。", { variant: "success" });
+      showToast(locale === "en" ? "Account deleted." : "アカウントを削除しました。", { variant: "success" });
       // 削除完了後、少し間を置いてからログインページへリダイレクトする
       // Brief delay before redirecting to login so the toast can be seen
       window.setTimeout(() => {
         window.location.assign("/login");
       }, 400);
     } catch (error) {
-      setAccountDeleteError(error instanceof Error ? error.message : "アカウント削除に失敗しました。");
+      setAccountDeleteError(error instanceof Error ? error.message : (locale === "en" ? "Could not delete the account." : "アカウント削除に失敗しました。"));
       setAccountDeleting(false);
     }
   }, [accountDeleteConfirmation]);
@@ -1192,8 +1224,8 @@ export default function UserSettingsPage() {
   return (
     <>
       <SeoHead
-        title="ユーザー設定 | Chat Core"
-        description="Chat Coreのユーザー設定ページです。"
+        title={t("settings.title")}
+        description={locale === "en" ? "Manage your Chat Core profile, display, language, and security settings." : "Chat Coreのユーザー設定ページです。"}
         canonicalPath="/settings"
         noindex
       >
@@ -1216,7 +1248,8 @@ export default function UserSettingsPage() {
                 type="button"
                 className="settings-back-btn"
                 onClick={() => window.history.back()}
-                data-tooltip="前の画面に戻る"
+                data-tooltip={t("common.back")}
+                aria-label={t("common.back")}
                 data-tooltip-placement="bottom"
               >
                 <i className="bi bi-arrow-left"></i>
@@ -1243,6 +1276,13 @@ export default function UserSettingsPage() {
               isActive={isSectionActive("appearance")}
               themePreference={themePreference}
               onThemeSelect={handleThemeSelect}
+            />
+
+            <LanguageSettingsSection
+              isActive={isSectionActive("language")}
+              locale={locale}
+              saving={localeSaving}
+              onLocaleSelect={handleLocaleSelect}
             />
 
             <AuthoredPromptsSection

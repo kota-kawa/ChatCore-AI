@@ -1,4 +1,5 @@
-import { Html, Head, Main, NextScript } from "next/document";
+import NextDocument, { Html, Head, Main, NextScript, type DocumentContext, type DocumentInitialProps } from "next/document";
+import { resolveRequestLocale, type Locale } from "../lib/i18n/config";
 
 // フラッシュを防ぐために<head>内で同期的にテーマを適用するインラインスクリプト
 // Inline script to synchronously apply the theme in <head> to prevent flash
@@ -28,9 +29,11 @@ export const authBootstrapScript = `(function(){try{var v=localStorage.getItem('
 
 // Next.jsカスタムDocumentコンポーネント（共通のHTMLシェルとPWA対応のmeta/linkタグを設定する）
 // Next.js custom Document component (sets up the common HTML shell and PWA-related meta/link tags)
-export default function Document() {
+type LocalizedDocumentProps = DocumentInitialProps & { locale: Locale };
+
+export default function Document({ locale }: LocalizedDocumentProps) {
   return (
-    <Html lang="ja">
+    <Html lang={locale} data-locale={locale}>
       <Head>
         {/* カラースキームとテーマカラーの設定 / Color scheme and theme color settings */}
         <meta name="color-scheme" content="light dark" />
@@ -57,3 +60,11 @@ export default function Document() {
     </Html>
   );
 }
+
+Document.getInitialProps = async (ctx: DocumentContext): Promise<LocalizedDocumentProps> => {
+  const initialProps = await NextDocument.getInitialProps(ctx);
+  return {
+    ...initialProps,
+    locale: resolveRequestLocale(ctx.req?.headers.cookie, ctx.req?.headers["accept-language"])
+  };
+};

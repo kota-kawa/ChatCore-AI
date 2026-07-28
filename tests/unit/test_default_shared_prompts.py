@@ -11,9 +11,9 @@ from tests.helpers.db_helpers import TransactionTrackingConnection
 # デフォルト共有プロンプト作成処理をテストするための疑似DBカーソルクラス。
 # Mock database cursor class for testing default shared prompt insertion logic.
 class FakeCursor:
-    def __init__(self, *, owner_id=None, existing_prompt_titles=None):
+    def __init__(self, *, owner_id=None, existing_prompt_variants=None):
         self.owner_id = owner_id
-        self.existing_prompt_titles = set(existing_prompt_titles or [])
+        self.existing_prompt_variants = set(existing_prompt_variants or [])
         self.inserted_prompts = []
         self.executed_queries = []
         self._fetchone_result = None
@@ -41,17 +41,16 @@ class FakeCursor:
 
         # 既存プロンプトのタイトル重複チェックをシミュレート
         # Simulate check for existing prompt titles to avoid duplicate insertions
-        if "SELECT title FROM prompts" in normalized and "title IN" in normalized:
-            titles = params[1:]
-            self._fetchall_result = [(title,) for title in titles if title in self.existing_prompt_titles]
+        if "SELECT system_prompt_key, content_locale FROM prompts" in normalized:
+            self._fetchall_result = sorted(self.existing_prompt_variants)
             return
 
         # プロンプトの新規登録をシミュレート
         # Simulate inserting a new prompt
         if "INSERT INTO prompts" in normalized:
-            title = params[1]
+            key, locale, title = params[1:4]
             self.inserted_prompts.append(title)
-            self.existing_prompt_titles.add(title)
+            self.existing_prompt_variants.add((key, locale))
             self._fetchone_result = None
             return
 
@@ -80,6 +79,14 @@ class FakeCursor:
 # システム標準のデフォルト共有プロンプトが存在しない場合に自動挿入され、存在する場合はスキップされるかをテストするクラス。
 # Test class to check that default shared prompts are auto-inserted if missing, and skipped if they already exist.
 class DefaultSharedPromptsTestCase(unittest.TestCase):
+    def test_samples_have_stable_keys_and_both_locales(self):
+        grouped = {}
+        for prompt in DEFAULT_SHARED_PROMPTS:
+            grouped.setdefault(prompt["system_prompt_key"], set()).add(prompt["content_locale"])
+
+        self.assertTrue(grouped)
+        self.assertTrue(all(locales == {"ja", "en"} for locales in grouped.values()))
+
     # デフォルト共有プロンプトが存在しないとき、データベースに不足しているすべてのプロンプトが挿入されることを検証します。
     # Verify that all missing default shared prompts are inserted into the database when they are not present.
     def test_inserts_samples_when_they_are_missing(self):
@@ -99,15 +106,18 @@ class DefaultSharedPromptsTestCase(unittest.TestCase):
         self.assertEqual(len(fake_cursor.inserted_prompts), len(DEFAULT_SHARED_PROMPTS))
         self.assertIsNotNone(fake_cursor.owner_id)
         self.assertEqual(
-            len([query for query, _ in fake_cursor.executed_queries if "SELECT title FROM prompts" in query]),
+            len([query for query, _ in fake_cursor.executed_queries if "SELECT system_prompt_key, content_locale FROM prompts" in query]),
             1,
         )
 
     # すべてのデフォルト共有プロンプトが既に登録されているとき、挿入処理がスキップされることを検証します。
     # Verify that the insertion is skipped when all default shared prompts already exist in the database.
     def test_skips_when_all_samples_already_exist(self):
-        existing_titles = {prompt["title"] for prompt in DEFAULT_SHARED_PROMPTS}
-        fake_cursor = FakeCursor(owner_id=999, existing_prompt_titles=existing_titles)
+        existing_variants = {
+            (prompt["system_prompt_key"], prompt["content_locale"])
+            for prompt in DEFAULT_SHARED_PROMPTS
+        }
+        fake_cursor = FakeCursor(owner_id=999, existing_prompt_variants=existing_variants)
         fake_conn = TransactionTrackingConnection(fake_cursor)
 
         # 挿入処理をモックされたDB接続を利用して呼び出し
@@ -125,7 +135,7 @@ class DefaultSharedPromptsTestCase(unittest.TestCase):
             any("INSERT INTO users" in query for query, _ in fake_cursor.executed_queries)
         )
         self.assertEqual(
-            len([query for query, _ in fake_cursor.executed_queries if "SELECT title FROM prompts" in query]),
+            len([query for query, _ in fake_cursor.executed_queries if "SELECT system_prompt_key, content_locale FROM prompts" in query]),
             1,
         )
 

@@ -20,6 +20,7 @@ import { LoadingSpinnerOverlay } from "./auth_gateway_modules/components/loading
 import { useModalMessage } from "./auth_gateway_modules/hooks/use_modal_message";
 import { AuthGatewayGlobalStyles } from "./auth_gateway_modules/styles/auth_gateway_global_styles";
 import type { AuthStep, EmailAuthFlow, PasskeySetupProvider } from "./auth_gateway_modules/types";
+import { useTranslation } from "../../contexts/locale_context";
 import { buildGoogleLoginUrl, getPostAuthRedirectPath, getSearchParams } from "./auth_gateway_modules/url_utils";
 
 // 認証ページで使用するフォントの設定（Google Fonts）
@@ -33,6 +34,7 @@ const authHeadingFont = Outfit({
 // パスキー・Google・メール認証の3方式に対応した認証ゲートウェイページのメインコンポーネント
 // Main component for the auth gateway page supporting passkey, Google, and email authentication
 export default function AuthGatewayPage() {
+  const { locale, t } = useTranslation();
   // 現在の認証ステップ（エントリー → コード入力 → パスキー設定）
   // Current authentication step (entry → code input → passkey setup)
   const [step, setStep] = useState<AuthStep>("entry");
@@ -84,26 +86,26 @@ export default function AuthGatewayPage() {
   const loadingState = (() => {
     if (redirectingAfterAuth) {
       return {
-        message: "画面を準備しています。まもなく移動します。",
-        title: emailAuthFlow === "register" ? "アカウントを作成しました" : "ログインしています"
+        message: t("auth.redirecting"),
+        title: emailAuthFlow === "register" ? t("auth.created") : t("auth.loggingIn")
       };
     }
     if (verifyingCode) {
       return {
-        message: "認証コードを照合し、ログイン情報を準備しています。",
-        title: "認証コードを確認中"
+        message: locale === "en" ? "Checking your code and preparing your account." : "認証コードを照合し、ログイン情報を準備しています。",
+        title: t("auth.verifying")
       };
     }
     if (sendingCode) {
       return {
-        message: "メールに届く6桁のコードを確認してください。",
-        title: "認証メールを送信中"
+        message: locale === "en" ? "Look for the six-digit code in your email." : "メールに届く6桁のコードを確認してください。",
+        title: t("auth.sendingCode")
       };
     }
     if (passkeyPending) {
       return {
-        message: "ブラウザまたは端末の案内に従ってください。",
-        title: "Passkeyを確認中"
+        message: locale === "en" ? "Follow the instructions from your browser or device." : "ブラウザまたは端末の案内に従ってください。",
+        title: locale === "en" ? "Checking your passkey" : "Passkeyを確認中"
       };
     }
     return null;
@@ -181,7 +183,7 @@ export default function AuthGatewayPage() {
     setRedirectingAfterAuth(false);
 
     if (!trimmedEmail) {
-      setErrorMessage("メールアドレスを入力してください。");
+      setErrorMessage(t("auth.emailRequired"));
       return;
     }
 
@@ -199,13 +201,13 @@ export default function AuthGatewayPage() {
 
       if (data.status === "success") {
         setStep("code");
-        showModalMessage("認証コードを送信しました。メールを確認してください。");
+        showModalMessage(t("auth.codeSent"));
       } else {
-        setErrorMessage(typeof data.error === "string" ? data.error : "認証コード送信に失敗しました。");
+        setErrorMessage(typeof data.error === "string" ? data.error : t("auth.codeSendFailed"));
       }
     } catch (error) {
       console.error("Error sending email auth code:", error);
-      setErrorMessage("サーバーエラーが発生しました。");
+      setErrorMessage(t("common.serverError"));
     } finally {
       setSendingCode(false);
     }
@@ -219,7 +221,7 @@ export default function AuthGatewayPage() {
     setRedirectingAfterAuth(false);
 
     if (!trimmedCode) {
-      setErrorMessage("認証コードを入力してください。");
+      setErrorMessage(t("auth.codeRequired"));
       return;
     }
 
@@ -250,11 +252,11 @@ export default function AuthGatewayPage() {
           scheduleRedirect();
         }
       } else {
-        setErrorMessage(typeof data.error === "string" ? data.error : "認証に失敗しました。");
+        setErrorMessage(typeof data.error === "string" ? data.error : t("auth.failed"));
       }
     } catch (error) {
       console.error("Error verifying email auth code:", error);
-      setErrorMessage("サーバーエラーが発生しました。");
+      setErrorMessage(t("common.serverError"));
     } finally {
       setVerifyingCode(false);
     }
@@ -289,7 +291,7 @@ export default function AuthGatewayPage() {
     setPasskeyPending(true);
     try {
       await registerPasskey();
-      showModalMessage("Passkeyを保存しました。");
+      showModalMessage(t("auth.passkeySaved"));
       scheduleRedirect();
     } catch (error) {
       if (error instanceof PasskeyCancelledError) {

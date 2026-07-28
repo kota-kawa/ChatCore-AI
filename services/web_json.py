@@ -11,10 +11,38 @@ from starlette.responses import JSONResponse
 from .api_errors import ApiServiceError
 from .web_constants import DEFAULT_INTERNAL_ERROR_MESSAGE
 from .error_messages import ERROR_INVALID_JSON
+from .i18n import translate, translate_text
 
 # モデルの型変数
 # TypeVar for Pydantic models
 ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+_ERROR_CODES_BY_TEXT = {
+    "ログインが必要です": "auth.login_required",
+    "ログインが必要です。": "auth.login_required",
+    "JSON形式が不正です。": "request.invalid_json",
+    "該当ルームが見つかりません": "chat.room_not_found",
+    "共有リンクが見つかりません": "sharing.link_not_found",
+    "共有対象のメモが見つかりません。": "memo.not_found",
+}
+
+
+def _localize_system_payload(payload: Any, status_code: int) -> Any:
+    """Localize only top-level system fields, never nested user content."""
+    if not isinstance(payload, dict):
+        return payload
+
+    localized = dict(payload)
+    original_error = localized.get("error")
+    for key in ("error", "message", "detail"):
+        value = localized.get(key)
+        if isinstance(value, str):
+            localized[key] = translate_text(value)
+
+    if status_code >= 400 and isinstance(original_error, str):
+        localized.setdefault("code", _ERROR_CODES_BY_TEXT.get(original_error, "api_error"))
+    return localized
 
 
 async def get_json(request: Request) -> Any | None:
@@ -33,7 +61,11 @@ def jsonify(
 ) -> JSONResponse:
     # FastAPI 互換のJSONエンコードを通してレスポンスを返す
     # Build a JSON response via FastAPI-compatible jsonable encoding.
-    response = JSONResponse(content=jsonable_encoder(payload), status_code=status_code)
+    localized_payload = _localize_system_payload(payload, status_code)
+    response = JSONResponse(
+        content=jsonable_encoder(localized_payload),
+        status_code=status_code,
+    )
     for key, value in (headers or {}).items():
         response.headers[str(key)] = str(value)
     return response
@@ -65,7 +97,12 @@ def jsonify_rate_limited(
 ) -> JSONResponse:
     # レートリミット制限のエラーレスポンスを生成し、Retry-Afterヘッダーを付与する
     # Generate a rate-limit error response and apply the Retry-After header.
-    payload: Dict[str, Any] = {error_key: message}
+    payload: Dict[str, Any] = {
+        error_key: translate_text(message),
+        "code": "rate_limit.exceeded",
+    }
+    if retry_after is not None:
+        payload["params"] = {"retry_after": max(int(retry_after), 1)}
     if status is not None:
         payload["status"] = status
     headers: dict[str, str] = {}
@@ -85,7 +122,15 @@ def log_and_internal_server_error(
     # ログ出力と500レスポンス生成を共通化する
     # Centralize exception logging and HTTP 500 response creation.
     logger.exception(context)
-    payload: Dict[str, Any] = {error_key: message}
+    localized_message = (
+        translate("common.internal_error")
+        if message == DEFAULT_INTERNAL_ERROR_MESSAGE
+        else translate_text(message)
+    )
+    payload: Dict[str, Any] = {
+        error_key: localized_message,
+        "code": "internal_error",
+    }
     if status is not None:
         payload["status"] = status
     return jsonify(payload, status_code=500)
@@ -103,7 +148,10 @@ async def require_json_dict(
     if isinstance(data, dict):
         return data, None
 
-    payload: Dict[str, Any] = {"error": error_message}
+    payload: Dict[str, Any] = {
+        "error": translate_text(error_message),
+        "code": "request.invalid_json",
+    }
     if status is not None:
         payload["status"] = status
     return None, jsonify(payload, status_code=400)
@@ -125,7 +173,10 @@ def validate_payload_model(
             return validate(data), None
         return model_class.parse_obj(data), None  # pragma: no cover - pydantic v1 fallback
     except ValidationError:
-        payload: Dict[str, Any] = {error_key: error_message}
+        payload: Dict[str, Any] = {
+            error_key: translate_text(error_message),
+            "code": "request.validation_error",
+        }
         if status is not None:
             payload["status"] = status
         return None, jsonify(payload, status_code=400)

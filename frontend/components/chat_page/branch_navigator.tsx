@@ -1,4 +1,5 @@
 import type { UiChatMessage } from "../../lib/chat_page/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 // ブランチナビゲーターのprops型定義
 // Props type definition for the branch navigator
@@ -13,6 +14,7 @@ type BranchNavigatorProps = {
 // メッセージのバージョン（編集済みプロンプトや再生成された回答）を切り替えるコンポーネント
 // Component for switching between versions of a message (edited prompts or regenerated answers)
 export function BranchNavigator({ message, disabled, onSwitchBranch }: BranchNavigatorProps) {
+  const { locale, t } = useTranslation();
   const versionCount = message.versionCount ?? 1;
   const versionIndex = message.versionIndex ?? 1;
   const siblingIds = message.siblingIds;
@@ -37,26 +39,26 @@ export function BranchNavigator({ message, disabled, onSwitchBranch }: BranchNav
   };
 
   return (
-    <div className="branch-navigator" role="group" aria-label="メッセージのバージョン切り替え">
+    <div className="branch-navigator" role="group" aria-label={locale === "en" ? "Switch message version" : "メッセージのバージョン切り替え"}>
       {/* 前のバージョンへ / Go to previous version */}
       <button
         type="button"
         className="branch-navigator__btn"
-        aria-label="前のバージョン"
+        aria-label={t("chat.previousBranch")}
         disabled={disabled || typeof prevId !== "number"}
         onClick={goPrev}
       >
         <i className="bi bi-chevron-left" aria-hidden="true"></i>
       </button>
       {/* 現在のバージョン番号 / Current version number */}
-      <span className="branch-navigator__count" aria-live="polite">
+      <span className="branch-navigator__count" aria-live="polite" aria-label={t("chat.branchPosition", { current: versionIndex, total: versionCount })}>
         {versionIndex}/{versionCount}
       </span>
       {/* 次のバージョンへ / Go to next version */}
       <button
         type="button"
         className="branch-navigator__btn"
-        aria-label="次のバージョン"
+        aria-label={t("chat.nextBranch")}
         disabled={disabled || typeof nextId !== "number"}
         onClick={goNext}
       >

@@ -38,6 +38,19 @@ class AuthSessionTestCase(unittest.TestCase):
         self.assertEqual(request.session["user_email"], "user2@example.com")
         self.assertTrue(request.session.get("_permanent"))
 
+    def test_establish_authenticated_session_sets_explicit_locale(self):
+        request = build_request(path="/api/login", session={})
+
+        establish_authenticated_session(
+            request,
+            user_id=7,
+            email="user2@example.com",
+            preferred_locale="en-US",
+        )
+
+        self.assertEqual(request.session["preferred_locale"], "en")
+        self.assertTrue(request.session["_preferred_locale_loaded"])
+
 
 if __name__ == "__main__":
     unittest.main()

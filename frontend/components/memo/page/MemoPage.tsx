@@ -1,4 +1,5 @@
 import { SeoHead } from "../../SeoHead";
+import { useTranslation } from "../../../contexts/locale_context";
 import { useRouter } from "next/router";
 import React, {
   useCallback,
@@ -45,8 +46,6 @@ import {
 import {
   DETAIL_AUTOSAVE_DELAY_MS,
   MEMO_DETAIL_CLOSE_ANIMATION_MS,
-  MEMO_SHARE_TEXT,
-  MEMO_SHARE_TITLE,
   memoPageDescription,
   memoStructuredData,
 } from "../../../lib/memo/constants";
@@ -86,6 +85,7 @@ export { MemoCrawlSummary };
 // メモ機能のメインページコンポーネント
 // Main page component for the memo feature
 export default function MemoPage() {
+  const { locale, t } = useTranslation();
   const router = useRouter();
 
   // Form state
@@ -237,13 +237,13 @@ export default function MemoPage() {
   const shareSnsLinks = useMemo(() => {
     if (!shareUrl) return { x: "#", line: "#", facebook: "#" };
     const eu = encodeURIComponent(shareUrl);
-    const et = encodeURIComponent(MEMO_SHARE_TEXT);
+    const et = encodeURIComponent(t("memo.nativeShareText"));
     return {
       x: `https://twitter.com/intent/tweet?url=${eu}&text=${et}`,
       line: `https://social-plugins.line.me/lineit/share?url=${eu}`,
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${eu}`,
     };
-  }, [shareUrl]);
+  }, [shareUrl, t]);
 
   // -----------------------------------------------------------------------
   // Effects
@@ -332,7 +332,7 @@ export default function MemoPage() {
     if (!router.isReady) return;
     if (router.query.saved !== "1") return;
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    setFlashState({ type: "success", text: "メモを保存しました。" });
+    setFlashState({ type: "success", text: t("memo.memoSaved") });
     flashTimerRef.current = setTimeout(() => {
       setFlashState(null);
       flashTimerRef.current = null;
@@ -516,7 +516,7 @@ export default function MemoPage() {
   const handleSubmitMemo = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFlashState(null);
-    if (!formState.ai_response.trim()) { showFlash("error", "本文を入力してください。"); return; }
+    if (!formState.ai_response.trim()) { showFlash("error", t("memo.bodyRequired")); return; }
     setSubmitting(true);
     try {
       await memoFetchJsonOrThrow(
@@ -527,16 +527,16 @@ export default function MemoPage() {
           credentials: "same-origin",
           body: JSON.stringify(formState),
         },
-        { defaultMessage: "メモの保存に失敗しました。" },
+        { defaultMessage: t("memo.memoSaveFailed") },
       );
       setFormState({ ai_response: "", title: "", collection_id: null, background_color: null });
       setPreviewMode(false);
       setIsComposeExpanded(false);
       setIsComposePaletteOpen(false);
-      showFlash("success", "メモを保存しました。");
+      showFlash("success", t("memo.memoSaved"));
       void mutate();
     } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "メモの保存に失敗しました。");
+      showFlash("error", error instanceof Error ? error.message : t("memo.memoSaveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -545,7 +545,7 @@ export default function MemoPage() {
   // AIによる自動入力補完を実行するハンドラー
   // Handler to execute AI-based auto-completion for inputs
   const handleAiSuggest = useCallback(async () => {
-    if (!formState.ai_response.trim()) { showFlash("error", "AIの回答を先に入力してください。"); return; }
+    if (!formState.ai_response.trim()) { showFlash("error", t("memo.aiResponseRequired")); return; }
     setAiSuggesting(true);
     try {
       const { payload } = await memoFetchJsonOrThrow<{ title?: string }>(
@@ -556,15 +556,15 @@ export default function MemoPage() {
           credentials: "same-origin",
           body: JSON.stringify({ ai_response: formState.ai_response }),
         },
-        { defaultMessage: "AI提案の取得に失敗しました。" },
+        { defaultMessage: t("memo.aiSuggestionFailed") },
       );
       setFormState((prev) => ({
         ...prev,
         title: payload.title || prev.title,
       }));
-      showFlash("success", "AIがタイトルを提案しました。");
+      showFlash("success", t("memo.aiTitleSuggested"));
     } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "AI提案に失敗しました。");
+      showFlash("error", error instanceof Error ? error.message : t("memo.aiSuggestionFailed"));
     } finally {
       setAiSuggesting(false);
     }
@@ -592,7 +592,7 @@ export default function MemoPage() {
       const nextChecklistLine = "- [ ] ";
       return {
         ...prev,
-        title: prev.title || "チェックリスト",
+        title: prev.title || t("memo.checklist"),
         ai_response: current.trim()
           ? `${current.replace(/\s*$/u, "")}\n${nextChecklistLine}`
           : nextChecklistLine,
@@ -667,7 +667,7 @@ export default function MemoPage() {
     detailSaveSequenceRef.current += 1;
     try {
       const memo = await loadMemoDetail(memoId);
-      if (!memo) { setDetailError("メモの詳細を取得できませんでした。"); return; }
+      if (!memo) { setDetailError(t("memo.memoDetailFailed")); return; }
       setDetailEditTitle(memo.title || "");
       setDetailEditCollectionId(memo.collection_id ?? null);
       setDetailEditAiResponse(memo.ai_response || "");
@@ -675,7 +675,7 @@ export default function MemoPage() {
       setSelectedMemo(memo);
       setDetailSaveStatus("saved");
     } catch (error) {
-      setDetailError(error instanceof Error ? error.message : "メモの詳細取得に失敗しました。");
+      setDetailError(error instanceof Error ? error.message : t("memo.memoDetailFailed"));
     } finally {
       setDetailLoading(false);
     }
@@ -685,7 +685,7 @@ export default function MemoPage() {
     if (!selectedMemo?.id || !detailHasUnsavedChanges) return true;
     if (!detailEditAiResponse.trim()) {
       setDetailSaveStatus("error");
-      setDetailSaveError("本文を入力してください。");
+      setDetailSaveError(t("memo.bodyRequired"));
       return false;
     }
     const snapshot = {
@@ -725,7 +725,7 @@ export default function MemoPage() {
           credentials: "same-origin",
           body: JSON.stringify(body),
         },
-        { defaultMessage: "メモ本文の更新に失敗しました。", hasApplicationError: (data) => !data.memo },
+        { defaultMessage: t("memo.memoUpdateFailed"), hasApplicationError: (data) => !data.memo },
       );
       if (requestId === detailSaveSequenceRef.current) {
         if (payload.memo) {
@@ -750,7 +750,7 @@ export default function MemoPage() {
     } catch (error) {
       if (requestId === detailSaveSequenceRef.current) {
         setDetailSaveStatus("error");
-        setDetailSaveError(error instanceof Error ? error.message : "メモ本文の更新に失敗しました。");
+        setDetailSaveError(error instanceof Error ? error.message : t("memo.memoUpdateFailed"));
       }
       return false;
     }
@@ -789,7 +789,7 @@ export default function MemoPage() {
     if (!selectedMemo || !detailHasUnsavedChanges) return;
     if (!detailEditAiResponse.trim()) {
       setDetailSaveStatus("error");
-      setDetailSaveError("本文を入力してください。");
+      setDetailSaveError(t("memo.bodyRequired"));
       return;
     }
 
@@ -847,13 +847,13 @@ export default function MemoPage() {
         await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}/pin`,
           { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
-          { defaultMessage: "ピン留め更新に失敗しました。" },
+          { defaultMessage: t("memo.pinUpdateFailed") },
         );
-        showFlash("success", memo.is_pinned ? "ピン留めを解除しました。" : "ピン留めしました。");
+        showFlash("success", memo.is_pinned ? t("memo.unpinnedSuccess") : t("memo.pinnedSuccess"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
       } catch (error) {
-        showFlash("error", error instanceof Error ? error.message : "ピン留め更新に失敗しました。");
+        showFlash("error", error instanceof Error ? error.message : t("memo.pinUpdateFailed"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
       }
@@ -879,13 +879,13 @@ export default function MemoPage() {
         await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}/archive`,
           { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ enabled }) },
-          { defaultMessage: "アーカイブ更新に失敗しました。" },
+          { defaultMessage: t("memo.archiveUpdateFailed") },
         );
-        showFlash("success", memo.is_archived ? "アーカイブを解除しました。" : "アーカイブしました。");
+        showFlash("success", memo.is_archived ? t("memo.unarchivedSuccess") : t("memo.archivedSuccess"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
       } catch (error) {
-        showFlash("error", error instanceof Error ? error.message : "アーカイブ更新に失敗しました。");
+        showFlash("error", error instanceof Error ? error.message : t("memo.archiveUpdateFailed"));
         await mutate();
         await refreshSelectedMemoIfNeeded();
       }
@@ -895,7 +895,7 @@ export default function MemoPage() {
   // メモを削除するハンドラー
   // Handler to delete a memo
   const handleDeleteMemo = useCallback(async (memo: MemoSummary) => {
-    const confirmed = await showConfirmModal(`「${memo.title || "保存したメモ"}」を削除しますか？`);
+    const confirmed = await showConfirmModal(t("memo.deleteConfirm", { title: memo.title || t("memo.savedMemo") }));
     if (!confirmed) return;
     await withActionLoading(memo.id, async () => {
       await updateMemoListOptimistically(() => null, [memo.id]);
@@ -903,13 +903,13 @@ export default function MemoPage() {
         await memoFetchJsonOrThrow(
           `/memo/api/${memo.id}`,
           { method: "DELETE", credentials: "same-origin" },
-          { defaultMessage: "メモの削除に失敗しました。" },
+          { defaultMessage: t("memo.memoDeleteFailed") },
         );
-        showFlash("success", "メモを削除しました。");
+        showFlash("success", t("memo.memoDeleted"));
         if (selectedMemo?.id && String(selectedMemo.id) === String(memo.id)) startMemoDetailCloseAnimation();
         await mutate();
       } catch (error) {
-        showFlash("error", error instanceof Error ? error.message : "メモの削除に失敗しました。");
+        showFlash("error", error instanceof Error ? error.message : t("memo.memoDeleteFailed"));
         await mutate();
       }
     });
@@ -921,24 +921,24 @@ export default function MemoPage() {
     try {
       const detail = await loadMemoDetail(memo.id);
       const fullText = detail?.ai_response || memo.excerpt || "";
-      const content = `${detail?.title || memo.title || "保存したメモ"}\n\n${parseMemoText(fullText)}`;
+      const content = `${detail?.title || memo.title || t("memo.savedMemo")}\n\n${parseMemoText(fullText)}`;
       await copyTextToClipboard(content.trim());
       setCopiedMemoId(memoId);
       setTimeout(() => {
         setCopiedMemoId((current) => (current === memoId ? "" : current));
       }, 1400);
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コピーに失敗しました。"); }
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed")); }
     finally { setCopyingMemoId(""); }
   }, [showFlash]);
 
   const copyDetailFullText = useCallback(async () => {
     const fullText = detailEditAiResponse || selectedMemo?.ai_response || "";
-    const content = `${detailEditTitle || selectedMemo?.title || "保存したメモ"}\n\n${parseMemoText(fullText)}`;
+    const content = `${detailEditTitle || selectedMemo?.title || t("memo.savedMemo")}\n\n${parseMemoText(fullText)}`;
     try {
       await copyTextToClipboard(content.trim());
       setDetailCopied(true);
       setTimeout(() => setDetailCopied(false), 1400);
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コピーに失敗しました。"); }
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.copyFailed")); }
   }, [detailEditAiResponse, detailEditTitle, selectedMemo?.ai_response, selectedMemo?.title, showFlash]);
 
   const toggleMemoActionMenu = useCallback((memoId: string, trigger: HTMLElement) => {
@@ -1030,7 +1030,7 @@ export default function MemoPage() {
     const beforeId = movedIdx > 0 ? Number(projection[movedIdx - 1]) : null;
     const afterId = movedIdx < projection.length - 1 ? Number(projection[movedIdx + 1]) : null;
     if (!Number.isFinite(memoId) || (beforeId !== null && !Number.isFinite(beforeId)) || (afterId !== null && !Number.isFinite(afterId))) {
-      showFlash("error", "並べ替え対象のメモIDが不正です。");
+      showFlash("error", t("memo.invalidReorderId"));
       clearMemoDragState();
       return;
     }
@@ -1052,11 +1052,11 @@ export default function MemoPage() {
           credentials: "same-origin",
           body: JSON.stringify({ memo_id: memoId, before_id: beforeId, after_id: afterId }),
         },
-        { defaultMessage: "メモの並べ替えに失敗しました。" },
+        { defaultMessage: t("memo.reorderFailed") },
       );
       await mutate();
     } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "メモの並べ替えに失敗しました。");
+      showFlash("error", error instanceof Error ? error.message : t("memo.reorderFailed"));
       await mutate();
     } finally {
       setDragSaving(false);
@@ -1181,19 +1181,19 @@ export default function MemoPage() {
       await memoFetchJsonOrThrow(
         "/memo/api/bulk",
         { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body) },
-        { defaultMessage: "一括操作に失敗しました。" },
+        { defaultMessage: t("memo.bulkActionFailed") },
       );
       const labels: Record<BulkAction, string> = {
-        delete: "削除", archive: "アーカイブ", unarchive: "アーカイブ解除",
-        pin: "ピン留め", unpin: "ピン留め解除",
-        set_collection: "コレクション設定", clear_collection: "コレクション解除",
+        delete: t("common.delete"), archive: t("memo.archive"), unarchive: t("memo.unarchive"),
+        pin: t("memo.pin"), unpin: t("memo.unpin"),
+        set_collection: t("memo.setCollection"), clear_collection: t("memo.clearCollection"),
       };
-      showFlash("success", `${selectedIds.size}件を${labels[action]}しました。`);
+      showFlash("success", t("memo.bulkActionSuccess", { count: selectedIds.size, action: labels[action] }));
       if (action === "delete") setSelectedIds(new Set());
       await mutate();
       setBulkCollectionId(null);
     } catch (error) {
-      showFlash("error", error instanceof Error ? error.message : "一括操作に失敗しました。");
+      showFlash("error", error instanceof Error ? error.message : t("memo.bulkActionFailed"));
       await mutate();
     } finally {
       setBulkLoading(false);
@@ -1213,7 +1213,7 @@ export default function MemoPage() {
     const { payload } = await memoFetchJsonOrThrow<SharePayload>(
       `/memo/api/${memoId}/share`,
       { credentials: "same-origin" },
-      { defaultMessage: "共有情報の取得に失敗しました。" },
+      { defaultMessage: t("memo.shareInfoFailed") },
     );
     setShareState(payload);
     return payload;
@@ -1221,19 +1221,19 @@ export default function MemoPage() {
 
   const openShareModal = useCallback(async (memo: MemoSummary) => {
     const memoId = String(memo.id || "");
-    if (!memoId) { showFlash("error", "共有対象のメモが見つかりません。"); return; }
+    if (!memoId) { showFlash("error", t("memo.shareTargetMissing")); return; }
     setIsShareModalOpen(true);
     setShareState(null);
-    setShareStatus({ type: "success", text: "共有情報を読み込んでいます..." });
+    setShareStatus({ type: "success", text: t("memo.loadingShareInfo") });
     setShareLoading(true);
     try {
       const payload = await loadShareState(memoId);
       if (payload.share_url && payload.is_active) {
-        setShareStatus({ type: "success", text: "共有リンクを表示しています。" });
+        setShareStatus({ type: "success", text: t("memo.showingShareLink") });
         return;
       }
 
-      setShareStatus({ type: "success", text: "共有リンクを作成しています..." });
+      setShareStatus({ type: "success", text: t("memo.creatingShareLink") });
       const { payload: createdPayload } = await memoFetchJsonOrThrow<SharePayload>(
         `/memo/api/${memoId}/share`,
         {
@@ -1242,13 +1242,13 @@ export default function MemoPage() {
           credentials: "same-origin",
           body: JSON.stringify({ force_refresh: false, expires_in_days: 30 }),
         },
-        { defaultMessage: "共有リンクの作成に失敗しました。" },
+        { defaultMessage: t("memo.createShareLinkFailed") },
       );
       setShareState(createdPayload);
-      setShareStatus({ type: "success", text: "共有リンクを作成しました。" });
+      setShareStatus({ type: "success", text: t("memo.shareLinkCreated") });
       await mutate();
     } catch (error) {
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : "共有情報の取得に失敗しました。" });
+      setShareStatus({ type: "error", text: error instanceof Error ? error.message : t("memo.shareInfoFailed") });
     } finally {
       setShareLoading(false);
     }
@@ -1261,23 +1261,23 @@ export default function MemoPage() {
   }, []);
 
   const copyShareLink = useCallback(async () => {
-    if (!shareUrl) { setShareStatus({ type: "error", text: "先に共有リンクを作成してください。" }); return; }
+    if (!shareUrl) { setShareStatus({ type: "error", text: t("memo.createShareLinkFirst") }); return; }
     try {
       await copyTextToClipboard(shareUrl);
-      setShareStatus({ type: "success", text: "共有リンクをコピーしました。" });
+      setShareStatus({ type: "success", text: t("memo.shareLinkCopied") });
     } catch (error) {
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : "リンクのコピーに失敗しました。" });
+      setShareStatus({ type: "error", text: error instanceof Error ? error.message : t("memo.copyLinkFailed") });
     }
   }, [shareUrl]);
 
   const openNativeShareSheet = useCallback(async () => {
-    if (!shareUrl) { setShareStatus({ type: "error", text: "先に共有リンクを作成してください。" }); return; }
-    if (!supportsNativeShare || typeof navigator.share !== "function") { setShareStatus({ type: "error", text: "このブラウザは端末共有に対応していません。" }); return; }
+    if (!shareUrl) { setShareStatus({ type: "error", text: t("memo.createShareLinkFirst") }); return; }
+    if (!supportsNativeShare || typeof navigator.share !== "function") { setShareStatus({ type: "error", text: t("memo.nativeShareUnsupported") }); return; }
     try {
-      await navigator.share({ title: MEMO_SHARE_TITLE, text: MEMO_SHARE_TEXT, url: shareUrl });
+      await navigator.share({ title: t("memo.nativeShareTitle"), text: t("memo.nativeShareText"), url: shareUrl });
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
-      setShareStatus({ type: "error", text: error instanceof Error ? error.message : "端末共有に失敗しました。" });
+      setShareStatus({ type: "error", text: error instanceof Error ? error.message : t("memo.nativeShareFailed") });
     }
   }, [shareUrl, supportsNativeShare]);
 
@@ -1289,19 +1289,19 @@ export default function MemoPage() {
   // Handler to create a new collection
   const handleCreateCollection = useCallback(async () => {
     const name = newCollectionName.trim();
-    if (!name) { showFlash("error", "コレクション名を入力してください。"); return; }
+    if (!name) { showFlash("error", t("memo.collectionNameRequired")); return; }
     setCollectionActionLoading(true);
     try {
       await memoFetchJsonOrThrow(
         "/memo/api/collections",
         { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name, color: newCollectionColor }) },
-        { defaultMessage: "コレクションの作成に失敗しました。" },
+        { defaultMessage: t("memo.collectionCreateFailed") },
       );
       setNewCollectionName("");
       setNewCollectionColor("#6b7280");
-      showFlash("success", "コレクションを作成しました。");
+      showFlash("success", t("memo.collectionCreated"));
       await mutateCollections();
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コレクションの作成に失敗しました。"); }
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.collectionCreateFailed")); }
     finally { setCollectionActionLoading(false); }
   }, [newCollectionColor, newCollectionName, mutateCollections, showFlash]);
 
@@ -1313,33 +1313,33 @@ export default function MemoPage() {
       await memoFetchJsonOrThrow(
         `/memo/api/collections/${collectionId}`,
         { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ name: editingCollectionName, color: editingCollectionColor }) },
-        { defaultMessage: "コレクションの更新に失敗しました。" },
+        { defaultMessage: t("memo.collectionUpdateFailed") },
       );
       setEditingCollectionId(null);
-      showFlash("success", "コレクションを更新しました。");
+      showFlash("success", t("memo.collectionUpdated"));
       await mutateCollections();
       await mutate();
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コレクションの更新に失敗しました。"); }
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.collectionUpdateFailed")); }
     finally { setCollectionActionLoading(false); }
   }, [editingCollectionColor, editingCollectionName, mutate, mutateCollections, showFlash]);
 
   // コレクションを削除するハンドラー
   // Handler to delete a collection
   const handleDeleteCollection = useCallback(async (collectionId: number, name: string) => {
-    const confirmed = await showConfirmModal(`「${name}」を削除しますか？\nコレクション内のメモはコレクションから外れます。`);
+    const confirmed = await showConfirmModal(t("memo.collectionDeleteConfirm", { name }));
     if (!confirmed) return;
     setCollectionActionLoading(true);
     try {
       await memoFetchJsonOrThrow(
         `/memo/api/collections/${collectionId}`,
         { method: "DELETE", credentials: "same-origin" },
-        { defaultMessage: "コレクションの削除に失敗しました。" },
+        { defaultMessage: t("memo.collectionDeleteFailed") },
       );
       if (activeCollectionId === collectionId) setActiveCollectionId(null);
-      showFlash("success", "コレクションを削除しました。");
+      showFlash("success", t("memo.collectionDeleted"));
       await mutateCollections();
       await mutate();
-    } catch (error) { showFlash("error", error instanceof Error ? error.message : "コレクションの削除に失敗しました。"); }
+    } catch (error) { showFlash("error", error instanceof Error ? error.message : t("memo.collectionDeleteFailed")); }
     finally { setCollectionActionLoading(false); }
   }, [activeCollectionId, mutate, mutateCollections, showFlash]);
 
@@ -1351,7 +1351,7 @@ export default function MemoPage() {
   // Handler to export memos in JSON format
   const handleExport = useCallback(() => {
     if (exportScope === "selected" && exportSelectedIds.size === 0) {
-      showFlash("error", "エクスポートするメモを選択してください。");
+      showFlash("error", t("memo.exportSelectionRequired"));
       return;
     }
     const ids = exportScope === "selected"
@@ -1365,7 +1365,7 @@ export default function MemoPage() {
     a.download = `memos.${exportFormat === "json" ? "json" : exportFormat === "csv" ? "csv" : "md"}`;
     a.click();
     setIsExportModalOpen(false);
-    showFlash("success", "エクスポートを開始しました。");
+    showFlash("success", t("memo.exportStarted"));
   }, [exportFormat, exportScope, exportSelectedIds, showFlash]);
 
   // -----------------------------------------------------------------------
@@ -1389,8 +1389,8 @@ export default function MemoPage() {
   return (
     <>
       <SeoHead
-        title="メモを保存 | Chat Core"
-        description={memoPageDescription}
+        title={t("memo.title")}
+        description={locale === "en" ? "Save, organize, search, and share your notes and useful AI responses." : memoPageDescription}
         canonicalPath="/memo"
         structuredData={memoStructuredData}
       />
@@ -1398,7 +1398,7 @@ export default function MemoPage() {
       <div className="memo-page-shell cc-page-rise">
         {/* 検索エンジン・支援技術向けの説明的なページ見出し（視覚的には非表示） */}
         {/* Descriptive page heading for search engines and assistive tech (visually hidden) */}
-        <h1 className="sr-only">Chat Core メモ ― AIの回答や作業メモを保存・整理・共有</h1>
+        <h1 className="sr-only">{locale === "en" ? "Chat Core Memos — save, organize, and share useful knowledge" : "Chat Core メモ ― AIの回答や作業メモを保存・整理・共有"}</h1>
         <action-menu></action-menu>
 
         <div
@@ -1413,7 +1413,7 @@ export default function MemoPage() {
         >
           <button type="button" id="login-btn" className="auth-btn" onClick={() => { window.location.href = "/login"; }}>
             <i className="bi bi-person-circle"></i>
-            <span>ログイン / 登録</span>
+            <span>{locale === "en" ? "Log in / Sign up" : "ログイン / 登録"}</span>
           </button>
         </div>
 
@@ -1444,9 +1444,7 @@ export default function MemoPage() {
             {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
             {/* Short feature intro shown only when logged out (provides crawlable public content) */}
             {!isLoggedIn && (
-              <p className="memo-guest-intro">
-                Chat Core のメモは、AIとのやり取りや調べ物のメモを保存・検索・整理し、リンクで共有できるノート機能です。ログインするとどの端末からでもメモを残せます。
-              </p>
+              <p className="memo-guest-intro">{t("memo.guestIntro")}</p>
             )}
             {/* ── Toolbar ── */}
             <MemoToolbar

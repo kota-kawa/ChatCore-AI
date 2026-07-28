@@ -34,6 +34,7 @@ class CurrentUserTestCase(unittest.TestCase):
                 "id": 7,
                 "email": "user@example.com",
                 "username": "kota",
+                "preferred_locale": "en",
             }
             response = asyncio.run(api_current_user(request))
 
@@ -42,7 +43,12 @@ class CurrentUserTestCase(unittest.TestCase):
             json.loads(response.body.decode()),
             {
                 "logged_in": True,
-                "user": {"id": 7, "email": "user@example.com", "username": "kota"},
+                "user": {
+                    "id": 7,
+                    "email": "user@example.com",
+                    "username": "kota",
+                    "locale": "en",
+                },
             },
         )
 
@@ -58,7 +64,10 @@ class CurrentUserTestCase(unittest.TestCase):
         response = asyncio.run(api_delete_user_account(request))
 
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(json.loads(response.body.decode()), {"error": "ログインが必要です。"})
+        self.assertEqual(
+            json.loads(response.body.decode()),
+            {"error": "ログインが必要です。", "code": "auth.login_required"},
+        )
 
     # 日本語: deleteユーザーaccount拒否するmissingconfirmationことを検証します。
     # English: Verify that delete user account rejects missing confirmation.
@@ -76,7 +85,10 @@ class CurrentUserTestCase(unittest.TestCase):
             response = asyncio.run(api_delete_user_account(request))
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(json.loads(response.body.decode()), {"error": "確認文字列が一致しません。"})
+        self.assertEqual(
+            json.loads(response.body.decode()),
+            {"error": "確認文字列が一致しません。", "code": "api_error"},
+        )
         mock_delete.assert_not_called()
 
     # 日本語: およびクリアするセッション、deleteユーザーaccount削除するaccountことを検証します。

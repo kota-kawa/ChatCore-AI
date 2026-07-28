@@ -9,6 +9,7 @@ from services.users import (
     delete_user_account,
     get_user_by_email,
     get_user_by_google_id,
+    get_user_by_id,
     link_google_account,
 )
 
@@ -88,6 +89,15 @@ class FakeConnection:
 # 日本語: ユーザー認証プロバイダー関連のDB操作（作成・取得・リンク・削除）をテストするクラス。
 # English: Test class for user auth provider related DB operations (create, get, link, delete).
 class UserAuthProvidersTestCase(unittest.TestCase):
+    def test_get_user_by_id_selects_preferred_locale(self):
+        expected = {"id": 7, "email": "user@example.com", "preferred_locale": "en"}
+        cursor = FakeCursor(fetchone_result=expected)
+        with patch("services.users.get_db_connection", return_value=FakeConnection(cursor)):
+            result = get_user_by_id(7)
+
+        self.assertEqual(result, expected)
+        self.assertIn("preferred_locale FROM users", cursor.executed[0][0])
+
     # 日本語: create_user がユーザーレコードとともに、メールプロバイダーのauth_providersレコードを別テーブルに挿入することを検証します。
     # English: Verify that create_user inserts a user record and a corresponding email auth_providers record into a separate table.
     def test_create_user_persists_email_provider_in_separate_table(self):
@@ -104,7 +114,11 @@ class UserAuthProvidersTestCase(unittest.TestCase):
         self.assertFalse(fake_conn.rolled_back)
         self.assertTrue(fake_conn.closed)
         self.assertTrue(fake_cursor.closed)
-        self.assertIn("INSERT INTO users ( email, username, avatar_url, is_verified ) VALUES (%s, %s, %s, %s) RETURNING id", fake_cursor.executed[0][0])
+        self.assertIn(
+            "INSERT INTO users ( email, username, avatar_url, is_verified, preferred_locale ) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            fake_cursor.executed[0][0],
+        )
+        self.assertEqual(fake_cursor.executed[0][1][-1], None)
         self.assertIn("INSERT INTO user_auth_providers", fake_cursor.executed[1][0])
         self.assertEqual(
             fake_cursor.executed[1][1],

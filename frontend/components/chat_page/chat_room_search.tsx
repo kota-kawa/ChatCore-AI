@@ -1,4 +1,5 @@
 import { memo, type ChangeEvent } from "react";
+import { useTranslation } from "../../contexts/locale_context";
 
 // サイドバーのチャットルームをタイトルで絞り込む検索入力コンポーネント。
 // Search input component for filtering chat rooms by title in the sidebar.
@@ -9,6 +10,7 @@ type ChatRoomSearchProps = {
 };
 
 function ChatRoomSearchComponent({ value, onChange, onClear }: ChatRoomSearchProps) {
+  const { t, locale } = useTranslation();
   const hasQuery = value.length > 0;
 
   return (
@@ -17,8 +19,8 @@ function ChatRoomSearchComponent({ value, onChange, onClear }: ChatRoomSearchPro
       <input
         type="search"
         className="chat-room-search__input"
-        placeholder="チャットを検索..."
-        aria-label="チャットを検索"
+        placeholder={t("chat.search")}
+        aria-label={t("chat.search")}
         value={value}
         autoComplete="off"
         // ブラウザ標準の検索クリアボタンは見た目が不揃いなので独自ボタンに任せる。
@@ -31,7 +33,7 @@ function ChatRoomSearchComponent({ value, onChange, onClear }: ChatRoomSearchPro
         <button
           type="button"
           className="chat-room-search__clear cc-press"
-          aria-label="検索をクリア"
+          aria-label={locale === "en" ? "Clear search" : "検索をクリア"}
           onClick={() => {
             onClear();
           }}

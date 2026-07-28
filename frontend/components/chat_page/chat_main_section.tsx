@@ -12,10 +12,13 @@ import {
 } from "../../lib/chat_page/file_attachments";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
+import { useTranslation } from "../../contexts/locale_context";
 
 // チャット画面の中央ペイン全体（サイドバー・メッセージリスト・入力欄）を管理するコンポーネント。
 // Component managing the entire chat center pane: sidebar, message list, and input area.
 function ChatMainSectionComponent() {
+  const { locale, t } = useTranslation();
+  const english = locale === "en";
   // UI 状態（ページビュー、モデル選択メニュー、セットアップフォーム表示など）を Context から取得する。
   // Retrieve UI state (page view, model selection menu, setup form visibility) from context.
   const {
@@ -120,9 +123,9 @@ function ChatMainSectionComponent() {
   const filteredChatRooms = useMemo(() => {
     if (!isRoomSearchActive) return chatRooms;
     return chatRooms.filter((room) =>
-      (room.title || "新規チャット").toLowerCase().includes(normalizedRoomSearchQuery),
+      (room.title || t("chat.new")).toLowerCase().includes(normalizedRoomSearchQuery),
     );
-  }, [chatRooms, isRoomSearchActive, normalizedRoomSearchQuery]);
+  }, [chatRooms, isRoomSearchActive, normalizedRoomSearchQuery, t]);
 
   // 検索中に絞り込み結果が空でも、未読み込みのルームがあれば末尾センチネルで
   // 追加読み込みが走り、全ルームを横断して検索できる。読み込み完了かつ 0 件なら
@@ -289,7 +292,7 @@ function ChatMainSectionComponent() {
           <button
             id="back-to-setup"
             className="icon-button cc-press"
-            data-tooltip="タスク選択に戻る"
+            data-tooltip={english ? "Back to tasks" : "タスク選択に戻る"}
             data-tooltip-placement="bottom"
             onClick={() => {
               showSetupForm();
@@ -298,7 +301,7 @@ function ChatMainSectionComponent() {
             <i className="bi bi-arrow-left"></i>
           </button>
           {currentRoomMode === "temporary" && (
-            <span className="chat-room-mode-badge">未保存</span>
+            <span className="chat-room-mode-badge">{english ? "Temporary" : "未保存"}</span>
           )}
         </div>
         <div className="header-right">
@@ -346,7 +349,7 @@ function ChatMainSectionComponent() {
             id="share-chat-btn"
             className={`icon-button chat-share-btn cc-press ${canShareCurrentRoom ? "" : "chat-share-btn--disabled"}`.trim()}
             type="button"
-            data-tooltip={currentRoomMode === "temporary" ? "未保存チャットは共有できません" : "このチャットを共有"}
+            data-tooltip={currentRoomMode === "temporary" ? (english ? "Temporary chats cannot be shared" : "未保存チャットは共有できません") : t("chat.share")}
             data-tooltip-placement="bottom"
             disabled={!canShareCurrentRoom}
             onClick={() => {
@@ -375,13 +378,13 @@ function ChatMainSectionComponent() {
             <div className="sidebar-projects">
               <div className="sidebar-projects__header">
                 <span className="sidebar-projects__title">
-                  <i className="bi bi-folder2" aria-hidden="true"></i> プロジェクト
+                  <i className="bi bi-folder2" aria-hidden="true"></i> {english ? "Projects" : "プロジェクト"}
                 </span>
                 <button
                   type="button"
                   className="sidebar-projects__add cc-press"
-                  aria-label="新規プロジェクトを作成"
-                  data-tooltip="新規プロジェクト"
+                  aria-label={english ? "Create a project" : "新規プロジェクトを作成"}
+                  data-tooltip={english ? "New project" : "新規プロジェクト"}
                   data-tooltip-placement="bottom"
                   onClick={() => {
                     openNewProjectModal();
@@ -419,7 +422,7 @@ function ChatMainSectionComponent() {
             // 複数選択モード中は選択件数と一括削除ボタンを表示する。
             // In selection mode, show the selection count and bulk-delete controls.
             <div className="room-selection-bar" aria-live="polite">
-              <span className="room-selection-bar__count">{selectedRoomCount}件選択中</span>
+              <span className="room-selection-bar__count">{english ? `${selectedRoomCount} selected` : `${selectedRoomCount}件選択中`}</span>
               <button
                 type="button"
                 className="room-selection-bar__button room-selection-bar__button--danger cc-press"
@@ -429,7 +432,7 @@ function ChatMainSectionComponent() {
                 }}
               >
                 <i className="bi bi-trash" aria-hidden="true"></i>
-                <span>{isBulkDeletingRooms ? "削除中..." : "削除"}</span>
+                <span>{isBulkDeletingRooms ? (english ? "Deleting…" : "削除中...") : t("common.delete")}</span>
               </button>
               <button
                 type="button"
@@ -439,7 +442,7 @@ function ChatMainSectionComponent() {
                   cancelRoomSelection();
                 }}
               >
-                キャンセル
+                {t("common.cancel")}
               </button>
             </div>
           ) : (
@@ -450,7 +453,7 @@ function ChatMainSectionComponent() {
                 handleNewChat();
               }}
             >
-              <i className="bi bi-plus-lg"></i> 新規チャット
+              <i className="bi bi-plus-lg"></i> {t("chat.new")}
             </button>
           )}
 
@@ -466,7 +469,7 @@ function ChatMainSectionComponent() {
 
           <div id="chat-room-list" aria-busy={isChatRoomsInitialLoading || isLoadingMoreChatRooms ? "true" : "false"}>
             {isChatRoomsInitialLoading && (
-              <div className="chat-room-list__skeleton" role="status" aria-live="polite" aria-label="チャット履歴を読み込み中">
+              <div className="chat-room-list__skeleton" role="status" aria-live="polite" aria-label={english ? "Loading chat history" : "チャット履歴を読み込み中"}>
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div key={index} className="chat-room-card chat-room-card--skeleton">
                     <Skeleton variant="text" width={index === 0 ? "72%" : "88%"} />
@@ -478,7 +481,7 @@ function ChatMainSectionComponent() {
               const roomMenuOpen = openRoomActionsFor === room.id;
               // タイトルが空の場合は「新規チャット」をフォールバック表示する。
               // Fall back to "新規チャット" when the room has no title yet.
-              const roomTitle = room.title || "新規チャット";
+              const roomTitle = room.title || t("chat.new");
               const roomMenuId = `room-actions-menu-${room.id}`;
               const roomSelected = selectedRoomIds.has(room.id);
 
@@ -513,7 +516,7 @@ function ChatMainSectionComponent() {
                     <span className="chat-room-card__title-row">
                       <span>{roomTitle}</span>
                       {room.mode === "temporary" && (
-                        <span className="chat-room-card__mode-badge">未保存</span>
+                        <span className="chat-room-card__mode-badge">{english ? "Temporary" : "未保存"}</span>
                       )}
                     </span>
                   </div>
@@ -530,7 +533,7 @@ function ChatMainSectionComponent() {
                       <button
                         type="button"
                         className="room-actions-icon cc-press"
-                        aria-label={`${roomTitle} の操作メニューを開く`}
+                        aria-label={english ? `Open actions for ${roomTitle}` : `${roomTitle} の操作メニューを開く`}
                         aria-haspopup="menu"
                         aria-expanded={roomMenuOpen ? "true" : "false"}
                         aria-controls={roomMenuId}
@@ -560,7 +563,7 @@ function ChatMainSectionComponent() {
                             void handleRenameRoom(room.id, room.title);
                           }}
                         >
-                          <i className="bi bi-pencil-square menu-item__icon"></i> 名前変更
+                          <i className="bi bi-pencil-square menu-item__icon"></i> {english ? "Rename" : "名前変更"}
                         </button>
 
                         <button
@@ -572,14 +575,14 @@ function ChatMainSectionComponent() {
                             enterRoomSelectionMode(room.id);
                           }}
                         >
-                          <i className="bi bi-check2-square menu-item__icon"></i> 複数選択
+                          <i className="bi bi-check2-square menu-item__icon"></i> {english ? "Select multiple" : "複数選択"}
                         </button>
 
                         {room.mode === "normal" && (
                           <div className="room-actions-menu__section" role="none">
                             <div className="room-actions-menu__label" role="presentation">
                               <i className="bi bi-folder-plus menu-item__icon" aria-hidden="true"></i>
-                              プロジェクトへ追加
+                              {english ? "Add to project" : "プロジェクトへ追加"}
                             </div>
                             {isProjectsLoading ? (
                               <button
@@ -588,7 +591,7 @@ function ChatMainSectionComponent() {
                                 role="menuitem"
                                 disabled
                               >
-                                読み込み中
+                                {t("common.loading")}
                               </button>
                             ) : projects.length > 0 ? (
                               projects.map((project) => (
@@ -618,7 +621,7 @@ function ChatMainSectionComponent() {
                                   openNewProjectModal();
                                 }}
                               >
-                                新規プロジェクトを作成
+                                {english ? "Create a project" : "新規プロジェクトを作成"}
                               </button>
                             )}
                           </div>
@@ -634,7 +637,7 @@ function ChatMainSectionComponent() {
                             void handleDeleteRoom(room.id, room.title);
                           }}
                         >
-                          <i className="bi bi-trash menu-item__icon"></i> 削除
+                          <i className="bi bi-trash menu-item__icon"></i> {t("common.delete")}
                         </button>
                       </div>
                     </div>
@@ -647,19 +650,19 @@ function ChatMainSectionComponent() {
               // Empty state shown when no chat matches the search query.
               <div className="chat-room-search-empty" role="status" aria-live="polite">
                 <i className="bi bi-search chat-room-search-empty__icon" aria-hidden="true"></i>
-                <span className="chat-room-search-empty__text">「{roomSearchQuery.trim()}」に一致するチャットはありません</span>
+                <span className="chat-room-search-empty__text">{english ? `No chats match “${roomSearchQuery.trim()}”` : `「${roomSearchQuery.trim()}」に一致するチャットはありません`}</span>
               </div>
             )}
             {isRoomSearchActive && filteredChatRooms.length === 0 && chatRoomsHasMore && (
               // 未読み込みのルームを横断検索するため追加読み込み中であることを示す。
               // Indicate that more rooms are being loaded to search across all of them.
               <div className="chat-room-list__loading" role="status" aria-live="polite">
-                <InlineLoading label="検索中" />
+                <InlineLoading label={english ? "Searching" : "検索中"} />
               </div>
             )}
             {isLoadingMoreChatRooms && (
               <div className="chat-room-list__loading" role="status" aria-live="polite">
-                <InlineLoading label="読み込み中" />
+                <InlineLoading label={t("common.loading")} />
               </div>
             )}
             {/* IntersectionObserver がこのセンチネルを監視し、末尾到達時に追加読み込みを発火する。 */}
@@ -674,9 +677,9 @@ function ChatMainSectionComponent() {
           <button
             id="sidebar-toggle"
             className="icon-button sidebar-toggle chat-sidebar-toggle cc-press"
-            aria-label={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
+            aria-label={sidebarOpen ? (english ? "Close chat history" : "チャット履歴を閉じる") : (english ? "Open chat history" : "チャット履歴を開く")}
             aria-controls="chat-room-sidebar"
-            data-tooltip={sidebarOpen ? "チャット履歴を閉じる" : "チャット履歴を開く"}
+            data-tooltip={sidebarOpen ? (english ? "Close chat history" : "チャット履歴を閉じる") : (english ? "Open chat history" : "チャット履歴を開く")}
             data-tooltip-placement="left"
             aria-expanded={sidebarOpen ? "true" : "false"}
             onClick={(event) => {
@@ -722,18 +725,18 @@ function ChatMainSectionComponent() {
               <span className="chat-attachment-drop-overlay__icon">
                 <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
               </span>
-              <span className="chat-attachment-drop-overlay__text">ファイルをドロップして添付</span>
-              <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
+              <span className="chat-attachment-drop-overlay__text">{t("home.dropFiles")}</span>
+              <span className="chat-attachment-drop-overlay__hint">PDF / Office / {english ? "Text" : "テキスト"}</span>
             </div>
             {detectedUrls.length > 0 && (
               // 入力テキストから検出した URL を送信前にチップとして表示し、AI が読み取ることを知らせる。
               // Show chips for detected URLs so users know the AI will fetch them on send.
-              <div className="chat-detected-urls" aria-label="送信時にAIが読み取るURL">
+              <div className="chat-detected-urls" aria-label={english ? "URLs the AI will read when sent" : "送信時にAIが読み取るURL"}>
                 {detectedUrls.map((url) => (
                   <div key={url} className="chat-detected-url-chip" title={url}>
                     <i className="bi bi-globe2 chat-detected-url-chip__icon" aria-hidden="true"></i>
                     <span className="chat-detected-url-chip__domain">{getUrlDomain(url)}</span>
-                    <span className="chat-detected-url-chip__label">AIが読み取り</span>
+                    <span className="chat-detected-url-chip__label">{english ? "AI will read" : "AIが読み取り"}</span>
                   </div>
                 ))}
               </div>
@@ -761,7 +764,7 @@ function ChatMainSectionComponent() {
                     <button
                       type="button"
                       className="chat-attached-file-chip__remove"
-                      aria-label={`${file.name}を削除`}
+                      aria-label={english ? `Remove ${file.name}` : `${file.name}を削除`}
                       onClick={() => handleRemoveAttachedFile(file.id)}
                     >
                       <i className="bi bi-x" aria-hidden="true"></i>
@@ -786,8 +789,8 @@ function ChatMainSectionComponent() {
               <button
                 type="button"
                 className="chat-attach-btn cc-press"
-                aria-label="ファイルを添付"
-                data-tooltip="ファイルを添付"
+                aria-label={t("home.attach")}
+                data-tooltip={t("home.attach")}
                 data-tooltip-placement="top"
                 disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
                 onClick={() => fileInputRef.current?.click()}
@@ -798,7 +801,7 @@ function ChatMainSectionComponent() {
                 ref={chatInputRef}
                 id="user-input"
                 rows={1}
-                placeholder={isChatLaunching ? "チャットを準備しています..." : "メッセージを入力..."}
+                placeholder={isChatLaunching ? (english ? "Preparing chat…" : "チャットを準備しています...") : t("chat.inputPlaceholder")}
                 value={chatInput}
                 disabled={isChatLaunching}
                 enterKeyHint="send"
@@ -817,8 +820,8 @@ function ChatMainSectionComponent() {
                 type="button"
                 id="send-btn"
                 className={`cc-press ${isGenerating ? "send-btn--stop" : ""}`.trim()}
-                aria-label={isGenerating ? "停止" : "送信"}
-                data-tooltip={isGenerating ? "生成を停止" : "メッセージを送信"}
+                aria-label={isGenerating ? t("chat.stop") : t("home.send")}
+                data-tooltip={isGenerating ? t("chat.stop") : t("home.send")}
                 data-tooltip-placement="top"
                 disabled={isChatLaunching || (!isGenerating && !canSendChatMessage)}
                 onClick={() => {
@@ -835,8 +838,8 @@ function ChatMainSectionComponent() {
               // Show character counter; turns red to warn when the limit is exceeded.
               <div className={`chat-input-counter${chatInput.length > MAX_CHAT_MESSAGE_LENGTH ? " chat-input-counter--over" : ""}`}>
                 {chatInput.length > MAX_CHAT_MESSAGE_LENGTH
-                  ? `文字数制限を超えています（${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字）`
-                  : `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字`}
+                  ? (english ? `Character limit exceeded (${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()})` : `文字数制限を超えています（${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字）`)
+                  : (english ? `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()} characters` : `${chatInput.length.toLocaleString()} / ${MAX_CHAT_MESSAGE_LENGTH.toLocaleString()}文字`)}
               </div>
             )}
           </div>

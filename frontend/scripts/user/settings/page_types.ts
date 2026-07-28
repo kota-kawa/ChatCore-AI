@@ -2,7 +2,7 @@ import type { ThemePreference } from "../../core/theme";
 
 // 設定画面のどのセクションを表示するかを識別するユニオン型
 // Union type identifying which section of the settings page is currently visible
-export type SettingsSection = "profile" | "appearance" | "prompts" | "liked-prompts" | "notifications" | "security";
+export type SettingsSection = "profile" | "appearance" | "language" | "prompts" | "liked-prompts" | "notifications" | "security";
 
 // テーマ選択肢の定義型 — アイコン・ラベル・説明を束ねる
 // Type for a single theme option bundling icon, label, and description

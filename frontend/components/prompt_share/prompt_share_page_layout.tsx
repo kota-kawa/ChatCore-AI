@@ -9,6 +9,9 @@ import type {
   PromptCategory,
   PromptFeedback
 } from "./prompt_share_page_types";
+import { useTranslation } from "../../contexts/locale_context";
+import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 
 // ページ全体のレイアウトが受け取るすべての状態・フィルター・ハンドラを定義する
 // Defines all state, filters, and event handlers passed into the page layout component
@@ -55,10 +58,11 @@ type PromptSharePageLayoutProps = {
 };
 
 function PromptCardSkeletonGrid() {
+  const { t } = useTranslation();
   return (
     <>
       {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="prompt-card prompt-card--skeleton" role="status" aria-label="プロンプトを読み込み中">
+        <div key={index} className="prompt-card prompt-card--skeleton" role="status" aria-label={t("promptShare.loading")}>
           <div className="prompt-card__header">
             <div className="prompt-card__badges">
               <Skeleton variant="text" width={82} height="1.45rem" />
@@ -122,6 +126,16 @@ export function PromptSharePageLayout({
   onToggleLike,
   children
 }: PromptSharePageLayoutProps) {
+  const { locale, t } = useTranslation();
+  const getCategoryLabel = (category: PromptCategory) => category.value === "all"
+    ? t("promptShare.all")
+    : getCategoryLabelOrFallback(category.value, category.label, locale);
+  const getContentFormatLabel = (value: ContentFormatFilter) => value === "all"
+    ? t("promptShare.all")
+    : getPromptFormatLabel(value, locale);
+  const getMediaTypeLabel = (value: MediaTypeFilter) => value === "all"
+    ? t("promptShare.all")
+    : getPromptMediaLabel(value, locale);
   return (
     <div className="prompt-share-page cc-page-rise">
       {/* カスタム要素：グローバルなアクションメニューWebComponent */}
@@ -149,7 +163,7 @@ export function PromptSharePageLayout({
           }}
         >
           <i className="bi bi-person-circle"></i>
-          <span>ログイン / 登録</span>
+          <span>{t("promptShare.loginRegister")}</span>
         </button>
       </div>
 
@@ -161,21 +175,21 @@ export function PromptSharePageLayout({
         <div className="prompts-header__inner">
           <p className="hero-kicker">Prompt Share</p>
           <h1 id="promptShareHeroTitle" className="hero-title">
-            必要なプロンプトを、すぐ検索。
+            {t("promptShare.heroTitle")}
           </h1>
           <p className="hero-description">
-            シンプルな検索で公開プロンプトを見つけて、そのまま保存・共有できます。
+            {t("promptShare.heroDescription")}
           </p>
 
           {/* role="search"でランドマークとして検索UIをスクリーンリーダーに認識させる */}
           {/* role="search" exposes the search region as a landmark for screen readers */}
-          <div className="search-section" role="search" aria-label="プロンプト検索">
+          <div className="search-section" role="search" aria-label={t("promptShare.search")}>
             <div className="search-box">
               <input
                 type="text"
                 id="searchInput"
                 data-agent-id="prompt.search-input"
-                placeholder="キーワードでプロンプトを検索..."
+                placeholder={t("promptShare.searchPlaceholder")}
                 value={searchInput}
                 onChange={(event) => {
                   onSearchInputChange(event.target.value);
@@ -187,8 +201,8 @@ export function PromptSharePageLayout({
                 type="button"
                 className="cc-press"
                 data-agent-id="prompt.search-button"
-                aria-label="検索を実行する"
-                data-tooltip="入力したキーワードで検索"
+                aria-label={t("common.search")}
+                data-tooltip={t("promptShare.search")}
                 data-tooltip-placement="bottom"
                 onClick={onSearch}
               >
@@ -206,7 +220,7 @@ export function PromptSharePageLayout({
               onClick={onOpenComposerModal}
             >
               <i className="bi bi-plus-lg"></i>
-              <span>プロンプトを投稿</span>
+              <span>{t("promptShare.post")}</span>
             </button>
           </div>
         </div>
@@ -216,14 +230,11 @@ export function PromptSharePageLayout({
         {/* SEO用のサマリーセクション。カテゴリ一覧をリストとしてマークアップする */}
         {/* SEO summary section; lists categories as semantic markup for crawlers */}
         <section className="prompt-crawl-summary" aria-labelledby="prompt-crawl-summary-title">
-          <h2 id="prompt-crawl-summary-title">公開プロンプトライブラリ</h2>
-          <p>
-            Chat Coreのプロンプト共有では、文章作成、調査、画像生成、SKILLなどの日本語AIプロンプトをカテゴリや形式別に探せます。
-            気になるプロンプトは詳細を確認し、コメントや共有リンクから使い方の文脈も追えます。
-          </p>
+          <h2 id="prompt-crawl-summary-title">{t("promptShare.publicLibrary")}</h2>
+          <p>{t("promptShare.publicLibraryDescription")}</p>
           <ul>
             {categories.slice(0, 6).map((category) => (
-              <li key={category.value}>{category.label}</li>
+              <li key={category.value}>{getCategoryLabel(category)}</li>
             ))}
           </ul>
         </section>
@@ -232,7 +243,7 @@ export function PromptSharePageLayout({
         {/* Category and two-axis filter controls for narrowing down the prompt list */}
         <section className="categories" aria-labelledby="categories-title">
           <div className="section-header section-header--compact">
-            <h2 id="categories-title">カテゴリ</h2>
+            <h2 id="categories-title">{t("promptShare.categories")}</h2>
           </div>
 
           <div className="category-list">
@@ -242,13 +253,13 @@ export function PromptSharePageLayout({
                 type="button"
                 className={`category-card cc-press${selectedCategory === category.value ? " active" : ""}`}
                 data-category={category.value}
-                title={category.label}
+                title={getCategoryLabel(category)}
                 onClick={() => {
                   onCategoryClick(category.value);
                 }}
               >
                 <i className={category.iconClass}></i>
-                <span>{category.label}</span>
+                <span>{getCategoryLabel(category)}</span>
               </button>
             ))}
           </div>
@@ -257,7 +268,7 @@ export function PromptSharePageLayout({
           {/* Content format filters use role="group" to form a distinct ARIA group from category buttons */}
           <div className="prompt-filter-block">
             <div id="prompt-format-filter-title" className="prompt-filter-heading">
-              フォーマット
+              {t("promptShare.format")}
             </div>
             <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-format-filter-title">
               {contentFormatFilters.map((contentFormatFilter) => (
@@ -271,7 +282,7 @@ export function PromptSharePageLayout({
                   }}
                 >
                   <i className={contentFormatFilter.iconClass}></i>
-                  <span>{contentFormatFilter.label}</span>
+                  <span>{getContentFormatLabel(contentFormatFilter.value)}</span>
                 </button>
               ))}
             </div>
@@ -281,7 +292,7 @@ export function PromptSharePageLayout({
           {/* Media filters are independent from format filters and narrow by generation target */}
           <div className="prompt-filter-block">
             <div id="prompt-media-filter-title" className="prompt-filter-heading">
-              生成メディア
+              {t("promptShare.generationMedia")}
             </div>
             <div className="prompt-type-filter-list" role="group" aria-labelledby="prompt-media-filter-title">
               {mediaTypeFilters.map((mediaTypeFilter) => (
@@ -295,7 +306,7 @@ export function PromptSharePageLayout({
                   }}
                 >
                   <i className={mediaTypeFilter.iconClass}></i>
-                  <span>{mediaTypeFilter.label}</span>
+                  <span>{getMediaTypeLabel(mediaTypeFilter.value)}</span>
                 </button>
               ))}
             </div>
@@ -369,7 +380,7 @@ export function PromptSharePageLayout({
                 onClick={onLoadMoreResults}
                 disabled={isLoadingMoreResults}
               >
-                {isLoadingMoreResults ? "読み込み中..." : "さらに読み込む"}
+                {isLoadingMoreResults ? t("common.loading") : t("promptShare.loadMore")}
               </button>
             </div>
           ) : null}

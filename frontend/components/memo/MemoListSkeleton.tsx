@@ -1,8 +1,10 @@
 import { Skeleton, SkeletonText } from "../ui/skeleton";
+import { useTranslation } from "../../contexts/locale_context";
 
 export function MemoListSkeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="memo-history__sections memo-history__sections--skeleton" role="status" aria-live="polite" aria-label="メモを読み込み中">
+    <div className="memo-history__sections memo-history__sections--skeleton" role="status" aria-live="polite" aria-label={t("memo.loadingMemos")}>
       <section className="memo-history__section">
         <ul className="memo-history__list memo-history__list--skeleton">
           {Array.from({ length: 8 }).map((_, index) => (

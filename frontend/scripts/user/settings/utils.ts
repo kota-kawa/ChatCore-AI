@@ -2,6 +2,7 @@ import { formatDateTime } from "../../../lib/datetime";
 import { asRecord } from "../../../lib/utils";
 
 import type { PasskeyRecord, ProfileFormState } from "./page_types";
+import type { Locale } from "../../../lib/i18n/config";
 
 export { escapeHtml } from "../../core/html";
 
@@ -24,7 +25,7 @@ export function normalizePreviewText(value?: string): string {
 
 // API レスポンスの未知の配列を型安全な PasskeyRecord 配列に変換する
 // Converts an unknown array from the API response into a type-safe PasskeyRecord array
-export function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[] {
+export function normalizePasskeyRecords(rawPasskeys: unknown[], locale: Locale = "ja"): PasskeyRecord[] {
   return rawPasskeys
     .map((rawPasskey) => {
       const passkey = asRecord(rawPasskey);
@@ -36,13 +37,13 @@ export function normalizePasskeyRecords(rawPasskeys: unknown[]): PasskeyRecord[]
       }
       const label = typeof passkey.label === "string" && passkey.label.trim()
         ? passkey.label.trim()
-        : "保存済みPasskey";
+        : (locale === "en" ? "Saved passkey" : "保存済みPasskey");
       return {
         id,
         label,
         credentialDeviceType: typeof passkey.credential_device_type === "string"
           ? passkey.credential_device_type
-          : "不明",
+          : (locale === "en" ? "Unknown" : "不明"),
         credentialBackedUp: Boolean(passkey.credential_backed_up),
         createdAt: typeof passkey.created_at === "string" ? passkey.created_at : "",
         lastUsedAt: typeof passkey.last_used_at === "string" ? passkey.last_used_at : ""
@@ -62,7 +63,10 @@ export function formatPasskeyDateTime(value: string): string {
 
 // プロフィール情報から LLM に渡すデフォルトコンテキスト文字列を組み立てる
 // Builds the default LLM context string from profile fields when no custom value has been saved
-export function buildDefaultLlmProfileContext(profile: Pick<ProfileFormState, "username" | "email" | "bio">): string {
+export function buildDefaultLlmProfileContext(
+  profile: Pick<ProfileFormState, "username" | "email" | "bio">,
+  locale: Locale = "ja"
+): string {
   const lines: string[] = [];
   const username = profile.username.trim();
   const email = profile.email.trim();
@@ -71,13 +75,13 @@ export function buildDefaultLlmProfileContext(profile: Pick<ProfileFormState, "u
   // 空フィールドは出力に含めず、入力済みの項目だけを改行区切りで連結する
   // Only include fields that have content so the context stays clean
   if (username) {
-    lines.push(`名前: ${username}`);
+    lines.push(`${locale === "en" ? "Name" : "名前"}: ${username}`);
   }
   if (email) {
-    lines.push(`メールアドレス: ${email}`);
+    lines.push(`${locale === "en" ? "Email address" : "メールアドレス"}: ${email}`);
   }
   if (bio) {
-    lines.push(`自己紹介: ${bio}`);
+    lines.push(`${locale === "en" ? "Bio" : "自己紹介"}: ${bio}`);
   }
 
   return lines.join("\n");

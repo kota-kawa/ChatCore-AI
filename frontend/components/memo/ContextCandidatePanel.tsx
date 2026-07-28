@@ -12,14 +12,14 @@ import {
   updateContextExtractionSettings as defaultUpdateSettings,
 } from "../../lib/memo/context_api";
 import {
-  CONTEXT_FACT_SOURCE_LABELS,
-  CONTEXT_FACT_TYPE_LABELS,
   CONTEXT_FACT_TYPE_OPTIONS,
   type ContextFactCandidate,
   type ContextFactType,
 } from "../../lib/memo/context_types";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { useTranslation } from "../../contexts/locale_context";
+import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 
 export type ContextCandidateApi = {
   load: typeof defaultLoad;
@@ -58,6 +58,13 @@ function confidenceLabel(confidence: number): string {
 }
 
 export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanelProps) {
+  const { t } = useTranslation();
+  const factTypeKeys: Record<ContextFactType, MessageKey> = {
+    profile: "memo.factTypeProfile", preference: "memo.factTypePreference", project: "memo.factTypeProject",
+    decision: "memo.factTypeDecision", reference: "memo.factTypeReference",
+  };
+  const factTypeOptions = CONTEXT_FACT_TYPE_OPTIONS.map((option) => ({ ...option, label: t(factTypeKeys[option.value as ContextFactType]) }));
+  const sourceLabel = (source: string) => source === "manual" ? t("memo.sourceManual") : source === "chat" ? t("memo.sourceChat") : source === "import" ? t("memo.sourceImport") : source;
   const load = api?.load ?? defaultLoad;
   const approve = api?.approve ?? defaultApprove;
   const reject = api?.reject ?? defaultReject;
@@ -133,7 +140,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       Promise.resolve().then(() => onApproved?.()),
     ]);
     if (results.some((result) => result.status === "rejected")) {
-      setErrorText("承認しましたが、一覧の再読み込みに失敗しました。ページを再読み込みしてください。");
+      setErrorText(t("memo.approvedRefreshFailed"));
     }
   };
 
@@ -145,7 +152,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       await refreshAfterApproval();
     } catch (approvalError) {
       setErrorText(
-        approvalError instanceof Error ? approvalError.message : "AIからの提案を承認できませんでした。",
+        approvalError instanceof Error ? approvalError.message : t("memo.approveSuggestionFailed"),
       );
     } finally {
       setBusyCandidateId(null);
@@ -169,11 +176,11 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
     const title = review.title.trim();
     const content = review.content.trim();
     if (!title || !content) {
-      setErrorText("タイトルと内容を入力してください。");
+      setErrorText(t("memo.titleContentRequired"));
       return;
     }
     if (!Number.isFinite(review.importance) || review.importance < 0 || review.importance > 100) {
-      setErrorText("重要度は0から100の範囲で入力してください。");
+      setErrorText(t("memo.importanceRange"));
       return;
     }
 
@@ -192,7 +199,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       await refreshAfterApproval();
     } catch (approvalError) {
       setErrorText(
-        approvalError instanceof Error ? approvalError.message : "AIからの提案を承認できませんでした。",
+        approvalError instanceof Error ? approvalError.message : t("memo.approveSuggestionFailed"),
       );
     } finally {
       setBusyCandidateId(null);
@@ -209,7 +216,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       setReview(null);
     } catch (rejectionError) {
       setErrorText(
-        rejectionError instanceof Error ? rejectionError.message : "AIからの提案を却下できませんでした。",
+        rejectionError instanceof Error ? rejectionError.message : t("memo.rejectSuggestionFailed"),
       );
       setBusyCandidateId(null);
       return;
@@ -217,7 +224,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
 
     const refreshResult = await Promise.allSettled([mutate()]);
     if (refreshResult[0]?.status === "rejected") {
-      setErrorText("却下しましたが、提案一覧の再読み込みに失敗しました。ページを再読み込みしてください。");
+      setErrorText(t("memo.rejectedRefreshFailed"));
     }
     setBusyCandidateId(null);
   };
@@ -247,7 +254,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       setNextCursor(page.nextCursor === requestedCursor ? null : page.nextCursor);
     } catch (loadError) {
       setErrorText(
-        loadError instanceof Error ? loadError.message : "追加の提案を取得できませんでした。",
+        loadError instanceof Error ? loadError.message : t("memo.loadMoreSuggestionsFailed"),
       );
     } finally {
       if (activeCursorRef.current === requestedCursor) {
@@ -269,7 +276,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       setErrorText(
         settingsUpdateError instanceof Error
           ? settingsUpdateError.message
-          : "自動抽出設定を更新できませんでした。",
+          : t("memo.updateExtractionFailed"),
       );
     } finally {
       setSettingsBusy(false);
@@ -284,33 +291,31 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
       <header className="memo-context-candidates__header">
         <div>
           <div className="memo-context-candidates__title-row">
-            <h2 id="context-candidates-title">AIからの提案</h2>
-            <span className="memo-context-candidates__count" aria-label={`保留中 ${totalPending}件`}>
+            <h2 id="context-candidates-title">{t("memo.aiSuggestions")}</h2>
+            <span className="memo-context-candidates__count" aria-label={t("memo.pendingCount", { count: totalPending })}>
               {totalPending}
             </span>
           </div>
-          <p>チャットから抽出された候補を確認し、必要なものだけ金庫へ保存できます。</p>
+          <p>{t("memo.suggestionsDescription")}</p>
         </div>
       </header>
 
       <div className="memo-context-extraction-setting">
         <div className="memo-context-extraction-setting__copy">
-          <strong>チャットから保存候補を提案</strong>
-          <p>
-            有効にすると、今後のチャットから保存候補を非同期で提案します。候補は承認するまで金庫に保存されません
-          </p>
+          <strong>{t("memo.extractionSettingTitle")}</strong>
+          <p>{t("memo.extractionSettingDescription")}</p>
         </div>
         <button
           type="button"
           className={`memo-context-extraction-setting__toggle${settingEnabled ? " is-enabled" : ""}`}
           role="switch"
           aria-checked={settingEnabled}
-          aria-label="チャットからの自動抽出"
+          aria-label={t("memo.autoExtraction")}
           onClick={() => void handleSettingsToggle()}
           disabled={settingsBusy || settingsLoading || Boolean(settingsError)}
         >
           <span aria-hidden="true" />
-          <span className="sr-only">{settingEnabled ? "有効" : "無効"}</span>
+          <span className="sr-only">{settingEnabled ? t("memo.active") : t("memo.disabled")}</span>
         </button>
       </div>
 
@@ -319,14 +324,14 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
           {(!review ? errorText : null) ||
             (error instanceof Error ? error.message : null) ||
             (settingsError instanceof Error ? settingsError.message : null) ||
-            "AIからの提案を取得できませんでした。"}
+            t("memo.loadSuggestionsFailed")}
         </div>
       )}
 
       {isLoading ? (
-        <p className="memo-context-candidates__state">提案を読み込んでいます…</p>
+        <p className="memo-context-candidates__state">{t("memo.loadingSuggestions")}</p>
       ) : error ? null : candidates.length === 0 ? (
-        <p className="memo-context-candidates__state">確認待ちの提案はありません。</p>
+        <p className="memo-context-candidates__state">{t("memo.noPendingSuggestions")}</p>
       ) : (
         <ul className="memo-context-candidate-list">
           {candidates.map((candidate) => {
@@ -336,10 +341,10 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                 <article className="memo-context-candidate-card">
                   <div className="memo-context-candidate-card__head">
                     <span className="memo-context-card__badge">
-                      {CONTEXT_FACT_TYPE_LABELS[candidate.fact_type]}
+                      {t(factTypeKeys[candidate.fact_type])}
                     </span>
                     <span className="memo-context-candidate-card__confidence">
-                      確信度 {confidenceLabel(candidate.confidence)}
+                      {t("memo.confidence", { value: confidenceLabel(candidate.confidence) })}
                     </span>
                   </div>
                   <h3>{candidate.title}</h3>
@@ -348,7 +353,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                     text={candidate.content}
                   />
                   <div className="memo-context-candidate-card__meta">
-                    出典: {CONTEXT_FACT_SOURCE_LABELS[candidate.source_kind]}
+                    {t("memo.source", { source: sourceLabel(candidate.source_kind) })}
                   </div>
                   <div className="memo-context-candidate-card__actions">
                     <button
@@ -357,14 +362,14 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                       onClick={() => void handleApprove(candidate)}
                       disabled={isBusy}
                     >
-                      {isBusy ? "処理中…" : "承認"}
+                      {isBusy ? t("memo.processing") : t("memo.approve")}
                     </button>
                     <button
                       type="button"
                       onClick={() => openApprovalReview(candidate)}
                       disabled={isBusy}
                     >
-                      編集して承認
+                      {t("memo.editAndApprove")}
                     </button>
                     <button
                       type="button"
@@ -375,7 +380,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                       }}
                       disabled={isBusy}
                     >
-                      却下
+                      {t("memo.reject")}
                     </button>
                   </div>
                 </article>
@@ -392,7 +397,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
           onClick={() => void handleLoadMore()}
           disabled={loadingMore || busyCandidateId !== null}
         >
-          {loadingMore ? "読み込み中…" : "提案をさらに読み込む"}
+          {loadingMore ? t("common.loading") : t("memo.loadMoreSuggestions")}
         </button>
       )}
 
@@ -417,14 +422,14 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
               <header className="memo-context-modal__header">
                 <div>
                   <h2 id="context-candidate-modal-title">
-                    {review.kind === "approve" ? "提案を編集して承認" : "提案を却下"}
+                    {review.kind === "approve" ? t("memo.editAndApproveTitle") : t("memo.rejectSuggestion")}
                   </h2>
                   <p>{review.candidate.title}</p>
                 </div>
                 <button
                   type="button"
                   className="memo-context-modal__close"
-                  aria-label="閉じる"
+                  aria-label={t("common.close")}
                   onClick={closeReview}
                   disabled={busyCandidateId !== null}
                 >
@@ -447,11 +452,11 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                   }}
                 >
                   <label>
-                    <span>種類</span>
+                    <span>{t("memo.type")}</span>
                     <MemoSelect
-                      ariaLabel="候補の種類"
+                      ariaLabel={t("memo.candidateType")}
                       value={review.factType}
-                      options={CONTEXT_FACT_TYPE_OPTIONS}
+                      options={factTypeOptions}
                       onChange={(value) =>
                         setReview((current) =>
                           current?.kind === "approve"
@@ -462,7 +467,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                     />
                   </label>
                   <label htmlFor="context-candidate-title">
-                    <span>タイトル</span>
+                    <span>{t("memo.titleLabel")}</span>
                     <input
                       ref={titleInputRef}
                       id="context-candidate-title"
@@ -479,7 +484,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                     />
                   </label>
                   <label htmlFor="context-candidate-content">
-                    <span>内容</span>
+                    <span>{t("memo.content")}</span>
                     <textarea
                       id="context-candidate-content"
                       value={review.content}
@@ -496,7 +501,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                     />
                   </label>
                   <label htmlFor="context-candidate-importance">
-                    <span>重要度</span>
+                    <span>{t("memo.importance")}</span>
                     <input
                       id="context-candidate-importance"
                       type="number"
@@ -515,7 +520,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                   </label>
                   <div className="memo-context-candidate-modal__actions">
                     <button type="button" onClick={closeReview} disabled={busyCandidateId !== null}>
-                      キャンセル
+                      {t("common.cancel")}
                     </button>
                     <button
                       ref={confirmButtonRef}
@@ -523,16 +528,16 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                       className="is-primary"
                       disabled={busyCandidateId !== null}
                     >
-                      {busyCandidateId !== null ? "承認中…" : "この内容で承認"}
+                      {busyCandidateId !== null ? t("memo.approving") : t("memo.approveContent")}
                     </button>
                   </div>
                 </form>
               ) : (
                 <div className="memo-context-candidate-modal__confirmation">
-                  <p>この提案を却下します。却下した候補は確認待ち一覧から除外されます。</p>
+                  <p>{t("memo.rejectConfirmation")}</p>
                   <div className="memo-context-candidate-modal__actions">
                     <button type="button" onClick={closeReview} disabled={busyCandidateId !== null}>
-                      キャンセル
+                      {t("common.cancel")}
                     </button>
                     <button
                       ref={confirmButtonRef}
@@ -541,7 +546,7 @@ export function ContextCandidatePanel({ api, onApproved }: ContextCandidatePanel
                       onClick={() => void submitRejection()}
                       disabled={busyCandidateId !== null}
                     >
-                      {busyCandidateId !== null ? "却下中…" : "却下する"}
+                      {busyCandidateId !== null ? t("memo.rejecting") : t("memo.rejectAction")}
                     </button>
                   </div>
                 </div>

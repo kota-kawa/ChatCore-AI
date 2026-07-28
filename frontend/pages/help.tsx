@@ -1,8 +1,10 @@
 import { SeoHead } from "../components/SeoHead";
 import { HELP_CATEGORIES } from "../components/help/help_content";
+import { HELP_CATEGORIES_EN } from "../components/help/help_content_en";
 import { LpFooter } from "../components/lp/lp_footer";
 import { LpHeader } from "../components/lp/lp_header";
 import { absoluteUrl } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 const HELP_TITLE = "ヘルプセンター | ChatCore-AI";
 
@@ -78,9 +80,31 @@ const helpStructuredData = [
 // ヘルプセンターページ（クイックスタート＋カテゴリ別FAQ）
 // Help center page (quick start + FAQ grouped by category)
 export default function HelpPage() {
+  const { locale, t } = useTranslation();
+  const categories = locale === "en" ? HELP_CATEGORIES_EN : HELP_CATEGORIES;
+  const quickstartCards = locale === "en" ? [
+    { href: "/", icon: "", useFavicon: true, name: "AI CHAT", title: "Start an AI chat", description: "Ask questions, draft content, and explore ideas naturally." },
+    { href: "/prompt_share", icon: "bi-share-fill", useFavicon: false, name: "PROMPT LIBRARY", title: "Find a prompt", description: "Discover useful prompts shared by the community." },
+    { href: "/memo", icon: "bi-journal-check", useFavicon: false, name: "MEMOS", title: "Create a memo", description: "Save and organize useful answers and your own notes." }
+  ] : QUICKSTART_CARDS;
+  const structuredData = helpStructuredData.map((entry) => {
+    if (entry["@type"] === "FAQPage") {
+      return { ...entry, mainEntity: categories.flatMap((category) => category.items.map((item) => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answers.join(" ") } }))) };
+    }
+    if (entry["@type"] === "WebPage") {
+      return { ...entry, name: t("help.title"), description: t("help.description"), inLanguage: locale };
+    }
+    if (entry["@type"] === "BreadcrumbList" && locale === "en") {
+      return { ...entry, itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
+        { "@type": "ListItem", position: 2, name: "Help Center", item: absoluteUrl("/help") }
+      ] };
+    }
+    return entry;
+  });
   return (
     <>
-      <SeoHead title={HELP_TITLE} description={HELP_DESCRIPTION} canonicalPath="/help" structuredData={helpStructuredData}>
+      <SeoHead title={t("help.title")} description={t("help.description")} canonicalPath="/help" structuredData={structuredData}>
         {/* ドキュメント系ページはLPのトークンを共有するため両方のCSSを読み込む
             Document pages load both stylesheets since they share the LP tokens */}
         <link rel="stylesheet" href="/static/css/pages/lp/lp.css" />
@@ -98,20 +122,20 @@ export default function HelpPage() {
         <main>
           <section className="docs-hero">
             <p className="docs-hero__kicker" aria-hidden="true">
-              困ったときの道しるべ
+              {locale === "en" ? "Guidance when you need it" : "困ったときの道しるべ"}
             </p>
             <div className="lp-container">
               <p className="lp-eyebrow">HELP CENTER</p>
-              <h1 className="docs-hero__title">ヘルプセンター</h1>
+              <h1 className="docs-hero__title">{t("help.heading")}</h1>
               <p className="docs-hero__lead">
-                ChatCore-AIの使い方と、よくある質問への回答をまとめました。知りたい項目をカテゴリから選ぶか、下の一覧から探してください。
+                {locale === "en" ? "Find guides and answers to common questions about ChatCore-AI. Choose a category or browse the topics below." : "ChatCore-AIの使い方と、よくある質問への回答をまとめました。知りたい項目をカテゴリから選ぶか、下の一覧から探してください。"}
               </p>
             </div>
           </section>
 
-          <section className="help-quickstart" aria-label="クイックスタート">
+          <section className="help-quickstart" aria-label={locale === "en" ? "Quick start" : "クイックスタート"}>
             <div className="lp-container help-quickstart__grid">
-              {QUICKSTART_CARDS.map((card) => (
+              {quickstartCards.map((card) => (
                 <a key={card.href} href={card.href} className="lp-feature-card">
                   <span className="lp-feature-card__icon" aria-hidden="true">
                     {card.useFavicon ? <img src="/static/favicon.png" alt="" /> : <i className={`bi ${card.icon}`}></i>}
@@ -126,10 +150,10 @@ export default function HelpPage() {
 
           <section className="help-body">
             <div className="lp-container help-body__inner">
-              <nav className="docs-toc" aria-label="カテゴリ">
-                <p className="docs-toc__label">カテゴリ</p>
+              <nav className="docs-toc" aria-label={locale === "en" ? "Categories" : "カテゴリ"}>
+                <p className="docs-toc__label">{locale === "en" ? "Categories" : "カテゴリ"}</p>
                 <ol className="docs-toc__list">
-                  {HELP_CATEGORIES.map((category) => (
+                  {categories.map((category) => (
                     <li key={category.id}>
                       <a href={`#${category.id}`}>{category.title}</a>
                     </li>
@@ -138,7 +162,7 @@ export default function HelpPage() {
               </nav>
 
               <div className="help-sections">
-                {HELP_CATEGORIES.map((category) => (
+                {categories.map((category) => (
                   <section key={category.id} id={category.id} className="help-section" aria-labelledby={`${category.id}-title`}>
                     <h2 className="help-section__title" id={`${category.id}-title`}>
                       <span className="help-section__icon" aria-hidden="true">
@@ -176,9 +200,9 @@ export default function HelpPage() {
                 {/* 解決しなかったときのお問い合わせ導線 / Contact strip for unresolved questions */}
                 <div className="docs-contact">
                   <div className="docs-contact__copy">
-                    <p className="docs-contact__title">解決しませんでしたか？</p>
+                    <p className="docs-contact__title">{locale === "en" ? "Still need help?" : "解決しませんでしたか？"}</p>
                     <p className="docs-contact__text">
-                      不具合の報告やご要望は、GitHubリポジトリのIssueで受け付けています。利用ルールは利用規約・プライバシーポリシーをご覧ください。
+                      {locale === "en" ? "Report bugs or request features in the GitHub repository. See the Terms and Privacy Policy for service rules." : "不具合の報告やご要望は、GitHubリポジトリのIssueで受け付けています。利用ルールは利用規約・プライバシーポリシーをご覧ください。"}
                     </p>
                   </div>
                   <div className="docs-contact__actions">
@@ -188,13 +212,13 @@ export default function HelpPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      お問い合わせ（Issue）
+                      {locale === "en" ? "Contact (Issue)" : "お問い合わせ（Issue）"}
                     </a>
                     <a href="/terms" className="lp-btn lp-btn--ghost">
-                      利用規約
+                      {locale === "en" ? "Terms" : "利用規約"}
                     </a>
                     <a href="/privacy" className="lp-btn lp-btn--ghost">
-                      プライバシーポリシー
+                      {locale === "en" ? "Privacy Policy" : "プライバシーポリシー"}
                     </a>
                   </div>
                 </div>

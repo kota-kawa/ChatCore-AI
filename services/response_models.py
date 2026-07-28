@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -25,6 +25,14 @@ class ApiErrorPayload(ResponsePayloadModel):
     error: str | None = None
     message: str | None = None
     detail: str | list[str | ApiDetailObject] | None = None
+    code: str | None = None
+    params: dict[str, Any] | None = None
+
+
+# 日本語: 解決済み、または保存済みの表示言語を返す設定APIレスポンス。
+# English: Preferences API response carrying the resolved or persisted display language.
+class LocalePreferenceResponse(ResponsePayloadModel):
+    locale: Literal["ja", "en"]
 
 
 # 日本語: チャットボットの応答テキストを含むJSONレスポンスモデル。

@@ -9,6 +9,7 @@ type AuthMessageModalProps = {
 // 認証処理の結果メッセージを表示するモーダルコンポーネント
 // Modal component that displays result messages from authentication processes
 export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessageModalProps) {
+  const { t } = useTranslation();
   return (
     <div
       id="messageModal"
@@ -20,7 +21,7 @@ export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessag
       {/* クリックイベントの伝播を止めてモーダル本体のクリックで閉じないようにする */}
       {/* Stop click propagation so clicking inside the modal doesn't close it */}
       <div className="modal-content" onClick={(event) => event.stopPropagation()}>
-        <button className="close cc-press" type="button" onClick={onHide} aria-label="閉じる">
+        <button className="close cc-press" type="button" onClick={onHide} aria-label={t("common.close")}>
           &times;
         </button>
         <p id="modalMessage">{message}</p>
@@ -28,3 +29,4 @@ export function AuthMessageModal({ isModalClosing, message, onHide }: AuthMessag
     </div>
   );
 }
+import { useTranslation } from "../../../../contexts/locale_context";

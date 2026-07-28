@@ -1,4 +1,5 @@
 import { ApiErrorPayloadSchema } from "../../types/chat";
+import { getRuntimeLocale } from "../../lib/i18n/config";
 
 type JsonLikeRecord = Record<string, unknown>;
 type FetchJsonResult<TPayload> = {
@@ -58,7 +59,7 @@ async function fetchJsonOrThrow<TPayload = JsonLikeRecord>(
   options?: FetchJsonOrThrowOptions<TPayload>
 ): Promise<FetchJsonResult<TPayload>> {
   const { response, payload } = await fetchJson<TPayload>(input, init, options?.fetchImpl);
-  const fallbackMessage = options?.defaultMessage || "操作に失敗しました。";
+  const fallbackMessage = options?.defaultMessage || (getRuntimeLocale() === "en" ? "The operation failed." : "操作に失敗しました。");
   const hasApplicationError = options?.hasApplicationError
     ? options.hasApplicationError(payload)
     : hasErrorField(payload);
@@ -103,7 +104,7 @@ function extractApiErrorMessage(
   }
 
   if (typeof fallbackStatus === "number") {
-    return `サーバーエラー: ${fallbackStatus}`;
+    return getRuntimeLocale() === "en" ? `Server error: ${fallbackStatus}` : `サーバーエラー: ${fallbackStatus}`;
   }
   return defaultMessage;
 }

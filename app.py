@@ -31,6 +31,7 @@ from services.default_shared_prompts import ensure_default_shared_prompts  # noq
 from services.health import get_liveness_status, get_readiness_status  # noqa: E402
 from services.llm_daily_limit import LlmDailyLimitService  # noqa: E402
 from services.logging_config import configure_logging  # noqa: E402
+from services.locale_middleware import LocaleMiddleware  # noqa: E402
 from services.cache import try_acquire_single_flight  # noqa: E402
 from services.csrf import get_or_create_csrf_token  # noqa: E402
 from services.request_context import RequestContextMiddleware  # noqa: E402
@@ -194,6 +195,12 @@ app.state.chat_generation_service = ChatGenerationService()
 
 # セッション管理、コンテキスト管理、セキュリティヘッダー付与用のミドルウェアを設定
 # Register middlewares for session handling, request context, and security headers
+app.add_middleware(
+    LocaleMiddleware,
+    same_site=same_site,
+    https_only=https_only,
+    bypass_paths=MCP_MACHINE_PATHS,
+)
 app.add_middleware(
     PermanentSessionMiddleware,
     secret_key=secret_key,

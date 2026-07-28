@@ -1,6 +1,7 @@
 import { SeoHead } from "../components/SeoHead";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
 import { absoluteUrl } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 const PRIVACY_TITLE = "プライバシーポリシー | ChatCore-AI";
 
@@ -191,6 +192,42 @@ const PRIVACY_SECTIONS: LegalSection[] = [
   }
 ];
 
+const PRIVACY_SUMMARY_EN: LegalSummaryItem[] = [
+  { icon: "bi-shield-lock", title: "Only what is needed", text: "We collect only information needed to provide the Service. Passwords are stored as hashes." },
+  { icon: "bi-cpu", title: "Sent only to generate AI responses", text: "Chat content is sent to third-party LLM APIs only as needed to generate a response." },
+  { icon: "bi-trash3", title: "You can delete your data", text: "Deleting your account from Settings also deletes the data stored for that account." }
+];
+
+const PRIVACY_SECTIONS_EN: LegalSection[] = [
+  {
+    id: "collection", number: "1.", heading: "Information we collect", body: <><p>ChatCore-AI (the “Service”) collects the following information when you use it:</p><ul><li><strong>Account information:</strong> email address, password hash, display name, and profile image.</li><li><strong>Content:</strong> chats, memos, prompts, comments, and files you choose to save or publish.</li><li><strong>Technical information:</strong> cookies, session identifiers, IP address, browser information, and access logs needed for security and operation.</li><li><strong>Connected-service information:</strong> identifiers and authorization data supplied by Google or another service you choose to connect.</li></ul></>
+  },
+  {
+    id: "purpose", number: "2.", heading: "How we use information", body: <><p>We use information to provide authentication and Service features, generate AI responses, preserve settings and content, prevent abuse, investigate faults, provide support, and improve reliability.</p><p>We do not sell personal information.</p></>
+  },
+  {
+    id: "third-party", number: "3.", heading: "Third-party services", body: <><p>Information may be sent to service providers only as needed to operate the feature you request.</p><ul><li><strong>LLM providers:</strong> chat text, prompts, and relevant attachments used to generate a response.</li><li><strong>Authentication providers:</strong> information needed for sign-in when you choose an external account.</li><li><strong>Email and infrastructure providers:</strong> delivery and hosting data needed to operate the Service.</li></ul><p>Each provider processes information under its own terms and privacy policy. Do not enter personal or confidential information unless necessary.</p></>
+  },
+  {
+    id: "cookie", number: "4.", heading: "Cookies and local storage", body: <p>We use cookies and browser storage for sign-in sessions, security, language, appearance, and other preferences. Disabling them may prevent parts of the Service from working correctly.</p>
+  },
+  {
+    id: "security", number: "5.", heading: "Security", body: <p>We use reasonable technical and organizational safeguards, including access controls, encrypted communications, password hashing, and monitoring. No internet service can guarantee absolute security.</p>
+  },
+  {
+    id: "retention", number: "6.", heading: "Retention and deletion", body: <><p>We retain account information and saved content while your account remains active and as needed to provide the Service. Security logs may be retained for a limited period.</p><p>You may delete content individually or delete your account from Settings. Some records may remain when required by law or in temporary backups until the normal backup cycle completes.</p></>
+  },
+  {
+    id: "rights", number: "7.", heading: "Your choices and rights", body: <p>You may review and update profile information, manage or delete saved content, change language and other preferences, and delete your account. Contact us if you need help exercising applicable privacy rights.</p>
+  },
+  {
+    id: "changes", number: "8.", heading: "Changes to this policy", body: <p>We may update this policy when the Service or legal requirements change. Material changes will be announced in the Service, and the revised policy takes effect when posted here.</p>
+  },
+  {
+    id: "contact", number: "9.", heading: "Contact", body: <p>Questions or requests about this policy may be submitted through the contact channel linked from the Help Center.</p>
+  }
+];
+
 // プライバシーポリシーページの構造化データ（WebPage・パンくず）
 // Structured data for the privacy policy page (WebPage, breadcrumbs)
 const privacyStructuredData = [
@@ -219,13 +256,27 @@ const privacyStructuredData = [
 
 // プライバシーポリシーページ / Privacy policy page
 export default function PrivacyPage() {
+  const { locale, t } = useTranslation();
+  const english = locale === "en";
+  const title = english ? "Privacy Policy | ChatCore-AI" : PRIVACY_TITLE;
+  const description = english
+    ? "How ChatCore-AI collects, uses, shares, retains, and deletes account information and user content."
+    : PRIVACY_DESCRIPTION;
+  const structuredData = privacyStructuredData.map((entry) => {
+    if (entry["@type"] === "WebPage") return { ...entry, name: title, description, inLanguage: locale };
+    if (entry["@type"] === "BreadcrumbList" && english) return { ...entry, itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
+      { "@type": "ListItem", position: 2, name: "Privacy Policy", item: absoluteUrl("/privacy") }
+    ] };
+    return entry;
+  });
   return (
     <>
       <SeoHead
-        title={PRIVACY_TITLE}
-        description={PRIVACY_DESCRIPTION}
+        title={title}
+        description={description}
         canonicalPath="/privacy"
-        structuredData={privacyStructuredData}
+        structuredData={structuredData}
       >
         {/* ドキュメント系ページはLPのトークンを共有するため両方のCSSを読み込む
             Document pages load both stylesheets since they share the LP tokens */}
@@ -240,15 +291,15 @@ export default function PrivacyPage() {
       </SeoHead>
 
       <LegalDocument
-        kicker="個人情報の保護"
+        kicker={english ? "Protecting your information" : "個人情報の保護"}
         eyebrow="PRIVACY POLICY"
-        title="プライバシーポリシー"
-        lead="ChatCore-AIは、利用者の情報を「サービスの提供に必要な範囲」でのみ取得・利用します。このページでは、取得する情報とその取り扱いについて説明します。"
-        meta={[`制定日：${ESTABLISHED_DATE}`, "運営：Chat Core"]}
-        summaryLabel="要点まとめ"
-        summary={PRIVACY_SUMMARY}
-        summaryNote="※ この要約は理解を助けるためのものです。正式な内容は以下の本文が優先されます。"
-        sections={PRIVACY_SECTIONS}
+        title={english ? "Privacy Policy" : "プライバシーポリシー"}
+        lead={english ? "ChatCore-AI collects and uses information only as needed to provide the Service. This page explains what we collect and how we handle it." : "ChatCore-AIは、利用者の情報を「サービスの提供に必要な範囲」でのみ取得・利用します。このページでは、取得する情報とその取り扱いについて説明します。"}
+        meta={english ? ["Established: July 17, 2026", "Operator: Chat Core"] : [`制定日：${ESTABLISHED_DATE}`, "運営：Chat Core"]}
+        summaryLabel={english ? "Key points" : "要点まとめ"}
+        summary={english ? PRIVACY_SUMMARY_EN : PRIVACY_SUMMARY}
+        summaryNote={english ? `This summary is provided for convenience. The full policy below controls. ${t("legal.japanesePrevails")}` : "※ この要約は理解を助けるためのものです。正式な内容は以下の本文が優先されます。"}
+        sections={english ? PRIVACY_SECTIONS_EN : PRIVACY_SECTIONS}
       />
     </>
   );

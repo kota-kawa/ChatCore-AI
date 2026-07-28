@@ -15,6 +15,7 @@ from blueprints.auth_support import (
     get_auth_limit_service_dependency,
     get_llm_daily_limit_service_dependency,
 )
+from services.email_service import resolve_request_email_locale
 
 
 async def api_send_email_code(
@@ -136,14 +137,15 @@ async def api_send_login_code(
     request.session["login_verification_code_issued_at"] = int(dep("time").time())
     request.session["login_verification_code_attempts"] = 0
 
-    subject = "AIチャットサービス: ログイン認証コード"
-    body_text = f"以下の認証コードをログイン画面に入力してください。\n\n認証コード: {code}"
+    locale = resolve_request_email_locale(request)
+    request.session["login_verification_locale"] = locale
     try:
         await dep("run_blocking")(
             dep("send_email"),
             to_address=email,
-            subject=subject,
-            body_text=body_text,
+            template_kind="login_verification",
+            code=code,
+            locale=locale,
         )
         return dep("jsonify")({"status": "success", "message": "認証コードを送信しました"})
     except Exception:

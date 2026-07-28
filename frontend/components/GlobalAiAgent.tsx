@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useTranslation } from "../contexts/locale_context";
 import { readSessionJson, writeSessionJson } from "../lib/utils";
 import { MiniChat } from "./chat_page/MiniChat";
 import { DraggableModal } from "./ui/DraggableModal";
@@ -12,6 +13,9 @@ const POSITION_STORAGE_KEY = "globalAiAgent.position";
 // グローバルAIエージェントのフローティングボタンとモーダルを管理するコンポーネント
 // Component that manages the global AI agent floating button and modal
 export function GlobalAiAgent() {
+  const { locale } = useTranslation();
+  const agentLabel = locale === "en" ? "AI agent" : "AI エージェント";
+  const launchLabel = locale === "en" ? "Open AI agent" : "AI エージェントを起動";
   // モーダルの開閉状態
   // Open/close state of the modal
   const [isOpen, setIsOpen] = useState(false);
@@ -39,9 +43,9 @@ export function GlobalAiAgent() {
       <button
         type="button"
         className="global-ai-agent-button"
-        aria-label="AI エージェントを起動"
+        aria-label={launchLabel}
         aria-expanded={isOpen}
-        data-tooltip="AI エージェントを起動"
+        data-tooltip={launchLabel}
         data-tooltip-placement="right"
         onClick={() => setIsOpen((current) => !current)}
       >
@@ -52,7 +56,7 @@ export function GlobalAiAgent() {
       <DraggableModal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        title="AI エージェント"
+        title={agentLabel}
         initialX={20}
         initialY={100}
         positionStorageKey={POSITION_STORAGE_KEY}

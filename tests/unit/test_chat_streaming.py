@@ -1114,6 +1114,12 @@ class ChatStreamingTestCase(unittest.TestCase):
 
             release_generation.set()
             self.assertTrue(generation_finished.wait(timeout=1.0))
+            # Persistence completes immediately before the terminal event marks the
+            # background job done, so allow that final callback to cross the thread boundary.
+            for _ in range(100):
+                if not has_active_generation(generation_key):
+                    break
+                threading.Event().wait(0.01)
             self.assertFalse(has_active_generation(generation_key))
 
             history_request = build_request(

@@ -7,6 +7,7 @@ import {
 
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { PROMPT_CATEGORY_OPTIONS } from "../prompt_share/prompt_share_page_constants";
+import { useTranslation } from "../../contexts/locale_context";
 
 // キーボード操作に対応したアクセシブルなカテゴリ選択コンポーネント
 // Accessible category select component with full keyboard navigation support
@@ -21,6 +22,7 @@ export function PromptCategorySelect({
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   // 各オプションボタンへの参照を保持し、フォーカス移動に使う
@@ -43,7 +45,7 @@ export function PromptCategorySelect({
     0,
     categoryOptions.findIndex((option) => option.value === selectedValue)
   );
-  const selectedLabel = categoryOptions[selectedIndex]?.label ?? "未選択";
+  const selectedLabel = categoryOptions[selectedIndex]?.label ?? t("promptShare.notSelected");
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const listboxId = `${selectId}-menu`;
 
@@ -182,7 +184,7 @@ export function PromptCategorySelect({
         aria-haspopup="listbox"
         aria-expanded={isOpen ? "true" : "false"}
         aria-controls={listboxId}
-        aria-label="カテゴリを選択"
+        aria-label={t("promptShare.selectCategory")}
         disabled={disabled}
         onClick={() => {
           setActiveIndex(selectedIndex);
@@ -202,7 +204,7 @@ export function PromptCategorySelect({
         <div
           id={listboxId}
           role="listbox"
-          aria-label="カテゴリを選択"
+          aria-label={t("promptShare.selectCategory")}
           className="prompt-category-select__menu"
         >
           {categoryOptions.map((category, index) => {

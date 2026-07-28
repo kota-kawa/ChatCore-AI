@@ -1,6 +1,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 
 import type { EditPromptFormState } from "../../scripts/user/settings/page_types";
+import { useTranslation } from "../../contexts/locale_context";
 import { PromptCategorySelect } from "./prompt_category_select";
 
 // プロンプト編集用のモーダルダイアログ — 保存中は全フォームを無効化する
@@ -20,6 +21,7 @@ export function EditPromptModal({
   onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { t, locale } = useTranslation();
   return (
     <div
       id="editModal"
@@ -44,17 +46,17 @@ export function EditPromptModal({
                 <i className="bi bi-pencil-square"></i>
               </span>
               <div>
-                <p className="edit-prompt-modal__eyebrow">投稿したプロンプト</p>
+                <p className="edit-prompt-modal__eyebrow">{t("settings.prompts")}</p>
                 <h2 id="editPromptModalTitle">
-                  プロンプトを編集
+                  {locale === "en" ? "Edit prompt" : "プロンプトを編集"}
                 </h2>
-                <p className="edit-prompt-modal__lead">公開中の内容を更新します。変更は保存後すぐに反映されます。</p>
+                <p className="edit-prompt-modal__lead">{t("promptShare.editLead")}</p>
               </div>
             </div>
             <button
               type="button"
               className="edit-prompt-modal__close"
-              aria-label="閉じる"
+              aria-label={t("common.close")}
               onClick={onClose}
               disabled={saving}
             >
@@ -70,14 +72,14 @@ export function EditPromptModal({
               <section className="edit-prompt-modal__section" aria-labelledby="editPromptBasicsTitle">
                 <div className="edit-prompt-modal__section-heading">
                   <div>
-                    <p className="edit-prompt-modal__section-kicker">基本情報</p>
-                    <h3 id="editPromptBasicsTitle">見つけやすい情報を整える</h3>
+                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.basicInfo")}</p>
+                    <h3 id="editPromptBasicsTitle">{t("promptShare.improveDiscovery")}</h3>
                   </div>
                 </div>
                 <div className="edit-prompt-modal__grid">
                   <div className="edit-prompt-modal__field">
-                    <label htmlFor="editTitle">タイトル <span aria-hidden="true">*</span></label>
-                    <p className="edit-prompt-modal__field-help">一覧で表示される名前です。</p>
+                    <label htmlFor="editTitle">{t("promptShare.titleLabel")} <span aria-hidden="true">*</span></label>
+                    <p className="edit-prompt-modal__field-help">{t("promptShare.titleHelp")}</p>
                     <input
                       type="text"
                       className="edit-prompt-modal__input"
@@ -91,8 +93,8 @@ export function EditPromptModal({
                   </div>
 
                   <div className="edit-prompt-modal__field">
-                    <label htmlFor="editCategory">カテゴリ <span aria-hidden="true">*</span></label>
-                    <p className="edit-prompt-modal__field-help">探している人に届きやすくなります。</p>
+                    <label htmlFor="editCategory">{t("promptShare.category")} <span aria-hidden="true">*</span></label>
+                    <p className="edit-prompt-modal__field-help">{t("promptShare.categoryHelp")}</p>
                     <PromptCategorySelect
                       selectId="editCategory"
                       value={formState.category}
@@ -106,13 +108,13 @@ export function EditPromptModal({
               <section className="edit-prompt-modal__section" aria-labelledby="editPromptContentTitle">
                 <div className="edit-prompt-modal__section-heading">
                   <div>
-                    <p className="edit-prompt-modal__section-kicker">プロンプト本文</p>
-                    <h3 id="editPromptContentTitle">AI に伝えたい内容</h3>
+                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.body")}</p>
+                    <h3 id="editPromptContentTitle">{locale === "en" ? "Instructions for AI" : "AI に伝えたい内容"}</h3>
                   </div>
-                  <span className="edit-prompt-modal__required">必須</span>
+                  <span className="edit-prompt-modal__required">{t("settings.required")}</span>
                 </div>
                 <div className="edit-prompt-modal__field">
-                  <label htmlFor="editContent" className="sr-only">内容</label>
+                  <label htmlFor="editContent" className="sr-only">{t("promptShare.contentLabel")}</label>
                   <textarea
                     className="edit-prompt-modal__input edit-prompt-modal__textarea edit-prompt-modal__textarea--content"
                     id="editContent"
@@ -129,14 +131,14 @@ export function EditPromptModal({
               <section className="edit-prompt-modal__section edit-prompt-modal__section--examples" aria-labelledby="editPromptExamplesTitle">
                 <div className="edit-prompt-modal__section-heading">
                   <div>
-                    <p className="edit-prompt-modal__section-kicker">入出力例</p>
-                    <h3 id="editPromptExamplesTitle">使い方を補足する</h3>
+                    <p className="edit-prompt-modal__section-kicker">{t("promptShare.examples")}</p>
+                    <h3 id="editPromptExamplesTitle">{t("promptShare.examplesHelp")}</h3>
                   </div>
-                  <span className="edit-prompt-modal__optional">任意</span>
+                  <span className="edit-prompt-modal__optional">{t("common.optional")}</span>
                 </div>
                 <div className="edit-prompt-modal__grid">
                   <div className="edit-prompt-modal__field">
-                    <label htmlFor="editInputExamples">入力例</label>
+                    <label htmlFor="editInputExamples">{t("promptShare.inputExample")}</label>
                     <textarea
                       className="edit-prompt-modal__input edit-prompt-modal__textarea"
                       id="editInputExamples"
@@ -149,7 +151,7 @@ export function EditPromptModal({
                   </div>
 
                   <div className="edit-prompt-modal__field">
-                    <label htmlFor="editOutputExamples">出力例</label>
+                    <label htmlFor="editOutputExamples">{t("promptShare.outputExample")}</label>
                     <textarea
                       className="edit-prompt-modal__input edit-prompt-modal__textarea"
                       id="editOutputExamples"
@@ -171,7 +173,7 @@ export function EditPromptModal({
                 onClick={onClose}
                 disabled={saving}
               >
-                閉じる
+                {t("common.close")}
               </button>
               <button
                 type="submit"
@@ -179,7 +181,7 @@ export function EditPromptModal({
                 disabled={saving}
               >
                 <i className="bi bi-save" aria-hidden="true"></i>
-                {saving ? "保存中..." : "変更を保存"}
+                {saving ? t("common.saving") : t("settings.saveChanges")}
               </button>
             </footer>
           </form>

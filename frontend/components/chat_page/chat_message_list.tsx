@@ -27,6 +27,7 @@ import { RegenerateActionButton } from "./regenerate_action_button";
 import { TaskPromptDisclosure } from "./task_prompt_disclosure";
 import { ThinkingConstellation } from "./thinking_constellation";
 import { UserMessageHtml } from "./user_message_html";
+import { useTranslation } from "../../contexts/locale_context";
 
 // SSR 環境では useLayoutEffect が警告を出すため、ブラウザ上でのみ useLayoutEffect を使う。
 // Use useLayoutEffect on the browser to avoid React SSR warnings.
@@ -44,6 +45,7 @@ function UserMessageEditForm({
   onCancel: () => void;
 }) {
   const [text, setText] = useState(initialText);
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // マウント直後にフォーカスを当て、カーソルを末尾へ移動し、テキスト量に合わせて高さを調整する。
@@ -105,7 +107,7 @@ function UserMessageEditForm({
       <div className="user-message-edit-actions">
         <button type="button" className="user-message-edit-cancel" onClick={onCancel}>
           <i className="bi bi-x-lg" aria-hidden="true"></i>
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -116,7 +118,7 @@ function UserMessageEditForm({
           }}
         >
           <i className="bi bi-arrow-clockwise" aria-hidden="true"></i>
-          再生成
+          {t("chat.regenerate")}
         </button>
       </div>
     </div>
@@ -176,6 +178,7 @@ function ChatMessageRow({
   style,
   taskLookup,
 }: ChatMessageRowComponentProps) {
+  const { t } = useTranslation();
   const row = rows[index];
   // 先頭・末尾・ロード行にそれぞれ専用クラスを付与してスタイリングを切り替える。
   // Apply positional and kind-specific CSS modifier classes for styling.
@@ -205,7 +208,7 @@ function ChatMessageRow({
             void loadOlderChatHistory();
           }}
         >
-          {isLoadingOlder ? <InlineLoading label="読み込み中" /> : "過去のメッセージを読み込む"}
+          {isLoadingOlder ? <InlineLoading label={t("chat.loadingOlder")} /> : t("chat.loadOlder")}
         </button>
       </div>
     );
@@ -215,7 +218,7 @@ function ChatMessageRow({
   // AI が応答を生成中であることを視覚的にアニメーションで示す思考中インジケーター。
   // Thinking indicator shown while the AI is preparing its response, with accessibility live region.
   if (message.sender === "thinking") {
-    const statusText = message.text.trim() || "AIが応答を準備しています";
+    const statusText = message.text.trim() || t("chat.preparing");
     const generationPhase = message.generationPhase ?? "preparing";
     return (
       <div {...ariaAttributes} className={rowClassName} style={style}>
@@ -403,6 +406,7 @@ function ChatMessageListComponent({
   onSwitchBranch,
   tasks,
 }: ChatMessageListProps) {
+  const { t } = useTranslation();
   // 同時に編集できるメッセージは 1 件のみ。null は非編集状態を表す。
   // Only one message can be in edit mode at a time; null means no active edit.
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -468,12 +472,12 @@ function ChatMessageListComponent({
                   ]
                     .filter(Boolean)
                     .join("\n")
-                : setupInfo?.trim() || "チャットを準備しています...",
+                : setupInfo?.trim() || t("chat.preparingRoom"),
             },
             {
               id: "launch-preview-thinking",
               sender: "thinking" as const,
-              text: "AIが応答を準備しています",
+              text: t("chat.preparing"),
             },
           ]
         : messages;
@@ -482,7 +486,7 @@ function ChatMessageListComponent({
       nextRows.push({ kind: "message", message });
     });
     return nextRows;
-  }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskName, messages, setupInfo]);
+  }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskName, messages, setupInfo, t]);
 
   // rowProps をメモ化することで、rows や状態が変わらない限り各行の再レンダリングを防ぐ。
   // Memoize rowProps to prevent unnecessary re-renders of individual rows.
@@ -670,7 +674,7 @@ function ChatMessageListComponent({
       aria-busy={isChatLaunching || isGenerating ? "true" : undefined}
       aria-live="polite"
       aria-relevant="additions text"
-      aria-label="チャットメッセージ"
+      aria-label={t("chat.messagesLabel")}
       className={`chat-messages chat-messages--virtual scroll-pb-24${
         isInitialContentRevealed ? "" : " chat-messages--anchoring"
       }`}

@@ -17,17 +17,18 @@ export function AuthCodeStep({
   onBack,
   onVerifyCode
 }: AuthCodeStepProps) {
+  const { t } = useTranslation();
   return (
     <div className="code-panel">
-      <p className="step-caption">メールに届いた認証コードを入力してください。</p>
-      <label htmlFor="authCode" className="email-label">認証コード</label>
+      <p className="step-caption">{t("auth.codeCaption")}</p>
+      <label htmlFor="authCode" className="email-label">{t("auth.code")}</label>
       <input
         type="text"
         id="authCode"
         name="authCode"
         required
         className="email-input"
-        placeholder="認証コードを入力"
+        placeholder={t("auth.codePlaceholder")}
         value={authCode}
         onChange={(event) => onAuthCodeChange(event.target.value)}
         autoComplete="one-time-code"
@@ -40,13 +41,13 @@ export function AuthCodeStep({
         onClick={onVerifyCode}
         disabled={verifyingCode}
       >
-        {verifyingCode ? "認証コードを確認中..." : "認証して続ける"}
+        {verifyingCode ? t("auth.verifying") : t("auth.verify")}
       </button>
       {/* 認証中のステータス表示 / Status display while verifying */}
       {verifyingCode ? (
         <div className="code-status" role="status" aria-live="polite">
           <span className="code-status-pulse" aria-hidden="true" />
-          <span>ログインの準備をしています。このままお待ちください。</span>
+          <span>{t("auth.preparing")}</span>
         </div>
       ) : null}
       {/* メールアドレス入力画面に戻るボタン / Button to go back to email input */}
@@ -56,8 +57,9 @@ export function AuthCodeStep({
         onClick={onBack}
         disabled={verifyingCode}
       >
-        戻る
+        {t("common.back")}
       </button>
     </div>
   );
 }
+import { useTranslation } from "../../../../contexts/locale_context";

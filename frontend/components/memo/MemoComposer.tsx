@@ -11,6 +11,7 @@ import { parseMemoText } from "../../lib/memo/utils";
 import type { Collection, MemoComposeFormState } from "../../lib/memo/types";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoComposerProps = {
   composeIsExpanded: boolean;
@@ -56,25 +57,27 @@ export function MemoComposer({
   setIsComposePaletteOpen,
   hasComposeDraft,
 }: MemoComposerProps) {
+  const { locale, t } = useTranslation();
+  const english = locale === "en";
   return (
           <section className={`memo-card memo-compose-panel memo-quick-capture${composeIsExpanded ? " is-expanded" : ""}`}>
             {!composeIsExpanded ? (
-              <div className="memo-quick-capture__collapsed" aria-label="新しいメモを作成">
+              <div className="memo-quick-capture__collapsed" aria-label={t("memo.new")}>
                 <button
                   type="button"
                   className="memo-quick-capture__text-button"
                   onClick={openTextComposer}
-                  aria-label="テキストメモを作成"
+                  aria-label={english ? "Create a text memo" : "テキストメモを作成"}
                 >
-                  <span>メモを入力...</span>
+                  <span>{english ? "Write a memo…" : "メモを入力..."}</span>
                 </button>
-                <div className="memo-quick-capture__shortcuts" role="toolbar" aria-label="新しいメモの種類">
+                <div className="memo-quick-capture__shortcuts" role="toolbar" aria-label={english ? "New memo type" : "新しいメモの種類"}>
                   <button
                     type="button"
                     className="memo-quick-capture__shortcut-btn"
                     onClick={openChecklistComposer}
-                    aria-label="チェックリストを作成"
-                    data-tooltip="チェックリスト"
+                    aria-label={english ? "Create a checklist" : "チェックリストを作成"}
+                    data-tooltip={english ? "Checklist" : "チェックリスト"}
                     data-tooltip-placement="top"
                   >
                     <i className="bi bi-check2-square" aria-hidden="true"></i>
@@ -83,8 +86,8 @@ export function MemoComposer({
                     type="button"
                     className="memo-quick-capture__shortcut-btn"
                     onClick={openComposePalette}
-                    aria-label="色を選択"
-                    data-tooltip="色を選択"
+                    aria-label={english ? "Choose a color" : "色を選択"}
+                    data-tooltip={english ? "Choose a color" : "色を選択"}
                     data-tooltip-placement="top"
                   >
                     <i className="bi bi-palette" aria-hidden="true"></i>
@@ -99,7 +102,7 @@ export function MemoComposer({
                 style={formState.background_color ? { "--memo-compose-color": formState.background_color } as React.CSSProperties : undefined}
               >
                 <div className="form-group">
-                  <label htmlFor="title" className="sr-only">タイトル</label>
+                  <label htmlFor="title" className="sr-only">{english ? "Title" : "タイトル"}</label>
                   <input
                     id="title"
                     name="title"
@@ -109,20 +112,20 @@ export function MemoComposer({
                     value={formState.title}
                     onChange={handleFormChange}
                     maxLength={255}
-                    placeholder="タイトル"
+                    placeholder={english ? "Title" : "タイトル"}
                     autoFocus={!hasComposeDraft}
                   />
                 </div>
 
                 <div className="form-group">
                   <div className="memo-response-header memo-quick-capture__response-header">
-                    <label htmlFor="ai_response" className="sr-only">本文</label>
+                    <label htmlFor="ai_response" className="sr-only">{english ? "Content" : "本文"}</label>
                     <div className="memo-response-tabs">
                       <button type="button" className={`memo-response-tab${!previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(false)}>
-                        <i className="bi bi-pencil" aria-hidden="true"></i>編集
+                        <i className="bi bi-pencil" aria-hidden="true"></i>{t("common.edit")}
                       </button>
                       <button type="button" className={`memo-response-tab${previewMode ? " is-active" : ""}`} onClick={() => setPreviewMode(true)} disabled={!formState.ai_response.trim()}>
-                        <i className="bi bi-eye" aria-hidden="true"></i>プレビュー
+                        <i className="bi bi-eye" aria-hidden="true"></i>{english ? "Preview" : "プレビュー"}
                       </button>
                     </div>
                   </div>
@@ -130,7 +133,7 @@ export function MemoComposer({
                     <div className="memo-preview-pane">
                       {formState.ai_response.trim()
                         ? <MemoMarkdown text={parseMemoText(formState.ai_response)} className="memo-preview-content" />
-                        : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
+                        : <p className="memo-preview-empty">{english ? "There is no text to preview." : "プレビューするテキストがありません。"}</p>}
                     </div>
                   ) : (
                     <textarea
@@ -141,7 +144,7 @@ export function MemoComposer({
                       className="memo-control memo-control--response"
                       value={formState.ai_response}
                       onChange={handleFormChange}
-                      placeholder="メモを入力..."
+                      placeholder={english ? "Write a memo…" : "メモを入力..."}
                       rows={1}
                       required
                     />
@@ -156,7 +159,7 @@ export function MemoComposer({
                       value={String(formState.collection_id ?? "")}
                       onChange={(v) => setFormState((prev) => ({ ...prev, collection_id: v === "" ? null : Number(v) }))}
                       options={[
-                        { value: "", label: "コレクションなし" },
+                        { value: "", label: english ? "No collection" : "コレクションなし" },
                         ...collections.map((c) => ({ value: String(c.id), label: c.name })),
                       ]}
                     />
@@ -166,27 +169,27 @@ export function MemoComposer({
                     className={`memo-ai-suggest-btn${aiSuggesting ? " is-loading" : ""}`}
                     onClick={() => { void handleAiSuggest(); }}
                     disabled={aiSuggesting || !formState.ai_response.trim()}
-                    data-tooltip="AIがタイトルを提案"
+                    data-tooltip={english ? "Suggest a title with AI" : "AIがタイトルを提案"}
                     data-tooltip-placement="top"
                   >
                     {aiSuggesting
-                      ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>提案中...</>
-                      : <><i className="bi bi-stars" aria-hidden="true"></i>AIタイトル</>}
+                      ? <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{english ? "Suggesting…" : "提案中..."}</>
+                      : <><i className="bi bi-stars" aria-hidden="true"></i>{english ? "AI title" : "AIタイトル"}</>}
                   </button>
                   <div className="memo-compose-palette">
                     <button
                       type="button"
                       className={`memo-compose-palette__trigger${isComposePaletteOpen ? " is-active" : ""}`}
                       onClick={openComposePalette}
-                      aria-label="色を選択"
+                      aria-label={english ? "Choose a color" : "色を選択"}
                       aria-expanded={isComposePaletteOpen}
-                      data-tooltip="色を選択"
+                      data-tooltip={english ? "Choose a color" : "色を選択"}
                       data-tooltip-placement="top"
                     >
                       <i className="bi bi-palette" aria-hidden="true"></i>
                     </button>
                     {isComposePaletteOpen && (
-                      <div className="memo-compose-palette__menu" role="listbox" aria-label="メモの背景色">
+                      <div className="memo-compose-palette__menu" role="listbox" aria-label={english ? "Memo background color" : "メモの背景色"}>
                         {MEMO_COLOR_OPTIONS.map((option) => (
                           <button
                             key={option.label}
@@ -201,7 +204,7 @@ export function MemoComposer({
                             aria-selected={(formState.background_color || "") === option.value}
                           >
                             <span className={`memo-compose-palette__swatch${option.value ? "" : " memo-compose-palette__swatch--empty"}`}></span>
-                            <span>{option.label}</span>
+                            <span>{t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}</span>
                           </button>
                         ))}
                       </div>
@@ -219,11 +222,11 @@ export function MemoComposer({
                       }}
                       disabled={submitting}
                     >
-                      閉じる
+                      {t("common.close")}
                     </button>
                     <button type="submit" className="primary-button" data-agent-id="memo.save" disabled={submitting}>
                       <i className="bi bi-check2" aria-hidden="true"></i>
-                      完了
+                      {english ? "Done" : "完了"}
                     </button>
                   </div>
                 </div>

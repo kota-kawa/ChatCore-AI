@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: d5b97910b7fd9f545d35834a081b197397f99798746ab8a583a50f3085760e34
+// Schema fingerprint: cd70da7f6bfd09fee6e9fe39e5f66522efdcc443f686e6b52b526ba6b0eea705
 
 import { z } from "zod";
 
@@ -10,6 +10,9 @@ export type EmailRequest = z.infer<typeof EmailRequestSchema>;
 
 export const AuthCodeRequestSchema = z.object({ "authCode": z.union([z.string(), z.null()]).default(null) });
 export type AuthCodeRequest = z.infer<typeof AuthCodeRequestSchema>;
+
+export const LocalePreferenceUpdateRequestSchema = z.object({ "locale": z.enum(["ja","en"]) }).strict();
+export type LocalePreferenceUpdateRequest = z.infer<typeof LocalePreferenceUpdateRequestSchema>;
 
 export const NewChatRoomRequestSchema = z.object({ "id": z.string(), "title": z.string().default("新規チャット"), "mode": z.enum(["normal","temporary"]).default("normal"), "project_id": z.union([z.number().int(), z.null()]).default(null) });
 export type NewChatRoomRequest = z.infer<typeof NewChatRoomRequestSchema>;
@@ -101,16 +104,19 @@ export type ContextFactCandidateRejectRequest = z.infer<typeof ContextFactCandid
 export const ContextExtractionSettingsUpdateRequestSchema = z.object({ "enabled": z.boolean() });
 export type ContextExtractionSettingsUpdateRequest = z.infer<typeof ContextExtractionSettingsUpdateRequestSchema>;
 
-export const ApiErrorPayloadSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null) }).catchall(z.any());
+export const ApiErrorPayloadSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null) }).catchall(z.any());
 export type ApiErrorPayload = z.infer<typeof ApiErrorPayloadSchema>;
 
 export const ApiDetailObjectSchema = z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ApiDetailObject = z.infer<typeof ApiDetailObjectSchema>;
 
-export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export const LocalePreferenceResponseSchema = z.object({ "locale": z.enum(["ja","en"]) }).catchall(z.any());
+export type LocalePreferenceResponse = z.infer<typeof LocalePreferenceResponseSchema>;
+
+export const ChatJsonResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "response": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ChatJsonResponse = z.infer<typeof ChatJsonResponseSchema>;
 
-export const ChatGenerationStatusResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "is_generating": z.union([z.boolean(), z.null()]).default(null), "has_replayable_job": z.union([z.boolean(), z.null()]).default(null) }).catchall(z.any());
+export const ChatGenerationStatusResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "is_generating": z.union([z.boolean(), z.null()]).default(null), "has_replayable_job": z.union([z.boolean(), z.null()]).default(null) }).catchall(z.any());
 export type ChatGenerationStatusResponse = z.infer<typeof ChatGenerationStatusResponseSchema>;
 
 export const ChatHistoryMessageSchema = z.object({ "id": z.union([z.number().int(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null), "timestamp": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
@@ -119,10 +125,10 @@ export type ChatHistoryMessage = z.infer<typeof ChatHistoryMessageSchema>;
 export const ChatHistoryPaginationSchema = z.object({ "has_more": z.union([z.boolean(), z.null()]).default(null), "next_before_id": z.union([z.number().int(), z.null()]).default(null), "limit": z.union([z.number().int(), z.null()]).default(null) }).catchall(z.any());
 export type ChatHistoryPagination = z.infer<typeof ChatHistoryPaginationSchema>;
 
-export const ChatHistoryResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "messages": z.union([z.array(z.object({ "id": z.union([z.number().int(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null), "timestamp": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())), z.null()]).default(null), "pagination": z.union([z.object({ "has_more": z.union([z.boolean(), z.null()]).default(null), "next_before_id": z.union([z.number().int(), z.null()]).default(null), "limit": z.union([z.number().int(), z.null()]).default(null) }).catchall(z.any()), z.null()]).default(null) }).catchall(z.any());
+export const ChatHistoryResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "messages": z.union([z.array(z.object({ "id": z.union([z.number().int(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null), "timestamp": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())), z.null()]).default(null), "pagination": z.union([z.object({ "has_more": z.union([z.boolean(), z.null()]).default(null), "next_before_id": z.union([z.number().int(), z.null()]).default(null), "limit": z.union([z.number().int(), z.null()]).default(null) }).catchall(z.any()), z.null()]).default(null) }).catchall(z.any());
 export type ChatHistoryResponse = z.infer<typeof ChatHistoryResponseSchema>;
 
-export const ShareChatRoomResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "share_token": z.union([z.string(), z.null()]).default(null), "share_url": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
+export const ShareChatRoomResponseSchema = z.object({ "error": z.union([z.string(), z.null()]).default(null), "message": z.union([z.string(), z.null()]).default(null), "detail": z.union([z.string(), z.array(z.union([z.string(), z.object({ "msg": z.union([z.string(), z.null()]).default(null) }).catchall(z.any())])), z.null()]).default(null), "code": z.union([z.string(), z.null()]).default(null), "params": z.union([z.record(z.string(), z.any()), z.null()]).default(null), "share_token": z.union([z.string(), z.null()]).default(null), "share_url": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());
 export type ShareChatRoomResponse = z.infer<typeof ShareChatRoomResponseSchema>;
 
 export const StoredChatHistoryEntrySchema = z.object({ "text": z.union([z.string(), z.null()]).default(null), "sender": z.union([z.string(), z.null()]).default(null) }).catchall(z.any());

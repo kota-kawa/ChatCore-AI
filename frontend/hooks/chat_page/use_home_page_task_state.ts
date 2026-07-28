@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FALLBACK_TASKS } from "../../lib/chat_page/task_utils";
 import type { NormalizedTask, TaskEditFormState } from "../../lib/chat_page/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 const EMPTY_TASK_EDIT_FORM: TaskEditFormState = {
   old_task: "",
@@ -18,6 +19,7 @@ const MOBILE_TASK_COLLAPSE_LIMIT = 4;
 const MOBILE_TASK_COLLAPSE_QUERY = "(max-width: 576px)";
 
 export function useHomePageTaskState() {
+  const { locale } = useTranslation();
   const [tasks, setTasks] = useState<NormalizedTask[]>(FALLBACK_TASKS);
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [isTaskOrderEditing, setIsTaskOrderEditing] = useState(false);
@@ -59,8 +61,8 @@ export function useHomePageTaskState() {
   }, [isTaskOrderEditing, taskCollapseLimit, tasks.length]);
 
   const visibleTaskCountText = useMemo(() => {
-    return tasksExpanded || isTaskOrderEditing ? "閉じる" : "もっと見る";
-  }, [isTaskOrderEditing, tasksExpanded]);
+    return locale === "en" ? (tasksExpanded || isTaskOrderEditing ? "Show less" : "Show more") : (tasksExpanded || isTaskOrderEditing ? "閉じる" : "もっと見る");
+  }, [isTaskOrderEditing, locale, tasksExpanded]);
 
   return {
     tasks,

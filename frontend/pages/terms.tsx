@@ -1,6 +1,7 @@
 import { SeoHead } from "../components/SeoHead";
 import { LegalDocument, type LegalSection, type LegalSummaryItem } from "../components/docs/legal_document";
 import { absoluteUrl } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 const TERMS_TITLE = "利用規約 | ChatCore-AI";
 
@@ -184,6 +185,25 @@ const TERMS_SECTIONS: LegalSection[] = [
   }
 ];
 
+const TERMS_SUMMARY_EN: LegalSummaryItem[] = [
+  { icon: "bi-wallet2", title: "Free core features", text: "Account creation and core features are free. No credit card is required." },
+  { icon: "bi-person-check", title: "Your content remains yours", text: "You retain rights to the chats, memos, and prompts you create." },
+  { icon: "bi-patch-question", title: "Verify AI answers", text: "AI responses may be wrong. Check important information before relying on it." }
+];
+const TERMS_SECTIONS_EN: LegalSection[] = [
+  { id: "article-1", number: "Article 1", heading: "Application", body: <><p>These Terms govern use of ChatCore-AI (the “Service”) provided by Chat Core (the “Operator”). By using the Service, you agree to these Terms.</p><p>Please also review our <a href="/privacy">Privacy Policy</a>.</p></> },
+  { id: "article-2", number: "Article 2", heading: "Accounts", body: <><p>An account is required. You may register with email or a Google account.</p><ul><li>Provide accurate registration information.</li><li>Keep authentication credentials secure.</li><li>Do not transfer or lend your account to another person.</li></ul></> },
+  { id: "article-3", number: "Article 3", heading: "Fees", body: <p>Core features are free. If paid features are introduced, their details and price will be announced in advance.</p> },
+  { id: "article-4", number: "Article 4", heading: "Prohibited conduct", body: <><p>You must not:</p><ul><li>Violate law or public order.</li><li>Infringe intellectual property, privacy, reputation, or other rights.</li><li>Gain unauthorized access, overload, or disrupt the Service.</li><li>Post personal or confidential information in public areas.</li><li>Use the Service to create illegal or harmful content.</li><li>Engage in conduct the Operator reasonably considers inappropriate.</li></ul></> },
+  { id: "article-5", number: "Article 5", heading: "Content rights", body: <><p>You retain rights in chats, memos, prompts, and other content you create. The Operator handles it only as needed to provide, maintain, and improve the Service.</p><p>Content you publish may be viewed and used by others. You decide whether to publish it.</p></> },
+  { id: "article-6", number: "Article 6", heading: "AI-generated content", body: <><p>The Service uses third-party LLM APIs. The Operator does not guarantee that generated content is accurate, complete, or useful.</p><ul><li>Verify important information.</li><li>Seek qualified advice for medical, legal, or financial decisions.</li><li>You are responsible for how you use AI responses.</li></ul></> },
+  { id: "article-7", number: "Article 7", heading: "Changes and availability", body: <p>The Operator may change, suspend, or end all or part of the Service without notice for maintenance, faults, or other unavoidable reasons.</p> },
+  { id: "article-8", number: "Article 8", heading: "Suspension and deletion", body: <><p>The Operator may suspend or delete accounts that violate these Terms.</p><p>You may delete your account from Settings at any time.</p></> },
+  { id: "article-9", number: "Article 9", heading: "Disclaimer", body: <><p>The Service is provided without warranties including safety, reliability, accuracy, completeness, or fitness for a particular purpose.</p><p>Except for intentional misconduct or gross negligence, the Operator is not liable for loss arising from use of the Service.</p></> },
+  { id: "article-10", number: "Article 10", heading: "Changes to these Terms", body: <p>The Operator may update these Terms when needed. Material changes will be announced, and revised Terms take effect when posted here.</p> },
+  { id: "article-11", number: "Article 11", heading: "Governing law and venue", body: <p>Japanese law governs these Terms. Courts with jurisdiction over the Operator’s location have exclusive agreed jurisdiction over disputes.</p> }
+];
+
 // 利用規約ページの構造化データ（WebPage・パンくず）
 // Structured data for the terms page (WebPage, breadcrumbs)
 const termsStructuredData = [
@@ -212,13 +232,25 @@ const termsStructuredData = [
 
 // 利用規約ページ / Terms of service page
 export default function TermsPage() {
+  const { locale, t } = useTranslation();
+  const english = locale === "en";
+  const title = english ? "Terms of Service | ChatCore-AI" : TERMS_TITLE;
+  const description = english ? "Terms governing accounts, acceptable use, content rights, AI-generated content, and availability of ChatCore-AI." : TERMS_DESCRIPTION;
+  const structuredData = termsStructuredData.map((entry) => {
+    if (entry["@type"] === "WebPage") return { ...entry, name: title, description, inLanguage: locale };
+    if (entry["@type"] === "BreadcrumbList" && english) return { ...entry, itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
+      { "@type": "ListItem", position: 2, name: "Terms of Service", item: absoluteUrl("/terms") }
+    ] };
+    return entry;
+  });
   return (
     <>
       <SeoHead
-        title={TERMS_TITLE}
-        description={TERMS_DESCRIPTION}
+        title={title}
+        description={description}
         canonicalPath="/terms"
-        structuredData={termsStructuredData}
+        structuredData={structuredData}
       >
         {/* ドキュメント系ページはLPのトークンを共有するため両方のCSSを読み込む
             Document pages load both stylesheets since they share the LP tokens */}
@@ -233,15 +265,15 @@ export default function TermsPage() {
       </SeoHead>
 
       <LegalDocument
-        kicker="安心して使うために"
+        kicker={english ? "Use Chat Core with confidence" : "安心して使うために"}
         eyebrow="TERMS OF SERVICE"
-        title="利用規約"
-        lead="ChatCore-AIを気持ちよく使っていただくためのルールです。サービスをご利用いただく前に、ご一読ください。"
-        meta={[`制定日：${ESTABLISHED_DATE}`, "運営：Chat Core"]}
-        summaryLabel="要点まとめ"
-        summary={TERMS_SUMMARY}
-        summaryNote="※ この要約は理解を助けるためのものです。正式な内容は以下の本文が優先されます。"
-        sections={TERMS_SECTIONS}
+        title={english ? "Terms of Service" : "利用規約"}
+        lead={english ? "These rules help everyone use ChatCore-AI safely and respectfully. Please read them before using the Service." : "ChatCore-AIを気持ちよく使っていただくためのルールです。サービスをご利用いただく前に、ご一読ください。"}
+        meta={english ? ["Established: July 17, 2026", "Operator: Chat Core"] : [`制定日：${ESTABLISHED_DATE}`, "運営：Chat Core"]}
+        summaryLabel={english ? "Key points" : "要点まとめ"}
+        summary={english ? TERMS_SUMMARY_EN : TERMS_SUMMARY}
+        summaryNote={english ? `This summary is provided for convenience. The full terms below control. ${t("legal.japanesePrevails")}` : "※ この要約は理解を助けるためのものです。正式な内容は以下の本文が優先されます。"}
+        sections={english ? TERMS_SECTIONS_EN : TERMS_SECTIONS}
       />
     </>
   );

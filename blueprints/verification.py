@@ -13,7 +13,7 @@ from services.auth_limits import (
 )
 from services.auth_session import establish_authenticated_session
 from services.csrf import require_csrf
-from services.email_service import send_email
+from services.email_service import resolve_request_email_locale, send_email
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_auth_email_daily_quota,
@@ -69,6 +69,7 @@ def _clear_registration_verification_session(session: dict) -> None:
     session.pop("temp_email", None)
     session.pop("verification_code_issued_at", None)
     session.pop("verification_code_attempts", None)
+    session.pop("verification_locale", None)
 
 
 # 渡されたAuthLimitServiceを使用するか、リクエストから新しく解決するヘルパー関数
@@ -204,14 +205,18 @@ async def api_send_verification_email(
     request.session["verification_code_issued_at"] = int(time.time())
     request.session["verification_code_attempts"] = 0
 
-    # メールの件名と本文を定義
-    # Define the subject and body text of the email.
-    subject = "AIチャットサービス: 認証コード"
-    body_text = f"以下の認証コードを登録画面に入力してください。\n\n認証コード: {code}"
+    locale = resolve_request_email_locale(request)
+    request.session["verification_locale"] = locale
     try:
         # メール送信を実行
         # Attempt to send the email with verification code.
-        await run_blocking(send_email, to_address=email, subject=subject, body_text=body_text)
+        await run_blocking(
+            send_email,
+            to_address=email,
+            template_kind="registration_verification",
+            code=code,
+            locale=locale,
+        )
         # 成功レスポンスを返却
         # Return a success response.
         return jsonify({"status": "success"})

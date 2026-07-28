@@ -11,10 +11,7 @@ import {
 } from "../../lib/memo/context_api";
 import {
   CONTEXT_FACT_IMPORTANCE_OPTIONS,
-  CONTEXT_FACT_SOURCE_LABELS,
-  CONTEXT_FACT_TYPE_LABELS,
   CONTEXT_FACT_TYPE_OPTIONS,
-  getContextFactImportanceLabel,
   toContextFactImportancePreset,
   type ContextFact,
   type ContextFactImportancePreset,
@@ -32,6 +29,8 @@ import {
   ContextPortabilityModal,
   type ContextPortabilityApi,
 } from "./ContextPortabilityModal";
+import { useTranslation } from "../../contexts/locale_context";
+import type { MessageKey } from "../../lib/i18n/catalogs/ja";
 
 type ContextApi = {
   load: typeof defaultLoad;
@@ -74,6 +73,15 @@ export function MyContextPanel({
   candidateApi,
   portabilityApi,
 }: MyContextPanelProps) {
+  const { t } = useTranslation();
+  const factTypeKeys: Record<ContextFactType, MessageKey> = {
+    profile: "memo.factTypeProfile", preference: "memo.factTypePreference", project: "memo.factTypeProject",
+    decision: "memo.factTypeDecision", reference: "memo.factTypeReference",
+  };
+  const localizedTypeOptions = CONTEXT_FACT_TYPE_OPTIONS.map((option) => ({ ...option, label: t(factTypeKeys[option.value as ContextFactType]) }));
+  const importanceOptions = CONTEXT_FACT_IMPORTANCE_OPTIONS.map((option) => ({ ...option, label: option.value === "25" ? t("memo.importanceLow") : option.value === "75" ? t("memo.importanceHigh") : t("memo.importanceStandard") }));
+  const sourceLabel = (source: string) => source === "manual" ? t("memo.sourceManual") : source === "chat" ? t("memo.sourceChat") : source === "import" ? t("memo.sourceImport") : source;
+  const importanceLabel = (value: number) => value <= 33 ? t("memo.importanceLow") : value >= 67 ? t("memo.importanceHigh") : t("memo.importanceStandard");
   const load = api?.load ?? defaultLoad;
   const create = api?.create ?? defaultCreate;
   const update = api?.update ?? defaultUpdate;
@@ -126,8 +134,8 @@ export function MyContextPanel({
   const totalActive = data?.totalActive ?? 0;
 
   const typeOptions = useMemo(
-    () => [{ value: "all", label: "すべての種類" }, ...CONTEXT_FACT_TYPE_OPTIONS],
-    [],
+    () => [{ value: "all", label: t("memo.allTypes") }, ...localizedTypeOptions],
+    [t],
   );
 
   const refreshFactsAfterCandidateApproval = useCallback(async () => {
@@ -179,7 +187,7 @@ export function MyContextPanel({
   const handleSubmit = async () => {
     if (!editor) return;
     if (!editor.title.trim() || !editor.content.trim()) {
-      setErrorText("タイトルと内容を入力してください。");
+      setErrorText(t("memo.titleContentRequired"));
       return;
     }
     setSubmitting(true);
@@ -204,7 +212,7 @@ export function MyContextPanel({
       closeEditor();
       await mutate();
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : "保存に失敗しました。");
+      setErrorText(err instanceof Error ? err.message : t("memo.saveFailed"));
       setSubmitting(false);
     }
   };
@@ -219,7 +227,7 @@ export function MyContextPanel({
       });
       await mutate();
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : "状態の変更に失敗しました。");
+      setErrorText(err instanceof Error ? err.message : t("memo.statusChangeFailed"));
     } finally {
       setBusyFactId(null);
     }
@@ -252,7 +260,7 @@ export function MyContextPanel({
       setNextCursor(page.nextCursor === requestedCursor ? null : page.nextCursor);
     } catch (err) {
       if (activeFilterKeyRef.current === requestedFilterKey) {
-        setErrorText(err instanceof Error ? err.message : "追加のコンテキストを取得できませんでした。");
+        setErrorText(err instanceof Error ? err.message : t("memo.loadMoreContextFailed"));
       }
     } finally {
       if (activeFilterKeyRef.current === requestedFilterKey) setLoadingMore(false);
@@ -265,11 +273,8 @@ export function MyContextPanel({
       <div className="memo-context memo-context--guest">
         <div className="memo-context-empty">
           <i className="bi bi-safe" aria-hidden="true"></i>
-          <h2 className="memo-context-empty__title">マイコンテキスト</h2>
-          <p className="memo-context-empty__text">
-            あなたの好み・経歴・プロジェクト文脈・過去の決定を一元保存し、MCP連携で
-            Claude・ChatGPT・Cursor などどのAIにも記憶を引き継げます。ログインすると利用できます。
-          </p>
+          <h2 className="memo-context-empty__title">{t("memo.myContext")}</h2>
+          <p className="memo-context-empty__text">{t("memo.contextGuestDescription")}</p>
         </div>
       </div>
     );
@@ -279,10 +284,8 @@ export function MyContextPanel({
     <div className="memo-context">
       <header className="memo-context__header">
         <div className="memo-context__heading">
-          <h1 className="memo-context__title">マイコンテキスト</h1>
-          <p className="memo-context__subtitle">
-            保存した事実は、接続したAIサービスにMCP経由で共有できます（有効: {totalActive} 件）。
-          </p>
+          <h1 className="memo-context__title">{t("memo.myContext")}</h1>
+          <p className="memo-context__subtitle">{t("memo.contextDescription", { count: totalActive })}</p>
         </div>
         <div className="memo-context__header-actions">
           <button
@@ -291,11 +294,11 @@ export function MyContextPanel({
             onClick={() => setIsPortabilityOpen(true)}
           >
             <i className="bi bi-arrow-left-right" aria-hidden="true" />
-            <span>持ち運び</span>
+            <span>{t("memo.portability")}</span>
           </button>
           <button type="button" className="memo-context__add-btn" onClick={openCreate}>
             <i className="bi bi-plus-lg" aria-hidden="true"></i>
-            <span>コンテキストを追加</span>
+            <span>{t("memo.addContext")}</span>
           </button>
         </div>
       </header>
@@ -322,20 +325,20 @@ export function MyContextPanel({
           options={typeOptions}
           className="memo-context__filter-select"
         />
-        <div className="memo-context__status-toggle" role="group" aria-label="状態フィルタ">
+        <div className="memo-context__status-toggle" role="group" aria-label={t("memo.statusFilter")}>
           <button
             type="button"
             className={`memo-context__status-btn${statusFilter === "active" ? " is-active" : ""}`}
             onClick={() => setStatusFilter("active")}
           >
-            有効
+            {t("memo.active")}
           </button>
           <button
             type="button"
             className={`memo-context__status-btn${statusFilter === "deprecated" ? " is-active" : ""}`}
             onClick={() => setStatusFilter("deprecated")}
           >
-            無効化済み
+            {t("memo.deprecated")}
           </button>
         </div>
       </div>
@@ -368,16 +371,16 @@ export function MyContextPanel({
             <header className="memo-context-modal__header">
               <div>
                 <h2 id="context-editor-title">
-                  {editor.mode === "create" ? "コンテキストを追加" : "コンテキストを編集"}
+                  {editor.mode === "create" ? t("memo.addContext") : t("memo.editContext")}
                 </h2>
                 <p id="context-editor-description">
-                  AIに引き継ぎたい事実を2000文字以内で保存します。
+                  {t("memo.contextEditorDescription")}
                 </p>
               </div>
               <button
                 type="button"
                 className="memo-context-modal__close"
-                aria-label="閉じる"
+                aria-label={t("common.close")}
                 onClick={closeEditor}
                 disabled={submitting}
               >
@@ -397,19 +400,19 @@ export function MyContextPanel({
                 </div>
               )}
               <div className="memo-context-editor__row">
-                <span className="memo-context-editor__label">種類</span>
+                <span className="memo-context-editor__label">{t("memo.type")}</span>
                 <MemoSelect
                   id="context-fact-type"
-                  ariaLabel="種類"
+                  ariaLabel={t("memo.type")}
                   value={editor.factType}
                   onChange={(v) => setEditor({ ...editor, factType: v as ContextFactType })}
-                  options={CONTEXT_FACT_TYPE_OPTIONS}
+                  options={localizedTypeOptions}
                   className="memo-context-editor__select"
                 />
-                <span className="memo-context-editor__label">重要度</span>
+                <span className="memo-context-editor__label">{t("memo.importance")}</span>
                 <MemoSelect
                   id="context-fact-importance"
-                  ariaLabel="重要度"
+                  ariaLabel={t("memo.importance")}
                   value={String(editor.importance)}
                   onChange={(value) =>
                     setEditor({
@@ -418,12 +421,12 @@ export function MyContextPanel({
                       importanceDirty: true,
                     })
                   }
-                  options={CONTEXT_FACT_IMPORTANCE_OPTIONS}
+                  options={importanceOptions}
                   className="memo-context-editor__importance-select"
                 />
               </div>
               <label className="memo-context-editor__field" htmlFor="context-fact-title">
-                <span className="memo-context-editor__label">タイトル</span>
+                <span className="memo-context-editor__label">{t("memo.titleLabel")}</span>
                 <input
                   ref={titleInputRef}
                   id="context-fact-title"
@@ -431,20 +434,20 @@ export function MyContextPanel({
                   type="text"
                   maxLength={100}
                   required
-                  placeholder="例: エディタの好み"
+                  placeholder={t("memo.contextTitlePlaceholder")}
                   value={editor.title}
                   onChange={(e) => setEditor({ ...editor, title: e.target.value })}
                 />
               </label>
               <label className="memo-context-editor__field" htmlFor="context-fact-content">
-                <span className="memo-context-editor__label">内容</span>
+                <span className="memo-context-editor__label">{t("memo.content")}</span>
                 <textarea
                   id="context-fact-content"
                   className="memo-context-editor__content"
                   maxLength={2000}
                   rows={4}
                   required
-                  placeholder="Markdown可、2000文字まで"
+                  placeholder={t("memo.contextContentPlaceholder")}
                   value={editor.content}
                   onChange={(e) => setEditor({ ...editor, content: e.target.value })}
                 />
@@ -456,14 +459,14 @@ export function MyContextPanel({
                   onClick={closeEditor}
                   disabled={submitting}
                 >
-                  キャンセル
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   className="memo-context-editor__save"
                   disabled={submitting}
                 >
-                  {submitting ? "保存中…" : editor.mode === "create" ? "追加" : "更新"}
+                  {submitting ? t("common.saving") : editor.mode === "create" ? t("memo.add") : t("memo.update")}
                 </button>
               </div>
             </form>
@@ -477,7 +480,7 @@ export function MyContextPanel({
       ) : error ? (
         <div className="memo-context-empty" role="alert">
           <p className="memo-context-empty__text">
-            {error instanceof Error ? error.message : "コンテキストを取得できませんでした。"}
+            {error instanceof Error ? error.message : t("memo.loadContextFailed")}
           </p>
         </div>
       ) : facts.length === 0 ? (
@@ -485,8 +488,8 @@ export function MyContextPanel({
           <i className="bi bi-safe" aria-hidden="true"></i>
           <p className="memo-context-empty__text">
             {statusFilter === "active"
-              ? "まだコンテキストがありません。「コンテキストを追加」から保存してみましょう。"
-              : "無効化済みのコンテキストはありません。"}
+              ? t("memo.noContext")
+              : t("memo.noDeprecatedContext")}
           </p>
         </div>
       ) : (
@@ -501,7 +504,7 @@ export function MyContextPanel({
                     <span
                       className={`memo-context-card__badge memo-context-card__badge--${fact.fact_type}`}
                     >
-                      {CONTEXT_FACT_TYPE_LABELS[fact.fact_type]}
+                      {t(factTypeKeys[fact.fact_type])}
                     </span>
                     <h3 className="memo-context-card__title">{fact.title}</h3>
                   </div>
@@ -510,8 +513,8 @@ export function MyContextPanel({
                     text={fact.content}
                   />
                   <div className="memo-context-card__meta">
-                    <span>出典: {CONTEXT_FACT_SOURCE_LABELS[fact.source_kind]}</span>
-                    <span>重要度: {getContextFactImportanceLabel(fact.importance)}</span>
+                    <span>{t("memo.source", { source: sourceLabel(fact.source_kind) })}</span>
+                    <span>{t("memo.importanceValue", { value: importanceLabel(fact.importance) })}</span>
                   </div>
                   <div className="memo-context-card__actions">
                     <button
@@ -521,7 +524,7 @@ export function MyContextPanel({
                       disabled={busyFactId === fact.id}
                     >
                       <i className="bi bi-pencil" aria-hidden="true"></i>
-                      <span>編集</span>
+                      <span>{t("common.edit")}</span>
                     </button>
                     <button
                       type="button"
@@ -533,7 +536,7 @@ export function MyContextPanel({
                         className={`bi ${fact.status === "active" ? "bi-archive" : "bi-arrow-counterclockwise"}`}
                         aria-hidden="true"
                       ></i>
-                      <span>{fact.status === "active" ? "無効化" : "復元"}</span>
+                      <span>{fact.status === "active" ? t("memo.deactivate") : t("memo.restore")}</span>
                     </button>
                   </div>
                 </article>
@@ -548,7 +551,7 @@ export function MyContextPanel({
                 onClick={() => void handleLoadMore()}
                 disabled={loadingMore}
               >
-                {loadingMore ? "読み込み中…" : "さらに読み込む"}
+                {loadingMore ? t("common.loading") : t("memo.loadMore")}
               </button>
             </div>
           )}

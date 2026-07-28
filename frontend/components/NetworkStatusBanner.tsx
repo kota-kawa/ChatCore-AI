@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useNetworkStatus } from "../hooks/use_network_status";
+import { useTranslation } from "../contexts/locale_context";
 
 type BannerState =
   | { variant: "offline"; message: string }
@@ -18,6 +19,7 @@ type BannerState =
 const RECOVERED_VISIBLE_MS = 2400;
 
 export function NetworkStatusBanner() {
+  const { locale, t } = useTranslation();
   const { online, slow } = useNetworkStatus();
   const [banner, setBanner] = useState<BannerState>(null);
   const wasOfflineRef = useRef(false);
@@ -31,7 +33,7 @@ export function NetworkStatusBanner() {
 
     if (!online) {
       wasOfflineRef.current = true;
-      setBanner({ variant: "offline", message: "オフラインです。接続を確認しています…" });
+      setBanner({ variant: "offline", message: t("network.offline") });
       return;
     }
 
@@ -39,7 +41,7 @@ export function NetworkStatusBanner() {
       // オフラインから復帰した直後だけ、短時間「復帰」を表示する。
       // Show a brief "recovered" message only right after coming back from offline.
       wasOfflineRef.current = false;
-      setBanner({ variant: "recovered", message: "オンラインに復帰しました" });
+      setBanner({ variant: "recovered", message: t("network.online") });
       recoveredTimerRef.current = setTimeout(() => {
         setBanner((current) => (current?.variant === "recovered" ? null : current));
         recoveredTimerRef.current = null;
@@ -48,12 +50,12 @@ export function NetworkStatusBanner() {
     }
 
     if (slow) {
-      setBanner({ variant: "slow", message: "通信が遅くなっています" });
+      setBanner({ variant: "slow", message: locale === "en" ? "Your connection is slow." : "通信が遅くなっています" });
       return;
     }
 
     setBanner(null);
-  }, [online, slow]);
+  }, [locale, online, slow, t]);
 
   useEffect(() => {
     return () => {

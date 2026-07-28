@@ -4,6 +4,7 @@ import { SeoHead } from "../../../components/SeoHead";
 import { formatDateTime } from "../../../lib/datetime";
 import { stripMarkdownForDescription, truncateSeoText } from "../../../lib/seo";
 import { resilientFetch } from "../../../scripts/core/resilient_fetch";
+import { useTranslation } from "../../../contexts/locale_context";
 
 // 共有メモのデータ型
 // Type for shared memo data
@@ -46,14 +47,14 @@ function normalizeProtoHeader(header: string | string[] | undefined) {
 
 // OGP用のmeta descriptionをメモ本文から生成する
 // Build the OGP meta description from the memo content
-function buildMetaDescription(payload: SharedMemoPayload) {
+function buildMetaDescription(payload: SharedMemoPayload, english = false) {
   if (payload.error) {
     return truncateSeoText(payload.error);
   }
   const memo = payload.memo;
   const summarySource = memo?.ai_response || "";
   const normalized = stripMarkdownForDescription(summarySource);
-  return truncateSeoText(normalized || "Chat Coreで共有されたメモの閲覧ページです。");
+  return truncateSeoText(normalized || (english ? "A read-only memo shared from Chat Core." : "Chat Coreで共有されたメモの閲覧ページです。"));
 }
 
 // URLトークンでメモを取得してSSRで返す（トークンが無効な場合は404）
@@ -105,10 +106,12 @@ export const getServerSideProps: GetServerSideProps<SharedMemoPageProps> = async
 // 共有メモ表示ページ（エラー時はメッセージを表示、正常時はMarkdownレンダリング）
 // Shared memo display page (shows error message or renders Markdown content)
 export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedMemoPageProps) {
+  const { locale } = useTranslation();
+  const english = locale === "en";
   const memo = payload.memo;
-  const title = memo?.title || "共有メモ";
-  const pageTitle = `${title} | Chat Core 共有`;
-  const description = buildMetaDescription(payload);
+  const title = memo?.title || (english ? "Shared memo" : "共有メモ");
+  const pageTitle = `${title} | ${english ? "Shared on Chat Core" : "Chat Core 共有"}`;
+  const description = buildMetaDescription(payload, english);
   // Schema.orgの構造化データ（メモが存在する場合のみ付与）
   // Schema.org structured data (only included when memo exists)
   const structuredData = memo
@@ -120,7 +123,7 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
         description,
         datePublished: memo.created_at || undefined,
         url: pageUrl,
-        inLanguage: "ja",
+        inLanguage: locale,
         isPartOf: {
           "@type": "WebSite",
           name: "Chat Core"
@@ -152,11 +155,11 @@ export default function SharedMemoPage({ payload, pageUrl, ogImageUrl }: SharedM
           >
             <header className="shared-memo-header">
               <h1>{title}</h1>
-              {memo.created_at ? <p>保存日時: {formatDateTime(memo.created_at) || memo.created_at}</p> : null}
+              {memo.created_at ? <p>{english ? "Saved" : "保存日時"}: {formatDateTime(memo.created_at) || memo.created_at}</p> : null}
             </header>
 
             <section className="shared-memo-section">
-              <h2>本文</h2>
+              <h2>{english ? "Content" : "本文"}</h2>
               <MarkdownContent text={memo.ai_response || ""} className="md-content" />
             </section>
           </article>

@@ -21,6 +21,7 @@ import {
 import type { ReadingSize } from "../../scripts/prompt_share/storage";
 import type { PromptRecord } from "./prompt_card";
 import { usePromptReadingSize } from "./use_prompt_reading_size";
+import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
 // All props required by the detail modal including prompt data, comment state, and handlers
@@ -68,12 +69,6 @@ function DetailMetaItem({ iconClass, label, value, id }: DetailMetaItemProps) {
   );
 }
 
-const READING_SIZE_OPTIONS: { value: ReadingSize; mark: string; label: string }[] = [
-  { value: "compact", mark: "小", label: "本文を小さめで表示" },
-  { value: "default", mark: "中", label: "本文を標準の大きさで表示" },
-  { value: "large", mark: "大", label: "本文を大きめで表示" }
-];
-
 type ReadingSizeControlProps = {
   value: ReadingSize;
   onChange: (size: ReadingSize) => void;
@@ -82,9 +77,15 @@ type ReadingSizeControlProps = {
 // 本文の文字サイズを3段階で切り替える。選択はlocalStorageに残り次回以降も適用される
 // Switches the body text between three sizes; the choice persists in localStorage
 function ReadingSizeControl({ value, onChange }: ReadingSizeControlProps) {
+  const { t } = useTranslation();
+  const options: { value: ReadingSize; mark: string; label: string }[] = [
+    { value: "compact", mark: t("promptShare.sizeMarkSmall"), label: t("promptShare.sizeSmall") },
+    { value: "default", mark: t("promptShare.sizeMarkDefault"), label: t("promptShare.sizeDefault") },
+    { value: "large", mark: t("promptShare.sizeMarkLarge"), label: t("promptShare.sizeLarge") }
+  ];
   return (
-    <div className="prompt-detail-readsize" role="group" aria-label="文字サイズ">
-      {READING_SIZE_OPTIONS.map((option) => (
+    <div className="prompt-detail-readsize" role="group" aria-label={t("promptShare.readingSize")}>
+      {options.map((option) => (
         <button
           key={option.value}
           type="button"
@@ -127,6 +128,7 @@ export function PromptShareDetailModal({
   onReloadComments,
   onClose
 }: PromptShareDetailModalProps) {
+  const { locale, t } = useTranslation();
   const { readingSize, changeReadingSize } = usePromptReadingSize();
   // promptがnullのときは安全なデフォルト値を使い、2軸表示を崩さない
   // Fall back to default axes when no prompt is loaded to keep axis-dependent rendering stable
@@ -140,12 +142,12 @@ export function PromptShareDetailModal({
   const promptBody = isSkillFormat
     ? detailPrompt?.skill_markdown || ""
     : detailPrompt?.content || "";
-  const promptBodyLabel = isSkillFormat ? "SKILL定義" : "プロンプト本文";
-  const promptBodyHelper = isSkillFormat ? "Markdown" : "そのまま使える本文";
-  const promptBodyEmptyText = detailPrompt ? "内容が登録されていません。" : "プロンプトを読み込み中です。";
-  const formattedDate = formatPromptDate(detailPrompt?.created_at) || "日付未設定";
-  const categoryLabel = getCategoryLabelOrFallback(detailPrompt?.category);
-  const authorLabel = detailPrompt?.author || "投稿者未設定";
+  const promptBodyLabel = isSkillFormat ? t("promptShare.skillDefinition") : t("promptShare.body");
+  const promptBodyHelper = isSkillFormat ? "Markdown" : t("promptShare.readyBody");
+  const promptBodyEmptyText = detailPrompt ? t("promptShare.contentMissing") : t("promptShare.loadingPrompt");
+  const formattedDate = formatPromptDate(detailPrompt?.created_at) || t("promptShare.dateUnavailable");
+  const categoryLabel = getCategoryLabelOrFallback(detailPrompt?.category, undefined, locale);
+  const authorLabel = detailPrompt?.author || t("promptShare.authorMissing");
   const promptBodyLength = Array.from(promptBody).length;
   const hasExamples = !isSkillFormat && Boolean(detailPrompt?.input_examples || detailPrompt?.output_examples);
   const skillResources = isSkillFormat
@@ -154,23 +156,23 @@ export function PromptShareDetailModal({
 
   const copyPromptBody = async () => {
     if (!promptBody.trim()) {
-      showToast("コピーできる内容がありません。", { variant: "error" });
+      showToast(t("promptShare.nothingToCopy"), { variant: "error" });
       return;
     }
     try {
       await copyTextToClipboard(promptBody);
-      showToast("プロンプト本文をコピーしました。", { variant: "success" });
+      showToast(t("promptShare.bodyCopied"), { variant: "success" });
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "コピーに失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
     }
   };
 
   const copyResource = async (path: string, content: string) => {
     try {
       await copyTextToClipboard(content);
-      showToast(`${path} をコピーしました。`, { variant: "success" });
+      showToast(t("promptShare.resourceCopied", { path }), { variant: "success" });
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "コピーに失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : t("promptShare.copyFailed"), { variant: "error" });
     }
   };
 
@@ -200,7 +202,7 @@ export function PromptShareDetailModal({
           type="button"
           className="close-btn"
           id="closePromptDetailModal"
-          aria-label="詳細モーダルを閉じる"
+          aria-label={t("promptShare.closeModal")}
           ref={promptDetailCloseButtonRef}
           onClick={onClose}
         >
@@ -209,44 +211,44 @@ export function PromptShareDetailModal({
         {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
         {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
         <header className="prompt-detail-header">
-          <h2 id="modalPromptTitle">{detailPrompt?.title || "プロンプト詳細"}</h2>
+          <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.detailsTitle")}</h2>
 
-          <dl className="prompt-detail-meta" aria-label="プロンプト概要">
+          <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
             <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
               <dt>
                 <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
-                <span className="sr-only">形式</span>
+                <span className="sr-only">{t("promptShare.format")}</span>
               </dt>
               <dd id="modalPromptFormat">
-                {detailPrompt ? getPromptFormatLabel(detailContentFormat) : ""}
+                {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
               </dd>
             </div>
             <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
               <dt>
                 <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
-                <span className="sr-only">生成</span>
+                <span className="sr-only">{t("promptShare.media")}</span>
               </dt>
               <dd id="modalPromptMediaType">
-                {detailPrompt ? getPromptMediaLabel(detailMediaType) : ""}
+                {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
               </dd>
             </div>
             <DetailMetaItem
               iconClass="bi-hash"
-              label="カテゴリ"
+              label={t("promptShare.category")}
               value={categoryLabel}
               id="modalPromptCategory"
             />
             <DetailMetaItem
               iconClass="bi-person"
-              label="投稿者"
+              label={t("promptShare.author")}
               value={authorLabel}
               id="modalPromptAuthor"
             />
-            <DetailMetaItem iconClass="bi-calendar3" label="投稿日" value={formattedDate} />
+            <DetailMetaItem iconClass="bi-calendar3" label={t("promptShare.publishedAt")} value={formattedDate} />
             {detailPrompt?.ai_model ? (
               <DetailMetaItem
                 iconClass="bi-cpu"
-                label="使用AIモデル"
+                label={t("promptShare.aiModel")}
                 value={detailPrompt.ai_model}
                 id="modalAiModel"
               />
@@ -255,7 +257,7 @@ export function PromptShareDetailModal({
 
           {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
           {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
-          <div className="prompt-detail-tabs" role="tablist" aria-label="プロンプト詳細表示">
+          <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
             <button
               type="button"
               role="tab"
@@ -267,7 +269,7 @@ export function PromptShareDetailModal({
                 onActiveViewChange("detail");
               }}
             >
-              詳細
+              {t("promptShare.details")}
             </button>
             <button
               type="button"
@@ -280,7 +282,7 @@ export function PromptShareDetailModal({
                 onActiveViewChange("comments");
               }}
             >
-              コメント
+              {t("promptShare.comments")}
               <span>{Number(detailPrompt?.comment_count || 0)}</span>
             </button>
           </div>
@@ -302,18 +304,18 @@ export function PromptShareDetailModal({
               {/* 作例メディアはURLが存在するプロンプトにのみ表示する（現状は画像プレビュー対応） */}
               {/* Reference media is only rendered when the prompt has a URL (currently image preview) */}
               {detailPrompt?.reference_image_url ? (
-                <aside id="modalReferenceImageGroup" className="prompt-detail-media" aria-label="作例メディア">
+                <aside id="modalReferenceImageGroup" className="prompt-detail-media" aria-label={t("promptShare.exampleMedia")}>
                   <div className="prompt-detail-section__header">
                     <div>
-                      <span className="prompt-detail-section__label">作例メディア</span>
-                      <span className="prompt-detail-section__meta">参考画像</span>
+                      <span className="prompt-detail-section__label">{t("promptShare.exampleMedia")}</span>
+                      <span className="prompt-detail-section__meta">{t("promptShare.referenceImage")}</span>
                     </div>
                   </div>
                   <div className="modal-reference-image">
                     <img
                       id="modalReferenceImage"
                       src={detailPrompt.reference_image_url}
-                      alt={`${detailPrompt.title} の作例画像`}
+                      alt={t("promptShare.exampleImageAlt", { title: detailPrompt.title })}
                     />
                   </div>
                 </aside>
@@ -329,7 +331,7 @@ export function PromptShareDetailModal({
                   <div>
                     <span className="prompt-detail-section__label">{promptBodyLabel}</span>
                     <span className="prompt-detail-section__meta">
-                      {promptBodyLength > 0 ? `${promptBodyLength.toLocaleString("ja-JP")}文字` : promptBodyHelper}
+                      {promptBodyLength > 0 ? t("promptShare.characters", { count: promptBodyLength.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") }) : promptBodyHelper}
                     </span>
                   </div>
                   <div className="prompt-detail-section__actions">
@@ -343,7 +345,7 @@ export function PromptShareDetailModal({
                       disabled={!promptBody.trim()}
                     >
                       <i className="bi bi-clipboard" aria-hidden="true"></i>
-                      <span>コピー</span>
+                      <span>{t("common.copy")}</span>
                     </button>
                   </div>
                 </div>
@@ -363,8 +365,8 @@ export function PromptShareDetailModal({
                   <article id="modalInputExamplesGroup" className="prompt-detail-section">
                     <div className="prompt-detail-section__header">
                       <div>
-                        <span className="prompt-detail-section__label">入力例</span>
-                        <span className="prompt-detail-section__meta">使い始めの文脈</span>
+                        <span className="prompt-detail-section__label">{t("promptShare.inputExample")}</span>
+                        <span className="prompt-detail-section__meta">{t("promptShare.inputContext")}</span>
                       </div>
                     </div>
                     <p id="modalInputExamples" className="prompt-detail-text-block">
@@ -377,8 +379,8 @@ export function PromptShareDetailModal({
                   <article id="modalOutputExamplesGroup" className="prompt-detail-section">
                     <div className="prompt-detail-section__header">
                       <div>
-                        <span className="prompt-detail-section__label">出力例</span>
-                        <span className="prompt-detail-section__meta">期待する返答</span>
+                        <span className="prompt-detail-section__label">{t("promptShare.outputExample")}</span>
+                        <span className="prompt-detail-section__meta">{t("promptShare.expectedResponse")}</span>
                       </div>
                     </div>
                     <p id="modalOutputExamples" className="prompt-detail-text-block">
@@ -394,10 +396,10 @@ export function PromptShareDetailModal({
                 <div className="prompt-detail-resources__heading">
                   <div>
                     <span className="prompt-detail-section__label" id="modalSkillResourcesTitle">
-                      追加リソース
+                      {t("promptShare.additionalResources")}
                     </span>
                     <span className="prompt-detail-section__meta">
-                      {skillResources.length}ファイル
+                      {t("promptShare.filesCount", { count: skillResources.length })}
                     </span>
                   </div>
                 </div>
@@ -411,7 +413,7 @@ export function PromptShareDetailModal({
                         <div>
                           <span className="prompt-detail-section__label">{resource.path}</span>
                           <span className="prompt-detail-section__meta">
-                            {getSkillResourceRoleLabel(resource.role)}
+                            {getSkillResourceRoleLabel(resource.role, locale)}
                             {resource.language ? ` · ${resource.language}` : ""}
                           </span>
                         </div>
@@ -423,7 +425,7 @@ export function PromptShareDetailModal({
                           }}
                         >
                           <i className="bi bi-clipboard" aria-hidden="true"></i>
-                          <span>コピー</span>
+                          <span>{t("common.copy")}</span>
                         </button>
                       </div>
                       <pre className="prompt-detail-code">
@@ -451,7 +453,7 @@ export function PromptShareDetailModal({
             {/* タイトルと概要はヘッダーに固定表示されるため、ここでは繰り返さない */}
             {/* The title and byline stay pinned in the header, so they are not repeated here */}
             <div className="prompt-detail-comments__header">
-              <h3>コメント</h3>
+              <h3>{t("promptShare.comments")}</h3>
               {/* 読み込み中はボタンを無効化して重複フェッチを防ぐ */}
               {/* Disable reload while loading to prevent duplicate fetch requests */}
               <button
@@ -460,7 +462,7 @@ export function PromptShareDetailModal({
                 onClick={onReloadComments}
                 disabled={isDetailCommentsLoading}
               >
-                {isDetailCommentsLoading ? "読み込み中..." : "更新"}
+                {isDetailCommentsLoading ? t("promptShare.refreshing") : t("promptShare.refresh")}
               </button>
             </div>
 
@@ -478,23 +480,23 @@ export function PromptShareDetailModal({
                   ref={commentTextareaRef}
                   value={commentDraft}
                   maxLength={1000}
-                  placeholder="使ってみた感想や改善ポイントを書いてください"
+                  placeholder={t("promptShare.commentPlaceholder")}
                   onChange={(event) => {
                     onCommentDraftChange(event.target.value);
                   }}
                 />
                 <button type="submit" disabled={isCommentSubmitting}>
-                  {isCommentSubmitting ? "投稿中..." : "コメントを投稿"}
+                  {isCommentSubmitting ? t("promptShare.postingComment") : t("promptShare.postComment")}
                 </button>
               </form>
             ) : (
-              <p className="prompt-detail-comments__login-note">コメントするにはログインが必要です。</p>
+              <p className="prompt-detail-comments__login-note">{t("promptShare.loginToComment")}</p>
             )}
 
             {isDetailCommentsLoading ? (
-              <p className="prompt-detail-comments__status">コメントを読み込み中...</p>
+              <p className="prompt-detail-comments__status">{t("promptShare.loadingComments")}</p>
             ) : detailComments.length === 0 ? (
-              <p className="prompt-detail-comments__status">まだコメントはありません。</p>
+              <p className="prompt-detail-comments__status">{t("promptShare.noComments")}</p>
             ) : (
               <ul className="prompt-detail-comments__list">
                 {detailComments.map((comment) => {
@@ -505,7 +507,7 @@ export function PromptShareDetailModal({
                   return (
                     <li key={commentId} className="prompt-detail-comments__item">
                       <div className="prompt-detail-comments__meta">
-                        <strong>{comment.author_name || "ユーザー"}</strong>
+                        <strong>{comment.author_name || t("promptShare.user")}</strong>
                         <span>{formatPromptDate(comment.created_at) || ""}</span>
                       </div>
                       <p>{comment.content || ""}</p>
@@ -520,7 +522,7 @@ export function PromptShareDetailModal({
                               onDeleteComment(comment.id);
                             }}
                           >
-                            削除
+                            {t("common.delete")}
                           </button>
                         ) : (
                           <button
@@ -530,7 +532,7 @@ export function PromptShareDetailModal({
                               onReportComment(comment.id);
                             }}
                           >
-                            報告
+                            {t("promptShare.report")}
                           </button>
                         )}
                       </div>

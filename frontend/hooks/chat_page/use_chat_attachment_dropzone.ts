@@ -6,6 +6,7 @@ import {
   readSelectedChatAttachments,
 } from "../../lib/chat_page/file_attachments";
 import type { AttachedFile } from "../../lib/chat_page/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 type FocusTargetRef = {
   current: { focus: () => void } | null;
@@ -30,6 +31,7 @@ export function useChatAttachmentDropzone({
   focusTargetRef,
   notifyAttachmentError,
 }: ChatAttachmentDropzoneOptions) {
+  const { locale, t } = useTranslation();
   const attachmentDragDepthRef = useRef(0);
   const [isAttachmentDropActive, setIsAttachmentDropActive] = useState(false);
   const canAttachMoreFiles = !isAttachmentDisabled && attachedFiles.length < MAX_ATTACHED_FILES;
@@ -44,12 +46,12 @@ export function useChatAttachmentDropzone({
       if (files.length === 0) return;
 
       if (isAttachmentDisabled) {
-        notifyAttachmentError("チャットの準備中はファイルを添付できません。");
+        notifyAttachmentError(t("chat.attachmentUnavailable"));
         return;
       }
 
       if (attachedFiles.length >= MAX_ATTACHED_FILES) {
-        notifyAttachmentError(`添付できるファイルは${MAX_ATTACHED_FILES}件までです。`);
+        notifyAttachmentError(locale === "en" ? `You can attach up to ${MAX_ATTACHED_FILES} files.` : `添付できるファイルは${MAX_ATTACHED_FILES}件までです。`);
         return;
       }
 
@@ -59,7 +61,7 @@ export function useChatAttachmentDropzone({
         focusTargetRef.current?.focus();
       });
     },
-    [attachedFiles, focusTargetRef, isAttachmentDisabled, notifyAttachmentError, setAttachedFiles],
+    [attachedFiles, focusTargetRef, isAttachmentDisabled, locale, notifyAttachmentError, setAttachedFiles, t],
   );
 
   const handleAttachmentDragEnter = useCallback(

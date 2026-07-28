@@ -23,6 +23,7 @@ import {
 } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
+import { useTranslation } from "../../contexts/locale_context";
 
 const CHAT_LAUNCH_MIN_TRANSITION_MS = 420;
 function waitForDuration(ms: number) {
@@ -160,6 +161,10 @@ export function useHomePageRoomActions({
   pendingProjectIdRef,
   clearPendingProject,
 }: UseHomePageRoomActionsParams) {
+  const { locale } = useTranslation();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
   const accessChatInProgressRef = useRef(false);
 
   const buildChatRoomsPageUrl = useCallback(() => {
@@ -178,7 +183,7 @@ export function useHomePageRoomActions({
     persistCurrentRoomId(null);
     setMessages([]);
     setShareUrl("");
-    setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
+    setShareStatus({ message: localize("共有するチャットルームを選択してください。", "Select a chat to share."), error: false });
     closeShareModal();
   }, [closeShareModal, persistCurrentRoomId, resetChatMessageList, setMessages, setShareStatus, setShareUrl]);
 
@@ -258,7 +263,7 @@ export function useHomePageRoomActions({
 
       const createdRoom: ChatRoom = {
         id: roomId,
-        title: title.trim() || "新規チャット",
+        title: title.trim() || localize("新規チャット", "New chat"),
         createdAt: new Date().toISOString(),
         mode,
       };
@@ -319,7 +324,7 @@ export function useHomePageRoomActions({
       setPageViewState("chat");
       closeOverlaySidebar();
       setOpenRoomActionsFor(null);
-      setShareStatus({ message: "共有リンクを準備しています...", error: false });
+      setShareStatus({ message: localize("共有リンクを準備しています...", "Preparing share link…"), error: false });
       setShareUrl("");
       loadLocalChatHistory(roomId);
       void loadChatHistory(roomId, true);
@@ -446,7 +451,7 @@ export function useHomePageRoomActions({
     setCurrentRoomMode("normal");
     setMessages([]);
     setShareUrl("");
-    setShareStatus({ message: "共有するチャットルームを選択してください。", error: false });
+    setShareStatus({ message: localize("共有するチャットルームを選択してください。", "Select a chat to share."), error: false });
     showSetupForm();
   }, [cancelRoomSelection, persistCurrentRoomId, showSetupForm]);
 
@@ -462,7 +467,7 @@ export function useHomePageRoomActions({
     setChatInput("");
     setOpenRoomActionsFor(null);
     setShareUrl("");
-    setShareStatus({ message: "共有リンクを準備しています...", error: false });
+    setShareStatus({ message: localize("共有リンクを準備しています...", "Preparing share link…"), error: false });
     setHistoryHasMore(false);
     setHistoryNextBeforeId(null);
     setIsLoadingOlder(false);
@@ -485,7 +490,7 @@ export function useHomePageRoomActions({
       // Project association applies to normal rooms only (temporary chats are not persisted).
       const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
       const currentSetupInfo = setupInfo.trim();
-      const roomTitle = (currentSetupInfo || "新規チャット").slice(0, 255);
+      const roomTitle = (currentSetupInfo || localize("新規チャット", "New chat")).slice(0, 255);
       const firstMessage = currentSetupInfo
         ? `【タスク】${task.name}\n【状況・作業環境】${currentSetupInfo}`
         : `【タスク】${task.name}`;
@@ -564,7 +569,7 @@ export function useHomePageRoomActions({
     // プロジェクト紐づけは通常ルームのみ（一時チャットは永続化しないため）。
     // Project association applies to normal rooms only (temporary chats are not persisted).
     const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
-    const roomTitle = firstMessage.slice(0, 255) || "新規チャット";
+    const roomTitle = firstMessage.slice(0, 255) || localize("新規チャット", "New chat");
 
     resetLaunchingRoomState(roomId, roomMode);
 
@@ -709,7 +714,7 @@ export function useHomePageRoomActions({
         const payload = await readJsonBodySafe(response);
 
         if (!response.ok) {
-          throw new Error(extractApiErrorMessage(payload, "削除失敗", response.status));
+          throw new Error(extractApiErrorMessage(payload, localize("削除失敗", "Delete failed"), response.status));
         }
 
         if (roomId === currentRoomIdRef.current) {
@@ -766,7 +771,7 @@ export function useHomePageRoomActions({
       const payload = await readJsonBodySafe(response);
 
       if (!response.ok) {
-        throw new Error(extractApiErrorMessage(payload, "削除失敗", response.status));
+        throw new Error(extractApiErrorMessage(payload, localize("削除失敗", "Delete failed"), response.status));
       }
 
       if (currentRoomIdRef.current && selectedRoomIds.has(currentRoomIdRef.current)) {
@@ -805,7 +810,7 @@ export function useHomePageRoomActions({
 
   const handleRenameRoom = useCallback(
     async (roomId: string, currentTitle: string) => {
-      const nextTitle = window.prompt("新しいチャットルーム名", currentTitle);
+      const nextTitle = window.prompt(localize("新しいチャットルーム名", "New chat name"), currentTitle);
       const normalizedTitle = nextTitle?.trim();
       if (!normalizedTitle) return;
 
@@ -833,7 +838,7 @@ export function useHomePageRoomActions({
         const payload = await readJsonBodySafe(response);
 
         if (!response.ok) {
-          throw new Error(extractApiErrorMessage(payload, "名前変更失敗", response.status));
+          throw new Error(extractApiErrorMessage(payload, localize("名前変更失敗", "Rename failed"), response.status));
         }
 
         void mutateChatRooms();

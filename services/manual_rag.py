@@ -13,6 +13,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 MANUAL_DIR = Path(__file__).parent.parent / "docs" / "manual"
+MANUAL_DIRS = {"ja": MANUAL_DIR, "en": MANUAL_DIR / "en"}
 MAX_CHUNK_CHARS = 600
 TOP_K = 3
 
@@ -27,6 +28,11 @@ BM25_MIN_DISCRIMINATION_RATIO = 4.0
 
 _CACHE_FILE = MANUAL_DIR / ".embeddings.npz"
 _CACHE_HASH_FILE = MANUAL_DIR / ".embeddings_hash.txt"
+
+
+def normalize_manual_locale(locale: str | None) -> str:
+    normalized = str(locale or "ja").lower().replace("_", "-").split("-", 1)[0]
+    return normalized if normalized in MANUAL_DIRS else "ja"
 
 
 # マニュアルデータ内の1つのテキストチャンクを表すデータクラス。
@@ -156,7 +162,10 @@ def _normalize_rows(mat: np.ndarray) -> np.ndarray:
 class ManualRagIndex:
     # マニュアルファイルを読み込み、BM25インデックスと埋め込みベクトルを構築して初期化します。
     # Load manual files and initialize BM25 and embedding vector indexes.
-    def __init__(self, manual_dir: Path = MANUAL_DIR) -> None:
+    def __init__(self, manual_dir: Path = MANUAL_DIR, *, locale: str = "ja") -> None:
+        self.locale = normalize_manual_locale(locale)
+        self._cache_file = manual_dir / ".embeddings.npz"
+        self._cache_hash_file = manual_dir / ".embeddings_hash.txt"
         self._chunks: list[ManualChunk] = []
         self._bm25 = None
         self._chunk_embeddings: np.ndarray | None = None  # shape (n, EMBEDDING_DIMS), L2-normalized
@@ -248,11 +257,11 @@ class ManualRagIndex:
         chunks_hash = _compute_chunks_hash(chunks)
 
         # Try loading from cache
-        if _CACHE_FILE.exists() and _CACHE_HASH_FILE.exists():
+        if self._cache_file.exists() and self._cache_hash_file.exists():
             try:
-                cached_hash = _CACHE_HASH_FILE.read_text().strip()
+                cached_hash = self._cache_hash_file.read_text().strip()
                 if cached_hash == chunks_hash:
-                    data = np.load(_CACHE_FILE)
+                    data = np.load(self._cache_file)
                     logger.info("Loaded embedding cache: %d vectors", len(data["embeddings"]))
                     return _normalize_rows(data["embeddings"].astype(np.float32))
             except Exception:
@@ -262,8 +271,8 @@ class ManualRagIndex:
         try:
             texts = [f"{c.heading}\n{c.content}" for c in chunks]
             embeddings = _fetch_embeddings_from_api(texts)
-            np.savez_compressed(_CACHE_FILE, embeddings=embeddings)
-            _CACHE_HASH_FILE.write_text(chunks_hash)
+            np.savez_compressed(self._cache_file, embeddings=embeddings)
+            self._cache_hash_file.write_text(chunks_hash)
             logger.info("Built and cached %d embeddings", len(embeddings))
             return _normalize_rows(embeddings)
         except Exception:
@@ -327,29 +336,33 @@ class ManualRagIndex:
 # Singleton & public API
 # ---------------------------------------------------------------------------
 
-_index: ManualRagIndex | None = None
+_indexes: dict[str, ManualRagIndex] = {}
 
 
 # マニュアルRAGインデックスのシングルトンインスタンスを取得・初期化します。
 # Retrieve or initialize the singleton instance of ManualRagIndex.
-def get_manual_rag_index() -> ManualRagIndex:
-    global _index
-    if _index is None:
-        _index = ManualRagIndex()
-    return _index
+def get_manual_rag_index(locale: str = "ja") -> ManualRagIndex:
+    normalized_locale = normalize_manual_locale(locale)
+    if normalized_locale not in _indexes:
+        _indexes[normalized_locale] = ManualRagIndex(
+            MANUAL_DIRS[normalized_locale],
+            locale=normalized_locale,
+        )
+    return _indexes[normalized_locale]
 
 
 # クエリに類似するマニュアル情報を検索し、プロンプト挿入用のフォーマットテキストとして返します。
 # Search the manual index and return formatted text of matching sections for LLM context.
-def search_manual(query: str, top_k: int = TOP_K) -> str:
+def search_manual(query: str, top_k: int = TOP_K, *, locale: str = "ja") -> str:
     # クエリに関連するマニュアルチャンクを検索し、フォーマットされた文字列として返します。
     # Search for manual chunks relevant to the query and return them as a formatted string.
     """クエリに関連するマニュアルチャンクを検索して文字列で返す。"""
-    chunks = get_manual_rag_index().search(query, top_k=top_k)
+    normalized_locale = normalize_manual_locale(locale)
+    chunks = get_manual_rag_index(normalized_locale).search(query, top_k=top_k)
     if not chunks:
         return ""
-    parts = ["【操作マニュアル（参考情報）】"]
+    title = "Operation manual (reference)" if normalized_locale == "en" else "操作マニュアル（参考情報）"
+    parts = [f"【{title}】"]
     for chunk in chunks:
         parts.append(f"\n### {chunk.heading}\n{chunk.content}")
     return "\n".join(parts)
-

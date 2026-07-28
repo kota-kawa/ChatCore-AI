@@ -22,6 +22,9 @@ import {
 import type { ContentFormat, MediaType, PromptResource } from "../../scripts/prompt_share/types";
 import type { PromptCategoryOption, PromptPostStatus } from "./prompt_share_page_types";
 import { SkillResourceEditor } from "./skill_resource_editor";
+import { useTranslation } from "../../contexts/locale_context";
+import { getPromptFormatLabel, getPromptMediaLabel } from "../../scripts/prompt_share/formatters";
+import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 
 // レジストリ駆動で描画する属性フィールドの、親が用意する状態バインディング。
 // State binding (provided by the parent) for a registry-driven attribute field.
@@ -335,7 +338,7 @@ function PromptComposerSelect({
       >
         {groupedOptions ? (
           <>
-            <option value="">未設定</option>
+            <option value={options[0]?.value ?? ""}>{options[0]?.label}</option>
             {groupedOptions.map((group) => (
               <optgroup key={group.label} label={group.label}>
                 {group.options.map((option) => (
@@ -345,7 +348,7 @@ function PromptComposerSelect({
                 ))}
               </optgroup>
             ))}
-            <option value="その他">その他</option>
+            <option value={options[options.length - 1]?.value ?? "その他"}>{options[options.length - 1]?.label}</option>
           </>
         ) : (
           options.map((option) => (
@@ -527,12 +530,28 @@ export function PromptShareComposerModal({
   onReferenceImageChange,
   onClearReferenceImage
 }: PromptShareComposerModalProps) {
+  const { locale, t } = useTranslation();
   // 選択中の2軸からレジストリ定義を解決する。
   // Resolve the registry descriptors for the currently selected axes.
   const activeFormat = getContentFormat(contentFormat);
   const activeMedia = getMediaType(mediaType);
   const attachmentRule = activeMedia.attachmentRule;
   const activeFieldKeys = new Set(getAttributeFields(contentFormat).map((field) => field.key));
+  const activeFormatLabel = getPromptFormatLabel(contentFormat, locale);
+  const activeMediaLabel = getPromptMediaLabel(mediaType, locale);
+  const localizedCategoryOptions = categoryOptions.map((option) => ({
+    ...option,
+    label: option.value ? getCategoryLabelOrFallback(option.value, option.label, locale) : t("promptShare.notSelected")
+  }));
+  const localizedAiModelGroups = AI_MODEL_OPTION_GROUPS.map((group) => ({
+    ...group,
+    label: group.label === "画像生成" ? t("promptShare.imageGeneration") : group.label
+  }));
+  const localizedAiModelOptions: PromptComposerSelectOption[] = [
+    { value: "", label: t("promptShare.unset") },
+    ...localizedAiModelGroups.flatMap((group) => group.options.map((option) => ({ ...option, group: group.label }))),
+    { value: "その他", label: t("promptShare.categoryOther") }
+  ];
 
   // SKILLの説明パネルの開閉状態を管理し、フォーマットが切り替わると自動で閉じる
   // Manage the SKILL info panel toggle; reset it whenever the content format changes
@@ -553,7 +572,7 @@ export function PromptShareComposerModal({
       ref={postModalRef}
     >
       <div className="post-modal-content post-modal-content--composer" tabIndex={-1}>
-        <button type="button" className="close-btn" aria-label="投稿モーダルを閉じる" onClick={onClose}>
+        <button type="button" className="close-btn" aria-label={t("promptShare.closeComposer")} onClick={onClose}>
           &times;
         </button>
 
@@ -561,7 +580,7 @@ export function PromptShareComposerModal({
           <div className="composer-hero">
             <div className="composer-hero__copy">
               <p className="composer-hero__eyebrow">Prompt Share Composer</p>
-              <h2 id="postModalTitle">新しいプロンプトを投稿</h2>
+              <h2 id="postModalTitle">{t("promptShare.newPrompt")}</h2>
             </div>
           </div>
 
@@ -572,7 +591,7 @@ export function PromptShareComposerModal({
               <div className="composer-section__header">
                 <div>
                   <p className="composer-section__eyebrow">Basics</p>
-                  <h3 id="composerBasicsTitle">投稿の基本情報</h3>
+                  <h3 id="composerBasicsTitle">{t("promptShare.basicPostInfo")}</h3>
                 </div>
               </div>
 
@@ -580,8 +599,8 @@ export function PromptShareComposerModal({
               {/* Two-axis selectors: format and media chosen independently. Icon + short label, minimal text */}
               <div className="composer-axis-grid">
                 <div className="form-group">
-                  <label>フォーマット</label>
-                  <div className="prompt-axis-toggle" role="radiogroup" aria-label="フォーマットを選択">
+                  <label>{t("promptShare.format")}</label>
+                  <div className="prompt-axis-toggle" role="radiogroup" aria-label={t("promptShare.chooseFormat")}>
                     {CONTENT_FORMATS.map((format) => (
                       <label
                         key={format.key}
@@ -600,8 +619,8 @@ export function PromptShareComposerModal({
                           <i className={`bi ${format.icon}`}></i>
                         </span>
                         <span className="prompt-axis-option__body">
-                          <strong>{format.label}</strong>
-                          <small>{format.tagline}</small>
+                          <strong>{getPromptFormatLabel(format.key, locale)}</strong>
+                          <small>{format.key === "skill" ? t("promptShare.formatSkillTagline") : t("promptShare.formatPromptTagline")}</small>
                         </span>
                       </label>
                     ))}
@@ -609,8 +628,8 @@ export function PromptShareComposerModal({
                 </div>
 
                 <div className="form-group">
-                  <label>生成メディア</label>
-                  <div className="prompt-axis-toggle" role="radiogroup" aria-label="生成メディアを選択">
+                  <label>{t("promptShare.generationMedia")}</label>
+                  <div className="prompt-axis-toggle" role="radiogroup" aria-label={t("promptShare.chooseMedia")}>
                     {MEDIA_TYPES.map((media) => (
                       <label
                         key={media.key}
@@ -629,7 +648,7 @@ export function PromptShareComposerModal({
                           <i className={`bi ${media.icon}`}></i>
                         </span>
                         <span className="prompt-axis-option__body">
-                          <strong>{media.label}</strong>
+                          <strong>{getPromptMediaLabel(media.key, locale)}</strong>
                         </span>
                       </label>
                     ))}
@@ -639,13 +658,13 @@ export function PromptShareComposerModal({
 
               <div className="composer-field-grid composer-field-grid--two">
                 <div className="form-group">
-                  <label htmlFor="prompt-title">タイトル</label>
+                  <label htmlFor="prompt-title">{t("promptShare.titleLabel")}</label>
                   {/* 入力のたびにバリデーションエラーをリアルタイムでクリアする */}
                   {/* Clear validation feedback in real-time as the user types */}
                   <input
                     type="text"
                     id="prompt-title"
-                    placeholder="用途が伝わる短い名前を入力"
+                    placeholder={t("promptShare.titlePlaceholder")}
                     required
                     ref={promptPostTitleInputRef}
                     value={postTitle}
@@ -657,13 +676,13 @@ export function PromptShareComposerModal({
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="prompt-category">カテゴリ</label>
+                  <label htmlFor="prompt-category">{t("promptShare.category")}</label>
                   <PromptComposerSelect
                     selectId="prompt-category"
                     nativeRef={promptPostCategorySelectRef}
                     value={postCategory}
-                    options={categoryOptions}
-                    menuLabel="カテゴリを選択"
+                    options={localizedCategoryOptions}
+                    menuLabel={t("promptShare.selectCategory")}
                     onChange={setPostCategory}
                     onAfterChange={updatePromptFeedbackErrorIfNeeded}
                     isModalOpen={isOpen}
@@ -677,10 +696,10 @@ export function PromptShareComposerModal({
             <section className="composer-section composer-section--content" aria-labelledby="composerContentTitle">
               <div className="composer-section__header">
                 <div>
-                  <p className="composer-section__eyebrow">{activeFormat.label}</p>
+                  <p className="composer-section__eyebrow">{activeFormatLabel}</p>
                   <div className="composer-section__title-row">
                     <h3 id="composerContentTitle">
-                      {contentFormat === "skill" ? "SKILL作成サポート" : "プロンプト本文"}
+                      {contentFormat === "skill" ? t("promptShare.skillSupport") : t("promptShare.promptContent")}
                     </h3>
                     {/* SKILLの場合のみ情報ボタンを表示し、説明文の表示をトグルする */}
                     {/* Show info toggle only for skill format to explain the SKILL structure */}
@@ -688,7 +707,7 @@ export function PromptShareComposerModal({
                       <button
                         type="button"
                         className={`composer-info-btn${showSkillInfo ? " is-active" : ""}`}
-                        aria-label="SKILLについての説明を表示"
+                        aria-label={t("promptShare.skillAbout")}
                         aria-expanded={showSkillInfo}
                         onClick={() => { setShowSkillInfo((v) => !v); }}
                       >
@@ -699,7 +718,7 @@ export function PromptShareComposerModal({
                 </div>
                 {contentFormat === "skill" && showSkillInfo ? (
                   <p className="composer-section__description">
-                    Markdownで手順を定義し、必要なスクリプト・参照資料・設定をリソースとして追加できます。
+                    {t("promptShare.skillHelp")}
                   </p>
                 ) : null}
               </div>
@@ -707,11 +726,11 @@ export function PromptShareComposerModal({
               {/* 本文を使わないフォーマット(SKILL等)のときはCSSのdisplayで隠し、DOMを維持してrefを保持する */}
               {/* Hide with CSS display rather than unmounting to preserve refs when the format omits content */}
               <div className="form-group" style={{ display: activeFormat.requiresContent ? "" : "none" }}>
-                <label htmlFor="prompt-content">プロンプト内容</label>
+                <label htmlFor="prompt-content">{t("promptShare.promptContent")}</label>
                 <textarea
                   id="prompt-content"
                   rows={6}
-                  placeholder="役割・前提・出力形式まで書くと再利用しやすくなります"
+                  placeholder={t("promptShare.contentPlaceholder")}
                   required={activeFormat.requiresContent}
                   ref={promptPostContentTextareaRef}
                   value={postContent}
@@ -741,20 +760,20 @@ export function PromptShareComposerModal({
               <div className="composer-section__header">
                 <div>
                   <p className="composer-section__eyebrow">Details</p>
-                  <h3 id="composerMetaTitle">投稿設定</h3>
+                  <h3 id="composerMetaTitle">{t("promptShare.postSettings")}</h3>
                 </div>
               </div>
 
               <div className="composer-field-grid">
                 <div className="form-group">
-                  <label htmlFor="prompt-ai-model">使用AIモデル（任意）</label>
+                  <label htmlFor="prompt-ai-model">{t("promptShare.aiModelOptional")}</label>
                   <PromptComposerSelect
                     selectId="prompt-ai-model"
                     nativeRef={promptPostAiModelSelectRef}
                     value={postAiModel}
-                    options={AI_MODEL_OPTIONS}
-                    groupedOptions={AI_MODEL_OPTION_GROUPS}
-                    menuLabel="使用AIモデルを選択"
+                    options={localizedAiModelOptions}
+                    groupedOptions={localizedAiModelGroups}
+                    menuLabel={t("promptShare.chooseAiModel")}
                     onChange={setPostAiModel}
                     onAfterChange={updatePromptFeedbackErrorIfNeeded}
                     isModalOpen={isOpen}
@@ -766,7 +785,7 @@ export function PromptShareComposerModal({
               {/* Generic reference attachment field, shown only when the media allows attachments */}
               <div className="image-prompt-fields" hidden={!attachmentRule}>
                 <div className="form-group">
-                  <label htmlFor="prompt-reference-image">作例{activeMedia.label}（任意・1点）</label>
+                  <label htmlFor="prompt-reference-image">{t("promptShare.exampleAttachment", { media: activeMediaLabel })}</label>
                   <label className="image-upload-field" htmlFor="prompt-reference-image">
                     <input
                       type="file"
@@ -779,13 +798,13 @@ export function PromptShareComposerModal({
                       <i className="bi bi-cloud-arrow-up"></i>
                     </span>
                     <span className="image-upload-field__copy">
-                      <strong>{activeMedia.label}をアップロード</strong>
+                      <strong>{t("promptShare.uploadMedia", { media: activeMediaLabel })}</strong>
                       <small>
                         {attachmentRule
-                          ? `${attachmentRule.acceptedExt
+                          ? t("promptShare.attachmentRules", { types: attachmentRule.acceptedExt
                               .map((ext) => ext.replace(".", "").toUpperCase())
                               .filter((ext, index, list) => list.indexOf(ext) === index)
-                              .join(" / ")}、${Math.round(attachmentRule.maxBytes / (1024 * 1024))}MBまで`
+                              .join(" / "), max: Math.round(attachmentRule.maxBytes / (1024 * 1024)) })
                           : ""}
                       </small>
                     </span>
@@ -794,7 +813,7 @@ export function PromptShareComposerModal({
                   {/* プレビューは添付が選択されているときのみ表示する */}
                   {/* Preview section is only shown once an attachment has been selected */}
                   <div id="promptImagePreview" className="prompt-image-preview" hidden={!promptImagePreviewUrl}>
-                    <img id="promptImagePreviewImg" src={promptImagePreviewUrl} alt="アップロードのプレビュー" />
+                    <img id="promptImagePreviewImg" src={promptImagePreviewUrl} alt={t("promptShare.uploadPreview")} />
                     <div className="prompt-image-preview__meta">
                       <span id="promptImagePreviewName">{promptImagePreviewName}</span>
                       <button
@@ -804,7 +823,7 @@ export function PromptShareComposerModal({
                         onClick={onClearReferenceImage}
                       >
                         <i className="bi bi-x-lg"></i>
-                        <span>外す</span>
+                        <span>{t("promptShare.removeAttachment")}</span>
                       </button>
                     </div>
                   </div>
@@ -823,12 +842,12 @@ export function PromptShareComposerModal({
                   const fieldId = `prompt-attr-${field.key}`;
                   return (
                     <div className="form-group" key={field.key} hidden={!isActive}>
-                      <label htmlFor={fieldId}>{field.label}</label>
+                      <label htmlFor={fieldId}>{t("promptShare.skillMarkdownLabel")}</label>
                       <textarea
                         id={fieldId}
                         rows={field.rows ?? 8}
                         maxLength={field.maxLength}
-                        placeholder={field.hint || field.placeholder}
+                        placeholder={t("promptShare.skillMarkdownHint")}
                         required={isActive && Boolean(field.required)}
                         ref={binding.ref}
                         value={binding.value}
@@ -856,7 +875,7 @@ export function PromptShareComposerModal({
               <div className="composer-section__header">
                 <div>
                   <p className="composer-section__eyebrow">Examples</p>
-                  <h3 id="composerExamplesTitle">利用例（任意）</h3>
+                  <h3 id="composerExamplesTitle">{t("promptShare.examplesOptional")}</h3>
                 </div>
               </div>
 
@@ -873,8 +892,8 @@ export function PromptShareComposerModal({
                     }}
                   />
                   <span className="composer-toggle__copy">
-                    <strong>入出力例を追加する</strong>
-                    <small>例があると他のユーザーがそのまま試せます。</small>
+                    <strong>{t("promptShare.addExamples")}</strong>
+                    <small>{t("promptShare.examplesBenefit")}</small>
                   </span>
                 </label>
               </div>
@@ -882,11 +901,11 @@ export function PromptShareComposerModal({
               <div id="guardrail-fields" style={{ display: guardrailEnabled ? "block" : "none" }}>
                 <div className="composer-field-grid">
                   <div className="form-group">
-                    <label htmlFor="prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
+                    <label htmlFor="prompt-input-example">{t("promptShare.inputExampleLabel")}</label>
                     <textarea
                       id="prompt-input-example"
                       rows={3}
-                      placeholder="例: 夏休みの思い出をテーマにした短いエッセイを書いてください。"
+                      placeholder={t("promptShare.inputPlaceholder")}
                       ref={promptPostInputExamplesRef}
                       value={postInputExample}
                       onChange={(event) => {
@@ -896,11 +915,11 @@ export function PromptShareComposerModal({
                     ></textarea>
                   </div>
                   <div className="form-group">
-                    <label htmlFor="prompt-output-example">出力例</label>
+                    <label htmlFor="prompt-output-example">{t("promptShare.outputExample")}</label>
                     <textarea
                       id="prompt-output-example"
                       rows={3}
-                      placeholder="例: 夏休みのある日、私は家族と一緒に海辺へ出かけました。波の音と潮風に包まれながら、子供の頃の記憶がよみがえり、心が温かくなりました。その日は一生忘れられない、宝物のような時間となりました。"
+                      placeholder={t("promptShare.outputPlaceholder")}
                       ref={promptPostOutputExamplesRef}
                       value={postOutputExample}
                       onChange={(event) => {
@@ -918,7 +937,7 @@ export function PromptShareComposerModal({
               {/* Disable submit button during submission to prevent duplicate requests */}
               <button type="submit" className="submit-btn" disabled={isPostSubmitting}>
                 <i className={`bi ${isPostSubmitting ? "bi-stars" : "bi-upload"}`}></i>
-                {isPostSubmitting ? " 投稿を準備中..." : " 投稿する"}
+                {isPostSubmitting ? t("promptShare.preparingPost") : t("promptShare.post")}
               </button>
             </div>
           </form>

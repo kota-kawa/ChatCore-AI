@@ -28,6 +28,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { section: "profile", iconClass: "bi bi-person-circle", label: "プロフィール設定" },
   { section: "appearance", iconClass: "bi bi-palette", label: "外観" },
+  { section: "language", iconClass: "bi bi-translate", label: "言語 / Language" },
   { section: "prompts", iconClass: "bi bi-shield-lock", label: "投稿したプロンプト" },
   { section: "liked-prompts", iconClass: "bi bi-heart", label: "いいねしたプロンプト" },
   { section: "notifications", iconClass: "bi bi-bell", label: "通知設定" },
@@ -87,6 +88,15 @@ export const MCP_OAUTH_SCOPE_DEFINITIONS: Record<string, {
     description: "あなたのパーソナル・コンテキストを追加・更新・無効化できます。",
     iconClass: "bi bi-safe2"
   }
+};
+
+export const MCP_OAUTH_SCOPE_DEFINITIONS_EN: typeof MCP_OAUTH_SCOPE_DEFINITIONS = {
+  "prompts:read": { label: "Search and view public prompts and skills", description: "Search and view publicly shared prompts and skills.", iconClass: "bi bi-search" },
+  "prompts:write": { label: "Publish public prompts", description: "Publish public prompts and skills under your name.", iconClass: "bi bi-send" },
+  "memos:read": { label: "Search and view saved memos", description: "Search and view the titles and content of your private memos.", iconClass: "bi bi-journal-text" },
+  "memos:write": { label: "Edit saved memos", description: "Change the titles and content of your private memos.", iconClass: "bi bi-pencil-square" },
+  "context:read": { label: "Read personal context", description: "Read context such as your preferences, background, projects, and previous decisions.", iconClass: "bi bi-safe" },
+  "context:write": { label: "Save and edit personal context", description: "Add, update, and disable your personal context.", iconClass: "bi bi-safe2" }
 };
 
 // Existing imports keep working while the consent page moves to the complete map.

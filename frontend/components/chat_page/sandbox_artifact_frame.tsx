@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GenerativeUiArtifactV1 } from "../../lib/chat_page/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 // サンドボックスiframeに適用するContent Security Policy（外部接続・フォームなどを完全ブロック）
 // scriptSourcesには、インラインに加えて許可するローカル配信ライブラリのURLだけを渡す
@@ -110,7 +111,7 @@ function escapeStyle(value: string) {
 
 // アーティファクトをiframeのsrcdocとして埋め込むHTMLを生成する（CSP・高さ自動調整スクリプト込み）
 // Generate the srcdoc HTML to embed an artifact in an iframe (includes CSP and auto-height script)
-export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
+export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1, english = false) {
   const title = escapeHtmlAttribute(artifact.title);
   const css = escapeStyle(`${BASE_SANDBOX_CSS}\n${artifact.css || ""}`);
   const js = escapeScript(artifact.js || "");
@@ -190,9 +191,9 @@ export function buildSandboxArtifactSrcDoc(artifact: GenerativeUiArtifactV1) {
       fallback.id = "chatcore-empty-artifact";
       fallback.className = "chatcore-empty-artifact";
       var title = document.createElement("strong");
-      title.textContent = "生成UIを表示しています";
+      title.textContent = ${JSON.stringify(english ? "Displaying generated UI" : "生成UIを表示しています")};
       var note = document.createElement("span");
-      note.textContent = "モデル出力が空だったため、安全な表示領域を補完しました。";
+      note.textContent = ${JSON.stringify(english ? "The model returned no visible content, so a safe display area was added." : "モデル出力が空だったため、安全な表示領域を補完しました。")};
       fallback.appendChild(title);
       fallback.appendChild(note);
       root().appendChild(fallback);
@@ -272,10 +273,11 @@ function clampHeight(value: number) {
 // 生成UIアーティファクトをサンドボックスiframe内で安全に実行・表示するコンポーネント
 // Component that safely runs and displays generative UI artifacts inside a sandbox iframe
 function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) {
+  const { locale, t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(() => clampHeight(artifact.height ?? DEFAULT_FRAME_HEIGHT) ?? DEFAULT_FRAME_HEIGHT);
   const [errorMessage, setErrorMessage] = useState("");
-  const srcDoc = useMemo(() => buildSandboxArtifactSrcDoc(artifact), [artifact]);
+  const srcDoc = useMemo(() => buildSandboxArtifactSrcDoc(artifact, locale === "en"), [artifact, locale]);
 
   // アーティファクトが変わったら高さとエラーをリセットする
   // Reset height and error when the artifact changes
@@ -341,7 +343,7 @@ function SandboxArtifactFrameComponent({ artifact }: SandboxArtifactFrameProps) 
         style={{ height }}
       />
       {errorMessage ? (
-        <p className="sandbox-artifact__error">生成UIの一部を実行できませんでした。</p>
+        <p className="sandbox-artifact__error">{t("chat.generatedUiError")}</p>
       ) : null}
     </section>
   );

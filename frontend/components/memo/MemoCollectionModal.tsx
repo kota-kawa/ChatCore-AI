@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction } from "react";
 
 import type { Collection } from "../../lib/memo/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoCollectionModalProps = {
   isCollectionPanelOpen: boolean;
@@ -42,16 +43,17 @@ export function MemoCollectionModal({
   handleUpdateCollection,
   handleDeleteCollection,
 }: MemoCollectionModalProps) {
+  const { t } = useTranslation();
   return (
         <div className={`memo-collection-modal${isCollectionPanelOpen ? " is-visible" : ""}`} aria-hidden={isCollectionPanelOpen ? "false" : "true"}>
           <div className="memo-collection-modal__overlay" onClick={() => setIsCollectionPanelOpen(false)}></div>
           <div className="memo-collection-modal__content" role="dialog" aria-modal="true" aria-labelledby="collectionPanelTitle">
-            <button type="button" className="memo-collection-modal__close" aria-label="閉じる" onClick={() => setIsCollectionPanelOpen(false)}>
+            <button type="button" className="memo-collection-modal__close" aria-label={t("common.close")} onClick={() => setIsCollectionPanelOpen(false)}>
               <i className="bi bi-x-lg"></i>
             </button>
             <header className="memo-collection-modal__header">
-              <h3 id="collectionPanelTitle"><i className="bi bi-folder2-open"></i>コレクション管理</h3>
-              <p>メモをグループ分けして整理できます。</p>
+              <h3 id="collectionPanelTitle"><i className="bi bi-folder2-open"></i>{t("memo.manageCollections")}</h3>
+              <p>{t("memo.collectionDescription")}</p>
             </header>
             <div className="memo-collection-modal__body">
               {/* Create new */}
@@ -61,12 +63,12 @@ export function MemoCollectionModal({
                   className="memo-control memo-collection-create__input"
                   value={newCollectionName}
                   onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="新しいコレクション名"
+                  placeholder={t("memo.newCollectionName")}
                   maxLength={100}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleCreateCollection(); } }}
                 />
                 <div className="memo-collection-create__color-row">
-                  <label htmlFor="new-collection-color">カラー</label>
+                  <label htmlFor="new-collection-color">{t("memo.color")}</label>
                   <input type="color" id="new-collection-color" value={newCollectionColor} onChange={(e) => setNewCollectionColor(e.target.value)} className="memo-collection-color-input" />
                   <div className="memo-collection-presets">
                     {["#6b7280", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#0ea5e9"].map((c) => (
@@ -88,12 +90,12 @@ export function MemoCollectionModal({
                   onClick={() => { void handleCreateCollection(); }}
                   disabled={collectionActionLoading || !newCollectionName.trim()}
                 >
-                  <i className="bi bi-plus-lg"></i>作成
+                  <i className="bi bi-plus-lg"></i>{t("memo.create")}
                 </button>
               </div>
 
               {/* Collection list */}
-              {collections.length === 0 && <p className="memo-collection-empty">コレクションはまだありません。</p>}
+              {collections.length === 0 && <p className="memo-collection-empty">{t("memo.noCollectionsYet")}</p>}
               <ul className="memo-collection-list">
                 {collections.map((col) => (
                   <li key={col.id} className="memo-collection-item">
@@ -107,7 +109,7 @@ export function MemoCollectionModal({
                           maxLength={100}
                         />
                         <div className="memo-collection-create__color-row">
-                          <label>カラー</label>
+                          <label>{t("memo.color")}</label>
                           <input type="color" value={editingCollectionColor} onChange={(e) => setEditingCollectionColor(e.target.value)} className="memo-collection-color-input" />
                           <div className="memo-collection-presets">
                             {["#6b7280", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#0ea5e9"].map((c) => (
@@ -116,19 +118,19 @@ export function MemoCollectionModal({
                           </div>
                         </div>
                         <div className="memo-collection-item__edit-actions">
-                          <button type="button" className="primary-button" onClick={() => { void handleUpdateCollection(col.id); }} disabled={collectionActionLoading}>保存</button>
-                          <button type="button" className="secondary-button" onClick={() => setEditingCollectionId(null)}>キャンセル</button>
+                          <button type="button" className="primary-button" onClick={() => { void handleUpdateCollection(col.id); }} disabled={collectionActionLoading}>{t("common.save")}</button>
+                          <button type="button" className="secondary-button" onClick={() => setEditingCollectionId(null)}>{t("common.cancel")}</button>
                         </div>
                       </div>
                     ) : (
                       <div className="memo-collection-item__row">
                         <span className="memo-collection-item__dot" style={{ background: col.color }}></span>
                         <span className="memo-collection-item__name">{col.name}</span>
-                        <span className="memo-collection-item__count">{col.memo_count}件</span>
-                        <button type="button" className="memo-collection-item__action" onClick={() => { setEditingCollectionId(col.id); setEditingCollectionName(col.name); setEditingCollectionColor(col.color); }} data-tooltip="編集" data-tooltip-placement="top">
+                        <span className="memo-collection-item__count">{t("memo.items", { count: col.memo_count })}</span>
+                        <button type="button" className="memo-collection-item__action" onClick={() => { setEditingCollectionId(col.id); setEditingCollectionName(col.name); setEditingCollectionColor(col.color); }} data-tooltip={t("common.edit")} data-tooltip-placement="top">
                           <i className="bi bi-pencil"></i>
                         </button>
-                        <button type="button" className="memo-collection-item__action memo-collection-item__action--danger" onClick={() => { void handleDeleteCollection(col.id, col.name); }} disabled={collectionActionLoading} data-tooltip="削除" data-tooltip-placement="top">
+                        <button type="button" className="memo-collection-item__action memo-collection-item__action--danger" onClick={() => { void handleDeleteCollection(col.id, col.name); }} disabled={collectionActionLoading} data-tooltip={t("common.delete")} data-tooltip-placement="top">
                           <i className="bi bi-trash3"></i>
                         </button>
                       </div>

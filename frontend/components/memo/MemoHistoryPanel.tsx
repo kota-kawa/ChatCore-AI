@@ -12,6 +12,7 @@ import { formatDateTime } from "../../lib/datetime";
 import { CollectionBadge } from "./CollectionBadge";
 import { MemoListSkeleton } from "./MemoListSkeleton";
 import { MemoMarkdown } from "./MemoMarkdown";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoHistoryPanelProps = {
   activeCollection: Collection | null | undefined;
@@ -83,16 +84,17 @@ export function MemoHistoryPanel({
   handleMemoSectionDragOver,
   handleMemoDrop,
 }: MemoHistoryPanelProps) {
+  const { t } = useTranslation();
   return (
             <section className="memo-history-panel">
               <div className="memo-panel__header">
                 <div className="memo-panel__heading">
-                  <h2><i className="bi bi-list-ul" aria-hidden="true"></i>メモ一覧</h2>
+                  <h2><i className="bi bi-list-ul" aria-hidden="true"></i>{t("memo.list")}</h2>
                   {activeCollection && <CollectionBadge name={activeCollection.name} color={activeCollection.color || "#6b7280"} />}
                 </div>
                 <span className="memo-panel__count">
                   <i className="bi bi-journal-text" aria-hidden="true"></i>
-                  {totalMemoCount}件
+                  {t("memo.items", { count: totalMemoCount })}
                 </span>
               </div>
 
@@ -101,7 +103,7 @@ export function MemoHistoryPanel({
                 <MemoListSkeleton />
               )}
               {!memoLoadError && !memoListLoading && memos.length === 0 && (
-                <div className="memo-history__empty">条件に一致するメモがありません。</div>
+                <div className="memo-history__empty">{t("memo.noMatchingMemos")}</div>
               )}
 
               {memos.length > 0 && (() => {
@@ -137,7 +139,7 @@ export function MemoHistoryPanel({
                               className="memo-bulk-checkbox"
                               checked={isSelected}
                               onChange={() => toggleSelectMemo(memoId)}
-                              aria-label={`${memo.title || "保存したメモ"}を選択`}
+                              aria-label={t("memo.selectNamed", { title: memo.title || t("memo.savedMemo") })}
                             />
                           </div>
                         )}
@@ -148,9 +150,9 @@ export function MemoHistoryPanel({
                             className={`memo-item__pin${memo.is_pinned ? " is-pinned" : ""}`}
                             onClick={() => { void handleTogglePin(memo); }}
                             disabled={isBusy}
-                            aria-label={memo.is_pinned ? "ピン留めを解除" : "ピン留め"}
+                            aria-label={memo.is_pinned ? t("memo.unpin") : t("memo.pin")}
                             aria-pressed={memo.is_pinned}
-                            data-tooltip={memo.is_pinned ? "ピン留めを解除" : "ピン留め"}
+                            data-tooltip={memo.is_pinned ? t("memo.unpin") : t("memo.pin")}
                             data-tooltip-placement="left"
                           >
                             <i className={`bi ${memo.is_pinned ? "bi-pin-angle-fill" : "bi-pin-angle"}`} aria-hidden="true"></i>
@@ -162,7 +164,7 @@ export function MemoHistoryPanel({
                           className="memo-item__open memo-item__open--content"
                           onClick={() => { if (isBulkMode) { toggleSelectMemo(memoId); return; } void openMemoDetail(memoId); }}
                         >
-                          <h3 className="memo-item__title">{memo.title || "保存したメモ"}</h3>
+                          <h3 className="memo-item__title">{memo.title || t("memo.savedMemo")}</h3>
                           {memo.excerpt && <MemoMarkdown text={parseMemoText(memo.excerpt)} className="memo-item__excerpt" />}
                         </button>
 
@@ -178,7 +180,7 @@ export function MemoHistoryPanel({
                               </time>
                             )}
                             {memo.is_archived && (
-                              <span className="memo-item__archive-badge" aria-label="アーカイブ済み" data-tooltip="アーカイブ済み" data-tooltip-placement="top">
+                              <span className="memo-item__archive-badge" aria-label={t("memo.archived")} data-tooltip={t("memo.archived")} data-tooltip-placement="top">
                                 <i className="bi bi-archive-fill" aria-hidden="true"></i>
                               </span>
                             )}
@@ -191,8 +193,8 @@ export function MemoHistoryPanel({
                                 className={`memo-item__action${isCopied ? " is-copied" : ""}`}
                                 onClick={() => { void copyMemoFullText(memo); }}
                                 disabled={isBusy || isCopying}
-                                aria-label={isCopied ? "コピーしました" : "全文をコピー"}
-                                data-tooltip={isCopied ? "コピーしました" : "全文をコピー"}
+                                aria-label={isCopied ? t("common.copied") : t("memo.copyFullText")}
+                                data-tooltip={isCopied ? t("common.copied") : t("memo.copyFullText")}
                                 data-tooltip-placement="top"
                               >
                                 <i className={`bi ${isCopied ? "bi-check2" : isCopying ? "bi-arrow-repeat memo-spin" : "bi-files"}`}></i>
@@ -202,8 +204,8 @@ export function MemoHistoryPanel({
                                 className="memo-item__action"
                                 onClick={(event) => { event.stopPropagation(); void handleToggleArchive(memo); }}
                                 disabled={isBusy}
-                                aria-label={memo.is_archived ? "アーカイブを解除" : "アーカイブ"}
-                                data-tooltip={memo.is_archived ? "アーカイブを解除" : "アーカイブ"}
+                                aria-label={memo.is_archived ? t("memo.unarchive") : t("memo.archive")}
+                                data-tooltip={memo.is_archived ? t("memo.unarchive") : t("memo.archive")}
                                 data-tooltip-placement="top"
                               >
                                 <i className={`bi ${memo.is_archived ? "bi-archive-fill" : "bi-archive"}`}></i>
@@ -214,11 +216,11 @@ export function MemoHistoryPanel({
                                   className={`memo-item__action${isMenuOpen ? " is-active" : ""}`}
                                   onClick={(event) => { toggleMemoActionMenu(memoId, event.currentTarget); }}
                                   disabled={isBusy}
-                                  data-tooltip="その他の操作"
+                                  data-tooltip={t("memo.moreActions")}
                                   data-tooltip-placement="top"
                                   aria-haspopup="true"
                                   aria-expanded={isMenuOpen}
-                                  aria-label="その他の操作"
+                                  aria-label={t("memo.moreActions")}
                                 >
                                   <i className="bi bi-three-dots"></i>
                                 </button>
@@ -241,7 +243,7 @@ export function MemoHistoryPanel({
                                       onClick={() => { void openShareModal(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                     >
                                       <i className="bi bi-share"></i>
-                                      共有設定
+                                      {t("memo.shareSettings")}
                                     </button>
                                     <button
                                       type="button"
@@ -250,7 +252,7 @@ export function MemoHistoryPanel({
                                       onClick={() => { void handleDeleteMemo(memo); setOpenMenuMemoId(""); setMenuPosition(null); }}
                                     >
                                       <i className="bi bi-trash3"></i>
-                                      削除
+                                      {t("common.delete")}
                                     </button>
                                   </div>,
                                   document.body,
@@ -272,7 +274,7 @@ export function MemoHistoryPanel({
                       <section className="memo-history__section">
                         {showSectionLabels && (
                           <h3 className="memo-history__section-label">
-                            <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>ピン留め
+                            <i className="bi bi-pin-angle-fill" aria-hidden="true"></i>{t("memo.pinned")}
                           </h3>
                         )}
                         <ul
@@ -287,7 +289,7 @@ export function MemoHistoryPanel({
                     {otherMemos.length > 0 && (
                       <section className="memo-history__section">
                         {showSectionLabels && (
-                          <h3 className="memo-history__section-label">その他</h3>
+                          <h3 className="memo-history__section-label">{t("memo.other")}</h3>
                         )}
                         <ul
                           className={`memo-history__list${draggedMemoId && canReorderCurrentView ? " is-drop-ready" : ""}`}

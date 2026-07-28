@@ -1,4 +1,6 @@
 import type { PromptResource, PromptResourceRole } from "./types";
+import type { Locale } from "../../lib/i18n/config";
+import { promptShareText } from "./i18n";
 
 export const SKILL_RESOURCE_ROLES: ReadonlyArray<{
   value: PromptResourceRole;
@@ -66,8 +68,11 @@ export function inferSkillResourceLanguage(path: string): string {
   return LANGUAGE_BY_EXTENSION[fileName.slice(extensionIndex)] || "text";
 }
 
-export function getSkillResourceRoleLabel(role: PromptResourceRole): string {
-  return SKILL_RESOURCE_ROLES.find((candidate) => candidate.value === role)?.label || "その他";
+export function getSkillResourceRoleLabel(role: PromptResourceRole, locale?: Locale): string {
+  const key = role === "script" ? "promptShare.resourceScript"
+    : role === "reference" ? "promptShare.resourceReference"
+      : role === "config" ? "promptShare.resourceConfig" : "promptShare.categoryOther";
+  return promptShareText(key, undefined, locale);
 }
 
 function isPromptResourceRole(value: unknown): value is PromptResourceRole {

@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction } from "react";
 
 import type { BulkAction, Collection, MemoSummary } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoBulkBarProps = {
   hasSelection: boolean;
@@ -29,8 +30,9 @@ export function MemoBulkBar({
   bulkCollectionId,
   setBulkCollectionId,
 }: MemoBulkBarProps) {
+  const { t } = useTranslation();
   return (
-            <div className="memo-bulk-bar memo-card" role="toolbar" aria-label="一括操作バー">
+            <div className="memo-bulk-bar memo-card" role="toolbar" aria-label={t("memo.bulkToolbar")}>
               <div className="memo-bulk-bar__info">
                 <input
                   type="checkbox"
@@ -40,21 +42,21 @@ export function MemoBulkBar({
                   onChange={(e) => { if (e.target.checked) selectAll(); else deselectAll(); }}
                 />
                 <label htmlFor="bulk-select-all" className="memo-bulk-bar__count">
-                  {hasSelection ? `${selectedIds.size}件選択中` : "すべて選択"}
+                  {hasSelection ? t("memo.selectedCount", { count: selectedIds.size }) : t("memo.selectAll")}
                 </label>
               </div>
               <div className="memo-bulk-bar__actions">
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("pin")} disabled={!hasSelection || bulkLoading} data-tooltip="ピン留め" data-tooltip-placement="top">
-                  <i className="bi bi-pin-angle"></i>ピン留め
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("pin")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.pin")} data-tooltip-placement="top">
+                  <i className="bi bi-pin-angle"></i>{t("memo.pin")}
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unpin")} disabled={!hasSelection || bulkLoading} data-tooltip="ピン留め解除" data-tooltip-placement="top">
-                  <i className="bi bi-pin-angle-fill"></i>解除
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unpin")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.unpin")} data-tooltip-placement="top">
+                  <i className="bi bi-pin-angle-fill"></i>{t("memo.remove")}
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("archive")} disabled={!hasSelection || bulkLoading} data-tooltip="アーカイブ" data-tooltip-placement="top">
-                  <i className="bi bi-archive"></i>アーカイブ
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("archive")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.archive")} data-tooltip-placement="top">
+                  <i className="bi bi-archive"></i>{t("memo.archive")}
                 </button>
-                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unarchive")} disabled={!hasSelection || bulkLoading} data-tooltip="アーカイブ解除" data-tooltip-placement="top">
-                  <i className="bi bi-archive-fill"></i>解除
+                <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("unarchive")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.unarchive")} data-tooltip-placement="top">
+                  <i className="bi bi-archive-fill"></i>{t("memo.remove")}
                 </button>
                 {collections.length > 0 && (
                   <div className="memo-bulk-bar__tag-group">
@@ -63,20 +65,20 @@ export function MemoBulkBar({
                       value={String(bulkCollectionId ?? "")}
                       onChange={(v) => setBulkCollectionId(v === "" ? null : Number(v))}
                       options={[
-                        { value: "", label: "コレクション選択" },
+                        { value: "", label: t("memo.chooseCollection") },
                         ...collections.map((c) => ({ value: String(c.id), label: c.name })),
                       ]}
                     />
-                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("set_collection", { collectionId: bulkCollectionId })} disabled={!hasSelection || bulkLoading || bulkCollectionId === null} data-tooltip="コレクション設定" data-tooltip-placement="top">
-                      <i className="bi bi-folder2"></i>設定
+                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("set_collection", { collectionId: bulkCollectionId })} disabled={!hasSelection || bulkLoading || bulkCollectionId === null} data-tooltip={t("memo.setCollection")} data-tooltip-placement="top">
+                      <i className="bi bi-folder2"></i>{t("memo.set")}
                     </button>
-                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("clear_collection")} disabled={!hasSelection || bulkLoading} data-tooltip="コレクション解除" data-tooltip-placement="top">
-                      解除
+                    <button type="button" className="memo-bulk-btn" onClick={() => void executeBulkAction("clear_collection")} disabled={!hasSelection || bulkLoading} data-tooltip={t("memo.clearCollection")} data-tooltip-placement="top">
+                      {t("memo.remove")}
                     </button>
                   </div>
                 )}
-                <button type="button" className="memo-bulk-btn memo-bulk-btn--danger" onClick={() => void executeBulkAction("delete")} disabled={!hasSelection || bulkLoading} data-tooltip="削除" data-tooltip-placement="top">
-                  <i className="bi bi-trash3"></i>削除
+                <button type="button" className="memo-bulk-btn memo-bulk-btn--danger" onClick={() => void executeBulkAction("delete")} disabled={!hasSelection || bulkLoading} data-tooltip={t("common.delete")} data-tooltip-placement="top">
+                  <i className="bi bi-trash3"></i>{t("common.delete")}
                 </button>
               </div>
             </div>

@@ -1,9 +1,10 @@
-import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useMemo, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 import {
   buildTaskOrderForPersistence,
 } from "../../lib/chat_page/home_page_controller_utils";
-import { FALLBACK_TASKS, normalizeTaskList } from "../../lib/chat_page/task_utils";
+import { getFallbackTasks, normalizeTaskList } from "../../lib/chat_page/task_utils";
+import { useTranslation } from "../../contexts/locale_context";
 import type { NormalizedTask, TaskEditFormState } from "../../lib/chat_page/types";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
@@ -41,21 +42,23 @@ export function useHomePageTaskActions({
   setTaskEditForm,
   setTaskEditModalOpen,
 }: UseHomePageTaskActionsParams) {
+  const { locale, t } = useTranslation();
+  const fallbackTasks = useMemo(() => getFallbackTasks(locale), [locale]);
   const refreshTasks = useCallback(
     async (forceRefresh = false) => {
       if (!forceRefresh) {
         const cached = readCachedTasks();
         if (Array.isArray(cached) && cached.length > 0) {
-          setTasks(normalizeTaskList(cached));
+          setTasks(normalizeTaskList(cached, locale));
           return;
         }
       }
 
-      setTasks(FALLBACK_TASKS);
+      setTasks(fallbackTasks);
 
       try {
         const { payload } = await fetchJsonOrThrow<{ tasks?: TaskItem[] }>("/api/tasks", undefined, {
-          defaultMessage: "タスクの読み込みに失敗しました。",
+          defaultMessage: t("chat.taskLoadFailed"),
           fetchImpl: resilientFetch,
         });
 
@@ -64,13 +67,13 @@ export function useHomePageTaskActions({
           writeCachedTasks(fetchedTasks);
         }
 
-        setTasks(normalizeTaskList(fetchedTasks));
+        setTasks(normalizeTaskList(fetchedTasks, locale));
       } catch (error) {
         console.error("タスク読み込みに失敗:", error);
-        setTasks(FALLBACK_TASKS);
+        setTasks(fallbackTasks);
       }
     },
-    [],
+    [fallbackTasks, locale, setTasks, t],
   );
 
   const saveTaskOrder = useCallback(async (nextTasks: NormalizedTask[]) => {
@@ -85,15 +88,15 @@ export function useHomePageTaskActions({
         credentials: "same-origin",
         body: JSON.stringify({ order }),
       }, {
-        defaultMessage: "並び順の保存に失敗しました。",
+        defaultMessage: t("chat.reorderFailed"),
         fetchImpl: resilientFetch,
       });
       invalidateTasksCache();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "並び順の保存に失敗しました。";
-      showToast(`並び順の保存に失敗: ${message}`, { variant: "error" });
+      const message = error instanceof Error ? error.message : t("chat.reorderFailed");
+      showToast(message, { variant: "error" });
     }
-  }, []);
+  }, [t]);
 
   const toggleTaskOrderEditing = useCallback(() => {
     setIsTaskOrderEditing((previous) => {
@@ -138,7 +141,7 @@ export function useHomePageTaskActions({
 
   const handleTaskDelete = useCallback(
     async (taskName: string) => {
-      const confirmed = await showConfirmModal("このタスクを削除してもよろしいですか？");
+      const confirmed = await showConfirmModal(t("chat.deleteTaskConfirm"));
       if (!confirmed) return;
 
       try {
@@ -148,7 +151,7 @@ export function useHomePageTaskActions({
           credentials: "same-origin",
           body: JSON.stringify({ task: taskName }),
         }, {
-          defaultMessage: "タスクの削除に失敗しました。",
+          defaultMessage: t("chat.taskDeleteFailed"),
           fetchImpl: resilientFetch,
         });
 
@@ -159,12 +162,12 @@ export function useHomePageTaskActions({
         });
         invalidateTasksCache();
       } catch (error) {
-        showToast(`削除に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
+        showToast(error instanceof Error ? error.message : t("chat.taskDeleteFailed"), {
           variant: "error",
         });
       }
     },
-    [saveTaskOrder],
+    [saveTaskOrder, t],
   );
 
   const openTaskEditModal = useCallback((task: NormalizedTask) => {
@@ -196,7 +199,7 @@ export function useHomePageTaskActions({
     };
 
     if (!payload.new_task) {
-      showToast("タイトルを入力してください。", { variant: "error" });
+      showToast(t("chat.titleRequired"), { variant: "error" });
       return;
     }
 
@@ -207,7 +210,7 @@ export function useHomePageTaskActions({
         credentials: "same-origin",
         body: JSON.stringify(payload),
       }, {
-        defaultMessage: "タスクの更新に失敗しました。",
+        defaultMessage: t("chat.taskUpdateFailed"),
         fetchImpl: resilientFetch,
       });
 
@@ -228,11 +231,11 @@ export function useHomePageTaskActions({
       invalidateTasksCache();
       closeTaskEditModal();
     } catch (error) {
-      showToast(`更新に失敗しました: ${error instanceof Error ? error.message : String(error)}`, {
+      showToast(error instanceof Error ? error.message : t("chat.taskUpdateFailed"), {
         variant: "error",
       });
     }
-  }, [closeTaskEditModal, taskEditForm]);
+  }, [closeTaskEditModal, t, taskEditForm]);
 
   return {
     refreshTasks,

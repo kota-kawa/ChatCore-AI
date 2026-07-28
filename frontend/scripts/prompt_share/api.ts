@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { fetchJsonOrThrow } from "../core/runtime_validation";
 import { resilientFetch } from "../core/resilient_fetch";
+import { promptShareText } from "./i18n";
 
 type ApiResponse = {
   error?: string;
@@ -28,7 +29,7 @@ function promptShareFetchJsonOrThrow<TPayload>(
 
 export async function sendLikeRequest(method: "POST" | "DELETE", prompt: PromptData) {
   if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("いいね対象のプロンプトIDが見つかりません。"));
+    return Promise.reject(new Error(promptShareText("promptShare.likeTargetMissing")));
   }
 
   const { payload } = await promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/like", {
@@ -55,7 +56,7 @@ export function fetchPromptComments(promptId: string | number) {
     `/prompt_share/api/prompts/${encodeURIComponent(String(promptId))}/comments`,
     undefined,
     {
-      defaultMessage: "コメント一覧の取得に失敗しました。"
+      defaultMessage: promptShareText("promptShare.loadCommentsFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -70,7 +71,7 @@ export function createPromptComment(promptId: string | number, content: string) 
       body: JSON.stringify({ content })
     },
     {
-      defaultMessage: "コメント投稿に失敗しました。"
+      defaultMessage: promptShareText("promptShare.commentPostFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -83,7 +84,7 @@ export function deletePromptComment(commentId: string | number) {
       credentials: "same-origin"
     },
     {
-      defaultMessage: "コメント削除に失敗しました。"
+      defaultMessage: promptShareText("promptShare.commentDeleteFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -102,7 +103,7 @@ export function reportPromptComment(
       body: JSON.stringify({ reason, details })
     },
     {
-      defaultMessage: "コメント報告に失敗しました。"
+      defaultMessage: promptShareText("promptShare.commentReportFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -111,7 +112,7 @@ export function addPromptAsTask(prompt: PromptData) {
   // タスク追加対象IDが無い場合はAPI呼び出し前に明確なエラーを返す
   // Fail fast before API call when prompt ID is missing.
   if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("チャットで使う対象のプロンプトIDが見つかりません。"));
+    return Promise.reject(new Error(promptShareText("promptShare.useTargetMissing")));
   }
 
   return promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
@@ -128,7 +129,7 @@ export function removePromptAsTask(prompt: PromptData) {
   // タスク解除対象IDが無い場合はAPI呼び出し前に明確なエラーを返す
   // Fail fast before API call when prompt ID is missing.
   if (prompt.id === undefined || prompt.id === null) {
-    return Promise.reject(new Error("チャットで使う解除対象のプロンプトIDが見つかりません。"));
+    return Promise.reject(new Error(promptShareText("promptShare.removeUseTargetMissing")));
   }
 
   return promptShareFetchJsonOrThrow<ApiResponse>("/prompt_share/api/task", {
@@ -170,7 +171,7 @@ export function fetchPromptList(options?: {
     `/prompt_share/api/prompts${query ? `?${query}` : ""}`,
     undefined,
     {
-      defaultMessage: "プロンプト一覧の取得に失敗しました。"
+      defaultMessage: promptShareText("promptShare.loadFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -210,7 +211,7 @@ export function fetchPromptSearchResults(
     `/search/prompts?${params.toString()}`,
     undefined,
     {
-      defaultMessage: "検索に失敗しました。"
+      defaultMessage: promptShareText("promptShare.searchFailed")
     }
   ).then(({ payload }) => payload);
 }
@@ -225,7 +226,7 @@ export async function createPrompt(postData: FormData) {
       body: postData
     },
     {
-      defaultMessage: "プロンプト投稿中にエラーが発生しました。"
+      defaultMessage: promptShareText("promptShare.postFailed")
     }
   );
   return payload;

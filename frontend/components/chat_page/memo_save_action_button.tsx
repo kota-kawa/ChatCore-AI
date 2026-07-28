@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { isRecord } from "../../lib/utils";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
+import { useTranslation } from "../../contexts/locale_context";
 
 // メモ保存ボタンのprops型定義
 // Props type definition for the memo save action button
@@ -13,6 +14,7 @@ type MemoSaveActionButtonProps = {
 // AIの回答をメモとして保存するアクションボタン（保存状態のフィードバックアニメーション付き）
 // Action button to save an AI response as a memo, with feedback animation for save state
 export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
+  const { locale, t } = useTranslation();
   // アイコンとバリアントクラスで保存状態を視覚的に表現する
   // Visually represent the save state using icon and variant classes
   const [iconClass, setIconClass] = useState("bi-bookmark-plus");
@@ -58,7 +60,7 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
       const status = isRecord(rawPayload) ? rawPayload.status : undefined;
 
       if (!response.ok || status === "fail") {
-        throw new Error(extractApiErrorMessage(rawPayload, "メモの保存に失敗しました。", response.status));
+        throw new Error(extractApiErrorMessage(rawPayload, locale === "en" ? "Could not save the memo." : "メモの保存に失敗しました。", response.status));
       }
 
       setIconClass("bi-check-lg");
@@ -81,8 +83,8 @@ export function MemoSaveActionButton({ getText }: MemoSaveActionButtonProps) {
     <button
       type="button"
       className={`memo-save-btn message-action-btn ${variantClass}`.trim()}
-      aria-label="メモに保存"
-      data-tooltip="この回答をメモに保存"
+      aria-label={t("chat.saveMemo")}
+      data-tooltip={t("chat.saveMemo")}
       data-tooltip-placement="top"
       disabled={disabled}
       onClick={() => {

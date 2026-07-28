@@ -1,6 +1,7 @@
 import { memo } from "react";
 
 import type { NormalizedTask } from "../../lib/chat_page/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 // タスクプロンプト折り畳みコンポーネントのprops型定義
 // Props type definition for the task prompt disclosure component
@@ -19,13 +20,13 @@ type TaskPromptSection = {
 // ラベルはタスク詳細モーダルと揃えている。
 // Flatten the task definition (the instructions sent to the LLM behind the scenes)
 // into ordered sections; labels match the task detail modal.
-function buildTaskPromptSections(task: NormalizedTask): TaskPromptSection[] {
+function buildTaskPromptSections(task: NormalizedTask, english: boolean): TaskPromptSection[] {
   const candidates: TaskPromptSection[] = [
-    { label: "プロンプトテンプレート", value: task.prompt_template },
-    { label: "回答ルール", value: task.response_rules },
-    { label: "出力テンプレート", value: task.output_skeleton },
-    { label: "入力例", value: task.input_examples },
-    { label: "出力例", value: task.output_examples },
+    { label: english ? "Prompt template" : "プロンプトテンプレート", value: task.prompt_template },
+    { label: english ? "Response rules" : "回答ルール", value: task.response_rules },
+    { label: english ? "Output template" : "出力テンプレート", value: task.output_skeleton },
+    { label: english ? "Input example" : "入力例", value: task.input_examples },
+    { label: english ? "Output example" : "出力例", value: task.output_examples },
   ];
   // 空のセクションは除外する
   // Filter out empty sections
@@ -39,14 +40,15 @@ function buildTaskPromptSections(task: NormalizedTask): TaskPromptSection[] {
 // The 【タスク】 name and 【状況・作業環境】 input stay visible in the caller, so they are
 // intentionally excluded here. Renders nothing when there is no prompt to show.
 function TaskPromptDisclosureComponent({ task }: TaskPromptDisclosureProps) {
-  const sections = task ? buildTaskPromptSections(task) : [];
+  const { locale, t } = useTranslation();
+  const sections = task ? buildTaskPromptSections(task, locale === "en") : [];
   if (sections.length === 0) return null;
 
   return (
     <details className="task-prompt-disclosure">
       <summary className="task-prompt-disclosure__summary">
         <i className="bi bi-chevron-right task-prompt-disclosure__chevron" aria-hidden="true"></i>
-        <span className="task-prompt-disclosure__label">タスクプロンプト</span>
+        <span className="task-prompt-disclosure__label">{t("chat.taskPrompt")}</span>
       </summary>
 
       <div className="task-prompt-disclosure__body">

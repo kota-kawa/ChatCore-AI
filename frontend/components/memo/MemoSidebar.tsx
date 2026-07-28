@@ -3,6 +3,7 @@ import { type Dispatch, type SetStateAction } from "react";
 import type { Collection } from "../../lib/memo/types";
 import { MemoSelect } from "./MemoSelect";
 import type { MemoView } from "./MemoViewSwitcher";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoSidebarProps = {
   isSidebarCollapsed: boolean;
@@ -33,6 +34,7 @@ export function MemoSidebar({
   activeView,
   setActiveView,
 }: MemoSidebarProps) {
+  const { t } = useTranslation();
   const isMemosView = activeView === "memos";
   return (
           <aside className="memo-sidebar">
@@ -47,8 +49,8 @@ export function MemoSidebar({
                 type="button"
                 className="memo-sidebar-toggle"
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                aria-label={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
-                data-tooltip={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
+                aria-label={isSidebarCollapsed ? t("memo.expandSidebar") : t("memo.collapseSidebar")}
+                data-tooltip={isSidebarCollapsed ? t("memo.expandSidebar") : t("memo.collapseSidebar")}
                 data-tooltip-placement="right"
               >
                 <i className={`bi ${isSidebarCollapsed ? "bi-layout-sidebar" : "bi-layout-sidebar-inset"}`} aria-hidden="true"></i>
@@ -63,7 +65,7 @@ export function MemoSidebar({
                   onClick={() => { setActiveView("memos"); setActiveCollectionId(null); setArchiveScope("active"); }}
                 >
                   <i className="bi bi-lightning-charge" aria-hidden="true"></i>
-                  <span>すべてのメモ</span>
+                  <span>{t("memo.allMemos")}</span>
                 </button>
                 <button
                   type="button"
@@ -71,7 +73,7 @@ export function MemoSidebar({
                   onClick={() => setActiveView("context")}
                 >
                   <i className="bi bi-safe" aria-hidden="true"></i>
-                  <span>マイコンテキスト</span>
+                  <span>{t("memo.myContext")}</span>
                 </button>
               </nav>
 
@@ -80,18 +82,18 @@ export function MemoSidebar({
                   <div className="memo-sidebar-divider" role="separator"></div>
 
                   <section className="memo-sidebar-section">
-                    <h3 className="memo-sidebar-section__title">並び順</h3>
+                    <h3 className="memo-sidebar-section__title">{t("memo.sort")}</h3>
                     <div className="memo-sidebar-sort">
                       <MemoSelect
                         value={sortMode}
                         onChange={(v) => setSortMode(v)}
                         options={[
-                          { value: "manual", label: "手動順" },
-                          { value: "recent", label: "新しい順" },
-                          { value: "updated", label: "更新順" },
-                          { value: "oldest", label: "古い順" },
-                          { value: "title", label: "タイトル順" },
-                          { value: "semantic", label: "AI類似検索" },
+                          { value: "manual", label: t("memo.sortManual") },
+                          { value: "recent", label: t("memo.sortNewest") },
+                          { value: "updated", label: t("memo.sortUpdated") },
+                          { value: "oldest", label: t("memo.sortOldest") },
+                          { value: "title", label: t("memo.sortTitle") },
+                          { value: "semantic", label: t("memo.sortSemantic") },
                         ]}
                       />
                     </div>
@@ -100,7 +102,7 @@ export function MemoSidebar({
                   <div className="memo-sidebar-divider" role="separator"></div>
 
                   <section className="memo-sidebar-section">
-                    <h3 className="memo-sidebar-section__title">コレクション</h3>
+                    <h3 className="memo-sidebar-section__title">{t("memo.collections")}</h3>
                     <div className="memo-sidebar-collection-list">
                       <button
                         type="button"
@@ -110,7 +112,7 @@ export function MemoSidebar({
                         <span className="memo-sidebar-collection-icon" aria-hidden="true">
                           <i className="bi bi-archive"></i>
                         </span>
-                        <span className="memo-sidebar-collection-name">アーカイブ</span>
+                        <span className="memo-sidebar-collection-name">{t("memo.archive")}</span>
                       </button>
                       {collections.map((col) => (
                         <button
@@ -125,7 +127,7 @@ export function MemoSidebar({
                         </button>
                       ))}
                       {collections.length === 0 && (
-                        <p className="memo-sidebar-collection-empty">コレクションなし</p>
+                        <p className="memo-sidebar-collection-empty">{t("memo.noCollection")}</p>
                       )}
                     </div>
                     <button
@@ -134,7 +136,7 @@ export function MemoSidebar({
                       onClick={() => setIsCollectionPanelOpen(true)}
                     >
                       <i className="bi bi-plus-circle" aria-hidden="true"></i>
-                      <span>コレクションを管理</span>
+                      <span>{t("memo.manageCollections")}</span>
                     </button>
                   </section>
                 </>

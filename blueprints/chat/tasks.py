@@ -23,7 +23,11 @@ from services.async_utils import run_blocking
 from services.agent_capabilities import build_capability_context
 from services.cache import cache_get_json, cache_set_json
 from services.db import get_db_connection
-from services.default_tasks import default_task_payloads
+from services.default_tasks import (
+    default_task_payloads,
+    localize_system_task,
+    resolve_system_task_key,
+)
 from services.llm import (
     GPT_OSS_120B_MODEL,
     LlmAuthenticationError,
@@ -43,6 +47,7 @@ from services.llm_daily_limit import (
 )
 from services.code_search import search_codebase
 from services.intent_classifier import classify_intent
+from services.i18n import get_request_locale, normalize_locale
 from services.manual_rag import search_manual
 from services.memo_agent_actions import (
     build_memo_edit_messages,
@@ -76,7 +81,7 @@ logger = logging.getLogger(__name__)
 # 全ゲストで共有され、変更は管理者操作/シードのみのため短いTTLでDB読み取りを肩代わりさせる。
 # Cache key/TTL (seconds) for the shared guest default-task list. It is identical for every
 # guest and only changes via admin edits/seeding, so a short TTL safely offloads DB reads.
-GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v1"
+GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v2"
 GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS = 30
 
 # プロンプト支援APIのIP/ユーザーあたりのレート制限ウインドウ秒数
@@ -291,6 +296,7 @@ def _ai_agent_sse(event: str, payload: dict[str, Any]) -> bytes:
 def _build_ai_agent_messages(
     payload: AiAgentRequest,
     rag_context: str = "",
+    locale: str = "ja",
 ) -> list[dict[str, str]]:
     """
     システムプロンプト、RAGによる参照資料、および直近の会話履歴（最大12件）をマージして、LLMへ送るメッセージリストを組み立てます。
@@ -302,7 +308,18 @@ def _build_ai_agent_messages(
     
     # ページ情報に応じた能力・権限のコンテキストを付与
     # Append capability context based on current page path
-    system_content = f"{AI_AGENT_SYSTEM_PROMPT}\n\n{build_capability_context(payload.current_page or '')}"
+    resolved_locale = normalize_locale(locale, default="ja") or "ja"
+    fallback_language = "English" if resolved_locale == "en" else "Japanese"
+    language_instruction = (
+        "Follow an explicit language request first. Otherwise answer in the language of the "
+        "latest substantive user message. If it is ambiguous, use the saved interface "
+        f"language ({fallback_language}). Do not translate user-authored content unless asked."
+    )
+    system_content = (
+        f"{AI_AGENT_SYSTEM_PROMPT}\n\n"
+        f"<response_language_policy>{language_instruction}</response_language_policy>\n\n"
+        f"{build_capability_context(payload.current_page or '')}"
+    )
     if rag_context:
         # RAGコンテキストが存在する場合、システムプロンプトの最後部に参照資料として埋め込む
         # Append RAG references with separation markers as untrusted data
@@ -356,7 +373,7 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
 
 # データベースからタスクリストを取得する関数（ログイン時は個別、未ログイン時は共通）
 # Fetch the list of tasks from the database (user-specific when authenticated, generic otherwise).
-def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
+def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[str, Any]]:
     """
     DBからタスク定義の一覧を取得します。ログインユーザーならその個別定義、ゲストならuser_id IS NULLのデフォルト定義を取得します。
     Fetches the list of task descriptions from the DB, scoped by user ownership.
@@ -366,7 +383,7 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
     # ゲスト共通のデフォルトタスクは全員同一なので、まずキャッシュを参照してDB負荷を下げる。
     # The shared guest default-task list is identical for everyone, so check the cache first.
     if not user_id:
-        cached = cache_get_json(GUEST_DEFAULT_TASKS_CACHE_KEY)
+        cached = cache_get_json(f"{GUEST_DEFAULT_TASKS_CACHE_KEY}:{locale}")
         if isinstance(cached, list):
             return cached
 
@@ -381,7 +398,8 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
             # Query custom tasks for authenticated user sorted by display order
             cursor.execute(
                 """
-              SELECT name,
+              SELECT system_task_key,
+                     name,
                      prompt_template,
                      response_rules,
                      output_skeleton,
@@ -401,7 +419,8 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
             # Query shared system tasks
             cursor.execute(
                 """
-              SELECT name,
+              SELECT system_task_key,
+                     name,
                      prompt_template,
                      response_rules,
                      output_skeleton,
@@ -418,10 +437,10 @@ def _fetch_tasks_from_db(user_id: int | None) -> list[dict[str, Any]]:
         rows = cursor.fetchall()
         # RealDictRow を素の dict に正規化し、ゲスト共通分のみキャッシュへ書き込む。
         # Normalize RealDictRow to plain dicts and cache only the shared guest list.
-        tasks = [dict(row) for row in rows]
+        tasks = [localize_system_task(dict(row), locale) for row in rows]
         if not user_id:
             cache_set_json(
-                GUEST_DEFAULT_TASKS_CACHE_KEY,
+                f"{GUEST_DEFAULT_TASKS_CACHE_KEY}:{locale}",
                 tasks,
                 GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS,
             )
@@ -448,15 +467,27 @@ def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
         conn = get_db_connection()
         cursor = conn.cursor()
         for index, task_name in enumerate(new_order):
-            cursor.execute(
-                """
-                UPDATE task_with_examples
-                   SET display_order=%s
-                 WHERE name=%s AND user_id=%s
-                   AND deleted_at IS NULL
-            """,
-                (index, task_name, user_id),
-            )
+            system_task_key = resolve_system_task_key(task_name)
+            if system_task_key is not None:
+                cursor.execute(
+                    """
+                    UPDATE task_with_examples
+                       SET display_order=%s
+                     WHERE system_task_key=%s AND user_id=%s
+                       AND deleted_at IS NULL
+                    """,
+                    (index, system_task_key, user_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE task_with_examples
+                       SET display_order=%s
+                     WHERE name=%s AND user_id=%s
+                       AND deleted_at IS NULL
+                    """,
+                    (index, task_name, user_id),
+                )
         conn.commit()
     finally:
         if cursor is not None:
@@ -479,14 +510,25 @@ def _delete_task_for_user(user_id: int, task_name: str) -> None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        query = """
-            UPDATE task_with_examples
-               SET deleted_at = CURRENT_TIMESTAMP
-             WHERE name = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-        """
-        cursor.execute(query, (task_name, user_id))
+        system_task_key = resolve_system_task_key(task_name)
+        if system_task_key is not None:
+            query = """
+                UPDATE task_with_examples
+                   SET deleted_at = CURRENT_TIMESTAMP
+                 WHERE system_task_key = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+            """
+            cursor.execute(query, (system_task_key, user_id))
+        else:
+            query = """
+                UPDATE task_with_examples
+                   SET deleted_at = CURRENT_TIMESTAMP
+                 WHERE name = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+            """
+            cursor.execute(query, (task_name, user_id))
         conn.commit()
     finally:
         if cursor is not None:
@@ -522,16 +564,29 @@ def _edit_task_for_user(
         
         # まずタスクが存在するか、および所有権を確認
         # Verify the target task exists and is owned by the current user
-        sel_cursor.execute(
-            """
-            SELECT 1
-              FROM task_with_examples
-             WHERE name = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-            """,
-            (old_task, user_id),
-        )
+        system_task_key = resolve_system_task_key(old_task)
+        if system_task_key is not None:
+            sel_cursor.execute(
+                """
+                SELECT 1
+                  FROM task_with_examples
+                 WHERE system_task_key = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+                """,
+                (system_task_key, user_id),
+            )
+        else:
+            sel_cursor.execute(
+                """
+                SELECT 1
+                  FROM task_with_examples
+                 WHERE name = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+                """,
+                (old_task, user_id),
+            )
         exists = sel_cursor.fetchone()
         if not exists:
             return False
@@ -539,8 +594,23 @@ def _edit_task_for_user(
         # タスクの詳細情報をアップデート
         # Update metadata for the task
         upd_cursor = conn.cursor()
-        upd_cursor.execute(
+        if system_task_key is not None:
+            update_query = """
+            UPDATE task_with_examples
+               SET name            = %s,
+                   prompt_template = %s,
+                   response_rules  = %s,
+                   output_skeleton = %s,
+                   input_examples  = %s,
+                   output_examples = %s,
+                   system_task_key = NULL
+             WHERE system_task_key = %s
+               AND user_id = %s
+               AND deleted_at IS NULL
             """
+            lookup_value = system_task_key
+        else:
+            update_query = """
             UPDATE task_with_examples
                SET name            = %s,
                    prompt_template = %s,
@@ -551,7 +621,10 @@ def _edit_task_for_user(
              WHERE name = %s
                AND user_id = %s
                AND deleted_at IS NULL
-            """,
+            """
+            lookup_value = old_task
+        upd_cursor.execute(
+            update_query,
             (
                 new_task,
                 prompt_template,
@@ -559,7 +632,7 @@ def _edit_task_for_user(
                 output_skeleton,
                 input_examples,
                 output_examples,
-                old_task,
+                lookup_value,
                 user_id,
             ),
         )
@@ -653,7 +726,11 @@ async def get_tasks(request: Request):
         try:
             # DBからタスク一覧を取得
             # Load tasks from DB based on user id
-            tasks = await run_blocking(_fetch_tasks_from_db, user_id)
+            tasks = await run_blocking(
+                _fetch_tasks_from_db,
+                user_id,
+                get_request_locale(request),
+            )
 
         except Exception:
             logger.exception("Database error while loading tasks.")
@@ -673,7 +750,7 @@ async def get_tasks(request: Request):
         # 未ログイン かつ タスクが取得できていない場合はデフォルトタスクを使用
         # Use bundled default tasks when guest tasks could not be loaded.
         if not user_id and not tasks:
-            tasks = default_task_payloads()
+            tasks = default_task_payloads(get_request_locale(request))
 
         return jsonify({"tasks": tasks})
 
@@ -966,6 +1043,7 @@ async def prompt_assist(
             payload.action,
             dump_fields() if callable(dump_fields) else payload.fields.dict(),
             payload.instruction,
+            get_request_locale(request),
         )
         return jsonify(result)
     except ValueError as exc:
@@ -1042,6 +1120,7 @@ async def ai_agent(
         return validation_error
 
     user_id = request.session.get("user_id")
+    locale = get_request_locale(request)
     actor_key = f"user:{user_id}" if user_id else f"guest:{get_session_id(request.session)}"
     
     # 呼び出し頻度（レート制限）のチェック
@@ -1125,7 +1204,7 @@ async def ai_agent(
                 yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
                 response_text = await run_blocking(
                     get_llm_response,
-                    _build_ai_agent_messages(payload, rag_context),
+                    _build_ai_agent_messages(payload, rag_context, locale),
                     GPT_OSS_120B_MODEL,
                 )
                 yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})
@@ -1142,8 +1221,12 @@ async def ai_agent(
             if intent == "action":
                 yield _ai_agent_sse("progress", {"message": "ページを解析中..."})
                 page_ctx = await run_blocking(get_page_context, current_page)
+                language_context = (
+                    "Response language policy: follow an explicit request, otherwise use the latest "
+                    f"user-message language; if ambiguous use {'English' if locale == 'en' else 'Japanese'}."
+                )
                 action_context = "\n\n".join(
-                    part for part in (dom_context, page_ctx, build_capability_context(current_page)) if part
+                    part for part in (language_context, dom_context, page_ctx, build_capability_context(current_page)) if part
                 )
                 if action_context:
                     yield _ai_agent_sse("progress", {"message": "操作手順を生成中..."})
@@ -1174,13 +1257,21 @@ async def ai_agent(
                     # 画面コンテキストが無ければマニュアルを検索
                     # Fallback to manual RAG if page details are not available
                     yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
-                    rag_context = await run_blocking(search_manual, last_user_message)
+                    rag_context = await run_blocking(
+                        search_manual,
+                        last_user_message,
+                        locale=locale,
+                    )
 
             # 一般検索(search)の処理：マニュアルやコードベースを検索
             # Handle search intention
             elif intent == "search":
                 yield _ai_agent_sse("progress", {"message": "マニュアルを検索中..."})
-                rag_context = await run_blocking(search_manual, last_user_message)
+                rag_context = await run_blocking(
+                    search_manual,
+                    last_user_message,
+                    locale=locale,
+                )
                 if not rag_context:
                     # マニュアルになければコードベースも探索
                     # Fallback to codebase search if manual yields nothing
@@ -1192,7 +1283,7 @@ async def ai_agent(
             yield _ai_agent_sse("progress", {"message": "回答を生成中..."})
             response_text = await run_blocking(
                 get_llm_response,
-                _build_ai_agent_messages(payload, rag_context),
+                _build_ai_agent_messages(payload, rag_context, locale),
                 GPT_OSS_120B_MODEL,
             )
             yield _ai_agent_sse("done", {"response": response_text or "", "model": GPT_OSS_120B_MODEL})

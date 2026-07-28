@@ -8,6 +8,7 @@ import {
   savePromptLike
 } from "../../scripts/prompt_share/api";
 import type { PromptRecord } from "./prompt_card";
+import { useTranslation } from "../../contexts/locale_context";
 
 type UsePromptCardActionsOptions = {
   closePromptDropdown: () => void;
@@ -24,6 +25,7 @@ export function usePromptCardActions({
   triggerActionEffect,
   updatePromptRecord
 }: UsePromptCardActionsOptions) {
+  const { t } = useTranslation();
   const [likePendingIds, setLikePendingIds] = useState<Set<string>>(new Set());
   const [addAsTaskPendingIds, setAddAsTaskPendingIds] = useState<Set<string>>(new Set());
   const likePendingIdsRef = useRef<Set<string>>(new Set());
@@ -61,7 +63,7 @@ export function usePromptCardActions({
       closePromptDropdown();
 
       if (!isLoggedIn) {
-        showToast("チャットで使うにはログインが必要です。", { variant: "error" });
+        showToast(t("promptShare.loginToUse"), { variant: "error" });
         return;
       }
 
@@ -85,8 +87,8 @@ export function usePromptCardActions({
             ? response.message
             : "";
         const fallbackMessage = nextUsedInChat
-          ? "チャットで使えるように追加しました。"
-          : "チャットで使う設定を解除しました。";
+          ? t("promptShare.addedToChat")
+          : t("promptShare.removedFromChat");
         updatePromptRecord(promptId, (currentPrompt) => ({
           ...currentPrompt,
           used_in_chat: nextUsedInChat
@@ -98,12 +100,12 @@ export function usePromptCardActions({
           ...currentPrompt,
           used_in_chat: wasUsedInChat
         }));
-        showToast("チャットで使う設定の更新中にエラーが発生しました。", { variant: "error" });
+        showToast(t("promptShare.updateChatFailed"), { variant: "error" });
       } finally {
         setAddAsTaskPending(promptId, false);
       }
     },
-    [closePromptDropdown, isLoggedIn, setAddAsTaskPending, triggerActionEffect, updatePromptRecord]
+    [closePromptDropdown, isLoggedIn, setAddAsTaskPending, t, triggerActionEffect, updatePromptRecord]
   );
 
   // いいね状態を楽観的UIで即座に反映し、API失敗時はロールバックする
@@ -111,7 +113,7 @@ export function usePromptCardActions({
   const handleTogglePromptLike = useCallback(
     async (prompt: PromptRecord) => {
       if (!isLoggedIn) {
-        showToast("いいねするにはログインが必要です。", { variant: "error" });
+        showToast(t("promptShare.loginToLike"), { variant: "error" });
         return;
       }
 
@@ -143,12 +145,12 @@ export function usePromptCardActions({
           ...currentPrompt,
           liked: !shouldLike
         }));
-        showToast("いいねの更新中にエラーが発生しました。", { variant: "error" });
+        showToast(t("promptShare.likeUpdateFailed"), { variant: "error" });
       } finally {
         setLikePending(promptId, false);
       }
     },
-    [isLoggedIn, setLikePending, triggerActionEffect, updatePromptRecord]
+    [isLoggedIn, setLikePending, t, triggerActionEffect, updatePromptRecord]
   );
 
   return {

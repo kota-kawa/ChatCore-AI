@@ -1,22 +1,24 @@
 import { SeoHead } from "../components/SeoHead";
+import { useTranslation } from "../contexts/locale_context";
 
 // 404エラーページコンポーネント（検索エンジンにインデックスさせない）
 // 404 error page component (excluded from search engine indexing)
 export default function NotFoundPage() {
+  const { t } = useTranslation();
   return (
     <>
       <SeoHead
-        title="ページが見つかりません | Chat Core"
-        description="お探しのページは存在しないか、移動・削除された可能性があります。"
+        title={t("notFound.title")}
+        description={t("notFound.description")}
         noindex
       />
       <main className="global-error-boundary" role="main">
         <div className="global-error-boundary__card">
-          <h1>404 - ページが見つかりません</h1>
-          <p>お探しのページは存在しないか、移動・削除された可能性があります。</p>
+          <h1>{t("notFound.heading")}</h1>
+          <p>{t("notFound.description")}</p>
           {/* トップページへの導線 / Link back to the top page */}
           <a href="/" className="cc-texture-btn cc-texture-btn--indigo cc-press">
-            トップページへ戻る
+            {t("notFound.backHome")}
           </a>
         </div>
       </main>

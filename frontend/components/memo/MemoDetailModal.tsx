@@ -4,12 +4,13 @@ import { MiniChat } from "../chat_page/MiniChat";
 import type { StepExecutionResult } from "../../lib/chat_page/ai_agent";
 import type { MemoEditPayload } from "../../lib/chat_page/mini_chat_runtime";
 import { InlineLoading } from "../ui/inline_loading";
-import { MEMO_AGENT_QUICK_PROMPTS, MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
+import { MEMO_COLOR_OPTIONS } from "../../lib/memo/constants";
 import { parseMemoText } from "../../lib/memo/utils";
 import type { Collection, DetailSaveStatus, MemoDetail } from "../../lib/memo/types";
 import { formatDateTime } from "../../lib/datetime";
 import { MemoMarkdown } from "./MemoMarkdown";
 import { MemoSelect } from "./MemoSelect";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoDetailModalProps = {
   selectedMemo: MemoDetail | null;
@@ -65,20 +66,21 @@ export function MemoDetailModal({
   detailEditAiResponse,
   setDetailEditAiResponse,
 }: MemoDetailModalProps) {
+  const { t } = useTranslation();
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // メモエージェントが提案した編集を編集中のタイトル・本文へ反映する（保存は既存の自動保存に任せる）
   // Applies an agent-proposed edit to the editing state; persistence is handled by the existing autosave
   const applyAgentMemoEdit = useCallback(async ({ content, title }: MemoEditPayload): Promise<StepExecutionResult> => {
     if (!content.trim()) {
-      return { ok: false, message: "編集後の本文が空のため適用できませんでした。", needsReplan: false };
+      return { ok: false, message: t("memo.emptyEditedBody"), needsReplan: false };
     }
     setDetailEditAiResponse(content);
     if (title !== undefined) {
       setDetailEditTitle(title.slice(0, 255));
     }
     return { ok: true };
-  }, [setDetailEditAiResponse, setDetailEditTitle]);
+  }, [setDetailEditAiResponse, setDetailEditTitle, t]);
 
   useEffect(() => {
     if (!isMemoAgentOpen) return;
@@ -109,24 +111,24 @@ export function MemoDetailModal({
             aria-modal="true"
             aria-labelledby="memoModalTitle"
           >
-            <button type="button" className="memo-modal__close" aria-label="閉じる" onClick={() => { void closeMemoDetail(); }}>
+            <button type="button" className="memo-modal__close" aria-label={t("common.close")} onClick={() => { void closeMemoDetail(); }}>
               <i className="bi bi-x-lg"></i>
             </button>
             <header className="memo-modal__header">
               <div className="memo-modal__title-row">
                 <div className="memo-modal__title-block">
-                  <span id="memoModalTitle" className="sr-only">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</span>
+                  <span id="memoModalTitle" className="sr-only">{detailEditTitle || selectedMemo?.title || t("memo.savedMemo")}</span>
                   {detailPreviewMode ? (
-                    <h3 aria-hidden="true">{detailEditTitle || selectedMemo?.title || "保存したメモ"}</h3>
+                    <h3 aria-hidden="true">{detailEditTitle || selectedMemo?.title || t("memo.savedMemo")}</h3>
                   ) : (
                     <input
                       type="text"
                       className="memo-modal__title-input"
                       value={detailEditTitle}
                       onChange={(event) => setDetailEditTitle(event.target.value)}
-                      placeholder="空欄なら回答1行目を採用"
+                      placeholder={t("memo.titleAutoPlaceholder")}
                       maxLength={255}
-                      aria-label="タイトル"
+                      aria-label={t("memo.titleLabel")}
                     />
                   )}
                   <p className="memo-modal__date">{formatDateTime(selectedMemo?.updated_at || selectedMemo?.created_at) || selectedMemo?.created_at || ""}</p>
@@ -140,12 +142,12 @@ export function MemoDetailModal({
                         value={String(detailEditCollectionId ?? "")}
                         onChange={(value) => setDetailEditCollectionId(value === "" ? null : Number(value))}
                         options={[
-                          { value: "", label: "コレクションなし" },
+                          { value: "", label: t("memo.noCollection") },
                           ...collections.map((collection) => ({ value: String(collection.id), label: collection.name })),
                         ]}
                       />
                     )}
-                    <div className="memo-modal__color-strip" role="listbox" aria-label="メモの背景色">
+                    <div className="memo-modal__color-strip" role="listbox" aria-label={t("memo.backgroundColor")}>
                       {MEMO_COLOR_OPTIONS.map((option) => (
                         <button
                           key={option.label}
@@ -155,8 +157,8 @@ export function MemoDetailModal({
                           onClick={() => setDetailEditBackgroundColor(option.value || null)}
                           role="option"
                           aria-selected={(detailEditBackgroundColor || "") === option.value}
-                          aria-label={option.label}
-                          data-tooltip={option.label}
+                          aria-label={t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}
+                          data-tooltip={t(`memo.color.${option.value || "default"}` as Parameters<typeof t>[0])}
                           data-tooltip-placement="bottom"
                         >
                           <span></span>
@@ -167,8 +169,8 @@ export function MemoDetailModal({
                       type="button"
                       className={`memo-modal__icon-btn${detailCopied ? " is-copied" : ""}`}
                       onClick={() => { void copyDetailFullText(); }}
-                      aria-label={detailCopied ? "コピーしました" : "全文をコピー"}
-                      data-tooltip={detailCopied ? "コピーしました" : "全文をコピー"}
+                      aria-label={detailCopied ? t("common.copied") : t("memo.copyFullText")}
+                      data-tooltip={detailCopied ? t("common.copied") : t("memo.copyFullText")}
                       data-tooltip-placement="bottom"
                     >
                       <i className={`bi ${detailCopied ? "bi-check2" : "bi-files"}`} aria-hidden="true"></i>
@@ -183,25 +185,25 @@ export function MemoDetailModal({
                           void openMemoAgent();
                         }
                       }}
-                      aria-label={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問・編集"}
+                      aria-label={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
                       aria-expanded={isMemoAgentOpen}
-                      data-tooltip={isMemoAgentOpen ? "メモチャットを閉じる" : "このメモについてAIに質問・編集"}
+                      data-tooltip={isMemoAgentOpen ? t("memo.closeAgent") : t("memo.askAgent")}
                       data-tooltip-placement="bottom"
                     >
                       <i className="bi bi-robot" aria-hidden="true"></i>
                     </button>
                     <div className={`memo-modal__autosave-status memo-modal__autosave-status--${detailSaveStatus}`} role="status" aria-live="polite">
-                      {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>保存中...</>}
-                      {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                      {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>自動保存待ち</>}
-                      {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>保存済み</>}
-                      {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || "自動保存に失敗しました"}</>}
+                      {detailSaveStatus === "saving" && <><i className="bi bi-arrow-repeat memo-spin" aria-hidden="true"></i>{t("common.saving")}</>}
+                      {detailSaveStatus === "saved" && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                      {detailSaveStatus === "idle" && detailHasUnsavedChanges && <><i className="bi bi-clock" aria-hidden="true"></i>{t("memo.awaitingAutosave")}</>}
+                      {detailSaveStatus === "idle" && !detailHasUnsavedChanges && <><i className="bi bi-check2" aria-hidden="true"></i>{t("memo.saved")}</>}
+                      {detailSaveStatus === "error" && <><i className="bi bi-exclamation-triangle" aria-hidden="true"></i>{detailSaveError || t("memo.autosaveFailed")}</>}
                     </div>
                   </div>
                 )}
               </div>
             </header>
-            {detailLoading && <div className="memo-history__empty"><InlineLoading label="メモを読み込んでいます..." className="mx-auto" /></div>}
+            {detailLoading && <div className="memo-history__empty"><InlineLoading label={t("memo.loadingMemo")} className="mx-auto" /></div>}
             {!detailLoading && detailError && <div className="memo-history__empty">{detailError}</div>}
             {!detailLoading && selectedMemo && (
               <div
@@ -219,7 +221,7 @@ export function MemoDetailModal({
                           className={`memo-response-tab${!detailPreviewMode ? " is-active" : ""}`}
                           onClick={() => setDetailPreviewMode(false)}
                         >
-                          <i className="bi bi-code-slash" aria-hidden="true"></i>編集
+                          <i className="bi bi-code-slash" aria-hidden="true"></i>{t("common.edit")}
                         </button>
                         <button
                           type="button"
@@ -227,7 +229,7 @@ export function MemoDetailModal({
                           onClick={() => setDetailPreviewMode(true)}
                           disabled={!detailEditAiResponse.trim()}
                         >
-                          <i className="bi bi-eye" aria-hidden="true"></i>プレビュー
+                          <i className="bi bi-eye" aria-hidden="true"></i>{t("memo.preview")}
                         </button>
                       </div>
                     </div>
@@ -235,7 +237,7 @@ export function MemoDetailModal({
                       <div className="memo-preview-pane memo-modal__preview-pane">
                         {detailEditAiResponse.trim()
                           ? <MemoMarkdown text={parseMemoText(detailEditAiResponse)} className="memo-preview-content" />
-                          : <p className="memo-preview-empty">プレビューするテキストがありません。</p>}
+                          : <p className="memo-preview-empty">{t("memo.noPreviewText")}</p>}
                       </div>
                     ) : (
                       <textarea
@@ -243,23 +245,23 @@ export function MemoDetailModal({
                         className="memo-control memo-modal__edit-textarea memo-modal__edit-textarea--response"
                         value={detailEditAiResponse}
                         onChange={(event) => setDetailEditAiResponse(event.target.value)}
-                        placeholder="メモを入力..."
+                        placeholder={t("memo.writePlaceholder")}
                         required
                       />
                     )}
                   </div>
                 </section>
                 {isMemoAgentOpen && (
-                  <aside className="memo-modal__agent-panel" aria-label="このメモについてAIに質問・編集">
+                  <aside className="memo-modal__agent-panel" aria-label={t("memo.askAgent")}>
                     <div className="memo-modal__agent-header">
                       <div className="memo-modal__agent-header-info">
                         <span className="memo-modal__agent-label">
                           <i className="bi bi-stars" aria-hidden="true"></i>
                           Memo Agent
                         </span>
-                        <strong>このメモについて質問・編集</strong>
+                        <strong>{t("memo.askAgent")}</strong>
                       </div>
-                      <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label="メモチャットを閉じる">
+                      <button type="button" className="memo-modal__agent-close" onClick={() => setIsMemoAgentOpen(false)} aria-label={t("memo.closeAgent")}>
                         <i className="bi bi-x-lg" aria-hidden="true"></i>
                       </button>
                     </div>
@@ -267,10 +269,15 @@ export function MemoDetailModal({
                       key={`memo-agent-${selectedMemo.id}`}
                       memoId={selectedMemo.id}
                       storageScope={`memoAgent.${selectedMemo.id}`}
-                      quickPrompts={MEMO_AGENT_QUICK_PROMPTS}
-                      placeholderTitle="メモ専用エージェント"
-                      placeholderDescription="このメモの内容を参照して、要約や質問に加えて、本文の編集も依頼できます。編集は実行ボタンを押したときだけ反映されます。"
-                      inputPlaceholder="このメモについて質問・編集を依頼する..."
+                      quickPrompts={[
+                        t("memo.agentPromptSummarize"),
+                        t("memo.agentPromptKeyPoints"),
+                        t("memo.agentPromptProofread"),
+                        t("memo.agentPromptRewrite"),
+                      ]}
+                      placeholderTitle={t("memo.agentTitle")}
+                      placeholderDescription={t("memo.agentDescription")}
+                      inputPlaceholder={t("memo.agentPlaceholder")}
                       enableActions={false}
                       persistConversation={false}
                       onMemoEdit={applyAgentMemoEdit}

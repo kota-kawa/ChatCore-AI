@@ -8,12 +8,13 @@ type EditActionButtonProps = {
 // ユーザーメッセージを編集して再生成するアクションボタン
 // Action button to edit a user message and regenerate the response
 export function EditActionButton({ onEdit, disabled }: EditActionButtonProps) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       className="edit-btn message-action-btn"
-      aria-label="編集"
-      data-tooltip="メッセージを編集して再生成"
+      aria-label={t("common.edit")}
+      data-tooltip={t("chat.edit")}
       data-tooltip-placement="top"
       disabled={disabled}
       onClick={() => {
@@ -24,3 +25,4 @@ export function EditActionButton({ onEdit, disabled }: EditActionButtonProps) {
     </button>
   );
 }
+import { useTranslation } from "../../contexts/locale_context";

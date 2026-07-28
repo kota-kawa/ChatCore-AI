@@ -94,6 +94,7 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
             category="business",
             content_format="prompt",
             media_type="text",
+            locale="ja",
         )
 
     def test_route_rejects_invalid_cursor_before_database_lookup(self):

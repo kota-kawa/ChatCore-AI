@@ -21,6 +21,7 @@ from services.error_messages import (
     ERROR_INVALID_PROMPT_FEED_CURSOR,
     ERROR_INVALID_PROMPT_FEED_FILTER,
 )
+from services.i18n import get_request_locale
 from services.prompt_categories import normalize_category
 from services.prompt_types import (
     CONTENT_FORMATS,
@@ -439,6 +440,7 @@ def _get_prompts_with_flags(
     category: str | None = None,
     content_format: str | None = None,
     media_type: str | None = None,
+    locale: str = "ja",
 ) -> dict[str, Any]:
     """
     公開中プロンプトをカーソルページ単位で確定し、コメント数とユーザー操作状態を付加する。
@@ -451,6 +453,10 @@ def _get_prompts_with_flags(
         db_cursor = conn.cursor(dictionary=True)
         conditions = []
         params: list[Any] = []
+        conditions.append(
+            "AND (p.system_prompt_key IS NULL OR p.content_locale = %s)"
+        )
+        params.append(locale)
         if category is not None:
             conditions.append("AND p.category = %s")
             params.append(category)
@@ -591,7 +597,11 @@ def _get_prompts_with_flags(
 
 # 共有プロンプト詳細ページ向けに、閲覧中の投稿を除いたおすすめをランダム取得する関数
 # Fetch random prompt recommendations for a shared prompt detail page, excluding the prompt being viewed.
-def _get_recommended_prompts(exclude_prompt_id: int | None, limit: int = RECOMMENDED_PROMPT_LIMIT) -> list[dict[str, Any]]:
+def _get_recommended_prompts(
+    exclude_prompt_id: int | None,
+    limit: int = RECOMMENDED_PROMPT_LIMIT,
+    locale: str = "ja",
+) -> list[dict[str, Any]]:
     conn = None
     cursor = None
     try:
@@ -645,11 +655,12 @@ def _get_recommended_prompts(exclude_prompt_id: int | None, limit: int = RECOMME
               ON u.id = p.user_id
             WHERE p.is_public = TRUE
               AND p.deleted_at IS NULL
+              AND (p.system_prompt_key IS NULL OR p.content_locale = %s)
               AND COALESCE(p.id <> %s, TRUE)
             ORDER BY RANDOM()
             LIMIT %s
             """,
-            (exclude_prompt_id, limit),
+            (locale, exclude_prompt_id, limit),
         )
         return [_serialize_prompt_row(dict(row)) for row in cursor.fetchall()]
     finally:
@@ -1582,6 +1593,7 @@ async def get_prompts(request: Request):
             category=category,
             content_format=content_format,
             media_type=media_type,
+            locale=get_request_locale(request),
         )
         return jsonify({"status": "success", **payload})
     except Exception:
@@ -1596,9 +1608,14 @@ async def get_prompts(request: Request):
 # 共有プロンプト詳細ページ用のランダムなおすすめを取得するエンドポイント
 # Endpoint to retrieve random recommendations for a shared prompt detail page.
 @prompt_share_api_bp.get("/prompts/recommended", name="prompt_share_api.get_recommended_prompts")
-async def get_recommended_prompts(exclude_id: int | None = None):
+async def get_recommended_prompts(request: Request, exclude_id: int | None = None):
     try:
-        prompts = await run_blocking(_get_recommended_prompts, exclude_id)
+        prompts = await run_blocking(
+            _get_recommended_prompts,
+            exclude_id,
+            RECOMMENDED_PROMPT_LIMIT,
+            get_request_locale(request),
+        )
         return jsonify({"status": "success", "prompts": prompts})
     except Exception:
         return log_and_internal_server_error(
