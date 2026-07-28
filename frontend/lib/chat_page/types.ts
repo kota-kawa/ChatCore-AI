@@ -195,6 +195,9 @@ export type StoredGenerationState = {
 
 export type ModelOption = {
   value: string;
+  /** プロバイダーとモデル名（翻訳しない固有名詞） / Provider and model name (a proper noun, never translated) */
   label: string;
+  /** 用途の補足を引くカタログキー / Catalog key for the usage hint shown next to the name */
+  descriptionKey: "chat.modelStandard" | "chat.modelReasoning" | "chat.modelLightweight";
   shortLabel: string;
 };

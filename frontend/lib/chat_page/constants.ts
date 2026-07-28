@@ -237,11 +237,22 @@ export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
 ];
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { value: "openai/gpt-oss-120b", label: "GROQ | GPT-OSS 120B（標準・高品質な応答）", shortLabel: "GPT-OSS 120B" },
+  {
+    value: "openai/gpt-oss-120b",
+    label: "GROQ | GPT-OSS 120B",
+    descriptionKey: "chat.modelStandard",
+    shortLabel: "GPT-OSS 120B",
+  },
   {
     value: "gpt-5-mini",
-    label: "OPENAI | GPT-5 mini（高品質・推論が必要な作業向け）",
+    label: "OPENAI | GPT-5 mini",
+    descriptionKey: "chat.modelReasoning",
     shortLabel: "GPT-5 mini",
   },
-  { value: "gemini-2.5-flash", label: "Gemini | 2.5 Flash（軽い作業向け）", shortLabel: "Gemini 2.5" },
+  {
+    value: "gemini-2.5-flash",
+    label: "Gemini | 2.5 Flash",
+    descriptionKey: "chat.modelLightweight",
+    shortLabel: "Gemini 2.5",
+  },
 ];

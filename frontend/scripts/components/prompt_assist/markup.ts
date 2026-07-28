@@ -1,10 +1,11 @@
-import { PROMPT_ASSIST_TARGET_META } from "./constants";
+import { getPromptAssistTargetMeta } from "./constants";
+import { localized } from "./strings";
 import type { PromptAssistTarget } from "./types";
 
 export function createPromptAssistMarkup(target: PromptAssistTarget) {
-  const meta = PROMPT_ASSIST_TARGET_META[target];
+  const meta = getPromptAssistTargetMeta(target);
   return `
-    <section class="prompt-assist" data-assist-target="${target}" aria-label="AIによるプロンプト作成">
+    <section class="prompt-assist" data-assist-target="${target}" aria-label="${localized("AIによるプロンプト作成", "Create a prompt with AI")}">
       <div class="prompt-assist__head">
         <span class="prompt-assist__icon" aria-hidden="true"><i class="bi bi-stars"></i></span>
         <div class="prompt-assist__head-copy">
@@ -24,12 +25,12 @@ export function createPromptAssistMarkup(target: PromptAssistTarget) {
       <div class="prompt-assist__run-row">
         <button type="button" class="prompt-assist__run" data-assist-run>
           <i class="bi bi-stars" aria-hidden="true"></i>
-          <span>AIで作成</span>
+          <span>${localized("AIで作成", "Create with AI")}</span>
         </button>
       </div>
       <div class="prompt-assist__loading" data-assist-loading hidden aria-live="polite">
         <span class="prompt-assist__spinner" aria-hidden="true"></span>
-        <span>AIがプロンプトを作成しています…</span>
+        <span>${localized("AIがプロンプトを作成しています…", "AI is drafting your prompt…")}</span>
       </div>
       <p class="prompt-assist__status" data-assist-status hidden></p>
       <section class="prompt-assist__preview" data-assist-preview hidden aria-live="polite">
@@ -39,9 +40,9 @@ export function createPromptAssistMarkup(target: PromptAssistTarget) {
         <div class="prompt-assist__preview-actions">
           <button type="button" class="prompt-assist__apply" data-assist-apply>
             <i class="bi bi-check2-circle" aria-hidden="true"></i>
-            <span>反映する</span>
+            <span>${localized("反映する", "Apply")}</span>
           </button>
-          <button type="button" class="prompt-assist__retry" data-assist-retry>やり直す</button>
+          <button type="button" class="prompt-assist__retry" data-assist-retry>${localized("やり直す", "Start over")}</button>
         </div>
       </section>
     </section>

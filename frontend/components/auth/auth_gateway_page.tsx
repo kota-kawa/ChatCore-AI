@@ -320,11 +320,11 @@ export default function AuthGatewayPage() {
 
           {/* ステップに応じてアイコンを切り替える / Switch icon based on current step */}
           <div className="bot-icon">{step === "passkey" ? "🔐" : supportsPasskeys ? "🌿" : "✉️"}</div>
-          <h1 className="title">アカウントに続ける</h1>
+          <h1 className="title">{t("auth.gatewayTitle")}</h1>
           <p className="subtitle">
-            Passkey、Google、メール認証に対応しています。
+            {t("auth.gatewayMethods")}
             <br />
-            初めての場合はメール認証後にアカウントを作成します。
+            {t("auth.gatewayFirstTime")}
           </p>
 
           <div className="error-message" role="alert">{errorMessage}</div>
