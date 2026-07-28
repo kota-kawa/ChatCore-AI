@@ -1,6 +1,7 @@
 import { animateAppliedField } from "./animation";
 import { createSuggestionRow } from "./cards";
-import { PROMPT_ASSIST_PRIMARY_FIELDS, PROMPT_ASSIST_SKILL_META, PROMPT_ASSIST_TARGET_META } from "./constants";
+import { PROMPT_ASSIST_PRIMARY_FIELDS, getPromptAssistSkillMeta, getPromptAssistTargetMeta } from "./constants";
+import { localized } from "./strings";
 import { createPromptAssistMarkup } from "./markup";
 import { fetchJsonOrThrow } from "../../core/runtime_validation";
 import { resilientFetch } from "../../core/resilient_fetch";
@@ -76,7 +77,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
     statusEl.dataset.variant = variant;
   };
 
-  const fieldLabel = (fieldName: PromptAssistFieldName) => fields[fieldName]?.label || "項目";
+  const fieldLabel = (fieldName: PromptAssistFieldName) => fields[fieldName]?.label || localized("項目", "field");
 
   const collectFieldValues = () => {
     const collected: Partial<Record<PromptAssistFieldName, string>> = {};
@@ -160,7 +161,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
     resultEl.replaceChildren();
     if (!entries.length) {
       clearPreview();
-      setStatus("AIから反映できる内容を取得できませんでした。もう一度お試しください。", "error");
+      setStatus(localized("AIから反映できる内容を取得できませんでした。もう一度お試しください。", "No usable content came back from AI. Please try again."), "error");
       return;
     }
 
@@ -169,7 +170,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
       resultEl.append(createSuggestionRow(fieldLabel(fieldName), value, isPrimary));
     });
 
-    summaryEl.textContent = response.summary || "AIがプロンプトの下書きを作成しました。";
+    summaryEl.textContent = response.summary || localized("AIがプロンプトの下書きを作成しました。", "AI drafted your prompt.");
 
     const warnings = Array.isArray(response.warnings) ? response.warnings.filter(Boolean) : [];
     warningsEl.replaceChildren();
@@ -181,7 +182,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
     warningsEl.hidden = warnings.length === 0;
 
     previewEl.hidden = false;
-    setStatus("内容を確認して「反映する」を押すと、フォームに入ります。", "success");
+    setStatus(localized("内容を確認して「反映する」を押すと、フォームに入ります。", "Review the draft, then choose Apply to fill in the form."), "success");
     previewEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
@@ -194,7 +195,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
 
     clearPreview();
     setLoading(true);
-    setStatus("AIがプロンプトを作成しています…", "info");
+    setStatus(localized("AIがプロンプトを作成しています…", "AI is drafting your prompt…"), "info");
 
     try {
       const { payload } = await fetchJsonOrThrow<PromptAssistResponse & { error?: string }>(
@@ -212,7 +213,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
           }),
         },
         {
-          defaultMessage: "AIによる作成に失敗しました。",
+          defaultMessage: localized("AIによる作成に失敗しました。", "Drafting with AI failed."),
           fetchImpl: resilientFetch,
         },
       );
@@ -226,7 +227,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
         return;
       }
       clearPreview();
-      setStatus(error instanceof Error ? error.message : "AIによる作成に失敗しました。", "error");
+      setStatus(error instanceof Error ? error.message : localized("AIによる作成に失敗しました。", "Drafting with AI failed."), "error");
     } finally {
       if (currentRequestVersion === requestVersion) {
         setLoading(false);
@@ -246,8 +247,8 @@ export function initPromptAssist(config: PromptAssistConfig) {
     entries.forEach(([fieldName]) => {
       applyFieldValue(fieldName);
     });
-    const labels = entries.map(([fieldName]) => fieldLabel(fieldName)).join("・");
-    setStatus(`${labels}をフォームに反映しました。`, "success");
+    const labels = entries.map(([fieldName]) => fieldLabel(fieldName)).join(localized("・", ", "));
+    setStatus(localized(`${labels}をフォームに反映しました。`, `Applied ${labels} to the form.`), "success");
   });
 
   retryButton.addEventListener("click", () => {
@@ -258,7 +259,7 @@ export function initPromptAssist(config: PromptAssistConfig) {
 
   const updateForPromptType = (promptType: string) => {
     if (target !== "shared_prompt_modal") return;
-    const meta = promptType === "skill" ? PROMPT_ASSIST_SKILL_META : PROMPT_ASSIST_TARGET_META[target];
+    const meta = promptType === "skill" ? getPromptAssistSkillMeta() : getPromptAssistTargetMeta(target);
     if (titleEl) titleEl.textContent = meta.title;
     if (leadEl) leadEl.textContent = meta.lead;
     if (briefLabelEl) briefLabelEl.textContent = meta.briefLabel;
