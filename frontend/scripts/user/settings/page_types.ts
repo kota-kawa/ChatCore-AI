@@ -1,4 +1,6 @@
 import type { ThemePreference } from "../../core/theme";
+import type { MessageKey } from "../../../lib/i18n/catalogs/ja";
+import type { Locale } from "../../../lib/i18n/config";
 
 // 設定画面のどのセクションを表示するかを識別するユニオン型
 // Union type identifying which section of the settings page is currently visible
@@ -11,6 +13,18 @@ export type ThemeOption = {
   iconClass: string;
   label: string;
   description: string;
+};
+
+// 表示言語選択肢の定義型 — ラベルと説明は i18n カタログから引くため、ここでは見た目に使う要素だけを持つ
+// Type for a display-language option — labels come from the i18n catalogue, so only presentational bits live here
+export type LanguageOption = {
+  value: Locale;
+  // カードに大きく表示する書記体系のグリフ（例: あ / A）/ Script glyph shown large on the card (e.g. あ / A)
+  glyph: string;
+  // ロケールコードのバッジ表記（例: JA / EN）/ Locale code shown as a badge (e.g. JA / EN)
+  code: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
 };
 
 // サイドバーナビゲーション項目の型

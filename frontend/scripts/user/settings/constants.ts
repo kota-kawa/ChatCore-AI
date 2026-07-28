@@ -1,4 +1,4 @@
-import type { SettingsNavItem, ThemeOption } from "./page_types";
+import type { LanguageOption, SettingsNavItem, ThemeOption } from "./page_types";
 
 // 選択可能なテーマの一覧 — ライト・ダーク・システム追従の 3 択
 // Available theme choices — light, dark, and system-follow
@@ -20,6 +20,25 @@ export const THEME_OPTIONS: ThemeOption[] = [
     iconClass: "bi bi-circle-half",
     label: "システムに合わせる",
     description: "OS の設定に追従して自動切り替え"
+  }
+];
+
+// 選択可能な表示言語の一覧 — グリフはその言語らしさが一目で伝わる文字を使う
+// Available display languages — each glyph is a character that instantly reads as that language
+export const LANGUAGE_OPTIONS: LanguageOption[] = [
+  {
+    value: "ja",
+    glyph: "あ",
+    code: "JA",
+    labelKey: "settings.japanese",
+    descriptionKey: "settings.japaneseDescription"
+  },
+  {
+    value: "en",
+    glyph: "A",
+    code: "EN",
+    labelKey: "settings.english",
+    descriptionKey: "settings.englishDescription"
   }
 ];
 

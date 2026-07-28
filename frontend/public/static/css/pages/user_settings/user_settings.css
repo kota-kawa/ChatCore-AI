@@ -2542,6 +2542,202 @@ body.settings-page :where(
   color: #34d399;
 }
 
+/* ───────── 言語セクション（表示言語の切替）─────────
+   テーマ選択カードと同じ質感を保ちつつ、書記体系のグリフを大きく見せて
+   言語が読めなくてもカードを判別できるようにしています。
+   Mirrors the theme cards, but leads with a large script glyph so each card
+   stays identifiable even when its language is unreadable. */
+/* 選択肢は2つだけなので、説明文が折り返さない全幅の縦並びにする
+   Only two choices exist, so a full-width vertical list keeps the descriptions on one line */
+:where(body.settings-page, .user-settings-page) .language-options {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.95rem;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--settings-border-color, #dee2e6);
+  border-radius: 16px;
+  background: var(--settings-card-bg, #ffffff);
+  color: var(--text-dark, #1a1a1a);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option:hover:not(:disabled) {
+  border-color: rgba(25, 195, 125, 0.42);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+:where(body.settings-page, .user-settings-page) .language-option:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #19c37d);
+  box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.18);
+}
+
+:where(body.settings-page, .user-settings-page) .language-option.is-selected {
+  border-color: var(--primary-color, #19c37d);
+  background: linear-gradient(135deg, rgba(25, 195, 125, 0.1) 0%, rgba(25, 195, 125, 0.02) 100%);
+  box-shadow: 0 12px 24px rgba(15, 122, 81, 0.12);
+}
+
+/* 保存中は操作不能であることを見た目でも伝える / Communicate the disabled state while a save is in flight */
+:where(body.settings-page, .user-settings-page) .language-option:disabled {
+  cursor: progress;
+  opacity: 0.62;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(25, 195, 125, 0.12);
+  color: var(--primary-dark, #0f7a51);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option.is-selected .language-option__glyph {
+  background: linear-gradient(135deg, var(--primary-color, #19c37d) 0%, var(--primary-hover, #15a86b) 100%);
+  color: #ffffff;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  flex: 1;
+  min-width: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option__label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-dark, #1a1a1a);
+}
+
+:where(body.settings-page, .user-settings-page) .language-option__code {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.07);
+  color: var(--settings-text-muted, #6c757d);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option.is-selected .language-option__code {
+  background: rgba(25, 195, 125, 0.16);
+  color: var(--primary-dark, #0f7a51);
+}
+
+:where(body.settings-page, .user-settings-page) .language-option__description {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--settings-text-muted, #6c757d);
+  overflow-wrap: anywhere;
+}
+
+/* チェックは常に配置しておき、未選択時だけ隠して幅のガタつきを防ぐ / Reserve the check slot and only hide it when unselected, so widths never shift */
+:where(body.settings-page, .user-settings-page) .language-option__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color, #19c37d);
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+:where(body.settings-page, .user-settings-page) .language-option.is-selected .language-option__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+:where(body.settings-page, .user-settings-page) .language-options__status {
+  margin-top: 0.9rem;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option {
+  background: rgba(17, 24, 39, 0.88);
+  border-color: rgba(148, 163, 184, 0.22);
+  color: var(--text-dark, #e5e7eb);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option:hover:not(:disabled) {
+  background: rgba(22, 33, 54, 0.96);
+  border-color: rgba(25, 195, 125, 0.4);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.32);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option.is-selected {
+  background: linear-gradient(135deg, rgba(25, 195, 125, 0.18) 0%, rgba(25, 195, 125, 0.04) 100%);
+  border-color: rgba(25, 195, 125, 0.55);
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.4);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option__glyph {
+  background: rgba(25, 195, 125, 0.18);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option__label {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option__code {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option.is-selected .language-option__code {
+  background: rgba(25, 195, 125, 0.22);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option__description {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .language-option__check {
+  color: #34d399;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body.settings-page, .user-settings-page) .language-option,
+  :where(body.settings-page, .user-settings-page) .language-option__check {
+    transition: none;
+  }
+
+  :where(body.settings-page, .user-settings-page) .language-option:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
 /* ─── ダークモード: フィードバックバナー ─── */
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .settings-inline-feedback--success {
   color: #4ade80;
