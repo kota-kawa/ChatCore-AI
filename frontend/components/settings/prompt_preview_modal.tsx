@@ -1,5 +1,6 @@
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { toDisplayDate } from "../../scripts/user/settings/utils";
+import { useTranslation } from "../../contexts/locale_context";
 
 // 設定画面のカードから閲覧するプロンプト詳細に必要な共通データ
 // Shared prompt data needed by the settings-card preview modal
@@ -25,13 +26,14 @@ export function PromptPreviewModal({
   source: "authored" | "liked";
   onClose: () => void;
 }) {
+  const { t, formatNumber } = useTranslation();
   const categoryLabel = getCategoryLabelOrFallback(prompt.category);
-  const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : "日時未設定";
+  const createdAtLabel = prompt.createdAt ? toDisplayDate(prompt.createdAt) : t("promptShare.dateUnknown");
   const isSkill = prompt.contentFormat === "skill";
   const promptBody = isSkill ? prompt.skillMarkdown : prompt.content;
-  const promptBodyLabel = isSkill ? "SKILL定義" : "プロンプト本文";
+  const promptBodyLabel = isSkill ? t("promptShare.skillDefinition") : t("promptShare.body");
   const hasExamples = !isSkill && Boolean(prompt.inputExamples.trim() || prompt.outputExamples.trim());
-  const sourceLabel = source === "authored" ? "投稿したプロンプト" : "いいねしたプロンプト";
+  const sourceLabel = source === "authored" ? t("settings.prompts") : t("settings.likedPrompts");
 
   return (
     <div
@@ -57,8 +59,8 @@ export function PromptPreviewModal({
             </span>
             <div>
               <p className="prompt-preview-modal__eyebrow">{sourceLabel}</p>
-              <h2 id="promptPreviewModalTitle">{prompt.title || "無題のプロンプト"}</h2>
-              <div className="prompt-preview-modal__meta" aria-label="プロンプト情報">
+              <h2 id="promptPreviewModalTitle">{prompt.title || t("promptShare.untitled")}</h2>
+              <div className="prompt-preview-modal__meta" aria-label={t("promptShare.promptInfo")}>
                 {isSkill ? (
                   <span>
                     <i className="bi bi-code-slash" aria-hidden="true"></i>
@@ -79,7 +81,7 @@ export function PromptPreviewModal({
           <button
             type="button"
             className="prompt-preview-modal__close"
-            aria-label="詳細を閉じる"
+            aria-label={t("promptShare.closeDetails")}
             onClick={onClose}
           >
             <i className="bi bi-x-lg" aria-hidden="true"></i>
@@ -90,29 +92,29 @@ export function PromptPreviewModal({
           <section className="prompt-preview-modal__section" aria-labelledby="promptPreviewContentTitle">
             <div className="prompt-preview-modal__section-heading">
               <p>{promptBodyLabel}</p>
-              <span>{promptBody.length.toLocaleString("ja-JP")}文字</span>
+              <span>{t("promptShare.characters", { count: formatNumber(promptBody.length) })}</span>
             </div>
             <p id="promptPreviewContentTitle" className="prompt-preview-modal__content">
-              {promptBody || "内容が設定されていません。"}
+              {promptBody || t("promptShare.noContent")}
             </p>
           </section>
 
           {hasExamples ? (
             <section className="prompt-preview-modal__examples" aria-labelledby="promptPreviewExamplesTitle">
               <div className="prompt-preview-modal__section-heading">
-                <p id="promptPreviewExamplesTitle">入出力例</p>
-                <span>任意の補足情報</span>
+                <p id="promptPreviewExamplesTitle">{t("promptShare.examples")}</p>
+                <span>{t("promptShare.supplemental")}</span>
               </div>
               <div className="prompt-preview-modal__example-grid">
                 {prompt.inputExamples.trim() ? (
                   <article className="prompt-preview-modal__example">
-                    <h3><i className="bi bi-box-arrow-in-right" aria-hidden="true"></i>入力例</h3>
+                    <h3><i className="bi bi-box-arrow-in-right" aria-hidden="true"></i>{t("promptShare.inputExample")}</h3>
                     <p>{prompt.inputExamples}</p>
                   </article>
                 ) : null}
                 {prompt.outputExamples.trim() ? (
                   <article className="prompt-preview-modal__example">
-                    <h3><i className="bi bi-box-arrow-right" aria-hidden="true"></i>出力例</h3>
+                    <h3><i className="bi bi-box-arrow-right" aria-hidden="true"></i>{t("promptShare.outputExample")}</h3>
                     <p>{prompt.outputExamples}</p>
                   </article>
                 ) : null}
@@ -123,7 +125,7 @@ export function PromptPreviewModal({
 
         <footer className="prompt-preview-modal__footer">
           <button type="button" className="prompt-preview-modal__button" onClick={onClose}>
-            閉じる
+            {t("common.close")}
           </button>
         </footer>
       </div>

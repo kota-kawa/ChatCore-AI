@@ -1,11 +1,12 @@
 import { SeoHead } from "../components/SeoHead";
-import { LpFaq, LP_FAQ_ITEMS } from "../components/lp/lp_faq";
+import { LpFaq, LP_FAQ_ITEMS, LP_FAQ_ITEMS_EN } from "../components/lp/lp_faq";
 import { LpFeatures } from "../components/lp/lp_features";
 import { LpFinalCta, LpFooter } from "../components/lp/lp_footer";
 import { LpFlow } from "../components/lp/lp_flow";
 import { LpHeader } from "../components/lp/lp_header";
 import { LpHero } from "../components/lp/lp_hero";
 import { absoluteUrl } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 const LP_TITLE = "ChatCore-AIとは | 無料の日本語AIチャット・プロンプト共有・メモ管理";
 
@@ -53,9 +54,16 @@ const lpStructuredData = [
 // ユーザー獲得向けのマーケティングランディングページ
 // Marketing landing page aimed at user acquisition
 export default function LandingPage() {
+  const { locale, t } = useTranslation();
+  const title = t("lp.title");
+  const description = t("lp.description");
+  const faqItems = locale === "en" ? LP_FAQ_ITEMS_EN : LP_FAQ_ITEMS;
+  const structuredData = lpStructuredData.map((entry) => entry["@type"] === "FAQPage"
+    ? { ...entry, mainEntity: faqItems.map((item) => ({ "@type": "Question", name: item.question, acceptedAnswer: { "@type": "Answer", text: item.answer } })) }
+    : { ...entry, ...(entry["@type"] === "WebPage" ? { name: title, description, inLanguage: locale } : {}) });
   return (
     <>
-      <SeoHead title={LP_TITLE} description={LP_DESCRIPTION} canonicalPath="/lp" structuredData={lpStructuredData}>
+      <SeoHead title={title} description={description} canonicalPath="/lp" structuredData={structuredData}>
         {/* LP専用CSSは_appに載せず、このページからのみ読み込む / LP-only CSS is linked from this page instead of _app */}
         <link rel="stylesheet" href="/static/css/pages/lp/lp.css" />
         {/* 見出し用の明朝体（このページのみで使用） / Mincho display face used only on this page */}

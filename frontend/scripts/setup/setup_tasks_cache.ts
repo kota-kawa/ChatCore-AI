@@ -1,5 +1,6 @@
 import type { TaskItem } from "./setup_types";
 import { CACHE_TTL_MS, STORAGE_KEYS } from "../core/constants";
+import { LOCALE_STORAGE_KEY, normalizeLocale } from "../../lib/i18n/config";
 
 const TASKS_CACHE_KEY_PREFIX = STORAGE_KEYS.tasksCachePrefix;
 
@@ -17,7 +18,15 @@ function getTasksCacheKey() {
   } catch {
     // localStorage が使えない環境では guest スコープを使用
   }
-  return `${TASKS_CACHE_KEY_PREFIX}${scope}`;
+  let locale = "ja";
+  try {
+    locale = normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY))
+      ?? normalizeLocale(document.documentElement.lang)
+      ?? "ja";
+  } catch {
+    // Browser storage/document access can be unavailable during isolated rendering.
+  }
+  return `${TASKS_CACHE_KEY_PREFIX}${scope}:${locale}`;
 }
 
 export function readCachedTasks() {
@@ -51,8 +60,12 @@ export function writeCachedTasks(tasks: TaskItem[]) {
 
 export function invalidateTasksCache() {
   try {
-    localStorage.removeItem(`${TASKS_CACHE_KEY_PREFIX}guest`);
-    localStorage.removeItem(`${TASKS_CACHE_KEY_PREFIX}auth`);
+    for (const scope of ["guest", "auth"]) {
+      for (const locale of ["ja", "en"]) {
+        localStorage.removeItem(`${TASKS_CACHE_KEY_PREFIX}${scope}:${locale}`);
+      }
+      localStorage.removeItem(`${TASKS_CACHE_KEY_PREFIX}${scope}`);
+    }
   } catch {
     // localStorage が使えない環境では削除をスキップ
   }

@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 
 from blueprints.auth import api_send_login_code
 from blueprints.prompt_share.prompt_manage_api import get_my_prompts
+from services.api_errors import ApiServiceError, ResourceNotFoundError
+from services.i18n import reset_current_locale, set_current_locale
 from services.web import DEFAULT_INTERNAL_ERROR_MESSAGE, log_and_internal_server_error
 from tests.helpers.request_helpers import build_request
 
@@ -29,6 +31,42 @@ def make_request(
 # 日本語: エラーハンドリング機能（内部エラーのマスク処理・ログ記録）をテストするクラス。
 # English: Test class for error handling functionality (masking internal errors and logging).
 class ErrorHandlingTestCase(unittest.TestCase):
+    def test_api_service_error_includes_stable_code_and_params(self):
+        error = ApiServiceError(
+            "Too many requests",
+            429,
+            code="rate_limit.exceeded",
+            params={"retry_after": 30},
+        )
+
+        self.assertEqual(
+            error.to_payload(),
+            {
+                "error": "Too many requests",
+                "code": "rate_limit.exceeded",
+                "params": {"retry_after": 30},
+            },
+        )
+
+    def test_specialized_api_error_uses_stable_default_code(self):
+        error = ResourceNotFoundError("missing")
+
+        self.assertEqual(error.to_payload()["code"], "resource_not_found")
+
+    def test_known_service_error_is_localized_in_english(self):
+        token = set_current_locale("en")
+        try:
+            error = ResourceNotFoundError("該当ルームが見つかりません")
+            payload = error.to_payload()
+        finally:
+            reset_current_locale(token)
+
+        self.assertEqual(payload["code"], "resource_not_found")
+        self.assertEqual(
+            payload["error"],
+            "The requested chat room could not be found.",
+        )
+
     # 日本語: log_and_internal_server_error が汎用エラーペイロードを返し、ロガーでexceptionをログすることを検証します。
     # English: Verify that log_and_internal_server_error returns a generic error payload and logs the exception.
     def test_log_and_internal_server_error_returns_generic_payload_and_logs(self):

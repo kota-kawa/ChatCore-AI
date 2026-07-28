@@ -15,6 +15,18 @@ from services.prompt_assist import (
 # 日本語: Prompt Assist Logicの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Prompt Assist Logic.
 class PromptAssistLogicTestCase(unittest.TestCase):
+    def test_prompt_assist_uses_input_language_then_saved_locale(self):
+        messages = _build_prompt_assist_messages(
+            "task_modal",
+            "generate_draft",
+            {"title": "", "prompt_content": "", "input_examples": "", "output_examples": ""},
+            "Create a concise support reply",
+            "en",
+        )
+
+        self.assertIn("主要な入力言語", messages[1]["content"])
+        self.assertIn("フォールバック）は English", messages[1]["content"])
+
     # 日本語: sharedプロンプトmodalに対して、normalizefieldscoercesプロンプトtypeことを検証します。
     # English: Verify that normalize fields coerces prompt type for shared prompt modal.
     def test_normalize_fields_coerces_prompt_type_for_shared_prompt_modal(self):

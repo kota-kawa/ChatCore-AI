@@ -1,3 +1,5 @@
+import { getRuntimeLocale } from "../../lib/i18n/config";
+
 type ToastVariant = "info" | "success" | "error";
 
 type ToastOptions = {
@@ -19,7 +21,7 @@ function ensureViewport() {
   viewport.className = "cc-toast-viewport";
   viewport.setAttribute("role", "region");
   viewport.setAttribute("aria-live", "polite");
-  viewport.setAttribute("aria-label", "通知");
+  viewport.setAttribute("aria-label", getRuntimeLocale() === "en" ? "Notifications" : "通知");
   document.body.appendChild(viewport);
   return viewport;
 }

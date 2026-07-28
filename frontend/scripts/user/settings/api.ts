@@ -11,6 +11,7 @@ import {
   type McpOAuthConnection,
   type McpOAuthConsent
 } from "./types";
+import { normalizeLocale, type Locale } from "../../../lib/i18n/config";
 
 export function settingsFetchJsonOrThrow<TPayload>(
   input: RequestInfo | URL,
@@ -21,6 +22,33 @@ export function settingsFetchJsonOrThrow<TPayload>(
     ...options,
     fetchImpl: resilientFetch,
   });
+}
+
+export async function loadLocalePreference(): Promise<Locale> {
+  const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
+    "/api/user/preferences",
+    { credentials: "same-origin" },
+    { defaultMessage: "表示言語の取得に失敗しました。" }
+  );
+  const locale = normalizeLocale(payload.locale);
+  if (!locale) throw new Error("Unsupported locale returned by preferences API");
+  return locale;
+}
+
+export async function updateLocalePreference(locale: Locale): Promise<Locale> {
+  const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
+    "/api/user/preferences",
+    {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale })
+    },
+    { defaultMessage: "表示言語の保存に失敗しました。" }
+  );
+  const savedLocale = normalizeLocale(payload.locale);
+  if (!savedLocale) throw new Error("Unsupported locale returned by preferences API");
+  return savedLocale;
 }
 
 export class McpOAuthApiError extends Error {

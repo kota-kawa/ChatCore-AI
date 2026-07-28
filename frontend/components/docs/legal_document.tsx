@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { LpFooter } from "../lp/lp_footer";
 import { LpHeader } from "../lp/lp_header";
+import { useTranslation } from "../../contexts/locale_context";
 
 // 要点サマリーカード1枚分の型 / Type for a single plain-language summary card
 export type LegalSummaryItem = {
@@ -45,6 +46,7 @@ export function LegalDocument({
   summaryNote,
   sections
 }: LegalDocumentProps) {
+  const { t } = useTranslation();
   return (
     <div className="lp-page docs-page">
       <LpHeader />
@@ -85,8 +87,8 @@ export function LegalDocument({
 
         <section className="docs-body">
           <div className="lp-container docs-body__inner">
-            <nav className="docs-toc" aria-label="目次">
-              <p className="docs-toc__label">目次</p>
+            <nav className="docs-toc" aria-label={t("legal.toc")}>
+              <p className="docs-toc__label">{t("legal.toc")}</p>
               <ol className="docs-toc__list">
                 {sections.map((section) => (
                   <li key={section.id}>

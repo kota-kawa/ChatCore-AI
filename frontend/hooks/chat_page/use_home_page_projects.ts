@@ -13,6 +13,7 @@ import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import { extractApiErrorMessage, readJsonBodySafe } from "../../scripts/core/runtime_validation";
 import { showConfirmModal } from "../../scripts/core/alert_modal";
 import { showToast } from "../../scripts/core/toast";
+import { useTranslation } from "../../contexts/locale_context";
 
 type UseHomePageProjectsParams = {
   loggedIn: boolean;
@@ -29,6 +30,7 @@ export function useHomePageProjects({
   pendingProjectIdRef,
   setPendingProjectId,
 }: UseHomePageProjectsParams) {
+  const { locale, t } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
   // 詳細オーバーレイの対象プロジェクトID（null で閉じている）。
@@ -49,7 +51,7 @@ export function useHomePageProjects({
       const response = await resilientFetch("/api/projects", { credentials: "same-origin" });
       const payload = (await readJsonBodySafe(response)) as { projects?: Project[]; error?: string };
       if (!response.ok || payload.error) {
-        throw new Error(extractApiErrorMessage(payload, "プロジェクト一覧の取得に失敗しました。", response.status));
+        throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not load projects." : "プロジェクト一覧の取得に失敗しました。", response.status));
       }
       const nextProjects = payload.projects ?? [];
       setProjects(nextProjects);
@@ -60,7 +62,7 @@ export function useHomePageProjects({
     } finally {
       setIsProjectsLoading(false);
     }
-  }, [loggedIn]);
+  }, [locale, loggedIn]);
 
   // ログイン状態が確定したらプロジェクト一覧を読み込む。
   // Load the project list once the user is known to be logged in.
@@ -80,7 +82,7 @@ export function useHomePageProjects({
       const response = await resilientFetch(`/api/projects/${projectId}`, { credentials: "same-origin" });
       const payload = (await readJsonBodySafe(response)) as { project?: ProjectDetail; error?: string };
       if (!response.ok || payload.error || !payload.project) {
-        throw new Error(extractApiErrorMessage(payload, "プロジェクトの取得に失敗しました。", response.status));
+        throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not load the project." : "プロジェクトの取得に失敗しました。", response.status));
       }
       setActiveProjectDetail(payload.project);
       return payload.project;
@@ -90,7 +92,7 @@ export function useHomePageProjects({
     } finally {
       setIsProjectDetailLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   const openProject = useCallback(
     (projectId: number) => {
@@ -121,11 +123,11 @@ export function useHomePageProjects({
         });
         const payload = (await readJsonBodySafe(response)) as { project?: Project; error?: string };
         if (!response.ok || payload.error || !payload.project) {
-          throw new Error(extractApiErrorMessage(payload, "プロジェクトの作成に失敗しました。", response.status));
+          throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not create the project." : "プロジェクトの作成に失敗しました。", response.status));
         }
         await loadProjects();
         setIsProjectModalOpen(false);
-        showToast("プロジェクトを作成しました。", { variant: "success" });
+        showToast(t("chat.projectCreated"), { variant: "success" });
         return payload.project;
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
@@ -134,7 +136,7 @@ export function useHomePageProjects({
         setIsSavingProject(false);
       }
     },
-    [loadProjects],
+    [loadProjects, locale, t],
   );
 
   const updateProject = useCallback(
@@ -149,10 +151,10 @@ export function useHomePageProjects({
         });
         const payload = (await readJsonBodySafe(response)) as { project?: Project; error?: string };
         if (!response.ok || payload.error) {
-          throw new Error(extractApiErrorMessage(payload, "プロジェクトの更新に失敗しました。", response.status));
+          throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not update the project." : "プロジェクトの更新に失敗しました。", response.status));
         }
         await Promise.all([loadProjects(), refreshProjectDetail(projectId)]);
-        showToast("プロジェクトを更新しました。", { variant: "success" });
+        showToast(t("chat.projectUpdated"), { variant: "success" });
         return true;
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
@@ -161,13 +163,13 @@ export function useHomePageProjects({
         setIsSavingProject(false);
       }
     },
-    [loadProjects, refreshProjectDetail],
+    [loadProjects, locale, refreshProjectDetail, t],
   );
 
   const deleteProject = useCallback(
     async (projectId: number, projectName: string): Promise<void> => {
       const confirmed = await showConfirmModal(
-        `「${projectName}」を削除しますか？\n配下のチャットは削除されず、プロジェクト未所属になります。`,
+        locale === "en" ? `Delete “${projectName}”?\nIts chats will remain and become unassigned.` : `「${projectName}」を削除しますか？\n配下のチャットは削除されず、プロジェクト未所属になります。`,
       );
       if (!confirmed) return;
 
@@ -180,18 +182,18 @@ export function useHomePageProjects({
         });
         const payload = (await readJsonBodySafe(response)) as { error?: string };
         if (!response.ok || payload.error) {
-          throw new Error(extractApiErrorMessage(payload, "プロジェクトの削除に失敗しました。", response.status));
+          throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not delete the project." : "プロジェクトの削除に失敗しました。", response.status));
         }
         if (activeProjectId === projectId) {
           closeProject();
         }
         await loadProjects();
-        showToast("プロジェクトを削除しました。", { variant: "success" });
+        showToast(t("chat.projectDeleted"), { variant: "success" });
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
       }
     },
-    [activeProjectId, closeProject, loadProjects],
+    [activeProjectId, closeProject, loadProjects, locale, t],
   );
 
   const assignRoomToProject = useCallback(
@@ -205,21 +207,21 @@ export function useHomePageProjects({
         });
         const payload = (await readJsonBodySafe(response)) as { error?: string };
         if (!response.ok || payload.error) {
-          throw new Error(extractApiErrorMessage(payload, "プロジェクトへの追加に失敗しました。", response.status));
+          throw new Error(extractApiErrorMessage(payload, locale === "en" ? "Could not add the chat to the project." : "プロジェクトへの追加に失敗しました。", response.status));
         }
 
         await loadProjects();
         if (activeProjectId !== null) {
           await refreshProjectDetail(activeProjectId);
         }
-        showToast(`「${projectName}」へ追加しました。`, { variant: "success" });
+        showToast(locale === "en" ? `Added to “${projectName}”.` : `「${projectName}」へ追加しました。`, { variant: "success" });
         return true;
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), { variant: "error" });
         return false;
       }
     },
-    [activeProjectId, loadProjects, refreshProjectDetail],
+    [activeProjectId, loadProjects, locale, refreshProjectDetail],
   );
 
   // 「このプロジェクトで新規チャット」: 次の作成チャットに紐づけるIDを記録する。

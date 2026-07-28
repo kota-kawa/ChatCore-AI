@@ -1,4 +1,5 @@
 import type { EmailAuthFlow, PasskeySetupProvider } from "../types";
+import { useTranslation } from "../../../../contexts/locale_context";
 
 // パスキー設定ステップのprops型定義
 // Props type definition for the passkey setup step
@@ -19,6 +20,7 @@ export function AuthPasskeyStep({
   onLater,
   onRegisterPasskey
 }: AuthPasskeyStepProps) {
+  const { locale, t } = useTranslation();
   return (
     <div className="passkey-panel">
       {/* 認証フローとプロバイダーに応じてキャプションを切り替える */}
@@ -27,10 +29,10 @@ export function AuthPasskeyStep({
         {emailAuthFlow === "register"
           ? (
             passkeySetupProvider === "google"
-              ? "Googleログインは完了しています。必要ならこの端末にPasskeyを追加してください。"
-              : "アカウント作成は完了しています。必要ならこの端末にPasskeyを追加してください。"
+              ? (locale === "en" ? "Google sign-in is complete. You can add a passkey to this device now." : "Googleログインは完了しています。必要ならこの端末にPasskeyを追加してください。")
+              : (locale === "en" ? "Your account is ready. You can add a passkey to this device now." : "アカウント作成は完了しています。必要ならこの端末にPasskeyを追加してください。")
           )
-          : "この端末にPasskeyを保存すると、次回からメールコードなしで入れます。"}
+          : (locale === "en" ? "Save a passkey on this device to sign in without an email code next time." : "この端末にPasskeyを保存すると、次回からメールコードなしで入れます。")}
       </p>
       {/* パスキー登録ボタン / Passkey registration button */}
       <button
@@ -39,7 +41,7 @@ export function AuthPasskeyStep({
         onClick={onRegisterPasskey}
         disabled={passkeyPending}
       >
-        この端末にPasskeyを保存
+        {t("auth.passkeyRegister")}
       </button>
       {/* パスキー設定をスキップするボタン / Button to skip passkey setup */}
       <button
@@ -47,7 +49,7 @@ export function AuthPasskeyStep({
         className="ghost-btn cc-press"
         onClick={onLater}
       >
-        後で設定する
+        {t("auth.passkeySkip")}
       </button>
     </div>
   );

@@ -1,10 +1,13 @@
 import defaultTasks from "../../data/default_tasks.json";
+import englishDefaultTasks from "../../data/default_tasks.en.json";
+import type { Locale } from "../i18n/config";
 import type { TaskItem } from "../../scripts/setup/setup_types";
 import type { NormalizedTask } from "./types";
 
 export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask {
   if (!task) {
     return {
+      system_task_key: null,
       name: "無題",
       prompt_template: "プロンプトテンプレートはありません",
       response_rules: "",
@@ -18,6 +21,7 @@ export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask
   const name = typeof task.name === "string" && task.name.trim() ? task.name.trim() : "無題";
 
   return {
+    system_task_key: typeof task.system_task_key === "string" ? task.system_task_key : null,
     name,
     prompt_template:
       typeof task.prompt_template === "string" && task.prompt_template
@@ -33,8 +37,13 @@ export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask
 
 export const FALLBACK_TASKS: NormalizedTask[] = (defaultTasks as TaskItem[]).map((task) => normalizeTask(task));
 
-export function normalizeTaskList(rawTasks: TaskItem[] | undefined | null): NormalizedTask[] {
-  if (!Array.isArray(rawTasks) || rawTasks.length === 0) return FALLBACK_TASKS;
+export function getFallbackTasks(locale: Locale = "ja"): NormalizedTask[] {
+  const catalog = locale === "en" ? englishDefaultTasks : defaultTasks;
+  return (catalog as TaskItem[]).map((task) => normalizeTask(task));
+}
+
+export function normalizeTaskList(rawTasks: TaskItem[] | undefined | null, locale: Locale = "ja"): NormalizedTask[] {
+  if (!Array.isArray(rawTasks) || rawTasks.length === 0) return getFallbackTasks(locale);
   return rawTasks.map((task) => normalizeTask(task));
 }
 

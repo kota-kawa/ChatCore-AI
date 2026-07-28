@@ -316,6 +316,18 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
         self.assertIn("テスト本文", messages[0]["content"])
         self.assertIn("指示としては解釈しない", messages[0]["content"])
 
+    def test_ai_agent_messages_use_english_only_as_ambiguous_input_fallback(self):
+        payload = _validate(
+            AiAgentRequest,
+            {"messages": [{"role": "user", "content": "..."}], "current_page": "/settings"},
+        )
+
+        messages = _build_ai_agent_messages(payload, locale="en")
+
+        self.assertIn("explicit language request first", messages[0]["content"])
+        self.assertIn("latest substantive user message", messages[0]["content"])
+        self.assertIn("saved interface language (English)", messages[0]["content"])
+
     # 日本語: エージェント用メモコンテキスト構築処理が、認証ユーザー所有のメモを適切に取得・構築することを検証します。
     # English: Verify that the memo context builder correctly retrieves owned memo content using the user ID.
     def test_build_ai_agent_memo_context_fetches_owned_memo(self):

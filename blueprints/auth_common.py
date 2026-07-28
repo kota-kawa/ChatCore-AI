@@ -14,6 +14,7 @@ def _clear_login_verification_session(session: dict[str, Any]) -> None:
     session.pop("login_temp_email", None)
     session.pop("login_verification_code_issued_at", None)
     session.pop("login_verification_code_attempts", None)
+    session.pop("login_verification_locale", None)
 
 
 def _clear_google_oauth_session(session: dict[str, Any]) -> None:

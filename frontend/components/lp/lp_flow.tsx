@@ -14,19 +14,26 @@ const LP_FLOW_STEPS = [
     description: "良い回答はメモへ保存、良い聞き方はプロンプトとして共有します。"
   }
 ] as const;
+const LP_FLOW_STEPS_EN = [
+  { title: "Create your account", description: "Sign up with an email address in a few minutes. It’s free." },
+  { title: "Talk to AI", description: "Describe what you want to research, write, or organize in your own words." },
+  { title: "Keep and share", description: "Save useful answers as memos and share effective prompts with others." }
+] as const;
 
 // 利用フローセクション
 // Usage flow section
 export function LpFlow() {
+  const { locale } = useTranslation();
+  const steps = locale === "en" ? LP_FLOW_STEPS_EN : LP_FLOW_STEPS;
   return (
     <section id="flow" className="lp-section lp-flow" aria-labelledby="lp-flow-heading">
       <div className="lp-container">
-        <p className="lp-eyebrow">使い方</p>
+        <p className="lp-eyebrow">{locale === "en" ? "HOW IT WORKS" : "使い方"}</p>
         <h2 id="lp-flow-heading" className="lp-heading">
-          始め方はかんたん、3ステップ。
+          {locale === "en" ? "Get started in three simple steps." : "始め方はかんたん、3ステップ。"}
         </h2>
         <ol className="lp-flow__list">
-          {LP_FLOW_STEPS.map((step, index) => (
+          {steps.map((step, index) => (
             <li key={step.title} className="lp-flow__step">
               <span className="lp-flow__number" aria-hidden="true">
                 {index + 1}
@@ -40,3 +47,4 @@ export function LpFlow() {
     </section>
   );
 }
+import { useTranslation } from "../../contexts/locale_context";

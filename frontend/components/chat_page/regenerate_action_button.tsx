@@ -8,12 +8,13 @@ type RegenerateActionButtonProps = {
 // AIの回答を再生成するアクションボタン
 // Action button to regenerate the AI's response
 export function RegenerateActionButton({ onRegenerate, disabled }: RegenerateActionButtonProps) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       className="regenerate-btn message-action-btn"
-      aria-label="再生成"
-      data-tooltip="AIの回答を再生成"
+      aria-label={t("chat.regenerate")}
+      data-tooltip={t("chat.regenerate")}
       data-tooltip-placement="top"
       disabled={disabled}
       onClick={() => {
@@ -24,3 +25,4 @@ export function RegenerateActionButton({ onRegenerate, disabled }: RegenerateAct
     </button>
   );
 }
+import { useTranslation } from "../../contexts/locale_context";

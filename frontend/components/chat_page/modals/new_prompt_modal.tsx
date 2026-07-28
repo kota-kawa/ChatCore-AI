@@ -3,6 +3,7 @@ import { useCallback, useRef, type FormEvent, type MutableRefObject } from "reac
 import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { PromptStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { useTranslation } from "../../../contexts/locale_context";
 
 // 新規プロンプト作成モーダルのprops型定義
 // Props type definition for the new prompt creation modal
@@ -53,6 +54,7 @@ export function NewPromptModal({
   setNewPromptInputExample,
   setNewPromptOutputExample,
 }: NewPromptModalProps) {
+  const { locale, t } = useTranslation();
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   // 初期フォーカスをタイトル入力欄またはモーダルコンテナに設定する
@@ -94,7 +96,7 @@ export function NewPromptModal({
         <ModalCloseButton
           className="new-modal-close-btn"
           id="newModalCloseBtn"
-          label="モーダルを閉じる"
+          label={t("chat.closeModal")}
           onClick={() => {
             if (isPromptSubmitting) return;
             onClose();
@@ -105,14 +107,14 @@ export function NewPromptModal({
           {/* モーダルのヘッダー（説明文付き）/ Modal header with description */}
           <div className="new-prompt-modal__hero">
             <div className="new-prompt-modal__hero-copy">
-              <p className="new-prompt-modal__eyebrow">プロンプト作成</p>
-              <h2 id="new-prompt-modal-title">新しいプロンプトを作成</h2>
-              <p className="new-prompt-modal__lead">タイトルと内容を書いて投稿します。下のAI補助で下書きを作ることもできます。</p>
+              <p className="new-prompt-modal__eyebrow">{locale === "en" ? "CREATE A PROMPT" : "プロンプト作成"}</p>
+              <h2 id="new-prompt-modal-title">{t("chat.newPrompt")}</h2>
+              <p className="new-prompt-modal__lead">{locale === "en" ? "Add a title and instructions, or use AI assistance to prepare a draft." : "タイトルと内容を書いて投稿します。下のAI補助で下書きを作ることもできます。"}</p>
             </div>
             <div className="new-prompt-modal__hero-badges" aria-hidden="true">
-              <span>下書き</span>
-              <span>編集</span>
-              <span>投稿</span>
+              <span>{locale === "en" ? "Draft" : "下書き"}</span>
+              <span>{locale === "en" ? "Edit" : "編集"}</span>
+              <span>{locale === "en" ? "Post" : "投稿"}</span>
             </div>
           </div>
 
@@ -125,12 +127,12 @@ export function NewPromptModal({
             }}
           >
           <div className="form-group">
-            <label htmlFor="new-prompt-title">タイトル</label>
+            <label htmlFor="new-prompt-title">{t("chat.promptTitle")}</label>
             <input
               ref={titleInputRef}
               type="text"
               id="new-prompt-title"
-              placeholder="プロンプトのタイトルを入力"
+              placeholder={locale === "en" ? "Enter a prompt title" : "プロンプトのタイトルを入力"}
               required
               value={newPromptTitle}
               onChange={(event) => {
@@ -140,12 +142,12 @@ export function NewPromptModal({
           </div>
 
           <div className="form-group">
-            <label htmlFor="new-prompt-content">プロンプト内容</label>
+            <label htmlFor="new-prompt-content">{t("chat.promptContent")}</label>
             <textarea
               ref={contentInputRef}
               id="new-prompt-content"
               rows={5}
-              placeholder="具体的なプロンプト内容を入力"
+              placeholder={locale === "en" ? "Enter detailed prompt instructions" : "具体的なプロンプト内容を入力"}
               required
               value={newPromptContent}
               onChange={(event) => {
@@ -177,8 +179,8 @@ export function NewPromptModal({
                 }}
               />
               <span className="composer-toggle__copy">
-                <strong>入出力例を追加する</strong>
-                <small>AI 提案の再現性を高めるための例を持たせます。</small>
+                <strong>{locale === "en" ? "Add input and output examples" : "入出力例を追加する"}</strong>
+                <small>{locale === "en" ? "Examples help make AI suggestions more repeatable." : "AI 提案の再現性を高めるための例を持たせます。"}</small>
               </span>
             </label>
           </div>
@@ -186,12 +188,12 @@ export function NewPromptModal({
           {/* 入出力例の入力欄（チェックボックスがONの場合のみ表示）/ Input/output example fields (shown only when checkbox is checked) */}
           <div id="new-guardrail-fields" hidden={!guardrailEnabled}>
             <div className="form-group">
-              <label htmlFor="new-prompt-input-example">入力例（プロンプト内容とは別にしてください）</label>
+              <label htmlFor="new-prompt-input-example">{locale === "en" ? "Input example (keep this separate from the prompt instructions)" : "入力例（プロンプト内容とは別にしてください）"}</label>
               <textarea
                 ref={inputExampleRef}
                 id="new-prompt-input-example"
                 rows={3}
-                placeholder={"例: タスク名\\nプロンプトテンプレート\\n回答ルール\\n出力テンプレート"}
+                placeholder={locale === "en" ? "For example: Task name\\nPrompt template\\nResponse rules\\nOutput template" : "例: タスク名\\nプロンプトテンプレート\\n回答ルール\\n出力テンプレート"}
                 value={newPromptInputExample}
                 onChange={(event) => {
                   setNewPromptInputExample(event.target.value);
@@ -199,13 +201,13 @@ export function NewPromptModal({
               ></textarea>
             </div>
             <div className="form-group">
-              <label htmlFor="new-prompt-output-example">出力例</label>
+              <label htmlFor="new-prompt-output-example">{locale === "en" ? "Output example" : "出力例"}</label>
               <textarea
                 ref={outputExampleRef}
                 id="new-prompt-output-example"
                 rows={3}
                 placeholder={
-                  "例: ## セクション名\\n- 項目\\n\\n## ステップ\\n### ステップ1\\n- 実施内容"
+                  locale === "en" ? "For example: ## Section\\n- Item\\n\\n## Steps\\n### Step 1\\n- Action" : "例: ## セクション名\\n- 項目\\n\\n## ステップ\\n### ステップ1\\n- 実施内容"
                 }
                 value={newPromptOutputExample}
                 onChange={(event) => {
@@ -219,11 +221,11 @@ export function NewPromptModal({
           <button type="submit" className="primary-button new-prompt-submit-btn" disabled={isPromptSubmitting}>
             {isPromptSubmitting ? (
               <>
-                <i className="bi bi-stars"></i> AIと投稿を準備中...
+                <i className="bi bi-stars"></i> {locale === "en" ? "Preparing with AI…" : "AIと投稿を準備中..."}
               </>
             ) : (
               <>
-                <i className="bi bi-upload"></i> 投稿する
+                <i className="bi bi-upload"></i> {locale === "en" ? "Post prompt" : "投稿する"}
               </>
             )}
           </button>

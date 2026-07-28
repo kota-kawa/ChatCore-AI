@@ -72,10 +72,10 @@ import { usePromptShareActionEffects } from "../../components/prompt_share/use_p
 import { usePromptShareAuth } from "../../components/prompt_share/use_prompt_share_auth";
 import { usePromptShareDialog } from "../../components/prompt_share/use_prompt_share_dialog";
 import { usePromptSharePageSetup } from "../../components/prompt_share/use_prompt_share_page_setup";
+import { useTranslation } from "../../contexts/locale_context";
 import {
   getPromptShareServerSideProps,
-  promptShareDescription,
-  promptShareStructuredData,
+  getPromptShareStructuredData,
   type PromptSharePageProps
 } from "../../components/prompt_share/prompt_share_page_data";
 
@@ -87,6 +87,7 @@ export default function PromptSharePage({
   initialPrompts = [],
   initialPagination = null
 }: PromptSharePageProps) {
+  const { locale, t } = useTranslation();
   // SSRで受け取った初期プロンプトをクライアント用レコード形式に変換する（マウント時のみ実行）
   // Transforms SSR-provided prompts into client records on mount only, avoiding unnecessary recomputation
   const initialPromptRecords = useMemo<PromptRecord[]>(() => {
@@ -99,7 +100,7 @@ export default function PromptSharePage({
   // Search and filter state
   const [searchInput, setSearchInput] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedCategoryTitle, setSelectedCategoryTitle] = useState("全てのプロンプト");
+  const [selectedCategoryTitle, setSelectedCategoryTitle] = useState(t("promptShare.allPrompts"));
   const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string | null>("all");
   const [selectedContentFormatFilter, setSelectedContentFormatFilter] = useState<ContentFormatFilter>("all");
   const [selectedMediaTypeFilter, setSelectedMediaTypeFilter] = useState<MediaTypeFilter>("all");
@@ -110,8 +111,8 @@ export default function PromptSharePage({
   const [isPromptsLoading, setIsPromptsLoading] = useState(initialPromptRecords.length === 0);
   const [promptCountMeta, setPromptCountMeta] = useState(
     initialPromptRecords.length > 0
-      ? `公開プロンプト: ${initialPromptRecords.length}${initialPagination?.has_next ? "件を表示" : "件"}`
-      : "公開プロンプトを読み込み中..."
+      ? `${t("promptShare.publicPrompts")}: ${initialPagination?.has_next ? t("promptShare.loadedCount", { count: initialPromptRecords.length }) : t("promptShare.itemsCount", { count: initialPromptRecords.length })}`
+      : t("promptShare.loading")
   );
   const [promptFeedback, setPromptFeedback] = useState<PromptFeedback | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
@@ -432,7 +433,7 @@ export default function PromptSharePage({
           setPromptFeedback(null);
         } else {
           setPromptFeedback({
-            message: "プロンプトが見つかりませんでした。",
+            message: t("promptShare.notFound"),
             variant: "empty"
           });
         }
@@ -448,9 +449,9 @@ export default function PromptSharePage({
         }
         console.error("プロンプト取得エラー:", error);
         const message = error instanceof Error ? error.message : String(error);
-        setPromptCountMeta("読み込みに失敗しました");
+        setPromptCountMeta(t("promptShare.loadFailed"));
         setPromptFeedback({
-          message: `エラーが発生しました: ${message}`,
+          message: t("promptShare.errorWithMessage", { message }),
           variant: "error"
         });
       } finally {
@@ -475,7 +476,7 @@ export default function PromptSharePage({
       options?.mediaTypeToApply || selectedMediaTypeFilterRef.current;
 
     if (!query) {
-      setSelectedCategoryTitle("全てのプロンプト");
+      setSelectedCategoryTitle(t("promptShare.allPrompts"));
       await loadPrompts({ contentFormatToApply, mediaTypeToApply });
       return;
     }
@@ -486,7 +487,7 @@ export default function PromptSharePage({
     setIsLoadingMoreFeedResults(false);
     setIsLoadingMoreSearchResults(false);
     setIsPromptsLoading(true);
-    setSelectedCategoryTitle(`検索結果: 「${query}」`);
+    setSelectedCategoryTitle(t("promptShare.searchResultsTitle", { query }));
 
     try {
       const data = await fetchPromptSearchResults(query, {
@@ -516,7 +517,7 @@ export default function PromptSharePage({
         setPromptFeedback(null);
       } else {
         setPromptFeedback({
-          message: "該当するプロンプトが見つかりませんでした。",
+          message: t("promptShare.noMatches"),
           variant: "empty"
         });
       }
@@ -531,9 +532,9 @@ export default function PromptSharePage({
       }
       console.error("検索エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
-      setPromptCountMeta("検索に失敗しました");
+      setPromptCountMeta(t("promptShare.searchFailed"));
       setPromptFeedback({
-        message: `エラーが発生しました: ${message}`,
+        message: t("promptShare.errorWithMessage", { message }),
         variant: "error"
       });
     } finally {
@@ -592,7 +593,7 @@ export default function PromptSharePage({
       console.error("追加検索エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
       setPromptFeedback({
-        message: `追加読み込みに失敗しました: ${message}`,
+        message: t("promptShare.loadMoreFailed", { message }),
         variant: "error"
       });
     } finally {
@@ -648,7 +649,7 @@ export default function PromptSharePage({
       console.error("プロンプト追加取得エラー:", error);
       const message = error instanceof Error ? error.message : String(error);
       setPromptFeedback({
-        message: `追加読み込みに失敗しました: ${message}`,
+        message: t("promptShare.loadMoreFailed", { message }),
         variant: "error"
       });
     } finally {
@@ -737,11 +738,11 @@ export default function PromptSharePage({
   // Shows a toast guide for unauthenticated users and opens the composer modal for logged-in users
   const openComposerModal = useCallback(() => {
     if (!isLoggedIn) {
-      showToast("プロンプトを投稿するにはログインが必要です。", { variant: "error" });
+      showToast(t("promptShare.loginToPost"), { variant: "error" });
       return;
     }
 
-    setPromptPostStatus("カテゴリやタイトルを軽く入れてから AI 補助を使うと、提案が安定します。", "info");
+    setPromptPostStatus(t("promptShare.aiAssistHint"), "info");
     openModal("post", promptPostTitleInputRef.current);
   }, [isLoggedIn, openModal, setPromptPostStatus]);
 
@@ -832,7 +833,7 @@ export default function PromptSharePage({
         !promptPostContentTextareaRef.current
       ) {
         setPromptPostStatus(
-          "フォーム要素が見つかりませんでした。ページを再読み込みしてください。",
+          t("promptShare.formMissing"),
           "error"
         );
         return;
@@ -875,12 +876,12 @@ export default function PromptSharePage({
       }
 
       setIsPostSubmitting(true);
-      setPromptPostStatus("プロンプトを投稿しています...", "info");
+      setPromptPostStatus(t("promptShare.posting"), "info");
 
       try {
         await createPrompt(formData);
 
-        setPromptPostStatus("プロンプトが投稿されました。公開一覧へ反映します。", "success");
+        setPromptPostStatus(t("promptShare.posted"), "success");
 
         // 投稿成功後にフォームを全フィールドリセットする
         // Reset all form fields after a successful submission
@@ -917,7 +918,7 @@ export default function PromptSharePage({
       } catch (error) {
         console.error("投稿エラー:", error);
         setPromptPostStatus(
-          error instanceof Error ? error.message : "プロンプト投稿中にエラーが発生しました。",
+          error instanceof Error ? error.message : t("promptShare.postFailed"),
           "error"
         );
         setIsPostSubmitting(false);
@@ -993,22 +994,22 @@ export default function PromptSharePage({
       root: promptAssistRootRef.current,
       target: "shared_prompt_modal",
       fields: {
-        title: { label: "タイトル", element: promptPostTitleInputRef.current, setValue: setPostTitle },
-        category: { label: "カテゴリ", element: promptPostCategorySelectRef.current, setValue: setPostCategory },
-        content: { label: "プロンプト内容", element: promptPostContentTextareaRef.current, setValue: setPostContent },
+        title: { label: t("promptShare.titleLabel"), element: promptPostTitleInputRef.current, setValue: setPostTitle },
+        category: { label: t("promptShare.category"), element: promptPostCategorySelectRef.current, setValue: setPostCategory },
+        content: { label: t("promptShare.promptContent"), element: promptPostContentTextareaRef.current, setValue: setPostContent },
         skill_markdown: {
-          label: "SKILL定義",
+          label: t("promptShare.skillDefinition"),
           element: promptPostSkillMarkdownRef.current,
           setValue: setPostSkillMarkdown
         },
-        ai_model: { label: "使用AIモデル", element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
+        ai_model: { label: t("promptShare.aiModel"), element: promptPostAiModelSelectRef.current, setValue: setPostAiModel },
         prompt_type: {
-          label: "互換タイプ",
+          label: t("promptShare.compatibilityType"),
           element: null,
           getValue: () => promptTypeRef.current
         },
-        input_examples: { label: "入力例", element: promptPostInputExamplesRef.current, setValue: setPostInputExample },
-        output_examples: { label: "出力例", element: promptPostOutputExamplesRef.current, setValue: setPostOutputExample }
+        input_examples: { label: t("promptShare.inputExample"), element: promptPostInputExamplesRef.current, setValue: setPostInputExample },
+        output_examples: { label: t("promptShare.outputExample"), element: promptPostOutputExamplesRef.current, setValue: setPostOutputExample }
       },
       beforeApplyField: (fieldName) => {
         // 入力例や出力例が自動入力されるときにガードレールを自動的に有効化する
@@ -1073,10 +1074,10 @@ export default function PromptSharePage({
     <>
       {/* SEOメタタグと構造化データを設定するヘッドコンポーネント / Head component that sets SEO meta tags and structured data */}
       <SeoHead
-        title="プロンプト共有 | Chat Core"
-        description={promptShareDescription}
+        title={t("promptShare.title")}
+        description={t("promptShare.seoDescription")}
         canonicalPath="/prompt_share"
-        structuredData={promptShareStructuredData}
+        structuredData={getPromptShareStructuredData(locale)}
       />
 
       {/* プロンプト一覧・検索・フィルタを含むページレイアウト / Page layout containing the prompt list, search bar, and filters */}

@@ -11,6 +11,7 @@ import {
 import type { PromptCommentData } from "../../scripts/prompt_share/types";
 import type { PromptRecord } from "./prompt_card";
 import { getPromptId } from "./prompt_share_page_utils";
+import { useTranslation } from "../../contexts/locale_context";
 
 type UsePromptCommentsOptions = {
   detailPrompt: PromptRecord | null;
@@ -25,6 +26,7 @@ export function usePromptComments({
   isLoggedIn,
   updatePromptCommentCount
 }: UsePromptCommentsOptions) {
+  const { t } = useTranslation();
   const [detailComments, setDetailComments] = useState<PromptCommentData[]>([]);
   const [isDetailCommentsLoading, setIsDetailCommentsLoading] = useState(false);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
@@ -79,31 +81,31 @@ export function usePromptComments({
           return;
         }
         console.error("コメント取得エラー:", error);
-        showToast("コメントの読み込みに失敗しました。", { variant: "error" });
+        showToast(t("promptShare.loadCommentsFailed"), { variant: "error" });
       } finally {
         if (detailPromptIdRef.current === targetPromptId) {
           setIsDetailCommentsLoading(false);
         }
       }
     },
-    [updatePromptCommentCount]
+    [t, updatePromptCommentCount]
   );
 
   // コメントを投稿し、成功したらレスポンスから直接コメントリストを更新する
   // Posts a comment and updates the comment list directly from the response to avoid a refetch
   const handleSubmitPromptComment = useCallback(async () => {
     if (!isLoggedIn) {
-      showToast("コメントするにはログインが必要です。", { variant: "error" });
+      showToast(t("promptShare.loginToComment"), { variant: "error" });
       return;
     }
     const promptId = getPromptId(detailPrompt);
     const content = commentDraft.trim();
     if (!promptId) {
-      showToast("コメント対象のプロンプトが見つかりません。", { variant: "error" });
+      showToast(t("promptShare.commentTargetMissing"), { variant: "error" });
       return;
     }
     if (!content) {
-      showToast("コメント内容を入力してください。", { variant: "error" });
+      showToast(t("promptShare.commentRequired"), { variant: "error" });
       return;
     }
     const optimisticCommentId = `optimistic-comment-${Date.now()}`;
@@ -112,7 +114,7 @@ export function usePromptComments({
       id: optimisticCommentId,
       prompt_id: promptId,
       user_id: 0,
-      author_name: "あなた",
+      author_name: t("promptShare.you"),
       content,
       created_at: new Date().toISOString(),
       mine: true,
@@ -136,25 +138,25 @@ export function usePromptComments({
         // If the API did not return a comment object, re-fetch the full comment list
         await loadPromptComments(promptId);
       }
-      showToast("コメントを投稿しました。", { variant: "success" });
+      showToast(t("promptShare.commentPosted"), { variant: "success" });
     } catch (error) {
       setDetailComments((current) => current.filter((comment) => String(comment.id) !== optimisticCommentId));
       updatePromptCommentCount(promptId, previousCommentCount);
       setCommentDraft(content);
       console.error("コメント投稿エラー:", error);
-      showToast(error instanceof Error ? error.message : "コメント投稿に失敗しました。", {
+      showToast(error instanceof Error ? error.message : t("promptShare.commentPostFailed"), {
         variant: "error"
       });
     } finally {
       setIsCommentSubmitting(false);
     }
-  }, [commentDraft, detailPrompt, isLoggedIn, loadPromptComments, updatePromptCommentCount]);
+  }, [commentDraft, detailPrompt, isLoggedIn, loadPromptComments, t, updatePromptCommentCount]);
 
   // ユーザーに確認を求めてからコメントを削除し、削除後はリストから該当コメントを除外する
   // Prompts the user for confirmation before deleting, then removes the comment from the local list
   const handleDeletePromptComment = useCallback(
     async (commentId: string | number) => {
-      const confirmed = await showConfirmModal("このコメントを削除しますか？");
+      const confirmed = await showConfirmModal(t("promptShare.confirmDeleteComment"));
       if (!confirmed) {
         return;
       }
@@ -172,7 +174,7 @@ export function usePromptComments({
         if (payload.prompt_id !== undefined && payload.comment_count !== undefined) {
           updatePromptCommentCount(payload.prompt_id, payload.comment_count);
         }
-        showToast("コメントを削除しました。", { variant: "success" });
+        showToast(t("promptShare.commentDeleted"), { variant: "success" });
       } catch (error) {
         if (removedComment) {
           setDetailComments((current) => {
@@ -184,14 +186,14 @@ export function usePromptComments({
           updatePromptCommentCount(currentPromptId, previousCommentCount);
         }
         console.error("コメント削除エラー:", error);
-        showToast(error instanceof Error ? error.message : "コメント削除に失敗しました。", {
+        showToast(error instanceof Error ? error.message : t("promptShare.commentDeleteFailed"), {
           variant: "error"
         });
       } finally {
         setCommentActionPending(commentKey, false);
       }
     },
-    [detailComments, detailPrompt, setCommentActionPending, updatePromptCommentCount]
+    [detailComments, detailPrompt, setCommentActionPending, t, updatePromptCommentCount]
   );
 
   // コメントを不正利用として報告し、モデレーターによって非表示にされた場合はリストから即座に除外する
@@ -199,10 +201,10 @@ export function usePromptComments({
   const handleReportPromptComment = useCallback(
     async (commentId: string | number) => {
       if (!isLoggedIn) {
-        showToast("コメントを報告するにはログインが必要です。", { variant: "error" });
+        showToast(t("promptShare.loginToReport"), { variant: "error" });
         return;
       }
-      const confirmed = await showConfirmModal("このコメントを報告しますか？");
+      const confirmed = await showConfirmModal(t("promptShare.confirmReportComment"));
       if (!confirmed) {
         return;
       }
@@ -211,9 +213,9 @@ export function usePromptComments({
       try {
         const payload = await reportPromptComment(commentId, "abuse");
         if (payload.already_reported) {
-          showToast("このコメントはすでに報告済みです。", { variant: "info" });
+          showToast(t("promptShare.commentAlreadyReported"), { variant: "info" });
         } else {
-          showToast("コメントを報告しました。", { variant: "success" });
+          showToast(t("promptShare.commentReported"), { variant: "success" });
         }
         if (payload.hidden) {
           setDetailComments((current) => current.filter((comment) => String(comment.id) !== commentKey));
@@ -223,14 +225,14 @@ export function usePromptComments({
         }
       } catch (error) {
         console.error("コメント報告エラー:", error);
-        showToast(error instanceof Error ? error.message : "コメント報告に失敗しました。", {
+        showToast(error instanceof Error ? error.message : t("promptShare.commentReportFailed"), {
           variant: "error"
         });
       } finally {
         setCommentActionPending(commentKey, false);
       }
     },
-    [isLoggedIn, setCommentActionPending, updatePromptCommentCount]
+    [isLoggedIn, setCommentActionPending, t, updatePromptCommentCount]
   );
 
   // 詳細モーダルからコメントを手動で再読み込みするためのアクション

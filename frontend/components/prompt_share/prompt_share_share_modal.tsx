@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { useTranslation } from "../../contexts/locale_context";
 
 // SNSシェアリンクのURL一式（X・LINE・Facebook）
 // Set of SNS share link URLs (X, LINE, Facebook)
@@ -46,6 +47,7 @@ export function PromptShareShareModal({
   onNativeShare,
   shareSnsLinks
 }: PromptShareShareModalProps) {
+  const { t } = useTranslation();
   return (
     <div
       id="promptShareModal"
@@ -67,7 +69,7 @@ export function PromptShareShareModal({
           type="button"
           className="prompt-share-dialog__close cc-share-modal__close"
           id="closePromptShareModal"
-          aria-label="共有モーダルを閉じる"
+          aria-label={t("promptShare.shareModalClose")}
           onClick={onClose}
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor">
@@ -76,9 +78,9 @@ export function PromptShareShareModal({
         </button>
 
         <header className="prompt-share-dialog__header cc-share-modal__header">
-          <h2 id="promptShareModalTitle">プロンプトを共有</h2>
+          <h2 id="promptShareModalTitle">{t("promptShare.sharePrompt")}</h2>
           <p className="prompt-share-dialog__lead cc-share-modal__lead">
-            このプロンプト専用のURLをコピーしたり、そのまま共有できます。
+            {t("promptShare.shareHelp")}
           </p>
         </header>
 
@@ -89,7 +91,8 @@ export function PromptShareShareModal({
               type="text"
               id="prompt-share-link-input"
               readOnly
-              placeholder="共有リンクを準備しています"
+              placeholder={t("promptShare.preparingShareLink")}
+              aria-label={t("promptShare.shareUrl")}
               value={shareUrl}
             />
           </div>
@@ -108,8 +111,8 @@ export function PromptShareShareModal({
               type="button"
               id="prompt-share-copy-btn"
               className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
-              aria-label="リンクをコピー"
-              title="リンクをコピー"
+              aria-label={t("promptShare.copyLink")}
+              title={t("promptShare.copyLink")}
               ref={promptShareCopyButtonRef}
               disabled={shareActionLoading}
               onClick={() => {
@@ -125,8 +128,8 @@ export function PromptShareShareModal({
                 type="button"
                 id="prompt-share-web-btn"
                 className="submit-btn prompt-share-icon-btn cc-share-modal__icon-btn"
-                aria-label="端末で共有"
-                title="端末で共有"
+                aria-label={t("promptShare.shareOnDevice")}
+                title={t("promptShare.shareOnDevice")}
                 disabled={shareActionLoading}
                 onClick={() => {
                   void onNativeShare();

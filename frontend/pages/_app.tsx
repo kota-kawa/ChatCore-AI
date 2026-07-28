@@ -36,7 +36,7 @@ import "../public/static/css/pages/chat/shared_chat.css";
 import "../scripts/core/tooltip";
 import "../scripts/core/alert_modal";
 import "../scripts/core/csrf";
-import type { AppProps } from "next/app";
+import NextApp, { type AppContext, type AppProps } from "next/app";
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { Noto_Sans_JP } from "next/font/google";
 import { useRouter } from "next/router";
@@ -47,6 +47,8 @@ import { NetworkStatusBanner } from "../components/NetworkStatusBanner";
 import { applyTheme, getStoredThemePreference, resolveTheme, watchSystemTheme } from "../scripts/core/theme";
 import { swrFetcher } from "../lib/data/swr_fetcher";
 import { createPersistentCacheProvider, loadPersistentCacheEntries } from "../lib/data/persistent_cache";
+import { LocaleProvider, useTranslation } from "../contexts/locale_context";
+import { DEFAULT_LOCALE, normalizeLocale, resolveRequestLocale, type Locale } from "../lib/i18n/config";
 
 // アプリ全体のサンセリフフォント設定（CSS変数として提供）
 // App-wide sans-serif font configuration (provided as a CSS variable)
@@ -61,6 +63,7 @@ const appSansFont = Noto_Sans_JP({
 // Props and state type definitions for the global error boundary
 type GlobalErrorBoundaryProps = {
   children: ReactNode;
+  messages: { heading: string; fallback: string; reload: string; unexpected: string };
 };
 
 type GlobalErrorBoundaryState = {
@@ -84,7 +87,7 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
   public static getDerivedStateFromError(error: unknown): GlobalErrorBoundaryState {
     return {
       hasError: true,
-      message: error instanceof Error ? error.message : "予期しないエラーが発生しました。"
+      message: error instanceof Error ? error.message : ""
     };
   }
 
@@ -104,19 +107,33 @@ class GlobalErrorBoundary extends Component<GlobalErrorBoundaryProps, GlobalErro
     return (
       <main className="global-error-boundary" role="alert" aria-live="assertive">
         <div className="global-error-boundary__card">
-          <h1>画面の表示中にエラーが発生しました。</h1>
-          <p>{this.state.message || "お手数ですが、ページを再読み込みしてください。"}</p>
+          <h1>{this.props.messages.heading}</h1>
+          <p>{this.state.message || this.props.messages.fallback}</p>
           <button
             type="button"
             className="cc-texture-btn cc-texture-btn--danger"
             onClick={() => window.location.reload()}
           >
-            再読み込み
+            {this.props.messages.reload}
           </button>
         </div>
       </main>
     );
   }
+}
+
+function LocalizedAppShell({ Component, pageProps, showAiAgent }: Pick<AppProps, "Component" | "pageProps"> & { showAiAgent: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <GlobalErrorBoundary messages={{
+      heading: t("common.renderError"), fallback: t("common.reloadHelp"), reload: t("common.reload"), unexpected: t("common.unexpectedError")
+    }}>
+      <GoogleAnalytics />
+      <NetworkStatusBanner />
+      <Component {...pageProps} />
+      {showAiAgent && <GlobalAiAgent />}
+    </GlobalErrorBoundary>
+  );
 }
 
 // 認証ページ（グローバルAIエージェントを非表示にするページ）のセット
@@ -183,7 +200,9 @@ function PersistentCacheHydrator() {
 
 // Next.jsのカスタムAppコンポーネント（テーマ管理と共通プロバイダーを統括する）
 // Next.js custom App component (manages theme and shared providers)
-export default function App({ Component, pageProps }: AppProps) {
+type LocalizedPageProps = Record<string, unknown> & { __locale?: Locale };
+
+export default function App({ Component, pageProps }: AppProps<LocalizedPageProps>) {
   const router = useRouter();
   // 認証ページではグローバルAIエージェントを非表示にする
   // Hide the global AI agent on auth pages
@@ -261,18 +280,22 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [router]);
 
   return (
-    <SWRConfig value={swrGlobalConfig}>
-      <PersistentCacheHydrator />
-      <div className={appSansFont.variable}>
-        <GlobalErrorBoundary>
-          <GoogleAnalytics />
-          {/* オフライン・低速回線・復帰を控えめに通知する / Subtly announce offline/slow/recovery */}
-          <NetworkStatusBanner />
-          <Component {...pageProps} />
-          {/* 認証ページ以外でグローバルAIエージェントを表示する / Show global AI agent on non-auth pages */}
-          {showAiAgent && <GlobalAiAgent />}
-        </GlobalErrorBoundary>
-      </div>
-    </SWRConfig>
+    <LocaleProvider initialLocale={normalizeLocale(pageProps.__locale) ?? DEFAULT_LOCALE}>
+      <SWRConfig value={swrGlobalConfig}>
+        <PersistentCacheHydrator />
+        <div className={appSansFont.variable}>
+          <LocalizedAppShell Component={Component} pageProps={pageProps} showAiAgent={showAiAgent} />
+        </div>
+      </SWRConfig>
+    </LocaleProvider>
   );
 }
+
+App.getInitialProps = async (appContext: AppContext) => {
+  const appProps = await NextApp.getInitialProps(appContext);
+  const request = appContext.ctx.req;
+  const locale = request
+    ? resolveRequestLocale(request.headers.cookie, request.headers["accept-language"])
+    : DEFAULT_LOCALE;
+  return { ...appProps, pageProps: { ...appProps.pageProps, __locale: locale } };
+};

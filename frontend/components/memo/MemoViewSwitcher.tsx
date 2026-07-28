@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { useTranslation } from "../../contexts/locale_context";
 
 export type MemoView = "memos" | "context";
 
@@ -8,8 +9,9 @@ type MemoViewSwitcherProps = {
 };
 
 export function MemoViewSwitcher({ activeView, setActiveView }: MemoViewSwitcherProps) {
+  const { t } = useTranslation();
   return (
-    <nav className="memo-view-switcher" aria-label="Notebookの表示切り替え">
+    <nav className="memo-view-switcher" aria-label={t("memo.viewSwitcher")}>
       <button
         type="button"
         className={`memo-view-switcher__item${activeView === "memos" ? " is-active" : ""}`}
@@ -17,7 +19,7 @@ export function MemoViewSwitcher({ activeView, setActiveView }: MemoViewSwitcher
         onClick={() => setActiveView("memos")}
       >
         <i className="bi bi-journal-text" aria-hidden="true"></i>
-        <span>メモ</span>
+        <span>{t("memo.heading")}</span>
       </button>
       <button
         type="button"
@@ -26,7 +28,7 @@ export function MemoViewSwitcher({ activeView, setActiveView }: MemoViewSwitcher
         onClick={() => setActiveView("context")}
       >
         <i className="bi bi-safe" aria-hidden="true"></i>
-        <span>マイコンテキスト</span>
+        <span>{t("memo.myContext")}</span>
       </button>
     </nav>
   );

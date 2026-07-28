@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 
+import { useTranslation } from "../../contexts/locale_context";
 import { readSessionJson, writeSessionJson } from "../../lib/utils";
 
 // ドラッグ可能モーダルのprops型定義
@@ -38,6 +39,8 @@ export function DraggableModal({
   initialY = 100,
   positionStorageKey,
 }: DraggableModalProps) {
+  const { locale } = useTranslation();
+  const fallbackTitle = locale === "en" ? "AI agent" : "AI エージェント";
   // モーダルの現在位置（px）
   // Current position of the modal (px)
   const [position, setPosition] = useState<Position>({ x: initialX, y: initialY });
@@ -267,7 +270,7 @@ export function DraggableModal({
       className={`ai-agent-modal global-ai-agent-modal ${isOpen ? "is-open" : "is-closing"}`}
       role="dialog"
       aria-modal="false"
-      aria-label={title || "AI エージェント"}
+      aria-label={title || fallbackTitle}
       style={{
         position: "fixed",
         left: `${position.x}px`,
@@ -287,7 +290,12 @@ export function DraggableModal({
         style={{ cursor: "grab", touchAction: "none" }}
       >
         <span className="ai-agent-modal-title">{title}</span>
-        <button type="button" className="modal-close-btn" onClick={onClose} aria-label="AIエージェントを閉じる">
+        <button
+          type="button"
+          className="modal-close-btn"
+          onClick={onClose}
+          aria-label={locale === "en" ? "Close AI agent" : "AIエージェントを閉じる"}
+        >
           <i className="bi bi-x-lg"></i>
         </button>
       </div>

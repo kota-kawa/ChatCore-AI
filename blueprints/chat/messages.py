@@ -67,6 +67,7 @@ from services.auth_limits import (
     get_auth_limit_service,
 )
 from services.api_errors import ApiServiceError
+from services.i18n import get_request_locale, normalize_locale
 from services.llm_daily_limit import (
     LlmDailyLimitService,
     consume_llm_daily_quota,
@@ -323,7 +324,11 @@ _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 # 現在日時情報などを埋め込んだベースのシステムプロンプトを組み立てる関数
 # Construct the base system prompt containing contextual runtime information like datetime.
-def _build_base_system_prompt(current_time: datetime | None = None) -> str:
+def _build_base_system_prompt(
+    current_time: datetime | None = None,
+    *,
+    locale: str = "ja",
+) -> str:
     """
     現在時刻やWeb検索などの動的な実行時コンテキストを埋め込んだベースシステムプロンプトを組み立てます。
     Constructs the base system prompt containing contextual runtime information.
@@ -356,7 +361,16 @@ def _build_base_system_prompt(current_time: datetime | None = None) -> str:
             "</runtime_context>",
         ]
     )
-    return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{runtime_context}"
+    resolved_locale = normalize_locale(locale, default="ja") or "ja"
+    language_name = "English" if resolved_locale == "en" else "Japanese"
+    language_context = (
+        "## Response language\n"
+        "Follow an explicit language request first. Otherwise reply in the language of the "
+        "user's latest substantive message. If that language is ambiguous, reply in the "
+        f"user's saved interface language ({language_name}). Do not translate user-authored "
+        "content unless the user asks you to."
+    )
+    return f"{BASE_SYSTEM_PROMPT.strip()}\n\n{language_context}\n\n{runtime_context}"
 
 
 # ユーザー設定からLLM向けプロフィール用カスタムプロンプトを組み立てる関数
@@ -949,7 +963,7 @@ def _paginate_ephemeral_chat_history(
 
 # チャットメッセージ投稿ユースケースクラスの依存関係を満たしたインスタンスを生成する関数
 # Factory function to build ChatPostUseCase instance with resolved dependencies.
-def _build_chat_post_use_case() -> ChatPostUseCase:
+def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
     """
     チャットメッセージ投稿ユースケースクラスの依存関係を満たしたインスタンスを生成します。
     Factory function to build ChatPostUseCase instance with resolved dependencies.
@@ -987,7 +1001,7 @@ def _build_chat_post_use_case() -> ChatPostUseCase:
             rename_chat_room_if_current_title_in=rename_chat_room_if_current_title_in,
             load_project_context=get_project_context,
             build_context_messages=build_context_messages,
-            build_base_system_prompt=_build_base_system_prompt,
+            build_base_system_prompt=partial(_build_base_system_prompt, locale=locale),
             build_generation_key=build_generation_key,
             has_active_generation=has_active_generation,
             consume_llm_daily_quota=consume_llm_daily_quota,
@@ -1034,7 +1048,7 @@ async def chat(
         request,
         chat_generation_service,
     )
-    return await _build_chat_post_use_case().execute(
+    return await _build_chat_post_use_case(get_request_locale(request)).execute(
         request,
         auth_limit_service=resolved_auth_limit_service,
         llm_daily_limit_service=resolved_llm_daily_limit_service,
@@ -1166,7 +1180,7 @@ async def chat_regenerate(
             logger.warning("Failed to load memory facts for regenerate; proceeding without them.")
 
     conversation_messages = build_context_messages(
-        base_system_prompt=_build_base_system_prompt(),
+        base_system_prompt=_build_base_system_prompt(locale=get_request_locale(request)),
         user_profile_prompt=user_profile_prompt,
         task_prompt=task_prompt,
         room_summary=room_summary,
@@ -1556,7 +1570,7 @@ async def chat_edit_and_regenerate(
             logger.warning("Failed to load memory facts for edit_and_regenerate; proceeding without them.")
 
     conversation_messages = build_context_messages(
-        base_system_prompt=_build_base_system_prompt(),
+        base_system_prompt=_build_base_system_prompt(locale=get_request_locale(request)),
         user_profile_prompt=user_profile_prompt,
         task_prompt=task_prompt,
         room_summary=room_summary,

@@ -11,6 +11,7 @@ import { fetchJsonOrThrow } from "../../scripts/core/runtime_validation";
 import { formatDateTime } from "../../lib/datetime";
 import { asId } from "../../lib/utils";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
+import { useTranslation } from "../../contexts/locale_context";
 import {
   parseMyPromptsResponse,
   parsePromptManageMutationResponse,
@@ -74,10 +75,11 @@ function promptManageFetchJsonOrThrow<TPayload>(
 }
 
 function PromptManageSkeletonGrid() {
+  const { t } = useTranslation();
   return (
     <>
       {Array.from({ length: 6 }).map((_, index) => (
-        <article key={index} className="prompt-card prompt-card--skeleton" aria-label="プロンプトを読み込み中">
+        <article key={index} className="prompt-card prompt-card--skeleton" aria-label={t("promptShare.loading")}>
           <div className="prompt-card__main">
             <Skeleton variant="text" width={index % 2 === 0 ? "62%" : "78%"} height="1.1rem" />
             <SkeletonText lines={3} />
@@ -115,6 +117,7 @@ type PromptCardProps = {
 // プロンプトの概要を表示するカードコンポーネント
 // Card component displaying a prompt summary
 function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
+  const { locale, t } = useTranslation();
   const promptId = asId(prompt.id);
   const truncatedTitle = truncateText(prompt.title, TITLE_CHAR_LIMIT);
   const truncatedContent = truncateText(prompt.content, CONTENT_CHAR_LIMIT);
@@ -125,9 +128,9 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
         <h3 title={prompt.title}>{truncatedTitle}</h3>
         <p className="prompt-card__content" title={prompt.content}>{truncatedContent}</p>
         <div className="meta">
-          <span>カテゴリ: {getCategoryLabelOrFallback(prompt.category, "未設定")}</span>
+          <span>{t("promptShare.categoryValue", { category: getCategoryLabelOrFallback(prompt.category, t("promptShare.unset"), locale) })}</span>
           <br />
-          <span>投稿日: {toDisplayDate(prompt.createdAt)}</span>
+          <span>{t("promptShare.createdAt", { date: toDisplayDate(prompt.createdAt) })}</span>
         </div>
       </div>
       {/* 入力例・出力例はスクリーンリーダー等のための非表示テキストとして保持 / Hidden text for input/output examples kept for accessibility */}
@@ -141,7 +144,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
             data-id={promptId}
             onClick={() => onEdit(prompt)}
           >
-            <i className="bi bi-pencil"></i> 編集
+            <i className="bi bi-pencil"></i> {t("common.edit")}
           </button>
           <button
             type="button"
@@ -149,7 +152,7 @@ function PromptCard({ prompt, onEdit, onDelete }: PromptCardProps) {
             data-id={promptId}
             onClick={() => onDelete(prompt)}
           >
-            <i className="bi bi-trash"></i> 削除
+            <i className="bi bi-trash"></i> {t("common.delete")}
           </button>
         </div>
       </div>
@@ -178,6 +181,7 @@ function PromptEditModal({
   onCategoryChange,
   onSubmit
 }: PromptEditModalProps) {
+  const { t } = useTranslation();
   return (
     <div
       id="editModal"
@@ -197,12 +201,12 @@ function PromptEditModal({
         <div className="modal-content">
           <div className="modal-header">
             <h5 className="modal-title">
-              <i className="bi bi-pencil-square me-2"></i>プロンプト編集
+              <i className="bi bi-pencil-square me-2"></i>{t("promptShare.editPrompt")}
             </h5>
             <button
               type="button"
               className="btn-close"
-              aria-label="Close"
+              aria-label={t("common.close")}
               onClick={onClose}
               disabled={isSaving}
             ></button>
@@ -214,7 +218,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editTitle" className="form-label">
-                  タイトル
+                  {t("promptShare.titleLabel")}
                 </label>
                 <input
                   type="text"
@@ -230,7 +234,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editCategory" className="form-label">
-                  カテゴリ
+                  {t("promptShare.category")}
                 </label>
                 {/* カテゴリはレジストリの選択肢に限定する（自由入力はサーバー側で拒否される） */}
                 {/* Categories are limited to the registry options; free text is rejected server-side */}
@@ -244,7 +248,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editContent" className="form-label">
-                  内容
+                  {t("promptShare.contentLabel")}
                 </label>
                 <textarea
                   className="form-control input-field"
@@ -260,7 +264,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editInputExamples" className="form-label">
-                  入力例
+                  {t("promptShare.inputExample")}
                 </label>
                 <textarea
                   className="form-control input-field"
@@ -275,7 +279,7 @@ function PromptEditModal({
 
               <div className="form-group">
                 <label htmlFor="editOutputExamples" className="form-label">
-                  出力例
+                  {t("promptShare.outputExample")}
                 </label>
                 <textarea
                   className="form-control input-field"
@@ -290,7 +294,7 @@ function PromptEditModal({
 
               <div className="form-actions">
                 <button type="submit" className="btn btn-primary w-100 cc-press" disabled={isSaving}>
-                  <i className="bi bi-save me-2"></i>{isSaving ? "更新中..." : "更新する"}
+                  <i className="bi bi-save me-2"></i>{isSaving ? t("promptShare.updating") : t("promptShare.update")}
                 </button>
               </div>
             </form>
@@ -304,6 +308,7 @@ function PromptEditModal({
 // プロンプト管理ページ（一覧表示・編集・削除を提供する）
 // Prompt manage page (provides list view, edit, and delete functionality)
 export default function PromptManagePage() {
+  const { t } = useTranslation();
   const [prompts, setPrompts] = useState<PromptRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -319,16 +324,16 @@ export default function PromptManagePage() {
       const { payload } = await promptManageFetchJsonOrThrow(
         "/prompt_manage/api/my_prompts",
         { credentials: "same-origin" },
-        { defaultMessage: "プロンプトの取得に失敗しました。" }
+        { defaultMessage: t("promptShare.loadFailed") }
       );
       setPrompts(parseMyPromptsResponse(payload));
     } catch (error) {
       setPrompts([]);
-      setLoadError(error instanceof Error ? error.message : "プロンプトの取得に失敗しました。");
+      setLoadError(error instanceof Error ? error.message : t("promptShare.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // マウント時にbodyクラスを付与し、アンマウント時に除去する
   // Add body class on mount and remove it on unmount
@@ -384,11 +389,11 @@ export default function PromptManagePage() {
   const handleDelete = useCallback(async (prompt: PromptRecord) => {
     const promptId = asId(prompt.id);
     if (!promptId) {
-      showToast("削除対象のプロンプトIDが不正です。", { variant: "error" });
+      showToast(t("promptShare.deleteFailed"), { variant: "error" });
       return;
     }
 
-    const confirmed = await showConfirmModal("本当にこのプロンプトを削除しますか？");
+    const confirmed = await showConfirmModal(t("promptShare.confirmDelete"));
     if (!confirmed) {
       return;
     }
@@ -404,17 +409,17 @@ export default function PromptManagePage() {
           credentials: "same-origin"
         },
         {
-          defaultMessage: "プロンプトの削除に失敗しました。"
+          defaultMessage: t("promptShare.deleteFailed")
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "削除しました。", { variant: "success" });
+      showToast(response.message || t("promptShare.deleted"), { variant: "success" });
       setPrompts((prev) => prev.filter((entry) => asId(entry.id) !== promptId));
     } catch (error) {
       void loadMyPrompts();
-      showToast(error instanceof Error ? error.message : "プロンプトの削除に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : t("promptShare.deleteFailed"), { variant: "error" });
     }
-  }, [loadMyPrompts]);
+  }, [loadMyPrompts, t]);
 
   // フォームの各フィールドの変更を編集フォーム状態に反映する
   // Reflect each form field change into the edit form state
@@ -446,7 +451,7 @@ export default function PromptManagePage() {
     }
 
     if (!editFormState.id || !editFormState.title.trim() || !editFormState.category.trim() || !editFormState.content.trim()) {
-      showToast("編集フォームの値が不足しています。", { variant: "error" });
+      showToast(t("promptShare.formIncomplete"), { variant: "error" });
       return;
     }
 
@@ -469,25 +474,25 @@ export default function PromptManagePage() {
           })
         },
         {
-          defaultMessage: "プロンプトの更新に失敗しました。"
+          defaultMessage: t("promptShare.updateFailed")
         }
       );
       const response = parsePromptManageMutationResponse(payload);
-      showToast(response.message || "更新しました。", { variant: "success" });
+      showToast(response.message || t("promptShare.updated"), { variant: "success" });
       setEditFormState(null);
       await loadMyPrompts();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "プロンプトの更新に失敗しました。", { variant: "error" });
+      showToast(error instanceof Error ? error.message : t("promptShare.updateFailed"), { variant: "error" });
     } finally {
       setIsSaving(false);
     }
-  }, [editFormState, loadMyPrompts]);
+  }, [editFormState, loadMyPrompts, t]);
 
   return (
     <>
       <SeoHead
-        title="投稿したプロンプト | Chat Core"
-        description="Chat Coreで投稿したプロンプトを管理するページです。"
+        title={t("promptShare.manageTitle")}
+        description={t("promptShare.manageDescription")}
         canonicalPath="/prompt_share/manage_prompts"
         noindex
       >
@@ -502,13 +507,13 @@ export default function PromptManagePage() {
 
         <main className="container main-container">
           <div className="header-bar">
-            <h2 className="section-title">投稿したプロンプト</h2>
+            <h2 className="section-title">{t("promptShare.manageHeading")}</h2>
           </div>
 
           {/* ローディング・エラー・空状態のフィードバック / Loading, error, and empty state feedback */}
-          {isLoading ? <p className="sr-only" role="status">プロンプトを読み込み中です...</p> : null}
+          {isLoading ? <p className="sr-only" role="status">{t("promptShare.loading")}</p> : null}
           {!isLoading && loadError ? <p role="alert">{loadError}</p> : null}
-          {!isLoading && !loadError && sortedPrompts.length === 0 ? <p>プロンプトが存在しません。</p> : null}
+          {!isLoading && !loadError && sortedPrompts.length === 0 ? <p>{t("promptShare.none")}</p> : null}
 
           <div id="promptList" className="prompt-grid">
             {isLoading ? <PromptManageSkeletonGrid /> : null}

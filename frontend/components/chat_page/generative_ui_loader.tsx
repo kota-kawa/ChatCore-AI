@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from "react";
+import { useTranslation } from "../../contexts/locale_context";
 
 // ローダーに巡回表示する進捗フレーズ。生成UIが「組み立てられていく」世界観に合わせる。
 // Status phrases cycled inside the loader, themed around a UI being assembled.
@@ -8,6 +9,9 @@ const GENERATIVE_UI_LOADER_PHRASES = [
   "レイアウトを整えています…",
   "ボタンを磨いています…",
   "仕上げの輝きを足しています…",
+];
+const GENERATIVE_UI_LOADER_PHRASES_EN = [
+  "Opening the UI blueprint…", "Assembling components…", "Arranging the layout…", "Polishing the controls…", "Adding the finishing touches…"
 ];
 
 // フレーズを切り替える間隔（ミリ秒）
@@ -21,6 +25,8 @@ const GENERATIVE_UI_LOADER_PHRASE_STEP_MS = 2200;
 // Inside a miniature browser window, skeleton UI parts build up in sequence
 // while a sparkle cursor polishes the screen.
 function GenerativeUiLoaderComponent() {
+  const { locale, t } = useTranslation();
+  const phrases = locale === "en" ? GENERATIVE_UI_LOADER_PHRASES_EN : GENERATIVE_UI_LOADER_PHRASES;
   const [phraseIndex, setPhraseIndex] = useState(0);
 
   // ウォールクロックに同期してフレーズを巡回させる（再マウントしても続きから見える）
@@ -31,7 +37,7 @@ function GenerativeUiLoaderComponent() {
     const syncPhrase = () => {
       const now = Date.now();
       setPhraseIndex(
-        Math.floor(now / GENERATIVE_UI_LOADER_PHRASE_STEP_MS) % GENERATIVE_UI_LOADER_PHRASES.length,
+        Math.floor(now / GENERATIVE_UI_LOADER_PHRASE_STEP_MS) % phrases.length,
       );
       const elapsedInStep = now % GENERATIVE_UI_LOADER_PHRASE_STEP_MS;
       timerId = setTimeout(syncPhrase, Math.max(48, GENERATIVE_UI_LOADER_PHRASE_STEP_MS - elapsedInStep + 18));
@@ -44,12 +50,12 @@ function GenerativeUiLoaderComponent() {
         clearTimeout(timerId);
       }
     };
-  }, []);
+  }, [phrases.length]);
 
-  const phrase = GENERATIVE_UI_LOADER_PHRASES[phraseIndex] ?? GENERATIVE_UI_LOADER_PHRASES[0];
+  const phrase = phrases[phraseIndex] ?? phrases[0];
 
   return (
-    <div className="genui-loader" role="status" aria-live="polite" aria-label="生成UIを作成しています">
+    <div className="genui-loader" role="status" aria-live="polite" aria-label={t("chat.generatedUiLoading")}>
       <div className="genui-loader__window" aria-hidden="true">
         <div className="genui-loader__titlebar">
           <span className="genui-loader__dot genui-loader__dot--1"></span>

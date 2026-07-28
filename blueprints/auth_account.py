@@ -7,6 +7,12 @@ from blueprints.auth_common import (
     _user_id_from_session,
 )
 from blueprints.auth_support import dep
+from services.i18n import (
+    PREFERRED_LOCALE_LOADED_SESSION_KEY,
+    PREFERRED_LOCALE_SESSION_KEY,
+    get_request_locale,
+    normalize_locale,
+)
 
 
 async def register_page(request: Request):
@@ -20,6 +26,15 @@ async def api_current_user(request: Request):
 
     user = await dep("run_blocking")(dep("get_user_by_id"), session["user_id"])
     if user:
+        preferred_locale = normalize_locale(user.get("preferred_locale"))
+        if preferred_locale is not None:
+            session[PREFERRED_LOCALE_SESSION_KEY] = preferred_locale
+            request.state.locale = preferred_locale
+            request.state.persist_locale_cookie = True
+        else:
+            session.pop(PREFERRED_LOCALE_SESSION_KEY, None)
+        session[PREFERRED_LOCALE_LOADED_SESSION_KEY] = True
+        locale = preferred_locale or get_request_locale(request)
         return dep("jsonify")(
             {
                 "logged_in": True,
@@ -27,6 +42,7 @@ async def api_current_user(request: Request):
                     "id": user["id"],
                     "email": user["email"],
                     "username": user.get("username") or "",
+                    "locale": locale,
                 },
             }
         )

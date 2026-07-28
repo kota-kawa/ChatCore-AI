@@ -8,6 +8,8 @@ import type {
   PromptPagination
 } from "../../scripts/prompt_share/types";
 import { absoluteUrl } from "../../lib/seo";
+import type { Locale } from "../../lib/i18n/config";
+import { promptShareText } from "../../scripts/prompt_share/i18n";
 
 export type PromptSharePageProps = {
   initialPrompts?: PromptData[];
@@ -21,19 +23,23 @@ export const promptShareDescription =
 
 // 構造化データ（JSON-LD）。Googleがリッチリザルトとしてページを解釈できるようにする
 // Structured data (JSON-LD) that helps Google understand and display this page as a rich result
-export const promptShareStructuredData = {
-  "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  name: "Chat Core プロンプト共有",
-  url: absoluteUrl("/prompt_share"),
-  description: promptShareDescription,
-  inLanguage: "ja",
-  isPartOf: {
-    "@type": "WebSite",
-    name: "Chat Core",
-    url: absoluteUrl("/")
-  }
-};
+export function getPromptShareStructuredData(locale: Locale) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: promptShareText("promptShare.structuredName", undefined, locale),
+    url: absoluteUrl("/prompt_share"),
+    description: promptShareText("promptShare.seoDescription", undefined, locale),
+    inLanguage: locale,
+    isPartOf: {
+      "@type": "WebSite",
+      name: "Chat Core",
+      url: absoluteUrl("/")
+    }
+  };
+}
+
+export const promptShareStructuredData = getPromptShareStructuredData("ja");
 
 // SSRで事前取得するプロンプトの最大件数。初期表示の速度とデータ量のバランスをとるための定数
 // Maximum number of prompts fetched during SSR; balances initial render speed against payload size

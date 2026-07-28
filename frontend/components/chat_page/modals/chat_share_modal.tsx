@@ -3,6 +3,7 @@ import { useCallback, useRef } from "react";
 import { useModalFocusTrap } from "../../../hooks/use_modal_focus_trap";
 import type { ShareStatus } from "../../../lib/chat_page/types";
 import { ModalCloseButton } from "../../ui/modal_close_button";
+import { useTranslation } from "../../../contexts/locale_context";
 
 // チャット共有モーダルのprops型定義
 // Props type definition for the chat share modal
@@ -35,6 +36,7 @@ export function ChatShareModal({
   copyShareLink,
   shareWithNativeSheet,
 }: ChatShareModalProps) {
+  const { locale, t } = useTranslation();
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   // 初期フォーカスをコピーボタンに設定する
@@ -73,14 +75,14 @@ export function ChatShareModal({
         <ModalCloseButton
           id="chat-share-close-btn"
           className="chat-share-close-btn cc-share-modal__close"
-          label="共有モーダルを閉じる"
+          label={t("chat.closeModal")}
           onClick={closeShareModal}
         />
 
         <header className="chat-share-modal__header cc-share-modal__header">
-          <h2 id="chat-share-title">チャットを共有</h2>
+          <h2 id="chat-share-title">{t("chat.shareTitle")}</h2>
           <p className="chat-share-modal__desc cc-share-modal__lead">
-            共有リンクを作成すると、このチャットルームの履歴をURL経由で閲覧できます。
+            {t("chat.shareDescription")}
           </p>
         </header>
 
@@ -91,7 +93,7 @@ export function ChatShareModal({
               type="text"
               id="chat-share-link-input"
               readOnly
-              placeholder="共有リンクを準備しています"
+              placeholder={locale === "en" ? "Preparing share link" : "共有リンクを準備しています"}
               value={shareUrl}
             />
           </div>
@@ -110,8 +112,8 @@ export function ChatShareModal({
               type="button"
               id="chat-share-copy-btn"
               className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
-              aria-label="リンクをコピー"
-              title="リンクをコピー"
+              aria-label={t("chat.copyLink")}
+              title={t("chat.copyLink")}
               disabled={shareLoading}
               onClick={copyShareLink}
             >
@@ -121,8 +123,8 @@ export function ChatShareModal({
               type="button"
               id="chat-share-web-btn"
               className="primary-button chat-share-icon-btn cc-share-modal__icon-btn"
-              aria-label="端末で共有"
-              title="端末で共有"
+              aria-label={locale === "en" ? "Share from this device" : "端末で共有"}
+              title={locale === "en" ? "Share from this device" : "端末で共有"}
               disabled={shareLoading}
               onClick={shareWithNativeSheet}
               hidden={!supportsNativeShare}

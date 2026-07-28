@@ -10,6 +10,8 @@ SAMPLE_PROMPT_OWNER_NAME = "運営サンプル"
 # List of default shared prompts defined by the system
 DEFAULT_SHARED_PROMPTS = [
     {
+        "system_prompt_key": "meeting_minutes",
+        "content_locale": "ja",
         "title": "会議の議事録を短時間で整理するテンプレート",
         "category": "business",
         "content": (
@@ -26,6 +28,8 @@ DEFAULT_SHARED_PROMPTS = [
         ),
     },
     {
+        "system_prompt_key": "english_presentation_feedback",
+        "content_locale": "ja",
         "title": "英語プレゼン練習用フィードバックプロンプト",
         "category": "language",
         "content": (
@@ -40,6 +44,8 @@ DEFAULT_SHARED_PROMPTS = [
         ),
     },
     {
+        "system_prompt_key": "budget_travel_planning",
+        "content_locale": "ja",
         "title": "旅行プランを予算内で最適化するプロンプト",
         "category": "daily_life",
         "content": (
@@ -55,6 +61,8 @@ DEFAULT_SHARED_PROMPTS = [
         ),
     },
     {
+        "system_prompt_key": "hobby_blog_outline",
+        "content_locale": "ja",
         "title": "趣味ブログのネタ出しと構成案を作る",
         "category": "writing",
         "content": (
@@ -66,6 +74,76 @@ DEFAULT_SHARED_PROMPTS = [
             "ネタ1 タイトル: 初心者向けフィルムカメラの選び方\n"
             "導入文: 最初の一台選びで迷わないために...\n"
             "見出し: 1. 必要な機能 2. 予算別おすすめ 3. 購入後の最初の設定"
+        ),
+    },
+    {
+        "system_prompt_key": "meeting_minutes",
+        "content_locale": "en",
+        "title": "Turn rough meeting notes into clear minutes",
+        "category": "business",
+        "content": (
+            "Organize the meeting notes below into decisions, pending items, and owner actions. "
+            "List ambiguous details under Questions to confirm, then finish with a concise to-do "
+            "list for the next meeting."
+        ),
+        "input_examples": "Notes: Feature A is planned for next month. Jordan owns UI fixes. The API specification is pending.",
+        "output_examples": (
+            "Decisions: Feature A is planned for next month\n"
+            "Pending: Finalize the API specification\n"
+            "Owner actions: UI fixes (Jordan)\n"
+            "Questions: Date of the final API review\n"
+            "To-do: Schedule the API specification meeting"
+        ),
+    },
+    {
+        "system_prompt_key": "english_presentation_feedback",
+        "content_locale": "en",
+        "title": "Practice an English presentation with focused feedback",
+        "category": "language",
+        "content": (
+            "Review the English speech below for grammar, vocabulary, difficult pronunciation, "
+            "and clarity for the audience. Suggest specific improvements and finish with a "
+            "condensed 60-second version."
+        ),
+        "input_examples": "Today I want to talk about why team communication is important in project.",
+        "output_examples": (
+            "Grammar: in project -> in projects\n"
+            "Vocabulary: consider critical instead of important\n"
+            "60-second version: Team communication is critical for project success..."
+        ),
+    },
+    {
+        "system_prompt_key": "budget_travel_planning",
+        "content_locale": "en",
+        "title": "Optimize a trip plan for a fixed budget",
+        "category": "daily_life",
+        "content": (
+            "Create a day-by-day trip plan from the preferences and budget, covering transport, "
+            "accommodation, meals, and sightseeing. If the plan may exceed the budget, rank "
+            "practical alternatives by priority."
+        ),
+        "input_examples": "Three days in Fukuoka with a ¥60,000 budget, focused on food and public transport.",
+        "output_examples": (
+            "Day 1: Hakata ramen and Nakasu walk\n"
+            "Day 2: Dazaifu and food stalls\n"
+            "Day 3: Market breakfast and departure\n"
+            "Alternative: Save about ¥8,000 by choosing a business hotel"
+        ),
+    },
+    {
+        "system_prompt_key": "hobby_blog_outline",
+        "content_locale": "en",
+        "title": "Generate hobby blog ideas and outlines",
+        "category": "writing",
+        "content": (
+            "Suggest five blog post ideas for the topic. For each one, provide a title, an "
+            "introductory paragraph, and three section headings in a beginner-friendly voice."
+        ),
+        "input_examples": "Topic: Getting started with film photography on weekends",
+        "output_examples": (
+            "Idea 1: How to choose your first film camera\n"
+            "Introduction: A practical guide to choosing without feeling overwhelmed...\n"
+            "Sections: 1. Essential features 2. Options by budget 3. First setup after purchase"
         ),
     },
 ]
@@ -143,38 +221,48 @@ def ensure_default_shared_prompts() -> int:
             try:
                 owner_user_id = _ensure_sample_owner(cursor)
                 inserted = 0
-                existing_titles: set[str] = set()
+                existing_variants: set[tuple[str, str]] = set()
 
                 if DEFAULT_SHARED_PROMPTS:
-                    titles = [prompt["title"] for prompt in DEFAULT_SHARED_PROMPTS]
-                    placeholders = ", ".join(["%s"] * len(titles))
                     cursor.execute(
-                        f"""
-                        SELECT title
+                        """
+                        SELECT system_prompt_key, content_locale
                           FROM prompts
                          WHERE user_id = %s
                            AND deleted_at IS NULL
-                           AND title IN ({placeholders})
+                           AND system_prompt_key IS NOT NULL
+                           AND content_locale IS NOT NULL
                         """,
-                        (owner_user_id, *titles),
+                        (owner_user_id,),
                     )
-                    existing_titles = {
-                        str(row["title"] if isinstance(row, dict) else row[0])
-                        for row in (cursor.fetchall() or [])
-                    }
+                    for row in cursor.fetchall() or []:
+                        if isinstance(row, dict):
+                            existing_variants.add(
+                                (str(row["system_prompt_key"]), str(row["content_locale"]))
+                            )
+                        else:
+                            existing_variants.add((str(row[0]), str(row[1])))
 
                 for prompt in DEFAULT_SHARED_PROMPTS:
-                    if prompt["title"] in existing_titles:
+                    variant = (
+                        str(prompt["system_prompt_key"]),
+                        str(prompt["content_locale"]),
+                    )
+                    if variant in existing_variants:
                         continue
 
                     cursor.execute(
                         """
                         INSERT INTO prompts
-                            (user_id, is_public, title, category, content, author, input_examples, output_examples, created_at)
-                        VALUES (%s, TRUE, %s, %s, %s, %s, %s, %s, NOW())
+                            (user_id, is_public, system_prompt_key, content_locale,
+                             title, category, content, author, input_examples,
+                             output_examples, created_at)
+                        VALUES (%s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         """,
                         (
                             owner_user_id,
+                            prompt["system_prompt_key"],
+                            prompt["content_locale"],
                             prompt["title"],
                             prompt["category"],
                             prompt["content"],
@@ -183,7 +271,7 @@ def ensure_default_shared_prompts() -> int:
                             prompt["output_examples"],
                         ),
                     )
-                    existing_titles.add(prompt["title"])
+                    existing_variants.add(variant)
                     inserted += 1
 
                 if inserted > 0:

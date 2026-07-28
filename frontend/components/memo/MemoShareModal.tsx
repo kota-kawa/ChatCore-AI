@@ -1,4 +1,5 @@
 import type { FlashState } from "../../lib/memo/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 type MemoShareModalProps = {
   isShareModalOpen: boolean;
@@ -24,6 +25,7 @@ export function MemoShareModal({
   supportsNativeShare,
   shareSnsLinks,
 }: MemoShareModalProps) {
+  const { t } = useTranslation();
   return (
         <div
           id="memo-share-modal"
@@ -39,13 +41,13 @@ export function MemoShareModal({
           }}
         >
           <div className="memo-share-modal__content cc-share-modal__content" tabIndex={-1}>
-            <button type="button" className="memo-share-modal__close cc-share-modal__close" aria-label="共有モーダルを閉じる" onClick={closeShareModal}>
+            <button type="button" className="memo-share-modal__close cc-share-modal__close" aria-label={t("memo.closeShare")} onClick={closeShareModal}>
               <i className="bi bi-x-lg"></i>
             </button>
             <header className="memo-share-modal__header cc-share-modal__header">
-              <h3 id="memoShareTitle">メモを共有</h3>
+              <h3 id="memoShareTitle">{t("memo.share")}</h3>
               <p className="cc-share-modal__lead">
-                このメモ専用のURLをコピーしたり、そのまま共有できます。
+                {t("memo.shareDescription")}
               </p>
             </header>
             <div className="memo-share-modal__body cc-share-modal__body">
@@ -55,14 +57,14 @@ export function MemoShareModal({
                   type="text"
                   readOnly
                   value={shareUrl}
-                  placeholder="共有リンクを準備しています"
+                  placeholder={t("memo.preparingShareLink")}
                 />
               </div>
               {shareStatus && <p className={`memo-share-modal__status cc-share-modal__status memo-share-modal__status--${shareStatus.type}${shareStatus.type === "error" ? " cc-share-modal__status--error" : ""}`}>{shareStatus.text}</p>}
               <div className="memo-share-modal__actions cc-share-modal__actions">
-                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="リンクをコピー" title="リンクをコピー" onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
+                <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label={t("memo.copyLink")} title={t("memo.copyLink")} onClick={() => { void copyShareLink(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-files"></i></button>
                 {supportsNativeShare && (
-                  <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label="端末で共有" title="端末で共有" onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
+                  <button type="button" className="primary-button memo-share-modal__icon-btn cc-share-modal__icon-btn" aria-label={t("memo.shareOnDevice")} title={t("memo.shareOnDevice")} onClick={() => { void openNativeShareSheet(); }} disabled={shareLoading || !shareUrl}><i className="bi bi-box-arrow-up-right"></i></button>
                 )}
               </div>
               <div className="memo-share-modal__sns cc-share-modal__sns">

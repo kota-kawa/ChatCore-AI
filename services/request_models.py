@@ -101,6 +101,14 @@ class RequestPayloadModel(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
 
+# 日本語: ユーザーが設定画面で保存する表示言語。
+# English: Display language saved by the user from the settings page.
+class LocalePreferenceUpdateRequest(RequestPayloadModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    locale: Literal["ja", "en"]
+
+
 # 日本語: メールアドレス登録またはログイン用のリクエストペイロード。
 # English: Request payload for email address registration or login.
 class EmailRequest(RequestPayloadModel):

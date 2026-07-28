@@ -15,6 +15,8 @@ export const CATEGORY_UNSET = "";
 // その他カテゴリのキー。
 // Key for the catch-all category.
 export const CATEGORY_OTHER = "other";
+import type { Locale } from "../../lib/i18n/config";
+import { promptShareText, type PromptShareMessageKey } from "./i18n";
 
 // カテゴリ軸の1エントリ。
 // One entry on the category axis.
@@ -61,6 +63,14 @@ const LEGACY_CATEGORY_ALIASES: Record<string, string> = {
 };
 
 const CATEGORY_MAP = new Map(PROMPT_CATEGORY_REGISTRY.map((category) => [category.key, category]));
+const CATEGORY_MESSAGE_KEYS: Record<string, PromptShareMessageKey> = {
+  writing: "promptShare.categoryWriting", coding: "promptShare.categoryCoding",
+  business: "promptShare.categoryBusiness", learning: "promptShare.categoryLearning",
+  research: "promptShare.categoryResearch", ideation: "promptShare.categoryIdeation",
+  creative: "promptShare.categoryCreative", language: "promptShare.categoryLanguage",
+  daily_life: "promptShare.categoryDailyLife", hobby: "promptShare.categoryHobby",
+  other: "promptShare.categoryOther"
+};
 
 // カテゴリキーの一覧 (投稿フォームのバリデーション等で使う)。
 // All canonical category keys.
@@ -83,16 +93,17 @@ export function normalizeCategory(value?: string | null): string | null {
 
 // カテゴリキーから表示ラベルを解決する。未設定・未知は空文字列。
 // Resolve a category key to its display label; unset or unknown yields an empty string.
-export function getCategoryLabel(value?: string | null): string {
+export function getCategoryLabel(value?: string | null, locale?: Locale): string {
   const normalized = normalizeCategory(value);
   if (!normalized) {
     return "";
   }
-  return CATEGORY_MAP.get(normalized)?.label ?? "";
+  const key = CATEGORY_MESSAGE_KEYS[normalized];
+  return key ? promptShareText(key, undefined, locale) : "";
 }
 
 // 表示用のラベルを、未設定時のフォールバック付きで返す。
 // Resolve a category label, falling back to 未分類 when unset or unknown.
-export function getCategoryLabelOrFallback(value?: string | null, fallback = "未分類"): string {
-  return getCategoryLabel(value) || fallback;
+export function getCategoryLabelOrFallback(value?: string | null, fallback?: string, locale?: Locale): string {
+  return getCategoryLabel(value, locale) || fallback || promptShareText("promptShare.uncategorized", undefined, locale);
 }

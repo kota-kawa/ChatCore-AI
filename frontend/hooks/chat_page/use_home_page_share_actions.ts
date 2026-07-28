@@ -8,6 +8,7 @@ import {
   readJsonBodySafe,
 } from "../../scripts/core/runtime_validation";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { useTranslation } from "../../contexts/locale_context";
 
 type ShareStatus = {
   message: string;
@@ -35,6 +36,7 @@ export function useHomePageShareActions({
   setShareModalOpen,
   shareCacheRef,
 }: UseHomePageShareActionsParams) {
+  const { locale, t } = useTranslation();
   const closeShareModal = useCallback(() => {
     setShareModalOpen(false);
   }, []);
@@ -47,12 +49,12 @@ export function useHomePageShareActions({
     async (forceRefresh = false) => {
       const roomId = currentRoomIdRef.current;
       if (!roomId) {
-        setShareStatus({ message: "共有するチャットルームを選択してください。", error: true });
+        setShareStatus({ message: t("chat.shareRoomRequired"), error: true });
         setShareUrl("");
         return;
       }
       if (currentRoomMode === "temporary") {
-        setShareStatus({ message: "未保存チャットは共有できません。", error: true });
+        setShareStatus({ message: t("chat.temporaryCannotShare"), error: true });
         setShareUrl("");
         return;
       }
@@ -60,12 +62,12 @@ export function useHomePageShareActions({
       if (!forceRefresh && shareCacheRef.current.has(roomId)) {
         const cached = shareCacheRef.current.get(roomId) || "";
         setShareUrl(cached);
-        setShareStatus({ message: "共有リンクを表示しています。", error: false });
+        setShareStatus({ message: locale === "en" ? "Showing the existing share link." : "共有リンクを表示しています。", error: false });
         return;
       }
 
       setShareActionLoading(true);
-      setShareStatus({ message: "共有リンクを生成しています...", error: false });
+      setShareStatus({ message: t("chat.generatingShare"), error: false });
 
       try {
         const response = await resilientFetch("/api/share_chat_room", {
@@ -78,77 +80,77 @@ export function useHomePageShareActions({
         const data = normalizeShareChatRoomPayload(rawPayload);
 
         if (!response.ok || !data.shareUrl) {
-          throw new Error(extractApiErrorMessage(rawPayload, "共有リンクの作成に失敗しました。", response.status));
+          throw new Error(extractApiErrorMessage(rawPayload, t("chat.shareFailed"), response.status));
         }
 
         shareCacheRef.current.set(roomId, data.shareUrl);
         setShareUrl(data.shareUrl);
-        setShareStatus({ message: "共有リンクを作成しました。", error: false });
+        setShareStatus({ message: t("chat.shareCreated"), error: false });
       } catch (error) {
         setShareStatus({
-          message: error instanceof Error ? error.message : "共有リンクの作成に失敗しました。",
+          message: error instanceof Error ? error.message : t("chat.shareFailed"),
           error: true,
         });
       } finally {
         setShareActionLoading(false);
       }
     },
-    [currentRoomMode, setShareActionLoading],
+    [currentRoomMode, locale, setShareActionLoading, t],
   );
 
   const openShareModal = useCallback(() => {
     if (currentRoomMode === "temporary") {
-      setShareStatus({ message: "未保存チャットは共有できません。", error: true });
+      setShareStatus({ message: t("chat.temporaryCannotShare"), error: true });
       return;
     }
     setShareModalOpen(true);
     void createShareLink(false);
-  }, [createShareLink, currentRoomMode]);
+  }, [createShareLink, currentRoomMode, t]);
 
   const copyShareLink = useCallback(async () => {
     if (!shareUrl.trim()) {
-      setShareStatus({ message: "先に共有リンクを生成してください。", error: true });
+      setShareStatus({ message: locale === "en" ? "Create a share link first." : "先に共有リンクを生成してください。", error: true });
       return;
     }
 
     try {
       await copyTextToClipboard(shareUrl);
-      setShareStatus({ message: "リンクをコピーしました。", error: false });
+      setShareStatus({ message: t("common.copied"), error: false });
     } catch (error) {
       setShareStatus({
-        message: error instanceof Error ? error.message : "リンクのコピーに失敗しました。",
+        message: error instanceof Error ? error.message : t("chat.copyLinkFailed"),
         error: true,
       });
     }
-  }, [shareUrl]);
+  }, [locale, shareUrl, t]);
 
   const shareWithNativeSheet = useCallback(async () => {
     if (!shareUrl.trim()) {
-      setShareStatus({ message: "先に共有リンクを生成してください。", error: true });
+      setShareStatus({ message: locale === "en" ? "Create a share link first." : "先に共有リンクを生成してください。", error: true });
       return;
     }
     if (!navigator.share) {
-      setShareStatus({ message: "このブラウザはネイティブ共有に対応していません。", error: true });
+      setShareStatus({ message: locale === "en" ? "This browser does not support native sharing." : "このブラウザはネイティブ共有に対応していません。", error: true });
       return;
     }
 
     try {
       await navigator.share({
-        title: "Chat Core 共有チャット",
-        text: "このチャットルームを共有しました。",
+        title: locale === "en" ? "Chat Core shared chat" : "Chat Core 共有チャット",
+        text: locale === "en" ? "Shared from Chat Core." : "このチャットルームを共有しました。",
         url: shareUrl,
       });
-      setShareStatus({ message: "共有シートを開きました。", error: false });
+      setShareStatus({ message: locale === "en" ? "Share sheet opened." : "共有シートを開きました。", error: false });
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         return;
       }
       setShareStatus({
-        message: error instanceof Error ? error.message : "共有に失敗しました。",
+        message: error instanceof Error ? error.message : (locale === "en" ? "Sharing failed." : "共有に失敗しました。"),
         error: true,
       });
     }
-  }, [shareUrl]);
+  }, [locale, shareUrl]);
 
   return {
     closeShareModal,

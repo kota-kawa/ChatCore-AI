@@ -19,12 +19,18 @@ class ApiServiceError(Exception):
         message: str,
         status_code: int,
         *,
+        code: str = "api_error",
+        message_key: str | None = None,
+        params: dict[str, Any] | None = None,
         status: str | None = None,
         error_key: str = "error",
         headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
+        self.code = str(code or "api_error")
+        self.message_key = message_key
+        self.params = dict(params or {})
         self.status_code = int(status_code)
         self.status = status
         self.error_key = error_key
@@ -33,7 +39,23 @@ class ApiServiceError(Exception):
     # 例外オブジェクトをクライアントへのJSONレスポンス用の辞書に変換する
     # Convert the exception object to a dictionary for JSON response to the client
     def to_payload(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {self.error_key: self.message}
+        from .i18n import translate_text
+
+        message = translate_text(self.message)
+        if self.message_key:
+            # Import lazily so service-layer exceptions stay usable during
+            # startup and in isolated unit tests that do not install request
+            # locale context.
+            from .i18n import translate
+
+            message = translate(self.message_key, **self.params)
+
+        payload: dict[str, Any] = {
+            self.error_key: message,
+            "code": self.code,
+        }
+        if self.params:
+            payload["params"] = self.params
         # ステータス情報が設定されている場合は、ペイロードに追加する
         # If status information is set, add it to the payload
         if self.status is not None:
@@ -46,8 +68,23 @@ class ApiServiceError(Exception):
 class ResourceNotFoundError(ApiServiceError):
     # リソースが見つからないエラー例外の初期化
     # Initialize the resource not found error exception
-    def __init__(self, message: str, *, status: str | None = None) -> None:
-        super().__init__(message, 404, status=status)
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "resource_not_found",
+        message_key: str | None = None,
+        params: dict[str, Any] | None = None,
+        status: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            404,
+            code=code,
+            message_key=message_key,
+            params=params,
+            status=status,
+        )
 
 
 # 操作が禁止されている場合（403）のエラー例外クラス
@@ -55,8 +92,23 @@ class ResourceNotFoundError(ApiServiceError):
 class ForbiddenOperationError(ApiServiceError):
     # 禁止操作エラー例外の初期化
     # Initialize the forbidden operation error exception
-    def __init__(self, message: str, *, status: str | None = None) -> None:
-        super().__init__(message, 403, status=status)
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "forbidden_operation",
+        message_key: str | None = None,
+        params: dict[str, Any] | None = None,
+        status: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            403,
+            code=code,
+            message_key=message_key,
+            params=params,
+            status=status,
+        )
 
 
 # エラーメッセージ文字列から「〇〇秒」の部分を抽出し、再試行待ち秒数（整数）を解析する

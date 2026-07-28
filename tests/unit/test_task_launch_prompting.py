@@ -26,6 +26,14 @@ def make_request(json_body, session=None):
 # 日本語: Task Launch Promptingの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Task Launch Prompting.
 class TaskLaunchPromptingTestCase(unittest.TestCase):
+    def test_base_system_prompt_uses_saved_locale_only_as_language_fallback(self):
+        prompt = _build_base_system_prompt(locale="en")
+
+        self.assertIn("explicit language request first", prompt)
+        self.assertIn("latest substantive message", prompt)
+        self.assertIn("saved interface language (English)", prompt)
+        self.assertIn("Do not translate user-authored content", prompt)
+
     # 日本語: ベースシステムプロンプト含むユーザー向けのMarkdownフォーマットルールことを検証します。
     # English: Verify that base system prompt includes user facing markdown formatting rules.
     def test_base_system_prompt_includes_user_facing_markdown_formatting_rules(self):

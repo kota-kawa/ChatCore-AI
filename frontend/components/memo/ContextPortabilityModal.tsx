@@ -15,11 +15,12 @@ import {
   previewContextVaultImport as defaultPreviewImport,
 } from "../../lib/memo/context_api";
 import {
-  CONTEXT_FACT_TYPE_LABELS,
   type ContextVaultExportFormat,
   type ContextVaultImportPreview,
   type ContextVaultImportResult,
 } from "../../lib/memo/context_types";
+import { useTranslation } from "../../contexts/locale_context";
+import { jaMessages, type MessageKey } from "../../lib/i18n/catalogs/ja";
 
 export const MAX_CONTEXT_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -46,7 +47,10 @@ type ImportFileValidation =
   | { valid: true; format: ContextVaultExportFormat }
   | { valid: false; message: string };
 
-export function validateContextImportFile(file: Pick<File, "name" | "size">): ImportFileValidation {
+export function validateContextImportFile(
+  file: Pick<File, "name" | "size">,
+  translate: (key: MessageKey) => string = (key) => jaMessages[key],
+): ImportFileValidation {
   const lowerName = file.name.toLowerCase();
   const format: ContextVaultExportFormat | null = lowerName.endsWith(".json")
     ? "json"
@@ -54,13 +58,13 @@ export function validateContextImportFile(file: Pick<File, "name" | "size">): Im
       ? "markdown"
       : null;
   if (!format) {
-    return { valid: false, message: "JSON（.json）またはMarkdown（.md / .markdown）ファイルを選択してください。" };
+    return { valid: false, message: translate("memo.importFileTypeError") };
   }
   if (file.size === 0) {
-    return { valid: false, message: "空のファイルはインポートできません。" };
+    return { valid: false, message: translate("memo.importEmptyFileError") };
   }
   if (file.size > MAX_CONTEXT_IMPORT_FILE_BYTES) {
-    return { valid: false, message: "ファイルサイズは10MB以下にしてください。" };
+    return { valid: false, message: translate("memo.importFileSizeError") };
   }
   return { valid: true, format };
 }
@@ -83,6 +87,7 @@ export function ContextPortabilityModal({
   onImported,
   api,
 }: ContextPortabilityModalProps) {
+  const { t } = useTranslation();
   const exportVault = api?.exportVault ?? defaultExport;
   const previewImport = api?.previewImport ?? defaultPreviewImport;
   const confirmImport = api?.confirmImport ?? defaultConfirmImport;
@@ -146,7 +151,7 @@ export function ContextPortabilityModal({
       const exported = await exportVault(exportFormat);
       downloadBlob(exported.blob, exported.filename);
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : "コンテキストを書き出せませんでした。");
+      setErrorText(error instanceof Error ? error.message : t("memo.exportContextFailed"));
     } finally {
       setBusy(false);
     }
@@ -161,7 +166,7 @@ export function ContextPortabilityModal({
     setSelectedImport(null);
     if (!file) return;
 
-    const validation = validateContextImportFile(file);
+    const validation = validateContextImportFile(file, t);
     if (!validation.valid) {
       setErrorText(validation.message);
       event.target.value = "";
@@ -172,7 +177,7 @@ export function ContextPortabilityModal({
       const content = await file.text();
       setSelectedImport({ name: file.name, format: validation.format, content });
     } catch {
-      setErrorText("ファイルを読み込めませんでした。別のファイルを選択してください。");
+      setErrorText(t("memo.readImportFileFailed"));
       event.target.value = "";
     }
   };
@@ -192,7 +197,7 @@ export function ContextPortabilityModal({
         }),
       );
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : "インポート内容を確認できませんでした。");
+      setErrorText(error instanceof Error ? error.message : t("memo.previewImportFailed"));
     } finally {
       setBusy(false);
     }
@@ -223,11 +228,11 @@ export function ContextPortabilityModal({
         await onImported();
       } catch {
         setErrorText(
-          "インポートは完了しましたが、一覧を更新できませんでした。ページを再読み込みしてください。",
+          t("memo.importRefreshFailed"),
         );
       }
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : "コンテキストをインポートできませんでした。");
+      setErrorText(error instanceof Error ? error.message : t("memo.importContextFailed"));
     } finally {
       setBusy(false);
     }
@@ -250,15 +255,15 @@ export function ContextPortabilityModal({
       >
         <header className="memo-context-modal__header">
           <div>
-            <h2 id="context-portability-title">コンテキストの持ち運び</h2>
+            <h2 id="context-portability-title">{t("memo.portabilityTitle")}</h2>
             <p id="context-portability-description">
-              金庫の内容をJSON・Markdownで書き出し、別の環境から安全に取り込めます。
+              {t("memo.portabilityDescription")}
             </p>
           </div>
           <button
             type="button"
             className="memo-context-modal__close"
-            aria-label="閉じる"
+            aria-label={t("common.close")}
             onClick={close}
             disabled={busy}
           >
@@ -266,7 +271,7 @@ export function ContextPortabilityModal({
           </button>
         </header>
 
-        <div className="memo-context-portability__tabs" role="tablist" aria-label="操作">
+        <div className="memo-context-portability__tabs" role="tablist" aria-label={t("memo.actions")}>
           <button
             ref={initialFocusRef}
             type="button"
@@ -277,7 +282,7 @@ export function ContextPortabilityModal({
             disabled={busy}
           >
             <i className="bi bi-download" aria-hidden="true" />
-            書き出し
+            {t("memo.exportAction")}
           </button>
           <button
             type="button"
@@ -288,7 +293,7 @@ export function ContextPortabilityModal({
             disabled={busy}
           >
             <i className="bi bi-upload" aria-hidden="true" />
-            取り込み
+            {t("memo.importAction")}
           </button>
         </div>
 
@@ -301,7 +306,7 @@ export function ContextPortabilityModal({
         {view === "export" ? (
           <div className="memo-context-portability__section" role="tabpanel">
             <fieldset className="memo-context-portability__format">
-              <legend>ファイル形式</legend>
+              <legend>{t("memo.fileFormat")}</legend>
               <label className={exportFormat === "json" ? "is-active" : ""}>
                 <input
                   type="radio"
@@ -313,7 +318,7 @@ export function ContextPortabilityModal({
                 />
                 <span>
                   <strong>JSON</strong>
-                  再インポートや機械処理に適した完全なデータ
+                  {t("memo.jsonFormatDescription")}
                 </span>
               </label>
               <label className={exportFormat === "markdown" ? "is-active" : ""}>
@@ -327,16 +332,16 @@ export function ContextPortabilityModal({
                 />
                 <span>
                   <strong>Markdown</strong>
-                  人が読みやすく、他のノートにも移しやすい形式
+                  {t("memo.markdownFormatDescription")}
                 </span>
               </label>
             </fieldset>
             <div className="memo-context-portability__actions">
               <button type="button" className="is-primary" onClick={handleExport} disabled={busy}>
                 <i className="bi bi-download" aria-hidden="true" />
-                {busy ? "準備中…" : "ダウンロード"}
+                {busy ? t("memo.preparing") : t("memo.download")}
               </button>
-              <button type="button" onClick={close} disabled={busy}>キャンセル</button>
+              <button type="button" onClick={close} disabled={busy}>{t("common.cancel")}</button>
             </div>
           </div>
         ) : (
@@ -344,21 +349,20 @@ export function ContextPortabilityModal({
             {importResult ? (
               <div className="memo-context-portability__result" role="status">
                 <i className="bi bi-check-circle" aria-hidden="true" />
-                <h3>インポートが完了しました</h3>
+                <h3>{t("memo.importComplete")}</h3>
                 <p>
-                  {importResult.imported_count}件を追加し、
-                  {importResult.skipped_duplicate_count}件の重複をスキップしました。
+                  {t("memo.importResult", { imported: importResult.imported_count, skipped: importResult.skipped_duplicate_count })}
                 </p>
                 <dl>
-                  <div><dt>有効</dt><dd>{importResult.active_count}件</dd></div>
-                  <div><dt>無効化済み</dt><dd>{importResult.deprecated_count}件</dd></div>
+                  <div><dt>{t("memo.active")}</dt><dd>{t("memo.items", { count: importResult.active_count })}</dd></div>
+                  <div><dt>{t("memo.deprecated")}</dt><dd>{t("memo.items", { count: importResult.deprecated_count })}</dd></div>
                 </dl>
-                <button type="button" className="is-primary" onClick={close}>閉じる</button>
+                <button type="button" className="is-primary" onClick={close}>{t("common.close")}</button>
               </div>
             ) : (
               <>
                 <div className="memo-context-portability__file">
-                  <label htmlFor="context-import-file">インポートするファイル</label>
+                  <label htmlFor="context-import-file">{t("memo.importFile")}</label>
                   <input
                     ref={fileInputRef}
                     id="context-import-file"
@@ -368,8 +372,7 @@ export function ContextPortabilityModal({
                     disabled={busy}
                   />
                   <p>
-                    Chat-Coreから書き出したJSONまたはMarkdown（10MB以下）を選択してください。
-                    既存の事実は上書きしません。
+                    {t("memo.importFileHelp")}
                   </p>
                   {selectedImport && (
                     <p className="memo-context-portability__selected-file">
@@ -387,25 +390,25 @@ export function ContextPortabilityModal({
                       onClick={handlePreview}
                       disabled={!selectedImport || busy}
                     >
-                      {busy ? "確認中…" : "内容を確認"}
+                      {busy ? t("memo.checking") : t("memo.reviewContent")}
                     </button>
-                    <button type="button" onClick={close} disabled={busy}>キャンセル</button>
+                    <button type="button" onClick={close} disabled={busy}>{t("common.cancel")}</button>
                   </div>
                 ) : (
                   <div className="memo-context-portability__preview">
-                    <div className="memo-context-portability__summary" aria-label="インポート確認">
-                      <div><strong>{preview.importable_count}</strong><span>追加予定</span></div>
-                      <div><strong>{preview.duplicate_count}</strong><span>重複スキップ</span></div>
-                      <div><strong>{preview.active_count}</strong><span>有効</span></div>
-                      <div><strong>{preview.deprecated_count}</strong><span>無効化済み</span></div>
+                    <div className="memo-context-portability__summary" aria-label={t("memo.importReview")}>
+                      <div><strong>{preview.importable_count}</strong><span>{t("memo.toAdd")}</span></div>
+                      <div><strong>{preview.duplicate_count}</strong><span>{t("memo.duplicateSkip")}</span></div>
+                      <div><strong>{preview.active_count}</strong><span>{t("memo.active")}</span></div>
+                      <div><strong>{preview.deprecated_count}</strong><span>{t("memo.deprecated")}</span></div>
                     </div>
 
                     {(preview.warnings.length > 0 || !preview.can_import) && (
                       <div className="memo-context-portability__warnings" role="alert">
-                        <h3><i className="bi bi-exclamation-triangle" aria-hidden="true" />確認事項</h3>
+                        <h3><i className="bi bi-exclamation-triangle" aria-hidden="true" />{t("memo.reviewNotes")}</h3>
                         <ul>
                           {!preview.can_import && preview.warnings.length === 0 && (
-                            <li>この内容はインポートできません。ファイル内容と保存上限を確認してください。</li>
+                            <li>{t("memo.cannotImport")}</li>
                           )}
                           {preview.warnings.map((warning, index) => (
                             <li key={`${index}-${warning}`}>{warning}</li>
@@ -416,12 +419,12 @@ export function ContextPortabilityModal({
 
                     {preview.sample_facts.length > 0 && (
                       <div className="memo-context-portability__samples">
-                        <h3>追加される事実のサンプル</h3>
+                        <h3>{t("memo.importSamples")}</h3>
                         <ul>
                           {preview.sample_facts.map((fact, index) => (
                             <li key={`${index}-${fact.fact_type}-${fact.title}`}>
                               <div>
-                                <span>{CONTEXT_FACT_TYPE_LABELS[fact.fact_type]}</span>
+                                <span>{t(`memo.factType${fact.fact_type.charAt(0).toUpperCase()}${fact.fact_type.slice(1)}` as MessageKey)}</span>
                                 <strong>{fact.title}</strong>
                               </div>
                               <p className="memo-context-portability__sample-content">
@@ -441,8 +444,7 @@ export function ContextPortabilityModal({
                         disabled={busy || !preview.can_import || preview.importable_count === 0}
                       />
                       <span>
-                        プレビューと警告を確認しました。既存データを変更せず、
-                        {preview.importable_count}件を追加します。
+                        {t("memo.importConfirmation", { count: preview.importable_count })}
                       </span>
                     </label>
 
@@ -458,9 +460,9 @@ export function ContextPortabilityModal({
                           busy
                         }
                       >
-                        {busy ? "取り込み中…" : "確認してインポート"}
+                        {busy ? t("memo.importing") : t("memo.confirmImport")}
                       </button>
-                      <button type="button" onClick={resetImport} disabled={busy}>別のファイルを選ぶ</button>
+                      <button type="button" onClick={resetImport} disabled={busy}>{t("memo.chooseAnotherFile")}</button>
                     </div>
                   </div>
                 )}

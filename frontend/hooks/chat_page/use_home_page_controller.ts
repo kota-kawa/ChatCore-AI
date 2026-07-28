@@ -60,6 +60,7 @@ import {
   invalidateTasksCache,
 } from "../../scripts/setup/setup_tasks_cache";
 import { bindSetupViewportFit, scheduleSetupViewportFit } from "../../scripts/setup/setup_viewport";
+import { useTranslation } from "../../contexts/locale_context";
 
 const CHAT_SIDEBAR_OVERLAY_QUERY = "(max-width: 992px)";
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -100,6 +101,10 @@ const fetchChatRoomsPage = async (url: string): Promise<ChatRoomsPage> => {
 };
 
 export function useHomePageController() {
+  const { locale } = useTranslation();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const localize = useCallback((ja: string, en: string) => localeRef.current === "en" ? en : ja, []);
   const {
     loggedIn,
     setLoggedIn,
@@ -530,7 +535,7 @@ export function useHomePageController() {
   const openNewPromptModal = useCallback(() => {
     setIsNewPromptModalOpen(true);
     setNewPromptStatus({
-      message: "タイトルか本文がある状態で AI 補助を使うと、提案の精度が上がります。",
+      message: localize("タイトルか本文がある状態で AI 補助を使うと、提案の精度が上がります。", "Add a title or content before using AI assistance for better suggestions."),
       variant: "info",
     });
   }, []);
@@ -541,7 +546,7 @@ export function useHomePageController() {
       if (isPromptSubmitting) return;
 
       setIsPromptSubmitting(true);
-      setNewPromptStatus({ message: "タスクを追加しています...", variant: "info" });
+      setNewPromptStatus({ message: localize("タスクを追加しています...", "Adding task…"), variant: "info" });
 
       try {
         const payload = {
@@ -560,14 +565,14 @@ export function useHomePageController() {
             body: JSON.stringify(payload),
           },
           {
-            defaultMessage: "タスクの追加に失敗しました。",
+            defaultMessage: localize("タスクの追加に失敗しました。", "Could not add the task."),
             fetchImpl: resilientFetch,
           },
         );
 
         setNewPromptStatus({
           message:
-            typeof responsePayload.message === "string" ? responsePayload.message : "タスクが追加されました。",
+            typeof responsePayload.message === "string" ? responsePayload.message : localize("タスクが追加されました。", "Task added."),
           variant: "success",
         });
 
@@ -585,7 +590,7 @@ export function useHomePageController() {
         }, 550);
       } catch (error) {
         setNewPromptStatus({
-          message: error instanceof Error ? error.message : "エラーが発生しました。",
+          message: error instanceof Error ? error.message : localize("エラーが発生しました。", "An error occurred."),
           variant: "error",
         });
         setIsPromptSubmitting(false);
@@ -818,8 +823,8 @@ export function useHomePageController() {
           setLoggedIn(false);
           showToast(
             error.status === 401
-              ? "ログインセッションが切れました。再ログインしてください。"
-              : "認証状態を確認できませんでした。再ログインしてください。",
+              ? localize("ログインセッションが切れました。再ログインしてください。", "Your session expired. Please log in again.")
+              : localize("認証状態を確認できませんでした。再ログインしてください。", "We could not verify your account. Please log in again."),
             { variant: "error" },
           );
           return;
@@ -1161,10 +1166,10 @@ export function useHomePageController() {
       root: newPromptAssistRootRef.current,
       target: "task_modal",
       fields: {
-        title: { label: "タイトル", element: titleInputRef.current, setValue: setNewPromptTitle },
-        prompt_content: { label: "プロンプト内容", element: contentInputRef.current, setValue: setNewPromptContent },
-        input_examples: { label: "入力例", element: inputExampleRef.current, setValue: setNewPromptInputExample },
-        output_examples: { label: "出力例", element: outputExampleRef.current, setValue: setNewPromptOutputExample },
+        title: { label: localize("タイトル", "Title"), element: titleInputRef.current, setValue: setNewPromptTitle },
+        prompt_content: { label: localize("プロンプト内容", "Prompt content"), element: contentInputRef.current, setValue: setNewPromptContent },
+        input_examples: { label: localize("入力例", "Input example"), element: inputExampleRef.current, setValue: setNewPromptInputExample },
+        output_examples: { label: localize("出力例", "Output example"), element: outputExampleRef.current, setValue: setNewPromptOutputExample },
       },
       beforeApplyField: (fieldName) => {
         if (fieldName === "input_examples" || fieldName === "output_examples") {

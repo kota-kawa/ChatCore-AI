@@ -105,7 +105,8 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("EXISTS ( SELECT 1 FROM prompt_likes AS pl", query)
         self.assertIn("EXISTS ( SELECT 1 FROM task_with_examples AS used_tasks", query)
         self.assertIn("used_tasks.source_prompt_id = p.id", query)
-        self.assertEqual(params, (25, 7, 7))
+        self.assertIn("p.system_prompt_key IS NULL", query)
+        self.assertEqual(params, ("ja", 25, 7, 7))
         self.assertTrue(payload["prompts"][0]["liked"])
         self.assertTrue(payload["prompts"][0]["used_in_chat"])
         self.assertFalse(payload["pagination"]["has_next"])
@@ -153,7 +154,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("AND (p.created_at, p.id) < (%s, %s)", query)
         self.assertEqual(
             params,
-            ("business", "prompt", "image", *page_cursor, 3, 7, 7),
+            ("ja", "business", "prompt", "image", *page_cursor, 3, 7, 7),
         )
         self.assertEqual([prompt["id"] for prompt in payload["prompts"]], [9, 8])
         self.assertTrue(payload["pagination"]["has_next"])
@@ -192,7 +193,8 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("COALESCE(p.id <> %s, TRUE)", query)
         self.assertIn("ORDER BY RANDOM()", query)
         self.assertIn("LIMIT %s", query)
-        self.assertEqual(params, (7, 3))
+        self.assertIn("p.system_prompt_key IS NULL", query)
+        self.assertEqual(params, ("ja", 7, 3))
         self.assertEqual(prompts[0]["id"], 8)
         self.assertTrue(fake_cursor.closed)
         self.assertTrue(fake_conn.closed)

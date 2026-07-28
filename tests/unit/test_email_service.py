@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+from starlette.requests import Request
+
 from services import email_service
 
 
@@ -23,6 +25,37 @@ class FakeResponse:
 # 日本語: Email Service Configの機能や仕様を検証するテストクラスです。
 # English: Test case class to verify the functionality and specifications of Email Service Config.
 class EmailServiceConfigTestCase(unittest.TestCase):
+    def test_render_english_verification_email_uses_typed_template(self):
+        subject, body = email_service.render_verification_email(
+            "login_verification",
+            code="654321",
+            locale="en-US",
+        )
+
+        self.assertEqual(subject, "Chat-Core AI: Sign-in verification code")
+        self.assertIn("Verification code: 654321", body)
+        html = email_service._build_email_html(
+            subject,
+            body,
+            template_kind="login_verification",
+            code="654321",
+            locale="en",
+        )
+        self.assertIn('<html lang="en">', html)
+        self.assertIn("Sign-in verification code", html)
+
+    def test_request_email_locale_uses_canonical_accept_language_parser(self):
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/",
+                "headers": [(b"accept-language", b"fr;q=1, en-US;q=0.8, ja;q=0.5")],
+                "session": {},
+            }
+        )
+
+        self.assertEqual(email_service.resolve_request_email_locale(request), "en")
     # 日本語: アドレスから、loadresend設定usesresendことを検証します。
     # English: Verify that load resend config uses resend from address.
     def test_load_resend_config_uses_resend_from_address(self):

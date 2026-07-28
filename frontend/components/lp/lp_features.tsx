@@ -32,21 +32,28 @@ const LP_FEATURES = [
     linkLabel: "メモを見る"
   }
 ] as const;
+const LP_FEATURES_EN = [
+  { id: "chat", icon: "bi-chat-dots", name: "AI Chat", title: "Ask naturally and get answers fast", description: "Switch between models such as Groq and Gemini for research, summaries, and writing. Share a conversation with one click.", href: "/", linkLabel: "Open chat" },
+  { id: "prompts", icon: "bi-people", name: "Prompt Library", title: "Reuse the prompts that work", description: "Publish effective prompts and learn from examples shared by others, complete with sample inputs and outputs.", href: "/prompt_share", linkLabel: "Browse prompts" },
+  { id: "memo", icon: "bi-journal-text", name: "Memos", title: "Keep useful answers as knowledge", description: "Save AI responses as Markdown memos, find them later, or share selected notes with your team.", href: "/memo", linkLabel: "Open memos" }
+] as const;
 
 // 機能紹介セクション
 // Feature introduction section
 export function LpFeatures() {
+  const { locale } = useTranslation();
+  const features = locale === "en" ? LP_FEATURES_EN : LP_FEATURES;
   return (
     <section id="features" className="lp-section lp-features" aria-labelledby="lp-features-heading">
       <div className="lp-container">
-        <p className="lp-eyebrow">できること</p>
+        <p className="lp-eyebrow">{locale === "en" ? "FEATURES" : "できること"}</p>
         <h2 id="lp-features-heading" className="lp-heading">
-          ひとつのワークスペースに、
+          {locale === "en" ? "Three essential tools" : "ひとつのワークスペースに、"}
           <br className="lp-br-sp" />
-          3つの道具。
+          {locale === "en" ? "in one workspace." : "3つの道具。"}
         </h2>
         <div className="lp-features__grid">
-          {LP_FEATURES.map((feature) => (
+          {features.map((feature) => (
             <article key={feature.id} className="lp-feature-card">
               <span className="lp-feature-card__icon" aria-hidden="true">
                 <i className={`bi ${feature.icon}`}></i>
@@ -65,3 +72,4 @@ export function LpFeatures() {
     </section>
   );
 }
+import { useTranslation } from "../../contexts/locale_context";

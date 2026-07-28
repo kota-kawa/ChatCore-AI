@@ -1,3 +1,5 @@
+import { getRuntimeLocale } from "../../lib/i18n/config";
+
 const ALERT_MODAL_ROOT_ID = "cc-alert-modal-root";
 const CONFIRM_MODAL_ROOT_ID = "cc-confirm-modal-root";
 const ALERT_MODAL_OPEN_CLASS = "cc-alert-modal-open";
@@ -53,6 +55,7 @@ class GlobalAlertModal {
       return existing;
     }
 
+    const english = getRuntimeLocale() === "en";
     const root = document.createElement("div");
     root.id = ALERT_MODAL_ROOT_ID;
     root.className = "cc-alert-modal";
@@ -63,8 +66,8 @@ class GlobalAlertModal {
     root.innerHTML = `
       <div class="cc-alert-modal__overlay" data-cc-alert-close></div>
       <div class="cc-alert-modal__dialog" role="document" tabindex="-1">
-        <button type="button" class="cc-alert-modal__close" aria-label="閉じる">×</button>
-        <h2 class="cc-alert-modal__title">お知らせ</h2>
+        <button type="button" class="cc-alert-modal__close" aria-label="${english ? "Close" : "閉じる"}">×</button>
+        <h2 class="cc-alert-modal__title">${english ? "Notice" : "お知らせ"}</h2>
         <p class="cc-alert-modal__message"></p>
         <div class="cc-alert-modal__actions">
           <button type="button" class="cc-alert-modal__button">OK</button>
@@ -216,6 +219,7 @@ class GlobalConfirmModal {
       return existing;
     }
 
+    const english = getRuntimeLocale() === "en";
     const root = document.createElement("div");
     root.id = CONFIRM_MODAL_ROOT_ID;
     root.className = "cc-alert-modal cc-alert-modal--confirm";
@@ -226,11 +230,11 @@ class GlobalConfirmModal {
     root.innerHTML = `
       <div class="cc-alert-modal__overlay" data-cc-confirm-cancel="true"></div>
       <div class="cc-alert-modal__dialog" role="document" tabindex="-1">
-        <button type="button" class="cc-alert-modal__close" aria-label="閉じる">×</button>
-        <h2 class="cc-alert-modal__title">確認</h2>
+        <button type="button" class="cc-alert-modal__close" aria-label="${english ? "Close" : "閉じる"}">×</button>
+        <h2 class="cc-alert-modal__title">${english ? "Confirm" : "確認"}</h2>
         <p class="cc-alert-modal__message"></p>
         <div class="cc-alert-modal__actions">
-          <button type="button" class="cc-alert-modal__button cc-alert-modal__button--secondary" data-cc-confirm-cancel="true">キャンセル</button>
+          <button type="button" class="cc-alert-modal__button cc-alert-modal__button--secondary" data-cc-confirm-cancel="true">${english ? "Cancel" : "キャンセル"}</button>
           <button type="button" class="cc-alert-modal__button" data-cc-confirm-ok="true">OK</button>
         </div>
       </div>

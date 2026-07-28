@@ -11,6 +11,7 @@ import {
   SITE_NAME,
   TWITTER_SITE
 } from "../lib/seo";
+import { useTranslation } from "../contexts/locale_context";
 
 // SEOヘッドコンポーネントのprops型定義
 // Props type definition for the SEO head component
@@ -45,6 +46,9 @@ export function SeoHead({
 }: SeoHeadProps) {
   // canonicalUrlが直接指定されていればそれを使い、なければパスから生成する
   // Use canonicalUrl directly if provided, otherwise generate from path
+  const { locale, t } = useTranslation();
+  const resolvedTitle = title === DEFAULT_SEO_TITLE ? t("home.seoTitle") : title;
+  const resolvedDescription = description === DEFAULT_SEO_DESCRIPTION ? t("home.seoDescription") : description;
   const resolvedCanonicalUrl = canonicalUrl || (canonicalPath ? absoluteUrl(canonicalPath) : "");
   const resolvedImageUrl = absoluteUrl(imageUrl);
   // noindexフラグに応じてrobotsメタタグの内容を切り替える
@@ -60,17 +64,19 @@ export function SeoHead({
         name="viewport"
         content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
       />
-      <title>{title}</title>
-      <meta name="description" content={description} />
+      <title>{resolvedTitle}</title>
+      <meta name="description" content={resolvedDescription} />
+      <meta httpEquiv="content-language" content={locale} />
       {/* 検索エンジンのインデックス制御 / Search engine indexing control */}
       <meta name="robots" content={robotsContent} />
       <meta name="googlebot" content={robotsContent} />
       {/* OGP基本メタタグ / OGP basic meta tags */}
-      <meta property="og:locale" content="ja_JP" />
+      <meta property="og:locale" content={locale === "ja" ? "ja_JP" : "en_US"} />
+      <meta property="og:locale:alternate" content={locale === "ja" ? "en_US" : "ja_JP"} />
       <meta property="og:site_name" content={SITE_NAME} />
       <meta property="og:type" content={ogType} />
-      <meta property="og:title" content={title} />
-      <meta property="og:description" content={description} />
+      <meta property="og:title" content={resolvedTitle} />
+      <meta property="og:description" content={resolvedDescription} />
       {resolvedCanonicalUrl ? <link rel="canonical" href={resolvedCanonicalUrl} /> : null}
       {resolvedCanonicalUrl ? <meta property="og:url" content={resolvedCanonicalUrl} /> : null}
       {/* OGP画像メタタグ / OGP image meta tags */}
@@ -82,8 +88,8 @@ export function SeoHead({
       {/* Twitter Cardメタタグ / Twitter Card meta tags */}
       <meta name="twitter:card" content="summary_large_image" />
       {TWITTER_SITE ? <meta name="twitter:site" content={TWITTER_SITE} /> : null}
-      <meta name="twitter:title" content={title} />
-      <meta name="twitter:description" content={description} />
+      <meta name="twitter:title" content={resolvedTitle} />
+      <meta name="twitter:description" content={resolvedDescription} />
       {resolvedImageUrl ? <meta name="twitter:image" content={resolvedImageUrl} /> : null}
       {/* ファビコン・アイコン設定 / Favicon and icon settings */}
       <link rel="icon" type="image/webp" href="/static/favicon.webp" />

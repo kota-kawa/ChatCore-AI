@@ -1,8 +1,10 @@
 import { Skeleton, SkeletonText } from "../ui/skeleton";
+import { useTranslation } from "../../contexts/locale_context";
 
 export function SettingsProfileSkeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="settings-profile-skeleton" role="status" aria-label="プロフィールを読み込み中">
+    <div className="settings-profile-skeleton" role="status" aria-label={t("settings.loadingProfile")}>
       <Skeleton variant="circle" width={96} height={96} />
       <div className="settings-profile-skeleton__fields">
         <Skeleton variant="text" width="34%" height="0.9rem" />

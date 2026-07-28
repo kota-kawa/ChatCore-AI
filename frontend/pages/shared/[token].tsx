@@ -5,6 +5,7 @@ import { SeoHead } from "../../components/SeoHead";
 import { formatDateTime } from "../../lib/datetime";
 import type { ChatMessagePart } from "../../lib/chat_page/types";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
+import { useTranslation } from "../../contexts/locale_context";
 
 // 共有チャットの個別メッセージを表す型
 // Represents a single message in a shared chat
@@ -92,7 +93,7 @@ function truncateText(value: string, maxLength = 140) {
 
 // ページのmeta descriptionをペイロードの内容から動的に生成する
 // Dynamically builds the meta description from the payload content
-function buildMetaDescription(payload: SharedChatPayload) {
+function buildMetaDescription(payload: SharedChatPayload, english = false) {
   if (payload.error) {
     return truncateText(payload.error);
   }
@@ -101,10 +102,10 @@ function buildMetaDescription(payload: SharedChatPayload) {
   // Prefer the first assistant message as the description source for richer preview text
   const previewTarget = messages.find((item) => item.sender === "assistant") || messages[0];
   if (!previewTarget?.message) {
-    return "Chat Core で共有されたチャットの閲覧ページです。";
+    return english ? "A read-only chat shared from Chat Core." : "Chat Core で共有されたチャットの閲覧ページです。";
   }
   const normalized = stripPreviewText(decodeStoredMessage(previewTarget.message));
-  return truncateText(normalized || "Chat Core で共有されたチャットの閲覧ページです。");
+  return truncateText(normalized || (english ? "A read-only chat shared from Chat Core." : "Chat Core で共有されたチャットの閲覧ページです。"));
 }
 
 // サーバーサイドでトークンを検証し、共有チャットデータをバックエンドから取得する
@@ -158,10 +159,12 @@ export const getServerSideProps: GetServerSideProps<SharedChatPageProps> = async
 // 共有チャットの読み取り専用ビューを表示するページコンポーネント
 // Page component that renders a read-only view of a shared chat conversation
 export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedChatPageProps) {
-  const title = payload.room?.title || "共有チャット";
+  const { locale } = useTranslation();
+  const english = locale === "en";
+  const title = payload.room?.title || (english ? "Shared chat" : "共有チャット");
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
-  const pageTitle = `${title} | Chat Core 共有`;
-  const description = buildMetaDescription(payload);
+  const pageTitle = `${title} | ${english ? "Shared on Chat Core" : "Chat Core 共有"}`;
+  const description = buildMetaDescription(payload, english);
   // エラー時はStructured Dataを出力せずインデックスもブロックする
   // Suppress structured data on error pages to prevent indexing invalid content
   const structuredData = !payload.error
@@ -172,7 +175,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
         description,
         datePublished: payload.room?.created_at || undefined,
         url: pageUrl,
-        inLanguage: "ja",
+        inLanguage: locale,
         isPartOf: {
           "@type": "WebSite",
           name: "Chat Core"
@@ -202,14 +205,14 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
               <h1 className="shared-chat-header__title">{title}</h1>
               {payload.room?.created_at ? (
                 <p className="shared-chat-header__meta">
-                  作成日: {formatDateTime(payload.room.created_at) || payload.room.created_at}
+                  {english ? "Created" : "作成日"}: {formatDateTime(payload.room.created_at) || payload.room.created_at}
                 </p>
               ) : null}
             </header>
 
             <main className="shared-chat-messages">
               {messages.length === 0 ? (
-                <p className="shared-chat-empty">この共有チャットにはまだメッセージがありません。</p>
+                <p className="shared-chat-empty">{english ? "This shared chat has no messages yet." : "この共有チャットにはまだメッセージがありません。"}</p>
               ) : null}
 
               {messages.map((message, index) => {
@@ -249,7 +252,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
                             return (
                               <div key={`buttons-${partIndex}`} style={{ marginTop: "1rem", opacity: 0.7 }}>
                                 <strong>{part.buttons.question}</strong>
-                                <div style={{ fontSize: "0.85rem", color: "#666" }}>(対話型ボタンは共有画面では動作しません)</div>
+                                <div style={{ fontSize: "0.85rem", color: "#666" }}>({english ? "Interactive buttons are unavailable in shared views" : "対話型ボタンは共有画面では動作しません"})</div>
                               </div>
                             );
                           }
@@ -267,7 +270,7 @@ export default function SharedChatPage({ payload, pageUrl, ogImageUrl }: SharedC
             </main>
 
             <footer className="shared-chat-footer">
-              このページは読み取り専用です。送信や編集はできません。
+              {english ? "This page is read-only. Messages cannot be sent or edited." : "このページは読み取り専用です。送信や編集はできません。"}
             </footer>
           </div>
         )}

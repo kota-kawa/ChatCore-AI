@@ -2,6 +2,7 @@ from typing import Any
 
 from .db import get_db_connection
 from .default_tasks import default_task_rows
+from .i18n import Locale, normalize_locale
 
 # 定数定義
 # Define constants
@@ -84,7 +85,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
         try:
             cursor.execute(
                 """
-                SELECT name, prompt_template, response_rules,
+                SELECT system_task_key, name, prompt_template, response_rules,
                        output_skeleton, input_examples,
                        output_examples, display_order
                   FROM task_with_examples
@@ -94,28 +95,48 @@ def copy_default_tasks_for_user(user_id: int) -> None:
             )
             defaults = cursor.fetchall()
             if not defaults:
-                defaults = default_task_rows()
+                defaults = default_task_rows(include_key=True)
 
-            for name, tmpl, response_rules, output_skeleton, inp, out, disp in defaults:
-                cursor.execute(
-                    """
-                    SELECT 1 FROM task_with_examples
-                     WHERE user_id = %s AND name = %s
-                       AND deleted_at IS NULL
-                    """,
-                    (user_id, name)
-                )
+            for system_task_key, name, tmpl, response_rules, output_skeleton, inp, out, disp in defaults:
+                if system_task_key:
+                    cursor.execute(
+                        """
+                        SELECT 1 FROM task_with_examples
+                         WHERE user_id = %s AND system_task_key = %s
+                           AND deleted_at IS NULL
+                        """,
+                        (user_id, system_task_key),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT 1 FROM task_with_examples
+                         WHERE user_id = %s AND name = %s
+                           AND deleted_at IS NULL
+                        """,
+                        (user_id, name),
+                    )
                 if cursor.fetchone():
                     continue
                 cursor.execute(
                     """
                     INSERT INTO task_with_examples
-                          (user_id, name, prompt_template,
+                          (user_id, system_task_key, name, prompt_template,
                            response_rules, output_skeleton,
                            input_examples, output_examples, display_order)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (user_id, name, tmpl, response_rules, output_skeleton, inp, out, disp)
+                    (
+                        user_id,
+                        system_task_key,
+                        name,
+                        tmpl,
+                        response_rules,
+                        output_skeleton,
+                        inp,
+                        out,
+                        disp,
+                    ),
                 )
 
             conn.commit()
@@ -190,7 +211,8 @@ def get_user_by_id(user_id: int) -> dict[str, Any] | None:
             cursor.execute(
                 """
                 SELECT id, email, is_verified, created_at,
-                       username, bio, avatar_url, llm_profile_context
+                       username, bio, avatar_url, llm_profile_context,
+                       preferred_locale
                   FROM users
                  WHERE id = %s
                 """,
@@ -212,12 +234,16 @@ def create_user(
     provider_user_id: str | None = None,
     provider_email: str | None = None,
     is_verified: bool = False,
+    preferred_locale: Locale | None = None,
 ) -> int | None:
     # 未認証ユーザーを作成し、採番された user_id を返す
     # Create an unverified user and return the generated user_id.
     """未認証ユーザーを新規作成"""
     normalized_username = (username or "").strip()[:255] or DEFAULT_USERNAME
     normalized_avatar_url = _normalize_avatar_url(avatar_url)
+    normalized_preferred_locale = normalize_locale(preferred_locale)
+    if preferred_locale is not None and normalized_preferred_locale is None:
+        raise ValueError("Unsupported preferred locale")
     normalized_provider_user_id, normalized_provider_email = _normalize_provider_metadata(
         auth_provider,
         email,
@@ -233,9 +259,10 @@ def create_user(
                     email,
                     username,
                     avatar_url,
-                    is_verified
+                    is_verified,
+                    preferred_locale
                 )
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -243,6 +270,7 @@ def create_user(
                     normalized_username,
                     normalized_avatar_url,
                     is_verified,
+                    normalized_preferred_locale,
                 ),
             )
             row = cursor.fetchone()

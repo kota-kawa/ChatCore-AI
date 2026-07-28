@@ -23,6 +23,7 @@ export function AuthEntryStep({
   onPasskeyLogin,
   onSendCode
 }: AuthEntryStepProps) {
+  const { t } = useTranslation();
   return (
     <>
       {/* デバイスがパスキーをサポートしている場合のみ表示 / Shown only when device supports passkeys */}
@@ -33,7 +34,7 @@ export function AuthEntryStep({
           onClick={onPasskeyLogin}
           disabled={passkeyPending}
         >
-          Passkeyで続ける
+          {t("auth.passkeyLogin")}
         </button>
       ) : null}
 
@@ -70,14 +71,14 @@ export function AuthEntryStep({
               d="M12 6.1c1.5 0 2.8.5 3.9 1.5l2.9-2.9C17 2.9 14.7 2 12 2 8.2 2 4.9 4.2 3.3 7.5l3.1 2.6c.8-2.4 3-4 5.6-4z"
             />
           </svg>
-          <span>Googleで続ける</span>
+          <span>{t("auth.continueGoogle")}</span>
         </button>
       </div>
 
-      <div className="divider"><span>またはメール</span></div>
+      <div className="divider"><span>{t("auth.orEmail")}</span></div>
 
       {/* メールアドレス入力フォーム / Email address input form */}
-      <label htmlFor="email" className="email-label">メールアドレス</label>
+      <label htmlFor="email" className="email-label">{t("auth.email")}</label>
       <input
         type="email"
         id="email"
@@ -96,8 +97,9 @@ export function AuthEntryStep({
         onClick={onSendCode}
         disabled={sendingCode}
       >
-        メールで続ける
+        {sendingCode ? t("auth.sendingCode") : t("auth.sendCode")}
       </button>
     </>
   );
 }
+import { useTranslation } from "../../../../contexts/locale_context";

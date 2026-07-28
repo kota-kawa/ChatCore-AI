@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from services.async_utils import run_blocking
 from services.db import get_db_connection  # 既存の DB 接続関数を利用
 # Reuse the shared DB connection helper.
+from services.i18n import get_request_locale
 from services.prompt_categories import category_keys_matching
 from services.prompt_types import (
     CONTENT_FORMATS,
@@ -151,6 +152,7 @@ def _search_public_prompts(
     content_format=None,
     media_type=None,
     include_total=True,
+    locale="ja",
 ):
     """
     公開プロンプトをデータベースから部分一致で検索する。ページネーションとインタラクション状態（Like等）の取得も行う。
@@ -197,10 +199,14 @@ def _search_public_prompts(
             content_format_filter = legacy_content_format
             media_type_filter = legacy_media_type
 
-        select_axis_conditions = []
-        count_axis_conditions = []
-        count_filter_params = []
-        search_filter_params = []
+        select_axis_conditions = [
+            "AND (p.system_prompt_key IS NULL OR p.content_locale = %s)"
+        ]
+        count_axis_conditions = [
+            "AND (p.system_prompt_key IS NULL OR p.content_locale = %s)"
+        ]
+        count_filter_params = [locale]
+        search_filter_params = [locale]
         if content_format_filter:
             select_axis_conditions.append("AND p.content_format = %s")
             count_axis_conditions.append("AND content_format = %s")
@@ -439,6 +445,7 @@ async def search_prompts(request: Request):
             content_format,
             media_type,
             include_total,
+            get_request_locale(request),
         )
         return jsonify({"status": "success", **payload})
     except Exception:

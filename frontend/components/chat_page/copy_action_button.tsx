@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
+import { useTranslation } from "../../contexts/locale_context";
 
 // コピーアクションボタンのprops型定義
 // Props type definition for the copy action button
@@ -11,6 +12,7 @@ type CopyActionButtonProps = {
 // メッセージをクリップボードにコピーするアクションボタン（成功・失敗のフィードバックアニメーション付き）
 // Action button to copy a message to the clipboard, with success/failure feedback animation
 export function CopyActionButton({ getText }: CopyActionButtonProps) {
+  const { locale, t } = useTranslation();
   // アイコンクラスとステータスクラスでコピー結果を視覚的に表現する
   // Visually represent the copy result using icon and status classes
   const [iconClass, setIconClass] = useState("bi-clipboard");
@@ -47,8 +49,8 @@ export function CopyActionButton({ getText }: CopyActionButtonProps) {
     <button
       type="button"
       className={`copy-btn message-action-btn ${statusClass}`.trim()}
-      aria-label="メッセージをコピー"
-      data-tooltip="このメッセージをコピー"
+      aria-label={locale === "en" ? "Copy message" : "メッセージをコピー"}
+      data-tooltip={t("chat.copy")}
       data-tooltip-placement="top"
       disabled={disabled}
       onClick={() => {

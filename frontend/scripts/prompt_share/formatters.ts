@@ -9,6 +9,8 @@ import {
   normalizeMediaType
 } from "./prompt_type_registry";
 import { normalizeSkillResources } from "./skill_resources";
+import type { Locale } from "../../lib/i18n/config";
+import { promptShareText } from "./i18n";
 
 export function truncateText(text: string, limit: number) {
   const safeText = text || "";
@@ -37,10 +39,10 @@ export function normalizePromptType(value?: string): PromptType {
   return "text";
 }
 
-export function getPromptTypeLabel(promptType: PromptType) {
-  if (promptType === "image") return "画像生成";
+export function getPromptTypeLabel(promptType: PromptType, locale?: Locale) {
+  if (promptType === "image") return promptShareText("promptShare.mediaImage", undefined, locale);
   if (promptType === "skill") return "SKILL";
-  return "通常";
+  return promptShareText("promptShare.formatPrompt", undefined, locale);
 }
 
 export function getPromptTypeIconClass(promptType: PromptType) {
@@ -57,16 +59,16 @@ export function normalizePromptMediaType(value?: string): MediaType {
   return normalizeMediaType(value);
 }
 
-export function getPromptFormatLabel(contentFormat?: string) {
-  return getContentFormat(contentFormat || "").label;
+export function getPromptFormatLabel(contentFormat?: string, locale?: Locale) {
+  return normalizeContentFormat(contentFormat) === "skill" ? "SKILL" : promptShareText("promptShare.formatPrompt", undefined, locale);
 }
 
 export function getPromptFormatIconClass(contentFormat?: string) {
   return getContentFormat(contentFormat || "").icon;
 }
 
-export function getPromptMediaLabel(mediaType?: string) {
-  return getMediaType(mediaType || "").label;
+export function getPromptMediaLabel(mediaType?: string, locale?: Locale) {
+  return normalizeMediaType(mediaType) === "image" ? promptShareText("promptShare.mediaImage", undefined, locale) : promptShareText("promptShare.mediaText", undefined, locale);
 }
 
 export function getPromptMediaIconClass(mediaType?: string) {

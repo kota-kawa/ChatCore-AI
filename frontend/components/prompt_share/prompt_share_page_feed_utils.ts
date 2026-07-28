@@ -12,6 +12,7 @@ import type {
   MediaTypeFilter
 } from "./prompt_share_page_types";
 import { getCategoryCountLabel } from "./prompt_share_page_utils";
+import { promptShareText } from "../../scripts/prompt_share/i18n";
 
 // SSR/API由来のPromptDataをReact側で扱うPromptRecordに揃える
 // Converts SSR/API PromptData into PromptRecords used by the React UI
@@ -50,11 +51,11 @@ export function appendUniquePromptRecords(current: PromptRecord[], incoming: Pro
 }
 
 export function getContentFormatFilterLabel(contentFormatFilter: ContentFormatFilter) {
-  return contentFormatFilter === "all" ? "全て" : getPromptFormatLabel(contentFormatFilter);
+  return contentFormatFilter === "all" ? promptShareText("promptShare.all") : getPromptFormatLabel(contentFormatFilter);
 }
 
 export function getMediaTypeFilterLabel(mediaTypeFilter: MediaTypeFilter) {
-  return mediaTypeFilter === "all" ? "全て" : getPromptMediaLabel(mediaTypeFilter);
+  return mediaTypeFilter === "all" ? promptShareText("promptShare.all") : getPromptMediaLabel(mediaTypeFilter);
 }
 
 // カテゴリ・フォーマット・メディアの条件でプロンプト一覧を絞り込む
@@ -103,10 +104,10 @@ export function buildPromptCountMeta(
   const filterSuffix = `${formatSuffix}${mediaSuffix}`;
 
   if (typeof options?.searchTotal === "number") {
-    return `検索結果${filterSuffix}: ${visibleCount}件 / ${options.searchTotal}件`;
+    return promptShareText("promptShare.resultsCount", { filters: filterSuffix, visible: visibleCount, total: options.searchTotal });
   }
 
-  const loadedSuffix = options?.hasMore ? `${visibleCount}件を表示` : `${visibleCount}件`;
+  const loadedSuffix = options?.hasMore ? promptShareText("promptShare.loadedCount", { count: visibleCount }) : promptShareText("promptShare.itemsCount", { count: visibleCount });
   return `${getCategoryCountLabel(category || "all")}${filterSuffix}: ${loadedSuffix}`;
 }
 
@@ -115,11 +116,11 @@ export function getFilterEmptyMessage(
   mediaTypeFilter: MediaTypeFilter
 ) {
   if (contentFormatFilter === "all" && mediaTypeFilter === "all") {
-    return "条件に一致するプロンプトが見つかりませんでした。";
+    return promptShareText("promptShare.noMatches");
   }
   const labels = [
     contentFormatFilter === "all" ? "" : getContentFormatFilterLabel(contentFormatFilter),
     mediaTypeFilter === "all" ? "" : getMediaTypeFilterLabel(mediaTypeFilter)
   ].filter(Boolean);
-  return `${labels.join(" / ")}のプロンプトが見つかりませんでした。`;
+  return promptShareText("promptShare.noMatchesFor", { filters: labels.join(" / ") });
 }

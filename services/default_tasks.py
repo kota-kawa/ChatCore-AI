@@ -9,17 +9,23 @@ from .db import Error, get_db_connection, is_retryable_db_error, rollback_connec
 DEFAULT_TASKS_JSON = (
     Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.json"
 )
+DEFAULT_TASKS_EN_JSON = (
+    Path(__file__).resolve().parent.parent / "frontend" / "data" / "default_tasks.en.json"
+)
+DEFAULT_TASK_CATALOGS = {"ja": DEFAULT_TASKS_JSON, "en": DEFAULT_TASKS_EN_JSON}
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 # JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
 # Load, cache, and normalize default task definitions from the JSON file.
-@lru_cache(maxsize=1)
-def load_default_tasks() -> list[dict]:
+@lru_cache(maxsize=2)
+def load_default_tasks(locale: str = "ja") -> list[dict]:
     # JSON からデフォルトタスクを読み込み、型とキーを正規化する
     # Load default tasks from JSON and normalize schema/types.
-    with DEFAULT_TASKS_JSON.open(encoding="utf-8") as fp:
+    normalized_locale = str(locale or "ja").lower().replace("_", "-").split("-", 1)[0]
+    catalog_path = DEFAULT_TASK_CATALOGS.get(normalized_locale, DEFAULT_TASKS_JSON)
+    with catalog_path.open(encoding="utf-8") as fp:
         tasks = json.load(fp)
 
     if not isinstance(tasks, list):
@@ -32,6 +38,7 @@ def load_default_tasks() -> list[dict]:
 
         normalized.append(
             {
+                "system_task_key": str(task.get("system_task_key") or f"legacy:{index}"),
                 "name": str(task["name"]),
                 "prompt_template": str(task["prompt_template"]),
                 "response_rules": str(task.get("response_rules", "")),
@@ -46,13 +53,14 @@ def load_default_tasks() -> list[dict]:
 
 # APIレスポンス用のペイロード形式に変換したデフォルトタスクのリストを返す
 # Convert and return default tasks formatted as API payloads.
-def default_task_payloads() -> list[dict]:
+def default_task_payloads(locale: str = "ja") -> list[dict]:
     # APIレスポンス向けに is_default を付与した形へ変換する
     # Build API payload objects with is_default metadata.
     payloads = []
-    for task in load_default_tasks():
+    for task in load_default_tasks(locale):
         payloads.append(
             {
+                "system_task_key": task.get("system_task_key"),
                 "name": task["name"],
                 "prompt_template": task["prompt_template"],
                 "response_rules": task["response_rules"],
@@ -65,15 +73,64 @@ def default_task_payloads() -> list[dict]:
     return payloads
 
 
+@lru_cache(maxsize=2)
+def default_tasks_by_key(locale: str = "ja") -> dict[str, dict[str, Any]]:
+    """Return the localized system task catalog indexed by its stable key."""
+    return {
+        str(task["system_task_key"]): task
+        for task in load_default_tasks(locale)
+        if task.get("system_task_key")
+    }
+
+
+def resolve_system_task_key(identifier: Any) -> str | None:
+    """Resolve a stable key or a localized built-in task name to its stable key."""
+    normalized = str(identifier or "").strip()
+    if not normalized:
+        return None
+
+    for locale in DEFAULT_TASK_CATALOGS:
+        catalog = default_tasks_by_key(locale)
+        if normalized in catalog:
+            return normalized
+        for system_task_key, task in catalog.items():
+            if normalized == task["name"]:
+                return system_task_key
+    return None
+
+
+def localize_system_task(
+    task: dict[str, Any],
+    locale: str = "ja",
+) -> dict[str, Any]:
+    """Overlay localized fields only when a row is a known, untouched system task."""
+    system_task_key = str(task.get("system_task_key") or "").strip()
+    localized = default_tasks_by_key(locale).get(system_task_key)
+    if localized is None:
+        return dict(task)
+
+    result = dict(task)
+    for field in (
+        "name",
+        "prompt_template",
+        "response_rules",
+        "output_skeleton",
+        "input_examples",
+        "output_examples",
+    ):
+        result[field] = localized[field]
+    result["system_task_key"] = system_task_key
+    return result
+
+
 # データベース挿入用のタプル形式に変換したデフォルトタスクのリストを返す
 # Convert and return default tasks formatted as tuples for database insertion.
-def default_task_rows() -> list[tuple]:
+def default_task_rows(locale: str = "ja", *, include_key: bool = False) -> list[tuple]:
     # DB INSERT 用のタプル配列へ変換する
     # Convert normalized tasks into DB insert row tuples.
     rows = []
-    for task in load_default_tasks():
-        rows.append(
-            (
+    for task in load_default_tasks(locale):
+        row = (
                 task["name"],
                 task["prompt_template"],
                 task["response_rules"],
@@ -81,8 +138,8 @@ def default_task_rows() -> list[tuple]:
                 task["input_examples"],
                 task["output_examples"],
                 task["display_order"],
-            )
         )
+        rows.append((task.get("system_task_key"), *row) if include_key else row)
     return rows
 
 
@@ -98,6 +155,16 @@ def _extract_name(row: dict[str, Any] | tuple[Any, ...] | None) -> str | None:
     return row[0]
 
 
+def _extract_system_key_and_name(
+    row: dict[str, Any] | tuple[Any, ...] | None,
+) -> tuple[str | None, str | None]:
+    if row is None:
+        return None, None
+    if isinstance(row, dict):
+        return row.get("system_task_key"), row.get("name")
+    return row[0], row[1]
+
+
 # データベースに不足しているデフォルトタスクをインサートし、追加された件数を返す
 # Seed default tasks into the database if they do not already exist, returning the insert count.
 def ensure_default_tasks_seeded() -> int:
@@ -111,20 +178,19 @@ def ensure_default_tasks_seeded() -> int:
                 # Retrieve the names of existing default tasks
                 cursor.execute(
                     """
-                    SELECT name
+                    SELECT system_task_key, name
                       FROM task_with_examples
                      WHERE user_id IS NULL
                        AND deleted_at IS NULL
                     """
                 )
-                existing_names = {
-                    name
-                    for name in (_extract_name(row) for row in cursor.fetchall())
-                    if isinstance(name, str)
-                }
+                existing_rows = [_extract_system_key_and_name(row) for row in cursor.fetchall()]
+                existing_keys = {key for key, _ in existing_rows if isinstance(key, str) and key}
+                existing_names = {name for _, name in existing_rows if isinstance(name, str)}
 
                 inserted = 0
                 for (
+                    system_task_key,
                     name,
                     template,
                     response_rules,
@@ -132,10 +198,14 @@ def ensure_default_tasks_seeded() -> int:
                     input_example,
                     output_example,
                     display_order,
-                ) in default_task_rows():
+                ) in default_task_rows(include_key=True):
                     # 既に存在する場合は挿入をスキップする
                     # Skip insertion if the task already exists
-                    if name in existing_names:
+                    if (
+                        system_task_key in existing_keys
+                        if system_task_key
+                        else name in existing_names
+                    ):
                         continue
 
                     cursor.execute(
@@ -143,6 +213,7 @@ def ensure_default_tasks_seeded() -> int:
                         INSERT INTO task_with_examples
                               (
                                   user_id,
+                                  system_task_key,
                                   name,
                                   prompt_template,
                                   response_rules,
@@ -151,9 +222,10 @@ def ensure_default_tasks_seeded() -> int:
                                   output_examples,
                                   display_order
                               )
-                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
+                            system_task_key,
                             name,
                             template,
                             response_rules,
@@ -163,6 +235,9 @@ def ensure_default_tasks_seeded() -> int:
                             display_order,
                         ),
                     )
+                    if system_task_key:
+                        existing_keys.add(system_task_key)
+                    existing_names.add(name)
                     inserted += 1
 
                 # 挿入があった場合はコミットする

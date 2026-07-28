@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BranchNavigator } from "../components/chat_page/branch_navigator";
 import type { UiChatMessage } from "../lib/chat_page/types";
+import { LocaleProvider } from "../contexts/locale_context";
 
 function makeMessage(overrides: Partial<UiChatMessage> = {}): UiChatMessage {
   return {
@@ -64,5 +65,17 @@ describe("BranchNavigator", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("uses English accessible labels for an English locale", () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <BranchNavigator message={makeMessage()} onSwitchBranch={vi.fn()} />
+      </LocaleProvider>
+    );
+
+    expect(screen.getByRole("button", { name: "Previous branch" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Next branch" })).toBeEnabled();
+    expect(screen.getByLabelText("Branch 2 of 3")).toBeInTheDocument();
   });
 });

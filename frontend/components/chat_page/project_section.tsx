@@ -8,10 +8,12 @@ import { useBodyScrollLock } from "../../hooks/use_body_scroll_lock";
 import { useModalFocusTrap } from "../../hooks/use_modal_focus_trap";
 import { InlineLoading } from "../ui/inline_loading";
 import { ModalCloseButton } from "../ui/modal_close_button";
+import { useTranslation } from "../../contexts/locale_context";
 
 // プロジェクト詳細オーバーレイ。指示・所属チャットを管理する。
 // Project detail overlay: manage instructions and member chats.
 export function ProjectSection() {
+  const { locale, t } = useTranslation();
   const {
     activeProjectId,
     activeProjectDetail,
@@ -54,8 +56,8 @@ export function ProjectSection() {
 
   const handleSaveDetails = useCallback(() => {
     if (activeProjectId === null) return;
-    void updateProject(activeProjectId, { name: name.trim() || "新規プロジェクト", instructions });
-  }, [activeProjectId, instructions, name, updateProject]);
+    void updateProject(activeProjectId, { name: name.trim() || t("chat.newProject"), instructions });
+  }, [activeProjectId, instructions, name, t, updateProject]);
 
   const handleStartChatInProject = useCallback(() => {
     if (activeProjectId === null) return;
@@ -91,12 +93,12 @@ export function ProjectSection() {
           <ModalCloseButton
             id="project-detail-close-btn"
             className="project-overlay__close icon-button cc-press"
-            label="プロジェクト詳細を閉じる"
+            label={t("chat.closeModal")}
             onClick={closeProject}
           />
           <span id="project-detail-title" className="project-overlay__title">
             <i className="bi bi-folder2-open" aria-hidden="true"></i>
-            プロジェクト
+            {locale === "en" ? "Project" : "プロジェクト"}
           </span>
           {detail !== null && (
             <button
@@ -107,23 +109,23 @@ export function ProjectSection() {
               }}
             >
               <i className="bi bi-trash" aria-hidden="true"></i>
-              <span>削除</span>
+              <span>{t("common.delete")}</span>
             </button>
           )}
         </header>
 
         {isProjectDetailLoading && detail === null ? (
           <div className="project-overlay__loading">
-            <InlineLoading label="読み込み中" />
+            <InlineLoading label={t("common.loading")} />
           </div>
         ) : detail === null ? (
-          <div className="project-overlay__loading">プロジェクトを読み込めませんでした。</div>
+          <div className="project-overlay__loading">{locale === "en" ? "Could not load the project." : "プロジェクトを読み込めませんでした。"}</div>
         ) : (
           <div className="project-overlay__body">
             {/* 基本情報・カスタム指示 / Basic info and custom instructions */}
             <section className="project-section-block">
               <label className="project-field">
-                <span className="project-field__label">プロジェクト名</span>
+                <span className="project-field__label">{t("chat.projectName")}</span>
                 <input
                   id="project-name-input"
                   type="text"
@@ -134,12 +136,12 @@ export function ProjectSection() {
                 />
               </label>
               <label className="project-field">
-                <span className="project-field__label">カスタム指示</span>
+                <span className="project-field__label">{locale === "en" ? "Custom instructions" : "カスタム指示"}</span>
                 <textarea
                   className="project-field__textarea"
                   rows={6}
                   maxLength={20000}
-                  placeholder="このプロジェクト内の全会話に適用される指示（口調・役割・出力形式など）"
+                  placeholder={locale === "en" ? "Instructions applied to every chat in this project (tone, role, output format, etc.)" : "このプロジェクト内の全会話に適用される指示（口調・役割・出力形式など）"}
                   value={instructions}
                   onChange={(event) => setInstructions(event.target.value)}
                 />
@@ -151,7 +153,7 @@ export function ProjectSection() {
                   disabled={!hasUnsavedChanges || isSavingProject}
                   onClick={handleSaveDetails}
                 >
-                  {isSavingProject ? "保存中..." : "指示を保存"}
+                  {isSavingProject ? t("common.saving") : (locale === "en" ? "Save instructions" : "指示を保存")}
                 </button>
               </div>
             </section>
@@ -160,15 +162,15 @@ export function ProjectSection() {
             <section className="project-section-block">
               <div className="project-section-block__heading">
                 <h3 className="project-section-block__title">
-                  <i className="bi bi-chat-left-text" aria-hidden="true"></i> チャット
+                  <i className="bi bi-chat-left-text" aria-hidden="true"></i> {t("nav.chat")}
                 </h3>
                 <button type="button" className="project-newchat-btn cc-press" onClick={handleStartChatInProject}>
                   <i className="bi bi-plus-lg" aria-hidden="true"></i>
-                  このプロジェクトで新規チャット
+                  {locale === "en" ? "New chat in this project" : "このプロジェクトで新規チャット"}
                 </button>
               </div>
               {detail.rooms.length === 0 ? (
-                <p className="project-chats__empty">このプロジェクトにはまだチャットがありません。</p>
+                <p className="project-chats__empty">{locale === "en" ? "This project has no chats yet." : "このプロジェクトにはまだチャットがありません。"}</p>
               ) : (
                 <ul className="project-chats__list">
                   {detail.rooms.map((room) => (
@@ -182,7 +184,7 @@ export function ProjectSection() {
                         }}
                       >
                         <i className="bi bi-chat-dots project-chats__item-icon" aria-hidden="true"></i>
-                        <span className="project-chats__item-title">{room.title || "新規チャット"}</span>
+                        <span className="project-chats__item-title">{room.title || t("chat.new")}</span>
                       </button>
                     </li>
                   ))}

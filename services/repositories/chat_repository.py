@@ -13,6 +13,8 @@ from services.datetime_serialization import serialize_datetime_iso
 from services.db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from services.error_messages import ERROR_CHAT_ROOM_NOT_FOUND, ERROR_SHARED_LINK_NOT_FOUND
 from services.generative_ui import decode_message_parts, encode_message_parts
+from services.default_tasks import localize_system_task, resolve_system_task_key
+from services.i18n import get_current_locale
 
 def _decode_web_search_context(raw: Any) -> list[dict[str, Any]] | None:
     # 保存済みのWeb検索結果(JSONB文字列 or 解析済みリスト)を dict のリストに正規化する
@@ -718,39 +720,47 @@ class ChatRepository:
         with self._connection_getter() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
+                system_task_key = resolve_system_task_key(task)
+                lookup_column = "system_task_key" if system_task_key is not None else "name"
+                lookup_value = system_task_key or task
                 if user_id:
                     query = """
-                        SELECT name,
+                        SELECT system_task_key,
+                               name,
                                prompt_template,
                                response_rules,
                                output_skeleton,
                                input_examples,
                                output_examples
                          FROM task_with_examples
-                         WHERE name = %s
+                         WHERE {lookup_column} = %s
                            AND deleted_at IS NULL
                            AND (user_id = %s OR user_id IS NULL)
                          ORDER BY CASE WHEN user_id = %s THEN 0 ELSE 1 END, id
                          LIMIT 1
-                    """
-                    cursor.execute(query, (task, user_id, user_id))
+                    """.format(lookup_column=lookup_column)
+                    cursor.execute(query, (lookup_value, user_id, user_id))
                 else:
                     query = """
-                        SELECT name,
+                        SELECT system_task_key,
+                               name,
                                prompt_template,
                                response_rules,
                                output_skeleton,
                                input_examples,
                                output_examples
                          FROM task_with_examples
-                         WHERE name = %s
+                         WHERE {lookup_column} = %s
                            AND deleted_at IS NULL
                            AND user_id IS NULL
                          ORDER BY id
                          LIMIT 1
-                    """
-                    cursor.execute(query, (task,))
-                return cursor.fetchone()
+                    """.format(lookup_column=lookup_column)
+                    cursor.execute(query, (lookup_value,))
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return localize_system_task(dict(row), get_current_locale())
             finally:
                 cursor.close()
 

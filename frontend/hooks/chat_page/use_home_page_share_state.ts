@@ -1,24 +1,21 @@
 import { useMemo, useRef, useState } from "react";
 
 import type { ShareStatus } from "../../lib/chat_page/types";
-
-const DEFAULT_SHARE_STATUS: ShareStatus = {
-  message: "共有するチャットルームを選択してください。",
-  error: false,
-};
+import { useTranslation } from "../../contexts/locale_context";
 
 export function useHomePageShareState() {
+  const { locale, t } = useTranslation();
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [shareStatus, setShareStatus] = useState<ShareStatus>(DEFAULT_SHARE_STATUS);
+  const [shareStatus, setShareStatus] = useState<ShareStatus>(() => ({ message: t("chat.shareRoomRequired"), error: false }));
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
   const shareCacheRef = useRef<Map<string, string>>(new Map());
 
   const shareXUrl = useMemo(() => {
     const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent("このチャットルームを共有しました。");
+    const encodedText = encodeURIComponent(locale === "en" ? "Shared from Chat Core." : "このチャットルームを共有しました。");
     return `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`;
-  }, [shareUrl]);
+  }, [locale, shareUrl]);
 
   const shareLineUrl = useMemo(() => {
     const encodedUrl = encodeURIComponent(shareUrl);

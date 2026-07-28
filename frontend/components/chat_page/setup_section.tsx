@@ -23,6 +23,7 @@ import {
   useHomePageTaskContext,
   useHomePageUiContext,
 } from "../../contexts/chat_page/home_page_context";
+import { useTranslation } from "../../contexts/locale_context";
 
 // ドラッグ開始と判定するための最小移動距離（ピクセル）
 // Minimum pointer movement in pixels before a drag gesture is recognized
@@ -98,6 +99,7 @@ const TaskCard = memo(function TaskCard({
   onEdit,
   onShowDetail,
 }: TaskCardProps) {
+  const { locale } = useTranslation();
   return (
     <div
       ref={(node) => {
@@ -128,7 +130,7 @@ const TaskCard = memo(function TaskCard({
               <button
                 type="button"
                 className="card-delete-btn"
-                data-tooltip="このタスクを削除"
+                data-tooltip={locale === "en" ? "Delete this task" : "このタスクを削除"}
                 data-tooltip-placement="top"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -144,7 +146,7 @@ const TaskCard = memo(function TaskCard({
               <button
                 type="button"
                 className="card-edit-btn"
-                data-tooltip="このタスクを編集"
+                data-tooltip={locale === "en" ? "Edit this task" : "このタスクを編集"}
                 data-tooltip-placement="top"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -164,7 +166,7 @@ const TaskCard = memo(function TaskCard({
             type="button"
             className="task-detail-toggle"
             aria-label={`${task.name}の詳細を表示`}
-            data-tooltip="タスクの詳細を表示"
+            data-tooltip={locale === "en" ? "Show task details" : "タスクの詳細を表示"}
             data-tooltip-placement="top"
             onClick={(event) => {
               event.preventDefault();
@@ -185,6 +187,7 @@ TaskCard.displayName = "TaskCard";
 // セットアップ画面全体を管理するメインコンポーネント
 // Main component that manages the setup screen: message input, model selection, and task list
 function SetupSectionComponent() {
+  const { locale, t } = useTranslation();
   const {
     pageViewState,
     isSetupVisible,
@@ -923,12 +926,12 @@ function SetupSectionComponent() {
         {/* Short feature intro shown only when logged out (provides crawlable public content) */}
         {!loggedIn && (
           <p className="setup-form-subtitle">
-            ChatCore-AIは、日本語対応のAIチャットでの調べ物・文章作成・コード相談に加え、プロンプト共有やメモ保存をまとめて使えるAIワークスペースです。下の入力欄からそのまま試せます。
+            {locale === "en" ? "ChatCore-AI brings AI research, writing, coding help, reusable prompts, and notes into one workspace. Try it below." : "ChatCore-AIは、日本語対応のAIチャットでの調べ物・文章作成・コード相談に加え、プロンプト共有やメモ保存をまとめて使えるAIワークスペースです。下の入力欄からそのまま試せます。"}
           </p>
         )}
 
         <div className="form-group setup-info-group">
-          <label className="form-label" htmlFor="setup-info">やりたいことを入力（任意）</label>
+          <label className="form-label" htmlFor="setup-info">{t("home.inputLabel")}</label>
           {/* ファイルドロップゾーンを兼ねたメッセージ入力エリア / Message input area that also serves as a file drop zone */}
           <div
             className={`setup-info-field-shell chat-attachment-dropzone ${
@@ -940,8 +943,8 @@ function SetupSectionComponent() {
               <span className="chat-attachment-drop-overlay__icon">
                 <i className="bi bi-cloud-arrow-up" aria-hidden="true"></i>
               </span>
-              <span className="chat-attachment-drop-overlay__text">ファイルをドロップして添付</span>
-              <span className="chat-attachment-drop-overlay__hint">PDF / Office / テキスト</span>
+              <span className="chat-attachment-drop-overlay__text">{t("home.dropFiles")}</span>
+              <span className="chat-attachment-drop-overlay__hint">PDF / Office / {locale === "en" ? "Text" : "テキスト"}</span>
             </div>
             {/* 未保存チャットモードのトグルとフィードバック表示 / Toggle for temporary chat mode with animated feedback label */}
             <div className="chat-save-mode-control">
@@ -950,10 +953,10 @@ function SetupSectionComponent() {
                 type="button"
                 className={`chat-save-mode-toggle ${temporaryModeEnabled ? "is-active" : ""}`.trim()}
                 aria-pressed={temporaryModeEnabled ? "true" : "false"}
-                aria-label={temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする"}
-                data-tooltip={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
+                aria-label={locale === "en" ? (temporaryModeEnabled ? "Turn temporary chat off" : "Turn temporary chat on") : (temporaryModeEnabled ? "未保存チャットモードをオフにする" : "未保存チャットモードをオンにする")}
+                data-tooltip={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
                 data-tooltip-placement="top"
-                title={temporaryModeEnabled ? "未保存チャットモード: ON" : "未保存チャットモード: OFF"}
+                title={locale === "en" ? `Temporary chat: ${temporaryModeEnabled ? "ON" : "OFF"}` : `未保存チャットモード: ${temporaryModeEnabled ? "ON" : "OFF"}`}
                 onClick={() => {
                   finishPointerDrag();
                   setTemporaryModeEnabled((previous) => !previous);
@@ -976,7 +979,7 @@ function SetupSectionComponent() {
                 role="status"
                 aria-live="polite"
               >
-                {temporaryModeEnabled ? "未保存チャット" : "履歴に保存"}
+                {temporaryModeEnabled ? t("home.temporary") : t("home.savedHistory")}
               </span>
             </div>
 
@@ -1029,7 +1032,7 @@ function SetupSectionComponent() {
                 data-agent-id="chat.setup-message"
                 rows={4}
                 aria-describedby={setupInfo.length > 0 ? "setup-info-counter" : undefined}
-                placeholder="例：沖縄旅行のプランを考えたい　／　英語メールを添削してほしい　／　Pythonのエラーを直したい"
+                placeholder={t("home.inputPlaceholder")}
                 value={setupInfo}
                 onChange={(event) => {
                   setSetupInfo(event.target.value);
@@ -1040,8 +1043,8 @@ function SetupSectionComponent() {
               <button
                 type="button"
                 className="setup-attach-btn"
-                aria-label="ファイルを添付"
-                data-tooltip="ファイルを添付"
+                aria-label={t("home.attach")}
+                data-tooltip={t("home.attach")}
                 data-tooltip-placement="top"
                 disabled={isChatLaunching || attachedFiles.length >= MAX_ATTACHED_FILES}
                 onClick={() => fileInputRef.current?.click()}
@@ -1053,8 +1056,8 @@ function SetupSectionComponent() {
                 type="button"
                 className="setup-send-btn"
                 data-agent-id="chat.send-setup-message"
-                aria-label="入力内容を送信"
-                data-tooltip="メッセージを送信"
+                aria-label={t("home.send")}
+                data-tooltip={t("home.send")}
                 data-tooltip-placement="top"
                 disabled={!canSendSetupMessage}
                 onClick={() => {
@@ -1082,7 +1085,7 @@ function SetupSectionComponent() {
         </div>
 
         <div className="form-group">
-          <label className="form-label" htmlFor="ai-model">AIモデル選択</label>
+          <label className="form-label" htmlFor="ai-model">{t("home.model")}</label>
 
           {/* ネイティブselectはモバイルでのフォールバックとして残す / Native select element kept as a fallback for mobile and accessibility */}
           <select
@@ -1120,7 +1123,7 @@ function SetupSectionComponent() {
               {selectedModelLabel}
             </button>
 
-            <div className="model-select-menu" id="ai-model-listbox" role="listbox" aria-label="AIモデル選択">
+            <div className="model-select-menu" id="ai-model-listbox" role="listbox" aria-label={t("home.model")}>
               {MODEL_OPTIONS.map((option, index) => (
                 <button
                   key={option.value}
@@ -1151,7 +1154,7 @@ function SetupSectionComponent() {
         </div>
 
         <div className="task-selection-header">
-          <p id="task-selection-text">実行したいタスクを選択（クリックで即実行）</p>
+          <p id="task-selection-text">{t("home.tasks")}</p>
 
           {/* ログイン済みユーザーのみ並び替え編集と新規作成ボタンを表示 / Reorder and create buttons only available to authenticated users */}
           {loggedIn && (
@@ -1160,7 +1163,7 @@ function SetupSectionComponent() {
                 id="edit-task-order-btn"
                 className="primary-button"
                 type="button"
-                data-tooltip={isTaskOrderEditing ? "並び替え編集を終了" : "タスクの並び順を編集"}
+                data-tooltip={locale === "en" ? (isTaskOrderEditing ? "Finish reordering" : "Reorder tasks") : (isTaskOrderEditing ? "並び替え編集を終了" : "タスクの並び順を編集")}
                 data-tooltip-placement="bottom"
                 onClick={() => {
                   finishPointerDrag();
@@ -1174,7 +1177,7 @@ function SetupSectionComponent() {
                 id="openNewPromptModal"
                 className={`circle-button new-prompt-modal-btn ${isNewPromptModalOpen ? "is-rotated" : ""}`.trim()}
                 type="button"
-                data-tooltip="新しいプロンプトを作成"
+                data-tooltip={locale === "en" ? "Create a new prompt" : "新しいプロンプトを作成"}
                 data-tooltip-placement="bottom"
                 onClick={() => {
                   if (isNewPromptModalOpen) {

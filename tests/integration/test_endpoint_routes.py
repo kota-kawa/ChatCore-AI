@@ -171,7 +171,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 response = await client.get("/memo/api/recent?limit=5")
 
             self.assertEqual(response.status_code, 401)
-            self.assertEqual(response.json(), {"status": "fail", "error": "ログインが必要です"})
+            self.assertEqual(
+                response.json(),
+                {
+                    "status": "fail",
+                    "error": "ログインが必要です",
+                    "code": "auth.login_required",
+                },
+            )
 
         asyncio.run(scenario())
 
@@ -239,7 +246,14 @@ class EndpointRoutesTestCase(unittest.TestCase):
                 )
 
             self.assertEqual(response.status_code, 401)
-            self.assertEqual(response.json(), {"status": "fail", "error": "ログインが必要です"})
+            self.assertEqual(
+                response.json(),
+                {
+                    "status": "fail",
+                    "error": "ログインが必要です",
+                    "code": "auth.login_required",
+                },
+            )
 
         asyncio.run(scenario())
 

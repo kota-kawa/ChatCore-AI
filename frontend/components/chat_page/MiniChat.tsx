@@ -40,6 +40,7 @@ import {
 import { writeSessionJson } from "../../lib/utils";
 import { resilientFetch } from "../../scripts/core/resilient_fetch";
 import MarkdownContent from "../MarkdownContent";
+import { useTranslation } from "../../contexts/locale_context";
 
 // MiniChat — AI エージェントとの会話 UI コンポーネント
 // MiniChat — embeddable chat panel that lets users interact with the AI agent
@@ -54,6 +55,15 @@ export function MiniChat({
   persistConversation = true,
   onMemoEdit,
 }: MiniChatProps = {}) {
+  const { locale, t } = useTranslation();
+  const english = locale === "en";
+  const resolvedTitle = english && placeholderTitle === "操作支援エージェント" ? "Navigation assistant" : placeholderTitle;
+  const resolvedDescription = english && placeholderDescription.startsWith("画面の使い方")
+    ? "Ask for help using this page, choosing your next action, or organizing what to enter."
+    : placeholderDescription;
+  const resolvedInputPlaceholder = english && inputPlaceholder === "この画面でやりたいことを相談する"
+    ? "Ask for help with this page"
+    : inputPlaceholder;
   // メモ編集ハンドラが渡されている場合は、画面操作が無効でもアクション計画（memo_edit）を受け付ける
   // Accept action plans (memo_edit) when an edit handler is provided, even with page actions disabled
   const actionsEnabled = enableActions || Boolean(onMemoEdit);
@@ -115,7 +125,7 @@ export function MiniChat({
   // Prefers client-side navigation for smooth UX and falls back to hard navigation when needed
   const navigateInternal = useCallback<NavigateInternal>(async (path) => {
     if (!isSafeInternalPath(path) || !isAllowedNavigationPath(path)) {
-      return { ok: false, message: "この遷移は許可されていません。", clientSide: false, needsReplan: false };
+      return { ok: false, message: english ? "This navigation is not allowed." : "この遷移は許可されていません。", clientSide: false, needsReplan: false };
     }
     const targetPathname = getInternalPathname(path);
     if (targetPathname && isClientNavigableRoute(targetPathname)) {
@@ -178,7 +188,7 @@ export function MiniChat({
       throw await buildAiAgentHttpError(response);
     }
 
-    let assistantText = "応答を取得できませんでした。もう一度試してください。";
+    let assistantText = english ? "No response was received. Please try again." : "応答を取得できませんでした。もう一度試してください。";
     let actionPlan: ActionPlan | undefined;
     let isError = false;
 
@@ -233,7 +243,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
+          text: error instanceof Error ? error.message : (english ? "The AI assistant could not generate a response." : "AIエージェントの応答生成に失敗しました。"),
           isError: true,
         },
       ]);
@@ -274,7 +284,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : "AIエージェントの応答生成に失敗しました。",
+          text: error instanceof Error ? error.message : (english ? "The AI assistant could not generate a response." : "AIエージェントの応答生成に失敗しました。"),
           isError: true,
         },
       ]);
@@ -326,8 +336,8 @@ export function MiniChat({
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsGenerating(true);
-    setStatusText("画面を再確認しています...");
-    setProgressSteps(["画面を再確認しています..."]);
+    setStatusText(english ? "Checking the page again…" : "画面を再確認しています...");
+    setProgressSteps([english ? "Checking the page again…" : "画面を再確認しています..."]);
 
     try {
       const replanMessage = await requestAiAgentMessage(
@@ -353,7 +363,7 @@ export function MiniChat({
           {
             id: createAiAgentMessageId(),
             sender: "assistant",
-            text: replanError instanceof Error ? replanError.message : "操作の再計画に失敗しました。",
+            text: replanError instanceof Error ? replanError.message : (english ? "Could not create a new action plan." : "操作の再計画に失敗しました。"),
             isError: true,
           },
         ]);
@@ -420,12 +430,12 @@ export function MiniChat({
           {
             id: createAiAgentMessageId(),
             sender: "assistant",
-            text: result.message || "操作を完了できませんでした。",
+            text: result.message || (english ? "The action could not be completed." : "操作を完了できませんでした。"),
             isError: true,
           },
         ]);
       } else {
-        await replanAfterFailure(result.message || "画面状態を確認できませんでした。", result.failedStepIndex);
+        await replanAfterFailure(result.message || (english ? "The page state could not be verified." : "画面状態を確認できませんでした。"), result.failedStepIndex);
       }
     } catch (error) {
       setMessages((prev) => [
@@ -433,7 +443,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: error instanceof Error ? error.message : "操作の実行に失敗しました。",
+          text: error instanceof Error ? error.message : (english ? "The action could not be run." : "操作の実行に失敗しました。"),
           isError: true,
         },
       ]);
@@ -478,14 +488,14 @@ export function MiniChat({
           clearPendingActionSteps();
           if (ready.needsReplan) {
             // The destination loaded but the blind-planned targets aren't there: re-observe.
-            void replanAfterFailure(ready.message || "移動後のページ準備を確認できませんでした。");
+            void replanAfterFailure(ready.message || (english ? "The destination page did not become ready." : "移動後のページ準備を確認できませんでした。"));
           } else {
             setMessages((current) => [
               ...current,
               {
                 id: createAiAgentMessageId(),
                 sender: "assistant",
-                text: ready.message || "移動後のページ準備を確認できませんでした。",
+                text: ready.message || (english ? "The destination page did not become ready." : "移動後のページ準備を確認できませんでした。"),
                 isError: true,
               },
             ]);
@@ -499,9 +509,9 @@ export function MiniChat({
         {
           id: pendingMessageId,
           sender: "assistant",
-          text: "移動後の残り操作を続けます。",
+          text: english ? "Continuing the remaining actions on the new page." : "移動後の残り操作を続けます。",
           actionPlan: {
-            description: "移動後の残り操作を続けます。",
+            description: english ? "Continue the remaining actions on the new page." : "移動後の残り操作を続けます。",
             steps: pendingSteps,
           },
         },
@@ -549,9 +559,9 @@ export function MiniChat({
             <span className="mini-chat-robot-icon" aria-hidden="true">
               <i className="bi bi-stars"></i>
             </span>
-            <strong>{placeholderTitle}</strong>
-            <p>{placeholderDescription}</p>
-            <div className="mini-chat-suggestions" aria-label="入力候補">
+            <strong>{resolvedTitle}</strong>
+            <p>{resolvedDescription}</p>
+            <div className="mini-chat-suggestions" aria-label={english ? "Suggested messages" : "入力候補"}>
               {quickPrompts.map((prompt) => (
                 <button
                   key={prompt}
@@ -643,14 +653,14 @@ export function MiniChat({
                     className="mini-chat-execute-btn"
                     onClick={() => handleExecuteActions(msg.actionPlan!.steps, msg.id)}
                     disabled={executingMessageId === msg.id || executedSet.has(msg.id)}
-                    aria-label="操作を実行"
+                    aria-label={english ? "Run actions" : "操作を実行"}
                   >
                     {executingMessageId === msg.id ? (
-                      <><i className="bi bi-three-dots"></i> 実行中...</>
+                      <><i className="bi bi-three-dots"></i> {english ? "Running…" : "実行中..."}</>
                     ) : executedSet.has(msg.id) ? (
-                      <><i className="bi bi-check2"></i> 実行済み</>
+                      <><i className="bi bi-check2"></i> {english ? "Completed" : "実行済み"}</>
                     ) : (
-                      <><i className="bi bi-play-fill"></i> 実行</>
+                      <><i className="bi bi-play-fill"></i> {english ? "Run" : "実行"}</>
                     )}
                   </button>
                 </div>
@@ -663,10 +673,10 @@ export function MiniChat({
                     type="button"
                     className="mini-chat-copy-btn"
                     onClick={() => void handleCopy(msg.text, i)}
-                    aria-label="回答をコピー"
+                    aria-label={t("chat.copy")}
                   >
                     <i className={`bi ${copiedIndex === i ? "bi-check2" : "bi-copy"}`}></i>
-                    {copiedIndex === i ? "コピー済み" : "コピー"}
+                    {copiedIndex === i ? t("common.copied") : t("common.copy")}
                   </button>
                   {msg.isError && (
                     <button
@@ -674,10 +684,10 @@ export function MiniChat({
                       className="mini-chat-retry-btn"
                       onClick={() => void handleRetry(i)}
                       disabled={isGenerating}
-                      aria-label="再試行"
+                      aria-label={t("common.retry")}
                     >
                       <i className="bi bi-arrow-clockwise"></i>
-                      再試行
+                      {t("common.retry")}
                     </button>
                   )}
                 </div>
@@ -697,7 +707,7 @@ export function MiniChat({
                 <div className="mini-chat-progress" role="status">
                   <span className="mini-chat-status-text">{currentProgressText}</span>
                   {progressSteps.length > 0 ? (
-                    <ol className="mini-chat-progress-list" aria-label="AIエージェントの進捗">
+                    <ol className="mini-chat-progress-list" aria-label={english ? "AI assistant progress" : "AIエージェントの進捗"}>
                       {progressSteps.map((step, stepIndex) => (
                         <li
                           key={`${step}-${stepIndex}`}
@@ -729,8 +739,8 @@ export function MiniChat({
             className="mini-chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={inputPlaceholder}
-            aria-label="AIサポートへのメッセージ"
+            placeholder={resolvedInputPlaceholder}
+            aria-label={english ? "Message to AI support" : "AIサポートへのメッセージ"}
             maxLength={MAX_INPUT_LENGTH}
             disabled={isGenerating}
           />
@@ -741,7 +751,7 @@ export function MiniChat({
               type="button"
               className="mini-chat-stop-btn"
               onClick={handleStop}
-              aria-label="生成を停止"
+              aria-label={t("chat.stop")}
             >
               <i className="bi bi-stop-fill"></i>
             </button>
@@ -750,7 +760,7 @@ export function MiniChat({
               type="submit"
               className="mini-chat-send-btn"
               disabled={!trimmedInput}
-              aria-label="送信"
+              aria-label={t("home.send")}
             >
               <i className="bi bi-arrow-up-short"></i>
             </button>
@@ -766,7 +776,7 @@ export function MiniChat({
             setExecutedSet(new Set());
           }}
           disabled={!messages.length || isGenerating}
-          aria-label="会話をクリア"
+          aria-label={english ? "Clear conversation" : "会話をクリア"}
         >
           <i className="bi bi-arrow-counterclockwise"></i>
         </button>

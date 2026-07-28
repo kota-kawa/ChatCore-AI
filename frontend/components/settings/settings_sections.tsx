@@ -10,6 +10,7 @@ import { InlineLoading } from "../ui/inline_loading";
 import {
   ACCOUNT_DELETE_CONFIRMATION_TEXT,
   MCP_OAUTH_SCOPE_DEFINITIONS,
+  MCP_OAUTH_SCOPE_DEFINITIONS_EN,
   THEME_OPTIONS
 } from "../../scripts/user/settings/constants";
 import type {
@@ -24,8 +25,56 @@ import type {
   McpOAuthConnection
 } from "../../scripts/user/settings/types";
 import type { ThemePreference } from "../../scripts/core/theme";
-import { formatPasskeyDateTime } from "../../scripts/user/settings/utils";
 import { SettingsProfileSkeleton, SettingsPromptCardSkeletonGrid } from "./settings_skeletons";
+import { useTranslation } from "../../contexts/locale_context";
+import type { Locale } from "../../lib/i18n/config";
+
+export function LanguageSettingsSection({
+  isActive,
+  locale,
+  saving,
+  onLocaleSelect
+}: {
+  isActive: boolean;
+  locale: Locale;
+  saving: boolean;
+  onLocaleSelect: (locale: Locale) => void;
+}) {
+  const { t } = useTranslation();
+  const options: Array<{ value: Locale; label: string; description: string }> = [
+    { value: "ja", label: t("settings.japanese"), description: t("settings.japaneseDescription") },
+    { value: "en", label: t("settings.english"), description: t("settings.englishDescription") }
+  ];
+  return (
+    <section className={`settings-section${isActive ? " active" : ""}`} data-section="language" hidden={!isActive}>
+      <div className="settings-section-header">
+        <div>
+          <h2><i className="bi bi-translate" aria-hidden="true"></i> {t("settings.languageHeading")}</h2>
+          <p>{t("settings.languageDescription")}</p>
+        </div>
+      </div>
+      <div className="theme-options" role="radiogroup" aria-label={t("settings.languageHeading")} aria-busy={saving}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={locale === option.value}
+            className={`theme-option${locale === option.value ? " selected" : ""}`}
+            data-agent-id={`settings.language.${option.value}`}
+            disabled={saving}
+            onClick={() => onLocaleSelect(option.value)}
+          >
+            <i className={option.value === "ja" ? "bi bi-translate" : "bi bi-alphabet-uppercase"} aria-hidden="true"></i>
+            <span className="theme-option-name">{option.label}</span>
+            <span className="theme-option-description">{option.description}</span>
+          </button>
+        ))}
+      </div>
+      {saving ? <InlineLoading label={t("common.saving")} /> : null}
+    </section>
+  );
+}
 
 export function ProfileSettingsSection({
   isActive,
@@ -56,11 +105,12 @@ export function ProfileSettingsSection({
   onProfileInputChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onProfileCancel: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div id="profile-section" className={`settings-section${isActive ? " active" : ""}`}>
       {/* 保存成功時に settings-card--save-success クラスを付与してアニメーションを発火する / Add save-success class on success to trigger the animation */}
       <div className={`settings-card${profileSaveEffectActive ? " settings-card--save-success" : ""}`}>
-        <h2>ユーザープロフィール設定</h2>
+        <h2>{t("settings.profileHeading")}</h2>
         {profileSaveStatus ? (
           <p
             key={`${profileSaveStatus.tone}-${profileSaveEffectToken}`}
@@ -82,7 +132,7 @@ export function ProfileSettingsSection({
           {/* アバター画像の選択 — hidden input を重ねてスタイル自由なボタンで起動する / Avatar selection — triggers a hidden file input via a custom button */}
           <div className="form-group avatar-group">
             <label className="form-label" htmlFor="avatarInput">
-              プロフィール画像
+              {t("settings.avatar")}
             </label>
             <div className="avatar-preview-wrapper">
               <img
@@ -95,7 +145,7 @@ export function ProfileSettingsSection({
                 type="button"
                 className="change-avatar-btn"
                 id="changeAvatarBtn"
-                data-tooltip="プロフィール画像を選択"
+                data-tooltip={t("settings.chooseAvatar")}
                 data-tooltip-placement="bottom"
                 onClick={() => avatarInputRef.current?.click()}
               >
@@ -114,14 +164,14 @@ export function ProfileSettingsSection({
 
           <div className="form-group">
             <label className="form-label" htmlFor="username">
-              ユーザー名
+              {t("settings.username")}
             </label>
             <input
               type="text"
               id="username"
               name="username"
               className="custom-form-control"
-              placeholder="ユーザー名を入力"
+              placeholder={t("settings.usernamePlaceholder")}
               value={profileForm.username}
               onChange={onProfileInputChange}
             />
@@ -130,7 +180,7 @@ export function ProfileSettingsSection({
           {/* メールアドレスは読み取り専用 — 変更はセキュリティセクションで行う / Email is read-only here; changes are made in the Security section */}
           <div className="form-group">
             <label className="form-label" htmlFor="email">
-              メールアドレス
+              {t("settings.email")}
             </label>
             <input
               type="email"
@@ -142,20 +192,20 @@ export function ProfileSettingsSection({
               readOnly
             />
             <p className="form-help-text">
-              変更はセキュリティのメールアドレス変更から行います。
+              {t("settings.emailHelp")}
             </p>
           </div>
 
           <div className="form-group">
             <label className="form-label" htmlFor="bio">
-              自己紹介
+              {t("settings.bio")}
             </label>
             <textarea
               id="bio"
               name="bio"
               rows={4}
               className="custom-form-control"
-              placeholder="自己紹介を入力 (例: 趣味、好きなことなど)"
+              placeholder={t("settings.bioPlaceholder")}
               value={profileForm.bio}
               onChange={onProfileInputChange}
             ></textarea>
@@ -164,25 +214,25 @@ export function ProfileSettingsSection({
           {/* LLM コンテキスト欄 — 未設定時はプロフィールから自動生成した値が入る / LLM context field — auto-populated from profile fields when not explicitly set */}
           <div className="form-group">
             <label className="form-label" htmlFor="llmProfileContext">
-              AI に伝えておきたい情報
+              {t("settings.aiContext")}
             </label>
             <textarea
               id="llmProfileContext"
               name="llmProfileContext"
               rows={6}
               className="custom-form-control"
-              placeholder={"例: 私の名前は山田太郎です。\nメールは taro@example.com です。\n普段は日本語で、結論から短く答えてください。"}
+              placeholder={t("settings.aiContextPlaceholder")}
               value={profileForm.llmProfileContext}
               onChange={onProfileInputChange}
             ></textarea>
             <p className="form-help-text">
-              未設定時はプロフィール情報が初期値として入ります。保存後は、この欄に残っている内容だけが AI に渡されます。
+              {t("settings.aiContextHelp")}
             </p>
           </div>
 
           <div className="button-group">
             <button type="button" className="secondary-button" id="cancelBtn" onClick={onProfileCancel}>
-              キャンセル
+              {t("common.cancel")}
             </button>
             {/* 保存中・保存直後でボタンラベルとアイコンを切り替えてフィードバックを伝える / Switch button label and icon to reflect saving / saved states */}
             <button
@@ -193,7 +243,7 @@ export function ProfileSettingsSection({
               <span className="profile-save-button__content">
                 {profileSaving ? <i className="bi bi-arrow-repeat" aria-hidden="true"></i> : null}
                 {!profileSaving && profileSaveEffectActive ? <i className="bi bi-check2-circle" aria-hidden="true"></i> : null}
-                {profileSaving ? "保存中..." : profileSaveEffectActive ? "保存しました" : "変更を保存"}
+                {profileSaving ? t("common.saving") : profileSaveEffectActive ? t("settings.saved") : t("settings.saveChanges")}
               </span>
             </button>
           </div>
@@ -213,16 +263,22 @@ export function AppearanceSettingsSection({
   themePreference: ThemePreference;
   onThemeSelect: (preference: ThemePreference) => void;
 }) {
+  const { t } = useTranslation();
+  const themeCopy: Record<ThemePreference, { label: string; description: string }> = {
+    light: { label: t("settings.themeLight"), description: t("settings.themeLightDescription") },
+    dark: { label: t("settings.themeDark"), description: t("settings.themeDarkDescription") },
+    auto: { label: t("settings.themeSystem"), description: t("settings.themeSystemDescription") }
+  };
   return (
     <div id="appearance-section" className={`settings-section${isActive ? " active" : ""}`}>
       <div className="settings-card">
-        <h2>外観</h2>
+        <h2>{t("settings.appearance")}</h2>
         <p className="settings-section-lead">
-          画面のテーマを切り替えます。「システムに合わせる」を選ぶと OS の設定に追従します。
+          {t("settings.appearanceDescription")}
         </p>
 
         {/* radiogroup ロールでスクリーンリーダーにグループを認識させる / radiogroup role helps screen readers recognize the group of theme choices */}
-        <div className="theme-options" role="radiogroup" aria-label="テーマ選択">
+        <div className="theme-options" role="radiogroup" aria-label={t("settings.themeSelection")}>
           {THEME_OPTIONS.map((option) => {
             const isSelected = themePreference === option.value;
             return (
@@ -238,8 +294,8 @@ export function AppearanceSettingsSection({
                   <i className={option.iconClass}></i>
                 </span>
                 <span className="theme-option__body">
-                  <span className="theme-option__label">{option.label}</span>
-                  <span className="theme-option__description">{option.description}</span>
+                  <span className="theme-option__label">{themeCopy[option.value].label}</span>
+                  <span className="theme-option__description">{themeCopy[option.value].description}</span>
                 </span>
                 {isSelected ? (
                   <span className="theme-option__check" aria-hidden="true">
@@ -327,20 +383,21 @@ export function AuthoredPromptsSection({
   promptCount: number;
   promptCards: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div id="prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
       <div className="settings-card settings-card--prompts">
         <PromptsHero
           icon="bi-megaphone"
           eyebrow="Shared prompts"
-          title="投稿したプロンプト"
-          lead="あなたが公開したプロンプトを一覧で確認し、内容の編集や削除ができます。"
-          statLabel="公開数"
-          statValue={loading && promptCount === 0 ? "確認中" : `${promptCount}件`}
+          title={t("settings.prompts")}
+          lead={t("settings.publishedLead")}
+          statLabel={t("settings.publishedCount")}
+          statValue={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
         />
 
         {/* ローディング・エラー・空状態の 3 パターンを排他的に表示する / Show loading, error, or empty state exclusively — only one at a time */}
-        {loading && promptCount > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
+        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} className="mb-4" /> : null}
         {!loading && error ? (
           <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
             <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
@@ -350,8 +407,8 @@ export function AuthoredPromptsSection({
         {!loading && !error && promptCount === 0 ? (
           <PromptsEmptyState
             icon="bi-file-earmark-plus"
-            title="まだ投稿したプロンプトはありません"
-            description="共有ページからプロンプトを公開すると、ここに一覧で表示されます。"
+            title={t("settings.noPublished")}
+            description={t("settings.noPublishedHelp")}
           />
         ) : null}
 
@@ -379,19 +436,20 @@ export function LikedPromptsSection({
   promptCount: number;
   promptCards: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div id="liked-prompts-section" className={`settings-section${isActive ? " active" : ""}`}>
       <div className="settings-card settings-card--prompts">
         <PromptsHero
           icon="bi-heart-fill"
           eyebrow="Liked prompts"
-          title="いいねしたプロンプト"
-          lead="気に入って保存したプロンプトの一覧です。内容を見返したり、いいねを解除できます。"
-          statLabel="保存数"
-          statValue={loading && promptCount === 0 ? "確認中" : `${promptCount}件`}
+          title={t("settings.likedPrompts")}
+          lead={t("settings.likedLead")}
+          statLabel={t("settings.savedCount")}
+          statValue={loading && promptCount === 0 ? t("settings.checking") : t("settings.items", { count: promptCount })}
         />
 
-        {loading && promptCount > 0 ? <InlineLoading label="更新中..." className="mb-4" /> : null}
+        {loading && promptCount > 0 ? <InlineLoading label={t("settings.updating")} className="mb-4" /> : null}
         {!loading && error ? (
           <p className="settings-inline-feedback settings-inline-feedback--error" role="alert">
             <i className="settings-inline-feedback__icon bi bi-exclamation-circle-fill" aria-hidden="true"></i>
@@ -401,8 +459,8 @@ export function LikedPromptsSection({
         {!loading && !error && promptCount === 0 ? (
           <PromptsEmptyState
             icon="bi-heart"
-            title="いいねしたプロンプトはありません"
-            description="気になるプロンプトにいいねすると、ここにまとまって表示されます。"
+            title={t("settings.noLiked")}
+            description={t("settings.noLikedHelp")}
           />
         ) : null}
 
@@ -418,14 +476,15 @@ export function LikedPromptsSection({
 }
 
 export function NotificationsSettingsSection({ isActive }: { isActive: boolean }) {
+  const { t } = useTranslation();
   return (
     <div
       id="notifications-section"
       className={`settings-section${isActive ? " active" : ""}`}
     >
       <div className="settings-card">
-        <h2>通知設定</h2>
-        <p>通知設定機能は準備中です。</p>
+        <h2>{t("settings.notifications")}</h2>
+        <p>{t("settings.notificationsComingSoon")}</p>
       </div>
     </div>
   );
@@ -444,6 +503,7 @@ function SecurityCredentialField({
   secret?: boolean;
   placeholder?: string;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const copyValue = async () => {
@@ -473,8 +533,8 @@ function SecurityCredentialField({
         <button
           type="button"
           className={`security-copy-button${copied ? " is-copied" : ""}`}
-          aria-label={copied ? `${label}をコピーしました` : `${label}をコピー`}
-          title={copied ? "コピーしました" : "コピー"}
+          aria-label={copied ? t("settings.copiedField", { label }) : t("settings.copyField", { label })}
+          title={copied ? t("common.copied") : t("common.copy")}
           disabled={!value}
           onClick={() => {
             void copyValue();
@@ -500,6 +560,7 @@ function EditableSecurityName({
   inputLabel: string;
   onSave: (value: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draftValue, setDraftValue] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -536,10 +597,10 @@ function EditableSecurityName({
         />
         <div className="editable-security-name__actions">
           <button type="button" className="ghost-button" disabled={saving} onClick={() => setEditing(false)}>
-            キャンセル
+            {t("common.cancel")}
           </button>
           <button type="submit" className="primary-button" disabled={saving}>
-            {saving ? "保存中..." : "保存"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </form>
@@ -552,14 +613,14 @@ function EditableSecurityName({
       <button
         type="button"
         className="editable-security-name__edit"
-        aria-label={`${inputLabel}を編集`}
+        aria-label={t("settings.editField", { label: inputLabel })}
         onClick={() => {
           setDraftValue(value || fallbackValue);
           setEditing(true);
         }}
       >
         <i className="bi bi-pencil" aria-hidden="true"></i>
-        編集
+        {t("common.edit")}
       </button>
     </div>
   );
@@ -660,6 +721,10 @@ export function SecuritySettingsSection({
   onAccountDeleteConfirmationChange: (value: string) => void;
   onDeleteAccount: () => void;
 }) {
+  const { t, locale, formatDate } = useTranslation();
+  const formatSecurityDate = (value: string) => value
+    ? formatDate(value, { dateStyle: "medium", timeStyle: "short" })
+    : t("settings.neverUsed");
   return (
     <div id="security-section" className={`settings-section${isActive ? " active" : ""}`}>
       <div className="settings-card settings-card--security">
@@ -670,21 +735,21 @@ export function SecuritySettingsSection({
             </span>
             <div>
               <p className="security-hero__eyebrow">Security center</p>
-              <h2>アカウントを安全に保つ</h2>
+              <h2>{t("settings.securityHeading")}</h2>
               <p className="security-hero__lead">
-                サインイン方法、登録メール、外部サービスのアクセス権を一か所で確認・管理できます。
+                {t("settings.securityLead")}
               </p>
             </div>
           </div>
 
-          <div className="security-overview" role="list" aria-label="セキュリティ設定の概要">
+          <div className="security-overview" role="list" aria-label={t("settings.securityOverview")}>
             <div className="security-overview__item" role="listitem">
               <span className="security-overview__icon" aria-hidden="true">
                 <i className="bi bi-envelope-check"></i>
               </span>
               <span className="security-overview__copy">
-                <span>登録メール</span>
-                <strong>{profileEmail ? "設定済み" : "未設定"}</strong>
+                <span>{t("settings.registeredEmail")}</span>
+                <strong>{profileEmail ? t("settings.configured") : t("settings.notConfigured")}</strong>
               </span>
             </div>
             <div
@@ -697,7 +762,7 @@ export function SecuritySettingsSection({
               <span className="security-overview__copy">
                 <span>Passkey</span>
                 <strong>
-                  {passkeysLoading ? "確認中" : passkeys.length > 0 ? `${passkeys.length}件登録` : "未登録"}
+                  {passkeysLoading ? t("settings.checking") : passkeys.length > 0 ? t("settings.registeredCount", { count: passkeys.length }) : t("settings.notRegistered")}
                 </strong>
               </span>
             </div>
@@ -706,28 +771,28 @@ export function SecuritySettingsSection({
                 <i className="bi bi-plug"></i>
               </span>
               <span className="security-overview__copy">
-                <span>外部サービス</span>
+                <span>{t("settings.externalServices")}</span>
                 <strong>
                   {mcpOAuthConnectionsLoading
-                    ? "確認中"
+                    ? t("settings.checking")
                     : mcpOAuthConnections.length > 0
-                      ? `${mcpOAuthConnections.length}件接続`
-                      : "接続なし"}
+                      ? t("settings.connectedCount", { count: mcpOAuthConnections.length })
+                      : t("settings.notConnected")}
                 </strong>
               </span>
             </div>
           </div>
         </header>
 
-        <nav className="security-jump-nav" aria-label="セキュリティ設定内のメニュー">
+        <nav className="security-jump-nav" aria-label={t("settings.securityMenu")}>
           <a href="#security-sign-in">
-            <i className="bi bi-person-lock" aria-hidden="true"></i>サインインと本人確認
+            <i className="bi bi-person-lock" aria-hidden="true"></i>{t("settings.signInVerification")}
           </a>
           <a href="#security-connections">
-            <i className="bi bi-nodes" aria-hidden="true"></i>外部サービス連携
+            <i className="bi bi-nodes" aria-hidden="true"></i>{t("settings.connections")}
           </a>
           <a href="#security-danger-zone">
-            <i className="bi bi-exclamation-diamond" aria-hidden="true"></i>危険な操作
+            <i className="bi bi-exclamation-diamond" aria-hidden="true"></i>{t("settings.dangerousActions")}
           </a>
         </nav>
 
@@ -736,8 +801,8 @@ export function SecuritySettingsSection({
             <div className="security-group__heading">
               <span className="security-group__number">01</span>
               <div>
-                <h3 id="security-sign-in-title">サインインと本人確認</h3>
-                <p>ログインに使う情報と、安全な認証方法を管理します。</p>
+                <h3 id="security-sign-in-title">{t("settings.signInVerification")}</h3>
+                <p>{t("settings.signInHelp")}</p>
               </div>
             </div>
             <div className="security-grid security-grid--account">
@@ -748,21 +813,21 @@ export function SecuritySettingsSection({
                 <i className="bi bi-envelope-at"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>メールアドレス変更</h3>
+                <h3>{t("settings.changeEmail")}</h3>
                 <p className="security-panel__description">
-                  現在のメールアドレスで確認後、新しいメールアドレスにも確認コードを送信します。
+                  {t("settings.changeEmailDescription")}
                 </p>
               </div>
             </div>
             <p className="email-change-current">
-              <span className="email-change-current__label">現在のアドレス</span>
-              <strong>{profileEmail || "未取得"}</strong>
+              <span className="email-change-current__label">{t("settings.currentAddress")}</span>
+              <strong>{profileEmail || t("settings.notLoaded")}</strong>
             </p>
 
-            <ol className="email-change-steps" aria-label="メールアドレス変更の手順">
+            <ol className="email-change-steps" aria-label={t("settings.changeEmailSteps")}>
               <li className={emailChangeStage === "idle" ? "is-current" : "is-complete"}>
                 <span>1</span>
-                <small>新しいアドレス</small>
+                <small>{t("settings.newAddress")}</small>
               </li>
               <li
                 className={emailChangeStage === "current_email"
@@ -772,11 +837,11 @@ export function SecuritySettingsSection({
                     : ""}
               >
                 <span>2</span>
-                <small>本人確認</small>
+                <small>{t("settings.identityCheck")}</small>
               </li>
               <li className={emailChangeStage === "new_email" ? "is-current" : ""}>
                 <span>3</span>
-                <small>変更を確定</small>
+                <small>{t("settings.confirmChange")}</small>
               </li>
             </ol>
 
@@ -798,7 +863,7 @@ export function SecuritySettingsSection({
             <form className="email-change-form" onSubmit={onRequestEmailChange}>
               <div className="form-group">
                 <label className="form-label" htmlFor="emailChangeNewEmail">
-                  新しいメールアドレス
+                  {t("settings.newEmail")}
                 </label>
                 <input
                   type="email"
@@ -819,7 +884,7 @@ export function SecuritySettingsSection({
                   disabled={emailChangeSubmitting}
                 >
                   <i className="bi bi-send" aria-hidden="true"></i>
-                  送信
+                  {t("settings.send")}
                 </button>
               ) : null}
             </form>
@@ -830,8 +895,8 @@ export function SecuritySettingsSection({
                 <div className="form-group">
                   <label className="form-label" htmlFor="emailChangeCode">
                     {emailChangeStage === "current_email"
-                      ? "現在のメールに届いた確認コード"
-                      : "新しいメールに届いた確認コード"}
+                      ? t("settings.currentEmailCode")
+                      : t("settings.newEmailCode")}
                   </label>
                   <input
                     type="text"
@@ -839,7 +904,7 @@ export function SecuritySettingsSection({
                     autoComplete="one-time-code"
                     id="emailChangeCode"
                     className="custom-form-control"
-                    placeholder="6桁の確認コード"
+                    placeholder={t("settings.codePlaceholder")}
                     value={emailChangeCode}
                     onChange={(event) => {
                       onEmailChangeCodeChange(event.target.value);
@@ -855,7 +920,7 @@ export function SecuritySettingsSection({
                     disabled={emailChangeSubmitting}
                   >
                     <i className="bi bi-x-lg" aria-hidden="true"></i>
-                    中止
+                    {t("settings.abort")}
                   </button>
                   <button
                     type="submit"
@@ -864,8 +929,8 @@ export function SecuritySettingsSection({
                   >
                     <i className="bi bi-check2" aria-hidden="true"></i>
                     {emailChangeStage === "current_email"
-                      ? "確認"
-                      : "完了"}
+                      ? t("settings.verify")
+                      : t("settings.complete")}
                   </button>
                 </div>
               </form>
@@ -881,7 +946,7 @@ export function SecuritySettingsSection({
               <div className="security-panel__heading">
                 <h3>Passkey</h3>
                 <p className="security-panel__description">
-                  パスワードの代わりに、指紋・顔認証や端末のロック解除でサインインできます。
+                  {t("settings.passkeyDescription")}
                 </p>
                 <span
                   className={`security-status-pill security-status-pill--${passkeySupported ? "ok" : "muted"}`}
@@ -906,7 +971,7 @@ export function SecuritySettingsSection({
                 }}
               >
                 <i className="bi bi-plus-lg" aria-hidden="true"></i>
-                {registeringPasskey ? "追加中..." : "追加"}
+                {registeringPasskey ? t("settings.adding") : t("settings.add")}
               </button>
               <button
                 type="button"
@@ -921,15 +986,15 @@ export function SecuritySettingsSection({
                   className={`bi bi-arrow-clockwise${passkeysLoading ? " security-action__spin" : ""}`}
                   aria-hidden="true"
                 ></i>
-                更新
+                {t("settings.refresh")}
               </button>
             </div>
             <div className="security-panel__subhead">
               <div>
                 <span className="security-panel__kicker">Trusted devices</span>
-                <h4>登録済みの端末</h4>
+                <h4>{t("settings.registeredDevices")}</h4>
               </div>
-              <span className="security-count" aria-label={`登録済みPasskey ${passkeys.length}件`}>
+              <span className="security-count" aria-label={t("settings.passkeysCount", { count: passkeys.length })}>
                 {passkeys.length}
               </span>
             </div>
@@ -937,12 +1002,12 @@ export function SecuritySettingsSection({
               {passkeysLoading && passkeys.length === 0 ? (
                 <div className="passkey-empty">
                   <i className="bi bi-arrow-repeat security-action__spin" aria-hidden="true"></i>
-                  <span>登録済みの端末を確認しています。</span>
+                  <span>{t("settings.loadingDevices")}</span>
                 </div>
               ) : passkeys.length === 0 ? (
                 <div className="passkey-empty">
                   <i className="bi bi-shield-slash" aria-hidden="true"></i>
-                  <span><strong>まだPasskeyはありません</strong>追加すると、パスワードを入力せず安全にログインできます。</span>
+                  <span><strong>{t("settings.noPasskeys")}</strong>{t("settings.noPasskeysHelp")}</span>
                 </div>
               ) : (
                 passkeys.map((passkey) => (
@@ -954,20 +1019,20 @@ export function SecuritySettingsSection({
                       <strong className="passkey-item__title">{passkey.label}</strong>
                       <dl className="security-meta">
                         <div className="security-meta__row">
-                          <dt>端末種別</dt>
+                          <dt>{t("settings.deviceType")}</dt>
                           <dd>{passkey.credentialDeviceType}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>バックアップ</dt>
-                          <dd>{passkey.credentialBackedUp ? "あり" : "なし"}</dd>
+                          <dt>{t("settings.backup")}</dt>
+                          <dd>{passkey.credentialBackedUp ? t("settings.available") : t("settings.unavailable")}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>作成日時</dt>
-                          <dd>{formatPasskeyDateTime(passkey.createdAt)}</dd>
+                          <dt>{t("settings.createdAt")}</dt>
+                          <dd>{formatSecurityDate(passkey.createdAt)}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>最終利用</dt>
-                          <dd>{formatPasskeyDateTime(passkey.lastUsedAt)}</dd>
+                          <dt>{t("settings.lastUsed")}</dt>
+                          <dd>{formatSecurityDate(passkey.lastUsedAt)}</dd>
                         </div>
                       </dl>
                     </div>
@@ -981,7 +1046,7 @@ export function SecuritySettingsSection({
                       }}
                     >
                       <i className="bi bi-trash3" aria-hidden="true"></i>
-                      {deletingPasskeyId === passkey.id ? "削除中..." : "削除"}
+                      {deletingPasskeyId === passkey.id ? t("settings.deleting") : t("common.delete")}
                     </button>
                   </div>
                 ))
@@ -995,8 +1060,8 @@ export function SecuritySettingsSection({
             <div className="security-group__heading">
               <span className="security-group__number">02</span>
               <div>
-                <h3 id="security-connections-title">外部サービス連携</h3>
-                <p>AIサービスに許可したアクセスと、連携用の認証情報を管理します。</p>
+                <h3 id="security-connections-title">{t("settings.connections")}</h3>
+                <p>{t("settings.connectionsHelp")}</p>
               </div>
             </div>
             <div className="security-grid">
@@ -1007,9 +1072,9 @@ export function SecuritySettingsSection({
                 <i className="bi bi-robot"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>接続中のAIサービス</h3>
+                <h3>{t("settings.connectedAi")}</h3>
                 <p className="security-panel__description">
-                  外部AIサービスに許可したChat-Core機能を確認できます。不要になった連携は解除できます。
+                  {locale === "en" ? "Review the Chat Core capabilities granted to external AI services and disconnect access you no longer need." : "外部AIサービスに許可したChat-Core機能を確認できます。不要になった連携は解除できます。"}
                 </p>
               </div>
             </div>
@@ -1026,19 +1091,19 @@ export function SecuritySettingsSection({
                   className={`bi bi-arrow-clockwise${mcpOAuthConnectionsLoading ? " security-action__spin" : ""}`}
                   aria-hidden="true"
                 ></i>
-                更新
+                {t("settings.refresh")}
               </button>
             </div>
             <div className="passkey-list" aria-live="polite" aria-busy={mcpOAuthConnectionsLoading}>
               {mcpOAuthConnectionsLoading ? (
                 <div className="passkey-empty">
                   <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
-                  <span>AIサービス連携を読み込んでいます。</span>
+                  <span>{locale === "en" ? "Loading AI service connections." : "AIサービス連携を読み込んでいます。"}</span>
                 </div>
               ) : mcpOAuthConnections.length === 0 ? (
                 <div className="passkey-empty">
                   <i className="bi bi-plug" aria-hidden="true"></i>
-                  <span>接続中のAIサービスはありません。</span>
+                  <span>{t("settings.noConnectedAi")}</span>
                 </div>
               ) : (
                 mcpOAuthConnections.map((connection) => (
@@ -1051,35 +1116,35 @@ export function SecuritySettingsSection({
                         value={connection.display_name || ""}
                         fallbackValue={connection.client_name}
                         inputId={`mcpOAuthConnection-${connection.id}`}
-                        inputLabel={`${connection.client_name}の表示名`}
+                        inputLabel={t("settings.displayName", { name: connection.client_name })}
                         onSave={(displayName) => onUpdateMcpOAuthConnectionDisplayName(connection, displayName)}
                       />
                       <dl className="security-meta">
                         <div className="security-meta__row">
-                          <dt>連携先の名称</dt>
+                          <dt>{t("settings.serviceName")}</dt>
                           <dd>{connection.client_name}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>接続先</dt>
-                          <dd>{connection.client_host || "不明"}</dd>
+                          <dt>{t("settings.destination")}</dt>
+                          <dd>{connection.client_host || t("settings.unknown")}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>許可した機能</dt>
+                          <dt>{t("settings.permissions")}</dt>
                           <dd>
                             {connection.scopes.map((scope) => (
                               <span key={scope} className="d-block">
-                                {MCP_OAUTH_SCOPE_DEFINITIONS[scope]?.label || scope}
+                                {(locale === "en" ? MCP_OAUTH_SCOPE_DEFINITIONS_EN : MCP_OAUTH_SCOPE_DEFINITIONS)[scope]?.label || scope}
                               </span>
                             ))}
                           </dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>接続日時</dt>
-                          <dd>{formatPasskeyDateTime(connection.created_at)}</dd>
+                          <dt>{t("settings.connectedAt")}</dt>
+                          <dd>{formatSecurityDate(connection.created_at)}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>最終利用</dt>
-                          <dd>{connection.last_used_at ? formatPasskeyDateTime(connection.last_used_at) : "未使用"}</dd>
+                          <dt>{t("settings.lastUsed")}</dt>
+                          <dd>{formatSecurityDate(connection.last_used_at || "")}</dd>
                         </div>
                       </dl>
                     </div>
@@ -1092,7 +1157,7 @@ export function SecuritySettingsSection({
                       }}
                     >
                       <i className="bi bi-x-circle" aria-hidden="true"></i>
-                      {deletingMcpOAuthConnectionId === connection.id ? "解除中..." : "解除"}
+                      {deletingMcpOAuthConnectionId === connection.id ? t("settings.disconnecting") : t("settings.disconnect")}
                     </button>
                   </div>
                 ))
@@ -1106,49 +1171,49 @@ export function SecuritySettingsSection({
                 <i className="bi bi-plug-fill"></i>
               </span>
               <div className="security-panel__heading">
-                <h3>MCP接続</h3>
+                <h3>{locale === "en" ? "MCP connection" : "MCP接続"}</h3>
                 <p className="security-panel__description">
-                  MCPクライアントとの接続に必要なURLと、手動設定用の認証情報を確認できます。
+                  {t("settings.mcpDescription")}
                 </p>
               </div>
             </div>
             <div className="security-server-endpoint">
               <SecurityCredentialField
                 id="mcpOAuthServerUrl"
-                label="MCPサーバーURL"
+                label={t("settings.mcpServerUrl")}
                 value={mcpOAuthServerUrl}
-                placeholder={mcpOAuthClientsLoading ? "読み込み中..." : "URLを取得できませんでした"}
+                placeholder={mcpOAuthClientsLoading ? t("common.loading") : t("settings.urlUnavailable")}
               />
               <p className="security-server-endpoint__description">
-                MCP対応クライアントに共通して使用する接続先です。このURLをクライアントのMCPサーバー設定に貼り付けてください。
+                {locale === "en" ? "This endpoint is shared by MCP-compatible clients. Paste the URL into the client’s MCP server settings." : "MCP対応クライアントに共通して使用する接続先です。このURLをクライアントのMCPサーバー設定に貼り付けてください。"}
               </p>
             </div>
             <details className="security-client-details">
               <summary>
-                <span>詳細（OAuth認証情報の手動設定）</span>
+                <span>{t("settings.oauthDetails")}</span>
                 <i className="bi bi-chevron-down" aria-hidden="true"></i>
               </summary>
               <div className="security-client-details__body">
                 <div className="security-advisory">
                   <i className="bi bi-info-circle" aria-hidden="true"></i>
-                  <p>ほとんどのMCPクライアントは動的クライアント登録によって自動的に認証を設定します。接続先が静的なOAuth認証情報を要求する場合だけ発行してください。</p>
+                  <p>{t("settings.oauthGuidance")}</p>
                 </div>
                 <div className="security-client-form">
                   <div className="security-client-form__intro">
-                    <h4>OAuth認証情報を発行</h4>
+                    <h4>{locale === "en" ? "Issue OAuth credentials" : "OAuth認証情報を発行"}</h4>
                     <p className="security-panel__description">
-                      認証情報の名前を入力してください。コールバックURLを指定しない場合は既定値を使用します。
+                      {locale === "en" ? "Enter a name for the credential. The default callback URL is used when you leave it blank." : "認証情報の名前を入力してください。コールバックURLを指定しない場合は既定値を使用します。"}
                     </p>
                   </div>
                   <div className="form-group security-client-form__name">
-                    <label className="form-label" htmlFor="mcpOAuthClientLabel">認証情報の名前 <span>必須</span></label>
+                    <label className="form-label" htmlFor="mcpOAuthClientLabel">{t("settings.oauthName")} <span>{t("settings.required")}</span></label>
                     <input
                       id="mcpOAuthClientLabel"
                       type="text"
                       className="custom-form-control"
                       value={mcpOAuthClientLabel}
                       maxLength={100}
-                      placeholder="例: 社内AIコネクター"
+                      placeholder={t("settings.oauthNamePlaceholder")}
                       required
                       disabled={mcpOAuthClientIssuing}
                       onChange={(event) => {
@@ -1157,7 +1222,7 @@ export function SecuritySettingsSection({
                     />
                   </div>
                   <div className="form-group security-client-form__uri">
-                    <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">コールバックURL（リダイレクトURI） <span>任意</span></label>
+                    <label className="form-label" htmlFor="mcpOAuthClientRedirectUri">{t("settings.callbackUrl")} <span>{t("settings.optional")}</span></label>
                     <input
                       id="mcpOAuthClientRedirectUri"
                       type="url"
@@ -1178,20 +1243,20 @@ export function SecuritySettingsSection({
                     onClick={onIssueMcpOAuthClient}
                   >
                     <i className="bi bi-key" aria-hidden="true"></i>
-                    {mcpOAuthClientIssuing ? "発行中..." : "発行"}
+                    {mcpOAuthClientIssuing ? t("settings.issuing") : t("settings.issue")}
                   </button>
                 </div>
                 {mcpOAuthClientCredentials ? (
                   <div className="security-credentials-result">
                     <p className="settings-inline-feedback settings-inline-feedback--success" role="status">
                       <i className="settings-inline-feedback__icon bi bi-check-circle-fill" aria-hidden="true"></i>
-                      <span><strong>認証情報を発行しました</strong>クライアントシークレットはページを離れると再表示できません。今すぐ安全な場所へコピーしてください。</span>
+                      <span><strong>{t("settings.credentialsIssued")}</strong>{t("settings.credentialsIssuedHelp")}</span>
                     </p>
                     <div className="security-credentials-result__grid">
-                      <SecurityCredentialField id="mcpOAuthRedirectUri" label="コールバックURL（リダイレクトURI）" value={mcpOAuthClientCredentials.redirect_uri} />
-                      <SecurityCredentialField id="mcpOAuthClientId" label="OAuthクライアントID" value={mcpOAuthClientCredentials.client_id} />
+                      <SecurityCredentialField id="mcpOAuthRedirectUri" label={t("settings.callbackUrl")} value={mcpOAuthClientCredentials.redirect_uri} />
+                      <SecurityCredentialField id="mcpOAuthClientId" label={locale === "en" ? "OAuth client ID" : "OAuthクライアントID"} value={mcpOAuthClientCredentials.client_id} />
                       {mcpOAuthClientCredentials.client_secret ? (
-                        <SecurityCredentialField id="mcpOAuthClientSecret" label="OAuthクライアントシークレット" value={mcpOAuthClientCredentials.client_secret} secret />
+                        <SecurityCredentialField id="mcpOAuthClientSecret" label={locale === "en" ? "OAuth client secret" : "OAuthクライアントシークレット"} value={mcpOAuthClientCredentials.client_secret} secret />
                       ) : null}
                     </div>
                   </div>
@@ -1201,12 +1266,12 @@ export function SecuritySettingsSection({
             <div className="security-panel__subhead">
               <div>
                 <span className="security-panel__kicker">Credentials</span>
-                <h4>保存済みの認証情報</h4>
+                <h4>{t("settings.savedCredentials")}</h4>
               </div>
               <button
                 type="button"
                 className="security-icon-button"
-                aria-label="認証情報の一覧を更新"
+                aria-label={t("settings.refresh")}
                 disabled={mcpOAuthClientsLoading}
                 onClick={() => {
                   void onRefreshMcpOAuthClients();
@@ -1219,12 +1284,12 @@ export function SecuritySettingsSection({
               {mcpOAuthClientsLoading ? (
                 <div className="passkey-empty">
                   <i className="bi bi-arrow-repeat" aria-hidden="true"></i>
-                  <span>連携用認証情報を読み込んでいます。</span>
+                  <span>{t("settings.loadingCredentials")}</span>
                 </div>
               ) : mcpOAuthClients.length === 0 ? (
                 <div className="passkey-empty">
                   <i className="bi bi-key" aria-hidden="true"></i>
-                  <span>保存済みの認証情報はありません。</span>
+                  <span>{t("settings.noCredentials")}</span>
                 </div>
               ) : (
                 mcpOAuthClients.map((client) => (
@@ -1235,27 +1300,27 @@ export function SecuritySettingsSection({
                     <div className="passkey-item__body">
                       <EditableSecurityName
                         value={client.label}
-                        fallbackValue="（名前なし）"
+                        fallbackValue={locale === "en" ? "(unnamed)" : "（名前なし）"}
                         inputId={`mcpOAuthClient-${client.client_id}`}
-                        inputLabel={`${client.label || "認証情報"}の名前`}
+                        inputLabel={t("settings.credentialName", { name: client.label || t("settings.oauthName") })}
                         onSave={(label) => onUpdateMcpOAuthClientLabel(client, label)}
                       />
                       <dl className="security-meta">
                         <div className="security-meta__row">
-                          <dt>クライアントID</dt>
+                          <dt>{t("settings.clientId")}</dt>
                           <dd>{client.client_id}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>コールバックURL</dt>
+                          <dt>{t("settings.callbackUrl")}</dt>
                           <dd>{client.redirect_uri}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>クライアント種別</dt>
-                          <dd>{client.token_endpoint_auth_method === "none" ? "公開クライアント（シークレットなし）" : "機密クライアント（シークレットあり）"}</dd>
+                          <dt>{t("settings.clientType")}</dt>
+                          <dd>{client.token_endpoint_auth_method === "none" ? t("settings.publicClient") : t("settings.confidentialClient")}</dd>
                         </div>
                         <div className="security-meta__row">
-                          <dt>発行日時</dt>
-                          <dd>{formatPasskeyDateTime(client.created_at)}</dd>
+                          <dt>{t("settings.issuedAt")}</dt>
+                          <dd>{formatSecurityDate(client.created_at)}</dd>
                         </div>
                       </dl>
                     </div>
@@ -1268,7 +1333,7 @@ export function SecuritySettingsSection({
                       }}
                     >
                       <i className="bi bi-trash3" aria-hidden="true"></i>
-                      {deletingMcpOAuthClientId === client.client_id ? "削除中..." : "削除"}
+                      {deletingMcpOAuthClientId === client.client_id ? t("settings.deleting") : t("common.delete")}
                     </button>
                   </div>
                 ))
@@ -1283,8 +1348,8 @@ export function SecuritySettingsSection({
             <div className="security-group__heading">
               <span className="security-group__number">03</span>
               <div>
-                <h3 id="security-danger-title">危険な操作</h3>
-                <p>アカウント全体に影響する、取り消しできない操作です。</p>
+                <h3 id="security-danger-title">{t("settings.dangerousActions")}</h3>
+                <p>{t("settings.dangerLead")}</p>
               </div>
             </div>
           <div className="security-panel security-panel--danger">
@@ -1293,16 +1358,16 @@ export function SecuritySettingsSection({
                 <i className="bi bi-exclamation-triangle"></i>
               </span>
               <div className="account-delete-header__text">
-                <h3>アカウント削除</h3>
+                <h3>{t("settings.deleteAccount")}</h3>
                 <p className="account-delete-copy">
-                  アカウント、チャット、メモ、プロンプト、Passkey など保存済みデータを削除します。この操作は取り消せません。
+                  {t("settings.deleteAccountDescription")}
                 </p>
               </div>
             </div>
             <div className="account-delete-confirmation">
               <div className="account-delete-field">
                 <label className="form-label" htmlFor="accountDeleteConfirmation">
-                  確認:「{ACCOUNT_DELETE_CONFIRMATION_TEXT}」と入力
+                  {t("settings.confirmDelete", { text: ACCOUNT_DELETE_CONFIRMATION_TEXT })}
                 </label>
                 <input
                   type="text"
@@ -1329,7 +1394,7 @@ export function SecuritySettingsSection({
                 }}
               >
                 <i className="bi bi-trash3" aria-hidden="true"></i>
-                {accountDeleting ? "削除中..." : "アカウントを削除"}
+                {accountDeleting ? t("settings.deleting") : t("settings.deleteAccount")}
               </button>
             </div>
             {accountDeleteError ? (

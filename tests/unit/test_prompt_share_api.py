@@ -9,6 +9,7 @@ from blueprints.prompt_share.prompt_share_api import (
     get_prompt_detail,
     get_recommended_prompts,
 )
+from tests.helpers.request_helpers import build_request
 
 
 # 公開されているプロンプトの詳細情報を取得するAPIの挙動を検証するテストクラス。
@@ -106,12 +107,17 @@ class PromptShareApiTestCase(unittest.TestCase):
             "blueprints.prompt_share.prompt_share_api._get_recommended_prompts",
             return_value=sample_prompts,
         ) as mock_get_recommended:
-            response = asyncio.run(get_recommended_prompts(exclude_id=12))
+            request = build_request(
+                method="GET",
+                path="/prompt_share/api/prompts/recommended",
+                headers=[(b"accept-language", b"en")],
+            )
+            response = asyncio.run(get_recommended_prompts(request, exclude_id=12))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["prompts"], sample_prompts)
-        mock_get_recommended.assert_called_once_with(12)
+        mock_get_recommended.assert_called_once_with(12, 3, "en")
 
 
 if __name__ == "__main__":

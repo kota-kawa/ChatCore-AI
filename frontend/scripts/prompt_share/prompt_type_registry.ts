@@ -9,6 +9,8 @@
 // Adding a new format or media type should only require one entry here.
 
 import type { ContentFormat, MediaType, PromptType } from "./types";
+import type { Locale } from "../../lib/i18n/config";
+import { promptShareText } from "./i18n";
 
 // 型固有テキスト属性の最大文字数 (バックエンドの MAX_PROMPT_ATTRIBUTE_TEXT_LENGTH と一致)。
 // Max length for a type-specific text attribute (matches the backend constant).
@@ -195,19 +197,19 @@ export function buildAttributes(
 
 // 添付ファイルをメディアの添付ルールで検証する (問題なければ null)。
 // Validate a file against the media's attachment rule (null when valid).
-export function validateAttachmentFile(mediaType: string, file: File | null): string | null {
+export function validateAttachmentFile(mediaType: string, file: File | null, locale?: Locale): string | null {
   if (!file) return null;
   const rule = getAttachmentRule(mediaType);
-  if (!rule) return "このメディアタイプではファイルを添付できません。";
+  if (!rule) return promptShareText("promptShare.attachmentUnsupported", undefined, locale);
   const lowerName = file.name.toLowerCase();
   const extOk = rule.acceptedExt.some((ext) => lowerName.endsWith(ext));
   if (!rule.acceptedMime.includes(file.type) && !extOk) {
     const allowed = Array.from(new Set(rule.acceptedExt.map((e) => e.replace(".", "").toUpperCase()))).join(" / ");
-    return `添付は ${allowed} のいずれかを指定してください。`;
+    return promptShareText("promptShare.attachmentType", { allowed }, locale);
   }
   if (file.size > rule.maxBytes) {
     const maxMb = Math.round(rule.maxBytes / (1024 * 1024));
-    return `添付ファイルのサイズは${maxMb}MB以下にしてください。`;
+    return promptShareText("promptShare.attachmentSize", { max: maxMb }, locale);
   }
   return null;
 }

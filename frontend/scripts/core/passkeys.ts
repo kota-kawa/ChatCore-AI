@@ -1,8 +1,13 @@
 import { fetchJsonOrThrow } from "./runtime_validation";
 import { resilientFetch } from "./resilient_fetch";
+import { getRuntimeLocale } from "../../lib/i18n/config";
 
 type JsonRecord = Record<string, unknown>;
 type PasskeyAction = "authenticate" | "register";
+
+function localized(ja: string, en: string): string {
+  return getRuntimeLocale() === "en" ? en : ja;
+}
 
 export class PasskeyCancelledError extends Error {
   constructor(message: string) {
@@ -128,7 +133,7 @@ async function requestJson(url: string, init?: RequestInit): Promise<JsonRecord>
       ...init
     },
     {
-      defaultMessage: "認証に失敗しました。",
+      defaultMessage: localized("認証に失敗しました。", "Authentication failed."),
       hasApplicationError: (data) => data.status === "fail",
       fetchImpl: resilientFetch
     }
@@ -164,8 +169,8 @@ function normalizePasskeyBrowserError(error: unknown, action: PasskeyAction): Er
   if (isPasskeyCancellationError(error)) {
     return new PasskeyCancelledError(
       action === "authenticate"
-        ? "Passkey認証はキャンセルされました。メールまたはGoogleでも続けられます。"
-        : "Passkey登録はキャンセルされました。必要なときにもう一度お試しください。"
+        ? localized("Passkey認証はキャンセルされました。メールまたはGoogleでも続けられます。", "Passkey authentication was canceled. You can continue with email or Google.")
+        : localized("Passkey登録はキャンセルされました。必要なときにもう一度お試しください。", "Passkey registration was canceled. Try again whenever you are ready.")
     );
   }
 
@@ -174,13 +179,13 @@ function normalizePasskeyBrowserError(error: unknown, action: PasskeyAction): Er
   if (errorName === "SecurityError") {
     return new Error(
       action === "authenticate"
-        ? "このサイトのPasskeyは利用できません。HTTPSで接続しているか確認してください。"
-        : "このサイトへのPasskey登録はできません。HTTPSで接続しているか確認してください。"
+        ? localized("このサイトのPasskeyは利用できません。HTTPSで接続しているか確認してください。", "Passkeys are unavailable on this site. Make sure you are connected over HTTPS.")
+        : localized("このサイトへのPasskey登録はできません。HTTPSで接続しているか確認してください。", "A passkey cannot be registered for this site. Make sure you are connected over HTTPS.")
     );
   }
 
   if (errorName === "NotSupportedError") {
-    return new Error("このデバイスまたはブラウザではPasskeyがサポートされていません。");
+    return new Error(localized("このデバイスまたはブラウザではPasskeyがサポートされていません。", "Passkeys are not supported on this device or browser."));
   }
 
   if (error instanceof Error) {
@@ -188,7 +193,9 @@ function normalizePasskeyBrowserError(error: unknown, action: PasskeyAction): Er
   }
 
   return new Error(
-    action === "authenticate" ? "Passkey認証に失敗しました。" : "Passkey登録に失敗しました。"
+    action === "authenticate"
+      ? localized("Passkey認証に失敗しました。", "Passkey authentication failed.")
+      : localized("Passkey登録に失敗しました。", "Passkey registration failed.")
   );
 }
 
@@ -198,7 +205,7 @@ export function browserSupportsPasskeys(): boolean {
 
 export async function authenticateWithPasskey(): Promise<JsonRecord> {
   if (!browserSupportsPasskeys()) {
-    throw new Error("このブラウザではPasskeyを利用できません。");
+    throw new Error(localized("このブラウザではPasskeyを利用できません。", "Passkeys are unavailable in this browser."));
   }
 
   const optionsPayload = await requestJson("/api/passkeys/authenticate/options", {
@@ -213,7 +220,7 @@ export async function authenticateWithPasskey(): Promise<JsonRecord> {
   }
 
   if (!(credential instanceof PublicKeyCredential)) {
-    throw new PasskeyCancelledError("Passkey認証はキャンセルされました。メールまたはGoogleでも続けられます。");
+    throw new PasskeyCancelledError(localized("Passkey認証はキャンセルされました。メールまたはGoogleでも続けられます。", "Passkey authentication was canceled. You can continue with email or Google."));
   }
 
   return requestJson("/api/passkeys/authenticate/verify", {
@@ -225,7 +232,7 @@ export async function authenticateWithPasskey(): Promise<JsonRecord> {
 
 export async function registerPasskey(label?: string): Promise<JsonRecord> {
   if (!browserSupportsPasskeys()) {
-    throw new Error("このブラウザではPasskeyを利用できません。");
+    throw new Error(localized("このブラウザではPasskeyを利用できません。", "Passkeys are unavailable in this browser."));
   }
 
   const optionsPayload = await requestJson("/api/passkeys/register/options", {
@@ -240,7 +247,7 @@ export async function registerPasskey(label?: string): Promise<JsonRecord> {
   }
 
   if (!(credential instanceof PublicKeyCredential)) {
-    throw new PasskeyCancelledError("Passkey登録はキャンセルされました。必要なときにもう一度お試しください。");
+    throw new PasskeyCancelledError(localized("Passkey登録はキャンセルされました。必要なときにもう一度お試しください。", "Passkey registration was canceled. Try again whenever you are ready."));
   }
 
   return requestJson("/api/passkeys/register/verify", {

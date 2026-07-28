@@ -13,6 +13,7 @@ import {
   truncateTitle,
 } from "../../scripts/prompt_share/formatters";
 import type { PromptData } from "../../scripts/prompt_share/types";
+import { useTranslation } from "../../contexts/locale_context";
 
 // サーバーから受け取ったPromptDataに、クライアント専用の状態を追加した拡張型
 // Extends server-side PromptData with client-only state (local ID and action status)
@@ -55,13 +56,14 @@ function PromptCardComponent({
   onAddAsTask,
   onToggleLike,
 }: PromptCardProps) {
+  const { locale, t } = useTranslation();
   // サーバー値を正規化し、未設定時のフォールバックを確保する
   // Normalize server values and set safe fallbacks for missing fields
   const contentFormatValue = normalizePromptContentFormat(String(prompt.content_format || ""));
   const mediaTypeValue = normalizePromptMediaType(String(prompt.media_type || ""));
   const promptId = prompt.clientId;
-  const safeCategory = getCategoryLabelOrFallback(prompt.category);
-  const safeCreatedAt = formatPromptDate(prompt.created_at) || "日付未設定";
+  const safeCategory = getCategoryLabelOrFallback(prompt.category, undefined, locale);
+  const safeCreatedAt = formatPromptDate(prompt.created_at) || t("promptShare.dateUnavailable");
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);
   const menuId = `prompt-actions-menu-${promptId}`;
@@ -70,7 +72,7 @@ function PromptCardComponent({
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
   const cardPreview =
     contentFormatValue === "skill"
-      ? truncateContent(prompt.skill_markdown || "SKILLの詳細を開いて内容を確認してください。")
+      ? truncateContent(prompt.skill_markdown || t("promptShare.skillOpenHelp"))
       : truncateContent(prompt.content);
 
   return (
@@ -91,13 +93,13 @@ function PromptCardComponent({
           {/* Apply content-format class and resolve icon/label from the registry */}
           <span className={`prompt-card__type-pill prompt-card__type-pill--format prompt-card__type-pill--${contentFormatValue}`}>
             <i className={`bi ${getPromptFormatIconClass(contentFormatValue)}`}></i>
-            <span>{getPromptFormatLabel(contentFormatValue)}</span>
+            <span>{getPromptFormatLabel(contentFormatValue, locale)}</span>
           </span>
           {/* メディア軸を独立したバッジとして表示し、画像を生成対象として扱う */}
           {/* Render media as an independent badge, so image is a generation target rather than a post type */}
           <span className={`prompt-card__type-pill prompt-card__type-pill--media prompt-card__type-pill--${mediaTypeValue}`}>
             <i className={`bi ${getPromptMediaIconClass(mediaTypeValue)}`}></i>
-            <span>{getPromptMediaLabel(mediaTypeValue)}</span>
+            <span>{getPromptMediaLabel(mediaTypeValue, locale)}</span>
           </span>
         </div>
         <span className="prompt-card__created-at">
@@ -109,11 +111,11 @@ function PromptCardComponent({
         <button
           className="meatball-menu cc-press"
           type="button"
-          aria-label="その他の操作"
+          aria-label={t("promptShare.moreActions")}
           aria-haspopup="true"
           aria-expanded={isDropdownOpen ? "true" : "false"}
           aria-controls={menuId}
-          data-tooltip="その他の操作"
+          data-tooltip={t("promptShare.moreActions")}
           data-tooltip-placement="left"
           onClick={(event) => {
             event.stopPropagation();
@@ -145,7 +147,7 @@ function PromptCardComponent({
           }}
         >
           <i className="bi bi-share"></i>
-          <span>共有する</span>
+          <span>{t("common.share")}</span>
         </button>
         <button
           className="dropdown-item cc-press"
@@ -156,7 +158,7 @@ function PromptCardComponent({
           }}
         >
           <i className="bi bi-bell-slash"></i>
-          <span>ミュート</span>
+          <span>{t("promptShare.mute")}</span>
         </button>
         <button
           className="dropdown-item cc-press"
@@ -167,7 +169,7 @@ function PromptCardComponent({
           }}
         >
           <i className="bi bi-flag"></i>
-          <span>報告する</span>
+          <span>{t("promptShare.report")}</span>
         </button>
       </div>
 
@@ -177,7 +179,7 @@ function PromptCardComponent({
         <div className="prompt-card__image">
           <img
             src={prompt.reference_image_url}
-            alt={`${truncateTitle(prompt.title)} の作例画像`}
+            alt={t("promptShare.exampleImageAlt", { title: truncateTitle(prompt.title) })}
             loading="lazy"
             decoding="async"
           />
@@ -192,8 +194,8 @@ function PromptCardComponent({
           <button
             className="prompt-action-btn comment-btn cc-press"
             type="button"
-            aria-label="コメント"
-            data-tooltip="コメントを見る・投稿する"
+            aria-label={t("promptShare.comments")}
+            data-tooltip={t("promptShare.commentTooltip")}
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
@@ -209,10 +211,10 @@ function PromptCardComponent({
           <button
             className={`prompt-action-btn like-btn cc-press${prompt.liked ? " liked" : ""}${isLikePending ? " is-pending" : ""}${isLikeEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label={prompt.liked ? "いいねを解除" : "いいね"}
+            aria-label={prompt.liked ? t("promptShare.unlike") : t("promptShare.like")}
             aria-pressed={prompt.liked ? "true" : "false"}
             aria-disabled={isLikePending ? "true" : "false"}
-            data-tooltip={prompt.liked ? "いいねを解除" : "このプロンプトにいいね"}
+            data-tooltip={prompt.liked ? t("promptShare.unlike") : t("promptShare.likeTooltip")}
             data-tooltip-placement="top"
             onClick={(event) => {
               event.stopPropagation();
@@ -230,15 +232,15 @@ function PromptCardComponent({
           <button
             className={`prompt-action-btn use-in-chat-btn cc-press${isUsedInChat ? " used-in-chat" : ""}${isAddAsTaskPending ? " is-pending" : ""}${isUseInChatEffectActive ? " is-celebrating" : ""}`}
             type="button"
-            aria-label={isUsedInChat ? "チャットで使う設定を解除" : "チャットで使う"}
+            aria-label={isUsedInChat ? t("promptShare.removeFromChat") : t("promptShare.useInChat")}
             aria-pressed={isUsedInChat ? "true" : "false"}
             aria-disabled={isAddAsTaskPending ? "true" : "false"}
             data-tooltip={
               isAddAsTaskPending
-                ? "チャット設定を更新中"
+                ? t("promptShare.updatingChat")
                 : isUsedInChat
-                  ? "チャットで使う設定を解除"
-                  : "チャットで使う"
+                  ? t("promptShare.removeFromChat")
+                  : t("promptShare.useInChat")
             }
             data-tooltip-placement="top"
             onClick={(event) => {

@@ -29,6 +29,7 @@ from services.request_models import (  # noqa: E402
     DeleteTaskRequest,
     EditTaskRequest,
     EmailRequest,
+    LocalePreferenceUpdateRequest,
     MemoBulkActionRequest,
     MemoCollectionCreateRequest,
     MemoCollectionUpdateRequest,
@@ -69,6 +70,7 @@ from services.response_models import (  # noqa: E402
     ContextVaultPortableFact,
     LikedPromptApi,
     LikedPromptsApiResponse,
+    LocalePreferenceResponse,
     MemoSaveResponse,
     MyPromptsApiResponse,
     PromptRecordApi,
@@ -84,6 +86,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     # Request payloads (source of truth: services/request_models.py)
     ("EmailRequest", EmailRequest),
     ("AuthCodeRequest", AuthCodeRequest),
+    ("LocalePreferenceUpdateRequest", LocalePreferenceUpdateRequest),
     ("NewChatRoomRequest", NewChatRoomRequest),
     ("ChatRoomIdRequest", ChatRoomIdRequest),
     ("ChatRoomIdsRequest", ChatRoomIdsRequest),
@@ -117,6 +120,7 @@ MODEL_REGISTRY: list[tuple[str, type[BaseModel]]] = [
     # Response payloads (source of truth: services/response_models.py)
     ("ApiErrorPayload", ApiErrorPayload),
     ("ApiDetailObject", ApiDetailObject),
+    ("LocalePreferenceResponse", LocalePreferenceResponse),
     ("ChatJsonResponse", ChatJsonResponse),
     ("ChatGenerationStatusResponse", ChatGenerationStatusResponse),
     ("ChatHistoryMessage", ChatHistoryMessage),
