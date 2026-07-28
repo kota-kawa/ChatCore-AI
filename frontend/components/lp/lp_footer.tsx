@@ -5,10 +5,18 @@ export function LpFinalCta() {
   return (
     <section className="lp-final-cta">
       <div className="lp-container lp-final-cta__inner">
+        {/* 日本語は狭い画面向けに改行位置を指定する。英語は単語間の空白が必要なため
+            改行を入れず自然な折り返しに任せる
+            Japanese pins the line break for narrow screens. English needs word spacing,
+            so it wraps naturally instead */}
         <h2 className="lp-final-cta__title">
-          {locale === "en" ? "Turn today’s questions" : "今日の調べものから、"}
-          <br className="lp-br-sp" />
-          {locale === "en" ? "into useful knowledge." : "始めてみませんか。"}
+          {locale === "en" ? "Turn today’s questions into useful knowledge." : (
+            <>
+              今日の調べものから、
+              <br className="lp-br-sp" />
+              始めてみませんか。
+            </>
+          )}
         </h2>
         <p className="lp-final-cta__note">{locale === "en" ? "Create an account in minutes. Chat Core is free to use." : "登録は数分で完了します。いつでも無料で使えます。"}</p>
         <a href="/register" className="lp-btn lp-btn--inverse lp-btn--large">
