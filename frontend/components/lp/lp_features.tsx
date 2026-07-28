@@ -47,10 +47,18 @@ export function LpFeatures() {
     <section id="features" className="lp-section lp-features" aria-labelledby="lp-features-heading">
       <div className="lp-container">
         <p className="lp-eyebrow">{locale === "en" ? "FEATURES" : "できること"}</p>
+        {/* 日本語は狭い画面向けに改行位置を指定する。英語は単語間の空白が必要なため
+            改行を入れず自然な折り返しに任せる
+            Japanese pins the line break for narrow screens. English needs word spacing,
+            so it wraps naturally instead */}
         <h2 id="lp-features-heading" className="lp-heading">
-          {locale === "en" ? "Three essential tools" : "ひとつのワークスペースに、"}
-          <br className="lp-br-sp" />
-          {locale === "en" ? "in one workspace." : "3つの道具。"}
+          {locale === "en" ? "Three essential tools in one workspace." : (
+            <>
+              ひとつのワークスペースに、
+              <br className="lp-br-sp" />
+              3つの道具。
+            </>
+          )}
         </h2>
         <div className="lp-features__grid">
           {features.map((feature) => (
