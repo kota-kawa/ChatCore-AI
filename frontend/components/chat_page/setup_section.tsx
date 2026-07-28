@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { formatModelOptionLabel } from "../../lib/chat_page/model_label";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   MAX_ATTACHED_FILES,
@@ -99,7 +100,7 @@ const TaskCard = memo(function TaskCard({
   onEdit,
   onShowDetail,
 }: TaskCardProps) {
-  const { locale } = useTranslation();
+  const { locale, t } = useTranslation();
   return (
     <div
       ref={(node) => {
@@ -165,7 +166,7 @@ const TaskCard = memo(function TaskCard({
           <button
             type="button"
             className="task-detail-toggle"
-            aria-label={`${task.name}の詳細を表示`}
+            aria-label={t("home.taskDetailsFor", { name: task.name })}
             data-tooltip={locale === "en" ? "Show task details" : "タスクの詳細を表示"}
             data-tooltip-placement="top"
             onClick={(event) => {
@@ -1098,7 +1099,7 @@ function SetupSectionComponent() {
           >
             {MODEL_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label}
+                {formatModelOptionLabel(option, t, locale)}
               </option>
             ))}
           </select>
@@ -1146,7 +1147,7 @@ function SetupSectionComponent() {
                     selectModelOption(index);
                   }}
                 >
-                  {option.label}
+                  {formatModelOptionLabel(option, t, locale)}
                 </button>
               ))}
             </div>
@@ -1280,7 +1281,7 @@ function SetupSectionComponent() {
                 void handleAccessChat();
               }}
             >
-              <i className="bi bi-chat-left-text"></i> これまでのチャットを見る
+              <i className="bi bi-chat-left-text"></i> {t("home.viewPastChats")}
             </button>
           )}
         </div>

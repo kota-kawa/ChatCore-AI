@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { DEFAULT_MODEL, MAX_SETUP_INFO_LENGTH, MODEL_OPTIONS } from "../../lib/chat_page/constants";
+import { formatModelOptionLabel } from "../../lib/chat_page/model_label";
 import {
   readRestorableHomePageViewState,
   writeStoredHomePageViewState,
 } from "../../lib/chat_page/storage";
 import { STORAGE_KEYS } from "../../scripts/core/constants";
+import { useTranslation } from "../../contexts/locale_context";
 
 // SSR では useLayoutEffect が警告を出すため、サーバーでは useEffect に切り替える
 // useLayoutEffect warns during SSR, so fall back to useEffect on the server
@@ -66,6 +68,7 @@ function readInitialPageViewState(): HomePageViewState {
  * Custom hook to manage the UI state of the home page
  */
 export function useHomePageUiState() {
+  const { locale, t } = useTranslation();
   const [loggedIn, setLoggedIn] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   // キャッシュ由来の認証状態を反映済みかどうか。サーバー確認を待たずに
@@ -102,8 +105,9 @@ export function useHomePageUiState() {
   // 選択されたモデルのラベルを取得する
   // Get the label of the selected model
   const selectedModelLabel = useMemo(() => {
-    return MODEL_OPTIONS.find((option) => option.value === selectedModel)?.label ?? MODEL_OPTIONS[0]?.label ?? "";
-  }, [selectedModel]);
+    const option = MODEL_OPTIONS.find((entry) => entry.value === selectedModel) ?? MODEL_OPTIONS[0];
+    return option ? formatModelOptionLabel(option, t, locale) : "";
+  }, [selectedModel, t, locale]);
 
   // 選択されたモデルの短いラベルを取得する
   // Get the short label of the selected model
