@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from services import web_search
+from services.llm import LIGHTWEIGHT_TASK_MODEL
 
 
 # 日本語: Web Search Serviceの機能や仕様を検証するテストクラスです。
@@ -226,27 +227,22 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertFalse(decision.should_search)
         mock_llm.assert_called_once()
 
-    # 日本語: fallbackkeysの前、decideWeb検索prefersselectedmodelことを検証します。
-    # English: Verify that decide web search prefers selected model before fallback keys.
-    def test_decide_web_search_prefers_selected_model_before_fallback_keys(self):
+    # 日本語: 選択中の会話モデルにかかわらず、検索プランナーが軽量モデルを使うことを検証します。
+    # English: Verify that the search planner uses the lightweight model regardless of chat selection.
+    def test_decide_web_search_always_uses_lightweight_model(self):
         messages = [{"role": "user", "content": "今日の天気を教えて"}]
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
-        with patch.dict(
-            os.environ,
-            {"ANTHROPIC_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
-            clear=False,
-        ):
-            with patch.object(
-                web_search,
-                "get_llm_json_response",
-                return_value='{"should_search": true, "query": "today weather", "freshness": "pd", "reason": "current"}',
-            ) as mock_llm:
-                decision = web_search.decide_web_search(messages, "openai/gpt-oss-120b")
+        with patch.object(
+            web_search,
+            "get_llm_json_response",
+            return_value='{"should_search": true, "query": "today weather", "freshness": "pd", "reason": "current"}',
+        ) as mock_llm:
+            decision = web_search.decide_web_search(messages, "openai/gpt-oss-120b")
 
         self.assertTrue(decision.should_search)
-        self.assertEqual(mock_llm.call_args.args[1], "openai/gpt-oss-120b")
+        self.assertEqual(mock_llm.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
 
     # 日本語: 検索bravellmコンテキストparsessourcesことを検証します。
     # English: Verify that search brave llm context parses sources.

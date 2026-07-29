@@ -69,7 +69,10 @@ def _get_non_negative_int_env(name: str, default: int) -> int:
 
 
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
-GPT_OSS_20B_LEGACY_MODEL = "openai/gpt-oss-20b"
+GPT_OSS_20B_MODEL = "openai/gpt-oss-20b"
+# 軽量な補助タスクは会話で選択されたモデルに依存させず、Groq の20Bへ固定する。
+# Keep lightweight auxiliary tasks independent from the chat model selected by the user.
+LIGHTWEIGHT_TASK_MODEL = GPT_OSS_20B_MODEL
 QWEN_3_6_27B_MODEL = "qwen/qwen3.6-27b"
 GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
 CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
@@ -117,7 +120,7 @@ VALID_CLAUDE_MODELS = {CLAUDE_DEFAULT_MODEL, CLAUDE_HAIKU_4_5_MODEL}
 VALID_GROQ_MODELS = {
     GROQ_MODEL,
     GPT_OSS_120B_MODEL,
-    GPT_OSS_20B_LEGACY_MODEL,
+    GPT_OSS_20B_MODEL,
     QWEN_3_6_27B_MODEL,
 }
 VALID_OPENAI_MODELS = {

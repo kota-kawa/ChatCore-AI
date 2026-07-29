@@ -6,7 +6,7 @@ import re
 from typing import Literal
 
 from services.agent_capabilities import build_capability_context
-from services.llm import GPT_OSS_20B_LEGACY_MODEL, get_llm_response
+from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_response
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
     # LLMにリクエストを送信し、応答テキストをパースして意図を抽出します。
     # Send the request to the LLM and parse the response text to extract the classified intent.
     try:
-        response = get_llm_response(messages, GPT_OSS_20B_LEGACY_MODEL)
+        response = get_llm_response(messages, LIGHTWEIGHT_TASK_MODEL)
         intent = _parse_intent(response or "")
         if intent is not None:
             if not current_page and intent in ("action", "page_info"):
@@ -120,4 +120,3 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
     except Exception:
         logger.warning("Intent classification failed, falling back to 'direct'")
     return "direct"
-

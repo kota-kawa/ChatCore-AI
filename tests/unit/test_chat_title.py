@@ -1,11 +1,12 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from services.chat_title import (
     build_initial_title_candidates,
     generate_chat_room_title,
     maybe_auto_title_chat_room,
 )
+from services.llm import LIGHTWEIGHT_TASK_MODEL
 
 
 # 日本語: チャットルームタイトルの自動生成ロジックをテストするクラス。
@@ -16,14 +17,15 @@ class ChatTitleTestCase(unittest.TestCase):
     def test_generate_chat_room_title_parses_json_response(self):
         # 日本語: LLMがJSONタイトルを返すケースをシミュレート
         # English: Simulate the LLM returning a JSON title string
+        llm_response_getter = MagicMock(return_value='{"title": "Python学習計画"}')
         title = generate_chat_room_title(
             "Pythonの学習計画を作って",
             "3週間の計画を提案します。",
-            "openai/gpt-oss-120b",
-            llm_response_getter=lambda *_args, **_kwargs: '{"title": "Python学習計画"}',
+            llm_response_getter=llm_response_getter,
         )
 
         self.assertEqual(title, "Python学習計画")
+        self.assertEqual(llm_response_getter.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
 
     # 日本語: タスク起動リクエストのセットアップ情報（タスク名・状況）が初期タイトル候補リストに含まれることを検証します。
     # English: Verify that task setup info (task name and context) is included in the initial title candidates list.
@@ -60,7 +62,6 @@ class ChatTitleTestCase(unittest.TestCase):
                 chat_room_id="room-1",
                 user_message="相談したい",
                 assistant_response="回答です",
-                model="openai/gpt-oss-120b",
                 allowed_current_titles=["新規チャット", "相談したい"],
                 conditional_rename=conditional_rename,
             )
