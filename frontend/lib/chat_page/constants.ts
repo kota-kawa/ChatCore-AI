@@ -244,15 +244,21 @@ export const MODEL_OPTIONS: ModelOption[] = [
     shortLabel: "GPT-OSS 120B",
   },
   {
-    value: "gpt-5-mini",
-    label: "OPENAI | GPT-5 mini",
-    descriptionKey: "chat.modelReasoning",
-    shortLabel: "GPT-5 mini",
+    value: "qwen/qwen3.6-27b",
+    label: "GROQ | Qwen 3.6 27B",
+    descriptionKey: "chat.modelStandard",
+    shortLabel: "Qwen 3.6 27B",
   },
   {
-    value: "gemini-2.5-flash",
-    label: "Gemini | 2.5 Flash",
+    value: "gpt-5.6-luna",
+    label: "OPENAI | GPT-5.6 Luna",
+    descriptionKey: "chat.modelReasoning",
+    shortLabel: "GPT-5.6 Luna",
+  },
+  {
+    value: "claude-haiku-4-5-20251001",
+    label: "ANTHROPIC | Claude Haiku 4.5",
     descriptionKey: "chat.modelLightweight",
-    shortLabel: "Gemini 2.5",
+    shortLabel: "Claude Haiku 4.5",
   },
 ];

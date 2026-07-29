@@ -24,7 +24,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": true, "query": "OpenAI latest news", "freshness": "pd", "reason": "current news"}',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "OpenAI latest news")
@@ -42,7 +42,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='```json\n{"should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}\n```',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "OpenAI news")
@@ -59,7 +59,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": "true", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
 
@@ -75,7 +75,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"decision": "search", "should_search": true, "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "OpenAI news")
@@ -92,7 +92,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": "必要", "query": "OpenAI news", "freshness": "pd", "reason": "current"}',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
 
@@ -111,7 +111,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 '{"decision": "search", "should_search": true, "query": "React 19 latest information", "freshness": "py", "reason": "latest software information"}',
             ],
         ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "React 19 latest information")
@@ -125,7 +125,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
         # English: Mock dependencies or context to configure the test environment.
         with patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertFalse(decision.should_search)
         self.assertEqual(decision.reason, "web search planner unavailable")
@@ -142,7 +142,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": true, "query": "今日のニュース 2026-05-06", "freshness": "pd", "reason": "news requires current information"}',
         ):
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertEqual(decision.query, "今日のニュース 2026-05-06")
@@ -161,7 +161,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": false, "query": "", "freshness": "", "reason": "greeting"}',
         ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertFalse(decision.should_search)
         mock_llm.assert_called_once()
@@ -178,7 +178,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": true, "query": "日本 法人設立 注意点 最新", "freshness": "py", "reason": "legal and procedural details"}',
         ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertTrue(decision.should_search)
         self.assertIn("法人設立", decision.query)
@@ -202,7 +202,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": true, "query": "CRM 最新 比較", "freshness": "pm", "reason": "active task requires research"}',
         ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         planner_context = mock_llm.call_args.args[0][1]["content"]
         self.assertTrue(decision.should_search)
@@ -221,7 +221,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             "get_llm_json_response",
             return_value='{"should_search": false, "query": "", "freshness": "", "reason": "pure writing"}',
         ) as mock_llm:
-            decision = web_search.decide_web_search(messages, "gemini-2.5-flash")
+            decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
         self.assertFalse(decision.should_search)
         mock_llm.assert_called_once()
@@ -235,7 +235,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         # English: Mock dependencies or context to configure the test environment.
         with patch.dict(
             os.environ,
-            {"GEMINI_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
+            {"ANTHROPIC_API_KEY": "test", "OPENAI_API_KEY": "test", "GROQ_API_KEY": "test"},
             clear=False,
         ):
             with patch.object(
@@ -361,7 +361,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 with patch.object(web_search, "search_brave_llm_context", return_value=result):
                     augmented = web_search.maybe_augment_messages_with_web_search(
                         messages,
-                        "gemini-2.5-flash",
+                        "claude-haiku-4-5-20251001",
                         publish_event=lambda event, payload: events.append(
                             SimpleNamespace(event=event, payload=payload)
                         ),
@@ -405,7 +405,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
                 ):
                     augmented = web_search.maybe_augment_messages_with_web_search(
                         messages,
-                        "gemini-2.5-flash",
+                        "claude-haiku-4-5-20251001",
                         publish_event=lambda event, payload: events.append(
                             SimpleNamespace(event=event, payload=payload)
                         ),
@@ -437,7 +437,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
             ):
                 augmented = web_search.maybe_augment_messages_with_web_search(
                     messages,
-                    "gemini-2.5-flash",
+                    "claude-haiku-4-5-20251001",
                     publish_event=lambda event, payload: events.append(
                         SimpleNamespace(event=event, payload=payload)
                     ),

@@ -54,7 +54,7 @@ class PromptShareApiTestCase(unittest.TestCase):
             "author": "tester",
             "input_examples": "input",
             "output_examples": "output",
-            "ai_model": "gemini-2.5-flash",
+            "ai_model": "Claude Haiku 4.5",
             "prompt_type": "text",
             "reference_image_url": None,
             "skill_markdown": "",

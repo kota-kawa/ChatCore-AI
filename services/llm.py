@@ -8,6 +8,14 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
+from anthropic import Anthropic
+from anthropic import (
+    APIConnectionError as AnthropicAPIConnectionError,
+    APIStatusError as AnthropicAPIStatusError,
+    APITimeoutError as AnthropicAPITimeoutError,
+    AuthenticationError as AnthropicAuthenticationError,
+    RateLimitError as AnthropicRateLimitError,
+)
 from openai import OpenAI
 try:
     from openai import (
@@ -60,26 +68,18 @@ def _get_non_negative_int_env(name: str, default: int) -> int:
     return value if value >= 0 else default
 
 
-# 環境変数からGeminiのAPIキーを取得します。
-# Retrieve the Gemini API key from environment variables.
-def _get_gemini_api_key() -> str:
-    return os.environ.get("GEMINI_API_KEY", "")
-
-
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 GPT_OSS_120B_MODEL = "openai/gpt-oss-120b"
 GPT_OSS_20B_LEGACY_MODEL = "openai/gpt-oss-20b"
-GPT_5_MINI_MODEL = "gpt-5-mini"
-GPT_5_MINI_2025_08_07_MODEL = "gpt-5-mini-2025-08-07"
-OPENAI_DEFAULT_MODEL = (
-    os.environ.get("OPENAI_DEFAULT_MODEL", GPT_5_MINI_MODEL).strip()
-    or GPT_5_MINI_MODEL
-)
-GEMINI_DEFAULT_MODEL = os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")
-# 対応モデル（gemini-2.5-flash / gpt-oss / gpt-5-mini）はいずれも思考トークンがこの上限に
+QWEN_3_6_27B_MODEL = "qwen/qwen3.6-27b"
+GPT_5_6_LUNA_MODEL = "gpt-5.6-luna"
+CLAUDE_HAIKU_4_5_MODEL = "claude-haiku-4-5-20251001"
+GROQ_MODEL = GPT_OSS_120B_MODEL
+OPENAI_DEFAULT_MODEL = GPT_5_6_LUNA_MODEL
+CLAUDE_DEFAULT_MODEL = CLAUDE_HAIKU_4_5_MODEL
+# 対応モデル（Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna）はいずれも思考トークンがこの上限に
 # 含まれる。4096では生成UI（最大8000文字のコード）＋思考で頻繁に途中打ち切りが発生する
 # ため、既定値を引き上げる（全プロバイダの出力上限 65536 以内）。
-# All supported models (gemini-2.5-flash / gpt-oss / gpt-5-mini) count reasoning tokens
+# All supported models (Claude Haiku / gpt-oss / Qwen / gpt-5.6-luna) count reasoning tokens
 # against this cap. 4096 frequently truncated generative UI output (up to ~8000 chars of
 # code) mid-stream, so raise the default (well within every provider's 65536 output cap).
 LLM_MAX_TOKENS = _get_positive_int_env("LLM_MAX_TOKENS", 16384)
@@ -92,6 +92,7 @@ REDACTED_SENSITIVE_VALUE = "[REDACTED-SENSITIVE]"
 OPENAI_MARKDOWN_REENABLE_PREFIX = "Formatting re-enabled"
 _SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"\bAIza[0-9A-Za-z\-_]{35}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"\bghp_[A-Za-z0-9]{36}\b"),
@@ -108,23 +109,24 @@ _SENSITIVE_ASSIGNMENT_PATTERNS = (
 )
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # サポート対象モデルを明示し、入力バリデーションの単一情報源にする
 # Keep supported model names explicit as the single validation source.
 # Valid model names
-VALID_GEMINI_MODELS = {
-    "gemini-2.5-flash",
+VALID_CLAUDE_MODELS = {CLAUDE_DEFAULT_MODEL, CLAUDE_HAIKU_4_5_MODEL}
+VALID_GROQ_MODELS = {
+    GROQ_MODEL,
+    GPT_OSS_120B_MODEL,
+    GPT_OSS_20B_LEGACY_MODEL,
+    QWEN_3_6_27B_MODEL,
 }
-VALID_GROQ_MODELS = {GROQ_MODEL, GPT_OSS_120B_MODEL, GPT_OSS_20B_LEGACY_MODEL}
 VALID_OPENAI_MODELS = {
     OPENAI_DEFAULT_MODEL,
-    GPT_5_MINI_MODEL,
-    GPT_5_MINI_2025_08_07_MODEL,
+    GPT_5_6_LUNA_MODEL,
 }
 
 groq_api_key = os.environ.get("GROQ_API_KEY", "")
-gemini_api_key = _get_gemini_api_key()
+anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
 # APIキーがある場合のみクライアントを構築し、未設定時は None を保持する
@@ -139,14 +141,13 @@ groq_client = (
     if groq_api_key
     else None
 )
-gemini_client = (
-    OpenAI(
-        api_key=gemini_api_key,
-        base_url=GEMINI_BASE_URL,
+claude_client = (
+    Anthropic(
+        api_key=anthropic_api_key,
         timeout=LLM_REQUEST_TIMEOUT_SECONDS,
         max_retries=LLM_MAX_RETRIES,
     )
-    if gemini_api_key
+    if anthropic_api_key
     else None
 )
 openai_client = (
@@ -278,8 +279,8 @@ def _extract_retry_after_seconds(exc: BaseException) -> int | None:
     return retry_after if retry_after >= 0 else None
 
 
-# 外部OpenAI/Groq/Geminiクライアントの例外をアプリケーション独自のLlmProviderError派生例外にマッピングする
-# Map raw exceptions from OpenAI/Groq/Gemini SDKs to application-specific LlmProviderError sub-classes.
+# 外部OpenAI/Groq/Claudeクライアントの例外をアプリケーション独自のLlmProviderError派生例外にマッピングする
+# Map raw exceptions from OpenAI/Groq/Claude SDKs to application-specific LlmProviderError sub-classes.
 # LLMプロバイダSDK独自の例外を、アプリケーション共通のLLM例外にマッピングします。
 # Map provider-specific exceptions to application-specific LLM exceptions.
 def _map_provider_exception(
@@ -291,18 +292,18 @@ def _map_provider_exception(
     if isinstance(exc, LlmProviderError):
         return exc
 
-    if isinstance(exc, RateLimitError):
+    if isinstance(exc, (RateLimitError, AnthropicRateLimitError)):
         return LlmRateLimitError(
             f"{provider_name} API rate limit exceeded.",
             retry_after_seconds=_extract_retry_after_seconds(exc),
         )
-    if isinstance(exc, APITimeoutError):
+    if isinstance(exc, (APITimeoutError, AnthropicAPITimeoutError)):
         return LlmTimeoutError(f"{provider_name} API request timed out.")
-    if isinstance(exc, APIConnectionError):
+    if isinstance(exc, (APIConnectionError, AnthropicAPIConnectionError)):
         return LlmNetworkError(f"{provider_name} API connection failed.")
-    if isinstance(exc, AuthenticationError):
+    if isinstance(exc, (AuthenticationError, AnthropicAuthenticationError)):
         return LlmAuthenticationError(f"{provider_name} API authentication failed.")
-    if isinstance(exc, APIStatusError):
+    if isinstance(exc, (APIStatusError, AnthropicAPIStatusError)):
         status_code = getattr(exc, "status_code", None)
         if status_code in (401, 403):
             return LlmAuthenticationError(f"{provider_name} API authentication failed.")
@@ -348,7 +349,7 @@ def _raise_provider_error(
 # 無効なモデルが指定された場合のエラーログを出力し、例外を送出します。
 # Log an error message and raise a LlmInvalidModelError for an invalid model name.
 def _raise_invalid_model_error(model_name: str) -> None:
-    valid_models = sorted(VALID_GEMINI_MODELS | VALID_GROQ_MODELS | VALID_OPENAI_MODELS)
+    valid_models = sorted(VALID_CLAUDE_MODELS | VALID_GROQ_MODELS | VALID_OPENAI_MODELS)
     logger.warning(
         "Invalid model requested: %s. Valid models: %s",
         model_name,
@@ -368,6 +369,20 @@ def _chat_completion_token_limit_kwargs(model_name: str) -> dict[str, int]:
     if is_openai_model(model_name):
         return {"max_completion_tokens": LLM_MAX_TOKENS}
     return {"max_tokens": LLM_MAX_TOKENS}
+
+
+def _openai_reasoning_kwargs(model_name: str) -> dict[str, Any]:
+    """Preserve GPT-5 mini's low-latency baseline for GPT-5.6 Luna requests."""
+    if model_name == GPT_5_6_LUNA_MODEL:
+        return {"reasoning_effort": "none"}
+    return {}
+
+
+def _openai_responses_reasoning_kwargs(model_name: str) -> dict[str, Any]:
+    """Use the Responses API equivalent of the GPT-5.6 Luna reasoning baseline."""
+    if model_name == GPT_5_6_LUNA_MODEL:
+        return {"reasoning": {"effort": "none"}}
+    return {}
 
 
 # ツール呼び出しの設定用キーワード引数を構築する
@@ -563,6 +578,7 @@ def _get_openai_compatible_response_stream(
             "model": model_name,
             "messages": sanitized_messages,
             **_chat_completion_token_limit_kwargs(model_name),
+            **_openai_reasoning_kwargs(model_name),
             "stream": True,
             **_chat_completion_tool_kwargs(tools),
         }
@@ -629,8 +645,6 @@ def _get_openai_compatible_response_stream(
         provider_name = "provider"
         if "Groq" in provider_error_message:
             provider_name = "Groq"
-        elif "Gemini" in provider_error_message:
-            provider_name = "Google Gemini"
         _raise_provider_error(
             exc,
             provider_name=provider_name,
@@ -663,76 +677,232 @@ def get_groq_response_stream(
     )
 
 
-# Google Gemini APIを呼び出してモデルからのテキスト応答または関数呼び出しデータを取得する
-# Call the Google Gemini API to retrieve text responses or function-call details.
-# Gemini API（OpenAI互換エンドポイント）を呼び出して応答を取得します。
-# Call the Gemini API (via OpenAI-compatible endpoint) to retrieve the response.
-def get_gemini_response(
+# Claude Messages API向けに会話履歴を変換する
+# Convert conversation history for the Claude Messages API.
+def _prepare_claude_messages(
+    conversation_messages: ConversationMessages,
+) -> tuple[str | None, ConversationMessages]:
+    system_messages: list[str] = []
+    claude_messages: ConversationMessages = []
+
+    for message in _sanitize_conversation_messages(conversation_messages):
+        role = str(message.get("role", "user"))
+        content = message.get("content")
+        text_content = "" if content is None else str(content)
+
+        if role in {"system", "developer"}:
+            if text_content:
+                system_messages.append(text_content)
+            continue
+
+        if role == "tool":
+            tool_result = {
+                "type": "tool_result",
+                "tool_use_id": str(message.get("tool_call_id") or ""),
+                "content": text_content,
+            }
+            if (
+                claude_messages
+                and claude_messages[-1]["role"] == "user"
+                and isinstance(claude_messages[-1].get("content"), list)
+                and all(
+                    isinstance(block, dict) and block.get("type") == "tool_result"
+                    for block in claude_messages[-1]["content"]
+                )
+            ):
+                claude_messages[-1]["content"].append(tool_result)
+            else:
+                claude_messages.append({"role": "user", "content": [tool_result]})
+            continue
+
+        if role == "assistant" and message.get("tool_calls"):
+            blocks: list[dict[str, Any]] = []
+            if text_content:
+                blocks.append({"type": "text", "text": text_content})
+            for tool_call in message["tool_calls"]:
+                function = tool_call.get("function") or {}
+                raw_arguments = function.get("arguments") or "{}"
+                try:
+                    tool_input = json.loads(raw_arguments)
+                except (TypeError, json.JSONDecodeError):
+                    tool_input = {}
+                if not isinstance(tool_input, dict):
+                    tool_input = {}
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": str(tool_call.get("id") or ""),
+                        "name": str(function.get("name") or ""),
+                        "input": tool_input,
+                    }
+                )
+            claude_messages.append({"role": "assistant", "content": blocks})
+            continue
+
+        claude_messages.append(
+            {
+                "role": "assistant" if role == "assistant" else "user",
+                "content": text_content,
+            }
+        )
+
+    return ("\n\n".join(system_messages) or None), claude_messages
+
+
+# OpenAI形式の関数ツール定義をClaude形式へ変換する
+# Convert OpenAI function-tool definitions to Claude tool definitions.
+def _prepare_claude_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    claude_tools: list[dict[str, Any]] = []
+    for tool in tools or []:
+        function = tool.get("function") or {}
+        name = str(function.get("name") or "")
+        if not name:
+            continue
+        input_schema = function.get("parameters")
+        if not isinstance(input_schema, dict):
+            input_schema = {"type": "object", "properties": {}}
+        claude_tools.append(
+            {
+                "name": name,
+                "description": str(function.get("description") or ""),
+                "input_schema": input_schema,
+            }
+        )
+    return claude_tools
+
+
+def _claude_tool_calls(content_blocks: Any) -> str | None:
+    tool_calls: list[dict[str, Any]] = []
+    for block in content_blocks or []:
+        if getattr(block, "type", None) != "tool_use":
+            continue
+        tool_calls.append(
+            {
+                "id": str(getattr(block, "id", "")),
+                "type": "function",
+                "function": {
+                    "name": str(getattr(block, "name", "")),
+                    "arguments": json.dumps(getattr(block, "input", {}) or {}),
+                },
+            }
+        )
+    return json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None
+
+
+def _claude_response_text(content_blocks: Any) -> str:
+    return "".join(
+        str(getattr(block, "text", ""))
+        for block in content_blocks or []
+        if getattr(block, "type", None) == "text"
+    )
+
+
+# Claude Messages APIを呼び出してテキスト応答または関数呼び出しデータを取得する
+# Call the Claude Messages API to retrieve text responses or function-call details.
+def get_claude_response(
     conversation_messages: ConversationMessages,
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
-) -> str | None:
-    # Gemini 向けクライアントを使ってチャット補完を実行します。
-    # Run chat completion through the Gemini client.
-    """Google Gemini API呼び出し (via OpenAI client)"""
-    if gemini_client is None:
-        raise LlmConfigurationError("GEMINI_API_KEY が未設定です。")
+) -> str:
+    if claude_client is None:
+        raise LlmConfigurationError("ANTHROPIC_API_KEY が未設定です。")
 
-    sanitized_messages = _sanitize_conversation_messages(conversation_messages)
+    system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
     try:
         request_kwargs: dict[str, Any] = {
             "model": model_name,
-            "messages": sanitized_messages,
-            **_chat_completion_token_limit_kwargs(model_name),
-            **_chat_completion_tool_kwargs(tools),
+            "messages": claude_messages,
+            "max_tokens": LLM_MAX_TOKENS,
         }
-        response = gemini_client.chat.completions.create(
-            **request_kwargs,
-        )
-        message = response.choices[0].message
-        tool_calls = getattr(message, "tool_calls", None)
-        if tool_calls:
-            return json.dumps([
-                {
-                    "id": tc.id,
-                    "type": tc.type,
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    }
-                }
-                for tc in tool_calls
-            ])
-        return message.content
+        if system_prompt is not None:
+            request_kwargs["system"] = system_prompt
+        claude_tools = _prepare_claude_tools(tools)
+        if claude_tools:
+            request_kwargs["tools"] = claude_tools
+        response = claude_client.messages.create(**request_kwargs)
+        return _claude_tool_calls(response.content) or _claude_response_text(response.content)
     except Exception as exc:
         _raise_provider_error(
             exc,
-            provider_name="Google Gemini",
-            fallback_message="Google Gemini API call failed.",
+            provider_name="Anthropic Claude",
+            fallback_message="Anthropic Claude API call failed.",
         )
 
 
-# Google Gemini APIを呼び出して、ストリーム形式でテキスト応答を逐次受け取る
-# Call the Google Gemini API and yield response chunks incrementally as a stream.
-# Gemini APIからストリーム形式で応答を逐次取得します。
-# Call the Gemini streaming API to yield response chunks incrementally.
-def get_gemini_response_stream(
+# Claude Messages APIを呼び出してストリーム形式でテキスト応答を逐次受け取る
+# Call the Claude Messages API and yield text response chunks incrementally.
+def get_claude_response_stream(
     conversation_messages: ConversationMessages,
     model_name: str,
     *,
     tools: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
-    # Gemini のストリーム応答を逐次テキスト片として返します。
-    # Yield Gemini response chunks incrementally.
-    return _get_openai_compatible_response_stream(
-        client=gemini_client,
-        conversation_messages=conversation_messages,
-        model_name=model_name,
-        missing_key_message="GEMINI_API_KEY が未設定です。",
-        provider_error_message="Google Gemini streaming API call failed.",
-        tools=tools,
-    )
+    if claude_client is None:
+        raise LlmConfigurationError("ANTHROPIC_API_KEY が未設定です。")
+
+    system_prompt, claude_messages = _prepare_claude_messages(conversation_messages)
+    stream = None
+    tool_call_parts: dict[int, dict[str, Any]] = {}
+    try:
+        request_kwargs: dict[str, Any] = {
+            "model": model_name,
+            "messages": claude_messages,
+            "max_tokens": LLM_MAX_TOKENS,
+            "stream": True,
+        }
+        if system_prompt is not None:
+            request_kwargs["system"] = system_prompt
+        claude_tools = _prepare_claude_tools(tools)
+        if claude_tools:
+            request_kwargs["tools"] = claude_tools
+        stream = claude_client.messages.create(**request_kwargs)
+        for event in stream:
+            event_type = getattr(event, "type", "")
+            if event_type == "content_block_start":
+                block = getattr(event, "content_block", None)
+                if getattr(block, "type", None) == "tool_use":
+                    tool_call_parts[int(getattr(event, "index", 0))] = {
+                        "id": str(getattr(block, "id", "")),
+                        "type": "function",
+                        "function": {
+                            "name": str(getattr(block, "name", "")),
+                            "arguments": "",
+                        },
+                    }
+            elif event_type == "content_block_delta":
+                delta = getattr(event, "delta", None)
+                delta_type = getattr(delta, "type", "")
+                if delta_type == "text_delta" and getattr(delta, "text", None):
+                    yield delta.text
+                elif delta_type == "input_json_delta":
+                    part = tool_call_parts.get(int(getattr(event, "index", 0)))
+                    if part is not None:
+                        part["function"]["arguments"] += str(
+                            getattr(delta, "partial_json", "")
+                        )
+            elif event_type == "message_delta":
+                delta = getattr(event, "delta", None)
+                if getattr(delta, "stop_reason", None) == "max_tokens":
+                    logger.warning(
+                        "Claude stream truncated by token limit (model=%s, max_tokens=%s).",
+                        model_name,
+                        LLM_MAX_TOKENS,
+                    )
+        if tool_call_parts:
+            yield json.dumps(
+                [tool_call_parts[index] for index in sorted(tool_call_parts)],
+                ensure_ascii=False,
+            )
+    except Exception as exc:
+        _raise_provider_error(
+            exc,
+            provider_name="Anthropic Claude",
+            fallback_message="Anthropic Claude streaming API call failed.",
+        )
+    finally:
+        if stream is not None and hasattr(stream, "close"):
+            stream.close()
 
 
 # OpenAI Responses APIを呼び出してテキスト応答を取得する
@@ -761,6 +931,7 @@ def get_openai_response(
                 "model": model_name,
                 "messages": sanitized_messages,
                 **_chat_completion_token_limit_kwargs(model_name),
+                **_openai_reasoning_kwargs(model_name),
                 **_chat_completion_tool_kwargs(tools),
             }
             response = openai_client.chat.completions.create(
@@ -786,6 +957,7 @@ def get_openai_response(
             model=model_name,
             input=sanitized_messages,
             max_output_tokens=LLM_MAX_TOKENS,
+            **_openai_responses_reasoning_kwargs(model_name),
         )
         return response.output_text
     except Exception as exc:
@@ -832,6 +1004,7 @@ def get_openai_response_stream(
             model=model_name,
             input=sanitized_messages,
             max_output_tokens=LLM_MAX_TOKENS,
+            **_openai_responses_reasoning_kwargs(model_name),
         ) as stream:
             for event in stream:
                 if event.type == "response.output_text.delta":
@@ -855,14 +1028,10 @@ def get_openai_response_stream(
         )
 
 
-# 与えられたモデル名がGeminiファミリーのものか確認する
-# Check if the given model name belongs to the Gemini family.
-# 指定されたモデル名がGeminiファミリーに属するか判定します。
-# Check whether the specified model name belongs to the Gemini family.
-def is_gemini_model(model_name: str) -> bool:
-    # モデル名が Gemini 系かを判定します。
-    # Check whether the selected model belongs to Gemini.
-    return model_name in VALID_GEMINI_MODELS
+# 与えられたモデル名がClaudeファミリーのものか確認する
+# Check if the given model name belongs to the Claude family.
+def is_claude_model(model_name: str) -> bool:
+    return model_name in VALID_CLAUDE_MODELS
 
 
 # 与えられたモデル名がGroqファミリーのものか確認する
@@ -892,7 +1061,7 @@ def is_openai_model(model_name: str) -> bool:
 def is_streaming_model(model_name: str) -> bool:
     # 現在SSE配信に対応しているモデルかを判定します。
     # Check whether the selected model supports SSE streaming in this app.
-    return is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name)
+    return is_claude_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name)
 
 
 # 指定されたモデル名がサポート対象であるか確認し、無効であればエラーを投げる
@@ -900,12 +1069,12 @@ def is_streaming_model(model_name: str) -> bool:
 # 指定されたモデル名が有効（いずれかのファミリーに属する）か検証します。無効な場合は例外を送出します。
 # Validate if the model name is supported, raising a LlmInvalidModelError if not.
 def validate_model_name(model_name: str) -> None:
-    if is_gemini_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name):
+    if is_claude_model(model_name) or is_groq_model(model_name) or is_openai_model(model_name):
         return
     _raise_invalid_model_error(model_name)
 
 
-# 指定モデルでプロバイダ（Gemini、Groq、OpenAI等）を自動で振り分けてチャット完了応答を取得する
+# 指定モデルでプロバイダ（Claude、Groq、OpenAI等）を自動で振り分けてチャット完了応答を取得する
 # Route to the appropriate LLM provider based on the model name and return the chat completion response.
 # モデル名に応じてプロバイダを自動判定し、チャット完了応答を取得します。
 # Automatically route the request based on the model name and return the LLM response.
@@ -918,8 +1087,8 @@ def get_llm_response(
     # 指定モデル名でプロバイダを振り分け、不正モデルは例外として扱います。
     # Route provider by model name and raise on invalid models.
     validate_model_name(model_name)
-    if is_gemini_model(model_name):
-        return get_gemini_response(conversation_messages, model_name, tools=tools)
+    if is_claude_model(model_name):
+        return get_claude_response(conversation_messages, model_name, tools=tools)
     if is_groq_model(model_name):
         return get_groq_response(conversation_messages, model_name, tools=tools)
     if is_openai_model(model_name):
@@ -949,6 +1118,7 @@ def _get_chat_completions_json_response(
             "model": model_name,
             "messages": sanitized_messages,
             **_chat_completion_token_limit_kwargs(model_name),
+            **_openai_reasoning_kwargs(model_name),
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }
@@ -983,6 +1153,7 @@ def _get_openai_responses_json_response(
             model=model_name,
             input=sanitized_messages,
             max_output_tokens=LLM_MAX_TOKENS,
+            **_openai_responses_reasoning_kwargs(model_name),
             text={"format": {"type": "json_object"}},
         )
         return response.output_text
@@ -1004,15 +1175,8 @@ def get_llm_json_response(
     # JSONオブジェクト形式の出力を強制してLLMから応答を取得します。失敗時は LlmServiceError を送出します。
     # Request and retrieve a chat completion response formatted strictly as a JSON object, raising LlmServiceError on failure.
     validate_model_name(model_name)
-    if is_gemini_model(model_name):
-        return _get_chat_completions_json_response(
-            client=gemini_client,
-            conversation_messages=conversation_messages,
-            model_name=model_name,
-            provider_name="Google Gemini",
-            missing_key_message="GEMINI_API_KEY が未設定です。",
-            fallback_message="Google Gemini JSON API call failed.",
-        )
+    if is_claude_model(model_name):
+        return get_claude_response(conversation_messages, model_name)
     if is_groq_model(model_name):
         return _get_chat_completions_json_response(
             client=groq_client,
@@ -1040,8 +1204,8 @@ def get_llm_response_stream(
     # 指定モデル名でストリーム可能なプロバイダを振り分けます。
     # Route streaming providers by model name and raise on invalid models.
     validate_model_name(model_name)
-    if is_gemini_model(model_name):
-        return get_gemini_response_stream(conversation_messages, model_name, tools=tools)
+    if is_claude_model(model_name):
+        return get_claude_response_stream(conversation_messages, model_name, tools=tools)
     if is_groq_model(model_name):
         return get_groq_response_stream(conversation_messages, model_name, tools=tools)
     if is_openai_model(model_name):

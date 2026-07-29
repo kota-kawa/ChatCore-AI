@@ -27,7 +27,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
         # 日本語: 制限超過を示すカウントと日付をセッションにセット
         # English: Set a count and date in the session indicating limit exhaustion
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
+            {"message": "こんにちは", "chat_room_id": "default", "model": "claude-haiku-4-5-20251001"},
             session={"free_chats_count": "999999", "free_chats_date": "2099-01-01"},
         )
 
@@ -58,7 +58,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
     # English: Verify that the custom error message from the guest limit is included in the 429 response.
     def test_chat_returns_429_when_guest_daily_limit_exceeded_with_custom_message(self):
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
+            {"message": "こんにちは", "chat_room_id": "default", "model": "claude-haiku-4-5-20251001"},
             session={},
         )
 
@@ -80,7 +80,7 @@ class ChatDailyLimitTestCase(unittest.TestCase):
     # English: Verify that the chat API returns 429 when the global LLM daily quota is exceeded.
     def test_chat_returns_429_when_global_daily_limit_exceeded(self):
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
+            {"message": "こんにちは", "chat_room_id": "default", "model": "claude-haiku-4-5-20251001"},
             session={},
         )
 

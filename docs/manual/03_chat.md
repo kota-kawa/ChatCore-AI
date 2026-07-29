@@ -23,9 +23,10 @@ section: 03
 
 | モデル | 特徴 |
 |--------|------|
-| Gemini 2.5 Flash | Google 製。バランスの良い応答速度と品質 |
+| Claude Haiku 4.5 | Anthropic 製。高速・軽量な応答モデル |
 | GPT OSS 20B (Groq) | 高速レスポンス |
-| GPT-5 Mini | OpenAI 製。軽量モデル |
+| Qwen 3.6 27B (Groq) | 高速な汎用応答モデル |
+| GPT-5.6 Luna | OpenAI 製。高スループット向けの軽量モデル |
 
 ## チャットルームの管理
 

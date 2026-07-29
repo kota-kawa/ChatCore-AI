@@ -114,14 +114,6 @@ const AI_MODEL_OPTION_GROUPS: { label: string; options: PromptComposerSelectOpti
     ]
   },
   {
-    label: "Google",
-    options: [
-      { value: "Gemini 3.1 Pro", label: "Gemini 3.1 Pro" },
-      { value: "Gemini 3.1 Flash", label: "Gemini 3.1 Flash" },
-      { value: "Gemini 2.0 Flash", label: "Gemini 2.0 Flash" }
-    ]
-  },
-  {
     label: "Meta",
     options: [
       { value: "Llama 4 Maverick", label: "Llama 4 Maverick" },

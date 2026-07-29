@@ -134,7 +134,7 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
         content_format: "prompt",
         media_type: "text",
         prompt_type: "text",
-        ai_model: "Gemini 2.5",
+        ai_model: "Claude Haiku 4.5",
         input_examples: "長い会議メモ",
         output_examples: "要点 / 決定事項 / 次のアクション",
         liked: false,
@@ -163,6 +163,6 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
   // カテゴリキーが表示ラベルへ解決されることを検証する
   // The category key must be resolved to its display label
   assert.match(html, /仕事・ビジネス/);
-  assert.match(html, /Gemini 2.5/);
+  assert.match(html, /Claude Haiku 4.5/);
   assert.match(html, /コピー/);
 });

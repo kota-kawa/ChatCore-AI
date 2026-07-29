@@ -131,7 +131,7 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             "prompt_type": "text",
             "input_examples": "",
             "output_examples": "",
-            "ai_model": "gemini",
+            "ai_model": "Claude Haiku 4.5",
         }
         parsed_response = {
             "suggested_fields": {
@@ -172,7 +172,7 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             "prompt_type": "text",
             "input_examples": "",
             "output_examples": "",
-            "ai_model": "gemini",
+            "ai_model": "Claude Haiku 4.5",
         }
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。

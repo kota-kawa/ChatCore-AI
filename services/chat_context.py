@@ -324,10 +324,10 @@ def build_context_messages(
 
     # タスク・プロフィール・プロジェクト指示などの可変システム文脈を読んだ後に、
     # 生成UIの完了条件を短く再提示する。OpenAI Responses APIでは developer
-    # message、Gemini互換APIでは system messageとして同じ位置関係を保つ。
+    # message、Claude APIでは先頭のsystem promptとして同じ位置関係を保つ。
     # Re-state the generative UI completion criteria after variable system
     # context. This becomes a developer message for OpenAI Responses and remains
-    # a system message for the Gemini-compatible API.
+    # a system prompt for the Claude API.
     messages.append(
         {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT}
     )

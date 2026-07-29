@@ -13,7 +13,7 @@ section: 13
 | **チャットルーム** | 1 つの会話スレッド。複数作成して話題を整理できる |
 | **タスク** | よく使うプロンプトをテンプレートとして登録したもの |
 | **プロンプト** | AI に送る指示文・質問文 |
-| **LLM** | Large Language Model（大規模言語モデル）。ChatGPT や Gemini のような AI モデルの総称 |
+| **LLM** | Large Language Model（大規模言語モデル）。ChatGPT や Claude のような AI モデルの総称 |
 | **SSE** | Server-Sent Events。AI のレスポンスをリアルタイムで少しずつ表示する通信技術 |
 | **Passkey** | 生体認証（指紋・顔認証）を使ったパスワードレスのログイン方式（WebAuthn） |
 | **WebAuthn** | Web 標準の認証 API。Passkey の基盤技術 |
