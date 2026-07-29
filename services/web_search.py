@@ -18,6 +18,7 @@ from typing import Any
 
 from services import http_client
 from services.llm import (
+    LIGHTWEIGHT_TASK_MODEL,
     LlmServiceError,
     get_llm_json_response,
     get_llm_response,
@@ -56,8 +57,7 @@ WEB_SEARCH_PLANNER_MAX_MESSAGES = 10
 WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL = 2
 WEB_SEARCH_PLANNER_REPAIR_ATTEMPTS_PER_MODEL = 1
-OPENAI_PLANNER_MODEL = "gpt-5.6-luna"
-CLAUDE_PLANNER_MODEL = "claude-haiku-4-5-20251001"
+WEB_SEARCH_PLANNER_MODEL = LIGHTWEIGHT_TASK_MODEL
 
 _SENSITIVE_MARKERS = (
     "api_key",
@@ -477,34 +477,10 @@ class _PlannerCandidate:
     supports_json_mode: bool
 
 
-def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
-    # 利用可能な環境変数に応じて、優先順にプランナーのLLM候補リストを作成する
-    # Build a list of planner LLM candidates in priority order based on available keys.
-    candidates: list[_PlannerCandidate] = []
-    seen: set[str] = set()
-
-    def add(model_name: str | None, *, supports_json_mode: bool) -> None:
-        normalized = str(model_name or "").strip()
-        if not normalized or normalized in seen:
-            return
-        seen.add(normalized)
-        candidates.append(
-            _PlannerCandidate(model=normalized, supports_json_mode=supports_json_mode)
-        )
-
-    # ユーザーが選択したプロバイダを優先し、別プロバイダのクォータ消費を避ける。
-    selected = str(selected_model or "").strip()
-    if selected:
-        add(selected, supports_json_mode=True)
-
-    # 選択モデルが失敗した場合のフォールバック候補。
-    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
-        add(CLAUDE_PLANNER_MODEL, supports_json_mode=True)
-    if os.environ.get("OPENAI_API_KEY", "").strip():
-        add(OPENAI_PLANNER_MODEL, supports_json_mode=True)
-    if os.environ.get("GROQ_API_KEY", "").strip():
-        add("openai/gpt-oss-120b", supports_json_mode=True)
-    return candidates
+def _planner_candidates() -> list[_PlannerCandidate]:
+    # 検索要否判定は常に軽量モデルだけで実行し、会話モデルや他プロバイダを消費しない。
+    # Run search planning exclusively on the lightweight model, never on the selected chat model.
+    return [_PlannerCandidate(model=WEB_SEARCH_PLANNER_MODEL, supports_json_mode=True)]
 
 
 _PLANNER_SYSTEM_PROMPT = (
@@ -647,7 +623,7 @@ def _repair_planner_output(
 
 def decide_web_search(
     conversation_messages: list[dict[str, str]],
-    model: str,
+    _selected_model: str,
 ) -> WebSearchDecision:
     # 会話履歴をもとにWeb検索を実行するか判断し、クエリを作成するメイン決定フロー
     # Main decision flow to determine if a web search is needed based on conversation.
@@ -657,9 +633,7 @@ def decide_web_search(
 
     planner_messages = _build_planner_messages(conversation_messages)
 
-    # まずユーザーが選んだモデルで判断し、失敗した時だけ利用可能な別プロバイダに逃がす。
-    # 通常回答と planner で別プロバイダの quota を消費するのを避けるため。
-    for candidate in _planner_candidates(model):
+    for candidate in _planner_candidates():
         loaded = _invoke_planner(candidate, planner_messages)
         if loaded is not None:
             return _parse_decision_payload(loaded, user_message)

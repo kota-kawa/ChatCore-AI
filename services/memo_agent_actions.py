@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Literal
 
-from services.llm import GPT_OSS_20B_LEGACY_MODEL, get_llm_response
+from services.llm import LIGHTWEIGHT_TASK_MODEL, get_llm_response
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def classify_memo_intent(message: str) -> MemoIntent:
     # 日本語: LLMで分類し、失敗時は安全側のqa（メモを書き換えない）へフォールバックします。
     # English: Classify with the LLM, falling back to the safe "qa" (no rewrite) on failure.
     try:
-        response = get_llm_response(messages, GPT_OSS_20B_LEGACY_MODEL)
+        response = get_llm_response(messages, LIGHTWEIGHT_TASK_MODEL)
         intent = _parse_memo_intent(response or "")
         if intent is not None:
             return intent

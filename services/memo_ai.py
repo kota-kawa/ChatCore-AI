@@ -8,9 +8,9 @@ import logging
 import re
 from typing import Any
 
-from .llm import GROQ_MODEL, LlmProviderError, groq_client, get_llm_response
+from .llm import LIGHTWEIGHT_TASK_MODEL, LlmProviderError, groq_client, get_llm_response
 
-MEMO_SUGGEST_MODEL = GROQ_MODEL
+MEMO_SUGGEST_MODEL = LIGHTWEIGHT_TASK_MODEL
 EMBEDDING_MODEL = "nomic-embed-text-v1_5"
 EMBEDDING_DIMENSIONS = 768
 EMBEDDING_MAX_INPUT_CHARS = 8000

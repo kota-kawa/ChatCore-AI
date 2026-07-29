@@ -5,7 +5,7 @@ import logging
 import re
 from collections.abc import Callable
 
-from .llm import LlmServiceError, get_llm_response
+from .llm import LIGHTWEIGHT_TASK_MODEL, LlmServiceError, get_llm_response
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,6 @@ def build_initial_title_candidates(
 def generate_chat_room_title(
     user_message: str,
     assistant_response: str,
-    model: str,
     *,
     llm_response_getter: Callable[..., str] = get_llm_response,
 ) -> str:
@@ -108,7 +107,7 @@ def generate_chat_room_title(
     ]
 
     try:
-        raw_title = llm_response_getter(messages, model)
+        raw_title = llm_response_getter(messages, LIGHTWEIGHT_TASK_MODEL)
     except LlmServiceError as exc:
         logger.warning("Failed to generate chat room title with LLM: %s", exc)
         return ""
@@ -126,11 +125,10 @@ def maybe_auto_title_chat_room(
     chat_room_id: str,
     user_message: str,
     assistant_response: str,
-    model: str,
     allowed_current_titles: list[str],
     conditional_rename: Callable[[str, str, list[str]], bool],
 ) -> str | None:
-    title = generate_chat_room_title(user_message, assistant_response, model)
+    title = generate_chat_room_title(user_message, assistant_response)
     if not title:
         return None
     if title in allowed_current_titles:

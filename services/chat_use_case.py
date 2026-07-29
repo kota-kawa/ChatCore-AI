@@ -551,7 +551,6 @@ class ChatPostUseCase:
                         chat_room_id=chat_room_id,
                         user_message=user_message,
                         assistant_response=response,
-                        model=model,
                         allowed_current_titles=title_candidates,
                         conditional_rename=deps.rename_chat_room_if_current_title_in,
                     )
@@ -753,7 +752,6 @@ class ChatPostUseCase:
                     chat_room_id=chat_room_id,
                     user_message=user_message,
                     assistant_response=bot_reply,
-                    model=model,
                     allowed_current_titles=title_candidates,
                     conditional_rename=deps.rename_chat_room_if_current_title_in,
                 )
