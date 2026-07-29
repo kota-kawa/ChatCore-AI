@@ -239,25 +239,25 @@ export const THINKING_CONSTELLATION_VARIANTS: ThinkingConstellationVariant[] = [
 export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "openai/gpt-oss-120b",
-    label: "GROQ | GPT-OSS 120B",
+    label: "GPT-OSS 120B",
     descriptionKey: "chat.modelStandard",
     shortLabel: "GPT-OSS 120B",
   },
   {
     value: "qwen/qwen3.6-27b",
-    label: "GROQ | Qwen 3.6 27B",
+    label: "Qwen 3.6 27B",
     descriptionKey: "chat.modelStandard",
     shortLabel: "Qwen 3.6 27B",
   },
   {
     value: "gpt-5.6-luna",
-    label: "OPENAI | GPT-5.6 Luna",
+    label: "GPT-5.6 Luna",
     descriptionKey: "chat.modelReasoning",
     shortLabel: "GPT-5.6 Luna",
   },
   {
     value: "claude-haiku-4-5-20251001",
-    label: "ANTHROPIC | Claude Haiku 4.5",
+    label: "Claude Haiku 4.5",
     descriptionKey: "chat.modelLightweight",
     shortLabel: "Claude Haiku 4.5",
   },
