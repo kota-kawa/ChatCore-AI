@@ -3,7 +3,7 @@ import { enMessages } from "../lib/i18n/catalogs/en";
 import { jaMessages, type MessageKey } from "../lib/i18n/catalogs/ja";
 import {
   DEFAULT_LOCALE, LOCALE_CHANGE_EVENT, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY,
-  normalizeLocale, type Locale
+  normalizeLocale, readLocaleCookie, type Locale
 } from "../lib/i18n/config";
 
 type TranslationValues = Record<string, string | number>;
@@ -23,10 +23,25 @@ function interpolate(message: string, values?: TranslationValues) {
   return message.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
 }
 
+// setLocale直後にawaitを挟んで表示するメッセージは、React再レンダリング前のためcontextの`t`が
+// 旧ロケールのクロージャのままになる。呼び出し側が対象ロケールを明示できるよう公開する。
+// Messages shown right after setLocale (past an await) can't rely on context `t` — that closure
+// still reflects the pre-render locale. Expose a locale-explicit translator for those call sites.
+export function translate(locale: Locale, key: MessageKey, values?: TranslationValues) {
+  return interpolate(catalogs[locale][key] ?? jaMessages[key], values);
+}
+
 function persistLocale(locale: Locale) {
   if (typeof document === "undefined") return;
   document.cookie = `${LOCALE_COOKIE_NAME}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
   try { window.localStorage.setItem(LOCALE_STORAGE_KEY, locale); } catch { /* storage can be unavailable */ }
+}
+
+function readPersistedLocale(): Locale | null {
+  if (typeof document === "undefined") return null;
+  const fromCookie = readLocaleCookie(document.cookie);
+  if (fromCookie) return fromCookie;
+  try { return normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY)); } catch { return null; }
 }
 
 const fallbackContext: LocaleContextValue = {
@@ -61,6 +76,24 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    // 設定画面への遷移はプレーンな<a>リンクによるフルページ遷移のため、ブラウザの
+    // bfcacheから元ページが復元されると、そのページのJSは実行されず旧ロケールの
+    // まま表示され続ける。bfcache復元時（pageshowのpersisted）に永続化済みの値へ
+    // 再同期し、リロードなしで正しい言語を反映する。
+    // Navigating to Settings is a full-page load via a plain <a> link, so when the
+    // browser restores the previous page from bfcache, its JS doesn't re-run and it
+    // keeps showing the old locale. Resync from the persisted value on bfcache
+    // restore (pageshow's persisted flag) so the correct language shows without a reload.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      const persisted = readPersistedLocale();
+      if (persisted) setLocaleState((current) => (current === persisted ? current : persisted));
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
 
   const value = useMemo<LocaleContextValue>(() => ({

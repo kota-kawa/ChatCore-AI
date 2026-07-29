@@ -49,7 +49,7 @@ import {
   updateMcpOAuthConnectionDisplayName,
   updateLocalePreference
 } from "../scripts/user/settings/api";
-import { useTranslation } from "../contexts/locale_context";
+import { translate, useTranslation } from "../contexts/locale_context";
 import type { Locale } from "../lib/i18n/config";
 import type {
   EditPromptFormState,
@@ -237,15 +237,20 @@ export default function UserSettingsPage() {
     setLocale(nextLocale);
     setLocaleSaving(true);
     try {
-      setLocale(await updateLocalePreference(nextLocale));
-      showToast(t("settings.languageSaved"), { variant: "success" });
+      const savedLocale = await updateLocalePreference(nextLocale);
+      setLocale(savedLocale);
+      // このコールバックのクロージャが持つ`t`はクリック時点（切り替え前）のロケールに
+      // 束縛されたままなので、トーストの文言はここでは切り替え後のロケールを明示して取得する。
+      // This closure's `t` stays bound to the pre-switch locale, so fetch the toast copy
+      // with the post-switch locale explicitly rather than relying on `t`.
+      showToast(translate(savedLocale, "settings.languageSaved"), { variant: "success" });
     } catch (error) {
       setLocale(previousLocale);
-      showToast(t("settings.languageSaveFailed"), { variant: "error" });
+      showToast(translate(previousLocale, "settings.languageSaveFailed"), { variant: "error" });
     } finally {
       setLocaleSaving(false);
     }
-  }, [locale, localeSaving, setLocale, t]);
+  }, [locale, localeSaving, setLocale]);
 
   // ユーザーが投稿したプロンプト一覧を取得する
   // Fetch the list of prompts authored by the current user
