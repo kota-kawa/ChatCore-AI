@@ -86,27 +86,66 @@ describe("locale switching", () => {
     expect(translate("en", "settings.languageSaved")).toBe("Display language updated.");
   });
 
-  // 設定画面への遷移はプレーンリンクによるフルページ遷移のため、ブラウザバック時に
-  // bfcacheから元ページが復元されるとJSが再実行されず古い言語のままになっていた。
-  // pageshow(persisted)で永続化済みの値へ再同期し、リロードなしで反映されることを検証する。
-  // Navigating to Settings is a full-page load, so a bfcache-restored previous page kept
-  // showing the old language until reload. Verify pageshow(persisted) resyncs from the
-  // persisted value without requiring a reload.
-  it("resyncs the locale from the persisted cookie when the page is restored from bfcache", () => {
-    render(<LocaleProvider initialLocale="ja"><LocaleHarness /></LocaleProvider>);
-
-    expect(screen.getByTestId("locale")).toHaveTextContent("ja");
-
-    // 別ページ（設定画面）でロケールがenへ変更され、cookieへ永続化された状態を模す
-    // Simulate another page (Settings) having changed the locale and persisted it to the cookie
-    document.cookie = `${LOCALE_COOKIE_NAME}=en; Path=/`;
-
+  // bfcache復元をシミュレートする（ブラウザバックで元ページが凍結解除された状態）
+  // Simulate a bfcache restore (the previous page unfrozen by a browser back navigation)
+  function dispatchBfcacheRestore() {
     act(() => {
       const event = new Event("pageshow") as PageTransitionEvent;
       Object.defineProperty(event, "persisted", { value: true });
       window.dispatchEvent(event);
     });
+  }
 
+  // 設定画面への遷移はプレーンリンクによるフルページ遷移のため、ブラウザバック時に
+  // bfcacheから復元される元ページは、SSR済みHTML・バニラJSのDOM・取得済みAPIデータが
+  // すべて旧言語のまま。Reactのstateだけを差し替えると言語が混在して表示が崩れるため、
+  // ページ全体を再読み込みして一貫した状態に戻すことを検証する。
+  // Navigating to Settings is a full-page load, so the previous page restored from
+  // bfcache still has its SSR'd HTML, vanilla-rendered DOM, and fetched API data in the
+  // old language. Swapping only the React state yields a mixed-language, broken layout,
+  // so verify the provider reloads the page to restore a consistent state.
+  it("reloads a bfcache-restored page when the locale changed in another document", () => {
+    const reload = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, reload } as Location);
+    render(<LocaleProvider initialLocale="ja"><LocaleHarness /></LocaleProvider>);
+
+    // 別ページ（設定画面）でロケールがenへ変更され、cookieへ永続化された状態を模す
+    // Simulate another page (Settings) having changed the locale and persisted it to the cookie
+    document.cookie = `${LOCALE_COOKIE_NAME}=en; Path=/`;
+    dispatchBfcacheRestore();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // 言語が変わっていない通常のブラウザバックまで再読み込みすると、入力中の内容が
+  // 失われ体験を損なうため、差分があるときだけ再読み込みすることを検証する。
+  // Reloading on every back navigation would discard in-progress input, so verify the
+  // reload only happens when the persisted locale actually differs.
+  it("leaves a bfcache-restored page untouched when the locale did not change", () => {
+    const reload = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, reload } as Location);
+    document.cookie = `${LOCALE_COOKIE_NAME}=ja; Path=/`;
+    render(<LocaleProvider initialLocale="ja"><LocaleHarness /></LocaleProvider>);
+
+    dispatchBfcacheRestore();
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(screen.getByTestId("locale")).toHaveTextContent("ja");
+  });
+
+  // 同一文書内で切り替えた直後の復元では、既にその言語で描画済みなので再読み込みしない。
+  // A restore right after an in-document switch must not reload — the page already renders
+  // in that language.
+  it("does not reload after an in-document locale switch", () => {
+    const reload = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, reload } as Location);
+    render(<LocaleProvider initialLocale="ja"><LocaleHarness /></LocaleProvider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "switch" }));
     expect(screen.getByTestId("locale")).toHaveTextContent("en");
+
+    dispatchBfcacheRestore();
+
+    expect(reload).not.toHaveBeenCalled();
   });
 });

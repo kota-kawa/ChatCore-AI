@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { enMessages } from "../lib/i18n/catalogs/en";
 import { jaMessages, type MessageKey } from "../lib/i18n/catalogs/ja";
 import {
@@ -57,12 +57,19 @@ const fallbackContext: LocaleContextValue = {
 
 export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { initialLocale?: Locale; children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  // この文書が実際に描画されているロケール。bfcache復元時に永続化済みの値と比べ、
+  // 同一文書内での切り替え（再読み込み不要）と、別文書での切り替えを区別する。
+  // The locale this document is actually rendered in. Compared against the persisted
+  // value on bfcache restore to tell an in-document switch (no reload needed) apart
+  // from one made in another document.
+  const renderedLocaleRef = useRef<Locale>(initialLocale);
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
     persistLocale(nextLocale);
   }, []);
 
   useEffect(() => {
+    renderedLocaleRef.current = locale;
     document.documentElement.lang = locale;
     document.documentElement.setAttribute("data-locale", locale);
     window.dispatchEvent(new CustomEvent(LOCALE_CHANGE_EVENT, { detail: { locale } }));
@@ -79,18 +86,23 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
   }, []);
 
   useEffect(() => {
-    // 設定画面への遷移はプレーンな<a>リンクによるフルページ遷移のため、ブラウザの
-    // bfcacheから元ページが復元されると、そのページのJSは実行されず旧ロケールの
-    // まま表示され続ける。bfcache復元時（pageshowのpersisted）に永続化済みの値へ
-    // 再同期し、リロードなしで正しい言語を反映する。
-    // Navigating to Settings is a full-page load via a plain <a> link, so when the
-    // browser restores the previous page from bfcache, its JS doesn't re-run and it
-    // keeps showing the old locale. Resync from the persisted value on bfcache
-    // restore (pageshow's persisted flag) so the correct language shows without a reload.
+    // 設定画面への遷移はプレーンな<a>リンクによるフルページ遷移のため、言語変更後に
+    // 戻ると、ブラウザは旧言語のページをbfcacheからそのまま復元する。ここでReactの
+    // stateだけを新しい言語へ差し替えると、SSR済みHTML・バニラJSが構築したDOM・
+    // 取得済みAPIデータ（SWRキャッシュ）は旧言語のまま残るため、言語が混在して
+    // レイアウトが崩れる。ページ全体を再読み込みして一貫した状態へ戻すことで、
+    // 利用者が手動で再読込しなくても新しい言語が正しく反映される。
+    // Settings is reached by a full page load, so after a language change the browser
+    // restores the previous page from bfcache still in the old language. Swapping only
+    // the React state would leave the SSR'd HTML, vanilla-rendered DOM, and already
+    // fetched API data (SWR cache) in the old language — a mixed-language page with a
+    // broken layout. Reload instead so the page comes back fully consistent, without
+    // the user having to reload by hand.
     const onPageShow = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
       const persisted = readPersistedLocale();
-      if (persisted) setLocaleState((current) => (current === persisted ? current : persisted));
+      if (!persisted || persisted === renderedLocaleRef.current) return;
+      window.location.reload();
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
