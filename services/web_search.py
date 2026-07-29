@@ -56,10 +56,8 @@ WEB_SEARCH_PLANNER_MAX_MESSAGES = 10
 WEB_SEARCH_PLANNER_MAX_CONTEXT_CHARS = 8000
 WEB_SEARCH_PLANNER_ATTEMPTS_PER_MODEL = 2
 WEB_SEARCH_PLANNER_REPAIR_ATTEMPTS_PER_MODEL = 1
-OPENAI_PLANNER_MODEL = (
-    os.environ.get("OPENAI_PLANNER_MODEL", "gpt-5-mini").strip()
-    or "gpt-5-mini"
-)
+OPENAI_PLANNER_MODEL = "gpt-5.6-luna"
+CLAUDE_PLANNER_MODEL = "claude-haiku-4-5-20251001"
 
 _SENSITIVE_MARKERS = (
     "api_key",
@@ -500,18 +498,12 @@ def _planner_candidates(selected_model: str) -> list[_PlannerCandidate]:
         add(selected, supports_json_mode=True)
 
     # 選択モデルが失敗した場合のフォールバック候補。
-    if os.environ.get("GEMINI_API_KEY", "").strip():
-        add(
-            os.environ.get("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash"),
-            supports_json_mode=True,
-        )
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        add(CLAUDE_PLANNER_MODEL, supports_json_mode=True)
     if os.environ.get("OPENAI_API_KEY", "").strip():
         add(OPENAI_PLANNER_MODEL, supports_json_mode=True)
     if os.environ.get("GROQ_API_KEY", "").strip():
-        add(
-            os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"),
-            supports_json_mode=True,
-        )
+        add("openai/gpt-oss-120b", supports_json_mode=True)
     return candidates
 
 

@@ -243,11 +243,11 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertTrue(payload["pagination"]["has_more"])
         self.assertEqual(payload["pagination"]["next_before_id"], 2)
 
-    # 日本語: Geminiモデルが指定された場合に、チャットAPIがストリーミング応答(StreamingResponse)を返すことを検証します。
-    # English: Verify that the chat API returns a StreamingResponse when a Gemini model is specified.
-    def test_chat_returns_streaming_response_for_gemini(self):
+    # 日本語: Claudeモデルが指定された場合に、チャットAPIがストリーミング応答(StreamingResponse)を返すことを検証します。
+    # English: Verify that the chat API returns a StreamingResponse when a Claude model is specified.
+    def test_chat_returns_streaming_response_for_claude(self):
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "default", "model": "gemini-2.5-flash"},
+            {"message": "こんにちは", "chat_room_id": "default", "model": "claude-haiku-4-5-20251001"},
             session={},
         )
 
@@ -330,7 +330,7 @@ class ChatStreamingTestCase(unittest.TestCase):
     # English: Verify that a streaming generation error discards a guest room when there is no assistant reply.
     def test_streaming_generation_error_discards_guest_room_without_assistant_reply(self):
         request = make_request(
-            {"message": "こんにちは", "chat_room_id": "room-guest", "model": "gemini-2.5-flash"},
+            {"message": "こんにちは", "chat_room_id": "room-guest", "model": "claude-haiku-4-5-20251001"},
             session={},
         )
 
@@ -898,7 +898,7 @@ class ChatStreamingTestCase(unittest.TestCase):
             job = start_generation_job(
                 "guest:sid-1:default",
                 conversation_messages=[{"role": "user", "content": "こんにちは"}],
-                model="gpt-5-mini",
+                model="gpt-5.6-luna",
                 persist_response=lambda _: None,
             )
             body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
@@ -1144,7 +1144,7 @@ class ChatStreamingTestCase(unittest.TestCase):
         request = build_request(
             method="POST",
             path="/api/chat_regenerate",
-            json_body={"chat_room_id": "room-1", "model": "gemini-2.5-flash"},
+            json_body={"chat_room_id": "room-1", "model": "claude-haiku-4-5-20251001"},
             session={"user_id": 42},
         )
 
@@ -1200,7 +1200,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 "chat_room_id": "room-1",
                 "new_message": "この資料を短く要約して",
                 "trailing_user_count": 0,
-                "model": "gemini-2.5-flash",
+                "model": "claude-haiku-4-5-20251001",
             },
             session={"user_id": 42},
         )

@@ -234,7 +234,7 @@ class ChatTemporaryModeTestCase(unittest.TestCase):
         request = build_request(
             method="POST",
             path="/api/chat",
-            json_body={"message": "こんにちは", "chat_room_id": "temp-room", "model": "gpt-5-mini"},
+            json_body={"message": "こんにちは", "chat_room_id": "temp-room", "model": "gpt-5.6-luna"},
             session={"user_id": 11},
         )
 

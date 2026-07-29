@@ -84,7 +84,7 @@ const PRIVACY_SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>LLM API（Groq、Google Geminiなど）</strong>
+            <strong>LLM API（Groq、Anthropic Claudeなど）</strong>
             ：AIチャットの応答を生成するため、会話内容が送信されます。応答生成以外の目的で提供することはありません。
           </li>
           <li>

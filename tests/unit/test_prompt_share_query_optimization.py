@@ -75,7 +75,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
                     "author": "tester",
                     "input_examples": "",
                     "output_examples": "",
-                    "ai_model": "gemini",
+                    "ai_model": "Claude Haiku 4.5",
                     "prompt_type": "text",
                     "reference_image_url": None,
                     "created_at": "2024-01-01T00:00:00",

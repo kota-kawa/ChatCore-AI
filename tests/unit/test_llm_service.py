@@ -108,6 +108,70 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertIn("説明文だけで終える回答は未完了", prepared[1]["content"])
         self.assertEqual(prepared[2]["role"], "user")
 
+    def test_prepare_claude_messages_converts_system_and_tool_history(self):
+        """Claude Messages APIのsystem promptとツール履歴変換を検証する。"""
+        system_prompt, messages = llm._prepare_claude_messages(
+            [
+                {"role": "system", "content": "You are helpful."},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": '{"query":"Claude"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-1",
+                    "content": '{"status":"completed"}',
+                },
+            ]
+        )
+
+        self.assertEqual(system_prompt, "You are helpful.")
+        self.assertEqual(messages[0]["role"], "assistant")
+        self.assertEqual(messages[0]["content"][0]["type"], "tool_use")
+        self.assertEqual(messages[0]["content"][0]["input"], {"query": "Claude"})
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertEqual(messages[1]["content"][0]["type"], "tool_result")
+
+    def test_model_constants_ignore_model_environment_variables(self):
+        with patch.dict(
+            llm.os.environ,
+            {
+                "GROQ_MODEL": "env-groq-model",
+                "OPENAI_DEFAULT_MODEL": "env-openai-model",
+                "CLAUDE_DEFAULT_MODEL": "env-claude-model",
+            },
+            clear=False,
+        ):
+            self.assertEqual(llm.GROQ_MODEL, llm.GPT_OSS_120B_MODEL)
+            self.assertEqual(llm.OPENAI_DEFAULT_MODEL, llm.GPT_5_6_LUNA_MODEL)
+            self.assertEqual(llm.CLAUDE_DEFAULT_MODEL, llm.CLAUDE_HAIKU_4_5_MODEL)
+
+    def test_get_claude_response_redacts_anthropic_api_keys(self):
+        mock_claude = MagicMock()
+        mock_claude.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="ok")]
+        )
+
+        with patch.object(llm, "claude_client", mock_claude):
+            response = llm.get_claude_response(
+                [{"role": "user", "content": "token=sk-ant-abcdefghijklmnopqrstuvwxyz0123456789"}],
+                llm.CLAUDE_HAIKU_4_5_MODEL,
+            )
+
+        self.assertEqual(response, "ok")
+        sent_content = mock_claude.messages.create.call_args.kwargs["messages"][0]["content"]
+        self.assertNotIn("sk-ant-", sent_content)
+        self.assertIn("REDACTED-SENSITIVE", sent_content)
+
     def test_get_llm_response_routes_to_groq(self):
         """
         モデル名がGroqのものだった場合に、Groqクライアントへ正しく振り分けられることを検証します。
@@ -129,40 +193,42 @@ class LlmServiceTestCase(unittest.TestCase):
         self.assertEqual(response, "groq-ok")
         mock_groq.chat.completions.create.assert_called_once()
 
-    def test_get_llm_response_routes_to_gemini(self):
-        """
-        モデル名がGeminiのものだった場合に、Geminiクライアントへ正しく振り分けられることを検証します。
-        Verify that requests are correctly routed to the Gemini client when the model name matches a Gemini model.
-        """
-        # Geminiクライアントのモック作成
-        # Create a mock for the Gemini client
-        mock_gemini = MagicMock()
-        mock_gemini.chat.completions.create.return_value = _mock_openai_response(
-            "gemini-ok"
-        )
+    def test_get_llm_response_routes_qwen_to_groq(self):
+        mock_groq = MagicMock()
+        mock_groq.chat.completions.create.return_value = _mock_openai_response("qwen-ok")
 
-        with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "groq_client", mock_groq):
             response = llm.get_llm_response(
                 [{"role": "user", "content": "hello"}],
-                "gemini-2.5-flash",
+                llm.QWEN_3_6_27B_MODEL,
             )
 
-        # レスポンスおよび呼び出し履歴の検証
-        # Assert the response and the invocation
-        self.assertEqual(response, "gemini-ok")
-        mock_gemini.chat.completions.create.assert_called_once()
+        self.assertEqual(response, "qwen-ok")
+        self.assertEqual(
+            mock_groq.chat.completions.create.call_args.kwargs["model"],
+            llm.QWEN_3_6_27B_MODEL,
+        )
 
-    def test_gemini_api_key_reads_standard_uppercase_env_name(self):
+    def test_get_llm_response_routes_to_claude(self):
         """
-        環境変数からGemini APIキーを読み取る際、標準的な大文字のGEMINI_API_KEYが使用されることを検証します。
-        Verify that the standard uppercase GEMINI_API_KEY environment variable is used.
+        Claudeモデルが指定された場合に、Claudeクライアントへ正しく振り分けられることを検証します。
+        Verify that requests are correctly routed to the Claude client when the model name matches a Claude model.
         """
-        with patch.dict(
-            llm.os.environ,
-            {"GEMINI_API_KEY": "standard-key"},
-            clear=False,
-        ):
-            self.assertEqual(llm._get_gemini_api_key(), "standard-key")
+        mock_claude = MagicMock()
+        mock_claude.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="claude-ok")]
+        )
+
+        with patch.object(llm, "claude_client", mock_claude):
+            response = llm.get_llm_response(
+                [{"role": "user", "content": "hello"}],
+                llm.CLAUDE_HAIKU_4_5_MODEL,
+            )
+
+        self.assertEqual(response, "claude-ok")
+        request_kwargs = mock_claude.messages.create.call_args.kwargs
+        self.assertEqual(request_kwargs["model"], llm.CLAUDE_HAIKU_4_5_MODEL)
+        self.assertEqual(request_kwargs["messages"], [{"role": "user", "content": "hello"}])
 
     def test_get_llm_response_routes_to_openai_responses(self):
         """
@@ -180,14 +246,17 @@ class LlmServiceTestCase(unittest.TestCase):
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": "hello"},
                 ],
-                llm.GPT_5_MINI_MODEL,
+                llm.GPT_5_6_LUNA_MODEL,
             )
 
         # レスポンスおよび渡されたパラメータの検証
         # Assert the response and passed parameters
         self.assertEqual(response, "openai-ok")
         mock_openai.responses.create.assert_called_once()
-        passed_messages = mock_openai.responses.create.call_args.kwargs["input"]
+        response_kwargs = mock_openai.responses.create.call_args.kwargs
+        self.assertEqual(response_kwargs["model"], llm.GPT_5_6_LUNA_MODEL)
+        self.assertEqual(response_kwargs["reasoning"], {"effort": "none"})
+        passed_messages = response_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         self.assertTrue(
             passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
@@ -245,90 +314,90 @@ class LlmServiceTestCase(unittest.TestCase):
                     llm.GROQ_MODEL,
                 )
 
-    def test_get_gemini_response_wraps_provider_error_as_exception(self):
+    def test_get_claude_response_wraps_provider_error_as_exception(self):
         """
         プロバイダー呼び出し時に例外が発生した場合、一般的なプロバイダーエラーとしてラップされることを検証します。
-        Verify that raw runtime exceptions from Gemini are wrapped as LlmProviderError.
+        Verify that raw runtime exceptions from Claude are wrapped as LlmProviderError.
         """
-        mock_gemini = MagicMock()
-        mock_gemini.chat.completions.create.side_effect = RuntimeError("provider down")
+        mock_claude = MagicMock()
+        mock_claude.messages.create.side_effect = RuntimeError("provider down")
 
-        with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "claude_client", mock_claude):
             with self.assertRaises(llm.LlmProviderError):
-                llm.get_gemini_response(
+                llm.get_claude_response(
                     [{"role": "user", "content": "hello"}],
-                    "gemini-2.5-flash",
+                    llm.CLAUDE_HAIKU_4_5_MODEL,
                 )
 
-    def test_get_gemini_response_maps_rate_limit_error(self):
+    def test_get_claude_response_maps_rate_limit_error(self):
         """
         レートリミットエラーが発生した際、適切にリトライ可能なLlmRateLimitErrorにマップされることを検証します。
-        Verify that RateLimitError from Gemini is mapped to LlmRateLimitError (which is retryable).
+        Verify that RateLimitError from Claude is mapped to LlmRateLimitError (which is retryable).
         """
         # レートリミットエラー用のモッククラス
         # Mock class for RateLimitError
         class FakeRateLimitError(Exception):
             pass
 
-        mock_gemini = MagicMock()
-        mock_gemini.chat.completions.create.side_effect = FakeRateLimitError("rate limit")
+        mock_claude = MagicMock()
+        mock_claude.messages.create.side_effect = FakeRateLimitError("rate limit")
 
-        with patch.object(llm, "RateLimitError", FakeRateLimitError):
-            with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "AnthropicRateLimitError", FakeRateLimitError):
+            with patch.object(llm, "claude_client", mock_claude):
                 with self.assertRaises(llm.LlmRateLimitError) as cm:
-                    llm.get_gemini_response(
+                    llm.get_claude_response(
                         [{"role": "user", "content": "hello"}],
-                        "gemini-2.5-flash",
+                        llm.CLAUDE_HAIKU_4_5_MODEL,
                     )
 
         # エラーがリトライ可能であるかの検証
         # Assert that the error is marked retryable
         self.assertTrue(llm.is_retryable_llm_error(cm.exception))
 
-    def test_get_gemini_response_maps_timeout_error(self):
+    def test_get_claude_response_maps_timeout_error(self):
         """
         タイムアウトエラーが発生した際、適切にリトライ可能なLlmTimeoutErrorにマップされることを検証します。
-        Verify that APITimeoutError from Gemini is mapped to LlmTimeoutError (which is retryable).
+        Verify that APITimeoutError from Claude is mapped to LlmTimeoutError (which is retryable).
         """
         # タイムアウトエラー用のモッククラス
         # Mock class for APITimeoutError
         class FakeTimeoutError(Exception):
             pass
 
-        mock_gemini = MagicMock()
-        mock_gemini.chat.completions.create.side_effect = FakeTimeoutError("timeout")
+        mock_claude = MagicMock()
+        mock_claude.messages.create.side_effect = FakeTimeoutError("timeout")
 
-        with patch.object(llm, "APITimeoutError", FakeTimeoutError):
-            with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "AnthropicAPITimeoutError", FakeTimeoutError):
+            with patch.object(llm, "claude_client", mock_claude):
                 with self.assertRaises(llm.LlmTimeoutError) as cm:
-                    llm.get_gemini_response(
+                    llm.get_claude_response(
                         [{"role": "user", "content": "hello"}],
-                        "gemini-2.5-flash",
+                        llm.CLAUDE_HAIKU_4_5_MODEL,
                     )
 
         # エラーがリトライ可能であるかの検証
         # Assert that the error is marked retryable
         self.assertTrue(llm.is_retryable_llm_error(cm.exception))
 
-    def test_get_gemini_response_maps_authentication_error(self):
+    def test_get_claude_response_maps_authentication_error(self):
         """
         認証エラーが発生した際、リトライ不可なLlmAuthenticationErrorにマップされることを検証します。
-        Verify that AuthenticationError from Gemini is mapped to LlmAuthenticationError (which is not retryable).
+        Verify that AuthenticationError from Claude is mapped to LlmAuthenticationError (which is not retryable).
         """
         # 認証エラー用のモッククラス
         # Mock class for AuthenticationError
         class FakeAuthError(Exception):
             pass
 
-        mock_gemini = MagicMock()
-        mock_gemini.chat.completions.create.side_effect = FakeAuthError("auth")
+        mock_claude = MagicMock()
+        mock_claude.messages.create.side_effect = FakeAuthError("auth")
 
-        with patch.object(llm, "AuthenticationError", FakeAuthError):
-            with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "AnthropicAuthenticationError", FakeAuthError):
+            with patch.object(llm, "claude_client", mock_claude):
                 with self.assertRaises(llm.LlmAuthenticationError) as cm:
-                    llm.get_gemini_response(
+                    llm.get_claude_response(
                         [{"role": "user", "content": "hello"}],
-                        "gemini-2.5-flash",
+                        llm.CLAUDE_HAIKU_4_5_MODEL,
                     )
 
         # 認証エラーはリトライ不可であることを検証
@@ -344,61 +413,79 @@ class LlmServiceTestCase(unittest.TestCase):
             with self.assertRaises(llm.LlmConfigurationError):
                 llm.get_openai_response(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_MODEL,
+                    llm.GPT_5_6_LUNA_MODEL,
                 )
 
-    def test_get_gemini_response_stream_yields_chunks_and_closes_stream(self):
+    def test_get_claude_response_stream_yields_chunks_and_closes_stream(self):
         """
-        Geminiでのストリーミング出力時に、テキスト差分が順次出力され、最後にストリームがクローズされることを検証します。
-        Verify that Gemini streaming yields text deltas and closes the connection at the end.
+        Claudeでのストリーミング出力時に、テキスト差分が順次出力され、最後にストリームがクローズされることを検証します。
+        Verify that Claude streaming yields text deltas and closes the connection at the end.
         """
-        mock_gemini = MagicMock()
+        mock_claude = MagicMock()
         mock_stream = _MockStream(
-            _mock_stream_chunk("gemini"),
-            _mock_stream_chunk(None),
-            _mock_stream_chunk("-stream"),
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(type="text_delta", text="claude"),
+            ),
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(type="text_delta", text="-stream"),
+            ),
         )
-        mock_gemini.chat.completions.create.return_value = mock_stream
+        mock_claude.messages.create.return_value = mock_stream
 
-        with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "claude_client", mock_claude):
             response = list(
-                llm.get_gemini_response_stream(
+                llm.get_claude_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    "gemini-2.5-flash",
+                    llm.CLAUDE_HAIKU_4_5_MODEL,
                 )
             )
 
-        # 差分テキストの検証およびストリームの終了の検証
-        # Assert that text deltas are correctly output and the stream is closed
-        self.assertEqual(response, ["gemini", "-stream"])
+        self.assertEqual(response, ["claude", "-stream"])
         self.assertTrue(mock_stream.closed)
-        self.assertTrue(mock_gemini.chat.completions.create.call_args.kwargs["stream"])
+        self.assertTrue(mock_claude.messages.create.call_args.kwargs["stream"])
 
-    def test_get_gemini_response_stream_sends_tool_choice_when_tools_are_present(self):
+    def test_get_claude_response_stream_converts_function_tools(self):
         """
-        ストリーミング呼び出し時にツール情報が指定されている場合、tool_choice="auto"などのパラメータが渡されることを検証します。
-        Verify that tool information and tool_choice parameter are sent when tools are specified for Gemini stream.
+        OpenAI形式の関数ツールがClaude形式へ変換されることを検証します。
+        Verify that OpenAI function tools are converted to Claude tool definitions.
         """
-        mock_gemini = MagicMock()
-        mock_stream = _MockStream(_mock_stream_chunk("gemini"))
-        mock_gemini.chat.completions.create.return_value = mock_stream
-        tools = [{"type": "function", "function": {"name": "web_search"}}]
+        mock_claude = MagicMock()
+        mock_stream = _MockStream()
+        mock_claude.messages.create.return_value = mock_stream
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "description": "Search the web.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
 
-        with patch.object(llm, "gemini_client", mock_gemini):
+        with patch.object(llm, "claude_client", mock_claude):
             response = list(
-                llm.get_gemini_response_stream(
+                llm.get_claude_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    "gemini-2.5-flash",
+                    llm.CLAUDE_HAIKU_4_5_MODEL,
                     tools=tools,
                 )
             )
 
-        # 送信されたパラメータの検証
-        # Assert the passed parameters
-        self.assertEqual(response, ["gemini"])
-        request_kwargs = mock_gemini.chat.completions.create.call_args.kwargs
-        self.assertEqual(request_kwargs["tools"], tools)
-        self.assertEqual(request_kwargs["tool_choice"], "auto")
+        self.assertEqual(response, [])
+        request_kwargs = mock_claude.messages.create.call_args.kwargs
+        self.assertEqual(
+            request_kwargs["tools"],
+            [
+                {
+                    "name": "web_search",
+                    "description": "Search the web.",
+                    "input_schema": {"type": "object", "properties": {}},
+                }
+            ],
+        )
 
     def test_get_groq_response_stream_yields_chunks_and_closes_stream(self):
         """
@@ -518,7 +605,7 @@ class LlmServiceTestCase(unittest.TestCase):
                         {"role": "system", "content": "You are a helpful assistant."},
                         {"role": "user", "content": "hello"},
                     ],
-                    llm.GPT_5_MINI_MODEL,
+                    llm.GPT_5_6_LUNA_MODEL,
                 )
             )
 
@@ -526,7 +613,9 @@ class LlmServiceTestCase(unittest.TestCase):
         # Assert the response and input parameter translation
         self.assertEqual(response, ["openai", "-stream"])
         mock_openai.responses.stream.assert_called_once()
-        passed_messages = mock_openai.responses.stream.call_args.kwargs["input"]
+        stream_kwargs = mock_openai.responses.stream.call_args.kwargs
+        self.assertEqual(stream_kwargs["reasoning"], {"effort": "none"})
+        passed_messages = stream_kwargs["input"]
         self.assertEqual(passed_messages[0]["role"], "developer")
         self.assertTrue(
             passed_messages[0]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
@@ -545,7 +634,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_openai_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_MODEL,
+                    llm.GPT_5_6_LUNA_MODEL,
                     tools=[{"type": "function", "function": {"name": "web_search"}}],
                 )
             )
@@ -557,6 +646,7 @@ class LlmServiceTestCase(unittest.TestCase):
         chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
         self.assertEqual(chat_kwargs["max_completion_tokens"], llm.LLM_MAX_TOKENS)
         self.assertNotIn("max_tokens", chat_kwargs)
+        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
         self.assertEqual(chat_kwargs["tool_choice"], "auto")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
@@ -596,7 +686,7 @@ class LlmServiceTestCase(unittest.TestCase):
         ]
 
         with patch.object(llm, "openai_client", mock_openai):
-            response = list(llm.get_openai_response_stream(messages, llm.GPT_5_MINI_MODEL))
+            response = list(llm.get_openai_response_stream(messages, llm.GPT_5_6_LUNA_MODEL))
 
         # 履歴が存在するため、chat.completions.create がフォールバックされることを検証
         # Verify fallback to chat.completions.create due to tool history
@@ -605,6 +695,7 @@ class LlmServiceTestCase(unittest.TestCase):
         chat_kwargs = mock_openai.chat.completions.create.call_args.kwargs
         self.assertNotIn("tools", chat_kwargs)
         self.assertNotIn("tool_choice", chat_kwargs)
+        self.assertEqual(chat_kwargs["reasoning_effort"], "none")
         mock_openai.responses.stream.assert_not_called()
         self.assertTrue(mock_stream.closed)
 
@@ -621,7 +712,7 @@ class LlmServiceTestCase(unittest.TestCase):
             response = list(
                 llm.get_llm_response_stream(
                     [{"role": "user", "content": "hello"}],
-                    llm.GPT_5_MINI_MODEL,
+                    llm.GPT_5_6_LUNA_MODEL,
                 )
             )
 

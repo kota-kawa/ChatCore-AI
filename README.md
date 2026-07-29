@@ -12,7 +12,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-LLM%20API-4285F4?logo=google&logoColor=white)
+![Anthropic Claude](https://img.shields.io/badge/Anthropic%20Claude-LLM%20API-191919?logo=anthropic&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
 
 **🚀 Live Demo: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
@@ -34,7 +34,7 @@ Click a thumbnail to open the video on YouTube.
 </p>
 
 ## Overview
-Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq, Google Gemini, and OpenAI APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
+Chat-Core-AI is a FastAPI-based AI chat application with email-based authentication, persistent + ephemeral conversations, and prompt sharing. It integrates with Groq, Anthropic Claude, and OpenAI APIs, uses PostgreSQL for storage, and ships with a Next.js frontend.
 
 ## Background
 
@@ -49,13 +49,13 @@ Chat-Core-AI was built to eliminate that overhead. The core idea is a **Task** s
 - **Persistent + ephemeral chat** modes
 - **Chat room sharing** via public URLs and SNS link sharing
 - **Prompt sharing** with search and public visibility controls
-- **Groq / Gemini / OpenAI** integrations for LLM responses
+- **Groq / Claude / OpenAI** integrations for LLM responses
 
 ## Tech Stack
 - **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 18, Redis 7 (optional)
-- **LLM Providers**: Groq, Google Gemini, OpenAI
+- **LLM Providers**: Groq, Anthropic Claude, OpenAI
 - **Local Dev**: Docker Compose
 
 ## Quick Start (Docker Compose)
@@ -151,7 +151,7 @@ flowchart LR
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
     RD[(Redis Optional)]
-    LLM[Groq / Gemini / OpenAI APIs]
+    LLM[Groq / Claude / OpenAI APIs]
     EM[Email Provider]
 
     U --> FE --> API
@@ -174,7 +174,7 @@ flowchart LR
 ## Engineering Highlights (for reviewers)
 - **Hybrid session middleware** (`services/session_middleware.py`): Built a custom ASGI middleware that transparently falls back from Redis-backed sessions to signed-cookie sessions when Redis is unavailable or fails mid-request — no session loss, no user disruption. Also implements session fixation prevention by rotating the session identifier on login.
 - **Streaming LLM responses** (`services/chat_generation.py`): LLM responses are streamed token-by-token via SSE using a background `ChatGenerationJob` thread. Jobs are cancellable, and the completed response is persisted to the database only after the full stream finishes, keeping the HTTP handler thin.
-- **Provider-agnostic LLM abstraction** (`services/llm.py`): A single `get_llm_response` / `get_llm_response_stream` interface routes to Groq, Gemini, or OpenAI based on model name, with an allowlist that rejects unsupported models before any external call is made.
+- **Provider-agnostic LLM abstraction** (`services/llm.py`): A single `get_llm_response` / `get_llm_response_stream` interface routes to Groq, Claude, or OpenAI based on model name, with an allowlist that rejects unsupported models before any external call is made.
 - **LLM input sanitization**: Conversation messages are scanned for known secret patterns (API keys, OAuth tokens, passwords) using compiled regexes and redacted before forwarding to any LLM provider, preventing accidental secret leakage.
 - **CSRF protection** (`services/csrf.py`): Custom header-based CSRF token validation is enforced on all state-changing requests. Tokens are auto-generated per session inside the session middleware, requiring no extra setup per route.
 
@@ -200,7 +200,7 @@ Licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker Compose](https://img.shields.io/badge/Docker%20Compose-Local%20Dev-2496ED?logo=docker&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036?logo=groq&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-LLM%20API-4285F4?logo=google&logoColor=white)
+![Anthropic Claude](https://img.shields.io/badge/Anthropic%20Claude-LLM%20API-191919?logo=anthropic&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-LLM%20API-412991?logo=openai&logoColor=white)
 
 **🚀 ライブデモ: [https://chatcore-ai.com/](https://chatcore-ai.com/)**
@@ -222,7 +222,7 @@ Click a thumbnail to open the video on YouTube.
 </p>
 
 ## 概要
-Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq・Google Gemini・OpenAI API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
+Chat-Core-AI は FastAPI で構築した AI チャットアプリです。メール認証・永続／エフェメラルチャット・プロンプト共有を備え、Groq・Anthropic Claude・OpenAI API に対応しています。PostgreSQL を採用し、Next.js フロントエンドと連携します。
 
 ## 制作背景
 
@@ -237,13 +237,13 @@ ChatGPT などの AI チャットサービスを日常的に使うなかで、�
 - **永続／エフェメラル**のチャット
 - **チャット共有リンク**（URL/SNS 共有）
 - **プロンプト共有**（公開・検索）
-- **Groq / Gemini / OpenAI 連携**
+- **Groq / Claude / OpenAI 連携**
 
 ## 技術スタック
 - **Backend**: Python 3.14, FastAPI, SQLAlchemy, Alembic
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS
 - **Database / Cache**: PostgreSQL 18, Redis 7（任意）
-- **LLM Providers**: Groq, Google Gemini, OpenAI
+- **LLM Providers**: Groq, Anthropic Claude, OpenAI
 - **Local Dev**: Docker Compose
 
 ## 実行方法（Docker Compose）
@@ -340,7 +340,7 @@ flowchart LR
     SV[Services<br/>db/llm/email/user]
     DB[(PostgreSQL)]
     RD[(Redis 任意)]
-    LLM[Groq / Gemini / OpenAI API]
+    LLM[Groq / Claude / OpenAI API]
     EM[メールプロバイダ]
 
     U --> FE --> API

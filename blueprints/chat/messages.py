@@ -76,7 +76,7 @@ from services.llm_daily_limit import (
 )
 from services.llm import (
     get_llm_response,
-    GEMINI_DEFAULT_MODEL,
+    CLAUDE_DEFAULT_MODEL,
     is_streaming_model,
     is_retryable_llm_error,
     LlmAuthenticationError,
@@ -1022,7 +1022,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             get_session_id=get_session_id,
             logger=logger,
         ),
-        default_model=GEMINI_DEFAULT_MODEL,
+        default_model=CLAUDE_DEFAULT_MODEL,
     )
 
 
@@ -1077,7 +1077,7 @@ async def chat_regenerate(
         return error_response
 
     chat_room_id_raw = data.get("chat_room_id")
-    model_raw = data.get("model") or GEMINI_DEFAULT_MODEL
+    model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():
         return jsonify({"error": "chat_room_id is required"}, status_code=400)
@@ -1365,7 +1365,7 @@ async def chat_edit_and_regenerate(
 
     chat_room_id_raw = data.get("chat_room_id")
     new_message_raw = data.get("new_message")
-    model_raw = data.get("model") or GEMINI_DEFAULT_MODEL
+    model_raw = data.get("model") or CLAUDE_DEFAULT_MODEL
     trailing_user_count_raw = data.get("trailing_user_count")
 
     if not isinstance(chat_room_id_raw, str) or not chat_room_id_raw.strip():

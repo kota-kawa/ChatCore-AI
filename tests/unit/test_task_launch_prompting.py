@@ -108,7 +108,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
                 "chat_room_id": "room-1",
-                "model": "gemini-2.5-flash",
+                "model": "claude-haiku-4-5-20251001",
             },
             session={},
         )
@@ -183,7 +183,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "件名だけ3案ください",
                 "chat_room_id": "room-1",
-                "model": "gemini-2.5-flash",
+                "model": "claude-haiku-4-5-20251001",
             },
             session={},
         )
@@ -258,7 +258,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "【タスク】📧 メール作成\n【状況・作業環境】新製品リリース案内のメールを作りたい",
                 "chat_room_id": "room-1",
-                "model": "gemini-2.5-flash",
+                "model": "claude-haiku-4-5-20251001",
             },
             session={},
         )
@@ -335,7 +335,7 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
             {
                 "message": "次の面談メールを整えて",
                 "chat_room_id": "room-logged-in",
-                "model": "gemini-2.5-flash",
+                "model": "claude-haiku-4-5-20251001",
             },
             session={"user_id": 42},
         )

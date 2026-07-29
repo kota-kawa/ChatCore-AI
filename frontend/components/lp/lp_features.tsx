@@ -7,7 +7,7 @@ const LP_FEATURES = [
     name: "AIチャット",
     title: "日本語で聞けば、すぐ答えが返る",
     description:
-      "GroqやGeminiなど複数の生成AIモデルを切り替えながら、調査・要約・文章作成を進められます。会話はワンクリックで共有リンクにできます。",
+      "GroqやClaudeなど複数の生成AIモデルを切り替えながら、調査・要約・文章作成を進められます。会話はワンクリックで共有リンクにできます。",
     href: "/",
     linkLabel: "チャットを開く"
   },
@@ -33,7 +33,7 @@ const LP_FEATURES = [
   }
 ] as const;
 const LP_FEATURES_EN = [
-  { id: "chat", icon: "bi-chat-dots", name: "AI Chat", title: "Ask naturally and get answers fast", description: "Switch between models such as Groq and Gemini for research, summaries, and writing. Share a conversation with one click.", href: "/", linkLabel: "Open chat" },
+  { id: "chat", icon: "bi-chat-dots", name: "AI Chat", title: "Ask naturally and get answers fast", description: "Switch between models such as Groq and Claude for research, summaries, and writing. Share a conversation with one click.", href: "/", linkLabel: "Open chat" },
   { id: "prompts", icon: "bi-people", name: "Prompt Library", title: "Reuse the prompts that work", description: "Publish effective prompts and learn from examples shared by others, complete with sample inputs and outputs.", href: "/prompt_share", linkLabel: "Browse prompts" },
   { id: "memo", icon: "bi-journal-text", name: "Memos", title: "Keep useful answers as knowledge", description: "Save AI responses as Markdown memos, find them later, or share selected notes with your team.", href: "/memo", linkLabel: "Open memos" }
 ] as const;
