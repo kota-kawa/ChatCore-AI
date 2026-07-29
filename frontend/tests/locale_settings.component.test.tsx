@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LanguageSettingsSection } from "../components/settings/settings_sections";
-import { LocaleProvider, useTranslation } from "../contexts/locale_context";
-import type { Locale } from "../lib/i18n/config";
+import { LocaleProvider, translate, useTranslation } from "../contexts/locale_context";
+import { LOCALE_COOKIE_NAME, type Locale } from "../lib/i18n/config";
 
 function LocaleHarness() {
   const { locale, setLocale, t } = useTranslation();
@@ -73,5 +73,40 @@ describe("locale switching", () => {
 
     expect(english).toHaveClass("is-selected");
     expect(japanese).not.toHaveClass("is-selected");
+  });
+
+  // 切り替え直後に表示する確認メッセージは、await後に古いクロージャの`t`ではなく
+  // 切り替え後のロケールで文言を取得する必要がある（設定保存トーストが旧言語のまま
+  // 表示されていた不具合の回帰防止）。
+  // The confirmation message shown right after switching must resolve copy for the new
+  // locale, not a stale pre-switch `t` closure (regression guard for the settings save
+  // toast staying in the old language).
+  it("resolves a locale-explicit translation independent of any stale `t` closure", () => {
+    expect(translate("ja", "settings.languageSaved")).toBe("表示言語を変更しました。");
+    expect(translate("en", "settings.languageSaved")).toBe("Display language updated.");
+  });
+
+  // 設定画面への遷移はプレーンリンクによるフルページ遷移のため、ブラウザバック時に
+  // bfcacheから元ページが復元されるとJSが再実行されず古い言語のままになっていた。
+  // pageshow(persisted)で永続化済みの値へ再同期し、リロードなしで反映されることを検証する。
+  // Navigating to Settings is a full-page load, so a bfcache-restored previous page kept
+  // showing the old language until reload. Verify pageshow(persisted) resyncs from the
+  // persisted value without requiring a reload.
+  it("resyncs the locale from the persisted cookie when the page is restored from bfcache", () => {
+    render(<LocaleProvider initialLocale="ja"><LocaleHarness /></LocaleProvider>);
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("ja");
+
+    // 別ページ（設定画面）でロケールがenへ変更され、cookieへ永続化された状態を模す
+    // Simulate another page (Settings) having changed the locale and persisted it to the cookie
+    document.cookie = `${LOCALE_COOKIE_NAME}=en; Path=/`;
+
+    act(() => {
+      const event = new Event("pageshow") as PageTransitionEvent;
+      Object.defineProperty(event, "persisted", { value: true });
+      window.dispatchEvent(event);
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("en");
   });
 });
