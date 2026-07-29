@@ -18,7 +18,6 @@ import {
   MAX_DOM_LENGTH,
   MAX_INPUT_LENGTH,
   MAX_SEND_MESSAGES,
-  QUICK_PROMPTS,
   clearPendingActionSteps,
   clearStoredConversation,
   describeActionStep,
@@ -47,23 +46,35 @@ import { useTranslation } from "../../contexts/locale_context";
 export function MiniChat({
   memoId = null,
   storageScope,
-  quickPrompts = QUICK_PROMPTS,
-  placeholderTitle = "操作支援エージェント",
-  placeholderDescription = "画面の使い方、次の操作、入力内容の整理を短い会話で進められます。",
-  inputPlaceholder = "この画面でやりたいことを相談する",
+  quickPrompts,
+  placeholderTitle,
+  placeholderDescription,
+  inputPlaceholder,
   enableActions = true,
   persistConversation = true,
   onMemoEdit,
 }: MiniChatProps = {}) {
   const { locale, t } = useTranslation();
   const english = locale === "en";
-  const resolvedTitle = english && placeholderTitle === "操作支援エージェント" ? "Navigation assistant" : placeholderTitle;
-  const resolvedDescription = english && placeholderDescription.startsWith("画面の使い方")
-    ? "Ask for help using this page, choosing your next action, or organizing what to enter."
-    : placeholderDescription;
-  const resolvedInputPlaceholder = english && inputPlaceholder === "この画面でやりたいことを相談する"
-    ? "Ask for help with this page"
-    : inputPlaceholder;
+  // 呼び出し側が文言を渡さないとき（左下のサポートエージェント）は、日本語を既定値に
+  // 埋め込まずカタログから引く。既定の日本語と一致するかで英訳を差し替える方式は、
+  // 文言を少し直すだけで英語版が日本語に戻ってしまい壊れやすい。
+  // When the caller passes no copy (the support agent in the bottom-left corner), read it
+  // from the catalogue instead of baking Japanese defaults in. Substituting English by
+  // comparing against the Japanese default is brittle: any edit to that default silently
+  // reverts the English UI to Japanese.
+  const resolvedTitle = placeholderTitle ?? t("agent.title");
+  const resolvedDescription = placeholderDescription ?? t("agent.description");
+  const resolvedInputPlaceholder = inputPlaceholder ?? t("agent.placeholder");
+  const resolvedQuickPrompts = useMemo(
+    () => quickPrompts ?? [
+      t("agent.promptCapabilities"),
+      t("agent.promptHowToUse"),
+      t("agent.promptFindMemoSharing"),
+      t("agent.promptSearchPromptShare"),
+    ],
+    [quickPrompts, t]
+  );
   // メモ編集ハンドラが渡されている場合は、画面操作が無効でもアクション計画（memo_edit）を受け付ける
   // Accept action plans (memo_edit) when an edit handler is provided, even with page actions disabled
   const actionsEnabled = enableActions || Boolean(onMemoEdit);
@@ -322,15 +333,17 @@ export function MiniChat({
   // when a step fails mid-flight and when post-navigation targets can't be found.
   const replanAfterFailure = async (failureText: string, failedStepIndex?: number) => {
     const failedStepText = typeof failedStepIndex === "number"
-      ? `失敗ステップ: ${failedStepIndex + 1}`
+      ? t("agent.replanFailedStep", { step: failedStepIndex + 1 })
       : "";
-    // 最新の DOM 状態を含む再計画プロンプトを構築する
-    // Builds a replan prompt that includes the failure reason so the model can adapt its plan
+    // 最新の DOM 状態を含む再計画プロンプトを構築する。表示言語で組み立てることで、
+    // モデルの再計画結果も利用者と同じ言語で返る。
+    // Builds a replan prompt that includes the failure reason so the model can adapt its
+    // plan. Composing it in the display language keeps the model's reply in that language.
     const replanPrompt = [
-      "前回の操作計画は実行中に失敗しました。",
+      t("agent.replanIntro"),
       failedStepText,
-      `失敗理由: ${failureText}`,
-      "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
+      t("agent.replanReason", { reason: failureText }),
+      t("agent.replanInstruction"),
     ].filter(Boolean).join("\n");
 
     const controller = new AbortController();
@@ -352,7 +365,7 @@ export function MiniChat({
         {
           id: createAiAgentMessageId(),
           sender: "assistant",
-          text: `操作を途中で停止しました。${failureText}`,
+          text: t("agent.replanStopped", { reason: failureText }),
         },
         replanMessage,
       ]);
@@ -562,7 +575,7 @@ export function MiniChat({
             <strong>{resolvedTitle}</strong>
             <p>{resolvedDescription}</p>
             <div className="mini-chat-suggestions" aria-label={english ? "Suggested messages" : "入力候補"}>
-              {quickPrompts.map((prompt) => (
+              {resolvedQuickPrompts.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"

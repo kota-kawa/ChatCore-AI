@@ -799,7 +799,24 @@ export const jaMessages = {
   "notFound.description": "お探しのページは存在しないか、移動・削除された可能性があります。",
   "notFound.backHome": "トップページへ戻る",
   "network.offline": "オフラインです。接続を確認しています…",
-  "network.online": "オンラインに復帰しました"
+  "network.online": "オンラインに復帰しました",
+  "agent.title": "操作支援エージェント",
+  "agent.description": "画面の使い方、次の操作、入力内容の整理を短い会話で進められます。",
+  "agent.placeholder": "この画面でやりたいことを相談する",
+  "agent.promptCapabilities": "このサービスはどんなことができる？",
+  "agent.promptHowToUse": "この画面の使い方を教えて",
+  "agent.promptFindMemoSharing": "マニュアルからメモの共有方法を探して",
+  "agent.promptSearchPromptShare": "プロンプト共有を開いてメール返信を検索して",
+  "agent.replanIntro": "前回の操作計画は実行中に失敗しました。",
+  "agent.replanFailedStep": "失敗ステップ: {step}",
+  "agent.replanReason": "失敗理由: {reason}",
+  "agent.replanInstruction": "現在の画面DOMを再観測し、成功確認しやすい型付きアクションAPIを優先して、実行可能な操作計画だけを作り直してください。",
+  "agent.replanStopped": "操作を途中で停止しました。{reason}",
+  "userMenu.open": "アカウントメニューを開く",
+  "userMenu.avatarAlt": "ユーザーアイコン",
+  "userMenu.avatarAltNamed": "{username}のアイコン",
+  "userMenu.settings": "設定",
+  "userMenu.logout": "ログアウト"
 } as const;
 
 export type MessageKey = keyof typeof jaMessages;

@@ -257,5 +257,22 @@ export const enMessages = {
   "legal.toc": "Contents", "legal.japanesePrevails": "If the English translation differs from the Japanese version, the Japanese version prevails.",
   "notFound.title": "Page not found | Chat Core", "notFound.heading": "404 - Page not found",
   "notFound.description": "The page may not exist, or it may have been moved or deleted.", "notFound.backHome": "Back to home",
-  "network.offline": "You’re offline. Check your connection.", "network.online": "You’re back online."
+  "network.offline": "You’re offline. Check your connection.", "network.online": "You’re back online.",
+  "agent.title": "Navigation assistant",
+  "agent.description": "Ask for help using this page, choosing your next action, or organizing what to enter.",
+  "agent.placeholder": "Ask for help with this page",
+  "agent.promptCapabilities": "What can this service do?",
+  "agent.promptHowToUse": "How do I use this page?",
+  "agent.promptFindMemoSharing": "Find how to share a memo in the manual",
+  "agent.promptSearchPromptShare": "Open prompt sharing and search for email replies",
+  "agent.replanIntro": "The previous action plan failed while it was running.",
+  "agent.replanFailedStep": "Failed step: {step}",
+  "agent.replanReason": "Reason for the failure: {reason}",
+  "agent.replanInstruction": "Re-observe the current page DOM and rebuild only the actions that can run, preferring typed action APIs whose success is easy to verify.",
+  "agent.replanStopped": "The actions stopped partway through. {reason}",
+  "userMenu.open": "Open the account menu",
+  "userMenu.avatarAlt": "User icon",
+  "userMenu.avatarAltNamed": "{username}’s icon",
+  "userMenu.settings": "Settings",
+  "userMenu.logout": "Log out"
 } as const satisfies Record<MessageKey, string>;
