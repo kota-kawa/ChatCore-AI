@@ -12,11 +12,11 @@ test("model labels keep the model name and localize only the usage hint", () => 
   const [groq] = MODEL_OPTIONS;
   assert.equal(
     formatModelOptionLabel(groq, translate(jaMessages), "ja"),
-    "GROQ | GPT-OSS 120B（標準・高品質な応答）"
+    "GPT-OSS 120B（標準・高品質な応答）"
   );
   assert.equal(
     formatModelOptionLabel(groq, translate(enMessages), "en"),
-    "GROQ | GPT-OSS 120B (balanced, high-quality answers)"
+    "GPT-OSS 120B (balanced, high-quality answers)"
   );
 });
 
