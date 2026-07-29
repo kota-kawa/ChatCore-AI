@@ -81,14 +81,10 @@ export type ExecuteOptions = {
   applyMemoEdit?: MemoEditApplyHandler;
 };
 
-// デフォルトの候補プロンプト — ユーザーが何を聞けるかをすぐに把握できるように
-// Default quick prompts that demonstrate the agent's capabilities to new users
-export const QUICK_PROMPTS = [
-  "このサービスはどんなことができる？",
-  "この画面の使い方を教えて",
-  "マニュアルからメモの共有方法を探して",
-  "プロンプト共有を開いてメール返信を検索して"
-];
+// デフォルトの候補プロンプトは MiniChat が agent.prompt* のカタログから組み立てる
+// （日本語をここに固定すると英語UIに漏れるため）。
+// The default quick prompts are built by MiniChat from the agent.prompt* catalogue keys;
+// hardcoding Japanese here would leak into the English UI.
 
 // sessionStorage のキー定数 — コンポーネント外の関数からも同じキーを参照できるように集約
 // Centralized storage key constants shared between the component and helper functions

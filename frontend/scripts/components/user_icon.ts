@@ -3,6 +3,8 @@
 import { getLoggedInState, hasLoggedInState } from "../core/app_state";
 import { resilientFetch } from "../core/resilient_fetch";
 import { clearPersistentCache } from "../../lib/data/persistent_cache";
+import { LOCALE_CHANGE_EVENT, getRuntimeLocale } from "../../lib/i18n/config";
+import { translate } from "../../lib/i18n/translate";
 // 右上ユーザーアイコン  +  ドロップダウンメニュー
 //  - /api/user/profile で avatar_url / username を取得
 //  - カスタム画像がある場合はデフォルト画像を先に出さない
@@ -142,13 +144,14 @@ tpl.innerHTML = `
     .item:hover { background: #f5f5f5; }
   </style>
 
-  <button class="btn" aria-label="アカウントメニューを開く">
-    <img class="avatar" alt="ユーザーアイコン" hidden>
+  <button class="btn">
+    <img class="avatar" hidden>
   </button>
 
+  <!-- 文言は表示言語に合わせて applyLocaleStrings が流し込む / applyLocaleStrings fills the copy in for the active display language -->
   <div class="dropdown">
-    <a class="item" href="/settings">⚙️ 設定</a>
-    <a class="item" href="/logout">🚪 ログアウト</a>
+    <a class="item" href="/settings"><span aria-hidden="true">⚙️</span><span class="item-label"></span></a>
+    <a class="item" href="/logout"><span aria-hidden="true">🚪</span><span class="item-label"></span></a>
   </div>
 `;
 
@@ -181,6 +184,9 @@ class UserIcon extends HTMLElement {
   private _profileRequest: Promise<void> | null = null;
   private _profileRequestVersion = 0;
   private _handleAuthState: (evt?: Event) => void;
+  private _handleLocaleChange: () => void;
+  private settingsLabel: HTMLElement | null;
+  private logoutLabel: HTMLElement | null;
 
   constructor() {
     super();
@@ -198,7 +204,11 @@ class UserIcon extends HTMLElement {
     this.btn = btn;
     this.dropdown = dropdown;
     this.avatarImg = avatarImg;
+    this.settingsLabel = root.querySelector('a[href="/settings"] .item-label');
+    this.logoutLabel = root.querySelector('a[href="/logout"] .item-label');
     this._handleAuthState = this._handleAuthStateInternal.bind(this);
+    this._handleLocaleChange = this.applyLocaleStrings.bind(this);
+    this.applyLocaleStrings();
     this.setAvatarPending();
 
     // ドロップダウン開閉
@@ -232,6 +242,12 @@ class UserIcon extends HTMLElement {
       });
     }
     document.addEventListener("authstatechange", this._handleAuthState);
+    // React ツリーの外にあるため、表示言語を切り替えても再描画されない。
+    // LocaleProvider が発火するイベントを受けて文言を貼り直す。
+    // This lives outside the React tree, so a language switch never re-renders it.
+    // Re-apply the copy when the LocaleProvider announces the change.
+    window.addEventListener(LOCALE_CHANGE_EVENT, this._handleLocaleChange);
+    this.applyLocaleStrings();
     if (hasLoggedInState()) {
       this._handleAuthStateInternal({ detail: { loggedIn: getLoggedInState() } } as CustomEvent);
     }
@@ -243,6 +259,16 @@ class UserIcon extends HTMLElement {
       this.bodyClassObserver = null;
     }
     document.removeEventListener("authstatechange", this._handleAuthState);
+    window.removeEventListener(LOCALE_CHANGE_EVENT, this._handleLocaleChange);
+  }
+
+  // メニューの文言を現在の表示言語で貼り直す / Re-apply the menu copy in the active display language
+  private applyLocaleStrings() {
+    const locale = getRuntimeLocale();
+    this.btn.setAttribute("aria-label", translate(locale, "userMenu.open"));
+    this.avatarImg.alt = translate(locale, "userMenu.avatarAlt");
+    if (this.settingsLabel) this.settingsLabel.textContent = translate(locale, "userMenu.settings");
+    if (this.logoutLabel) this.logoutLabel.textContent = translate(locale, "userMenu.logout");
   }
 
   private syncTextureContext() {
@@ -336,13 +362,16 @@ class UserIcon extends HTMLElement {
     this.removeAttribute("data-avatar-ready");
     this.avatarImg.hidden = true;
     this.avatarImg.removeAttribute("src");
-    this.avatarImg.alt = "ユーザーアイコン";
+    this.avatarImg.alt = translate(getRuntimeLocale(), "userMenu.avatarAlt");
   }
 
   private setAvatar(avatarUrl: string, username: string) {
+    const locale = getRuntimeLocale();
     this.avatarImg.hidden = false;
     this.avatarImg.src = avatarUrl;
-    this.avatarImg.alt = username ? `${username}のアイコン` : "ユーザーアイコン";
+    this.avatarImg.alt = username
+      ? translate(locale, "userMenu.avatarAltNamed", { username })
+      : translate(locale, "userMenu.avatarAlt");
     this.setAttribute("data-avatar-ready", "true");
   }
 }

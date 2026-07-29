@@ -43,9 +43,7 @@ export const MEMO_COLOR_OPTIONS = [
   { value: "#ede9fe", label: "ラベンダー", color: "#ede9fe" },
   { value: "#fce7f3", label: "ローズ", color: "#fce7f3" },
 ] as const;
-export const MEMO_AGENT_QUICK_PROMPTS = [
-  "このメモを要約して",
-  "重要なポイントを箇条書きにして",
-  "誤字脱字を修正して",
-  "本文を読みやすく整理して書き直して"
-];
+// メモ用エージェントの候補プロンプトは MemoDetailModal が memo.agentPrompt* の
+// カタログから渡す（日本語をここに固定すると英語UIに漏れるため）。
+// The memo agent's quick prompts come from MemoDetailModal via the memo.agentPrompt*
+// catalogue keys; hardcoding Japanese here would leak into the English UI.

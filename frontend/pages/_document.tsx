@@ -27,6 +27,16 @@ const homeViewBootstrapScript = `(function(){try{if(location.pathname!=='/')retu
 // The key must match STORAGE_KEYS.authStateCache in frontend/scripts/core/constants.ts.
 export const authBootstrapScript = `(function(){try{var v=localStorage.getItem('chatcore.auth.loggedIn');if(v==='1'||v==='0'){document.documentElement.setAttribute('data-cc-auth',v==='1'?'in':'out');}}catch(e){}})();`;
 
+// 表示言語の変更による再読み込みでは、描画前にフェードインの初期状態を適用して
+// 白い画面が差し込まれるのを目立たなくする。フラグは一度使ったら消し、通常の
+// 再読み込みでは演出が走らないようにする。属性・キーは
+// frontend/lib/i18n/locale_transition.ts の定数と同一。
+// On reloads triggered by a display-language change, apply the fade-in starting state
+// before paint so the blank frame is far less noticeable. The flag is consumed on use
+// so ordinary reloads never animate. The attribute and key must match the constants in
+// frontend/lib/i18n/locale_transition.ts.
+const localeTransitionBootstrapScript = `(function(){try{var k='chatcore.locale.transition';if(sessionStorage.getItem(k)){sessionStorage.removeItem(k);document.documentElement.setAttribute('data-cc-locale-transition','settle');}}catch(e){}})();`;
+
 // Next.jsカスタムDocumentコンポーネント（共通のHTMLシェルとPWA対応のmeta/linkタグを設定する）
 // Next.js custom Document component (sets up the common HTML shell and PWA-related meta/link tags)
 type LocalizedDocumentProps = DocumentInitialProps & { locale: Locale };
@@ -52,6 +62,8 @@ export default function Document({ locale }: LocalizedDocumentProps) {
         <script dangerouslySetInnerHTML={{ __html: homeViewBootstrapScript }} />
         {/* 未ログインUIのフラッシュを防ぐブートストラップスクリプト / Bootstrap script that prevents the logged-out UI from flashing */}
         <script dangerouslySetInnerHTML={{ __html: authBootstrapScript }} />
+        {/* 言語変更による再読み込みを滑らかにつなぐブートストラップスクリプト / Bootstrap script that smooths reloads triggered by a language change */}
+        <script dangerouslySetInnerHTML={{ __html: localeTransitionBootstrapScript }} />
       </Head>
       <body className="min-h-screen font-sans antialiased">
         <Main />

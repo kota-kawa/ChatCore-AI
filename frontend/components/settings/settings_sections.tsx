@@ -71,7 +71,12 @@ export function LanguageSettingsSection({
                 className={`language-option${isSelected ? " is-selected" : ""}`}
                 data-agent-id={`settings.language.${option.value}`}
                 lang={option.value}
-                disabled={saving}
+                // 保存中も操作を受け付ける。無効化すると保存が終わるまでのクリックが
+                // 捨てられ、続けて切り替えたときに反応しないように見えるため、進行中で
+                // あることは radiogroup の aria-busy でのみ伝える。
+                // Stay clickable while saving. Disabling drops clicks until the save
+                // settles, which makes rapid switches look unresponsive, so progress is
+                // conveyed through the radiogroup's aria-busy alone.
                 onClick={() => onLocaleSelect(option.value)}
               >
                 {/* 書記体系のグリフを大きく見せることで、言語が読めなくてもカードを判別できる / A large script glyph keeps each card identifiable even when its language is unreadable */}

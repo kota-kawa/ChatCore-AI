@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { enMessages } from "../lib/i18n/catalogs/en";
 import { jaMessages, type MessageKey } from "../lib/i18n/catalogs/ja";
 import {
   DEFAULT_LOCALE, LOCALE_CHANGE_EVENT, LOCALE_COOKIE_NAME, LOCALE_STORAGE_KEY,
   normalizeLocale, readLocaleCookie, type Locale
 } from "../lib/i18n/config";
+import { finishBootLocaleTransition, reloadWithLocaleTransition, runLocaleTransition } from "../lib/i18n/locale_transition";
+import { interpolate, translate, type TranslationValues } from "../lib/i18n/translate";
 
-type TranslationValues = Record<string, string | number>;
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -15,21 +15,13 @@ type LocaleContextValue = {
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
 };
 
-const catalogs = { ja: jaMessages, en: enMessages } as const;
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-function interpolate(message: string, values?: TranslationValues) {
-  if (!values) return message;
-  return message.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
-}
-
 // setLocale直後にawaitを挟んで表示するメッセージは、React再レンダリング前のためcontextの`t`が
-// 旧ロケールのクロージャのままになる。呼び出し側が対象ロケールを明示できるよう公開する。
+// 旧ロケールのクロージャのままになる。呼び出し側が対象ロケールを明示できるよう再公開する。
 // Messages shown right after setLocale (past an await) can't rely on context `t` — that closure
-// still reflects the pre-render locale. Expose a locale-explicit translator for those call sites.
-export function translate(locale: Locale, key: MessageKey, values?: TranslationValues) {
-  return interpolate(catalogs[locale][key] ?? jaMessages[key], values);
-}
+// still reflects the pre-render locale. Re-exported so those call sites can name the locale.
+export { translate };
 
 function persistLocale(locale: Locale) {
   if (typeof document === "undefined") return;
@@ -64,8 +56,15 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
   // from one made in another document.
   const renderedLocaleRef = useRef<Locale>(initialLocale);
   const setLocale = useCallback((nextLocale: Locale) => {
-    setLocaleState(nextLocale);
     persistLocale(nextLocale);
+    // 実際に表示が変わるときだけ演出する。設定画面は初期化時にも保存済みの言語で
+    // setLocale を呼ぶため、同じ言語での呼び出しまで演出すると無意味に画面が
+    // ちらついてしまう。
+    // Animate only when the visible language actually changes. The settings page also
+    // calls setLocale with the already-active language while initializing, and animating
+    // that would flicker the screen for no reason.
+    if (nextLocale === renderedLocaleRef.current) return;
+    runLocaleTransition(() => setLocaleState(nextLocale));
   }, []);
 
   useEffect(() => {
@@ -79,10 +78,19 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
     const onStorage = (event: StorageEvent) => {
       if (event.key !== LOCALE_STORAGE_KEY) return;
       const nextLocale = normalizeLocale(event.newValue);
-      if (nextLocale) setLocaleState(nextLocale);
+      if (!nextLocale || nextLocale === renderedLocaleRef.current) return;
+      runLocaleTransition(() => setLocaleState(nextLocale));
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    // 言語変更による再読み込み直後は、描画前にフェードインの初期状態が当たっている。
+    // アニメーション終了後に演出用の属性を取り除く。
+    // Right after a language-change reload the fade-in starting state is already applied
+    // before paint; drop the transition attribute once the animation has finished.
+    finishBootLocaleTransition();
   }, []);
 
   useEffect(() => {
@@ -102,7 +110,7 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
       if (!event.persisted) return;
       const persisted = readPersistedLocale();
       if (!persisted || persisted === renderedLocaleRef.current) return;
-      window.location.reload();
+      reloadWithLocaleTransition();
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
@@ -111,7 +119,7 @@ export function LocaleProvider({ initialLocale = DEFAULT_LOCALE, children }: { i
   const value = useMemo<LocaleContextValue>(() => ({
     locale,
     setLocale,
-    t: (key, values) => interpolate(catalogs[locale][key] ?? jaMessages[key], values),
+    t: (key, values) => translate(locale, key, values),
     formatDate: (input, options) => {
       const date = input instanceof Date ? input : new Date(input);
       return new Intl.DateTimeFormat(locale === "ja" ? "ja-JP" : "en-US", options).format(date);
