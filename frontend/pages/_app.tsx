@@ -6,6 +6,7 @@ import "../public/static/css/base/animations.css";
 import "../public/static/css/base/buttons.css";
 import "../public/static/css/base/responsive.css";
 import "../public/static/css/base/global.css";
+import "../public/static/css/base/locale_transition.css";
 import "../public/static/css/components/sidebar.css";
 import "../public/static/css/components/prompt_assist.css";
 import "../public/static/css/components/new_prompt_modal.css";

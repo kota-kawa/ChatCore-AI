@@ -1,0 +1,38 @@
+/* locale_transition.css
+   表示言語の切り替え演出。ページ全体の文言が一斉に入れ替わるため、短いフェードで
+   「切り替わった」ことを伝える。
+
+   transform や filter は position: fixed の含みブロックを作り、サイドバーや
+   トースト等の固定配置要素が演出中にずれてしまうため、opacity のみを使う。
+   Only opacity is animated: transform/filter would create a containing block for
+   position: fixed elements, shifting the sidebar and toasts mid-transition. */
+
+:root[data-cc-locale-transition] body {
+  transition: opacity 150ms ease-in;
+}
+
+/* 切り替え直後のフェードイン。完全な透明からではなく薄く残った状態から戻すことで、
+   文脈を見失わせずに変化だけを伝える。
+   Fade in from a dimmed state rather than fully transparent, so the change reads
+   without the page ever disappearing. */
+:root[data-cc-locale-transition="settle"] body {
+  animation: cc-locale-settle 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* 再読み込みで言語を適用する直前のフェードアウト / Fade out just before a reload applies the language */
+:root[data-cc-locale-transition="leave"] body {
+  opacity: 0;
+}
+
+@keyframes cc-locale-settle {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-cc-locale-transition] body {
+    transition: none;
+    animation: none;
+    opacity: 1;
+  }
+}
