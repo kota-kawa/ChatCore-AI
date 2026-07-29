@@ -76,6 +76,12 @@ import {
 
 // ユーザー設定ページのメインコンポーネント — すべての設定セクションを統括する
 // Main component for the user settings page — orchestrates all settings sections
+// 読み込みの呼び出し方を切り替えるオプション。background 指定時はスケルトンを出さず、
+// 既存の表示を保ったまま裏で差し替える。
+// Options that vary how a load is performed. With background the data is swapped behind
+// the existing view instead of showing skeletons.
+type SettingsLoadOptions = { background?: boolean };
+
 export default function UserSettingsPage() {
   const { locale, setLocale, t } = useTranslation();
   // 現在表示中のセクションを管理する
@@ -178,8 +184,11 @@ export default function UserSettingsPage() {
 
   // プロフィール情報を API から取得してフォームに反映する
   // Fetch profile data from the API and populate the form
-  const loadProfile = useCallback(async () => {
-    setProfileLoading(true);
+  // background: true のときはスケルトンを出さずに差し替える（言語切り替え後の再取得用）
+  // With background: true the data is swapped without showing skeletons (used when
+  // refetching after a language switch)
+  const loadProfile = useCallback(async (options?: SettingsLoadOptions) => {
+    if (!options?.background) setProfileLoading(true);
     try {
       const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
         "/api/user/profile",
@@ -231,13 +240,24 @@ export default function UserSettingsPage() {
     }
   }, [setLocale]);
 
+  // 保存中でも次の切り替えを受け付け、常に最後の選択を採用する。保存が終わるまで
+  // 操作を弾いていると、続けて切り替えたときにクリックが黙って捨てられ「切り替わらない」
+  // ように見えるため、古い保存結果の方を破棄する。
+  // Accept another switch while a save is in flight and always honour the latest choice.
+  // Blocking input until the save settles silently drops rapid clicks and reads as "the
+  // switch did nothing", so discard the stale save result instead.
+  const localeRequestRef = useRef(0);
+
   const handleLocaleSelect = useCallback(async (nextLocale: Locale) => {
-    if (nextLocale === locale || localeSaving) return;
+    if (nextLocale === locale) return;
+    const requestId = localeRequestRef.current + 1;
+    localeRequestRef.current = requestId;
     const previousLocale = locale;
     setLocale(nextLocale);
     setLocaleSaving(true);
     try {
       const savedLocale = await updateLocalePreference(nextLocale);
+      if (localeRequestRef.current !== requestId) return;
       setLocale(savedLocale);
       // このコールバックのクロージャが持つ`t`はクリック時点（切り替え前）のロケールに
       // 束縛されたままなので、トーストの文言はここでは切り替え後のロケールを明示して取得する。
@@ -245,12 +265,13 @@ export default function UserSettingsPage() {
       // with the post-switch locale explicitly rather than relying on `t`.
       showToast(translate(savedLocale, "settings.languageSaved"), { variant: "success" });
     } catch (error) {
+      if (localeRequestRef.current !== requestId) return;
       setLocale(previousLocale);
       showToast(translate(previousLocale, "settings.languageSaveFailed"), { variant: "error" });
     } finally {
-      setLocaleSaving(false);
+      if (localeRequestRef.current === requestId) setLocaleSaving(false);
     }
-  }, [locale, localeSaving, setLocale]);
+  }, [locale, setLocale]);
 
   // ユーザーが投稿したプロンプト一覧を取得する
   // Fetch the list of prompts authored by the current user
@@ -303,7 +324,7 @@ export default function UserSettingsPage() {
 
   // ブラウザの Passkey 対応を確認してから登録済み Passkey 一覧を取得する
   // Check browser passkey support, then fetch the list of registered passkeys
-  const loadPasskeys = useCallback(async () => {
+  const loadPasskeys = useCallback(async (options?: SettingsLoadOptions) => {
     if (!browserSupportsPasskeys()) {
       setPasskeySupported(false);
       setPasskeySupportStatus(t("settings.passkeyUnsupported"));
@@ -313,7 +334,7 @@ export default function UserSettingsPage() {
 
     setPasskeySupported(true);
     setPasskeySupportStatus(t("settings.passkeySupported"));
-    setPasskeysLoading(true);
+    if (!options?.background) setPasskeysLoading(true);
 
     try {
       const { payload } = await settingsFetchJsonOrThrow<Record<string, unknown>>(
@@ -371,8 +392,21 @@ export default function UserSettingsPage() {
     }
   }, [locale]);
 
-  // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする
-  // On mount, add the page class and perform initial loads for theme, profile, and passkeys
+  // マウント時にページクラスを追加し、テーマ・プロフィール・Passkey を初期ロードする。
+  // 依存配列は空に保つ。loadProfile / loadPasskeys は locale に依存するため、依存に
+  // 含めると言語を変えるたびにこのエフェクトが破棄・再実行され、(1) settings-page
+  // クラスが一瞬外れて画面がちらつき、(2) 保存中の言語が loadLanguagePreference の
+  // 取得結果（変更前の値）で上書きされて切り替わらなくなる。初回描画時の
+  // コールバックを ref で保持し、初期ロードは一度だけ実行する。
+  // On mount, add the page class and perform initial loads for theme, profile, and
+  // passkeys. The dependency array stays empty on purpose: loadProfile/loadPasskeys
+  // depend on locale, so listing them would tear down and re-run this effect on every
+  // language change, which (1) drops the settings-page class for a frame and flickers
+  // the screen and (2) lets loadLanguagePreference overwrite the language being saved
+  // with the pre-change value, making the switch appear to do nothing. Hold the
+  // first-render callbacks in a ref so the initial loads happen exactly once.
+  const initialLoadersRef = useRef({ loadProfile, loadLanguagePreference, loadPasskeys });
+
   useEffect(() => {
     document.body.classList.add("settings-page");
 
@@ -383,9 +417,10 @@ export default function UserSettingsPage() {
     };
     void importCustomElements();
 
-    void loadProfile();
-    void loadLanguagePreference();
-    void loadPasskeys();
+    const initialLoaders = initialLoadersRef.current;
+    void initialLoaders.loadProfile();
+    void initialLoaders.loadLanguagePreference();
+    void initialLoaders.loadPasskeys();
 
     return () => {
       if (profileSaveEffectTimeoutRef.current) {
@@ -394,7 +429,21 @@ export default function UserSettingsPage() {
       document.body.classList.remove("settings-page");
       document.body.classList.remove("modal-open");
     };
-  }, [loadLanguagePreference, loadPasskeys, loadProfile]);
+  }, []);
+
+  // 言語を切り替えたら、サーバー由来のラベル（Passkey の日時表記など）を新しい言語で
+  // 取り直す。スケルトンを出すと切り替えのたびに画面がちらつくため、裏側で差し替える。
+  // After a language switch, refetch server-derived labels (passkey timestamps and the
+  // like) in the new language. Refresh them in the background — showing skeletons would
+  // flicker the screen on every switch.
+  const relocalizedForRef = useRef(locale);
+
+  useEffect(() => {
+    if (relocalizedForRef.current === locale) return;
+    relocalizedForRef.current = locale;
+    void loadProfile({ background: true });
+    void loadPasskeys({ background: true });
+  }, [locale, loadPasskeys, loadProfile]);
 
   // 保存成功トークンが変わるたびにアニメーションを一定時間表示して自動消灯する
   // Show the save-success animation for a fixed duration each time the token increments
