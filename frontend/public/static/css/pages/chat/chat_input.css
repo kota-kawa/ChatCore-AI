@@ -256,6 +256,12 @@
     flex-shrink: 0;
   }
 
+  /* The keyboard already covers the home-indicator area. Keeping the safe-area
+     inset here leaves an unnecessary gap between the composer and keyboard. */
+  html[data-chat-keyboard-open="true"] :where(body.chat-page, .chat-page-shell) .input-container {
+    padding-bottom: 0.35rem;
+  }
+
   :where(body.chat-page, .chat-page-shell) .input-wrapper {
     gap: 0.3rem;
     align-items: flex-end;
@@ -455,6 +461,10 @@
     width: calc(100% - 1.1rem);
     top: 0.38rem;
     bottom: calc(0.42rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-chat-keyboard-open="true"] :where(body.chat-page, .chat-page-shell) .input-container .chat-attachment-drop-overlay {
+    bottom: 0.35rem;
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__icon {

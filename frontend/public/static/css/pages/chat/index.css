@@ -1158,7 +1158,7 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   }
 
   /* キーボード表示中はガラスエフェクトを軽くしてジャギを抑える */
-  :where(body.chat-page, .chat-page-shell) html[data-chat-keyboard-open="true"] .input-container {
+  html[data-chat-keyboard-open="true"] :where(body.chat-page, .chat-page-shell) .input-container {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
