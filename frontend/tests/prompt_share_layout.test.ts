@@ -166,3 +166,59 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
   assert.match(html, /Claude Haiku 4.5/);
   assert.match(html, /コピー/);
 });
+
+// 設定画面の閲覧モーダルと同じ枠組み（見出しブロック・フッター・入出力例パネル）を保つ
+// The shell must keep the settings-page preview modal's frame: heading block, footer, examples panel
+test("prompt share detail modal keeps the settings-style shell", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptShareDetailModal, {
+      isOpen: true,
+      isLoggedIn: true,
+      activeView: "detail",
+      promptDetailModalRef: React.createRef<HTMLDivElement>(),
+      commentsSectionRef: React.createRef<HTMLElement>(),
+      commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
+      detailPrompt: {
+        id: 12,
+        clientId: "prompt-12",
+        title: "会議メモ要約",
+        content: "議事録を要約してください。",
+        category: "business",
+        author: "Kota",
+        content_format: "prompt",
+        media_type: "text",
+        prompt_type: "text",
+        input_examples: "長い会議メモ",
+        output_examples: "要点 / 決定事項 / 次のアクション",
+        liked: false,
+        used_in_chat: false,
+        comment_count: 0,
+        created_at: "2026-06-01T00:00:00Z"
+      },
+      detailComments: [],
+      isDetailCommentsLoading: false,
+      isCommentSubmitting: false,
+      commentDraft: "",
+      commentActionPendingIds: new Set<string>(),
+      promptDetailCloseButtonRef: React.createRef<HTMLButtonElement>(),
+      onActiveViewChange: noop,
+      onCommentDraftChange: noop,
+      onSubmitComment: noop,
+      onDeleteComment: noop,
+      onReportComment: noop,
+      onReloadComments: noop,
+      onClose: noop
+    })
+  );
+
+  // 閉じる操作はヘッダーの角ボタンと固定フッターの両方から届く
+  // Closing is reachable from both the header corner button and the pinned footer
+  assert.match(html, /class="prompt-detail-close"/);
+  assert.match(html, /class="prompt-detail-footer"/);
+  assert.match(html, /prompt-detail-footer__button[^>]*>閉じる</);
+  // 入出力例は1枚のパネルにまとめ、中を2枚のカードに割る
+  // The examples share one panel that holds two cards
+  assert.match(html, /prompt-detail-examples__grid/);
+  assert.equal(html.match(/class="prompt-detail-example"/g)?.length, 2);
+  assert.ok(html.indexOf("入出力例") < html.indexOf("prompt-detail-examples__grid"));
+});
