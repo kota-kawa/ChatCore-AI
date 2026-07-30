@@ -763,8 +763,8 @@
 @media (max-width: 576px) {
   :where(body.chat-page, .chat-page-shell) .sidebar {
     padding:
-      /* サイドバートグルボタンの高さ分だけ上を空ける */
-      calc(3.6rem + env(safe-area-inset-top, 0px))
+      /* サイドバートグルと重ならない最小限の上余白を確保する */
+      calc(2.85rem + env(safe-area-inset-top, 0px))
       calc(0.72rem + env(safe-area-inset-right, 0px))
       calc(1.2rem + env(safe-area-inset-bottom, 0px))
       calc(0.72rem + env(safe-area-inset-left, 0px));

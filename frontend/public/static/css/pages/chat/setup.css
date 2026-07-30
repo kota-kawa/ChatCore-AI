@@ -1083,7 +1083,8 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
       linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 248, 247, 0.98) 100%),
       #f7f8f7;
     padding:
-      calc(var(--chat-mobile-toolbar-space, 3.65rem) + 0.9rem)
+      /* Keep the heading clear of the floating toolbar without adding a large blank band. */
+      calc(var(--chat-mobile-toolbar-space, 3.65rem) + 0.25rem)
       calc(var(--setup-container-padding-x) + env(safe-area-inset-right, 0px))
       calc(1.35rem + env(safe-area-inset-bottom, 0px))
       calc(var(--setup-container-padding-x) + env(safe-area-inset-left, 0px));
