@@ -763,14 +763,19 @@
 @media (max-width: 576px) {
   :where(body.chat-page, .chat-page-shell) .sidebar {
     padding:
-      /* サイドバートグルと重ならない最小限の上余白を確保する */
-      calc(2.85rem + env(safe-area-inset-top, 0px))
+      /* Place the project header in the toggle row instead of reserving a blank row above it. */
+      calc(0.5rem + env(safe-area-inset-top, 0px))
       calc(0.72rem + env(safe-area-inset-right, 0px))
       calc(1.2rem + env(safe-area-inset-bottom, 0px))
       calc(0.72rem + env(safe-area-inset-left, 0px));
     /* iOS での慣性スクロールを有効にする */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .sidebar-projects__header {
+    /* Keep the title clear of the 2.65rem mobile sidebar toggle while sharing its row. */
+    padding-left: 2.85rem;
   }
 
   :where(body.chat-page, .chat-page-shell) .new-chat-btn {
