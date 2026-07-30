@@ -52,6 +52,7 @@ type PromptSharePageLayoutProps = {
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
+  onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
   // モーダルなど追加UIを差し込める拡張スロット
   // Slot for injecting additional UI elements such as modals
   children?: ReactNode;
@@ -124,6 +125,7 @@ export function PromptSharePageLayout({
   onCloseDropdown,
   onAddAsTask,
   onToggleLike,
+  onOpenAuthorProfile,
   children
 }: PromptSharePageLayoutProps) {
   const { locale, t } = useTranslation();
@@ -365,6 +367,7 @@ export function PromptSharePageLayout({
                   onCloseDropdown={onCloseDropdown}
                   onAddAsTask={onAddAsTask}
                   onToggleLike={onToggleLike}
+                  onOpenAuthorProfile={onOpenAuthorProfile}
                 />
               );
             })}

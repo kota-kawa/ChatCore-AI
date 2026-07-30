@@ -32,6 +32,7 @@ import type {
   PromptResource,
   PromptType
 } from "../../scripts/prompt_share/types";
+import { PromptShareAuthorProfileModal } from "../../components/prompt_share/prompt_share_author_profile_modal";
 import { PromptShareComposerModal } from "../../components/prompt_share/prompt_share_composer_modal";
 import { PromptShareDetailModal } from "../../components/prompt_share/prompt_share_detail_modal";
 import {
@@ -65,6 +66,7 @@ import {
 import { PromptShareShareModal } from "../../components/prompt_share/prompt_share_share_modal";
 import type { PromptRecord } from "../../components/prompt_share/prompt_card";
 import { usePromptImageSelection } from "../../components/prompt_share/use_prompt_image_selection";
+import { usePromptAuthorProfile } from "../../components/prompt_share/use_prompt_author_profile";
 import { usePromptCardActions } from "../../components/prompt_share/use_prompt_card_actions";
 import { usePromptComments } from "../../components/prompt_share/use_prompt_comments";
 import { usePromptModalManager } from "../../components/prompt_share/use_prompt_modal_manager";
@@ -178,6 +180,7 @@ export default function PromptSharePage({
   const promptCommentsSectionRef = useRef<HTMLElement | null>(null);
   const promptCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptShareModalRef = useRef<HTMLDivElement | null>(null);
+  const promptAuthorProfileModalRef = useRef<HTMLDivElement | null>(null);
 
   // 投稿フォームのフォーム要素への参照。バリデーションとAI補助機能の初期化に使用する
   // Refs to composer form elements used for validation and AI-assist initialization
@@ -350,6 +353,22 @@ export default function PromptSharePage({
     updatePromptCommentCount
   });
 
+  // クリック時点の投稿者名。プロフィール取得が完了するまでの見出しの仮表示に使う
+  // Author name captured at click time; shown as a placeholder heading until the profile loads
+  const [authorProfileFallbackName, setAuthorProfileFallbackName] = useState("");
+
+  const {
+    authorProfile,
+    authorProfileError,
+    authorProfilePagination,
+    authorProfilePrompts,
+    isAuthorProfileLoading,
+    isLoadingMoreAuthorPrompts,
+    loadAuthorProfile,
+    loadMoreAuthorPrompts,
+    resetAuthorProfile
+  } = usePromptAuthorProfile({ toPromptRecords });
+
   const { activeModal, closeModal, hasModalLockRef, openModal } = usePromptModalManager({
     isPostSubmitting,
     onCloseDetail: () => {
@@ -358,10 +377,23 @@ export default function PromptSharePage({
       resetPromptComments();
     },
     onClosePost: resetPostModalState,
+    onCloseProfile: resetAuthorProfile,
     postModalRef,
     promptDetailModalRef,
-    promptShareModalRef
+    promptShareModalRef,
+    promptAuthorProfileModalRef
   });
+
+  // SNS風のアバター/名前をタップしたときに、投稿者プロフィールモーダルを開いて内容を取得する
+  // Opens the author profile modal and fetches its contents when an avatar/name is tapped
+  const openAuthorProfile = useCallback(
+    (authorUserId: number, authorName: string) => {
+      setAuthorProfileFallbackName(authorName);
+      openModal("profile");
+      void loadAuthorProfile(authorUserId);
+    },
+    [loadAuthorProfile, openModal]
+  );
 
   const supportsNativeShare = usePromptSharePageSetup({
     hasModalLockRef,
@@ -1122,6 +1154,7 @@ export default function PromptSharePage({
         onCloseDropdown={closePromptDropdown}
         onAddAsTask={handleAddPromptAsTask}
         onToggleLike={handleTogglePromptLike}
+        onOpenAuthorProfile={openAuthorProfile}
       >
 
         {/* プロンプト投稿フォームのモーダル。ログイン済みユーザーのみ利用可能 / Composer modal for posting new prompts; only available to logged-in users */}
@@ -1201,6 +1234,7 @@ export default function PromptSharePage({
           onClose={() => {
             closeModal("detail");
           }}
+          onOpenAuthorProfile={openAuthorProfile}
         />
 
         {/* 共有URLとSNSリンクを表示するモーダル / Modal displaying the share URL and SNS share links */}
@@ -1218,6 +1252,27 @@ export default function PromptSharePage({
           supportsNativeShare={supportsNativeShare}
           onNativeShare={handleNativeShare}
           shareSnsLinks={shareSnsLinks}
+        />
+
+        {/* SNSのように投稿者のこれまでの投稿と自己紹介を表示するプロフィールモーダル */}
+        {/* SNS-style modal showing an author's past posts and self-introduction */}
+        <PromptShareAuthorProfileModal
+          isOpen={activeModal === "profile"}
+          authorProfileModalRef={promptAuthorProfileModalRef}
+          profile={authorProfile}
+          fallbackName={authorProfileFallbackName}
+          prompts={authorProfilePrompts}
+          isLoading={isAuthorProfileLoading}
+          isLoadingMore={isLoadingMoreAuthorPrompts}
+          error={authorProfileError}
+          hasMore={Boolean(authorProfilePagination?.has_next)}
+          onLoadMore={() => {
+            void loadMoreAuthorPrompts();
+          }}
+          onOpenPrompt={openPromptDetailModal}
+          onClose={() => {
+            closeModal("profile");
+          }}
         />
 
       </PromptSharePageLayout>

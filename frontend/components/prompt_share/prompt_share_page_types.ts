@@ -33,7 +33,7 @@ export type PromptAxisFilterOption<TValue extends string> = {
 
 // 現在開いているモーダルを識別するキー（nullの場合はモーダル非表示）
 // Key identifying the currently open modal (null means no modal is shown)
-export type ModalKey = "post" | "detail" | "share" | null;
+export type ModalKey = "post" | "detail" | "share" | "profile" | null;
 
 // プロンプト操作に対するフィードバックメッセージの型
 // Type for feedback messages from prompt actions
