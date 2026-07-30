@@ -926,7 +926,10 @@ function SetupSectionComponent() {
       aria-hidden={isSetupVisible ? "false" : "true"}
     >
       <form className="setup-form" id="setup-form" onSubmit={(event) => event.preventDefault()}>
-        <h2 className="setup-form-title">Chat Core</h2>
+        <h2 className="setup-form-title">
+          <img className="setup-form-title__icon" src="/static/favicon.png" alt="" aria-hidden="true" />
+          <span>Chat Core</span>
+        </h2>
 
         {/* 未ログイン時のみ表示する機能紹介テキスト（クロール可能な公開コンテンツを確保する） */}
         {/* Short feature intro shown only when logged out (provides crawlable public content) */}

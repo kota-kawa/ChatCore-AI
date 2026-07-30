@@ -86,12 +86,23 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-form-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
   text-align: center;
   font-size: var(--setup-title-font-size);
   font-weight: 700;
   color: var(--success-strong, #134e4a);
   letter-spacing: 0.03em;
   margin-bottom: var(--setup-title-margin-bottom) !important;
+}
+
+:where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 /* 未ログイン時にタイトル直下へ表示する機能紹介テキスト（控えめなリード文として既存デザインに馴染ませる） */
@@ -1103,10 +1114,16 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   :where(body.chat-page, .chat-page-shell) .setup-form-title {
     margin-bottom: 0.1rem !important;
     padding-right: 3.2rem;
+    justify-content: flex-start;
     text-align: left;
     font-size: 1.42rem;
     line-height: 1.18;
     letter-spacing: 0;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .setup-form-title__icon {
+    width: 1.7rem;
+    height: 1.7rem;
   }
 
   :where(body.chat-page, .chat-page-shell) .form-label {
