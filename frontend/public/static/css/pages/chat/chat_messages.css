@@ -2068,6 +2068,23 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     scroll-padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    /* 透明なモバイルヘッダーへ近づくメッセージを、スクロール位置に応じて自然に薄くする。 */
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgba(0, 0, 0, 0.48) 1.15rem,
+      rgba(0, 0, 0, 0.88) 2.7rem,
+      #000 4.25rem,
+      #000 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgba(0, 0, 0, 0.48) 1.15rem,
+      rgba(0, 0, 0, 0.88) 2.7rem,
+      #000 4.25rem,
+      #000 100%
+    );
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-messages--virtual {
