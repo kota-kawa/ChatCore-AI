@@ -333,6 +333,57 @@
   color: #7d90a8;
 }
 
+[data-theme="dark"]
+  :where(body.prompt-share-page, .prompt-share-page)
+  #promptDetailModal
+  .prompt-detail-header {
+  background:
+    radial-gradient(circle at 92% 12%, rgba(96, 165, 250, 0.16), transparent 35%),
+    linear-gradient(135deg, #172433 0%, #16263a 58%, #16202f 100%);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__icon {
+  border-color: rgba(96, 165, 250, 0.3);
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__eyebrow {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(15, 23, 42, 0.82);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:hover,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:focus-visible,
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.14);
+  color: #bfdbfe;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer {
+  background: rgba(15, 23, 42, 0.94);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-examples {
+  background: linear-gradient(145deg, rgba(23, 36, 51, 0.72), rgba(15, 23, 42, 0.52));
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-example {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.58);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-example h3 {
+  color: #93c5fd;
+}
+
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-meta__item--chip {
   background: rgba(96, 165, 250, 0.16);
 }
@@ -698,11 +749,9 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* ── 詳細モーダル内コンテンツテキストボックス (白背景→ダーク) ── */
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #modalPromptContent,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #modalInputExamples,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #modalOutputExamples,
-
+/* ── 詳細モーダル内コンテンツテキストボックス (白背景→ダーク) ──
+   入出力例はカードの中の素の段落になったため、ここでは箱にしない
+   The examples are now bare paragraphs inside a card, so they are not boxed here */
 [data-theme="dark"] .prompt-share-page .modal-content-body .form-group p {
   background: rgba(15, 23, 42, 0.6);
   border-color: rgba(148, 163, 184, 0.2);

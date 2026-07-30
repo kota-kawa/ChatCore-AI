@@ -198,62 +198,78 @@ export function PromptShareDetailModal({
         data-reading-size={readingSize}
         tabIndex={-1}
       >
-        <button
-          type="button"
-          className="close-btn"
-          id="closePromptDetailModal"
-          aria-label={t("promptShare.closeModal")}
-          ref={promptDetailCloseButtonRef}
-          onClick={onClose}
-        >
-          &times;
-        </button>
         {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
         {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
         <header className="prompt-detail-header">
-          <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.detailsTitle")}</h2>
+          {/* 閉じるボタンは浮かせず見出し行に並べ、設定画面の閲覧モーダルと同じ組みにする */}
+          {/* The close button sits in the title row instead of floating, matching the settings preview modal */}
+          <div className="prompt-detail-header__bar">
+            <div className="prompt-detail-heading">
+              <span className="prompt-detail-heading__icon" aria-hidden="true">
+                <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`}></i>
+              </span>
+              <div className="prompt-detail-heading__text">
+                <p className="prompt-detail-heading__eyebrow">{t("promptShare.detailsTitle")}</p>
+                <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
 
-          <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
-            <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-              <dt>
-                <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
-                <span className="sr-only">{t("promptShare.format")}</span>
-              </dt>
-              <dd id="modalPromptFormat">
-                {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
-              </dd>
+                <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
+                  <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                    <dt>
+                      <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`} aria-hidden="true"></i>
+                      <span className="sr-only">{t("promptShare.format")}</span>
+                    </dt>
+                    <dd id="modalPromptFormat">
+                      {detailPrompt ? getPromptFormatLabel(detailContentFormat, locale) : ""}
+                    </dd>
+                  </div>
+                  <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
+                    <dt>
+                      <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
+                      <span className="sr-only">{t("promptShare.media")}</span>
+                    </dt>
+                    <dd id="modalPromptMediaType">
+                      {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
+                    </dd>
+                  </div>
+                  <DetailMetaItem
+                    iconClass="bi-hash"
+                    label={t("promptShare.category")}
+                    value={categoryLabel}
+                    id="modalPromptCategory"
+                  />
+                  <DetailMetaItem
+                    iconClass="bi-person"
+                    label={t("promptShare.author")}
+                    value={authorLabel}
+                    id="modalPromptAuthor"
+                  />
+                  <DetailMetaItem
+                    iconClass="bi-calendar3"
+                    label={t("promptShare.publishedAt")}
+                    value={formattedDate}
+                  />
+                  {detailPrompt?.ai_model ? (
+                    <DetailMetaItem
+                      iconClass="bi-cpu"
+                      label={t("promptShare.aiModel")}
+                      value={detailPrompt.ai_model}
+                      id="modalAiModel"
+                    />
+                  ) : null}
+                </dl>
+              </div>
             </div>
-            <div className="prompt-detail-meta__item prompt-detail-meta__item--chip">
-              <dt>
-                <i className={`bi ${getPromptMediaIconClass(detailMediaType)}`} aria-hidden="true"></i>
-                <span className="sr-only">{t("promptShare.media")}</span>
-              </dt>
-              <dd id="modalPromptMediaType">
-                {detailPrompt ? getPromptMediaLabel(detailMediaType, locale) : ""}
-              </dd>
-            </div>
-            <DetailMetaItem
-              iconClass="bi-hash"
-              label={t("promptShare.category")}
-              value={categoryLabel}
-              id="modalPromptCategory"
-            />
-            <DetailMetaItem
-              iconClass="bi-person"
-              label={t("promptShare.author")}
-              value={authorLabel}
-              id="modalPromptAuthor"
-            />
-            <DetailMetaItem iconClass="bi-calendar3" label={t("promptShare.publishedAt")} value={formattedDate} />
-            {detailPrompt?.ai_model ? (
-              <DetailMetaItem
-                iconClass="bi-cpu"
-                label={t("promptShare.aiModel")}
-                value={detailPrompt.ai_model}
-                id="modalAiModel"
-              />
-            ) : null}
-          </dl>
+            <button
+              type="button"
+              className="prompt-detail-close"
+              id="closePromptDetailModal"
+              aria-label={t("promptShare.closeModal")}
+              ref={promptDetailCloseButtonRef}
+              onClick={onClose}
+            >
+              <i className="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+          </div>
 
           {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
           {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
@@ -359,36 +375,40 @@ export function PromptShareDetailModal({
               </article>
             </div>
 
+            {/* 入出力例は1枚のパネルにまとめ、中を2列カードに割る（設定画面の閲覧モーダルと同じ組み） */}
+            {/* Input/output examples share one panel split into two cards, as in the settings preview modal */}
             {hasExamples ? (
-              <div className="prompt-detail-examples">
-                {detailPrompt?.input_examples ? (
-                  <article id="modalInputExamplesGroup" className="prompt-detail-section">
-                    <div className="prompt-detail-section__header">
-                      <div>
-                        <span className="prompt-detail-section__label">{t("promptShare.inputExample")}</span>
-                        <span className="prompt-detail-section__meta">{t("promptShare.inputContext")}</span>
-                      </div>
-                    </div>
-                    <p id="modalInputExamples" className="prompt-detail-text-block">
-                      {detailPrompt.input_examples}
-                    </p>
-                  </article>
-                ) : null}
+              <section className="prompt-detail-examples" aria-labelledby="modalExamplesTitle">
+                <div className="prompt-detail-section__header">
+                  <div>
+                    <span className="prompt-detail-section__label" id="modalExamplesTitle">
+                      {t("promptShare.examples")}
+                    </span>
+                    <span className="prompt-detail-section__meta">{t("promptShare.supplemental")}</span>
+                  </div>
+                </div>
+                <div className="prompt-detail-examples__grid">
+                  {detailPrompt?.input_examples ? (
+                    <article id="modalInputExamplesGroup" className="prompt-detail-example">
+                      <h3>
+                        <i className="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                        {t("promptShare.inputExample")}
+                      </h3>
+                      <p id="modalInputExamples">{detailPrompt.input_examples}</p>
+                    </article>
+                  ) : null}
 
-                {detailPrompt?.output_examples ? (
-                  <article id="modalOutputExamplesGroup" className="prompt-detail-section">
-                    <div className="prompt-detail-section__header">
-                      <div>
-                        <span className="prompt-detail-section__label">{t("promptShare.outputExample")}</span>
-                        <span className="prompt-detail-section__meta">{t("promptShare.expectedResponse")}</span>
-                      </div>
-                    </div>
-                    <p id="modalOutputExamples" className="prompt-detail-text-block">
-                      {detailPrompt.output_examples}
-                    </p>
-                  </article>
-                ) : null}
-              </div>
+                  {detailPrompt?.output_examples ? (
+                    <article id="modalOutputExamplesGroup" className="prompt-detail-example">
+                      <h3>
+                        <i className="bi bi-box-arrow-right" aria-hidden="true"></i>
+                        {t("promptShare.outputExample")}
+                      </h3>
+                      <p id="modalOutputExamples">{detailPrompt.output_examples}</p>
+                    </article>
+                  ) : null}
+                </div>
+              </section>
             ) : null}
 
             {skillResources.length > 0 ? (
@@ -543,6 +563,14 @@ export function PromptShareDetailModal({
             )}
           </section>
         </div>
+
+        {/* 本文がどれだけ長くても閉じる導線が画面内に残るよう、フッターを固定する */}
+        {/* A pinned footer keeps the close action reachable no matter how long the body runs */}
+        <footer className="prompt-detail-footer">
+          <button type="button" className="prompt-detail-footer__button" onClick={onClose}>
+            {t("common.close")}
+          </button>
+        </footer>
       </div>
     </div>
   );

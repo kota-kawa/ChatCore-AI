@@ -191,8 +191,28 @@
     max-height: 86vh;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-examples {
+  /* 詳細モーダルは下端に貼り付くシートにする（設定画面の閲覧モーダルと同じ）
+     The detail modal becomes a bottom sheet, as in the settings preview modal */
+  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal {
+    align-items: flex-end;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
+    width: 100%;
+    height: min(92dvh, 740px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 22px 22px 0 0;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-examples__grid {
     grid-template-columns: 1fr;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer,
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button {
+    width: 100%;
   }
 
   /* 見出し行が詰まるので、ラベルと操作を2段に折り返す
@@ -355,12 +375,14 @@
     padding: 0.82rem;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .prompt-detail-header {
-    padding-right: 3.4rem;
+  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
+    border-radius: 20px 20px 0 0;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content--detail h2 {
-    padding-right: 0;
+  /* 44pxのアイコンを外し、狭い画面ではタイトルに横幅を渡す
+     The 44px icon steps aside so the title keeps its width on narrow screens */
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__icon {
+    display: none;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section,
