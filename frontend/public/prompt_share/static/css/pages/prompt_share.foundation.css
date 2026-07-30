@@ -69,7 +69,9 @@ body.prompt-share-page.ps-modal-open {
   overscroll-behavior: none;
 }
 
-body.prompt-share-page.ps-modal-open .prompt-share-page > :not(#postModal):not(#promptDetailModal):not(#promptShareModal) {
+/* 開いているプロフィールモーダルも背景ではなく操作対象として残す。
+   Keep the author profile modal interactive while the rest of the page is locked. */
+body.prompt-share-page.ps-modal-open .prompt-share-page > :not(#postModal):not(#promptDetailModal):not(#promptShareModal):not(#promptAuthorProfileModal) {
   pointer-events: none;
 }
 
@@ -77,7 +79,9 @@ body.prompt-share-page.ps-modal-open #postModal.show,
 
 body.prompt-share-page.ps-modal-open #promptDetailModal.show,
 
-body.prompt-share-page.ps-modal-open #promptShareModal.show {
+body.prompt-share-page.ps-modal-open #promptShareModal.show,
+
+body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
   pointer-events: auto;
 }
 
