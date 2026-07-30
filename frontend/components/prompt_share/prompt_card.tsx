@@ -130,6 +130,32 @@ function PromptCardComponent({
           <i className="bi bi-calendar3"></i>
           {safeCreatedAt}
         </span>
+        {/* 投稿者と日付を同じメタ情報行に配置する。ユーザーIDがある場合のみプロフィールへ遷移できる */}
+        {/* Keep the author and date on the same metadata row; only make the author interactive when a user ID exists */}
+        {hasAuthorProfile ? (
+          <button
+            type="button"
+            className="prompt-card__author"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenAuthorProfile(authorUserId, authorName);
+            }}
+          >
+            <AuthorAvatarImage
+              src={prompt.author_avatar_url || ""}
+              alt={t("promptShare.authorAvatarAlt", { name: authorName })}
+            />
+            <span className="prompt-card__author-name">{authorName}</span>
+          </button>
+        ) : (
+          <div className="prompt-card__author prompt-card__author--static">
+            <AuthorAvatarImage
+              src={prompt.author_avatar_url || ""}
+              alt={t("promptShare.authorAvatarAlt", { name: authorName })}
+            />
+            <span className="prompt-card__author-name">{authorName}</span>
+          </div>
+        )}
         {/* クリックがカード本体に伝播しないようにstopPropagationでモーダル誤起動を防ぐ */}
         {/* Stop propagation so clicking the menu button does not also open the detail modal */}
         <button
@@ -196,33 +222,6 @@ function PromptCardComponent({
           <span>{t("promptShare.report")}</span>
         </button>
       </div>
-
-      {/* SNSのようにアバター+投稿者名を表示する。ユーザーIDがある場合のみプロフィールへ遷移できる */}
-      {/* SNS-style avatar + author name; only clickable when a user ID is present */}
-      {hasAuthorProfile ? (
-        <button
-          type="button"
-          className="prompt-card__author"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenAuthorProfile(authorUserId, authorName);
-          }}
-        >
-          <AuthorAvatarImage
-            src={prompt.author_avatar_url || ""}
-            alt={t("promptShare.authorAvatarAlt", { name: authorName })}
-          />
-          <span className="prompt-card__author-name">{authorName}</span>
-        </button>
-      ) : (
-        <div className="prompt-card__author prompt-card__author--static">
-          <AuthorAvatarImage
-            src={prompt.author_avatar_url || ""}
-            alt={t("promptShare.authorAvatarAlt", { name: authorName })}
-          />
-          <span className="prompt-card__author-name">{authorName}</span>
-        </div>
-      )}
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}
