@@ -563,14 +563,6 @@ export function PromptShareDetailModal({
             )}
           </section>
         </div>
-
-        {/* 本文がどれだけ長くても閉じる導線が画面内に残るよう、フッターを固定する */}
-        {/* A pinned footer keeps the close action reachable no matter how long the body runs */}
-        <footer className="prompt-detail-footer">
-          <button type="button" className="prompt-detail-footer__button" onClick={onClose}>
-            {t("common.close")}
-          </button>
-        </footer>
       </div>
     </div>
   );

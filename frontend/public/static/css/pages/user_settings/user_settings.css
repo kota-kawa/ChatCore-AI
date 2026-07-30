@@ -3547,16 +3547,17 @@ body.settings-page :where(
   transform: translateY(-1px);
 }
 
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__close:focus-visible,
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__button:focus-visible {
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__close:focus-visible {
   box-shadow: 0 0 0 4px rgba(25, 195, 125, 0.2);
 }
 
+/* ×ボタンが唯一の閉じる導線になったため、フッターの分だけ本文の縦幅を広げる
+   The × button is now the only close affordance, so the body reclaims the footer's height */
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__body {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: clamp(1rem, 2.8vw, 1.6rem) clamp(1.15rem, 3vw, 1.75rem);
+  padding: clamp(1rem, 2.8vw, 1.6rem) clamp(1.15rem, 3vw, 1.75rem) clamp(1.3rem, 3.2vw, 2rem);
   scrollbar-gutter: stable;
 }
 
@@ -3634,35 +3635,6 @@ body.settings-page :where(
   line-height: 1.7;
 }
 
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__footer {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  padding: 0.95rem clamp(1.15rem, 3vw, 1.75rem);
-  border-top: 1px solid rgba(200, 220, 210, 0.78);
-  background: rgba(252, 255, 253, 0.96);
-}
-
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__button {
-  min-height: 42px;
-  border: 1px solid #c9dcd2;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #40544a;
-  cursor: pointer;
-  font-size: 0.86rem;
-  font-weight: 800;
-  padding: 0.62rem 1.1rem;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__button:hover {
-  border-color: rgba(15, 122, 81, 0.45);
-  background: #f2fbf6;
-  color: var(--primary-dark, #0f7a51);
-  transform: translateY(-1px);
-}
-
 @media (max-width: 640px) {
   :where(body.settings-page, .user-settings-page) .prompt-preview-modal {
     align-items: end;
@@ -3680,11 +3652,6 @@ body.settings-page :where(
 
   :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example-grid {
     grid-template-columns: 1fr;
-  }
-
-  :where(body.settings-page, .user-settings-page) .prompt-preview-modal__footer,
-  :where(body.settings-page, .user-settings-page) .prompt-preview-modal__button {
-    width: 100%;
   }
 }
 
@@ -3746,15 +3713,13 @@ body.settings-page :where(
   background: rgba(52, 211, 153, 0.12);
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__close,
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__button {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__close {
   border-color: rgba(100, 135, 117, 0.56);
   background: rgba(15, 23, 42, 0.82);
   color: #cbd5e1;
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__close:hover,
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__button:hover {
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__close:hover {
   border-color: rgba(52, 211, 153, 0.5);
   background: rgba(52, 211, 153, 0.12);
   color: #a7f3d0;
@@ -3778,11 +3743,6 @@ body.settings-page :where(
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example p {
   color: #dbe5ee;
-}
-
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__footer {
-  border-color: rgba(71, 101, 88, 0.72);
-  background: rgba(15, 23, 42, 0.94);
 }
 
 /* ─── ダークモード: 投稿／いいねプロンプトのヒーロー・空状態 ─── */

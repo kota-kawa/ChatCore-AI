@@ -352,23 +352,17 @@
   color: #93c5fd;
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close {
   border-color: rgba(148, 163, 184, 0.38);
   background: rgba(15, 23, 42, 0.82);
   color: #cbd5e1;
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:hover,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:focus-visible,
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button:hover {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:focus-visible {
   border-color: rgba(96, 165, 250, 0.5);
   background: rgba(96, 165, 250, 0.14);
   color: #bfdbfe;
-}
-
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer {
-  background: rgba(15, 23, 42, 0.94);
 }
 
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-examples {

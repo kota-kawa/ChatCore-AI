@@ -279,8 +279,7 @@
   transform: translateY(-1px);
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:focus-visible,
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button:focus-visible {
+:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close:focus-visible {
   box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.2);
 }
 
@@ -394,6 +393,8 @@
 }
 
 /* ── スクロール領域（モーダル内で唯一のスクローラー） ─────────────── */
+/* ×ボタンが唯一の閉じる導線になったため、フッターの分だけ本文の縦幅を広げる
+   The × button is now the only close affordance, so the body reclaims the footer's height */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -401,7 +402,7 @@
   overscroll-behavior: contain;
   /* 上端に余白を持たせると固定見出しの上に本文が覗くため、余白はパネル側で取る
      Top spacing lives on the panel: padding here would let text show above the sticky header */
-  padding: 0 var(--pd-pad-x) calc(var(--pd-pad-x) + 0.4rem);
+  padding: 0 var(--pd-pad-x) calc(var(--pd-pad-x) + 1.1rem);
   scrollbar-width: thin;
   scrollbar-color: var(--page-scrollbar-thumb) transparent;
 }
@@ -954,36 +955,6 @@
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-comments__actions button:disabled {
   opacity: 0.66;
   cursor: wait;
-}
-
-/* ── フッター（固定領域） ─────────────────────────────────────────── */
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  padding: 0.95rem var(--pd-pad-x);
-  border-top: 1px solid var(--pd-line);
-  background: rgba(250, 252, 255, 0.96);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button {
-  min-height: 42px;
-  padding: 0.62rem 1.1rem;
-  border: 1px solid #cfdff0;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #40546a;
-  cursor: pointer;
-  font-size: 0.86rem;
-  font-weight: 800;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button:hover {
-  border-color: rgba(26, 115, 232, 0.45);
-  background: #f1f7ff;
-  color: #185abc;
-  transform: translateY(-1px);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) #promptShareModal .post-modal-content {

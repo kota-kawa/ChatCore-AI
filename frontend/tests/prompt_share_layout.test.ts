@@ -167,8 +167,8 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
   assert.match(html, /コピー/);
 });
 
-// 設定画面の閲覧モーダルと同じ枠組み（見出しブロック・フッター・入出力例パネル）を保つ
-// The shell must keep the settings-page preview modal's frame: heading block, footer, examples panel
+// 設定画面の閲覧モーダルと同じ枠組み（見出しブロック・入出力例パネル）を保つ
+// The shell must keep the settings-page preview modal's frame: heading block, examples panel
 test("prompt share detail modal keeps the settings-style shell", () => {
   const html = renderToStaticMarkup(
     React.createElement(PromptShareDetailModal, {
@@ -211,11 +211,10 @@ test("prompt share detail modal keeps the settings-style shell", () => {
     })
   );
 
-  // 閉じる操作はヘッダーの角ボタンと固定フッターの両方から届く
-  // Closing is reachable from both the header corner button and the pinned footer
+  // 閉じる操作はヘッダーの角ボタンのみ。冗長なフッターの「閉じる」は持たない
+  // Closing is reachable only from the header corner button; no redundant footer close
   assert.match(html, /class="prompt-detail-close"/);
-  assert.match(html, /class="prompt-detail-footer"/);
-  assert.match(html, /prompt-detail-footer__button[^>]*>閉じる</);
+  assert.doesNotMatch(html, /prompt-detail-footer/);
   // 入出力例は1枚のパネルにまとめ、中を2枚のカードに割る
   // The examples share one panel that holds two cards
   assert.match(html, /prompt-detail-examples__grid/);
