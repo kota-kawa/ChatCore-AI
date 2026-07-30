@@ -10,17 +10,23 @@ const chatMessagesCss = readFileSync(
   new URL("../public/static/css/pages/chat/chat_messages.css", import.meta.url),
   "utf8",
 );
+const mobileChatLayoutCss = chatLayoutCss.slice(chatLayoutCss.indexOf("@media (max-width: 576px)"));
 
-test("mobile chat header uses a transparent surface with readable controls", () => {
+test("mobile chat header and controls use near-transparent surfaces", () => {
   assert.match(
-    chatLayoutCss,
-    /@media \(max-width: 576px\)[\s\S]*?\.chat-header\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;/,
+    mobileChatLayoutCss,
+    /\.chat-header\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;/,
     "the mobile header must not restore the green background or divider shadow",
   );
   assert.match(
-    chatLayoutCss,
-    /\.chat-header \.icon-button\s*\{[\s\S]*?backdrop-filter:\s*blur\(14px\) saturate\(135%\)\s*;/,
-    "header actions must remain readable over the transparent surface",
+    mobileChatLayoutCss,
+    /\.chat-header \.icon-button\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?border:\s*1px solid transparent\s*;[\s\S]*?box-shadow:\s*none\s*;[\s\S]*?backdrop-filter:\s*none\s*;/,
+    "header actions must not add visible cards to the transparent surface",
+  );
+  assert.match(
+    mobileChatLayoutCss,
+    /\.chat-header-model-trigger\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?border-color:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;/,
+    "the model selector must stay visually transparent with the header",
   );
 });
 
