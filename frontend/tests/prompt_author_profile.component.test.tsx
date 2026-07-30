@@ -52,7 +52,11 @@ describe("prompt_share author avatar", () => {
   it("投稿者IDがある場合、アバターをクリックするとプロフィールが開き、詳細モーダルは開かない", () => {
     const { onOpenAuthorProfile, onOpenDetail } = renderPromptCard();
 
-    fireEvent.click(screen.getByRole("button", { name: /Kota/ }));
+    const authorButton = screen.getByRole("button", { name: /Kota/ });
+    const cardHeader = authorButton.closest(".prompt-card__header");
+
+    expect(cardHeader).toContainElement(screen.getByText("2026/06/01"));
+    fireEvent.click(authorButton);
 
     expect(onOpenAuthorProfile).toHaveBeenCalledWith(42, "Kota");
     expect(onOpenDetail).not.toHaveBeenCalled();

@@ -111,7 +111,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "badges menu"
-    "date date";
+    "author date";
   align-items: center;
   gap: 0.42rem 0.54rem;
   min-height: 3rem;
@@ -119,7 +119,7 @@
 
 .prompt-share-page .prompt-card__created-at {
   grid-area: date;
-  justify-self: start;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
@@ -155,6 +155,7 @@
 /* SNSのようにアバター+投稿者名を並べる署名行。ユーザーIDがある場合のみボタンにする */
 /* SNS-style byline pairing avatar and name; only a button when a user ID is present */
 .prompt-share-page .prompt-card__author {
+  grid-area: author;
   position: relative;
   z-index: 1;
   display: inline-flex;
@@ -177,7 +178,7 @@
 
 .prompt-share-page .prompt-card__author:hover .prompt-card__author-name {
   color: var(--ps-primary);
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .prompt-share-page .prompt-card__author--static:hover .prompt-card__author-name {

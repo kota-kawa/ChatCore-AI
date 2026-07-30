@@ -358,7 +358,7 @@
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-author:hover span {
   color: var(--pd-accent);
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-author--static:hover span {
