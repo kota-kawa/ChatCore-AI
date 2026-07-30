@@ -152,6 +152,61 @@
   justify-self: end;
 }
 
+/* SNSのようにアバター+投稿者名を並べる署名行。ユーザーIDがある場合のみボタンにする */
+/* SNS-style byline pairing avatar and name; only a button when a user ID is present */
+.prompt-share-page .prompt-card__author {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prompt-share-page .prompt-card__author--static {
+  cursor: default;
+}
+
+.prompt-share-page .prompt-card__author:hover .prompt-card__author-name {
+  color: var(--ps-primary);
+  text-decoration: underline;
+}
+
+.prompt-share-page .prompt-card__author--static:hover .prompt-card__author-name {
+  color: inherit;
+  text-decoration: none;
+}
+
+.prompt-share-page .prompt-card__author-avatar {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #dce7f3;
+  background: #f5f9ff;
+}
+
+.prompt-share-page .prompt-card__author-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.16s ease;
+}
+
 .prompt-share-page .prompt-card__category-pill {
   display: inline-flex;
   align-items: center;

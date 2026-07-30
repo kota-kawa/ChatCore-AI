@@ -210,6 +210,19 @@
   color: #9ca3af;
 }
 
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card__author-name {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card__author:hover .prompt-card__author-name {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card__author-avatar {
+  border-color: #374151;
+  background: #1f2937;
+}
+
 [data-theme="dark"] .prompt-share-page .prompt-loading-message,
 
 [data-theme="dark"] .prompt-share-page .prompt-feedback,
@@ -741,6 +754,82 @@
 [data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #promptShareModal .post-modal-content {
   background: #111827;
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── SNS風プロフィールモーダル ── */
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) #promptAuthorProfileModal .post-modal-content {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-header {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(96, 165, 250, 0.14), transparent 46%),
+    linear-gradient(180deg, #1f2937 0%, #111827 100%);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-header__avatar {
+  border-color: #1f2937;
+  background: #1f2937;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-header h2 {
+  color: #f9fafb;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-header__count {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-header__bio {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-body__label {
+  color: #f9fafb;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-status {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__pill {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__title {
+  color: #f9fafb;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__content {
+  color: #d1d5db;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-prompt__meta {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-load-more {
+  background: #1f2937;
+  border-color: #374151;
+  color: #93c5fd;
+}
+
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .author-profile-load-more:hover {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.15);
 }
 
 /* ── 詳細モーダル内コンテンツテキストボックス (白背景→ダーク) ──
