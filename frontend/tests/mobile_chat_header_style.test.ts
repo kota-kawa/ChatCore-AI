@@ -12,7 +12,7 @@ const chatMessagesCss = readFileSync(
 );
 const mobileChatLayoutCss = chatLayoutCss.slice(chatLayoutCss.indexOf("@media (max-width: 576px)"));
 
-test("mobile chat header and controls use near-transparent surfaces", () => {
+test("mobile chat header and controls stay fully transparent", () => {
   assert.match(
     mobileChatLayoutCss,
     /\.chat-header\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;/,
@@ -27,6 +27,11 @@ test("mobile chat header and controls use near-transparent surfaces", () => {
     mobileChatLayoutCss,
     /\.chat-header-model-trigger\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?border-color:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;/,
     "the model selector must stay visually transparent with the header",
+  );
+  assert.match(
+    mobileChatLayoutCss,
+    /\.chat-header :is\(\.icon-button, \.chat-header-model-trigger\):is\(:hover, :focus, :focus-visible, :active\)\s*\{[\s\S]*?background:\s*transparent\s*;[\s\S]*?box-shadow:\s*none\s*;[\s\S]*?filter:\s*none\s*;/,
+    "interactive header controls must not add a visible surface or shadow",
   );
 });
 
