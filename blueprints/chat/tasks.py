@@ -15,6 +15,7 @@ from services.auth_limits import (
     get_request_client_ip,
 )
 from services.api_errors import (
+    ApiServiceError,
     DEFAULT_RETRY_AFTER_SECONDS,
     ResourceNotFoundError,
     parse_retry_after_seconds,
@@ -22,11 +23,15 @@ from services.api_errors import (
 from services.async_utils import run_blocking
 from services.agent_capabilities import build_capability_context
 from services.cache import cache_get_json, cache_set_json
-from services.db import get_db_connection
+from services.db import Error, get_db_connection
 from services.default_tasks import (
     default_task_payloads,
     localize_system_task,
-    resolve_system_task_key,
+)
+from services.error_messages import (
+    ERROR_TASK_NAME_CONFLICT,
+    ERROR_TASK_NOT_FOUND,
+    ERROR_TASK_ORDER_INVALID,
 )
 from services.llm import (
     GPT_OSS_120B_MODEL,
@@ -69,6 +74,7 @@ from services.web import (
     jsonify,
     jsonify_rate_limited,
     log_and_internal_server_error,
+    jsonify_service_error,
     require_json_dict,
     validate_payload_model,
 )
@@ -81,8 +87,10 @@ logger = logging.getLogger(__name__)
 # 全ゲストで共有され、変更は管理者操作/シードのみのため短いTTLでDB読み取りを肩代わりさせる。
 # Cache key/TTL (seconds) for the shared guest default-task list. It is identical for every
 # guest and only changes via admin edits/seeding, so a short TTL safely offloads DB reads.
-GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v2"
+GUEST_DEFAULT_TASKS_CACHE_KEY = "tasks:default:v3"
 GUEST_DEFAULT_TASKS_CACHE_TTL_SECONDS = 30
+TASK_WRITE_LOCK_NAMESPACE = 1_413_567_307  # "TASK"
+UNIQUE_VIOLATION_PGCODE = "23505"
 
 # プロンプト支援APIのIP/ユーザーあたりのレート制限ウインドウ秒数
 # Rate limit window (seconds) for prompt assist calls.
@@ -398,7 +406,9 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
             # Query custom tasks for authenticated user sorted by display order
             cursor.execute(
                 """
-              SELECT system_task_key,
+              SELECT id AS task_id,
+                     system_task_key,
+                     is_system_task_customized,
                      name,
                      prompt_template,
                      response_rules,
@@ -419,7 +429,9 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
             # Query shared system tasks
             cursor.execute(
                 """
-              SELECT system_task_key,
+              SELECT id AS task_id,
+                     system_task_key,
+                     is_system_task_customized,
                      name,
                      prompt_template,
                      response_rules,
@@ -454,7 +466,25 @@ def _fetch_tasks_from_db(user_id: int | None, locale: str = "ja") -> list[dict[s
 
 # ユーザーのタスク表示順を更新する関数
 # Update the display order of tasks for a specific user in the database.
-def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
+def _lock_user_tasks(cursor: Any, user_id: int) -> None:
+    """Serialize task mutations for one user within the current transaction."""
+    cursor.execute(
+        "SELECT pg_advisory_xact_lock(%s, %s)",
+        (TASK_WRITE_LOCK_NAMESPACE, user_id),
+    )
+
+
+def _raise_task_name_conflict_for_unique_violation(exc: Error) -> None:
+    if getattr(exc, "pgcode", None) == UNIQUE_VIOLATION_PGCODE:
+        raise ApiServiceError(
+            ERROR_TASK_NAME_CONFLICT,
+            409,
+            code="task_name_conflict",
+        ) from exc
+    raise exc
+
+
+def _update_tasks_order_for_user(user_id: int, new_order: list[int]) -> None:
     """
     渡されたタスク名の順序に合わせて、DB内の各カスタムタスクのdisplay_orderを一括更新します。
     Updates the display order index for custom user tasks in the DB.
@@ -466,28 +496,38 @@ def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        for index, task_name in enumerate(new_order):
-            system_task_key = resolve_system_task_key(task_name)
-            if system_task_key is not None:
-                cursor.execute(
-                    """
-                    UPDATE task_with_examples
-                       SET display_order=%s
-                     WHERE system_task_key=%s AND user_id=%s
-                       AND deleted_at IS NULL
-                    """,
-                    (index, system_task_key, user_id),
-                )
-            else:
-                cursor.execute(
-                    """
-                    UPDATE task_with_examples
-                       SET display_order=%s
-                     WHERE name=%s AND user_id=%s
-                       AND deleted_at IS NULL
-                    """,
-                    (index, task_name, user_id),
-                )
+        _lock_user_tasks(cursor, user_id)
+        cursor.execute(
+            """
+            SELECT id
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+             FOR UPDATE
+            """,
+            (user_id,),
+        )
+        active_ids = {
+            int(row["id"] if isinstance(row, dict) else row[0])
+            for row in cursor.fetchall()
+        }
+        if len(new_order) != len(active_ids) or set(new_order) != active_ids:
+            raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
+
+        for index, task_id in enumerate(new_order):
+            cursor.execute(
+                """
+                UPDATE task_with_examples
+                   SET display_order = %s,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = %s
+                   AND user_id = %s
+                   AND deleted_at IS NULL
+                """,
+                (index, task_id, user_id),
+            )
+            if cursor.rowcount != 1:
+                raise ApiServiceError(ERROR_TASK_ORDER_INVALID, 400, code="invalid_task_order")
         conn.commit()
     finally:
         if cursor is not None:
@@ -498,7 +538,7 @@ def _update_tasks_order_for_user(user_id: int, new_order: list[str]) -> None:
 
 # ユーザーのタスクを論理削除する関数
 # Mark a user's task as deleted (soft delete) in the database.
-def _delete_task_for_user(user_id: int, task_name: str) -> None:
+def _delete_task_for_user(user_id: int, task_id: int) -> None:
     """
     指定されたタスクのdeleted_atに現在日時を設定し、タスクを論理削除します。
     Applies a soft-delete (sets deleted_at) to a user's custom task by name.
@@ -510,25 +550,18 @@ def _delete_task_for_user(user_id: int, task_name: str) -> None:
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        system_task_key = resolve_system_task_key(task_name)
-        if system_task_key is not None:
-            query = """
-                UPDATE task_with_examples
-                   SET deleted_at = CURRENT_TIMESTAMP
-                 WHERE system_task_key = %s
-                   AND user_id = %s
-                   AND deleted_at IS NULL
-            """
-            cursor.execute(query, (system_task_key, user_id))
-        else:
-            query = """
-                UPDATE task_with_examples
-                   SET deleted_at = CURRENT_TIMESTAMP
-                 WHERE name = %s
-                   AND user_id = %s
-                   AND deleted_at IS NULL
-            """
-            cursor.execute(query, (task_name, user_id))
+        _lock_user_tasks(cursor, user_id)
+        query = """
+            UPDATE task_with_examples
+               SET deleted_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s
+               AND user_id = %s
+               AND deleted_at IS NULL
+        """
+        cursor.execute(query, (task_id, user_id))
+        if cursor.rowcount != 1:
+            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
         conn.commit()
     finally:
         if cursor is not None:
@@ -541,7 +574,7 @@ def _delete_task_for_user(user_id: int, task_name: str) -> None:
 # Update the metadata and configuration details of a user-owned task in the database.
 def _edit_task_for_user(
     user_id: int,
-    old_task: str,
+    task_id: int,
     new_task: str,
     prompt_template: str | None,
     response_rules: str | None,
@@ -562,67 +595,59 @@ def _edit_task_for_user(
         conn = get_db_connection()
         sel_cursor = conn.cursor()
         
+        _lock_user_tasks(sel_cursor, user_id)
         # まずタスクが存在するか、および所有権を確認
         # Verify the target task exists and is owned by the current user
-        system_task_key = resolve_system_task_key(old_task)
-        if system_task_key is not None:
-            sel_cursor.execute(
-                """
-                SELECT 1
-                  FROM task_with_examples
-                 WHERE system_task_key = %s
-                   AND user_id = %s
-                   AND deleted_at IS NULL
-                """,
-                (system_task_key, user_id),
-            )
-        else:
-            sel_cursor.execute(
-                """
-                SELECT 1
-                  FROM task_with_examples
-                 WHERE name = %s
-                   AND user_id = %s
-                   AND deleted_at IS NULL
-                """,
-                (old_task, user_id),
-            )
+        sel_cursor.execute(
+            """
+            SELECT id
+              FROM task_with_examples
+             WHERE id = %s
+               AND user_id = %s
+               AND deleted_at IS NULL
+             FOR UPDATE
+            """,
+            (task_id, user_id),
+        )
         exists = sel_cursor.fetchone()
         if not exists:
-            return False
+            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
+
+        sel_cursor.execute(
+            """
+            SELECT 1
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND id <> %s
+               AND deleted_at IS NULL
+               AND LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
+             LIMIT 1
+            """,
+            (user_id, task_id, new_task),
+        )
+        if sel_cursor.fetchone():
+            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
 
         # タスクの詳細情報をアップデート
         # Update metadata for the task
         upd_cursor = conn.cursor()
-        if system_task_key is not None:
-            update_query = """
+        update_query = """
             UPDATE task_with_examples
                SET name            = %s,
-                   prompt_template = %s,
-                   response_rules  = %s,
-                   output_skeleton = %s,
-                   input_examples  = %s,
-                   output_examples = %s,
-                   system_task_key = NULL
-             WHERE system_task_key = %s
+                   prompt_template = COALESCE(%s, prompt_template),
+                   response_rules  = COALESCE(%s, response_rules),
+                   output_skeleton = COALESCE(%s, output_skeleton),
+                   input_examples  = COALESCE(%s, input_examples),
+                   output_examples = COALESCE(%s, output_examples),
+                   is_system_task_customized = CASE
+                       WHEN system_task_key IS NOT NULL THEN TRUE
+                       ELSE is_system_task_customized
+                   END,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE id = %s
                AND user_id = %s
                AND deleted_at IS NULL
             """
-            lookup_value = system_task_key
-        else:
-            update_query = """
-            UPDATE task_with_examples
-               SET name            = %s,
-                   prompt_template = %s,
-                   response_rules  = %s,
-                   output_skeleton = %s,
-                   input_examples  = %s,
-                   output_examples = %s
-             WHERE name = %s
-               AND user_id = %s
-               AND deleted_at IS NULL
-            """
-            lookup_value = old_task
         upd_cursor.execute(
             update_query,
             (
@@ -632,12 +657,16 @@ def _edit_task_for_user(
                 output_skeleton,
                 input_examples,
                 output_examples,
-                lookup_value,
+                task_id,
                 user_id,
             ),
         )
+        if upd_cursor.rowcount != 1:
+            raise ResourceNotFoundError(ERROR_TASK_NOT_FOUND, code="task_not_found")
         conn.commit()
         return True
+    except Error as exc:
+        _raise_task_name_conflict_for_unique_violation(exc)
     finally:
         # リソース解放
         # Resource cleanup
@@ -671,6 +700,35 @@ def _add_task_for_user(
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        _lock_user_tasks(cursor, user_id)
+        cursor.execute(
+            """
+            SELECT 1
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+               AND LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
+             LIMIT 1
+            """,
+            (user_id, title),
+        )
+        if cursor.fetchone():
+            raise ApiServiceError(ERROR_TASK_NAME_CONFLICT, 409, code="task_name_conflict")
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(display_order), -1) + 1 AS next_display_order
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+            """,
+            (user_id,),
+        )
+        order_row = cursor.fetchone()
+        display_order = int(
+            (order_row.get("next_display_order") if isinstance(order_row, dict) else order_row[0])
+            if order_row is not None
+            else 0
+        )
         query = """
             INSERT INTO task_with_examples
                   (
@@ -680,9 +738,10 @@ def _add_task_for_user(
                       output_skeleton,
                       input_examples,
                       output_examples,
-                      user_id
+                      user_id,
+                      display_order
                   )
-            VALUES (%s,   %s,               %s,             %s,             %s,             %s,             %s)
+            VALUES (%s,   %s,               %s,             %s,             %s,             %s,             %s,      %s)
         """
         cursor.execute(
             query,
@@ -694,9 +753,12 @@ def _add_task_for_user(
                 input_examples,
                 output_examples,
                 user_id,
+                display_order,
             ),
         )
         conn.commit()
+    except Error as exc:
+        _raise_task_name_conflict_for_unique_violation(exc)
     finally:
         if cursor is not None:
             cursor.close()
@@ -751,6 +813,8 @@ async def get_tasks(request: Request):
         # Use bundled default tasks when guest tasks could not be loaded.
         if not user_id and not tasks:
             tasks = default_task_payloads(get_request_locale(request))
+            for task in tasks:
+                task["task_id"] = None
 
         return jsonify({"tasks": tasks})
 
@@ -799,6 +863,8 @@ async def update_tasks_order(request: Request):
         # Update index ordering in DB
         await run_blocking(_update_tasks_order_for_user, user_id, new_order)
         return jsonify({"message": "Order updated"}, status_code=200)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(
             logger,
@@ -831,17 +897,18 @@ async def delete_task(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         DeleteTaskRequest,
-        error_message="task is required",
+        error_message="task_id is required",
     )
     if validation_error is not None:
         return validation_error
 
-    task_name = payload.task
     try:
         # タスクを削除
         # Run DB delete query
-        await run_blocking(_delete_task_for_user, user_id, task_name)
+        await run_blocking(_delete_task_for_user, user_id, payload.task_id)
         return jsonify({"message": "Task deleted"}, status_code=200)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(
             logger,
@@ -874,7 +941,7 @@ async def edit_task(request: Request):
     payload, validation_error = validate_payload_model(
         data,
         EditTaskRequest,
-        error_message="old_task と new_task は必須です",
+        error_message="task_id と new_task は必須です",
     )
     if validation_error is not None:
         return validation_error
@@ -882,10 +949,10 @@ async def edit_task(request: Request):
     try:
         # 編集処理を実行
         # Perform DB update
-        updated = await run_blocking(
+        await run_blocking(
             _edit_task_for_user,
             user_id,
-            payload.old_task,
+            payload.task_id,
             payload.new_task,
             payload.prompt_template,
             payload.response_rules,
@@ -893,13 +960,10 @@ async def edit_task(request: Request):
             payload.input_examples,
             payload.output_examples,
         )
-        if not updated:
-            # 存在しない、または他ユーザーのタスク編集を拒否
-            # Deny if the task does not belong to user
-            return jsonify({"error": "他ユーザーのタスクは編集できません"}, status_code=403)
-
         return jsonify({"message": "Task updated"}, status_code=200)
 
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(
             logger,
@@ -951,6 +1015,8 @@ async def add_task(request: Request):
             payload.output_examples,
         )
         return jsonify({"message": "タスクが追加されました"}, status_code=201)
+    except ApiServiceError as exc:
+        return jsonify_service_error(exc)
     except Exception:
         return log_and_internal_server_error(
             logger,

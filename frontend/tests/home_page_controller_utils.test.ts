@@ -5,13 +5,49 @@ import {
   buildTaskOrderForPersistence,
   isLatestChatTurnAnswered,
   mergeUniqueChatRooms,
+  removeTaskById,
   removeChatRoomsById,
+  updateTaskById,
   updateChatRoomTitle,
 } from "../lib/chat_page/home_page_controller_utils";
 
-test("buildTaskOrderForPersistence excludes default tasks and empty names", () => {
+const duplicateNameTasks = [
+  {
+    task_id: 10,
+    name: "同名タスク",
+    prompt_template: "first",
+    response_rules: "",
+    output_skeleton: "",
+    input_examples: "",
+    output_examples: "",
+    is_default: false,
+  },
+  {
+    task_id: 11,
+    name: "同名タスク",
+    prompt_template: "second",
+    response_rules: "",
+    output_skeleton: "",
+    input_examples: "",
+    output_examples: "",
+    is_default: false,
+  },
+];
+
+test("removeTaskById removes only the selected row when names are duplicated", () => {
+  assert.deepEqual(removeTaskById(duplicateNameTasks, 10).map((task) => task.task_id), [11]);
+});
+
+test("updateTaskById edits only the selected row when names are duplicated", () => {
+  const updated = updateTaskById(duplicateNameTasks, 11, { name: "更新後" });
+  assert.equal(updated[0]?.name, "同名タスク");
+  assert.equal(updated[1]?.name, "更新後");
+});
+
+test("buildTaskOrderForPersistence returns stable task ids and ignores id-less fallback tasks", () => {
   const order = buildTaskOrderForPersistence([
     {
+      task_id: null,
       name: "Default Task",
       prompt_template: "",
       response_rules: "",
@@ -21,6 +57,7 @@ test("buildTaskOrderForPersistence excludes default tasks and empty names", () =
       is_default: true,
     },
     {
+      task_id: 42,
       name: "  Create report  ",
       prompt_template: "",
       response_rules: "",
@@ -30,6 +67,7 @@ test("buildTaskOrderForPersistence excludes default tasks and empty names", () =
       is_default: false,
     },
     {
+      task_id: 43,
       name: "   ",
       prompt_template: "",
       response_rules: "",
@@ -39,6 +77,7 @@ test("buildTaskOrderForPersistence excludes default tasks and empty names", () =
       is_default: false,
     },
     {
+      task_id: 44,
       name: "Send summary",
       prompt_template: "",
       response_rules: "",
@@ -49,7 +88,7 @@ test("buildTaskOrderForPersistence excludes default tasks and empty names", () =
     },
   ]);
 
-  assert.deepEqual(order, ["Create report", "Send summary"]);
+  assert.deepEqual(order, [42, 43, 44]);
 });
 
 test("isLatestChatTurnAnswered is true when an assistant reply follows the latest user message", () => {

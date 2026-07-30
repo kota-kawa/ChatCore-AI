@@ -546,13 +546,7 @@ def _get_prompts_with_flags(
                   FROM task_with_examples AS used_tasks
                   WHERE used_tasks.user_id = %s
                     AND used_tasks.deleted_at IS NULL
-                    AND (
-                      used_tasks.source_prompt_id = p.id
-                      OR (
-                        used_tasks.source_prompt_id IS NULL
-                        AND used_tasks.name = p.title
-                      )
-                    )
+                    AND used_tasks.source_prompt_id = p.id
                 ) AS used_in_chat
             FROM page_prompts AS p
             LEFT JOIN LATERAL (
@@ -849,6 +843,30 @@ def _compose_task_prompt_template(prompt: dict[str, Any]) -> str:
     return "\n\n".join(parts) or (prompt.get("content") or "")
 
 
+def _available_imported_task_name(cursor: Any, user_id: int, title: str) -> str:
+    """Return a normalized-name-safe title without overwriting an existing task."""
+    base_title = title[:255]
+    candidate = base_title
+    suffix_number = 1
+    while True:
+        cursor.execute(
+            """
+            SELECT 1
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+               AND LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
+             LIMIT 1
+            """,
+            (user_id, candidate),
+        )
+        if not cursor.fetchone():
+            return candidate
+        suffix_number += 1
+        suffix = f" ({suffix_number})"
+        candidate = f"{base_title[: 255 - len(suffix)]}{suffix}"
+
+
 # 公開プロンプトをユーザー自身の個人用タスクテンプレートとして追加・複製保存する関数
 # Duplicate a public shared prompt as a user's private task template.
 def _add_prompt_as_task_for_user(
@@ -913,37 +931,29 @@ def _add_prompt_as_task_for_user(
         if not prompt_template:
             return {"error": "タスクとして追加できる本文がありません。"}, 400
 
-        # すでに同じ共有プロンプト由来、または移行前の同一タイトルタスクが登録済みかチェック
-        # Check if the source prompt or legacy same-title task template already exists.
+        # Serialize task imports for this user so source checks, title allocation,
+        # and tail-order assignment remain one atomic decision.
+        cursor.execute(
+            "SELECT pg_advisory_xact_lock(%s)",
+            (user_id,),
+        )
+
+        # Stable source provenance is the only identity. A same-title custom task
+        # must never be claimed or removed by prompt-share actions.
         cursor.execute(
             """
             SELECT id
               FROM task_with_examples
              WHERE user_id = %s
                AND deleted_at IS NULL
-               AND (
-                    source_prompt_id = %s
-                    OR (
-                         source_prompt_id IS NULL
-                         AND name = %s
-                       )
-                   )
-             ORDER BY CASE WHEN source_prompt_id = %s THEN 0 ELSE 1 END, id ASC
+               AND source_prompt_id = %s
+             ORDER BY id ASC
              LIMIT 1
             """,
-            (user_id, prompt_id, title, prompt_id),
+            (user_id, prompt_id),
         )
         existing = cursor.fetchone()
         if existing:
-            cursor.execute(
-                """
-                UPDATE task_with_examples
-                   SET source_prompt_id = %s
-                 WHERE id = %s
-                   AND source_prompt_id IS NULL
-                """,
-                (prompt_id, existing["id"]),
-            )
             conn.commit()
             return {
                 "message": "すでにチャットで使えるように追加済みです。",
@@ -951,26 +961,68 @@ def _add_prompt_as_task_for_user(
                 "used_in_chat": True,
             }, 200
 
+        task_name = _available_imported_task_name(cursor, user_id, title)
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(display_order), -1) + 1 AS next_display_order
+              FROM task_with_examples
+             WHERE user_id = %s
+               AND deleted_at IS NULL
+            """,
+            (user_id,),
+        )
+        order_row = cursor.fetchone()
+        if isinstance(order_row, dict):
+            next_display_order = int(order_row.get("next_display_order") or 0)
+        else:
+            next_display_order = int(order_row[0] if order_row else 0)
+
         # タスクテンプレートテーブルへレコード挿入
         # Perform SQL insert into task_with_examples.
         cursor.execute(
             """
             INSERT INTO task_with_examples
-                (user_id, source_prompt_id, name, prompt_template, input_examples, output_examples)
-            VALUES (%s,      %s,               %s,   %s,               %s,             %s)
+                (user_id, source_prompt_id, name, prompt_template,
+                 input_examples, output_examples, display_order)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
             RETURNING id
             """,
             (
                 user_id,
                 prompt_id,
-                title,
+                task_name,
                 prompt_template,
                 prompt.get("input_examples") or "",
                 prompt.get("output_examples") or "",
+                next_display_order,
             ),
         )
-        conn.commit()
         saved_id = _extract_id(cursor.fetchone())
+        if saved_id is None:
+            cursor.execute(
+                """
+                SELECT id
+                  FROM task_with_examples
+                 WHERE user_id = %s
+                   AND source_prompt_id = %s
+                   AND deleted_at IS NULL
+                 LIMIT 1
+                """,
+                (user_id, prompt_id),
+            )
+            concurrent = cursor.fetchone()
+            if concurrent:
+                conn.commit()
+                return {
+                    "message": "すでにチャットで使えるように追加済みです。",
+                    "saved_id": _extract_id(concurrent),
+                    "used_in_chat": True,
+                }, 200
+            conn.rollback()
+            return {"error": "同じ名前のタスクがすでにあります。"}, 409
+
+        conn.commit()
         return {
             "message": "チャットで使えるように追加しました。",
             "saved_id": saved_id,
@@ -1004,34 +1056,19 @@ def _remove_prompt_as_task_for_user(
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT title
-              FROM prompts
-             WHERE id = %s
-               AND is_public = TRUE
-               AND deleted_at IS NULL
-            """,
-            (prompt_id,),
-        )
-        prompt = cursor.fetchone()
-        if not prompt:
-            return {"error": "対象の公開プロンプトが見つかりませんでした。"}, 404
-
-        title = prompt.get("title") or ""
-        cursor.execute(
-            """
             UPDATE task_with_examples
                SET deleted_at = CURRENT_TIMESTAMP
-             WHERE user_id = %s
-               AND deleted_at IS NULL
-               AND (
-                    source_prompt_id = %s
-                    OR (
-                         source_prompt_id IS NULL
-                         AND name = %s
-                       )
-                   )
+             WHERE id = (
+                 SELECT id
+                   FROM task_with_examples
+                  WHERE user_id = %s
+                    AND source_prompt_id = %s
+                    AND deleted_at IS NULL
+                  ORDER BY id ASC
+                  LIMIT 1
+             )
             """,
-            (user_id, prompt_id, title),
+            (user_id, prompt_id),
         )
         conn.commit()
         if cursor.rowcount == 0:

@@ -1,4 +1,5 @@
 export type TaskItem = {
+  task_id?: number | null;
   system_task_key?: string | null;
   name?: string;
   prompt_template?: string;

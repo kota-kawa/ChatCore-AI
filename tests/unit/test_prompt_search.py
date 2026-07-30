@@ -138,6 +138,7 @@ class PromptSearchTestCase(unittest.TestCase):
         self.assertIn("EXISTS ( SELECT 1 FROM prompt_likes AS pl", search_query)
         self.assertIn("EXISTS ( SELECT 1 FROM task_with_examples AS used_tasks", search_query)
         self.assertIn("used_tasks.source_prompt_id = p.id", search_query)
+        self.assertNotIn("used_tasks.name = p.title", search_query)
         self.assertNotIn("GROUP BY prompt_id", search_query)
         self.assertNotIn("LEFT JOIN prompt_list_entries AS ple", search_query)
         self.assertIn("LIMIT %s OFFSET %s", search_query)

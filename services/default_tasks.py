@@ -15,6 +15,7 @@ DEFAULT_TASKS_EN_JSON = (
 DEFAULT_TASK_CATALOGS = {"ja": DEFAULT_TASKS_JSON, "en": DEFAULT_TASKS_EN_JSON}
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
+DEFAULT_TASK_SEED_ADVISORY_LOCK_ID = 743_241_901
 
 
 # JSONファイルからデフォルトタスク定義を読み込んでキャッシュし、正規化した辞書のリストを返す
@@ -104,6 +105,9 @@ def localize_system_task(
     locale: str = "ja",
 ) -> dict[str, Any]:
     """Overlay localized fields only when a row is a known, untouched system task."""
+    if task.get("is_system_task_customized"):
+        return dict(task)
+
     system_task_key = str(task.get("system_task_key") or "").strip()
     localized = default_tasks_by_key(locale).get(system_task_key)
     if localized is None:
@@ -174,6 +178,13 @@ def ensure_default_tasks_seeded() -> int:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # Serialize startup seeding across application workers. The unique
+                # indexes remain the final guard, while this lock also protects
+                # legacy name-only rows that predate stable system keys.
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(%s)",
+                    (DEFAULT_TASK_SEED_ADVISORY_LOCK_ID,),
+                )
                 # 既存のデフォルトタスク名を取得する
                 # Retrieve the names of existing default tasks
                 cursor.execute(
@@ -181,12 +192,15 @@ def ensure_default_tasks_seeded() -> int:
                     SELECT system_task_key, name
                       FROM task_with_examples
                      WHERE user_id IS NULL
-                       AND deleted_at IS NULL
                     """
                 )
                 existing_rows = [_extract_system_key_and_name(row) for row in cursor.fetchall()]
                 existing_keys = {key for key, _ in existing_rows if isinstance(key, str) and key}
-                existing_names = {name for _, name in existing_rows if isinstance(name, str)}
+                existing_names = {
+                    name.strip().lower()
+                    for _, name in existing_rows
+                    if isinstance(name, str)
+                }
 
                 inserted = 0
                 for (
@@ -201,10 +215,10 @@ def ensure_default_tasks_seeded() -> int:
                 ) in default_task_rows(include_key=True):
                     # 既に存在する場合は挿入をスキップする
                     # Skip insertion if the task already exists
+                    normalized_name = name.strip().lower()
                     if (
-                        system_task_key in existing_keys
-                        if system_task_key
-                        else name in existing_names
+                        (system_task_key and system_task_key in existing_keys)
+                        or normalized_name in existing_names
                     ):
                         continue
 
@@ -223,6 +237,7 @@ def ensure_default_tasks_seeded() -> int:
                                   display_order
                               )
                         VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING
                         """,
                         (
                             system_task_key,
@@ -235,10 +250,11 @@ def ensure_default_tasks_seeded() -> int:
                             display_order,
                         ),
                     )
-                    if system_task_key:
-                        existing_keys.add(system_task_key)
-                    existing_names.add(name)
-                    inserted += 1
+                    if getattr(cursor, "rowcount", 1) > 0:
+                        if system_task_key:
+                            existing_keys.add(system_task_key)
+                        existing_names.add(normalized_name)
+                        inserted += 1
 
                 # 挿入があった場合はコミットする
                 # Commit the transaction if insertions occurred

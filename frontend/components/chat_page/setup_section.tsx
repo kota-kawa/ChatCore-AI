@@ -19,6 +19,7 @@ import {
 } from "../../lib/chat_page/file_attachments";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import type { NormalizedTask } from "../../lib/chat_page/types";
+import { getStableTaskKey } from "../../lib/chat_page/task_utils";
 import {
   useHomePageSetupChatContext,
   useHomePageTaskContext,
@@ -45,7 +46,7 @@ type TaskCardProps = {
   ) => void;
   onFinishPointerDrag: () => void;
   onLaunch: (task: NormalizedTask) => void | Promise<void>;
-  onDelete: (taskName: string) => void | Promise<void>;
+  onDelete: (taskId: number) => void | Promise<void>;
   onEdit: (task: NormalizedTask) => void;
   onShowDetail: (task: NormalizedTask) => void;
 };
@@ -136,7 +137,7 @@ const TaskCard = memo(function TaskCard({
                 onClick={(event) => {
                   event.stopPropagation();
                   onFinishPointerDrag();
-                  void onDelete(task.name);
+                  if (task.task_id !== null) void onDelete(task.task_id);
                 }}
               >
                 <i className="bi bi-trash"></i>
@@ -216,6 +217,7 @@ function SetupSectionComponent() {
     showTaskToggleButton,
     visibleTaskCountText,
     launchingTaskName,
+    launchingTaskId,
     draggingTaskIndex,
     toggleTaskOrderEditing,
     closeNewPromptModal,
@@ -384,6 +386,9 @@ function SetupSectionComponent() {
   // タスクオブジェクトに対して安定したDOMキーを割り当てる（オブジェクト参照が変わっても追跡可能）
   // Assign a stable DOM key to each task object so drag state survives list mutations
   const getTaskDomKey = useCallback((taskObject: object) => {
+    const task = taskObject as NormalizedTask;
+    const stableKey = getStableTaskKey(task);
+    if (stableKey) return stableKey;
     const existing = taskObjectKeyMapRef.current.get(taskObject);
     if (existing) return existing;
     const nextKey = `task-dom-${taskObjectSequenceRef.current++}`;
@@ -1211,7 +1216,7 @@ function SetupSectionComponent() {
                 taskDomKey={taskDomKey}
                 isEditing={isTaskOrderEditing}
                 isDragging={draggingTaskIndex === index}
-                isLaunching={launchingTaskName === task.name}
+                isLaunching={task.task_id !== null ? launchingTaskId === task.task_id : launchingTaskName === task.name}
                 setTaskWrapperRef={setTaskWrapperRef}
                 onTaskPointerDown={handleTaskPointerDown}
                 onFinishPointerDrag={finishPointerDrag}
@@ -1238,7 +1243,7 @@ function SetupSectionComponent() {
                       taskDomKey={taskDomKey}
                       isEditing={false}
                       isDragging={draggingTaskIndex === index}
-                      isLaunching={launchingTaskName === task.name}
+                      isLaunching={task.task_id !== null ? launchingTaskId === task.task_id : launchingTaskName === task.name}
                       setTaskWrapperRef={setTaskWrapperRef}
                       onTaskPointerDown={handleTaskPointerDown}
                       onFinishPointerDrag={finishPointerDrag}

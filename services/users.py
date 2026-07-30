@@ -83,6 +83,12 @@ def copy_default_tasks_for_user(user_id: int) -> None:
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
+            # Use the same transaction advisory lock as task mutation routes so
+            # logins, manual additions, and prompt imports cannot interleave.
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(%s)",
+                (user_id,),
+            )
             cursor.execute(
                 """
                 SELECT system_task_key, name, prompt_template, response_rules,
@@ -98,24 +104,21 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                 defaults = default_task_rows(include_key=True)
 
             for system_task_key, name, tmpl, response_rules, output_skeleton, inp, out, disp in defaults:
-                if system_task_key:
-                    cursor.execute(
-                        """
-                        SELECT 1 FROM task_with_examples
-                         WHERE user_id = %s AND system_task_key = %s
-                           AND deleted_at IS NULL
-                        """,
-                        (user_id, system_task_key),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        SELECT 1 FROM task_with_examples
-                         WHERE user_id = %s AND name = %s
-                           AND deleted_at IS NULL
-                        """,
-                        (user_id, name),
-                    )
+                # Deleted rows are deliberate user choices and must continue to
+                # suppress the corresponding built-in task. The legacy-name arm
+                # also prevents a keyed catalog row from duplicating pre-key data.
+                cursor.execute(
+                    """
+                    SELECT 1 FROM task_with_examples
+                     WHERE user_id = %s
+                       AND (
+                            system_task_key = %s
+                            OR LOWER(BTRIM(name)) = LOWER(BTRIM(%s))
+                           )
+                     LIMIT 1
+                    """,
+                    (user_id, system_task_key, name),
+                )
                 if cursor.fetchone():
                     continue
                 cursor.execute(
@@ -125,6 +128,7 @@ def copy_default_tasks_for_user(user_id: int) -> None:
                            response_rules, output_skeleton,
                            input_examples, output_examples, display_order)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
                     """,
                     (
                         user_id,

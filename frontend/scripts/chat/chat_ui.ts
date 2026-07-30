@@ -361,12 +361,14 @@ function preserveMemoPreviewBlankLines(markdown: string) {
 }
 
 function normalizeUserTextForDisplay(rawText: string) {
-  return stripInvisibleCharacters(
+  const normalized = stripInvisibleCharacters(
     rawText
       .replace(/\r\n?/g, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .trimEnd()
   );
+  if (!/^【タスク】[^\n]+$/m.test(normalized)) return normalized;
+  return normalized.replace(/^【タスクID】\d+[ \t]*(?:\n|$)/m, "");
 }
 
 function formatMarkdownFallback(markdown: string) {

@@ -1,10 +1,21 @@
 import type { ChatRoom, NormalizedTask, UiChatMessage } from "./types";
 
+export function removeTaskById(tasks: NormalizedTask[], taskId: number) {
+  return tasks.filter((task) => task.task_id !== taskId);
+}
+
+export function updateTaskById(
+  tasks: NormalizedTask[],
+  taskId: number,
+  updates: Partial<Omit<NormalizedTask, "task_id">>,
+) {
+  return tasks.map((task) => task.task_id === taskId ? { ...task, ...updates } : task);
+}
+
 export function buildTaskOrderForPersistence(tasks: NormalizedTask[]) {
   return tasks
-    .filter((task) => !task.is_default)
-    .map((task) => task.name.trim())
-    .filter((name) => Boolean(name));
+    .map((task) => task.task_id)
+    .filter((taskId): taskId is number => taskId !== null);
 }
 
 export function isLatestChatTurnAnswered(messages: Pick<UiChatMessage, "sender">[]) {

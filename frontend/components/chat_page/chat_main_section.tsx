@@ -35,7 +35,7 @@ function ChatMainSectionComponent() {
     setSelectedModel,
   } = useHomePageUiContext();
 
-  const { launchingTaskName, tasks } = useHomePageTaskContext();
+  const { launchingTaskId, launchingTaskName, tasks } = useHomePageTaskContext();
 
   // プロジェクト一覧と操作（サイドバーのプロジェクトセクション用）。
   // Project list and actions for the sidebar's project section.
@@ -702,6 +702,7 @@ function ChatMainSectionComponent() {
             isChatLaunching={isChatLaunching}
             isGenerating={isGenerating}
             isLoadingOlder={isLoadingOlder}
+            launchingTaskId={launchingTaskId}
             launchingTaskName={launchingTaskName}
             loadOlderChatHistory={loadOlderChatHistory}
             messages={messages}

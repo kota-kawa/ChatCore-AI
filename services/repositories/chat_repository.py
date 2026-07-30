@@ -714,18 +714,71 @@ class ChatRepository:
             finally:
                 cursor.close()
 
-    def get_task_prompt_data(self, task: str, user_id: int | None) -> dict[str, Any] | None:
+    def get_task_prompt_data(
+        self,
+        task: str,
+        user_id: int | None,
+        task_id: int | None = None,
+    ) -> dict[str, Any] | None:
         # タスク名とユーザーIDに基づいてタスクプロンプトのデータを取得する
         # Retrieve task prompt data based on task name and user ID.
         with self._connection_getter() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
+                if task_id is not None:
+                    if user_id:
+                        cursor.execute(
+                            """
+                            SELECT id AS task_id,
+                                   system_task_key,
+                                   is_system_task_customized,
+                                   name,
+                                   prompt_template,
+                                   response_rules,
+                                   output_skeleton,
+                                   input_examples,
+                                   output_examples
+                              FROM task_with_examples
+                             WHERE id = %s
+                               AND user_id = %s
+                               AND deleted_at IS NULL
+                             LIMIT 1
+                            """,
+                            (task_id, user_id),
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            SELECT id AS task_id,
+                                   system_task_key,
+                                   is_system_task_customized,
+                                   name,
+                                   prompt_template,
+                                   response_rules,
+                                   output_skeleton,
+                                   input_examples,
+                                   output_examples
+                              FROM task_with_examples
+                             WHERE id = %s
+                               AND user_id IS NULL
+                               AND deleted_at IS NULL
+                             LIMIT 1
+                            """,
+                            (task_id,),
+                        )
+                    row = cursor.fetchone()
+                    if row is None:
+                        return None
+                    return localize_system_task(dict(row), get_current_locale())
+
                 system_task_key = resolve_system_task_key(task)
                 lookup_column = "system_task_key" if system_task_key is not None else "name"
                 lookup_value = system_task_key or task
                 if user_id:
                     query = """
-                        SELECT system_task_key,
+                        SELECT id AS task_id,
+                               system_task_key,
+                               is_system_task_customized,
                                name,
                                prompt_template,
                                response_rules,
@@ -742,7 +795,9 @@ class ChatRepository:
                     cursor.execute(query, (lookup_value, user_id, user_id))
                 else:
                     query = """
-                        SELECT system_task_key,
+                        SELECT id AS task_id,
+                               system_task_key,
+                               is_system_task_customized,
                                name,
                                prompt_template,
                                response_rules,

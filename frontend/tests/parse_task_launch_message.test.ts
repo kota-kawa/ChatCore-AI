@@ -6,6 +6,7 @@ import { parseTaskLaunchMessage } from "../lib/chat_page/task_utils";
 test("parses a task-launch message with task name and setup info", () => {
   const parsed = parseTaskLaunchMessage("【タスク】ℹ️ 情報提供\n【状況・作業環境】〇〇について調べたい");
   assert.deepEqual(parsed, {
+    taskId: null,
     taskName: "ℹ️ 情報提供",
     setupInfo: "〇〇について調べたい",
   });
@@ -13,7 +14,7 @@ test("parses a task-launch message with task name and setup info", () => {
 
 test("parses a task-launch message without setup info", () => {
   const parsed = parseTaskLaunchMessage("【タスク】ℹ️ 情報提供");
-  assert.deepEqual(parsed, { taskName: "ℹ️ 情報提供", setupInfo: "" });
+  assert.deepEqual(parsed, { taskId: null, taskName: "ℹ️ 情報提供", setupInfo: "" });
 });
 
 test("captures multi-line setup info verbatim", () => {
@@ -25,9 +26,21 @@ test("parses the reload format (html-escaped with <br> joins) identically", () =
   // services/chat_use_case.py stores user messages as html.escape(text).replace("\n", "<br>").
   const stored = "【タスク】ℹ️ 情報提供<br>【状況・作業環境】A &amp; B を &lt;比較&gt; したい";
   assert.deepEqual(parseTaskLaunchMessage(stored), {
+    taskId: null,
     taskName: "ℹ️ 情報提供",
     setupInfo: "A & B を <比較> したい",
   });
+});
+
+test("parses a stable task id when a launch message includes one", () => {
+  assert.deepEqual(
+    parseTaskLaunchMessage("【タスク】同名タスク\n【タスクID】42\n【状況・作業環境】確認する"),
+    {
+      taskId: 42,
+      taskName: "同名タスク",
+      setupInfo: "確認する",
+    },
+  );
 });
 
 test("fresh-send and reloaded text yield the same parse result", () => {

@@ -73,12 +73,12 @@ class SoftDeleteQueryTestCase(unittest.TestCase):
         # タスク削除関数をモックされたDB接続を利用して呼び出し
         # Call the delete task function using the mocked DB connection
         with patch("blueprints.chat.tasks.get_db_connection", return_value=fake_conn):
-            _delete_task_for_user(5, "Task A")
+            _delete_task_for_user(5, 41)
 
-        query, params = fake_cursor.executed[0]
+        query, params = fake_cursor.executed[1]
         self.assertIn("UPDATE task_with_examples SET deleted_at = CURRENT_TIMESTAMP", query)
         self.assertNotIn("DELETE FROM task_with_examples", query)
-        self.assertEqual(params, ("Task A", 5))
+        self.assertEqual(params, (41, 5))
         self.assertTrue(fake_conn.committed)
 
     # 保存されたプロンプト（タスク）の削除処理において、UPDATE文でdeleted_atが更新されることを確認します。

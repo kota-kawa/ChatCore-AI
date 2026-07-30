@@ -48,6 +48,18 @@ class RequestModelsTestCase(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _validate(UpdateTasksOrderRequest, {"order": []})
 
+    def test_update_tasks_order_rejects_duplicate_or_non_positive_ids(self):
+        for order in ([1, 1], [0], [-1]):
+            with self.subTest(order=order), self.assertRaises(ValidationError):
+                _validate(UpdateTasksOrderRequest, {"order": order})
+
+    def test_add_task_rejects_title_longer_than_database_column(self):
+        with self.assertRaises(ValidationError):
+            _validate(
+                AddTaskRequest,
+                {"title": "x" * 256, "prompt_content": "prompt"},
+            )
+
     # メモ作成リクエストでAIの回答内容が空の場合、バリデーションエラーになることを検証します。
     # Verify that memo creation requires a non-empty AI response.
     def test_memo_create_requires_non_empty_ai_response(self):

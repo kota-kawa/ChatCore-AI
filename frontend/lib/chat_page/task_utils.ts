@@ -7,6 +7,7 @@ import type { NormalizedTask } from "./types";
 export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask {
   if (!task) {
     return {
+      task_id: null,
       system_task_key: null,
       name: "無題",
       prompt_template: "プロンプトテンプレートはありません",
@@ -21,6 +22,10 @@ export function normalizeTask(task: TaskItem | null | undefined): NormalizedTask
   const name = typeof task.name === "string" && task.name.trim() ? task.name.trim() : "無題";
 
   return {
+    task_id:
+      typeof task.task_id === "number" && Number.isInteger(task.task_id) && task.task_id > 0
+        ? task.task_id
+        : null,
     system_task_key: typeof task.system_task_key === "string" ? task.system_task_key : null,
     name,
     prompt_template:
@@ -43,11 +48,18 @@ export function getFallbackTasks(locale: Locale = "ja"): NormalizedTask[] {
 }
 
 export function normalizeTaskList(rawTasks: TaskItem[] | undefined | null, locale: Locale = "ja"): NormalizedTask[] {
-  if (!Array.isArray(rawTasks) || rawTasks.length === 0) return getFallbackTasks(locale);
+  if (!Array.isArray(rawTasks)) return getFallbackTasks(locale);
   return rawTasks.map((task) => normalizeTask(task));
 }
 
+export function getStableTaskKey(task: NormalizedTask): string | null {
+  if (task.task_id !== null) return `task-id-${task.task_id}`;
+  if (task.system_task_key) return `task-system-${task.system_task_key}`;
+  return null;
+}
+
 export type ParsedTaskLaunch = {
+  taskId: number | null;
   taskName: string;
   setupInfo: string;
 };
@@ -81,8 +93,10 @@ export function parseTaskLaunchMessage(message: string | null | undefined): Pars
   const taskMatch = /^【タスク】([^\n]+)/m.exec(normalized);
   if (!taskMatch) return null;
 
+  const taskIdMatch = /^【タスクID】(\d+)$/m.exec(normalized);
   const setupMatch = /【状況・作業環境】([\s\S]+)/.exec(normalized);
   return {
+    taskId: taskIdMatch ? Number(taskIdMatch[1]) : null,
     taskName: taskMatch[1].trim(),
     setupInfo: setupMatch ? setupMatch[1].trim() : "",
   };

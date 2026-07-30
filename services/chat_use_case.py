@@ -376,7 +376,13 @@ class ChatPostUseCase:
         active_task_request = deps.find_latest_task_launch_request(normalized_all_messages)
         prompt_data = None
         if active_task_request is not None:
-            prompt_data = await deps.load_task_prompt_data(active_task_request["task"], user_id)
+            task_id = active_task_request.get("task_id")
+            if task_id is None:
+                prompt_data = await deps.load_task_prompt_data(active_task_request["task"], user_id)
+            else:
+                prompt_data = await deps.load_task_prompt_data(
+                    active_task_request["task"], user_id, task_id
+                )
 
         task_prompt = deps.build_task_prompt(prompt_data) if prompt_data else None
         room_summary = ""

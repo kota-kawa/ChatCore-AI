@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { FALLBACK_TASKS } from "../../lib/chat_page/task_utils";
 import type { NormalizedTask, TaskEditFormState } from "../../lib/chat_page/types";
 import { useTranslation } from "../../contexts/locale_context";
 
 const EMPTY_TASK_EDIT_FORM: TaskEditFormState = {
-  old_task: "",
+  task_id: null,
   new_task: "",
   prompt_template: "",
   response_rules: "",
@@ -20,11 +19,12 @@ const MOBILE_TASK_COLLAPSE_QUERY = "(max-width: 576px)";
 
 export function useHomePageTaskState() {
   const { locale } = useTranslation();
-  const [tasks, setTasks] = useState<NormalizedTask[]>(FALLBACK_TASKS);
+  const [tasks, setTasks] = useState<NormalizedTask[]>([]);
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [isTaskOrderEditing, setIsTaskOrderEditing] = useState(false);
   const [taskDetail, setTaskDetail] = useState<NormalizedTask | null>(null);
   const [launchingTaskName, setLaunchingTaskName] = useState<string | null>(null);
+  const [launchingTaskId, setLaunchingTaskId] = useState<number | null>(null);
   const [draggingTaskIndex, setDraggingTaskIndex] = useState<number | null>(null);
   const [taskCollapseLimit, setTaskCollapseLimit] = useState(DESKTOP_TASK_COLLAPSE_LIMIT);
   const taskLaunchInProgressRef = useRef(false);
@@ -76,6 +76,8 @@ export function useHomePageTaskState() {
     setTaskDetail,
     launchingTaskName,
     setLaunchingTaskName,
+    launchingTaskId,
+    setLaunchingTaskId,
     draggingTaskIndex,
     setDraggingTaskIndex,
     taskLaunchInProgressRef,

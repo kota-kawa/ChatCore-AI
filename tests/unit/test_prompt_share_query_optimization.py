@@ -105,6 +105,7 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
         self.assertIn("EXISTS ( SELECT 1 FROM prompt_likes AS pl", query)
         self.assertIn("EXISTS ( SELECT 1 FROM task_with_examples AS used_tasks", query)
         self.assertIn("used_tasks.source_prompt_id = p.id", query)
+        self.assertNotIn("used_tasks.name = p.title", query)
         self.assertIn("p.system_prompt_key IS NULL", query)
         self.assertEqual(params, ("ja", 25, 7, 7))
         self.assertTrue(payload["prompts"][0]["liked"])
