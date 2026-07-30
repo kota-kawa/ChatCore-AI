@@ -1,8 +1,9 @@
-import React, { type RefObject } from "react";
+import React, { useState, type RefObject } from "react";
 
 import MarkdownContent from "../MarkdownContent";
 import { copyTextToClipboard } from "../../scripts/chat/message_utils";
 import { showToast } from "../../scripts/core/toast";
+import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
   formatPromptDate,
@@ -46,6 +47,7 @@ type PromptShareDetailModalProps = {
   onReportComment: (commentId: string | number) => void;
   onReloadComments: () => void;
   onClose: () => void;
+  onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
 };
 
 type DetailMetaItemProps = {
@@ -65,6 +67,62 @@ function DetailMetaItem({ iconClass, label, value, id }: DetailMetaItemProps) {
         <span className="sr-only">{label}</span>
       </dt>
       <dd id={id}>{value}</dd>
+    </div>
+  );
+}
+
+type AuthorMetaItemProps = {
+  name: string;
+  avatarUrl: string;
+  authorUserId: number;
+  onOpenProfile: (authorUserId: number, authorName: string) => void;
+};
+
+// 投稿者の署名項目。アバター画像付きで、ユーザーIDがある場合のみプロフィールへ遷移できる
+// The author byline item; shows an avatar and links to the profile when a user ID is present
+function AuthorMetaItem({ name, avatarUrl, authorUserId, onOpenProfile }: AuthorMetaItemProps) {
+  const { t } = useTranslation();
+  const [hasImageError, setHasImageError] = useState(false);
+  const resolvedAvatarUrl = hasImageError || !avatarUrl ? DEFAULT_AUTHOR_AVATAR_URL : avatarUrl;
+  const avatarImage = (
+    <img
+      className="prompt-detail-author__avatar"
+      src={resolvedAvatarUrl}
+      alt={t("promptShare.authorAvatarAlt", { name })}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        setHasImageError(true);
+      }}
+    />
+  );
+
+  return (
+    <div className="prompt-detail-meta__item">
+      {/* アバター画像が視覚的なアイコンを兼ねるため、他項目と違いdtアイコンは出さない */}
+      {/* The avatar already carries the visual icon role, so this dt skips the usual bi-* icon */}
+      <dt>
+        <span className="sr-only">{t("promptShare.author")}</span>
+      </dt>
+      <dd id="modalPromptAuthor">
+        {authorUserId > 0 ? (
+          <button
+            type="button"
+            className="prompt-detail-author"
+            onClick={() => {
+              onOpenProfile(authorUserId, name);
+            }}
+          >
+            {avatarImage}
+            <span>{name}</span>
+          </button>
+        ) : (
+          <span className="prompt-detail-author prompt-detail-author--static">
+            {avatarImage}
+            <span>{name}</span>
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -126,7 +184,8 @@ export function PromptShareDetailModal({
   onDeleteComment,
   onReportComment,
   onReloadComments,
-  onClose
+  onClose,
+  onOpenAuthorProfile
 }: PromptShareDetailModalProps) {
   const { locale, t } = useTranslation();
   const { readingSize, changeReadingSize } = usePromptReadingSize();
@@ -148,6 +207,8 @@ export function PromptShareDetailModal({
   const formattedDate = formatPromptDate(detailPrompt?.created_at) || t("promptShare.dateUnavailable");
   const categoryLabel = getCategoryLabelOrFallback(detailPrompt?.category, undefined, locale);
   const authorLabel = detailPrompt?.author || t("promptShare.authorMissing");
+  const authorUserId = Number(detailPrompt?.author_user_id || 0);
+  const authorAvatarUrl = detailPrompt?.author_avatar_url || "";
   const promptBodyLength = Array.from(promptBody).length;
   const hasExamples = !isSkillFormat && Boolean(detailPrompt?.input_examples || detailPrompt?.output_examples);
   const skillResources = isSkillFormat
@@ -237,11 +298,11 @@ export function PromptShareDetailModal({
                     value={categoryLabel}
                     id="modalPromptCategory"
                   />
-                  <DetailMetaItem
-                    iconClass="bi-person"
-                    label={t("promptShare.author")}
-                    value={authorLabel}
-                    id="modalPromptAuthor"
+                  <AuthorMetaItem
+                    name={authorLabel}
+                    avatarUrl={authorAvatarUrl}
+                    authorUserId={authorUserId}
+                    onOpenProfile={onOpenAuthorProfile}
                   />
                   <DetailMetaItem
                     iconClass="bi-calendar3"

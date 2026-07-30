@@ -22,6 +22,10 @@ export const SEARCH_RESULTS_PER_PAGE = 20;
 // Items fetched per page for the regular prompt feed.
 export const PROMPT_FEED_PAGE_SIZE = 24;
 
+// SNS風プロフィールモーダルで、投稿者の投稿を1ページに読み込む件数。
+// Items fetched per page of an author's posts inside the SNS-style profile modal.
+export const AUTHOR_PROFILE_PROMPTS_PAGE_SIZE = 10;
+
 // カテゴリフィルターの定義。value="all"は全件表示のための特別値。
 // カテゴリの追加はレジストリへの1エントリ追加で吸収する。
 // Category filter definitions; "all" is a sentinel that shows every prompt.

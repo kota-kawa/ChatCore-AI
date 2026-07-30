@@ -8,13 +8,16 @@ function PromptModalManagerHarness() {
   const postModalRef = useRef<HTMLDivElement | null>(null);
   const promptDetailModalRef = useRef<HTMLDivElement | null>(null);
   const promptShareModalRef = useRef<HTMLDivElement | null>(null);
+  const promptAuthorProfileModalRef = useRef<HTMLDivElement | null>(null);
   const { activeModal, closeModal, openModal } = usePromptModalManager({
     isPostSubmitting: false,
     onCloseDetail: vi.fn(),
     onClosePost: vi.fn(),
+    onCloseProfile: vi.fn(),
     postModalRef,
     promptDetailModalRef,
-    promptShareModalRef
+    promptShareModalRef,
+    promptAuthorProfileModalRef
   });
 
   return (

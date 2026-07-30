@@ -210,6 +210,21 @@
     grid-template-columns: 1fr;
   }
 
+  /* プロフィールモーダルも詳細モーダルと同じくボトムシートにする
+     The profile modal becomes a bottom sheet too, matching the detail modal */
+  :where(body.prompt-share-page, .prompt-share-page) #promptAuthorProfileModal {
+    align-items: flex-end;
+  }
+
+  :where(body.prompt-share-page, .prompt-share-page) #promptAuthorProfileModal .post-modal-content {
+    width: 100%;
+    height: min(90dvh, 720px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 22px 22px 0 0;
+  }
+
   /* 見出し行が詰まるので、ラベルと操作を2段に折り返す
      The section header wraps onto two rows once the label and controls stop fitting */
   :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header--sticky {

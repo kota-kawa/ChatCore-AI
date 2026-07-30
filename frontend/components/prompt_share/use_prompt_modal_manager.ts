@@ -13,9 +13,11 @@ type UsePromptModalManagerOptions = {
   isPostSubmitting: boolean;
   onCloseDetail: () => void;
   onClosePost: () => void;
+  onCloseProfile: () => void;
   postModalRef: MutableRefObject<HTMLDivElement | null>;
   promptDetailModalRef: MutableRefObject<HTMLDivElement | null>;
   promptShareModalRef: MutableRefObject<HTMLDivElement | null>;
+  promptAuthorProfileModalRef: MutableRefObject<HTMLDivElement | null>;
 };
 
 // モーダルの開閉、フォーカス復元、スクロールロック、Escape/Tab操作を管理する
@@ -24,9 +26,11 @@ export function usePromptModalManager({
   isPostSubmitting,
   onCloseDetail,
   onClosePost,
+  onCloseProfile,
   postModalRef,
   promptDetailModalRef,
-  promptShareModalRef
+  promptShareModalRef,
+  promptAuthorProfileModalRef
 }: UsePromptModalManagerOptions) {
   const [activeModal, setActiveModal] = useState<ModalKey>(null);
   const activeModalRef = useRef<ModalKey>(null);
@@ -44,8 +48,9 @@ export function usePromptModalManager({
   const getModalElement = useCallback((modal: Exclude<ModalKey, null>) => {
     if (modal === "post") return postModalRef.current;
     if (modal === "detail") return promptDetailModalRef.current;
+    if (modal === "profile") return promptAuthorProfileModalRef.current;
     return promptShareModalRef.current;
-  }, [postModalRef, promptDetailModalRef, promptShareModalRef]);
+  }, [postModalRef, promptAuthorProfileModalRef, promptDetailModalRef, promptShareModalRef]);
 
   // モーダル内のフォーカス可能な要素を取得し、優先要素または先頭要素へフォーカスを移す
   // Finds focusable elements inside a modal and moves focus to the preferred or first element
@@ -95,10 +100,12 @@ export function usePromptModalManager({
         onClosePost();
       } else if (modal === "detail") {
         onCloseDetail();
+      } else if (modal === "profile") {
+        onCloseProfile();
       }
       return true;
     },
-    [onCloseDetail, onClosePost]
+    [onCloseDetail, onCloseProfile, onClosePost]
   );
 
   // モーダルを開く前にトリガー要素を記録しておき、閉じた後にフォーカスを元の位置へ戻せるようにする

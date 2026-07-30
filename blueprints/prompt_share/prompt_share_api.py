@@ -440,6 +440,7 @@ def _get_prompts_with_flags(
     category: str | None = None,
     content_format: str | None = None,
     media_type: str | None = None,
+    author_id: int | None = None,
     locale: str = "ja",
 ) -> dict[str, Any]:
     """
@@ -466,6 +467,11 @@ def _get_prompts_with_flags(
         if media_type is not None:
             conditions.append("AND p.media_type = %s")
             params.append(media_type)
+        if author_id is not None:
+            # SNSライクなプロフィール表示向けに、投稿者IDで自分の公開投稿だけへ絞り込む
+            # Filters to a single author's public prompts for the SNS-style profile view
+            conditions.append("AND p.user_id = %s")
+            params.append(author_id)
         if cursor is not None:
             conditions.append("AND (p.created_at, p.id) < (%s, %s)")
             params.extend(cursor)
@@ -485,6 +491,8 @@ def _get_prompts_with_flags(
                 p.category,
                 p.content,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.user_id AS author_user_id,
+                COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
                 p.input_examples,
                 p.output_examples,
                 p.ai_model,
@@ -609,6 +617,8 @@ def _get_recommended_prompts(
                 p.category,
                 p.content,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.user_id AS author_user_id,
+                COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
                 p.content_format,
                 p.media_type,
                 p.attributes,
@@ -686,6 +696,8 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
                 p.category,
                 p.content,
                 COALESCE(u.username, p.author, 'ユーザー') AS author,
+                p.user_id AS author_user_id,
+                COALESCE(u.avatar_url, '/static/user-icon.png') AS author_avatar_url,
                 p.input_examples,
                 p.output_examples,
                 p.ai_model,
@@ -746,6 +758,52 @@ def _get_public_prompt_by_id(prompt_id: int) -> dict[str, Any] | None:
         if not row:
             return None
         return _serialize_prompt_row(dict(row))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+# 公開プロンプトの投稿者プロフィール（SNS風のアバール・自己紹介・投稿数）を取得する関数
+# Fetch the public author profile (avatar, bio, post count) for the SNS-style profile view.
+def _get_public_author_profile(user_id: int) -> dict[str, Any] | None:
+    """
+    公開プロンプトを1件以上投稿しているユーザーに限り、プロフィール情報を返す。
+    Return profile info only for users who have authored at least one public prompt,
+    since bio/avatar are otherwise private and must not be enumerable by user ID alone.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                u.id,
+                COALESCE(u.username, 'ユーザー') AS username,
+                COALESCE(u.avatar_url, '/static/user-icon.png') AS avatar_url,
+                COALESCE(u.bio, '') AS bio,
+                (
+                    SELECT COUNT(*)
+                    FROM prompts AS p
+                    WHERE p.user_id = u.id
+                      AND p.is_public = TRUE
+                      AND p.deleted_at IS NULL
+                ) AS prompt_count
+            FROM users AS u
+            WHERE u.id = %s
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cursor.fetchone()
+        if not row or int(row.get("prompt_count") or 0) <= 0:
+            return None
+        profile = dict(row)
+        profile["prompt_count"] = int(profile.get("prompt_count") or 0)
+        return profile
     finally:
         if cursor is not None:
             cursor.close()
@@ -1602,7 +1660,7 @@ def _report_prompt_comment_for_user(
 # 公開プロンプトをカーソルページ単位で取得するエンドポイント
 # Endpoint to retrieve a cursor page of public prompts.
 @prompt_share_api_bp.get("/prompts", name="prompt_share_api.get_prompts")
-async def get_prompts(request: Request):
+async def get_prompts(request: Request, author_id: int | None = None):
     """
     公開プロンプトを絞り込み条件とカーソルに基づいて取得する。
     Retrieve one filtered cursor page of public prompts with interaction flags.
@@ -1630,6 +1688,7 @@ async def get_prompts(request: Request):
             category=category,
             content_format=content_format,
             media_type=media_type,
+            author_id=author_id,
             locale=get_request_locale(request),
         )
         return jsonify({"status": "success", **payload})
@@ -1682,6 +1741,28 @@ async def get_prompt_detail(prompt_id: int):
         return log_and_internal_server_error(
             logger,
             "Failed to load public prompt detail.",
+        )
+
+
+# SNS風の投稿者プロフィール（アバター・自己紹介・投稿数）を取得するエンドポイント
+# Endpoint to retrieve an SNS-style author profile (avatar, bio, post count).
+@prompt_share_api_bp.get("/users/{user_id}", name="prompt_share_api.get_author_profile")
+async def get_author_profile(user_id: int):
+    """
+    公開プロンプトを1件以上投稿しているユーザーのプロフィールを返す。
+    それ以外のユーザーIDは404とし、bio等の私的情報が総当たりで閲覧できないようにする。
+    Return the profile only for a user with at least one public prompt; any other
+    user ID resolves to 404 so bio and other private fields cannot be enumerated.
+    """
+    try:
+        profile = await run_blocking(_get_public_author_profile, user_id)
+        if not profile:
+            return jsonify({"error": "ユーザーが見つかりません"}, status_code=404)
+        return jsonify({"status": "success", "user": profile})
+    except Exception:
+        return log_and_internal_server_error(
+            logger,
+            "Failed to load public author profile.",
         )
 
 

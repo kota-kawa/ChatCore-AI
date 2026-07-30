@@ -1,6 +1,7 @@
 import type {
   ContentFormat,
   MediaType,
+  PromptAuthorProfileResponse,
   PromptCommentsResponse,
   PromptData,
   PromptFeedResponse,
@@ -148,6 +149,7 @@ export function fetchPromptList(options?: {
   category?: string;
   contentFormat?: ContentFormat | "all";
   mediaType?: MediaType | "all";
+  authorId?: number | string;
 }) {
   const params = new URLSearchParams();
   if (options?.limit) {
@@ -165,6 +167,9 @@ export function fetchPromptList(options?: {
   if (options?.mediaType && options.mediaType !== "all") {
     params.set("media_type", options.mediaType);
   }
+  if (options?.authorId !== undefined && options.authorId !== null && options.authorId !== "") {
+    params.set("author_id", String(options.authorId));
+  }
   const query = params.toString();
 
   return promptShareFetchJsonOrThrow<PromptFeedResponse>(
@@ -172,6 +177,18 @@ export function fetchPromptList(options?: {
     undefined,
     {
       defaultMessage: promptShareText("promptShare.loadFailed")
+    }
+  ).then(({ payload }) => payload);
+}
+
+// SNS風プロフィールモーダル向けに、投稿者の公開プロフィール（アバター・自己紹介・投稿数）を取得する
+// Fetches an author's public profile (avatar, bio, post count) for the SNS-style profile modal
+export function fetchPromptAuthorProfile(userId: number | string) {
+  return promptShareFetchJsonOrThrow<PromptAuthorProfileResponse>(
+    `/prompt_share/api/users/${encodeURIComponent(String(userId))}`,
+    undefined,
+    {
+      defaultMessage: promptShareText("promptShare.authorProfileLoadFailed")
     }
   ).then(({ payload }) => payload);
 }

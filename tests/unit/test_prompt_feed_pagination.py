@@ -94,6 +94,42 @@ class PromptFeedPaginationTestCase(unittest.TestCase):
             category="business",
             content_format="prompt",
             media_type="text",
+            author_id=None,
+            locale="ja",
+        )
+
+    def test_route_passes_author_id_filter_to_blocking_query(self):
+        # author_id はFastAPIがクエリ文字列から直接バインドするため、ここでは
+        # ルート関数へ渡された後の値としてそのまま指定して検証する。
+        # FastAPI binds author_id directly from the query string, so this test
+        # supplies it as the already-bound route argument.
+        request = build_request(
+            method="GET",
+            path="/prompt_share/api/prompts",
+            query_string=b"author_id=99",
+            session={"user_id": 7},
+        )
+        result = {
+            "prompts": [{"id": 41}],
+            "pagination": {"limit": 12, "has_next": False, "next_cursor": None},
+        }
+
+        with patch(
+            "blueprints.prompt_share.prompt_share_api.run_blocking",
+            new=AsyncMock(return_value=result),
+        ) as run_blocking_mock:
+            response = asyncio.run(get_prompts(request, author_id=99))
+
+        self.assertEqual(response.status_code, 200)
+        run_blocking_mock.assert_awaited_once_with(
+            unittest.mock.ANY,
+            7,
+            limit=PROMPT_FEED_DEFAULT_LIMIT,
+            cursor=None,
+            category=None,
+            content_format=None,
+            media_type=None,
+            author_id=99,
             locale="ja",
         )
 

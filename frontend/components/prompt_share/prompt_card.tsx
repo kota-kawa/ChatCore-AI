@@ -1,5 +1,6 @@
-import { memo, type MouseEvent } from "react";
+import { memo, useState, type MouseEvent } from "react";
 
+import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
   formatPromptDate,
@@ -39,7 +40,26 @@ type PromptCardProps = {
   onCloseDropdown: () => void;
   onAddAsTask: (prompt: PromptRecord) => void;
   onToggleLike: (prompt: PromptRecord) => void;
+  onOpenAuthorProfile: (authorUserId: number, authorName: string) => void;
 };
+
+// アバター画像の読み込みに失敗した場合、デフォルト画像へ差し替える
+// Falls back to the default image when the avatar fails to load
+function AuthorAvatarImage({ src, alt }: { src: string; alt: string }) {
+  const [hasError, setHasError] = useState(false);
+  return (
+    <img
+      className="prompt-card__author-avatar"
+      src={hasError || !src ? DEFAULT_AUTHOR_AVATAR_URL : src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        setHasError(true);
+      }}
+    />
+  );
+}
 
 function PromptCardComponent({
   prompt,
@@ -55,6 +75,7 @@ function PromptCardComponent({
   onCloseDropdown,
   onAddAsTask,
   onToggleLike,
+  onOpenAuthorProfile,
 }: PromptCardProps) {
   const { locale, t } = useTranslation();
   // サーバー値を正規化し、未設定時のフォールバックを確保する
@@ -67,6 +88,9 @@ function PromptCardComponent({
   const commentCount = Number(prompt.comment_count || 0);
   const isUsedInChat = Boolean(prompt.used_in_chat);
   const menuId = `prompt-actions-menu-${promptId}`;
+  const authorName = prompt.author || t("promptShare.authorMissing");
+  const authorUserId = Number(prompt.author_user_id || 0);
+  const hasAuthorProfile = authorUserId > 0;
 
   // SKILLフォーマットはskill_markdownを、それ以外はcontentをプレビューに使う
   // Show skill_markdown preview for skill-format prompts; fall back to content otherwise
@@ -172,6 +196,33 @@ function PromptCardComponent({
           <span>{t("promptShare.report")}</span>
         </button>
       </div>
+
+      {/* SNSのようにアバター+投稿者名を表示する。ユーザーIDがある場合のみプロフィールへ遷移できる */}
+      {/* SNS-style avatar + author name; only clickable when a user ID is present */}
+      {hasAuthorProfile ? (
+        <button
+          type="button"
+          className="prompt-card__author"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenAuthorProfile(authorUserId, authorName);
+          }}
+        >
+          <AuthorAvatarImage
+            src={prompt.author_avatar_url || ""}
+            alt={t("promptShare.authorAvatarAlt", { name: authorName })}
+          />
+          <span className="prompt-card__author-name">{authorName}</span>
+        </button>
+      ) : (
+        <div className="prompt-card__author prompt-card__author--static">
+          <AuthorAvatarImage
+            src={prompt.author_avatar_url || ""}
+            alt={t("promptShare.authorAvatarAlt", { name: authorName })}
+          />
+          <span className="prompt-card__author-name">{authorName}</span>
+        </div>
+      )}
 
       {/* 作例画像は存在する場合のみ表示し、遅延読み込みで初期描画コストを下げる */}
       {/* Reference image is optional; lazy loading reduces initial render cost */}

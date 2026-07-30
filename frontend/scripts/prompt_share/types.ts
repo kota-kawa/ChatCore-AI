@@ -43,6 +43,10 @@ export type PromptData = {
   content: string;
   category?: string;
   author?: string;
+  // 投稿者のユーザーIDとアイコン画像URL。SNS風のプロフィール導線に使う
+  // Author's user ID and avatar URL, used for the SNS-style profile link
+  author_user_id?: number | null;
+  author_avatar_url?: string;
   // 2軸モデルの正準フィールド。
   // Canonical two-axis fields.
   content_format?: ContentFormat | string;
@@ -80,6 +84,23 @@ export type PromptFeedResponse = {
   status?: string;
   prompts?: PromptData[];
   pagination?: PromptPagination;
+  error?: string;
+  message?: string;
+};
+
+// SNS風プロフィールモーダルに表示する、投稿者の公開プロフィール情報
+// Author's public profile info shown in the SNS-style profile modal
+export type PromptAuthorProfile = {
+  id: number;
+  username: string;
+  avatar_url: string;
+  bio: string;
+  prompt_count: number;
+};
+
+export type PromptAuthorProfileResponse = {
+  status?: string;
+  user?: PromptAuthorProfile;
   error?: string;
   message?: string;
 };

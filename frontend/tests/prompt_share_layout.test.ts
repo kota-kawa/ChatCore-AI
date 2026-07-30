@@ -49,7 +49,8 @@ test("prompt share layout renders crawlable page content before client API data 
       onToggleDropdown: noop,
       onCloseDropdown: noop,
       onAddAsTask: noop,
-      onToggleLike: noop
+      onToggleLike: noop,
+      onOpenAuthorProfile: noop
     })
   );
 
@@ -107,7 +108,8 @@ test("prompt share layout places load more after the final prompt card", () => {
       onToggleDropdown: noop,
       onCloseDropdown: noop,
       onAddAsTask: noop,
-      onToggleLike: noop
+      onToggleLike: noop,
+      onOpenAuthorProfile: noop
     })
   );
 
@@ -154,7 +156,8 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
       onDeleteComment: noop,
       onReportComment: noop,
       onReloadComments: noop,
-      onClose: noop
+      onClose: noop,
+      onOpenAuthorProfile: noop
     })
   );
 
@@ -207,7 +210,8 @@ test("prompt share detail modal keeps the settings-style shell", () => {
       onDeleteComment: noop,
       onReportComment: noop,
       onReloadComments: noop,
-      onClose: noop
+      onClose: noop,
+      onOpenAuthorProfile: noop
     })
   );
 
@@ -220,4 +224,98 @@ test("prompt share detail modal keeps the settings-style shell", () => {
   assert.match(html, /prompt-detail-examples__grid/);
   assert.equal(html.match(/class="prompt-detail-example"/g)?.length, 2);
   assert.ok(html.indexOf("入出力例") < html.indexOf("prompt-detail-examples__grid"));
+});
+
+// SNSのように投稿者のアバターをボタン化し、プロフィールモーダルへ遷移できることを検証する
+// Verifies the SNS-style author avatar renders as a button that links to the profile modal
+test("prompt share detail modal renders a clickable author byline when a user ID is present", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PromptShareDetailModal, {
+      isOpen: true,
+      isLoggedIn: true,
+      activeView: "detail",
+      promptDetailModalRef: React.createRef<HTMLDivElement>(),
+      commentsSectionRef: React.createRef<HTMLElement>(),
+      commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
+      detailPrompt: {
+        id: 12,
+        clientId: "prompt-12",
+        title: "会議メモ要約",
+        content: "議事録を要約してください。",
+        category: "business",
+        author: "Kota",
+        author_user_id: 42,
+        author_avatar_url: "/static/uploads/avatar-42.png",
+        content_format: "prompt",
+        media_type: "text",
+        prompt_type: "text",
+        liked: false,
+        used_in_chat: false,
+        comment_count: 0,
+        created_at: "2026-06-01T00:00:00Z"
+      },
+      detailComments: [],
+      isDetailCommentsLoading: false,
+      isCommentSubmitting: false,
+      commentDraft: "",
+      commentActionPendingIds: new Set<string>(),
+      promptDetailCloseButtonRef: React.createRef<HTMLButtonElement>(),
+      onActiveViewChange: noop,
+      onCommentDraftChange: noop,
+      onSubmitComment: noop,
+      onDeleteComment: noop,
+      onReportComment: noop,
+      onReloadComments: noop,
+      onClose: noop,
+      onOpenAuthorProfile: noop
+    })
+  );
+
+  assert.match(html, /<button type="button" class="prompt-detail-author"/);
+  assert.match(html, /\/static\/uploads\/avatar-42\.png/);
+
+  const withoutUserId = renderToStaticMarkup(
+    React.createElement(PromptShareDetailModal, {
+      isOpen: true,
+      isLoggedIn: true,
+      activeView: "detail",
+      promptDetailModalRef: React.createRef<HTMLDivElement>(),
+      commentsSectionRef: React.createRef<HTMLElement>(),
+      commentTextareaRef: React.createRef<HTMLTextAreaElement>(),
+      detailPrompt: {
+        id: 13,
+        clientId: "prompt-13",
+        title: "会議メモ要約2",
+        content: "議事録を要約してください。",
+        category: "business",
+        author: "Kota",
+        content_format: "prompt",
+        media_type: "text",
+        prompt_type: "text",
+        liked: false,
+        used_in_chat: false,
+        comment_count: 0,
+        created_at: "2026-06-01T00:00:00Z"
+      },
+      detailComments: [],
+      isDetailCommentsLoading: false,
+      isCommentSubmitting: false,
+      commentDraft: "",
+      commentActionPendingIds: new Set<string>(),
+      promptDetailCloseButtonRef: React.createRef<HTMLButtonElement>(),
+      onActiveViewChange: noop,
+      onCommentDraftChange: noop,
+      onSubmitComment: noop,
+      onDeleteComment: noop,
+      onReportComment: noop,
+      onReloadComments: noop,
+      onClose: noop,
+      onOpenAuthorProfile: noop
+    })
+  );
+
+  // 投稿者IDが無い場合はボタン化せず、静的な署名として表示する
+  // Without a user ID, the byline stays a static (non-button) element
+  assert.doesNotMatch(withoutUserId, /<button type="button" class="prompt-detail-author"/);
+  assert.match(withoutUserId, /class="prompt-detail-author prompt-detail-author--static"/);
 });

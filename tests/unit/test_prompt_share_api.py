@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from blueprints.prompt_share.prompt_share_api import (
     _serialize_prompt_row,
+    get_author_profile,
     get_prompt_detail,
     get_recommended_prompts,
 )
@@ -118,6 +119,40 @@ class PromptShareApiTestCase(unittest.TestCase):
         payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(payload["prompts"], sample_prompts)
         mock_get_recommended.assert_called_once_with(12, 3, "en")
+
+    # 公開投稿を持つユーザーのプロフィール（アバター・自己紹介・投稿数）が取得できることを検証します。
+    # Verify the author profile endpoint returns avatar, bio, and post count for a user with public posts.
+    def test_get_author_profile_returns_public_profile(self):
+        sample_profile = {
+            "id": 7,
+            "username": "tester",
+            "avatar_url": "/static/uploads/avatar-7.png",
+            "bio": "プロンプトを書くのが好きです。",
+            "prompt_count": 3,
+        }
+
+        with patch(
+            "blueprints.prompt_share.prompt_share_api._get_public_author_profile",
+            return_value=sample_profile,
+        ):
+            response = asyncio.run(get_author_profile(7))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["user"], sample_profile)
+
+    # 公開投稿を持たないユーザーIDに対しては404を返し、bio等が総当たりで閲覧できないことを検証します。
+    # Verify a 404 for users without public posts, so bio and other fields cannot be enumerated by ID.
+    def test_get_author_profile_returns_404_for_user_without_public_posts(self):
+        with patch(
+            "blueprints.prompt_share.prompt_share_api._get_public_author_profile",
+            return_value=None,
+        ):
+            response = asyncio.run(get_author_profile(999))
+
+        self.assertEqual(response.status_code, 404)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"], "ユーザーが見つかりません")
 
 
 if __name__ == "__main__":

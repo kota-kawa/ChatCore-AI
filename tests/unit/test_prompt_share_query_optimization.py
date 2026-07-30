@@ -165,6 +165,40 @@ class PromptShareQueryOptimizationTestCase(unittest.TestCase):
             (datetime(2026, 7, 16, 10, 0, 8), 8),
         )
 
+    # SNS風プロフィール表示向けに、author_idを指定すると投稿者本人の投稿だけへ絞られることを検証します。
+    # Verify author_id narrows the feed to a single author's posts, for the SNS-style profile view.
+    def test_get_prompts_with_flags_applies_author_id_filter(self):
+        fake_cursor = FakeCursor(
+            [
+                {
+                    "id": 5,
+                    "title": "著者の投稿",
+                    "category": "business",
+                    "content": "Body",
+                    "author": "tester",
+                    "author_user_id": 42,
+                    "author_avatar_url": "/static/user-icon.png",
+                    "content_format": "prompt",
+                    "media_type": "text",
+                    "attributes": {},
+                    "attachments": [],
+                    "created_at": "2024-01-01T00:00:00",
+                    "liked": False,
+                    "used_in_chat": False,
+                    "comment_count": 0,
+                }
+            ]
+        )
+        fake_conn = FakeConnection(fake_cursor)
+
+        with patch("blueprints.prompt_share.prompt_share_api.get_db_connection", return_value=fake_conn):
+            payload = _get_prompts_with_flags(None, author_id=42)
+
+        query, params = fake_cursor.executed[0]
+        self.assertIn("AND p.user_id = %s", query)
+        self.assertEqual(params, ("ja", 42, 25, None, None))
+        self.assertEqual(payload["prompts"][0]["author_user_id"], 42)
+
     # おすすめ取得では閲覧中の投稿を除外し、DB側でランダムな最大件数に絞ることを検証します。
     # Verify recommendation lookup excludes the viewed prompt and limits random rows in the database.
     def test_get_recommended_prompts_excludes_current_prompt_and_limits_results(self):
