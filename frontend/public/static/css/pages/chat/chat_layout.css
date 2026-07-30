@@ -663,6 +663,9 @@
       0.48rem
       calc(0.72rem + env(safe-area-inset-left, 0px));
     gap: 0.45rem;
+    background: transparent;
+    box-shadow: none;
+    color: var(--success-strong, #367540);
     /* iOS の慣性スクロール中もヘッダーが視覚的に揺れないよう固定する */
     flex-shrink: 0;
     position: sticky;
@@ -698,6 +701,18 @@
     min-height: 2.5rem;
     max-width: 42vw;
     padding: 0.38rem 0.56rem;
+    color: var(--success-strong, #367540);
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(54, 117, 64, 0.16);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover {
+    color: var(--success-strong, #367540);
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(54, 117, 64, 0.24);
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger span {
@@ -739,6 +754,46 @@
     min-width: 2.5rem;
     min-height: 2.5rem;
     border-radius: 50%;
+    color: var(--success-strong, #367540);
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(54, 117, 64, 0.16);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .chat-header .icon-button:hover {
+    color: var(--success-strong, #367540);
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(54, 117, 64, 0.24);
+  }
+
+  :where(body.chat-page, .chat-page-shell) .chat-room-mode-badge {
+    color: var(--success-strong, #367540);
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(54, 117, 64, 0.16);
+    backdrop-filter: blur(14px) saturate(135%);
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+  }
+
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header {
+    color: #99f6e4;
+  }
+
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header .icon-button,
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger,
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-mode-badge {
+    color: #99f6e4;
+    background: rgba(15, 23, 42, 0.78);
+    border-color: rgba(153, 246, 228, 0.2);
+    box-shadow: 0 6px 20px rgba(2, 6, 23, 0.24);
+  }
+
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header .icon-button:hover,
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover {
+    color: #ccfbf1;
+    background: rgba(30, 41, 59, 0.94);
+    border-color: rgba(153, 246, 228, 0.32);
   }
 
   :where(body.chat-page, .chat-page-shell) .sidebar {
