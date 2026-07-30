@@ -1,6 +1,7 @@
 export type ChatRoomMode = "normal" | "temporary";
 
 export type NormalizedTask = {
+  task_id: number | null;
   system_task_key?: string | null;
   name: string;
   prompt_template: string;
@@ -170,7 +171,7 @@ export type ShareStatus = {
 };
 
 export type TaskEditFormState = {
-  old_task: string;
+  task_id: number | null;
   new_task: string;
   prompt_template: string;
   response_rules: string;

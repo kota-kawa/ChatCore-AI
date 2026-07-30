@@ -8,7 +8,7 @@ export const STORAGE_KEYS = {
   homePageViewState: "chatcore.home.viewState",
   authStateCache: "chatcore.auth.loggedIn",
   authStateCachedAt: "chatcore.auth.cachedAt",
-  tasksCachePrefix: "chatcore.tasks.v2.",
+  tasksCachePrefix: "chatcore.tasks.v3.",
   setupInfoDraft: "chatcore.setup.infoDraft",
   temporaryModeEnabled: "chatcore.setup.temporaryModeEnabled"
 } as const;

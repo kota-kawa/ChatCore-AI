@@ -5,12 +5,22 @@ from blueprints.chat.tasks import _delete_task_for_user, _edit_task_for_user
 
 
 class FakeCursor:
-    def __init__(self, fetchone_result=(1,)):
-        self.fetchone_result = fetchone_result
+    def __init__(self):
         self.executed = []
+        self.fetchone_result = None
+        self.rowcount = 0
 
     def execute(self, query, params=None):
-        self.executed.append((" ".join(query.split()), params))
+        normalized = " ".join(query.split())
+        self.executed.append((normalized, params))
+        if normalized.startswith("SELECT id FROM task_with_examples"):
+            self.fetchone_result = (params[0],)
+        elif normalized.startswith("SELECT 1 FROM task_with_examples"):
+            self.fetchone_result = None
+        else:
+            self.fetchone_result = None
+        if normalized.startswith("UPDATE task_with_examples"):
+            self.rowcount = 1
 
     def fetchone(self):
         return self.fetchone_result
@@ -37,21 +47,21 @@ class FakeConnection:
 
 
 class LocalizedTaskOperationsTestCase(unittest.TestCase):
-    def test_delete_english_system_name_uses_stable_key(self):
+    def test_delete_uses_owned_task_id(self):
         connection = FakeConnection()
         with patch("blueprints.chat.tasks.get_db_connection", return_value=connection):
-            _delete_task_for_user(7, "ℹ️ Explain a topic")
+            _delete_task_for_user(7, 42)
 
-        query, params = connection.cursors[0].executed[0]
-        self.assertIn("WHERE system_task_key = %s", query)
-        self.assertEqual(params, ("information", 7))
+        query, params = connection.cursors[0].executed[1]
+        self.assertIn("WHERE id = %s", query)
+        self.assertEqual(params, (42, 7))
 
-    def test_editing_system_task_clears_provenance(self):
+    def test_editing_system_task_preserves_provenance_and_marks_customized(self):
         connection = FakeConnection()
         with patch("blueprints.chat.tasks.get_db_connection", return_value=connection):
             updated = _edit_task_for_user(
                 7,
-                "ℹ️ Explain a topic",
+                42,
                 "My topic helper",
                 "Custom prompt",
                 "",
@@ -62,9 +72,10 @@ class LocalizedTaskOperationsTestCase(unittest.TestCase):
 
         self.assertTrue(updated)
         update_query, update_params = connection.cursors[1].executed[0]
-        self.assertIn("system_task_key = NULL", update_query)
-        self.assertIn("WHERE system_task_key = %s", update_query)
-        self.assertEqual(update_params[-2:], ("information", 7))
+        self.assertNotIn("system_task_key = NULL", update_query)
+        self.assertIn("is_system_task_customized", update_query)
+        self.assertIn("WHERE id = %s", update_query)
+        self.assertEqual(update_params[-2:], (42, 7))
 
 
 if __name__ == "__main__":

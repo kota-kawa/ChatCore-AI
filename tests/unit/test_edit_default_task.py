@@ -14,15 +14,21 @@ class FakeCursor:
     def __init__(self):
         self.executed = []
         self._fetchone_result = None
+        self.rowcount = 0
 
     # 日本語: クエリと引数を記録し、SELECT 1 クエリの場合はフェッチ結果として (1,) をセットします。
     # English: Record the query and params. Set (1,) as fetchone result if query contains SELECT 1.
     def execute(self, query, params=None):
         self.executed.append((query, params))
-        if "SELECT 1" in query:
-            self._fetchone_result = (1,)
+        normalized = " ".join(query.split())
+        if normalized.startswith("SELECT id FROM task_with_examples"):
+            self._fetchone_result = (params[0],)
+        elif normalized.startswith("SELECT 1 FROM task_with_examples"):
+            self._fetchone_result = None
         else:
             self._fetchone_result = None
+        if normalized.startswith("UPDATE task_with_examples"):
+            self.rowcount = 1
 
     # 日本語: バッファ内のフェッチ結果を1度だけ返し、次回以降はNoneを返します。
     # English: Return the buffered fetchone result once, then reset to None.
@@ -87,7 +93,7 @@ class EditDefaultTaskTestCase(unittest.TestCase):
         # English: Build a POST request with all fields required for task update
         request = make_request(
             {
-                "old_task": "Default Task",
+                "task_id": 55,
                 "new_task": "Updated Task",
                 "prompt_template": "Prompt",
                 "response_rules": "Rules",
@@ -107,7 +113,7 @@ class EditDefaultTaskTestCase(unittest.TestCase):
         # English: Confirm 200 response, DB commit, and that SELECT 1 existence check was performed
         self.assertEqual(response.status_code, 200)
         self.assertTrue(fake_connection.committed)
-        self.assertTrue(any("SELECT 1" in query for query, _ in fake_connection.cursors[0].executed))
+        self.assertTrue(any("SELECT id" in query for query, _ in fake_connection.cursors[0].executed))
 
 
 if __name__ == "__main__":

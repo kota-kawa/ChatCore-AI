@@ -299,13 +299,7 @@ def _search_public_prompts(
                 FROM task_with_examples AS used_tasks
                 WHERE used_tasks.user_id = %s
                   AND used_tasks.deleted_at IS NULL
-                  AND (
-                    used_tasks.source_prompt_id = p.id
-                    OR (
-                      used_tasks.source_prompt_id IS NULL
-                      AND used_tasks.name = p.title
-                    )
-                  )
+                  AND used_tasks.source_prompt_id = p.id
               ) AS used_in_chat
             FROM matched_prompts AS p
             LEFT JOIN LATERAL (

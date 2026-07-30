@@ -547,7 +547,7 @@ def _parse_last_event_id(request: Request) -> int:
 
 # ユーザーメッセージからタスク名と状況設定情報を抽出するパース関数
 # Parse and extract task launch parameters from a user message content.
-def _parse_task_launch_message(message: str) -> dict[str, str] | None:
+def _parse_task_launch_message(message: str) -> dict[str, Any] | None:
     """
     ユーザーメッセージから「【タスク】」や「【状況・作業環境】」の定義を検索・パースします。
     Parses and extracts task launch parameters from a user message content.
@@ -563,27 +563,41 @@ def _parse_task_launch_message(message: str) -> dict[str, str] | None:
 
     setup_match = re.search(r"【状況・作業環境】(?P<setup>[\s\S]+)", message)
     setup_info = setup_match.group("setup").strip() if setup_match else ""
-    return {
+    parsed: dict[str, Any] = {
         "task": task_match.group("task").strip(),
         "setup_info": setup_info,
     }
+    task_id_match = re.search(r"^【タスクID】(?P<task_id>\d+)[ \t]*$", message, re.MULTILINE)
+    if task_id_match:
+        task_id = int(task_id_match.group("task_id"))
+        if task_id > 0:
+            parsed["task_id"] = task_id
+    return parsed
 
 
 # 特定タスク用のプロンプト定義をDBから取得する関数
 # Fetch prompt-template data for a specific task from the repository.
-def _fetch_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+def _fetch_prompt_data(
+    task: str,
+    user_id: int | None,
+    task_id: int | None = None,
+) -> dict[str, Any] | None:
     """
     特定タスク用のプロンプト定義をDBから取得します。
     Fetches prompt-template data for a specific task from the repository.
     """
     # タスク名に対応するプロンプト定義を取得する
     # Fetch prompt-template metadata for the selected task.
-    return _get_chat_repository().get_task_prompt_data(task, user_id)
+    return _get_chat_repository().get_task_prompt_data(task, user_id, task_id)
 
 
 # 特定タスクのプロンプトデータをDBから非同期に読み込む関数
 # Asynchronously load prompt data for a specific task.
-async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, Any] | None:
+async def _load_task_prompt_data(
+    task: str,
+    user_id: int | None,
+    task_id: int | None = None,
+) -> dict[str, Any] | None:
     """
     特定タスクのプロンプト定義データを非同期でロードします。
     Asynchronously loads prompt data for a specific task.
@@ -591,7 +605,10 @@ async def _load_task_prompt_data(task: str, user_id: int | None) -> dict[str, An
     # タスク補助情報の取得失敗ではチャット全体を止めず、ベースプロンプトのみで続行する
     # Do not fail the whole chat request when task metadata lookup fails.
     try:
-        prompt_data = await run_blocking(_fetch_prompt_data, task, user_id)
+        if task_id is None:
+            prompt_data = await run_blocking(_fetch_prompt_data, task, user_id)
+        else:
+            prompt_data = await run_blocking(_fetch_prompt_data, task, user_id, task_id)
     except Exception:
         logger.exception("Failed to load task prompt metadata for task launch: %s", task)
         return None
@@ -719,7 +736,7 @@ def _prepend_attached_files_to_latest_user_message(
 
 # メッセージ履歴から最も新しいタスク起動リクエストを検索抽出する関数
 # Search and extract the most recent task launch request from conversation history.
-def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, str] | None:
+def _find_latest_task_launch_request(messages: list[dict[str, str]]) -> dict[str, Any] | None:
     """
     会話履歴を逆順でスキャンし、最も新しいユーザーメッセージからタスク起動情報を抽出します。
     Searches and extracts the most recent task launch request from conversation history.
@@ -1150,7 +1167,11 @@ async def chat_regenerate(
     active_task_request = _find_latest_task_launch_request(normalized_all_messages)
     prompt_data = None
     if active_task_request is not None:
-        prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
+        task_id = active_task_request.get("task_id")
+        if task_id is None:
+            prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
+        else:
+            prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
     room_summary = ""
@@ -1540,7 +1561,11 @@ async def chat_edit_and_regenerate(
     active_task_request = _find_latest_task_launch_request(normalized_all_messages)
     prompt_data = None
     if active_task_request is not None:
-        prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
+        task_id = active_task_request.get("task_id")
+        if task_id is None:
+            prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id)
+        else:
+            prompt_data = await _load_task_prompt_data(active_task_request["task"], user_id, task_id)
 
     task_prompt = _build_task_prompt(prompt_data) if prompt_data else None
     room_summary = ""

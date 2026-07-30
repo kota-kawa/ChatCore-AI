@@ -93,6 +93,7 @@ type UseHomePageRoomActionsParams = {
   setIsLoadingOlder: Dispatch<SetStateAction<boolean>>;
   setIsRoomSelectionMode: Dispatch<SetStateAction<boolean>>;
   setLaunchingTaskName: Dispatch<SetStateAction<string | null>>;
+  setLaunchingTaskId: Dispatch<SetStateAction<number | null>>;
   setMessages: Dispatch<SetStateAction<UiChatMessage[]>>;
   setOpenRoomActionsFor: Dispatch<SetStateAction<string | null>>;
   setPageViewState: Dispatch<SetStateAction<PageViewState>>;
@@ -150,6 +151,7 @@ export function useHomePageRoomActions({
   setIsLoadingOlder,
   setIsRoomSelectionMode,
   setLaunchingTaskName,
+  setLaunchingTaskId,
   setMessages,
   setOpenRoomActionsFor,
   setPageViewState,
@@ -350,10 +352,11 @@ export function useHomePageRoomActions({
     setPageViewState("setup");
     closeOverlaySidebar();
     setLaunchingTaskName(null);
+    setLaunchingTaskId(null);
     setSetupInfo("");
     closeShareModal();
     scheduleSetupViewportFit();
-  }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskName, setPageViewState]);
+  }, [closeOverlaySidebar, closeShareModal, setLaunchingTaskId, setLaunchingTaskName, setPageViewState]);
 
   const handleAccessChat = useCallback(async () => {
     if (accessChatInProgressRef.current) return;
@@ -483,6 +486,7 @@ export function useHomePageRoomActions({
 
       taskLaunchInProgressRef.current = true;
       setLaunchingTaskName(task.name);
+      setLaunchingTaskId(task.task_id);
 
       const roomId = Date.now().toString();
       const roomMode: ChatRoomMode = temporaryModeEnabled ? "temporary" : "normal";
@@ -491,9 +495,13 @@ export function useHomePageRoomActions({
       const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
       const currentSetupInfo = setupInfo.trim();
       const roomTitle = (currentSetupInfo || localize("新規チャット", "New chat")).slice(0, 255);
+      const taskHeader = [
+        `【タスク】${task.name}`,
+        task.task_id !== null ? `【タスクID】${task.task_id}` : "",
+      ].filter(Boolean).join("\n");
       const firstMessage = currentSetupInfo
-        ? `【タスク】${task.name}\n【状況・作業環境】${currentSetupInfo}`
-        : `【タスク】${task.name}`;
+        ? `${taskHeader}\n【状況・作業環境】${currentSetupInfo}`
+        : taskHeader;
 
       resetLaunchingRoomState(roomId, roomMode);
 
@@ -505,6 +513,7 @@ export function useHomePageRoomActions({
         clearPendingProject();
         if (currentRoomIdRef.current !== roomId) {
           setLaunchingTaskName(null);
+          setLaunchingTaskId(null);
           return;
         }
         upsertCreatedChatRoom(roomId, roomTitle, roomMode);
@@ -515,6 +524,7 @@ export function useHomePageRoomActions({
         const generationPromise = generateResponse(firstMessage, selectedModel, roomId, filesToSend, roomMode);
         setPageViewState("chat");
         setLaunchingTaskName(null);
+        setLaunchingTaskId(null);
 
         const completed = await generationPromise;
         if (!completed && loggedIn && roomMode === "normal") {
@@ -523,6 +533,7 @@ export function useHomePageRoomActions({
       } catch (error) {
         setPageViewState("setup");
         setLaunchingTaskName(null);
+        setLaunchingTaskId(null);
         setMessages([]);
         persistCurrentRoomId(null);
         setCurrentRoomMode("normal");
@@ -547,6 +558,7 @@ export function useHomePageRoomActions({
       selectedModel,
       setAttachedFiles,
       setLaunchingTaskName,
+      setLaunchingTaskId,
       setPageViewState,
       setSetupInfo,
       setupInfo,

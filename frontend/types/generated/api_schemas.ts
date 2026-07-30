@@ -1,7 +1,7 @@
 // AUTO-GENERATED FILE. DO NOT EDIT MANUALLY.
 // Source of truth: backend Pydantic models in services/request_models.py and services/response_models.py
 // Regenerate with: python3 scripts/generate_frontend_zod_schemas.py
-// Schema fingerprint: cd70da7f6bfd09fee6e9fe39e5f66522efdcc443f686e6b52b526ba6b0eea705
+// Schema fingerprint: ea97bc05f90cf73d27d48d338877e623dcacb88f2dee09b51fca93cf0cccd07b
 
 import { z } from "zod";
 
@@ -32,16 +32,16 @@ export type ShareChatRoomRequest = z.infer<typeof ShareChatRoomRequestSchema>;
 export const ChatMessageRequestSchema = z.object({ "message": z.string().min(1).max(30000), "chat_room_id": z.string().min(1).max(128).default("default"), "model": z.union([z.string().min(1).max(64), z.null()]).default(null), "attached_files": z.array(z.object({ "name": z.string().min(1).max(256), "content": z.string().max(100000).default(""), "media_type": z.string().max(128).default(""), "data_base64": z.string().max(1398104).default("") })).max(5).optional() });
 export type ChatMessageRequest = z.infer<typeof ChatMessageRequestSchema>;
 
-export const UpdateTasksOrderRequestSchema = z.object({ "order": z.array(z.string().min(1)).min(1) });
+export const UpdateTasksOrderRequestSchema = z.object({ "order": z.array(z.number().int().gt(0)).min(1).max(500) });
 export type UpdateTasksOrderRequest = z.infer<typeof UpdateTasksOrderRequestSchema>;
 
-export const DeleteTaskRequestSchema = z.object({ "task": z.string().min(1) });
+export const DeleteTaskRequestSchema = z.object({ "task_id": z.number().int().gt(0) });
 export type DeleteTaskRequest = z.infer<typeof DeleteTaskRequestSchema>;
 
-export const EditTaskRequestSchema = z.object({ "old_task": z.string().min(1), "new_task": z.string().min(1), "prompt_template": z.union([z.string(), z.null()]).default(null), "response_rules": z.union([z.string(), z.null()]).default(null), "output_skeleton": z.union([z.string(), z.null()]).default(null), "input_examples": z.union([z.string(), z.null()]).default(null), "output_examples": z.union([z.string(), z.null()]).default(null) });
+export const EditTaskRequestSchema = z.object({ "task_id": z.number().int().gt(0), "new_task": z.string().min(1).max(255), "prompt_template": z.union([z.string(), z.null()]).default(null), "response_rules": z.union([z.string(), z.null()]).default(null), "output_skeleton": z.union([z.string(), z.null()]).default(null), "input_examples": z.union([z.string(), z.null()]).default(null), "output_examples": z.union([z.string(), z.null()]).default(null) });
 export type EditTaskRequest = z.infer<typeof EditTaskRequestSchema>;
 
-export const AddTaskRequestSchema = z.object({ "title": z.string().min(1), "prompt_content": z.string().min(1), "response_rules": z.string().default(""), "output_skeleton": z.string().default(""), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
+export const AddTaskRequestSchema = z.object({ "title": z.string().min(1).max(255), "prompt_content": z.string().min(1), "response_rules": z.string().default(""), "output_skeleton": z.string().default(""), "input_examples": z.string().default(""), "output_examples": z.string().default("") });
 export type AddTaskRequest = z.infer<typeof AddTaskRequestSchema>;
 
 export const PromptAssistRequestSchema = z.object({ "target": z.enum(["task_modal","shared_prompt_modal"]), "action": z.enum(["generate_draft","improve","shorten","expand","generate_examples"]), "instruction": z.string().max(4000).default(""), "fields": z.object({ "title": z.string().max(256).default(""), "content": z.string().max(4000).default(""), "prompt_content": z.string().max(4000).default(""), "skill_markdown": z.string().max(30000).default(""), "category": z.string().max(256).default(""), "author": z.string().max(256).default(""), "prompt_type": z.string().default("text"), "input_examples": z.string().max(4000).default(""), "output_examples": z.string().max(4000).default(""), "ai_model": z.string().max(256).default("") }).optional() });

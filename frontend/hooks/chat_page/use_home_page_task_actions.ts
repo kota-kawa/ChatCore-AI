@@ -1,7 +1,9 @@
-import { useCallback, useMemo, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useMemo, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 import {
   buildTaskOrderForPersistence,
+  removeTaskById,
+  updateTaskById,
 } from "../../lib/chat_page/home_page_controller_utils";
 import { getFallbackTasks, normalizeTaskList } from "../../lib/chat_page/task_utils";
 import { useTranslation } from "../../contexts/locale_context";
@@ -18,6 +20,7 @@ import {
 } from "../../scripts/setup/setup_tasks_cache";
 
 type UseHomePageTaskActionsParams = {
+  loggedIn: boolean;
   tasks: NormalizedTask[];
   setTasks: Dispatch<SetStateAction<NormalizedTask[]>>;
   isTaskOrderEditing: boolean;
@@ -31,6 +34,7 @@ type UseHomePageTaskActionsParams = {
 };
 
 export function useHomePageTaskActions({
+  loggedIn,
   tasks,
   setTasks,
   isTaskOrderEditing,
@@ -44,17 +48,23 @@ export function useHomePageTaskActions({
 }: UseHomePageTaskActionsParams) {
   const { locale, t } = useTranslation();
   const fallbackTasks = useMemo(() => getFallbackTasks(locale), [locale]);
+  const refreshGenerationRef = useRef(0);
   const refreshTasks = useCallback(
     async (forceRefresh = false) => {
+      const generation = ++refreshGenerationRef.current;
+      const cacheScope = loggedIn ? "auth" : "guest";
       if (!forceRefresh) {
-        const cached = readCachedTasks();
-        if (Array.isArray(cached) && cached.length > 0) {
+        const cached = readCachedTasks(cacheScope, locale);
+        if (Array.isArray(cached)) {
+          if (generation !== refreshGenerationRef.current) return;
           setTasks(normalizeTaskList(cached, locale));
           return;
         }
       }
 
-      setTasks(fallbackTasks);
+      if (!loggedIn && generation === refreshGenerationRef.current) {
+        setTasks(fallbackTasks);
+      }
 
       try {
         const { payload } = await fetchJsonOrThrow<{ tasks?: TaskItem[] }>("/api/tasks", undefined, {
@@ -62,18 +72,19 @@ export function useHomePageTaskActions({
           fetchImpl: resilientFetch,
         });
 
-        const fetchedTasks = Array.isArray(payload.tasks) ? payload.tasks : [];
-        if (fetchedTasks.length > 0) {
-          writeCachedTasks(fetchedTasks);
-        }
+        if (!Array.isArray(payload.tasks)) throw new Error(t("chat.taskLoadFailed"));
+        const fetchedTasks = payload.tasks;
+        if (generation !== refreshGenerationRef.current) return;
 
+        writeCachedTasks(cacheScope, locale, fetchedTasks);
         setTasks(normalizeTaskList(fetchedTasks, locale));
       } catch (error) {
+        if (generation !== refreshGenerationRef.current) return;
         console.error("タスク読み込みに失敗:", error);
-        setTasks(fallbackTasks);
+        if (!loggedIn) setTasks(fallbackTasks);
       }
     },
-    [fallbackTasks, locale, setTasks, t],
+    [fallbackTasks, locale, loggedIn, setTasks, t],
   );
 
   const saveTaskOrder = useCallback(async (nextTasks: NormalizedTask[]) => {
@@ -95,23 +106,23 @@ export function useHomePageTaskActions({
     } catch (error) {
       const message = error instanceof Error ? error.message : t("chat.reorderFailed");
       showToast(message, { variant: "error" });
+      await refreshTasks(true);
     }
-  }, [t]);
+  }, [refreshTasks, t]);
 
   const toggleTaskOrderEditing = useCallback(() => {
-    setIsTaskOrderEditing((previous) => {
-      const next = !previous;
-      if (next) {
-        setTasksExpanded(true);
-      } else {
-        draggingTaskIndexRef.current = null;
-        setDraggingTaskIndex(null);
-        setTasksExpanded(false);
-        void saveTaskOrder(tasks);
-      }
-      return next;
-    });
-  }, [saveTaskOrder, tasks]);
+    if (!isTaskOrderEditing) {
+      setIsTaskOrderEditing(true);
+      setTasksExpanded(true);
+      return;
+    }
+
+    draggingTaskIndexRef.current = null;
+    setDraggingTaskIndex(null);
+    setTasksExpanded(false);
+    setIsTaskOrderEditing(false);
+    void saveTaskOrder(tasks);
+  }, [isTaskOrderEditing, saveTaskOrder, tasks]);
 
   const handleTaskDragStart = useCallback(
     (index: number) => {
@@ -140,7 +151,7 @@ export function useHomePageTaskActions({
   }, []);
 
   const handleTaskDelete = useCallback(
-    async (taskName: string) => {
+    async (taskId: number) => {
       const confirmed = await showConfirmModal(t("chat.deleteTaskConfirm"));
       if (!confirmed) return;
 
@@ -149,17 +160,14 @@ export function useHomePageTaskActions({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ task: taskName }),
+          body: JSON.stringify({ task_id: taskId }),
         }, {
           defaultMessage: t("chat.taskDeleteFailed"),
           fetchImpl: resilientFetch,
         });
 
-        setTasks((previous) => {
-          const next = previous.filter((task) => task.name !== taskName);
-          void saveTaskOrder(next);
-          return next;
-        });
+        refreshGenerationRef.current += 1;
+        setTasks((previous) => removeTaskById(previous, taskId));
         invalidateTasksCache();
       } catch (error) {
         showToast(error instanceof Error ? error.message : t("chat.taskDeleteFailed"), {
@@ -167,12 +175,13 @@ export function useHomePageTaskActions({
         });
       }
     },
-    [saveTaskOrder, t],
+    [t],
   );
 
   const openTaskEditModal = useCallback((task: NormalizedTask) => {
+    if (task.task_id === null) return;
     setTaskEditForm({
-      old_task: task.name,
+      task_id: task.task_id,
       new_task: task.name,
       prompt_template: task.prompt_template,
       response_rules: task.response_rules,
@@ -189,7 +198,7 @@ export function useHomePageTaskActions({
 
   const handleTaskEditSave = useCallback(async () => {
     const payload = {
-      old_task: taskEditForm.old_task,
+      task_id: taskEditForm.task_id,
       new_task: taskEditForm.new_task.trim(),
       prompt_template: taskEditForm.prompt_template,
       response_rules: taskEditForm.response_rules,
@@ -198,10 +207,11 @@ export function useHomePageTaskActions({
       output_examples: taskEditForm.output_examples,
     };
 
-    if (!payload.new_task) {
+    if (payload.task_id === null || !payload.new_task) {
       showToast(t("chat.titleRequired"), { variant: "error" });
       return;
     }
+    const taskId = payload.task_id;
 
     try {
       await fetchJsonOrThrow("/api/edit_task", {
@@ -214,20 +224,15 @@ export function useHomePageTaskActions({
         fetchImpl: resilientFetch,
       });
 
-      setTasks((previous) =>
-        previous.map((task) => {
-          if (task.name !== taskEditForm.old_task) return task;
-          return {
-            ...task,
-            name: payload.new_task,
-            prompt_template: payload.prompt_template,
-            response_rules: payload.response_rules,
-            output_skeleton: payload.output_skeleton,
-            input_examples: payload.input_examples,
-            output_examples: payload.output_examples,
-          };
-        }),
-      );
+      refreshGenerationRef.current += 1;
+      setTasks((previous) => updateTaskById(previous, taskId, {
+        name: payload.new_task,
+        prompt_template: payload.prompt_template,
+        response_rules: payload.response_rules,
+        output_skeleton: payload.output_skeleton,
+        input_examples: payload.input_examples,
+        output_examples: payload.output_examples,
+      }));
       invalidateTasksCache();
       closeTaskEditModal();
     } catch (error) {

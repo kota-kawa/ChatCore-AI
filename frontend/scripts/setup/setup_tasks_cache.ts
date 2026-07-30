@@ -1,6 +1,6 @@
 import type { TaskItem } from "./setup_types";
 import { CACHE_TTL_MS, STORAGE_KEYS } from "../core/constants";
-import { LOCALE_STORAGE_KEY, normalizeLocale } from "../../lib/i18n/config";
+import type { Locale } from "../../lib/i18n/config";
 
 const TASKS_CACHE_KEY_PREFIX = STORAGE_KEYS.tasksCachePrefix;
 
@@ -9,29 +9,15 @@ type TaskCachePayload = {
   tasks: TaskItem[];
 };
 
-function getTasksCacheKey() {
-  let scope = "guest";
-  try {
-    if (localStorage.getItem(STORAGE_KEYS.authStateCache) === "1") {
-      scope = "auth";
-    }
-  } catch {
-    // localStorage が使えない環境では guest スコープを使用
-  }
-  let locale = "ja";
-  try {
-    locale = normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY))
-      ?? normalizeLocale(document.documentElement.lang)
-      ?? "ja";
-  } catch {
-    // Browser storage/document access can be unavailable during isolated rendering.
-  }
+export type TaskCacheScope = "auth" | "guest";
+
+function getTasksCacheKey(scope: TaskCacheScope, locale: Locale) {
   return `${TASKS_CACHE_KEY_PREFIX}${scope}:${locale}`;
 }
 
-export function readCachedTasks() {
+export function readCachedTasks(scope: TaskCacheScope, locale: Locale) {
   try {
-    const raw = localStorage.getItem(getTasksCacheKey());
+    const raw = localStorage.getItem(getTasksCacheKey(scope, locale));
     if (!raw) return null;
     const payload = JSON.parse(raw) as TaskCachePayload;
     if (!payload || !Array.isArray(payload.tasks) || typeof payload.cachedAt !== "number") {
@@ -46,13 +32,13 @@ export function readCachedTasks() {
   }
 }
 
-export function writeCachedTasks(tasks: TaskItem[]) {
+export function writeCachedTasks(scope: TaskCacheScope, locale: Locale, tasks: TaskItem[]) {
   try {
     const payload: TaskCachePayload = {
       cachedAt: Date.now(),
       tasks
     };
-    localStorage.setItem(getTasksCacheKey(), JSON.stringify(payload));
+    localStorage.setItem(getTasksCacheKey(scope, locale), JSON.stringify(payload));
   } catch {
     // localStorage が使えない環境では保存をスキップ
   }

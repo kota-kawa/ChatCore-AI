@@ -279,7 +279,15 @@ function ChatMessageRow({
             {/* 【タスク】名と【状況・作業環境】は折り畳みの外に常時表示する。 */}
             {/* The task name and setup input always stay visible (outside the disclosure). */}
             <UserMessageHtml text={message.text} attachedFileNames={message.attachedFileNames} />
-            {taskLaunch ? <TaskPromptDisclosure task={taskLookup.get(taskLaunch.taskName)} /> : null}
+            {taskLaunch ? (
+              <TaskPromptDisclosure
+                task={taskLookup.get(
+                  taskLaunch.taskId !== null
+                    ? `id:${taskLaunch.taskId}`
+                    : `name:${taskLaunch.taskName}`,
+                )}
+              />
+            ) : null}
           </div>
           {isLaunchPreview ? (
             // プレースホルダー行ではアクションボタン領域をレイアウト確保のため非表示で保持する。
@@ -378,6 +386,7 @@ type ChatMessageListProps = {
   isChatLaunching: boolean;
   isGenerating: boolean;
   isLoadingOlder: boolean;
+  launchingTaskId: number | null;
   launchingTaskName: string | null;
   loadOlderChatHistory: () => Promise<void>;
   messages: UiChatMessage[];
@@ -398,6 +407,7 @@ function ChatMessageListComponent({
   isChatLaunching,
   isGenerating,
   isLoadingOlder,
+  launchingTaskId,
   launchingTaskName,
   loadOlderChatHistory,
   messages,
@@ -426,7 +436,8 @@ function ChatMessageListComponent({
   const taskLookup = useMemo(() => {
     const lookup = new Map<string, NormalizedTask>();
     tasks.forEach((task) => {
-      lookup.set(task.name, task);
+      if (task.task_id !== null) lookup.set(`id:${task.task_id}`, task);
+      if (!lookup.has(`name:${task.name}`)) lookup.set(`name:${task.name}`, task);
     });
     return lookup;
   }, [tasks]);
@@ -468,6 +479,7 @@ function ChatMessageListComponent({
               text: launchingTaskName
                 ? [
                     `【タスク】${launchingTaskName}`,
+                    launchingTaskId !== null ? `【タスクID】${launchingTaskId}` : "",
                     setupInfo?.trim() ? `【状況・作業環境】${setupInfo.trim()}` : "",
                   ]
                     .filter(Boolean)
@@ -486,7 +498,7 @@ function ChatMessageListComponent({
       nextRows.push({ kind: "message", message });
     });
     return nextRows;
-  }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskName, messages, setupInfo, t]);
+  }, [historyHasMore, historyNextBeforeId, isChatLaunching, launchingTaskId, launchingTaskName, messages, setupInfo, t]);
 
   // rowProps をメモ化することで、rows や状態が変わらない限り各行の再レンダリングを防ぐ。
   // Memoize rowProps to prevent unnecessary re-renders of individual rows.

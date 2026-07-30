@@ -157,6 +157,44 @@ class DefaultTasksTestCase(unittest.TestCase):
 
         self.assertEqual(inserted, 0)
 
+    def test_seed_checks_deleted_rows_and_uses_conflict_safe_insert(self):
+        fake_cursor = FakeCursor(existing_names=[])
+        fake_conn = TransactionTrackingConnection(fake_cursor)
+
+        with patch("services.default_tasks.get_db_connection", return_value=fake_conn), patch(
+            "services.default_tasks.load_default_tasks", return_value=SAMPLE_TASKS[:1]
+        ):
+            ensure_default_tasks_seeded()
+
+        select_query = next(
+            query
+            for query, _ in fake_cursor.executed_queries
+            if "SELECT system_task_key, name FROM task_with_examples" in query
+        )
+        insert_query = next(
+            query
+            for query, _ in fake_cursor.executed_queries
+            if "INSERT INTO task_with_examples" in query
+        )
+        self.assertNotIn("deleted_at IS NULL", select_query)
+        self.assertIn("ON CONFLICT DO NOTHING", insert_query)
+        self.assertTrue(
+            any("pg_advisory_xact_lock" in query for query, _ in fake_cursor.executed_queries)
+        )
+
+    def test_customized_system_task_is_not_localized_over_user_content(self):
+        task = {
+            "system_task_key": "information",
+            "name": "My custom task",
+            "prompt_template": "Keep this prompt",
+            "is_system_task_customized": True,
+        }
+
+        localized = localize_system_task(task, "en")
+
+        self.assertEqual(localized["name"], "My custom task")
+        self.assertEqual(localized["prompt_template"], "Keep this prompt")
+
     # 日本語: repositoryデフォルトtasksincludefullseedsetことを検証します。
     # English: Verify that repository default tasks include full seed set.
     def test_repository_default_tasks_include_full_seed_set(self):

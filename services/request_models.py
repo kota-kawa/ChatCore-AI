@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from services.attached_files import (
     MAX_ATTACHED_FILE_BASE64_LENGTH,
@@ -34,6 +34,8 @@ from services.prompt_types import (
 )
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
+TaskNameStr = Annotated[str, Field(min_length=1, max_length=255)]
+MAX_TASKS_PER_USER = 500
 
 # RFC 5321 caps the full address at 254 chars. The pattern is a deliberately
 # strict subset — it rejects CR/LF (mail-header injection) and any non-printable
@@ -238,20 +240,26 @@ class ChatMessageRequest(RequestPayloadModel):
 # 日本語: 定型タスクの並び順（IDリスト）を更新するリクエストペイロード。
 # English: Request payload to update the ordering of preset tasks.
 class UpdateTasksOrderRequest(RequestPayloadModel):
-    order: list[NonEmptyStr] = Field(min_length=1)
+    order: list[PositiveInt] = Field(min_length=1, max_length=MAX_TASKS_PER_USER)
+
+    @model_validator(mode="after")
+    def validate_unique_task_ids(self) -> "UpdateTasksOrderRequest":
+        if len(self.order) != len(set(self.order)):
+            raise ValueError("order must not contain duplicate task IDs")
+        return self
 
 
 # 日本語: 特定のタスクを削除する際のリクエストペイロード。
 # English: Request payload for deleting a specific task.
 class DeleteTaskRequest(RequestPayloadModel):
-    task: NonEmptyStr
+    task_id: PositiveInt
 
 
 # 日本語: 既存のタスク定義を編集する際のリクエストペイロード。
 # English: Request payload for editing an existing task definition.
 class EditTaskRequest(RequestPayloadModel):
-    old_task: NonEmptyStr
-    new_task: NonEmptyStr
+    task_id: PositiveInt
+    new_task: TaskNameStr
     prompt_template: str | None = None
     response_rules: str | None = None
     output_skeleton: str | None = None
@@ -262,7 +270,7 @@ class EditTaskRequest(RequestPayloadModel):
 # 日本語: 新しいカスタムタスクを追加する際のリクエストペイロード。
 # English: Request payload for adding a new custom task.
 class AddTaskRequest(RequestPayloadModel):
-    title: NonEmptyStr
+    title: TaskNameStr
     prompt_content: NonEmptyStr
     response_rules: str = ""
     output_skeleton: str = ""
