@@ -210,11 +210,6 @@
     grid-template-columns: 1fr;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer,
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-footer__button {
-    width: 100%;
-  }
-
   /* 見出し行が詰まるので、ラベルと操作を2段に折り返す
      The section header wraps onto two rows once the label and controls stop fitting */
   :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header--sticky {

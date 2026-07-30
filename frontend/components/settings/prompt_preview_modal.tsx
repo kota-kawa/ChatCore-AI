@@ -122,12 +122,6 @@ export function PromptPreviewModal({
             </section>
           ) : null}
         </div>
-
-        <footer className="prompt-preview-modal__footer">
-          <button type="button" className="prompt-preview-modal__button" onClick={onClose}>
-            {t("common.close")}
-          </button>
-        </footer>
       </div>
     </div>
   );
