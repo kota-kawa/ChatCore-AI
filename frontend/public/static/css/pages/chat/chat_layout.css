@@ -709,12 +709,6 @@
     -webkit-backdrop-filter: none;
   }
 
-  :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover {
-    color: var(--success-strong, #367540);
-    background: rgba(54, 117, 64, 0.08);
-    border-color: transparent;
-  }
-
   :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger span {
     min-width: 0;
     overflow: hidden;
@@ -762,10 +756,12 @@
     -webkit-backdrop-filter: none;
   }
 
-  :where(body.chat-page, .chat-page-shell) .chat-header .icon-button:hover {
+  :where(body.chat-page, .chat-page-shell) .chat-header :is(.icon-button, .chat-header-model-trigger):is(:hover, :focus, :focus-visible, :active) {
     color: var(--success-strong, #367540);
-    background: rgba(54, 117, 64, 0.08);
+    background: transparent;
     border-color: transparent;
+    box-shadow: none;
+    filter: none;
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-room-mode-badge {
@@ -789,11 +785,12 @@
     box-shadow: none;
   }
 
-  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header .icon-button:hover,
-  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover {
+  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header :is(.icon-button, .chat-header-model-trigger):is(:hover, :focus, :focus-visible, :active) {
     color: #ccfbf1;
-    background: rgba(153, 246, 228, 0.1);
+    background: transparent;
     border-color: transparent;
+    box-shadow: none;
+    filter: none;
   }
 
   :where(body.chat-page, .chat-page-shell) .sidebar {
