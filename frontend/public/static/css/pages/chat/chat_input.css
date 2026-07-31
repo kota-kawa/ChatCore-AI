@@ -5,13 +5,20 @@
    メッセージが下を通り抜けて見える「浮いた入力欄」にする。透明部分は
    pointer-events を無効化し、背後のテキスト選択やクリックを妨げない。
    メッセージ側の下端余白は --chat-footer-height（use_chat_footer_height が
-   実測を反映、未計測時は各所のフォールバック値）で確保する */
-:where(body.chat-page, .chat-page-shell) .input-container {
+   実測を反映、未計測時は各所のフォールバック値）で確保する。
+
+   position は子孫セレクタで指定する。同ファイル後方の
+   .chat-attachment-dropzone { position: relative } と詳細度が並ぶと後勝ちで
+   打ち消され、入力欄がフローに残って帯のまま占有してしまうため。 */
+:where(body.chat-page, .chat-page-shell) .chat-area > .input-container {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 20;
+}
+
+:where(body.chat-page, .chat-page-shell) .input-container {
   padding: 0.75rem 1rem 0.85rem;
   background: transparent;
   pointer-events: none;

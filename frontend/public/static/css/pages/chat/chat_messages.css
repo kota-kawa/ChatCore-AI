@@ -38,6 +38,21 @@
   gap: 0.25rem;
   min-width: 0;
   min-height: 0;
+  /* 浮いている入力欄の下へ潜り込むテキストを、下端で硬く切らずに徐々に
+     薄くする。帯で覆い隠すのではなく減衰させることで、コンテンツが入力欄の
+     背後へ続いていることが伝わる */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--chat-footer-height, 5.4rem)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--chat-footer-height, 5.4rem)),
+    transparent 100%
+  );
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-messages--virtual {
@@ -2066,14 +2081,17 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     scroll-padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
-    /* 透明なモバイルヘッダーへ近づくメッセージを、スクロール位置に応じて自然に薄くする。 */
+    /* 透明なモバイルヘッダーへ近づくメッセージを、スクロール位置に応じて自然に薄くする。
+       下端も同様に、浮いている入力欄へ潜り込むテキストを減衰させる。
+       mask-image は単一プロパティなので、上下のフェードを1つの gradient で指定する。 */
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
       rgba(0, 0, 0, 0.48) 1.15rem,
       rgba(0, 0, 0, 0.88) 2.7rem,
       #000 4.25rem,
-      #000 100%
+      #000 calc(100% - var(--chat-footer-height, 4.9rem)),
+      transparent 100%
     );
     mask-image: linear-gradient(
       to bottom,
@@ -2081,7 +2099,8 @@
       rgba(0, 0, 0, 0.48) 1.15rem,
       rgba(0, 0, 0, 0.88) 2.7rem,
       #000 4.25rem,
-      #000 100%
+      #000 calc(100% - var(--chat-footer-height, 4.9rem)),
+      transparent 100%
     );
   }
 
