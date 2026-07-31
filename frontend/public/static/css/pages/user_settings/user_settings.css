@@ -1331,14 +1331,14 @@
 
 :where(body.settings-page, .user-settings-page) .prompt-card:hover {
   transform: translateY(-4px);
-  border-color: #1a73e8;
-  box-shadow: 0 12px 28px rgba(26, 115, 232, 0.15);
+  border-color: var(--primary-color, #19c37d);
+  box-shadow: 0 12px 28px rgba(25, 195, 125, 0.18);
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card:active {
   transform: translateY(-1px);
-  border-color: #1a73e8;
-  box-shadow: 0 5px 12px rgba(26, 115, 232, 0.12);
+  border-color: var(--primary-color, #19c37d);
+  box-shadow: 0 5px 12px rgba(25, 195, 125, 0.14);
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card--skeleton {
@@ -1373,7 +1373,7 @@
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card__main:focus-visible {
-  outline: 2px solid rgba(26, 115, 232, 0.55);
+  outline: 2px solid rgba(25, 195, 125, 0.55);
   outline-offset: 4px;
 }
 
@@ -1411,6 +1411,8 @@
   color: #8aa0b8;
 }
 
+/* カテゴリバッジは共有ページの青ではなく、設定ページのアクセントカラー（グリーン）に合わせる */
+/* The category pill uses the settings page's green accent instead of the share page's blue */
 :where(body.settings-page, .user-settings-page) .prompt-card__category-pill {
   display: inline-flex;
   align-items: center;
@@ -1419,9 +1421,9 @@
   max-width: min(48%, 11rem);
   padding: 0.22rem 0.65rem;
   border-radius: 999px;
-  border: 1px solid #bee3f8;
-  background: #ebf8ff;
-  color: #2b6cb0;
+  border: 1px solid rgba(25, 195, 125, 0.26);
+  background: rgba(25, 195, 125, 0.08);
+  color: var(--primary-dark, #0f7a51);
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.2;
@@ -1431,7 +1433,7 @@
 :where(body.settings-page, .user-settings-page) .prompt-card__category-pill i {
   flex: 0 0 auto;
   font-size: 0.7rem;
-  color: #3182ce;
+  color: var(--primary-color, #19c37d);
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card__category-pill span,
@@ -1472,14 +1474,6 @@
   color: #1d4ed8;
 }
 
-/* いいね済みバッジは設定ページのアクセントカラー（グリーン）で他のピルと区別する */
-/* The liked badge keeps the settings page accent color so it stands apart from the other pills */
-:where(body.settings-page, .user-settings-page) .prompt-card__type-pill--saved {
-  border: 1px solid #a7f3d0;
-  background: #ecfdf5;
-  color: #047857;
-}
-
 :where(body.settings-page, .user-settings-page) .prompt-card__title {
   margin: 0;
   color: #1a202c;
@@ -1516,6 +1510,7 @@
 :where(body.settings-page, .user-settings-page) .prompt-card .prompt-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.2rem;
   padding-top: 0.42rem;
 }
@@ -1551,13 +1546,13 @@
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn:focus-visible {
-  outline: 2px solid rgba(26, 115, 232, 0.55);
+  outline: 2px solid rgba(25, 195, 125, 0.55);
   outline-offset: 2px;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn--edit:hover {
-  background: rgba(26, 115, 232, 0.12);
-  color: #1a73e8;
+  background: rgba(25, 195, 125, 0.12);
+  color: var(--primary-dark, #0f7a51);
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn--delete:hover {
@@ -2923,7 +2918,7 @@ body.settings-page :where(
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card:hover {
   background: #262f3f;
-  border-color: #3b82f6;
+  border-color: rgba(25, 195, 125, 0.55);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
@@ -2951,13 +2946,13 @@ body.settings-page :where(
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__category-pill {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(96, 165, 250, 0.28);
-  color: #93c5fd;
+  background: rgba(25, 195, 125, 0.1);
+  border-color: rgba(110, 231, 183, 0.22);
+  color: #6ee7b7;
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__category-pill i {
-  color: #60a5fa;
+  color: #6ee7b7;
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__type-pill--prompt {
@@ -2972,12 +2967,6 @@ body.settings-page :where(
   color: #93c5fd;
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card__type-pill--saved {
-  background: rgba(25, 195, 125, 0.18);
-  border-color: rgba(110, 231, 183, 0.32);
-  color: #6ee7b7;
-}
-
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn {
   background: rgba(255, 255, 255, 0.08);
   color: #d1d5db;
@@ -2989,8 +2978,8 @@ body.settings-page :where(
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn--edit:hover {
-  background: rgba(59, 130, 246, 0.22);
-  color: #93c5fd;
+  background: rgba(25, 195, 125, 0.22);
+  color: #6ee7b7;
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-card .prompt-action-btn--delete:hover {

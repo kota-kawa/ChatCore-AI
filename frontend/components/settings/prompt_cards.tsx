@@ -26,7 +26,6 @@ function SettingsPromptCard({
   contentSource,
   contentFormat,
   categoryLabel,
-  savedBadge,
   dateLabel,
   dateTime,
   onOpenDetail,
@@ -37,7 +36,6 @@ function SettingsPromptCard({
   contentSource: string;
   contentFormat: string;
   categoryLabel: string;
-  savedBadge?: ReactNode;
   dateLabel: string;
   dateTime?: string;
   onOpenDetail: () => void;
@@ -68,7 +66,6 @@ function SettingsPromptCard({
       >
         <div className="prompt-card__header">
           <div className="prompt-card__badges">
-            {savedBadge}
             {categoryLabel ? (
               <span className="prompt-card__category-pill">
                 <i className="bi bi-hash" aria-hidden="true"></i>
@@ -182,12 +179,6 @@ export function LikedPromptCard({
       contentSource={isSkill ? entry.skillMarkdown : entry.content}
       contentFormat={entry.contentFormat}
       categoryLabel={categoryLabel}
-      savedBadge={
-        <span className="prompt-card__type-pill prompt-card__type-pill--saved">
-          <i className="bi bi-heart-fill" aria-hidden="true"></i>
-          <span>{t("promptShare.liked")}</span>
-        </span>
-      }
       dateLabel={likedAtLabel}
       dateTime={entry.likedAt}
       onOpenDetail={() => onPreview(entry)}
