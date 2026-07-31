@@ -3420,9 +3420,11 @@ body.settings-page :where(
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__dialog {
+  /* 本文を読むための面。プロンプト共有の詳細モーダルと同じ寸法感に合わせる
+     A reading surface sized like the prompt share detail modal */
   display: flex;
-  width: min(100%, 840px);
-  height: min(86dvh, 720px);
+  width: min(100%, 1080px);
+  height: min(92dvh, 900px);
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(194, 221, 208, 0.82);
@@ -3434,14 +3436,16 @@ body.settings-page :where(
   animation: settings-prompt-modal-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* 見出しを「タイトル＋署名」の2段に収め、残りの縦幅は本文へ渡す
+   The header packs down to title + byline so the remaining height belongs to the body */
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__header {
   position: relative;
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: clamp(1.1rem, 2.5vw, 1.45rem) clamp(1.15rem, 3vw, 1.75rem);
+  gap: 0.9rem;
+  padding: clamp(0.5rem, 0.9vw, 0.7rem) clamp(0.95rem, 2.4vw, 1.6rem);
   border-bottom: 1px solid rgba(200, 220, 210, 0.78);
   background:
     radial-gradient(circle at 92% 12%, rgba(25, 195, 125, 0.2), transparent 34%),
@@ -3461,39 +3465,29 @@ body.settings-page :where(
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__heading {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  gap: 0.85rem;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__icon {
   display: inline-flex;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(25, 195, 125, 0.24);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(145deg, rgba(25, 195, 125, 0.17), rgba(25, 195, 125, 0.07));
   color: var(--primary-dark, #0f7a51);
-  font-size: 1.2rem;
-}
-
-:where(body.settings-page, .user-settings-page) .prompt-preview-modal__eyebrow {
-  margin: 0;
-  color: var(--primary-dark, #0f7a51);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  line-height: 1.35;
-  text-transform: uppercase;
+  font-size: 0.95rem;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal h2 {
-  margin: 0.15rem 0 0;
+  margin: 0;
   color: var(--text-dark, #1a1a1a);
-  font-size: clamp(1.15rem, 1vw + 0.9rem, 1.42rem);
-  line-height: 1.38;
+  font-size: clamp(1.02rem, 0.5vw + 0.92rem, 1.2rem);
+  line-height: 1.32;
   overflow-wrap: anywhere;
 }
 
@@ -3501,10 +3495,10 @@ body.settings-page :where(
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.85rem;
-  margin-top: 0.45rem;
+  gap: 0.2rem 0.7rem;
+  margin-top: 0.2rem;
   color: var(--settings-text-muted, #64748b);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   line-height: 1.45;
 }
 
@@ -3524,8 +3518,8 @@ body.settings-page :where(
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__close {
   display: inline-flex;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -3557,8 +3551,18 @@ body.settings-page :where(
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: clamp(1rem, 2.8vw, 1.6rem) clamp(1.15rem, 3vw, 1.75rem) clamp(1.3rem, 3.2vw, 2rem);
+  padding: 1.1rem clamp(0.95rem, 2.4vw, 1.6rem) clamp(1.3rem, 3.2vw, 2rem);
   scrollbar-gutter: stable;
+}
+
+/* 本文は枠の入れ子をやめ、カード自体を読む面にする（プロンプト共有の詳細モーダルと同じ組み）
+   The body drops the box-in-box and becomes the reading surface, as in the prompt share detail modal */
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
+  overflow: clip;
+  border: 1px solid rgba(200, 220, 210, 0.8);
+  border-left: 3px solid rgba(25, 195, 125, 0.55);
+  border-radius: 16px;
+  background: #ffffff;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section-heading {
@@ -3569,37 +3573,59 @@ body.settings-page :where(
   margin-bottom: 0.72rem;
 }
 
+/* 本文が長くても見出しに手が届くよう、スクロール内で固定する
+   Sticky within the scroller so the label stays reachable through a long body */
+:where(body.settings-page, .user-settings-page)
+  .prompt-preview-modal__section
+  > .prompt-preview-modal__section-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 0;
+  padding: 0.72rem 0.95rem;
+  border-bottom: 1px solid rgba(200, 220, 210, 0.6);
+  background: #ffffff;
+}
+
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section-heading p {
   margin: 0;
   color: #304557;
-  font-size: 0.9rem;
+  font-size: 0.94rem;
   font-weight: 800;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section-heading span {
   color: var(--settings-text-muted, #64748b);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__content,
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example p {
   margin: 0;
-  color: #243b2f;
+  color: #1e2c2a;
   font-size: 0.94rem;
   line-height: 1.85;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+/* 読み幅の上限は残しつつ左右中央に置き、余白が片側に寄らないようにする
+   The measure cap stays but the block is centred so the slack is symmetric */
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__content {
-  padding: clamp(0.9rem, 2vw, 1.2rem);
-  border: 1px solid #d2e2da;
-  border-radius: 15px;
-  background: #fbfefc;
+  max-width: 88ch;
+  margin-inline: auto;
+  padding: 1.1rem clamp(1rem, 1.2vw, 1.5rem) 1.45rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 1.125rem;
+  line-height: 1.95;
+  letter-spacing: 0.012em;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__examples {
-  margin-top: 1.25rem;
+  margin-top: 1rem;
   padding: 1rem;
   border: 1px solid rgba(200, 220, 210, 0.8);
   border-radius: 16px;
@@ -3692,7 +3718,6 @@ body.settings-page :where(
   color: #f1f5f9;
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__eyebrow,
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__icon,
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__meta span,
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example h3 {
@@ -3725,9 +3750,21 @@ body.settings-page :where(
   color: #a7f3d0;
 }
 
-[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__content {
-  border-color: rgba(100, 135, 117, 0.58);
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__section {
+  border-color: rgba(71, 101, 88, 0.62);
+  border-left-color: rgba(52, 211, 153, 0.6);
   background: rgba(15, 23, 42, 0.72);
+}
+
+[data-theme="dark"]
+  :where(body.settings-page, .user-settings-page)
+  .prompt-preview-modal__section
+  > .prompt-preview-modal__section-heading {
+  border-bottom-color: rgba(71, 101, 88, 0.62);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__content {
   color: #e2e8f0;
 }
 
