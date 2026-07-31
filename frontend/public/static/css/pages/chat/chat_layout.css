@@ -106,33 +106,20 @@
   }
 }
 
-/* ヘッダー：コンテンツと同じサーフェス色にして、境界はヘアライン1本で示す。
-   ブランド緑は面で敷かず、下端のグラデーションライン（::after）とホバー時の
-   アクセントに限定する */
+/* ヘッダー：帯も境界線も持たせず、メッセージ面と一体化させる。
+   コンテンツがヘッダーの裏へ続いて見えるよう、メッセージ一覧側の上端に
+   フェード（chat_messages.css の mask-image）を掛けて受ける。
+   ブランド緑はホバー・選択時のアクセントに限定する */
 :where(body.chat-page, .chat-page-shell) .chat-header {
   padding: 0.7rem 1.25rem;
-  background: var(--surface-primary, #ffffff);
+  background: transparent;
   color: var(--text-dark, #1a1a1a);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   position: relative;
   z-index: var(--z-chat-header, 50);
   flex-shrink: 0;
-}
-
-/* ブランド緑の「囁き」：ヘアラインに左から重なる1pxのグラデーション */
-:where(body.chat-page, .chat-page-shell) .chat-header::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--primary-color, #19c37d) 0%, rgba(25, 195, 125, 0) 62%);
-  opacity: 0.55;
-  pointer-events: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .header-left {
@@ -709,20 +696,13 @@
       0.48rem
       calc(0.72rem + env(safe-area-inset-left, 0px));
     gap: 0.45rem;
-    background: transparent;
     box-shadow: none;
-    border-bottom: none;
     color: var(--success-strong, #367540);
     /* iOS の慣性スクロール中もヘッダーが視覚的に揺れないよう固定する */
     flex-shrink: 0;
     position: sticky;
     top: 0;
     z-index: var(--z-chat-header, 50);
-  }
-
-  /* モバイルは透明ヘッダーのため、デスクトップ用のグラデーションヘアラインを消す */
-  :where(body.chat-page, .chat-page-shell) .chat-header::after {
-    content: none;
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-main {
