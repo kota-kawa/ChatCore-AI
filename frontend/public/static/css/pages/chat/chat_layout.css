@@ -53,6 +53,15 @@
   pointer-events: auto;
 }
 
+/* 非表示中のチャット内に pointer-events: auto を持つ要素があっても、
+   セットアップ画面の操作を妨げないようにする。 */
+/* Keep interactive descendants in a non-interactive chat view from
+   intercepting pointer input intended for the setup view. */
+:where(body.chat-page, .chat-page-shell) #chat-container[data-view="setup"] *,
+:where(body.chat-page, .chat-page-shell) #chat-container[data-view="launching"] * {
+  pointer-events: none;
+}
+
 /* Staggered reveal of the chat panel's contents as it surfaces. The header
    eases down from the top while the conversation area rises up, layering the
    entrance instead of revealing everything in a single beat. Both the
