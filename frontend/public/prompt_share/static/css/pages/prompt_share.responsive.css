@@ -325,7 +325,7 @@
     font-size: 0.78rem;
   }
 
-  .prompt-share-page .prompt-card h3 {
+  .prompt-share-page .prompt-card > h3 {
     font-size: 0.96rem;
   }
 

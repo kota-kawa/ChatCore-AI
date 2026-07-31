@@ -1,5 +1,6 @@
 import { memo, useState, type MouseEvent } from "react";
 
+import MarkdownContent from "../MarkdownContent";
 import { DEFAULT_AUTHOR_AVATAR_URL } from "../../scripts/prompt_share/constants";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import {
@@ -237,7 +238,9 @@ function PromptCardComponent({
       ) : null}
 
       <h3>{truncateTitle(prompt.title)}</h3>
-      <p className="prompt-card__content">{cardPreview}</p>
+      {/* カード内の本文プレビューも詳細モーダルと同じ安全なMarkdownレンダラーで整形する */}
+      {/* Render the card preview through the same safe Markdown renderer as the detail modal */}
+      <MarkdownContent text={cardPreview} className="prompt-card__content" />
 
       <div className="prompt-meta">
         <div className="prompt-actions">
