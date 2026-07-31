@@ -252,7 +252,7 @@ body.chat-page .model-select-option.is-selected {
   border-color: rgba(19, 78, 74, 0.82) !important;
   box-shadow: 0 10px 18px rgba(19, 78, 74, 0.18) !important;
   color: #ffffff !important;
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
 }
 
 body.chat-page .model-select-option.is-selected:hover {
@@ -470,7 +470,7 @@ body.chat-page .cc-alert-modal__title {
   margin: 0 3rem 0.7rem 0;
   color: #163f31;
   font-size: 1.08rem;
-  font-weight: 800;
+  font-weight: var(--chat-font-heading-weight, 600);
 }
 
 body.chat-page .cc-alert-modal__message {
@@ -617,8 +617,8 @@ body.chat-page .custom-modal-header {
 
 body.chat-page .custom-modal-title {
   font-size: clamp(1.1rem, 1vw + 0.9rem, 1.35rem);
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  font-weight: var(--chat-font-heading-weight, 600);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   color: #163f31;
 }
 
@@ -653,7 +653,7 @@ body.chat-page .custom-form-group {
 body.chat-page .custom-form-label {
   margin-bottom: 0.45rem;
   color: #1e4c3b;
-  font-weight: 700;
+  font-weight: var(--chat-font-ui-weight, 500);
 }
 
 body.chat-page .custom-form-control {
@@ -754,6 +754,20 @@ body.chat-page .chat-share-sns a:hover {
   --chat-shell-max-width-wide: 1800px;
   --chat-readable-width: 1120px;
   --chat-readable-width-narrow: 820px;
+  /* Keep the conversation legible and visually quiet without affecting other pages. */
+  --chat-font-body-size: 1rem;
+  --chat-font-body-weight: 400;
+  --chat-font-body-leading: 1.7;
+  --chat-font-user-leading: 1.6;
+  --chat-font-input-leading: 1.5;
+  --chat-font-ui-size: 0.875rem;
+  --chat-font-ui-weight: 500;
+  --chat-font-label-size: 0.8125rem;
+  --chat-font-label-weight: 500;
+  --chat-font-heading-weight: 600;
+  --chat-font-code-size: 0.875rem;
+  --chat-font-code-leading: 1.6;
+  --chat-font-label-tracking: 0;
   font-family: var(--font-app-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
   min-height: 100svh;
@@ -952,7 +966,7 @@ html[data-cc-auth="in"] .setup-form-subtitle {
   background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%) !important;
   border-color: rgba(94, 234, 212, 0.72) !important;
   color: #ffffff !important;
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   box-shadow:
     0 10px 18px rgba(19, 78, 74, 0.34),
     inset 3px 0 0 rgba(204, 251, 241, 0.9) !important;

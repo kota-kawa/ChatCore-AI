@@ -76,11 +76,12 @@
   padding: 0.66rem 0.1rem 0.66rem 0;
   border: none;
   /* iOS で入力時のズームを防止（16px 以上） */
-  font-size: var(--text-md, 1rem);
+  font-size: var(--chat-font-body-size, 1rem);
+  font-weight: var(--chat-font-body-weight, 400);
   background: transparent;
   color: var(--text-dark, #1a1a1a);
   outline: none;
-  line-height: 1.45;
+  line-height: var(--chat-font-input-leading, 1.5);
   resize: none;
   overflow-y: hidden;
   overscroll-behavior: contain;
@@ -412,8 +413,8 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-attachment-drop-overlay__text {
-  font-size: var(--text-sm, 0.875rem);
-  font-weight: 700;
+  font-size: var(--chat-font-ui-size, 0.875rem);
+  font-weight: var(--chat-font-heading-weight, 600);
   line-height: 1.35;
   text-align: center;
 }

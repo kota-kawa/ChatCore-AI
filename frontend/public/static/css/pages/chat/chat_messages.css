@@ -156,9 +156,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.82);
 }
@@ -167,7 +167,7 @@
   margin-top: 0.25rem;
   font-size: 0.95rem;
   line-height: 1.4;
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: #ffffff;
 }
 
@@ -198,9 +198,9 @@
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.24);
   color: #fff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-launch-placeholder__pulse {
@@ -269,8 +269,8 @@
   border-radius: var(--radius-full, 999px);
   background: var(--primary-alpha-06, rgba(15, 118, 110, 0.06));
   color: var(--primary-color, #0f766e);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--chat-font-ui-size, 0.875rem);
+  font-weight: var(--chat-font-ui-weight, 500);
   cursor: pointer;
   transition:
     background var(--transition-fast, 0.15s ease),
@@ -330,8 +330,9 @@
 :where(body.chat-page, .chat-page-shell) .user-message,
 :where(body.chat-page, .chat-page-shell) .bot-message {
   position: relative;
-  line-height: var(--leading-loose, 1.65);
-  font-size: var(--text-base, 0.9375rem);
+  font-size: var(--chat-font-body-size, 1rem);
+  font-weight: var(--chat-font-body-weight, 400);
+  line-height: var(--chat-font-body-leading, 1.7);
 }
 
 :where(body.chat-page, .chat-page-shell) .user-message {
@@ -347,6 +348,7 @@
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-height: var(--chat-font-user-leading, 1.6);
 }
 
 @keyframes userMessageAppear {
@@ -504,8 +506,8 @@
   color: #0f172a;
   font-size: 0.95rem;
   line-height: 1.35;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: var(--chat-font-heading-weight, 600);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   overflow-wrap: anywhere;
 }
 
@@ -528,9 +530,9 @@
   border-radius: 999px;
   background: rgba(240, 253, 250, 0.8);
   color: #0f766e;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   text-transform: uppercase;
   line-height: 1;
   white-space: nowrap;
@@ -719,22 +721,23 @@
 :where(body.chat-page, .chat-page-shell) .bot-message h6 {
   margin: 1.25rem 0 0.5rem;
   line-height: 1.35;
-  font-weight: 600;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: var(--text-dark, #1a1a1a);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message h1 {
-  font-size: 1.4rem;
+  font-size: 1.375rem;
   border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   padding-bottom: 0.35rem;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message h2 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message h3 {
-  font-size: 1.1rem;
+  font-size: 1rem;
+  line-height: 1.45;
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message blockquote {
@@ -799,8 +802,8 @@
   padding: 0.4rem 0.85rem;
   color: rgba(255, 255, 255, 0.55);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  letter-spacing: var(--chat-font-label-tracking, 0);
 }
 
 :where(body.chat-page, .chat-page-shell) .code-block-lang {
@@ -818,7 +821,7 @@
   cursor: pointer;
   padding: 0.2rem 0.45rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: var(--chat-font-label-size, 0.8125rem);
   transition:
     background var(--transition-fast, 0.15s ease),
     color var(--transition-fast, 0.15s ease);
@@ -840,7 +843,7 @@
   border: none;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  line-height: var(--leading-normal, 1.5);
+  line-height: var(--chat-font-code-leading, 1.6);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message code {
@@ -857,7 +860,8 @@
   padding: 0;
   border-radius: 0;
   color: #cdd6f4;
-  font-size: 0.84rem;
+  font-size: var(--chat-font-code-size, 0.875rem);
+  line-height: var(--chat-font-code-leading, 1.6);
 }
 
 /* Atom One Dark Theme for highlight.js */
@@ -919,8 +923,8 @@
 
 :where(body.chat-page, .chat-page-shell) .bot-message th {
   background: var(--primary-subtle, rgba(15, 118, 110, 0.06));
-  font-weight: 600;
-  font-size: var(--text-sm, 0.875rem);
+  font-weight: var(--chat-font-heading-weight, 600);
+  font-size: var(--chat-font-ui-size, 0.875rem);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message hr {
@@ -967,7 +971,7 @@
   padding: 0.68rem 0.75rem;
   cursor: pointer;
   color: var(--text-dark, #1a1a1a);
-  font-weight: 600;
+  font-weight: var(--chat-font-ui-weight, 500);
   list-style: none;
   border-radius: var(--radius-sm, 8px);
   transition:
@@ -1246,7 +1250,7 @@
   margin-top: 0.25rem;
   color: var(--text-muted, #6b7280);
   font-size: var(--text-xs, 0.8125rem);
-  font-weight: 700;
+  font-weight: var(--chat-font-label-weight, 500);
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources[data-web-search-sources-state="opening"] .web-search-sources__list,
@@ -1298,7 +1302,7 @@
   background: rgba(15, 118, 110, 0.1);
   color: var(--primary-dark, #134e4a);
   font-size: var(--text-xs, 0.8125rem);
-  font-weight: 700;
+  font-weight: var(--chat-font-label-weight, 500);
   box-shadow:
     0 0 0 3px #ffffff,
     inset 0 0 0 1px rgba(15, 118, 110, 0.28);
@@ -1313,7 +1317,7 @@
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__title {
   overflow: hidden;
   color: inherit;
-  font-weight: 600;
+  font-weight: var(--chat-font-ui-weight, 500);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1329,7 +1333,7 @@
 :where(body.chat-page, .chat-page-shell) .bot-message .web-search-sources__external {
   color: var(--text-secondary, #6b7280);
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: var(--chat-font-ui-weight, 500);
   line-height: 1;
   transition:
     color var(--transition-fast, 0.15s ease),
@@ -1342,7 +1346,7 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .bot-message strong {
-  font-weight: 600;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: var(--text-dark, #1a1a1a);
 }
 
@@ -1495,9 +1499,9 @@
 :where(body.chat-page, .chat-page-shell) .branch-navigator__count {
   min-width: 1.75rem;
   text-align: center;
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--chat-font-label-size, 0.8125rem);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: var(--chat-font-label-weight, 500);
 }
 
 :where(body.chat-page, .chat-page-shell) .copy-btn--success {
@@ -1589,8 +1593,8 @@
   background: transparent;
   color: inherit;
   caret-color: currentColor;
-  font-size: var(--text-base, 0.9375rem);
-  line-height: var(--leading-loose, 1.65);
+  font-size: var(--chat-font-body-size, 1rem);
+  line-height: var(--chat-font-user-leading, 1.6);
   font-family: inherit;
   outline: none;
 }
@@ -1622,8 +1626,8 @@
   min-height: 1.85rem;
   padding: 0.3rem 0.78rem;
   border-radius: var(--radius-full, 999px);
-  font-size: var(--text-xs, 0.8125rem);
-  font-weight: 600;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-ui-weight, 500);
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
@@ -1745,8 +1749,8 @@
   max-width: 13rem;
   overflow: hidden;
   color: rgba(15, 96, 66, 0.84);
-  font-size: var(--text-xs, 0.75rem);
-  font-weight: 700;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
   line-height: 1.35;
   text-align: center;
   text-overflow: ellipsis;
@@ -2155,8 +2159,8 @@
 
   :where(body.chat-page, .chat-page-shell) .user-message {
     padding: 0.68rem 0.92rem;
-    font-size: var(--text-base, 0.9375rem);
-    line-height: 1.58;
+    font-size: var(--chat-font-body-size, 1rem);
+    line-height: var(--chat-font-user-leading, 1.6);
     border-radius: 18px 18px 4px 18px;
   }
 
@@ -2172,8 +2176,8 @@
   :where(body.chat-page, .chat-page-shell) .user-message-edit-textarea {
     min-height: 2.3rem;
     padding: 0.6rem 0.9rem 0.5rem;
-    font-size: var(--text-base, 0.9375rem);
-    line-height: 1.58;
+    font-size: var(--chat-font-body-size, 1rem);
+    line-height: var(--chat-font-user-leading, 1.6);
   }
 
   :where(body.chat-page, .chat-page-shell) .user-message-edit-cancel,
@@ -2183,8 +2187,8 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .bot-message {
-    font-size: var(--text-base, 0.9375rem);
-    line-height: 1.66;
+    font-size: var(--chat-font-body-size, 1rem);
+    line-height: var(--chat-font-body-leading, 1.7);
     padding: 0.15rem 0;
   }
 
@@ -2202,11 +2206,11 @@
 
   :where(body.chat-page, .chat-page-shell) .bot-message pre {
     padding: 0.75rem;
-    font-size: 0.78rem;
+    font-size: var(--chat-font-code-size, 0.875rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .bot-message pre code {
-    font-size: 0.78rem;
+    font-size: var(--chat-font-code-size, 0.875rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .bot-message code {
@@ -2220,7 +2224,7 @@
 
   :where(body.chat-page, .chat-page-shell) .code-block-header {
     padding: 0.35rem 0.7rem;
-    font-size: 0.7rem;
+    font-size: var(--chat-font-label-size, 0.8125rem);
   }
 
   :where(body.chat-page, .chat-page-shell) .code-block-copy-btn span {
@@ -2463,9 +2467,9 @@
 
 :where(body.chat-page, .chat-page-shell) .task-prompt-disclosure__section-title {
   margin: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   opacity: 0.85;
 }
 
@@ -2474,8 +2478,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  font-size: 0.86rem;
-  line-height: var(--leading-relaxed, 1.55);
+  font-size: var(--chat-font-ui-size, 0.875rem);
+  line-height: var(--chat-font-code-leading, 1.6);
   background: rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm, 8px);
   padding: 0.5rem 0.65rem;
@@ -2662,9 +2666,9 @@
 /* 巡回する進捗フレーズ */
 :where(body.chat-page, .chat-page-shell) .genui-loader__status {
   margin: 0;
-  font-size: var(--text-sm, 0.82rem);
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   color: transparent;
   background: linear-gradient(90deg, #0f766e 0%, #2dd4bf 45%, #0f766e 90%);
   background-size: 200% 100%;
