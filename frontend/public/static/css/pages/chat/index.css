@@ -1157,12 +1157,6 @@ html[data-cc-auth="in"] .setup-form-subtitle {
     display: none;
   }
 
-  /* キーボード表示中はガラスエフェクトを軽くしてジャギを抑える */
-  html[data-chat-keyboard-open="true"] :where(body.chat-page, .chat-page-shell) .input-container {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
   body.chat-page .global-ai-agent-button {
     top: auto;
     right: auto;

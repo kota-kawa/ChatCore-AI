@@ -11,6 +11,7 @@ import {
   getAttachmentIconClass,
 } from "../../lib/chat_page/file_attachments";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
+import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -157,6 +158,10 @@ function ChatMainSectionComponent() {
     focusTargetRef: chatInputRef,
     notifyAttachmentError,
   });
+
+  // 浮かせた入力コンテナの実高さを .chat-area の CSS 変数へ反映するフック。
+  // Hook mirroring the floating composer's height into a CSS variable on .chat-area.
+  const chatFooterRef = useChatFooterHeight<HTMLDivElement>();
 
   // ファイル選択ダイアログ経由のファイル追加処理。選択後に input の値をリセットして
   // 同じファイルを再度選択できるようにする。
@@ -715,7 +720,8 @@ function ChatMainSectionComponent() {
           {/* 入力コンテナ：ドロップゾーン・URL チップ・添付ファイルチップ・テキストエリア・送信ボタンを含む */}
           {/* Input container: dropzone overlay, URL chips, attachment chips, textarea, send button */}
           <div
-            className={`input-container chat-attachment-dropzone supports-[backdrop-filter]:backdrop-blur-xl ${
+            ref={chatFooterRef}
+            className={`input-container chat-attachment-dropzone ${
               isAttachmentDropActive ? "chat-attachment-dropzone--active" : ""
             }`.trim()}
             {...attachmentDropzoneProps}
