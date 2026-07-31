@@ -134,9 +134,9 @@
    scrolls inside another scroller. The shell mirrors the settings-page preview
    modal (fixed-height sheet, accent rule, icon heading, footer) in blue. */
 :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content {
-  width: min(96%, 960px);
+  width: min(96%, 1080px);
   /* 内容量に関わらず枠が動かないよう高さを決め打ちする / a fixed height keeps the sheet steady */
-  height: min(88dvh, 780px);
+  height: min(92dvh, 900px);
   max-height: none;
   border-radius: 24px;
   border-color: var(--pd-line);
@@ -146,12 +146,14 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content--detail {
-  --pd-read-size: 1.0625rem;
+  /* 本文は読むための面。既定サイズを一段上げ、切り替え機能なしで読みやすい大きさにする
+     The body is the reading surface: one step larger by default, with no size switcher */
+  --pd-read-size: 1.125rem;
   --pd-read-leading: 1.95;
-  --pd-measure: 76ch;
-  --pd-pad-x: clamp(1.1rem, 1.6vw + 0.6rem, 1.9rem);
+  --pd-measure: 88ch;
+  --pd-pad-x: clamp(0.95rem, 1.3vw + 0.5rem, 1.6rem);
   --pd-ink: #1f3348;
-  --pd-ink-body: #24323f;
+  --pd-ink-body: #1e2c39;
   --pd-ink-soft: #5d7288;
   --pd-line: rgba(203, 220, 238, 0.9);
   --pd-line-soft: rgba(212, 226, 241, 0.7);
@@ -164,28 +166,16 @@
   padding: 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page)
-  #promptDetailModal
-  .post-modal-content--detail[data-reading-size="compact"] {
-  --pd-read-size: 0.9375rem;
-  --pd-read-leading: 1.85;
-}
-
-:where(body.prompt-share-page, .prompt-share-page)
-  #promptDetailModal
-  .post-modal-content--detail[data-reading-size="large"] {
-  --pd-read-size: 1.1875rem;
-  --pd-read-leading: 2.05;
-}
-
-/* ── ヘッダー（固定領域） ─────────────────────────────────────────── */
+/* ── ヘッダー（固定領域） ───────────────────────────────────────────
+   タイトル・署名・タブ・閉じるを2段に収め、残りの縦幅は本文へ渡す
+   The header packs title, byline, tabs, and close into two rows so the
+   remaining height belongs to the prompt body */
 :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .prompt-detail-header {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
   flex: 0 0 auto;
-  padding: clamp(1rem, 1vw + 0.6rem, 1.35rem) var(--pd-pad-x) 0;
+  padding: clamp(0.5rem, 0.5vw + 0.35rem, 0.7rem) var(--pd-pad-x);
   border-bottom: 1px solid var(--pd-line);
   background:
     radial-gradient(circle at 92% 12%, rgba(26, 115, 232, 0.14), transparent 34%),
@@ -203,61 +193,53 @@
   content: "";
 }
 
+/* タイトル・タブ・閉じるを1行に並べる格子。狭い画面ではタブだけ2段目へ落とす
+   A grid so title, tabs, and close share one row; narrow screens drop the tabs below */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.3rem 0.9rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
-  gap: 0.85rem;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__icon {
   display: inline-flex;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(26, 115, 232, 0.24);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(145deg, rgba(26, 115, 232, 0.17), rgba(26, 115, 232, 0.07));
   color: #185abc;
-  font-size: 1.2rem;
+  font-size: 0.95rem;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__text {
   min-width: 0;
 }
 
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-heading__eyebrow {
-  margin: 0;
-  color: #185abc;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
 :where(body.prompt-share-page, .prompt-share-page) #promptDetailModal .post-modal-content--detail h2 {
-  margin: 0.15rem 0 0;
+  margin: 0;
   color: var(--pd-ink);
-  font-size: clamp(1.15rem, 0.7vw + 1rem, 1.42rem);
-  line-height: 1.38;
+  font-size: clamp(1.02rem, 0.5vw + 0.92rem, 1.2rem);
+  line-height: 1.32;
   letter-spacing: 0.005em;
   overflow-wrap: anywhere;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close {
   display: inline-flex;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -289,8 +271,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.85rem;
-  margin: 0.45rem 0 0;
+  gap: 0.2rem 0.7rem;
+  margin: 0.2rem 0 0;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-meta__item {
@@ -376,33 +358,37 @@
   background: var(--pd-surface-quiet);
 }
 
-/* ── タブ（ヘッダー下辺に接する下線式） ──────────────────────────── */
+/* ── タブ（見出し行に同居する分割ボタン） ────────────────────────────
+   下線式をやめて小さなセグメントにし、タイトル行の余白へ収める
+   A compact segmented control instead of an underline row, so it fits the title row */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs {
-  display: flex;
-  gap: 1.4rem;
-  margin: 0.1rem 0 -1px;
-  padding: 0;
-  border: 0;
-  background: none;
+  display: inline-flex;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid rgba(190, 210, 233, 0.9);
+  border-radius: 999px;
+  /* 選択中の白いセグメントが浮くよう、器は一段沈めた色にする
+     The track sits a shade darker so the active white segment reads as selected */
+  background: rgba(223, 234, 248, 0.85);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs__button {
   display: inline-flex;
   align-items: center;
-  gap: 0.42rem;
-  min-height: 34px;
-  padding: 0 0.12rem;
+  gap: 0.36rem;
+  min-height: 28px;
+  padding: 0 0.68rem;
   border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  border-radius: 999px;
   background: none;
   box-shadow: none;
   color: var(--pd-ink-soft);
   font: inherit;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  transition: color 0.16s ease, border-color 0.16s ease;
+  transition: color 0.16s ease, background 0.16s ease;
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs__button:hover {
@@ -410,16 +396,15 @@
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs__button.is-active {
-  border-bottom-color: var(--pd-accent);
-  background: none;
-  box-shadow: none;
+  background: var(--pd-surface);
+  box-shadow: 0 2px 8px rgba(39, 74, 111, 0.16);
   color: var(--pd-accent);
 }
 
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs__button span {
-  min-width: 1.4rem;
-  min-height: 1.4rem;
-  padding: 0 0.36rem;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  padding: 0 0.3rem;
   border-radius: 999px;
   background: rgba(26, 115, 232, 0.12);
   color: var(--pd-accent);
@@ -558,45 +543,6 @@
   line-height: 1.35;
 }
 
-/* ── 文字サイズ切り替え ──────────────────────────────────────────── */
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid rgba(197, 214, 232, 0.9);
-  border-radius: 999px;
-  background: var(--pd-surface-quiet);
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 30px;
-  min-height: 28px;
-  padding: 0 0.3rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--pd-ink-soft);
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize__button:hover {
-  color: #185abc;
-}
-
-:where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize__button.is-active {
-  background: var(--pd-surface);
-  color: #185abc;
-  box-shadow: 0 2px 8px rgba(39, 74, 111, 0.16);
-}
-
 /* ── コピーボタン ────────────────────────────────────────────────── */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn {
   flex: 0 0 auto;
@@ -646,13 +592,16 @@
 }
 
 /* 本文は枠なし・全文表示。入れ子スクロールを廃止し、モーダル側で一度に送る
-   The body is unframed and shown in full; the modal's own scroller handles it */
+   読み幅の上限は残しつつ左右中央に置き、余白が片側に寄らないようにする
+   The body is unframed and shown in full; the modal's own scroller handles it.
+   The measure cap stays but the block is centred so the slack is symmetric */
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section--body .prompt-detail-text-block,
 :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section--body .prompt-detail-markdown {
   max-height: none;
   overflow: visible;
   max-width: var(--pd-measure);
-  padding: 1.05rem clamp(0.95rem, 1.1vw, 1.4rem) 1.35rem;
+  margin-inline: auto;
+  padding: 1.1rem clamp(1rem, 1.2vw, 1.5rem) 1.45rem;
   border: 0;
   border-radius: 0;
   background: transparent;

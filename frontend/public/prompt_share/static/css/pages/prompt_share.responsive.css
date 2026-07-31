@@ -225,23 +225,22 @@
     border-radius: 22px 22px 0 0;
   }
 
-  /* 見出し行が詰まるので、ラベルと操作を2段に折り返す
-     The section header wraps onto two rows once the label and controls stop fitting */
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-section__header--sticky {
-    flex-wrap: wrap;
-    row-gap: 0.5rem;
+  /* タブは見出し行に収まらなくなるため、ヘッダー2段目へ落として全幅で並べる
+     The tabs drop to the header's second row and span it once the title row runs out of space */
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-header__bar {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page)
-    .prompt-detail-section__header
-    > .prompt-detail-section__actions {
-    width: 100%;
-    justify-content: space-between;
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize__button {
-    min-width: 38px;
-    min-height: 34px;
+  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-close {
+    grid-row: 1;
+    grid-column: 2;
+    align-self: start;
   }
 
   :where(body.prompt-share-page, .prompt-share-page) .prompt-share-dialog__sns {
@@ -408,10 +407,6 @@
     align-items: flex-start;
   }
 
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-tabs {
-    gap: 1.1rem;
-  }
-
   :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-copy-btn {
     min-width: 0;
     padding-inline: 0.62rem;
@@ -449,11 +444,6 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-
-  :where(body.prompt-share-page, .prompt-share-page) .prompt-detail-readsize__button {
-    min-width: 34px;
-    min-height: 34px;
   }
 
   .prompt-share-page .form-group input[type="text"],

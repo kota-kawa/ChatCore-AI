@@ -19,9 +19,7 @@ import {
   getSkillResourceRoleLabel,
   normalizeSkillResources
 } from "../../scripts/prompt_share/skill_resources";
-import type { ReadingSize } from "../../scripts/prompt_share/storage";
 import type { PromptRecord } from "./prompt_card";
-import { usePromptReadingSize } from "./use_prompt_reading_size";
 import { useTranslation } from "../../contexts/locale_context";
 
 // 詳細モーダルが必要とするすべての状態とハンドラをまとめたProps型
@@ -127,41 +125,6 @@ function AuthorMetaItem({ name, avatarUrl, authorUserId, onOpenProfile }: Author
   );
 }
 
-type ReadingSizeControlProps = {
-  value: ReadingSize;
-  onChange: (size: ReadingSize) => void;
-};
-
-// 本文の文字サイズを3段階で切り替える。選択はlocalStorageに残り次回以降も適用される
-// Switches the body text between three sizes; the choice persists in localStorage
-function ReadingSizeControl({ value, onChange }: ReadingSizeControlProps) {
-  const { t } = useTranslation();
-  const options: { value: ReadingSize; mark: string; label: string }[] = [
-    { value: "compact", mark: t("promptShare.sizeMarkSmall"), label: t("promptShare.sizeSmall") },
-    { value: "default", mark: t("promptShare.sizeMarkDefault"), label: t("promptShare.sizeDefault") },
-    { value: "large", mark: t("promptShare.sizeMarkLarge"), label: t("promptShare.sizeLarge") }
-  ];
-  return (
-    <div className="prompt-detail-readsize" role="group" aria-label={t("promptShare.readingSize")}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={`prompt-detail-readsize__button${value === option.value ? " is-active" : ""}`}
-          aria-pressed={value === option.value}
-          title={option.label}
-          onClick={() => {
-            onChange(option.value);
-          }}
-        >
-          <span aria-hidden="true">{option.mark}</span>
-          <span className="sr-only">{option.label}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // プロンプト詳細とコメントを切り替えて表示するモーダルコンポーネント
 // Modal that switches between prompt detail view and comments view via tabs
 export function PromptShareDetailModal({
@@ -188,7 +151,6 @@ export function PromptShareDetailModal({
   onOpenAuthorProfile
 }: PromptShareDetailModalProps) {
   const { locale, t } = useTranslation();
-  const { readingSize, changeReadingSize } = usePromptReadingSize();
   // promptがnullのときは安全なデフォルト値を使い、2軸表示を崩さない
   // Fall back to default axes when no prompt is loaded to keep axis-dependent rendering stable
   const detailContentFormat = detailPrompt
@@ -254,23 +216,18 @@ export function PromptShareDetailModal({
         }
       }}
     >
-      <div
-        className="post-modal-content post-modal-content--detail"
-        data-reading-size={readingSize}
-        tabIndex={-1}
-      >
+      <div className="post-modal-content post-modal-content--detail" tabIndex={-1}>
         {/* 見出し・署名・タブはスクロールさせず、本文だけが動く枠として固定する */}
         {/* Title, byline, and tabs stay put; only the reading area below scrolls */}
         <header className="prompt-detail-header">
-          {/* 閉じるボタンは浮かせず見出し行に並べ、設定画面の閲覧モーダルと同じ組みにする */}
-          {/* The close button sits in the title row instead of floating, matching the settings preview modal */}
+          {/* タブと閉じるボタンを見出し行に同居させ、ヘッダーを2段に収めて本文の高さを稼ぐ */}
+          {/* Tabs and the close button share the title row, keeping the header to two lines */}
           <div className="prompt-detail-header__bar">
             <div className="prompt-detail-heading">
               <span className="prompt-detail-heading__icon" aria-hidden="true">
                 <i className={`bi ${getPromptFormatIconClass(detailContentFormat)}`}></i>
               </span>
               <div className="prompt-detail-heading__text">
-                <p className="prompt-detail-heading__eyebrow">{t("promptShare.detailsTitle")}</p>
                 <h2 id="modalPromptTitle">{detailPrompt?.title || t("promptShare.loadingPrompt")}</h2>
 
                 <dl className="prompt-detail-meta" aria-label={t("promptShare.summary")}>
@@ -320,6 +277,41 @@ export function PromptShareDetailModal({
                 </dl>
               </div>
             </div>
+
+            {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
+            {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
+            <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
+              <button
+                type="button"
+                role="tab"
+                id="promptDetailTab"
+                aria-selected={activeView === "detail" ? "true" : "false"}
+                aria-controls="promptDetailPanel"
+                className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
+                onClick={() => {
+                  onActiveViewChange("detail");
+                }}
+              >
+                {t("promptShare.details")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="promptCommentsTab"
+                aria-selected={activeView === "comments" ? "true" : "false"}
+                aria-controls="promptCommentsPanel"
+                className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
+                onClick={() => {
+                  onActiveViewChange("comments");
+                }}
+              >
+                {t("promptShare.comments")}
+                <span>{Number(detailPrompt?.comment_count || 0)}</span>
+              </button>
+            </div>
+
+            {/* 閉じるボタンは浮かせず見出し行の右端に置き、設定画面の閲覧モーダルと同じ組みにする */}
+            {/* The close button sits at the right of the title row instead of floating */}
             <button
               type="button"
               className="prompt-detail-close"
@@ -329,38 +321,6 @@ export function PromptShareDetailModal({
               onClick={onClose}
             >
               <i className="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </div>
-
-          {/* タブでdetail/commentsビューを切り替え、aria属性でスクリーンリーダーに対応する */}
-          {/* Tab list for switching views; aria-selected and aria-controls satisfy ARIA tablist pattern */}
-          <div className="prompt-detail-tabs" role="tablist" aria-label={t("promptShare.detailView")}>
-            <button
-              type="button"
-              role="tab"
-              id="promptDetailTab"
-              aria-selected={activeView === "detail" ? "true" : "false"}
-              aria-controls="promptDetailPanel"
-              className={`prompt-detail-tabs__button${activeView === "detail" ? " is-active" : ""}`}
-              onClick={() => {
-                onActiveViewChange("detail");
-              }}
-            >
-              {t("promptShare.details")}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="promptCommentsTab"
-              aria-selected={activeView === "comments" ? "true" : "false"}
-              aria-controls="promptCommentsPanel"
-              className={`prompt-detail-tabs__button${activeView === "comments" ? " is-active" : ""}`}
-              onClick={() => {
-                onActiveViewChange("comments");
-              }}
-            >
-              {t("promptShare.comments")}
-              <span>{Number(detailPrompt?.comment_count || 0)}</span>
             </button>
           </div>
         </header>
@@ -402,8 +362,8 @@ export function PromptShareDetailModal({
                 id={isSkillFormat ? "modalSkillMarkdownGroup" : undefined}
                 className="prompt-detail-section prompt-detail-section--body"
               >
-                {/* 本文が長くてもコピーと文字サイズに手が届くよう、見出し行をスクロール内で固定する */}
-                {/* Sticky within the scroller so copy and text size stay reachable through a long body */}
+                {/* 本文が長くてもコピーに手が届くよう、見出し行をスクロール内で固定する */}
+                {/* Sticky within the scroller so copy stays reachable through a long body */}
                 <div className="prompt-detail-section__header prompt-detail-section__header--sticky">
                   <div>
                     <span className="prompt-detail-section__label">{promptBodyLabel}</span>
@@ -412,7 +372,6 @@ export function PromptShareDetailModal({
                     </span>
                   </div>
                   <div className="prompt-detail-section__actions">
-                    <ReadingSizeControl value={readingSize} onChange={changeReadingSize} />
                     <button
                       type="button"
                       className="prompt-detail-copy-btn"
