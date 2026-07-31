@@ -118,12 +118,13 @@ describe("設定画面のプロンプトカード詳細", () => {
     expect(container.querySelector(".prompt-card__preview-sections")).toBeNull();
   });
 
-  it("いいねしたプロンプトにはいいね済みバッジを表示する", () => {
+  it("いいねしたプロンプトのカードには「いいね済み」バッジを表示しない", () => {
     const { container } = render(
       <LikedPromptCard entry={likedPrompt} onPreview={vi.fn()} onDelete={vi.fn()} />
     );
 
-    expect(container.querySelector(".prompt-card__type-pill--saved")?.textContent).toContain("いいね済み");
+    expect(container.querySelector(".prompt-card__type-pill--saved")).toBeNull();
+    expect(screen.queryByText("いいね済み")).not.toBeInTheDocument();
     expect(container.querySelector(".prompt-card__category-pill")?.textContent).toContain("仕事・ビジネス");
   });
 
