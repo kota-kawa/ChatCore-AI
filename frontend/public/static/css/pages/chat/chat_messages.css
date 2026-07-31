@@ -25,8 +25,13 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  padding: var(--space-6, 1.5rem) var(--space-6, 1.5rem) var(--space-6, 1.5rem);
-  scroll-padding-bottom: calc(var(--space-6, 1.5rem) + env(safe-area-inset-bottom, 0px));
+  /* 下端は浮いている入力コンテナ（.input-container）の下を通り抜けるため、
+     実測高さ --chat-footer-height ぶんの余白を確保して最終行が隠れないようにする */
+  padding:
+    var(--space-6, 1.5rem)
+    var(--space-6, 1.5rem)
+    calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
+  scroll-padding-bottom: calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
   background: var(--surface-primary, #fff);
   display: flex;
   flex-direction: column;
@@ -70,11 +75,12 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
-  padding-bottom: calc(var(--space-6, 1.5rem) + env(safe-area-inset-bottom, 0px));
+  /* 浮いている入力コンテナの高さぶん下端を空ける（safe-area は実測高さに含まれる） */
+  padding-bottom: calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-messages.scroll-pb-24 {
-  scroll-padding-bottom: calc(var(--space-12, 3rem) * 2 + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--chat-footer-height, 5.4rem) + var(--space-12, 3rem));
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-message-row--history {
@@ -1747,7 +1753,8 @@
 /* Scroll to bottom ボタン (ストリーミング中にユーザーが上へスクロールした時に表示) */
 :where(body.chat-page, .chat-page-shell) .scroll-to-bottom-btn {
   position: absolute;
-  bottom: 4.5rem;
+  /* 浮いている入力コンテナのすぐ上に配置する */
+  bottom: calc(var(--chat-footer-height, 5.4rem) + 0.5rem);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
@@ -2052,13 +2059,13 @@
     padding:
       3.55rem
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
-      0.9rem
+      calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem))
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
     gap: 0.15rem;
     /* iOS の慣性スクロールを安定させ、入力フォーカス時にズレないようにする */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    scroll-padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    scroll-padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
     /* 透明なモバイルヘッダーへ近づくメッセージを、スクロール位置に応じて自然に薄くする。 */
     -webkit-mask-image: linear-gradient(
       to bottom,
@@ -2100,7 +2107,7 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
-    padding-bottom: 0.75rem;
+    padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
   }
 
   :where(body.chat-page, .chat-page-shell) .message-wrapper {
@@ -2240,7 +2247,8 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .scroll-to-bottom-btn {
-    bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    /* safe-area は入力コンテナの実測高さ（--chat-footer-height）に含まれる */
+    bottom: calc(var(--chat-footer-height, 4.9rem) + 0.5rem);
     width: 2.5rem;
     height: 2.5rem;
     font-size: 1rem;
