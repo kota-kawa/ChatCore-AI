@@ -99,6 +99,34 @@ describe("設定画面のプロンプトカード詳細", () => {
     expect(onDelete).toHaveBeenCalledWith(authoredPrompt);
   });
 
+  it("プロンプト共有ページと同じバッジ構成でカードを表示する", () => {
+    const { container } = render(
+      <PromptCard
+        prompt={authoredPrompt}
+        onPreview={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".prompt-card__category-pill")?.textContent).toContain("仕事・ビジネス");
+    expect(container.querySelector(".prompt-card__type-pill--format")?.textContent).toContain("プロンプト");
+    expect(container.querySelector(".prompt-card__created-at")?.textContent).toBeTruthy();
+    // 共有ページのカードと同じく、本文プレビューだけを見せて入出力例はモーダルへ委ねる
+    // Like the share page card, only the content preview is shown; examples stay in the modal
+    expect(container.querySelector(".prompt-card__content")?.textContent).toContain("会議メモを要点");
+    expect(container.querySelector(".prompt-card__preview-sections")).toBeNull();
+  });
+
+  it("いいねしたプロンプトにはいいね済みバッジを表示する", () => {
+    const { container } = render(
+      <LikedPromptCard entry={likedPrompt} onPreview={vi.fn()} onDelete={vi.fn()} />
+    );
+
+    expect(container.querySelector(".prompt-card__type-pill--saved")?.textContent).toContain("いいね済み");
+    expect(container.querySelector(".prompt-card__category-pill")?.textContent).toContain("仕事・ビジネス");
+  });
+
   it("いいねしたプロンプトも同じ詳細導線を提供する", () => {
     const onPreview = vi.fn();
     const onDelete = vi.fn();
