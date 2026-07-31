@@ -40,17 +40,28 @@ function applySetupViewportFit() {
   const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
   const availableHeight = Math.max(0, viewportHeight - shellPaddingTop - shellPaddingBottom);
 
-  // Measure the untransformed layout height via offsetHeight rather than
+  // Measure the untransformed layout height via scrollHeight rather than
   // getBoundingClientRect(). While returning from the chat view to the setup
   // view, the card is still mid-transition (3D scale/translate + blur driven by
   // the data-view animation), so getBoundingClientRect() would report the
-  // visually scaled-down height and make the density decision flicker. The
-  // offsetHeight reflects the stable layout box and is unaffected by transforms,
-  // so the correct fit class is chosen on the first pass.
-  if (setupContainer.offsetHeight <= availableHeight + 1) return;
+  // visually scaled-down height and make the density decision flicker.
+  // scrollHeight is unaffected by transforms, so the correct fit class is
+  // chosen on the first pass.
+  //
+  // offsetHeight would look tempting here, but at narrow widths
+  // .chat-page-stage switches to place-items: stretch, which clamps the
+  // container's layout box (and therefore offsetHeight) to the viewport
+  // height regardless of how tall its content actually is. That made this
+  // overflow check permanently false on mobile, so the compact/tight density
+  // classes never applied and overflowing content (including the "view past
+  // chats" button) silently fell back to internal scrolling instead of being
+  // shrunk to fit. scrollHeight still reports the true content height even
+  // when the box itself is clamped, since #setup-container scrolls its own
+  // overflow on mobile.
+  if (setupContainer.scrollHeight <= availableHeight + 1) return;
 
   setupContainer.classList.add(SETUP_FIT_COMPACT_CLASS);
-  if (setupContainer.offsetHeight <= availableHeight + 1) return;
+  if (setupContainer.scrollHeight <= availableHeight + 1) return;
 
   setupContainer.classList.add(SETUP_FIT_TIGHT_CLASS);
 }
