@@ -52,13 +52,14 @@ export function PromptPreviewModal({
       }}
     >
       <div className="prompt-preview-modal__dialog" role="document">
+        {/* 見出しは1行に絞り、出所は署名行のチップへ移して縦幅を詰める */}
+        {/* The title takes one line and the source moves into the byline as a chip, keeping the header short */}
         <header className="prompt-preview-modal__header">
           <div className="prompt-preview-modal__heading">
             <span className="prompt-preview-modal__icon" aria-hidden="true">
               <i className="bi bi-file-earmark-text"></i>
             </span>
             <div>
-              <p className="prompt-preview-modal__eyebrow">{sourceLabel}</p>
               <h2 id="promptPreviewModalTitle">{prompt.title || t("promptShare.untitled")}</h2>
               <div className="prompt-preview-modal__meta" aria-label={t("promptShare.promptInfo")}>
                 {isSkill ? (
@@ -67,6 +68,10 @@ export function PromptPreviewModal({
                     SKILL
                   </span>
                 ) : null}
+                <span>
+                  <i className={`bi ${source === "authored" ? "bi-pencil-square" : "bi-heart"}`} aria-hidden="true"></i>
+                  {sourceLabel}
+                </span>
                 <span>
                   <i className="bi bi-tag" aria-hidden="true"></i>
                   {categoryLabel}
