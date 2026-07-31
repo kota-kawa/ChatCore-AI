@@ -106,18 +106,33 @@
   }
 }
 
-/* ヘッダー */
+/* ヘッダー：コンテンツと同じサーフェス色にして、境界はヘアライン1本で示す。
+   ブランド緑は面で敷かず、下端のグラデーションライン（::after）とホバー時の
+   アクセントに限定する */
 :where(body.chat-page, .chat-page-shell) .chat-header {
   padding: 0.7rem 1.25rem;
-  background: var(--primary-gradient);
-  color: var(--text-light, #ffffff);
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-dark, #1a1a1a);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   position: relative;
   z-index: var(--z-chat-header, 50);
   flex-shrink: 0;
+}
+
+/* ブランド緑の「囁き」：ヘアラインに左から重なる1pxのグラデーション */
+:where(body.chat-page, .chat-page-shell) .chat-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--primary-color, #19c37d) 0%, rgba(25, 195, 125, 0) 62%);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .header-left {
@@ -133,12 +148,18 @@
   min-height: 32px;
   padding: 0.35rem 0.8rem;
   border-radius: var(--radius-full, 999px);
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  color: var(--text-light, #ffffff);
+  background: var(--primary-soft, #e8f9f3);
+  border: 1px solid var(--primary-border, rgba(25, 195, 125, 0.18));
+  color: var(--primary-dark, #0f7a51);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-room-mode-badge {
+  background: var(--primary-alpha-12, rgba(25, 195, 125, 0.12));
+  border-color: var(--primary-alpha-28, rgba(25, 195, 125, 0.28));
+  color: #6ee7b7;
 }
 
 :where(body.chat-page, .chat-page-shell) .header-left i {
@@ -168,6 +189,23 @@
   padding: 0;
   justify-content: center;
   flex-shrink: 0;
+  /* サーフェス化したヘッダー上ではゴーストボタンにする（index.css のガラス調
+     グラデーション背景と浮かせる影を打ち消す） */
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary, #6b7280);
+}
+
+:where(body.chat-page, .chat-page-shell) .chat-header .icon-button:is(:hover, :focus-visible):not(:disabled):not(.chat-share-btn--disabled) {
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  color: var(--primary-dark, #0f7a51);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header .icon-button:is(:hover, :focus-visible):not(:disabled):not(.chat-share-btn--disabled) {
+  color: #6ee7b7;
 }
 
 /* ヘッダー内モデル選択ドロップダウン */
@@ -180,22 +218,30 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
   border-radius: 9999px;
-  color: var(--text-light, #ffffff);
+  color: var(--text-secondary, #6b7280);
   font-size: var(--text-xs, 0.8125rem);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition:
     background var(--transition-fast, 0.15s ease),
-    border-color var(--transition-fast, 0.15s ease);
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease);
 }
 
-:where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.55);
+:where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover,
+:where(body.chat-page, .chat-page-shell) .chat-header-model-select.is-open .chat-header-model-trigger {
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08));
+  border-color: var(--primary-border, rgba(25, 195, 125, 0.18));
+  color: var(--primary-dark, #0f7a51);
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-trigger:hover,
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-select.is-open .chat-header-model-trigger {
+  color: #6ee7b7;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-header-model-chevron {
@@ -252,15 +298,15 @@
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
-  color: #ffffff;
+  background: var(--primary-soft, #e8f9f3);
+  color: var(--primary-dark, #0f7a51);
   font-weight: 700;
-  box-shadow: inset 3px 0 0 rgba(94, 234, 212, 0.95);
+  box-shadow: inset 3px 0 0 var(--primary-color, #19c37d);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
-  color: #ffffff;
+  background: var(--primary-alpha-16, rgba(25, 195, 125, 0.16));
+  color: var(--primary-dark, #0f7a51);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-menu {
@@ -280,19 +326,19 @@
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected {
-  background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
-  color: #ffffff;
+  background: var(--primary-alpha-12, rgba(25, 195, 125, 0.12));
+  color: #6ee7b7;
   font-weight: 700;
-  box-shadow: inset 3px 0 0 rgba(94, 234, 212, 0.95);
+  box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.85);
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-header-model-option.is-selected:hover {
-  background: linear-gradient(135deg, #0f3f3b 0%, #115e59 100%);
-  color: #ffffff;
+  background: var(--primary-alpha-22, rgba(25, 195, 125, 0.22));
+  color: #99f6e4;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-share-btn {
-  color: var(--text-light, #ffffff);
+  color: inherit;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-share-btn--disabled {
@@ -665,12 +711,18 @@
     gap: 0.45rem;
     background: transparent;
     box-shadow: none;
+    border-bottom: none;
     color: var(--success-strong, #367540);
     /* iOS の慣性スクロール中もヘッダーが視覚的に揺れないよう固定する */
     flex-shrink: 0;
     position: sticky;
     top: 0;
     z-index: var(--z-chat-header, 50);
+  }
+
+  /* モバイルは透明ヘッダーのため、デスクトップ用のグラデーションヘアラインを消す */
+  :where(body.chat-page, .chat-page-shell) .chat-header::after {
+    content: none;
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-main {
