@@ -15,6 +15,10 @@ import {
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
+  clampToCodePointBoundary,
+  nextSmoothedLength,
+} from "../../lib/chat_page/stream_smoothing";
+import {
   getStreamingGenerativeUiDisplayText,
   isGenerativeUiPending,
   updateStreamingTextPart,
@@ -373,6 +377,11 @@ export function useHomePageGenerationActions({
       let streamedText = storedGeneration?.streamedText ?? "";
       let streamingParts: ChatMessagePart[] | undefined;
 
+      // スムージング済みの表示文字数。復元テキストはリプレイせず即時表示する。
+      // Visible length after smoothing. Restored text shows instantly instead
+      // of being replayed.
+      let smoothedLength = getStreamingGenerativeUiDisplayText(streamedText).length;
+
       // localStorage への進行状態書き込みをスロットルするための保留値とタイマー。
       // Pending values and timer used to throttle progress writes to localStorage.
       let storedStateSyncTimerId: number | null = null;
@@ -397,18 +406,25 @@ export function useHomePageGenerationActions({
         );
       };
 
-      // チャンク描画を 1 フレーム 1 回へ間引くための rAF ハンドル。表示は元々
-      // リフレッシュレートでしか更新されないため見た目は変わらず、チャンク毎の
-      // 全文 Markdown 変換・サニタイズ・DOM 差し替えの回数だけが減る。
-      // rAF handle that coalesces chunk rendering to once per frame. The screen
-      // only updates at the refresh rate anyway, so this changes nothing
-      // visually; it only cuts the per-chunk full-text markdown/sanitize/DOM work.
+      // チャンク描画を 1 フレーム 1 回へ間引くための rAF ハンドル。あわせて
+      // 表示文字数を残量に比例したステップで進め（適応型タイプライター）、
+      // チャンクが塊のまま現れず文字が流れるように見せる。排出しきるまで
+      // フレーム毎に自身を再スケジュールする。
+      // rAF handle that coalesces chunk rendering to once per frame. It also
+      // advances the visible length by a backlog-proportional step (adaptive
+      // typewriter) so chunks read as flowing text instead of blocks, and it
+      // reschedules itself each frame until the backlog is drained.
       let chunkRenderRafId: number | null = null;
       const flushStreamedChunkRender = () => {
         chunkRenderRafId = null;
         const streamId = streamingMessageId;
         if (!streamId) return;
-        const displayText = getStreamingGenerativeUiDisplayText(streamedText);
+        const fullDisplayText = getStreamingGenerativeUiDisplayText(streamedText);
+        smoothedLength = clampToCodePointBoundary(
+          fullDisplayText,
+          nextSmoothedLength(smoothedLength, fullDisplayText.length),
+        );
+        const displayText = fullDisplayText.slice(0, smoothedLength);
         const displayParts = updateStreamingTextPart(streamingParts, displayText);
         const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 
@@ -426,6 +442,9 @@ export function useHomePageGenerationActions({
           });
         });
         scheduleAutoScrollIfNeeded();
+        if (smoothedLength < fullDisplayText.length) {
+          scheduleStreamedChunkRender();
+        }
       };
       const scheduleStreamedChunkRender = () => {
         if (chunkRenderRafId !== null) return;
@@ -613,6 +632,9 @@ export function useHomePageGenerationActions({
           cancelStreamedChunkRender();
           const updatePayload = normalizeChatResponsePayload(parsed.data);
           const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
+          // パーツ更新はテキストの書き換えを伴うため、スムージングせず全文を出す。
+          // Parts updates rewrite the text, so show it in full without smoothing.
+          smoothedLength = displayText.length;
           if (updatePayload.parts?.length) {
             streamingParts = updateStreamingTextPart(updatePayload.parts, displayText);
           }
