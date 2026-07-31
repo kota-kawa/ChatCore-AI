@@ -26,12 +26,15 @@ export function SettingsPromptCardSkeletonGrid() {
       {Array.from({ length: 4 }).map((_, index) => (
         <article key={index} className="prompt-card prompt-card--skeleton">
           <div className="prompt-card__main">
+            <div className="prompt-card__header">
+              <Skeleton variant="text" width="46%" height="1.1rem" />
+              <Skeleton variant="text" width="24%" height="0.8rem" />
+            </div>
             <Skeleton variant="text" width={index % 2 === 0 ? "58%" : "74%"} height="1.1rem" />
             <SkeletonText lines={3} />
-            <Skeleton variant="text" width="40%" height="0.8rem" />
           </div>
           <div className="prompt-card__footer">
-            <Skeleton variant="text" width={120} height="2rem" />
+            <Skeleton variant="text" width={96} height="2.2rem" />
           </div>
         </article>
       ))}
