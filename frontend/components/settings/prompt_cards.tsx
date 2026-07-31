@@ -1,4 +1,5 @@
 import { asId } from "../../lib/utils";
+import { stripMarkdownForPreview } from "../../scripts/core/markdown_preview";
 import {
   getCategoryLabel,
   getCategoryLabelOrFallback
@@ -26,7 +27,9 @@ export function PromptCard({
   // Normalize each text field for preview display
   const promptId = asId(prompt.id);
   const isSkill = prompt.contentFormat === "skill";
-  const contentPreview = normalizePreviewText(isSkill ? prompt.skillMarkdown : prompt.content);
+  // 内容にMarkdown記法が含まれていても、カードの一行プレビューでは記号を残さず読みやすく表示する
+  // Even when the content contains Markdown syntax, the one-line card preview strips it for readability
+  const contentPreview = stripMarkdownForPreview(isSkill ? prompt.skillMarkdown : prompt.content);
   const inputPreview = normalizePreviewText(prompt.inputExamples);
   const outputPreview = normalizePreviewText(prompt.outputExamples);
   const categoryLabel = getCategoryLabelOrFallback(normalizePreviewText(prompt.category));
@@ -123,7 +126,9 @@ export function LikedPromptCard({
   const { t } = useTranslation();
   const entryId = asId(entry.id);
   const isSkill = entry.contentFormat === "skill";
-  const contentPreview = normalizePreviewText(isSkill ? entry.skillMarkdown : entry.content);
+  // 内容にMarkdown記法が含まれていても、カードの一行プレビューでは記号を残さず読みやすく表示する
+  // Even when the content contains Markdown syntax, the one-line card preview strips it for readability
+  const contentPreview = stripMarkdownForPreview(isSkill ? entry.skillMarkdown : entry.content);
   const inputPreview = normalizePreviewText(entry.inputExamples);
   const outputPreview = normalizePreviewText(entry.outputExamples);
   // カテゴリ未設定時はバッジ自体を出さないため、フォールバックなしでラベルを解決する

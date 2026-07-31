@@ -3607,7 +3607,6 @@ body.settings-page :where(
   font-size: 0.94rem;
   line-height: 1.85;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* 読み幅の上限は残しつつ左右中央に置き、余白が片側に寄らないようにする
@@ -3622,6 +3621,124 @@ body.settings-page :where(
   font-size: 1.125rem;
   line-height: 1.95;
   letter-spacing: 0.012em;
+}
+
+/* Markdown未使用時（内容なしメッセージ）だけ改行をそのまま保持する
+   Only the no-content fallback message needs literal newlines preserved */
+:where(body.settings-page, .user-settings-page) p.prompt-preview-modal__content {
+  white-space: pre-wrap;
+}
+
+/* Markdownの見出し・箇条書き・コードなどを組み直す（グローバルの * リセット対策）
+   Restores heading/list/code typography for the Markdown-rendered body (countering the global * reset) */
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown > * {
+  margin-block: 0.6em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown > :first-child {
+  margin-top: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h1,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h2,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h3,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h4 {
+  margin: 1.5em 0 0.6em;
+  color: var(--text-dark, #1a1a1a);
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h1 {
+  font-size: 1.3em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h2 {
+  font-size: 1.16em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h3,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h4 {
+  font-size: 1.04em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown ul,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown ol {
+  padding-inline-start: 1.6em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown li {
+  margin-block: 0.3em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown li > ul,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown li > ol {
+  margin-block: 0.3em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown blockquote {
+  margin-inline: 0;
+  padding: 0.2em 0 0.2em 0.9em;
+  border-left: 3px solid rgba(25, 195, 125, 0.35);
+  color: var(--settings-text-muted, #64748b);
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown code {
+  padding: 0.12em 0.36em;
+  border-radius: 6px;
+  background: rgba(25, 195, 125, 0.1);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown pre {
+  overflow-x: auto;
+  padding: 0.85em 1em;
+  border: 1px solid #d2e2da;
+  border-radius: 12px;
+  background: rgba(240, 250, 245, 0.9);
+  line-height: 1.7;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown hr {
+  margin-block: 1.4em;
+  border: 0;
+  border-top: 1px solid #d2e2da;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown a {
+  color: var(--primary-dark, #0f7a51);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown th,
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown td {
+  padding: 0.42em 0.7em;
+  border: 1px solid #d2e2da;
+  text-align: left;
+}
+
+:where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown th {
+  background: rgba(240, 250, 245, 0.9);
+  font-weight: 800;
 }
 
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__examples {
@@ -3659,6 +3776,7 @@ body.settings-page :where(
 :where(body.settings-page, .user-settings-page) .prompt-preview-modal__example p {
   font-size: 0.82rem;
   line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 640px) {
@@ -3766,6 +3884,44 @@ body.settings-page :where(
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__content {
   color: #e2e8f0;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h1,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h2,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h3,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown h4 {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown blockquote {
+  border-left-color: rgba(52, 211, 153, 0.5);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown code {
+  background: rgba(52, 211, 153, 0.16);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown pre {
+  border-color: rgba(100, 135, 117, 0.58);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown hr {
+  border-top-color: rgba(100, 135, 117, 0.58);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown a {
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown th,
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown td {
+  border-color: rgba(100, 135, 117, 0.58);
+}
+
+[data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__markdown th {
+  background: rgba(52, 211, 153, 0.12);
 }
 
 [data-theme="dark"] :where(body.settings-page, .user-settings-page) .prompt-preview-modal__examples {

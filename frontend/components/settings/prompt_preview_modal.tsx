@@ -1,3 +1,4 @@
+import MarkdownContent from "../MarkdownContent";
 import { getCategoryLabelOrFallback } from "../../scripts/prompt_share/prompt_category_registry";
 import { toDisplayDate } from "../../scripts/user/settings/utils";
 import { useTranslation } from "../../contexts/locale_context";
@@ -99,9 +100,19 @@ export function PromptPreviewModal({
               <p>{promptBodyLabel}</p>
               <span>{t("promptShare.characters", { count: formatNumber(promptBody.length) })}</span>
             </div>
-            <p id="promptPreviewContentTitle" className="prompt-preview-modal__content">
-              {promptBody || t("promptShare.noContent")}
-            </p>
+            {/* 本文はMarkdown記法を含む可能性があるため、フォーマット軸に関わらず常にMarkdownとして整形する */}
+            {/* The body may contain Markdown syntax, so it is always rendered as Markdown regardless of the format axis */}
+            {promptBody ? (
+              <MarkdownContent
+                id="promptPreviewContentTitle"
+                text={promptBody}
+                className="prompt-preview-modal__content prompt-preview-modal__markdown"
+              />
+            ) : (
+              <p id="promptPreviewContentTitle" className="prompt-preview-modal__content">
+                {t("promptShare.noContent")}
+              </p>
+            )}
           </section>
 
           {hasExamples ? (

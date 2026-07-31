@@ -6,6 +6,7 @@ import { SeoHead } from "../../../../components/SeoHead";
 import { formatDateTime } from "../../../../lib/datetime";
 import { buildPromptPath, buildPromptSlug } from "../../../../lib/promptSlug";
 import { renderMarkdownToSafeHtmlOnServer } from "../../../../lib/server/markdown_ssr";
+import { stripMarkdownForPreview } from "../../../../scripts/core/markdown_preview";
 import { resilientFetch } from "../../../../scripts/core/resilient_fetch";
 import { showToast } from "../../../../scripts/core/toast";
 import { copyTextToClipboard } from "../../../../scripts/chat/message_utils";
@@ -100,19 +101,6 @@ function normalizeProtoHeader(header: string | string[] | undefined) {
   return raw.split(",")[0]?.trim() || "";
 }
 
-// OGP description用にMarkdown記法を除去してプレーンテキスト化する
-// Strip Markdown syntax for plain-text OGP description
-function stripPreviewText(value: string) {
-  return value
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[#>*_\-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 // テキストを最大文字数で切り詰める
 // Truncate text to a maximum character count
 function truncateText(value: string, maxLength = 140) {
@@ -165,7 +153,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
     (isSkillPrompt
       ? prompt.skill_markdown || skillResources[0]?.content || ""
       : prompt.content || prompt.output_examples || prompt.input_examples || "") || "";
-  const normalized = stripPreviewText(summarySource);
+  const normalized = stripMarkdownForPreview(summarySource);
   if (!normalized) {
     return "Chat Core で共有されたプロンプトの閲覧ページです。";
   }
@@ -176,7 +164,7 @@ function buildMetaDescription(payload: SharedPromptPayload) {
 // Build a short plain-text summary from Markdown-capable content for recommendation cards.
 function buildRecommendationPreview(prompt: SharedPrompt) {
   const source = prompt.content || prompt.skill_markdown || "";
-  const preview = stripPreviewText(source);
+  const preview = stripMarkdownForPreview(source);
   return truncateText(preview || "詳細を開いてプロンプトの内容を確認してください。", 112);
 }
 

@@ -385,11 +385,13 @@ export function PromptShareDetailModal({
                     </button>
                   </div>
                 </div>
-                {isSkillFormat && promptBody ? (
-                  <MarkdownContent text={promptBody} className="prompt-detail-markdown md-content" />
+                {/* 本文はMarkdown記法を含む可能性があるため、フォーマット軸に関わらず常にMarkdownとして整形する */}
+                {/* The body may contain Markdown syntax, so it is always rendered as Markdown regardless of the format axis */}
+                {promptBody ? (
+                  <MarkdownContent id="modalPromptContent" text={promptBody} className="prompt-detail-markdown md-content" />
                 ) : (
                   <p id="modalPromptContent" className="prompt-detail-text-block">
-                    {promptBody || promptBodyEmptyText}
+                    {promptBodyEmptyText}
                   </p>
                 )}
               </article>

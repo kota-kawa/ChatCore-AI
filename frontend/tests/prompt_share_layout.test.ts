@@ -162,7 +162,11 @@ test("prompt share detail modal highlights prompt content and metadata", () => {
   );
 
   assert.match(html, /プロンプト本文/);
-  assert.match(html, /議事録を要点、決定事項、次のアクションに分けて要約してください。/);
+  // 本文はMarkdownとしてクライアント側でマウント後に描画されるため、
+  // 静的マークアップの時点ではMarkdown用コンテナが選ばれていることだけを確認する
+  // The body renders as Markdown only after client-side mount, so the static
+  // markup only confirms the Markdown container was chosen for this content
+  assert.match(html, /class="prompt-detail-markdown md-content"/);
   // カテゴリキーが表示ラベルへ解決されることを検証する
   // The category key must be resolved to its display label
   assert.match(html, /仕事・ビジネス/);
