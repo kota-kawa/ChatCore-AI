@@ -400,8 +400,6 @@ body.prompt-share-page.ps-modal-open #promptAuthorProfileModal.show {
 
 .prompt-share-page .prompt-detail-tabs__button:focus-visible,
 
-.prompt-share-page .prompt-detail-readsize__button:focus-visible,
-
 .prompt-share-page .prompt-detail-copy-btn:focus-visible {
   outline: 3px solid rgba(26, 115, 232, 0.35);
   outline-offset: 2px;
