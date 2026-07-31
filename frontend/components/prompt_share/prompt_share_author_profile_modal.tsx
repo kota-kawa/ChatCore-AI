@@ -159,10 +159,12 @@ export function PromptShareAuthorProfileModal({
             src={profile?.avatar_url || ""}
             alt={t("promptShare.authorAvatarAlt", { name: displayName })}
           />
-          <h2 id="authorProfileModalTitle">{displayName}</h2>
-          <p className="author-profile-header__count">
-            {t("promptShare.authorPostCount", { count: formatNumber(postCount) })}
-          </p>
+          <div className="author-profile-header__identity">
+            <h2 id="authorProfileModalTitle">{displayName}</h2>
+            <p className="author-profile-header__count">
+              {t("promptShare.authorPostCount", { count: formatNumber(postCount) })}
+            </p>
+          </div>
           <p className="author-profile-header__bio">{bio || t("promptShare.noBio")}</p>
         </header>
 
