@@ -19,6 +19,7 @@ function renderMarkdownToSafeHtml(text: string): string {
 type Props = {
   text: string;
   className?: string;
+  id?: string;
   // SSRで事前サニタイズ済みのHTML。指定時はそれをそのまま描画する（クローラにも本文が見える）。
   // Pre-sanitized HTML rendered on the server. When provided it is rendered as-is (visible to crawlers too).
   ssrHtml?: string;
@@ -26,7 +27,7 @@ type Props = {
 
 // MarkdownテキストをレンダリングするReactコンポーネント
 // React component that renders Markdown text as safe HTML
-export default function MarkdownContent({ text, className, ssrHtml }: Props) {
+export default function MarkdownContent({ text, className, id, ssrHtml }: Props) {
   // Markdown変換とサニタイズは DOM (marked→DOMPurify→document) に依存するためブラウザ側でのみ実行できる。
   // ssrHtml 指定時はサーバー・クライアントとも同じHTMLを描画するためハイドレーション不一致は起きない。
   // 未指定時は SSR とハイドレーション初回を空にしてサーバー出力と一致させ、マウント後に本文を挿入する。
@@ -49,5 +50,5 @@ export default function MarkdownContent({ text, className, ssrHtml }: Props) {
     return renderMarkdownToSafeHtml(text);
   }, [ssrHtml, text, isMounted]);
 
-  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div id={id} className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }

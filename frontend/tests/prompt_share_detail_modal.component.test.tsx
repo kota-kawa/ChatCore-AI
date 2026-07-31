@@ -1,0 +1,101 @@
+import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
+import { describe, expect, it, vi } from "vitest";
+
+import { PromptShareDetailModal } from "../components/prompt_share/prompt_share_detail_modal";
+import type { PromptRecord } from "../components/prompt_share/prompt_card";
+
+const noop = () => {};
+
+// activeView/onClose以外はどのテストでも同じ形なので共通のダミーpropsとしてまとめる
+// Every test shares the same shape for everything besides the prompt itself, so bundle it as common dummy props
+function renderDetailModal(detailPrompt: PromptRecord) {
+  return render(
+    <PromptShareDetailModal
+      isOpen
+      isLoggedIn
+      activeView="detail"
+      promptDetailModalRef={createRef<HTMLDivElement>()}
+      commentsSectionRef={createRef<HTMLElement>()}
+      commentTextareaRef={createRef<HTMLTextAreaElement>()}
+      detailPrompt={detailPrompt}
+      detailComments={[]}
+      isDetailCommentsLoading={false}
+      isCommentSubmitting={false}
+      commentDraft=""
+      commentActionPendingIds={new Set<string>()}
+      promptDetailCloseButtonRef={createRef<HTMLButtonElement>()}
+      onActiveViewChange={noop}
+      onCommentDraftChange={noop}
+      onSubmitComment={noop}
+      onDeleteComment={noop}
+      onReportComment={noop}
+      onReloadComments={noop}
+      onClose={noop}
+      onOpenAuthorProfile={noop}
+    />
+  );
+}
+
+const basePrompt: PromptRecord = {
+  id: 12,
+  clientId: "prompt-12",
+  title: "要件定義書のたたき台を作るプロンプト",
+  content: "",
+  category: "business",
+  author: "Kota",
+  content_format: "prompt",
+  media_type: "text",
+  prompt_type: "text",
+  liked: false,
+  used_in_chat: false,
+  comment_count: 0,
+  created_at: "2026-06-01T00:00:00Z"
+};
+
+describe("プロンプト詳細モーダルのMarkdown整形", () => {
+  it("Markdown記法を含む本文を見出し・強調として整形する", () => {
+    renderDetailModal({
+      ...basePrompt,
+      content: "# 出力形式\n\n**箇条書き**でまとめてください。"
+    });
+
+    expect(screen.getByRole("heading", { level: 1, name: "出力形式" })).toBeInTheDocument();
+    expect(screen.getByText("箇条書き").tagName).toBe("STRONG");
+  });
+
+  it("Markdown記法を含まない本文はそのまま段落として表示する", () => {
+    renderDetailModal({
+      ...basePrompt,
+      content: "会議メモを要約してください。"
+    });
+
+    expect(screen.getByText("会議メモを要約してください。")).toBeInTheDocument();
+  });
+
+  it("Skill形式の本文もMarkdownとして整形する", () => {
+    renderDetailModal({
+      ...basePrompt,
+      content_format: "skill",
+      skill_markdown: "## 手順\n1. 決定事項を抽出する"
+    });
+
+    expect(screen.getByRole("heading", { level: 2, name: "手順" })).toBeInTheDocument();
+    expect(screen.getByText(/決定事項を抽出する/)).toBeInTheDocument();
+  });
+
+  it("コピーボタンには元のMarkdown記法を残したテキストを渡す", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    renderDetailModal({
+      ...basePrompt,
+      content: "# 出力形式\n\n**箇条書き**でまとめてください。"
+    });
+
+    screen.getByRole("button", { name: "コピー" }).click();
+    await Promise.resolve();
+
+    expect(writeText).toHaveBeenCalledWith("# 出力形式\n\n**箇条書き**でまとめてください。");
+  });
+});
