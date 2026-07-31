@@ -302,7 +302,7 @@
   object-fit: cover;
 }
 
-.prompt-share-page .prompt-card h3 {
+.prompt-share-page .prompt-card > h3 {
   margin: 0;
   position: relative;
   z-index: 1;
@@ -327,12 +327,44 @@
   font-size: 0.875rem;
   line-height: 1.6;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  max-height: 4.8em;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Markdown要素の余白と大きさをカードプレビュー向けに抑え、3行分に収める */
+/* Keep Markdown elements compact enough to fit within the card's three-line preview */
+.prompt-share-page .prompt-card__content > :first-child {
+  margin-top: 0;
+}
+
+.prompt-share-page .prompt-card__content > :last-child {
+  margin-bottom: 0;
+}
+
+.prompt-share-page .prompt-card__content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.2em 0;
+  color: inherit;
+  font-size: 1em;
+  line-height: 1.45;
+}
+
+.prompt-share-page .prompt-card__content p,
+.prompt-share-page .prompt-card__content ul,
+.prompt-share-page .prompt-card__content ol,
+.prompt-share-page .prompt-card__content blockquote,
+.prompt-share-page .prompt-card__content pre {
+  margin: 0.32em 0;
+}
+
+.prompt-share-page .prompt-card__content ul,
+.prompt-share-page .prompt-card__content ol {
+  padding-left: 1.35em;
+}
+
+.prompt-share-page .prompt-card__content pre {
+  padding: 0.3em 0.45em;
+  white-space: pre-wrap;
 }
 
 .prompt-share-page .prompt-meta {

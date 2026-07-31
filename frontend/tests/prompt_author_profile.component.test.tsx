@@ -25,7 +25,7 @@ const basePrompt: PromptRecord = {
 };
 
 function renderPromptCard(overrides: Partial<PromptRecord> = {}, onOpenAuthorProfile = vi.fn(), onOpenDetail = vi.fn()) {
-  render(
+  const view = render(
     <PromptCard
       prompt={{ ...basePrompt, ...overrides }}
       isDropdownOpen={false}
@@ -43,7 +43,7 @@ function renderPromptCard(overrides: Partial<PromptRecord> = {}, onOpenAuthorPro
       onOpenAuthorProfile={onOpenAuthorProfile}
     />
   );
-  return { onOpenAuthorProfile, onOpenDetail };
+  return { onOpenAuthorProfile, onOpenDetail, container: view.container };
 }
 
 // SNSのようにアバター+投稿者名からプロフィールを開ける導線を検証する
@@ -68,6 +68,15 @@ describe("prompt_share author avatar", () => {
     expect(screen.queryByRole("button", { name: /Kota/ })).not.toBeInTheDocument();
     expect(screen.getByText("Kota")).toBeInTheDocument();
     expect(onOpenAuthorProfile).not.toHaveBeenCalled();
+  });
+
+  it("カードの本文プレビューをMarkdownとして整形する", () => {
+    const { container } = renderPromptCard({
+      content: "# 会議メモ\n\n- 決定事項をまとめる\n- 次の対応を明記する"
+    });
+
+    expect(container.querySelector(".prompt-card__content h1")).toHaveTextContent("会議メモ");
+    expect(container.querySelector(".prompt-card__content li")).toHaveTextContent("決定事項をまとめる");
   });
 
   it("PromptShareAuthorProfileModalは自己紹介・投稿数・投稿一覧を表示し、行クリックとさらに読み込むを呼び出す", () => {

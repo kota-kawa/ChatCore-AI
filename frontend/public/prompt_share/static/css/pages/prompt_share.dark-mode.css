@@ -167,7 +167,7 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
-[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card h3 {
+[data-theme="dark"] :where(body.prompt-share-page, .prompt-share-page) .prompt-card > h3 {
   color: #f9fafb;
 }
 
