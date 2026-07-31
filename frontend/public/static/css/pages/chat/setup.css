@@ -92,9 +92,9 @@
   gap: 0.55rem;
   text-align: center;
   font-size: var(--setup-title-font-size);
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: var(--success-strong, #134e4a);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--chat-font-label-tracking, 0);
   margin-bottom: var(--setup-title-margin-bottom) !important;
 }
 
@@ -128,9 +128,9 @@
   background: transparent;
   padding: 0;
   font-size: var(--text-md, 1rem);
-  font-weight: 600;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: var(--success-strong, #134e4a);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--chat-font-label-tracking, 0);
 }
 
 :where(body.chat-page, .chat-page-shell) .setup-info-group .form-label {
@@ -418,9 +418,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   border-radius: var(--radius-full, 999px);
   background: rgba(255, 255, 255, 0.72);
   color: #466256;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   pointer-events: none;
   transition:
     max-width 0.28s ease,
@@ -478,8 +478,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   text-align: left;
   padding: 0.7rem 0.75rem;
   cursor: pointer;
-  font-size: var(--text-base, 0.9375rem);
-  line-height: var(--leading-tight, 1.4);
+  font-size: var(--chat-font-ui-size, 0.875rem);
+  font-weight: var(--chat-font-ui-weight, 500);
+  line-height: 1.5;
   transition:
     background var(--transition-normal, 0.2s ease),
     border-color var(--transition-normal, 0.2s ease),
@@ -496,7 +497,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   border-color: rgba(19, 78, 74, 0.82);
   color: #ffffff;
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   box-shadow: 0 10px 18px rgba(19, 78, 74, 0.18);
 }
 
@@ -877,9 +878,9 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 
 :where(body.chat-page, .chat-page-shell) .task-detail-modal-eyebrow {
   margin: 0;
-  font-size: var(--text-md, 1rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--chat-font-label-size, 0.8125rem);
+  font-weight: var(--chat-font-label-weight, 500);
+  letter-spacing: var(--chat-font-label-tracking, 0);
   text-transform: uppercase;
   color: var(--primary-dark, #1b5e43);
 }
@@ -933,7 +934,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
 :where(body.chat-page, .chat-page-shell) .task-detail-section-title {
   margin: 0;
   font-size: var(--text-md, 1rem);
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   color: #064e3b;
 }
 
@@ -1404,7 +1405,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   background: linear-gradient(135deg, #134e4a 0%, #0f766e 100%);
   border-color: rgba(94, 234, 212, 0.72);
   color: #ffffff;
-  font-weight: 700;
+  font-weight: var(--chat-font-heading-weight, 600);
   box-shadow:
     0 10px 18px rgba(19, 78, 74, 0.34),
     inset 3px 0 0 rgba(204, 251, 241, 0.9);

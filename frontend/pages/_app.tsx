@@ -55,7 +55,7 @@ import { DEFAULT_LOCALE, normalizeLocale, resolveRequestLocale, type Locale } fr
 // App-wide sans-serif font configuration (provided as a CSS variable)
 const appSansFont = Noto_Sans_JP({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
   variable: "--font-app-sans"
 });
