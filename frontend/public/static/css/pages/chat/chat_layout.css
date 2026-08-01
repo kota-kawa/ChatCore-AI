@@ -2,6 +2,11 @@
    チャットコンテナ全体、ヘッダー、メインの２カラムレイアウト
 */
 :where(body.chat-page, .chat-page-shell) #chat-container {
+  /* ヘッダーは行を占有しない浮遊オーバーレイなので、その基準となる包含ブロックを
+     コンテナ自身に持たせる。同じ変数でヘッダーの高さ・会話面の上端余白・
+     上端フェードの距離を揃える */
+  position: relative;
+  --chat-header-height: 3.5rem;
   display: flex;
   width: 100%;
   max-width: var(--chat-shell-max-width, 1280px);
@@ -115,20 +120,35 @@
   }
 }
 
-/* ヘッダー：帯も境界線も持たせず、メッセージ面と一体化させる。
-   コンテンツがヘッダーの裏へ続いて見えるよう、メッセージ一覧側の上端に
-   フェード（chat_messages.css の mask-image）を掛けて受ける。
+/* ヘッダー：帯も境界線も持たせず、レイアウトの行としても場所を取らせない。
+   会話面の上に浮かせることで、コンテナの上端まで会話を広げられる。
+   スクロール中のメッセージはヘッダーの裏を通り抜け、メッセージ一覧側の上端
+   フェード（chat_messages.css の mask-image）で減衰する。
+   ボタンの無い透明部分はクリックを透過させ、背後のテキスト選択を妨げない。
    ブランド緑はホバー・選択時のアクセントに限定する */
 :where(body.chat-page, .chat-page-shell) .chat-header {
-  padding: 0.7rem 1.25rem;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  min-height: var(--chat-header-height, 3.5rem);
+  padding: 0.375rem 1.25rem;
   background: transparent;
   color: var(--text-dark, #1a1a1a);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  position: relative;
   z-index: var(--z-chat-header, 50);
-  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* クリックを受け取るのはボタン本体と展開中のメニューだけ。グループ（.header-left は
+   モバイルで flex: 1 に伸びる）に付けると、その下のメッセージや会話面に浮かぶ
+   サイドバー開閉ボタンからクリックを奪ってしまう。
+   詳細度は #chat-container[data-view="setup"] * の pointer-events: none より低く保ち、
+   非表示のチャットが背後の画面の操作を奪わないようにする */
+:where(body.chat-page, .chat-page-shell) .chat-header :is(button, .chat-header-model-menu) {
+  pointer-events: auto;
 }
 
 :where(body.chat-page, .chat-page-shell) .header-left {
@@ -215,7 +235,8 @@
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
   background: transparent;
-  border: 1px solid var(--border-default, rgba(0, 0, 0, 0.08));
+  /* 面としての主張を消し、ホバー・展開時だけ枠と下地を見せる */
+  border: 1px solid transparent;
   border-radius: 9999px;
   color: var(--text-secondary, #6b7280);
   font-size: var(--chat-font-label-size, 0.8125rem);
@@ -521,7 +542,8 @@
   flex-shrink: 0;
 }
 
-/* メイン 2 カラム */
+/* メイン 2 カラム。ヘッダーがフローから外れているためコンテナの上端から始まり、
+   会話面はヘッダーの裏まで広がる */
 :where(body.chat-page, .chat-page-shell) .chat-main {
   flex: 1;
   display: grid;
@@ -543,37 +565,52 @@
   border-right-color: transparent;
 }
 
+/* サイドバーはヘッダーの裏へ潜らせず、これまで通りヘッダー下端から始める。
+   会話面だけがコンテナ上端まで広がる */
+:where(body.chat-page, .chat-page-shell) .sidebar {
+  margin-top: var(--chat-header-height, 3.5rem);
+}
+
+/* サイドバー開閉ボタンは会話面の上ではなくヘッダーの行に並べる。
+   これで会話の左上を占有せず、ヘッダーの操作列としてまとまる */
 :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle {
   position: absolute;
-  top: 0.75rem;
+  top: calc((var(--chat-header-height, 3.5rem) - 2.75rem) / 2);
   left: 0.85rem;
   display: inline-flex;
-  color: var(--success-strong, #134e4a) !important;
+  color: var(--text-secondary, #6b7280) !important;
   width: 2.75rem;
   height: 2.75rem;
   min-width: 2.75rem;
   min-height: 2.75rem;
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(15, 81, 50, 0.18);
-  box-shadow:
-    0 10px 24px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(255, 255, 255, 0.68);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  /* ヘッダーの他のボタンと同じゴースト表示。会話は上端フェードで減衰するため
+     下地を敷かなくてもアイコンが埋もれない */
+  background: transparent !important;
+  border: 1px solid transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   z-index: var(--z-chat-sidebar-toggle, 44);
   font-size: 1.25rem;
   transition:
     background var(--transition-fast, 0.15s ease),
     border-color var(--transition-fast, 0.15s ease),
     color var(--transition-fast, 0.15s ease),
+    left var(--transition-sidebar, 0.28s cubic-bezier(0.32, 0.72, 0, 1)),
     transform 0.1s ease;
+}
+
+/* サイドバーを閉じている間は会話面が左端から始まるため、
+   ヘッダーの戻るボタンの右隣へずらして重なりを避ける */
+:where(body.chat-page, .chat-page-shell) .chat-main--sidebar-closed .chat-sidebar-toggle {
+  left: calc(1.25rem + 2.75rem + 0.35rem);
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:hover,
 :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:focus-visible {
-  background: #ffffff !important;
-  border-color: rgba(15, 81, 50, 0.34);
-  color: #0f5132 !important;
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08)) !important;
+  border-color: transparent;
+  color: var(--primary-dark, #0f7a51) !important;
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:focus-visible {
@@ -582,19 +619,17 @@
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle {
-  color: #99f6e4 !important;
-  background: rgba(15, 23, 42, 0.95) !important;
-  border-color: rgba(94, 234, 212, 0.46);
-  box-shadow:
-    0 12px 28px rgba(2, 6, 23, 0.48),
-    0 0 0 1px rgba(94, 234, 212, 0.18);
+  color: var(--text-secondary, #9ca3af) !important;
+  background: transparent !important;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:hover,
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:focus-visible {
-  color: #ffffff !important;
-  background: #115e59 !important;
-  border-color: rgba(153, 246, 228, 0.78);
+  color: #6ee7b7 !important;
+  background: var(--primary-subtle, rgba(25, 195, 125, 0.08)) !important;
+  border-color: transparent;
 }
 
 [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle:focus-visible {
@@ -615,10 +650,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* サイドバートグルはchat-area内にダークグリーンで表示 */
-  :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle {
-    top: 0.6rem;
-    left: 0.75rem;
+  /* サイドバーがドロワーになり会話面が全幅を占めるため、開閉状態にかかわらず
+     ヘッダーの戻るボタンの右隣に置く */
+  :where(body.chat-page, .chat-page-shell) .chat-main .chat-sidebar-toggle {
+    left: calc(1.25rem + 2.75rem + 0.35rem);
     font-size: 1.3rem;
   }
 
@@ -648,11 +683,12 @@
     transform: translateX(0);
   }
 
-  /* サイドバー背面オーバーレイ（暗くし過ぎない） */
+  /* サイドバー背面オーバーレイ（暗くし過ぎない）。
+     ヘッダーの操作列まで覆わないよう、ドロワーと同じ上端から敷く */
   :where(body.chat-page, .chat-page-shell) .chat-main::after {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: var(--chat-header-height, 3.5rem) 0 0;
     background: rgba(0, 0, 0, 0.16);
     opacity: 0;
     pointer-events: none;
@@ -687,6 +723,8 @@
 /* ─── スマートフォン (≤576px) ─── */
 @media (max-width: 576px) {
   :where(body.chat-page, .chat-page-shell) #chat-container {
+    /* ノッチ端末では safe-area ぶんヘッダーが下がるので、その差を高さにも含める */
+    --chat-header-height: calc(3.45rem + env(safe-area-inset-top, 0px));
     height: 100%;
     min-height: 0;
     border-radius: 0;
@@ -697,9 +735,10 @@
     flex-direction: column;
   }
 
+  /* オーバーレイなので iOS の慣性スクロール中もヘッダーは動かない */
   :where(body.chat-page, .chat-page-shell) .chat-header {
     box-sizing: border-box;
-    min-height: calc(3.45rem + env(safe-area-inset-top, 0px));
+    min-height: var(--chat-header-height);
     padding:
       calc(0.42rem + env(safe-area-inset-top, 0px))
       calc(0.72rem + env(safe-area-inset-right, 0px))
@@ -708,11 +747,6 @@
     gap: 0.45rem;
     box-shadow: none;
     color: var(--success-strong, #367540);
-    /* iOS の慣性スクロール中もヘッダーが視覚的に揺れないよう固定する */
-    flex-shrink: 0;
-    position: sticky;
-    top: 0;
-    z-index: var(--z-chat-header, 50);
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-main {
@@ -844,26 +878,21 @@
       1px 0 0 rgba(15, 23, 42, 0.04);
   }
 
-  :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle {
-    top: 0.52rem;
-    left: calc(0.58rem + env(safe-area-inset-left, 0px));
+  :where(body.chat-page, .chat-page-shell) .chat-main .chat-sidebar-toggle {
+    top: calc(0.35rem + env(safe-area-inset-top, 0px));
+    left: calc(0.72rem + 2.5rem + 0.3rem + env(safe-area-inset-left, 0px));
     width: 2.65rem;
     height: 2.65rem;
     min-width: 2.65rem;
     min-height: 2.65rem;
     font-size: 1.2rem;
     z-index: 49;
-    color: var(--success-strong, #134e4a) !important;
-    background: rgba(255, 255, 255, 0.92) !important;
-    border: 1px solid rgba(198, 216, 207, 0.9);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
-  }
-
-  body.chat-page.sidebar-visible .chat-sidebar-toggle {
-    color: #ffffff !important;
-    background: rgba(19, 78, 74, 0.92) !important;
-    border-color: rgba(255, 255, 255, 0.22);
+    color: var(--success-strong, #367540) !important;
+    background: transparent !important;
+    border: 1px solid transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   body.chat-page.sidebar-visible .chat-main::after {
@@ -873,21 +902,10 @@
   }
 
   [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .chat-sidebar-toggle {
-    background: rgba(15, 23, 42, 0.95) !important;
-    border-color: rgba(94, 234, 212, 0.46);
+    background: transparent !important;
+    border-color: transparent;
     color: #99f6e4 !important;
-    box-shadow:
-      0 12px 28px rgba(2, 6, 23, 0.48),
-      0 0 0 1px rgba(94, 234, 212, 0.18);
-  }
-
-  [data-theme="dark"] body.chat-page.sidebar-visible .chat-sidebar-toggle {
-    color: #ffffff !important;
-    background: #0f766e !important;
-    border-color: rgba(153, 246, 228, 0.72);
-    box-shadow:
-      0 12px 30px rgba(2, 6, 23, 0.52),
-      0 0 0 1px rgba(153, 246, 228, 0.2);
+    box-shadow: none;
   }
 
   /* モデル選択ドロップダウン: iOS でスクロール可能にする */

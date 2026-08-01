@@ -25,14 +25,17 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  /* 上端フェードの距離。先頭メッセージが最上部で薄く見えないよう、同じ値を
-     padding-top（と .chat-message-row--first）に与えてフェードを空白の中で
-     終わらせる */
-  --chat-fade-top: 2.25rem;
-  /* 下端は浮いている入力コンテナ（.input-container）の下を通り抜けるため、
+  /* 上端フェードの距離＝浮いているヘッダーの高さ。ヘッダーの裏を通るテキストが
+     ちょうどヘッダー下端で不透明に戻るため、透明なヘッダーの上でもボタンが
+     文字と混ざらない */
+  --chat-fade-top: var(--chat-header-height, 3.5rem);
+  /* 上端はフェード距離ぶん空け、さらに一息ぶんの余白を足して先頭メッセージが
+     ヘッダーへ貼り付かないようにする（フェードは余白の中で終わるので、
+     最上部までスクロールしても先頭メッセージは薄くならない）。
+     下端は浮いている入力コンテナ（.input-container）の下を通り抜けるため、
      実測高さ --chat-footer-height ぶんの余白を確保して最終行が隠れないようにする */
   padding:
-    var(--chat-fade-top)
+    calc(var(--chat-fade-top) + var(--space-2, 0.5rem))
     var(--space-6, 1.5rem)
     calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
   scroll-padding-bottom: calc(var(--chat-footer-height, 5.4rem) + var(--space-2, 0.5rem));
@@ -45,11 +48,14 @@
   /* 透明なヘッダーの裏へ抜けるテキストと、浮いている入力欄の下へ潜り込む
      テキストを、上下とも硬く切らずに減衰させる。帯で覆い隠すのではなく
      薄くすることで、コンテンツが前後に続いていることが伝わる。
+     上端はアイコンやラベルが載る高さ（フェード距離の 6 割あたりまで）を完全に
+     透過させ、ヘッダーの操作が文字と混ざって見えないようにする。
      mask-image は単一プロパティなので上下を1つの gradient で指定する */
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.5) calc(var(--chat-fade-top) * 0.45),
+    transparent calc(var(--chat-fade-top) * 0.62),
+    rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.82),
     #000 var(--chat-fade-top),
     #000 calc(100% - var(--chat-footer-height, 5.4rem)),
     transparent 100%
@@ -57,7 +63,8 @@
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.5) calc(var(--chat-fade-top) * 0.45),
+    transparent calc(var(--chat-fade-top) * 0.62),
+    rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.82),
     #000 var(--chat-fade-top),
     #000 calc(100% - var(--chat-footer-height, 5.4rem)),
     transparent 100%
@@ -97,7 +104,7 @@
 /* 仮想リストでは .chat-messages--virtual が padding を 0 にするため、
    上端フェードぶんの余白は先頭行が受け持つ */
 :where(body.chat-page, .chat-page-shell) .chat-message-row--first {
-  padding-top: var(--chat-fade-top, 2.25rem);
+  padding-top: calc(var(--chat-fade-top, 3.5rem) + var(--space-2, 0.5rem));
 }
 
 :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
@@ -2043,18 +2050,8 @@
 
 /* ─── タブレット (≤992px) ─── */
 @media (max-width: 992px) {
-  :where(body.chat-page, .chat-page-shell) .chat-messages {
-    padding-top: 3rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .chat-messages--virtual {
-    padding-top: 0;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .chat-message-row--first {
-    padding-top: 3rem;
-  }
-
+  /* 上端の余白は --chat-fade-top（＝ヘッダーの高さ）が全ブレークポイントで
+     受け持つため、ここでの上書きは不要 */
   :where(body.chat-page, .chat-page-shell) .copy-btn {
     opacity: 0.8;
   }
@@ -2087,7 +2084,7 @@
     flex: 1;
     max-height: unset;
     padding:
-      3.55rem
+      calc(var(--chat-fade-top) + var(--space-2, 0.5rem))
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-right, 0px))
       calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem))
       calc(var(--chat-mobile-gutter, 0.85rem) + env(safe-area-inset-left, 0px));
@@ -2096,24 +2093,26 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     scroll-padding-bottom: calc(var(--chat-footer-height, 4.9rem) + var(--space-2, 0.5rem));
-    /* 透明なモバイルヘッダーへ近づくメッセージを、スクロール位置に応じて自然に薄くする。
+    /* 透明なモバイルヘッダーの裏を通るメッセージを、スクロール位置に応じて自然に
+       薄くする。モバイルはヘッダーの中でボタンが占める割合が大きいので、完全に
+       透過させる区間をデスクトップより少しだけ長く取る。
        下端も同様に、浮いている入力欄へ潜り込むテキストを減衰させる。
        mask-image は単一プロパティなので、上下のフェードを1つの gradient で指定する。 */
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      rgba(0, 0, 0, 0.48) 1.15rem,
-      rgba(0, 0, 0, 0.88) 2.7rem,
-      #000 4.25rem,
+      transparent calc(var(--chat-fade-top) * 0.66),
+      rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.84),
+      #000 var(--chat-fade-top),
       #000 calc(100% - var(--chat-footer-height, 4.9rem)),
       transparent 100%
     );
     mask-image: linear-gradient(
       to bottom,
       transparent 0,
-      rgba(0, 0, 0, 0.48) 1.15rem,
-      rgba(0, 0, 0, 0.88) 2.7rem,
-      #000 4.25rem,
+      transparent calc(var(--chat-fade-top) * 0.66),
+      rgba(0, 0, 0, 0.34) calc(var(--chat-fade-top) * 0.84),
+      #000 var(--chat-fade-top),
       #000 calc(100% - var(--chat-footer-height, 4.9rem)),
       transparent 100%
     );
@@ -2137,7 +2136,7 @@
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-message-row--first {
-    padding-top: 3.55rem;
+    padding-top: calc(var(--chat-fade-top) + var(--space-2, 0.5rem));
   }
 
   :where(body.chat-page, .chat-page-shell) .chat-message-row--last {
