@@ -1152,26 +1152,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     background: rgba(255, 255, 255, 0.98);
   }
 
-  :where(body.chat-page, .chat-page-shell) #ai-model.model-select-native {
-    position: static;
-    width: 100%;
-    height: auto;
-    min-height: 52px;
-    margin: 0;
-    padding: 0.82rem 2.6rem 0.82rem 0.92rem;
-    opacity: 1;
-    pointer-events: auto;
-    border: 1px solid rgba(207, 222, 215, 0.96);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.98);
-    color: var(--text-dark, #1a1a1a);
-    font-size: 1rem;
-  }
-
-  :where(body.chat-page, .chat-page-shell) .model-select {
-    display: none;
-  }
-
   :where(body.chat-page, .chat-page-shell) .chat-save-mode-control {
     top: 0.68rem;
     right: 0.68rem;
@@ -1556,12 +1536,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     border-color: rgba(148, 163, 184, 0.2);
     background: rgba(17, 24, 39, 0.78);
     box-shadow: 0 14px 32px rgba(2, 6, 23, 0.32);
-  }
-
-  [data-theme="dark"] :where(body.chat-page, .chat-page-shell) #ai-model.model-select-native {
-    background: rgba(15, 23, 42, 0.95);
-    border-color: rgba(148, 163, 184, 0.22);
-    color: var(--text-dark, #e5e7eb);
   }
 
   [data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-detail-toggle {
