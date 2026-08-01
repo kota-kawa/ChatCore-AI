@@ -1096,7 +1096,7 @@ function SetupSectionComponent() {
         <div className="form-group">
           <label className="form-label" htmlFor="ai-model">{t("home.model")}</label>
 
-          {/* ネイティブselectはモバイルでのフォールバックとして残す / Native select element kept as a fallback for mobile and accessibility */}
+          {/* ネイティブselectは常に非表示、フォーム送信/オートフィル互換のために保持 / Native select stays visually hidden at all breakpoints; kept for form/autofill compatibility */}
           <select
             id="ai-model"
             className="model-select-native"
