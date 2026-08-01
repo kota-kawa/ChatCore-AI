@@ -635,7 +635,7 @@ class ChatStreamingTestCase(unittest.TestCase):
                 "services.chat_generation.get_llm_response_stream",
                 return_value=iter(
                     [
-                        f"最新版です。[[sou",
+                        "最新版です。[[sou",
                         f"rce:{search_result.sources[0].evidence_id}]]",
                     ]
                 ),
