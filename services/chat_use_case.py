@@ -27,11 +27,14 @@ from services.request_models import ChatMessageRequest
 from services.url_fetcher import extract_urls_from_text, fetch_urls_content
 from services.web_search import (
     build_web_search_trace_markdown,
+    combine_web_search_results,
     deserialize_web_search_results,
     extract_prior_web_search_results,
     inject_prior_web_search_context,
     maybe_augment_messages_with_web_search,
+    resolve_web_search_citations,
     serialize_web_search_result,
+    with_web_search_citations,
 )
 from services.chat_title import (
     build_initial_title_candidates,
@@ -717,10 +720,48 @@ class ChatPostUseCase:
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
 
+        citation_evidence = combine_web_search_results(
+            [
+                *([augmentation.result] if augmentation.result is not None else []),
+                *prior_web_search_results,
+            ]
+        )
+        resolved_citations = ()
+        if citation_evidence is not None:
+            citation_resolution = resolve_web_search_citations(
+                bot_reply,
+                citation_evidence,
+            )
+            if citation_resolution.invalid_markers:
+                deps.logger.warning(
+                    "Removed invalid web search citation markers from generated response.",
+                    extra={
+                        "invalid_marker_count": len(citation_resolution.invalid_markers)
+                    },
+                )
+            bot_reply = citation_resolution.text
+            resolved_citations = citation_resolution.citations
+            if message_parts:
+                message_parts = [
+                    (
+                        {**part, "text": bot_reply}
+                        if part.get("type") == "text"
+                        else part
+                    )
+                    for part in message_parts
+                ]
+
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう保存する
         # Serialize this turn's search results so later turns can reference them.
         this_turn_web_search = (
-            [serialize_web_search_result(augmentation.result)]
+            [
+                serialize_web_search_result(
+                    with_web_search_citations(
+                        augmentation.result,
+                        resolved_citations,
+                    )
+                )
+            ]
             if augmentation.result is not None and augmentation.result.has_sources
             else None
         )

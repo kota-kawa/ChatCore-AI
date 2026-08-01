@@ -32,6 +32,27 @@ test("first formatLLMOutput call renders the web-search trace block instead of e
   assert.doesNotMatch(html, /&lt;details/);
 });
 
+test("formatLLMOutput keeps a leading web-search trace and renders numbered Markdown citations", () => {
+  const trace = [
+    '<details class="web-search-sources web-search-sources--trace">',
+    '<summary class="web-search-sources__summary">',
+    '<span class="web-search-sources__label">回答までのステップ</span>',
+    "</summary>",
+    '<div class="web-search-sources__list">検索結果を確認</div>',
+    "</details>",
+  ].join("\n");
+  const html = formatLLMOutput(
+    `${trace}\n\n確認できた内容です。[1](https://example.com/report?year=2026&lang=ja)`,
+  );
+
+  assert.match(html, /^<details class="web-search-sources web-search-sources--trace">/);
+  assert.match(
+    html,
+    /<a href="https:\/\/example\.com\/report\?year=2026&lang=ja">1<\/a>/,
+  );
+  assert.ok(html.indexOf("</details>") < html.indexOf("確認できた内容です。"));
+});
+
 test("formatLLMOutput turns loose bracketed LaTeX into readable math blocks", () => {
   const response = [
     "結論",

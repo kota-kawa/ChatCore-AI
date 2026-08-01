@@ -34,8 +34,10 @@ from .web_search import (
     inject_prior_web_search_context,
     is_web_search_enabled,
     maybe_augment_messages_with_web_search,
+    resolve_web_search_citations,
     search_brave_llm_context,
     serialize_web_search_result,
+    with_web_search_citations,
     WebSearchQuotaExceeded,
     WebSearchResult,
 )
@@ -56,6 +58,7 @@ _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
+_WEB_SEARCH_CITATION_PREFIX = "[[source:"
 
 
 def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
@@ -65,6 +68,22 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
             content = message.get("content")
             return content if isinstance(content, str) else str(content or "")
     return ""
+
+
+def _split_complete_streaming_citation_text(text: str) -> tuple[str, str]:
+    """Hold a trailing partial citation marker until a later stream chunk."""
+    lowered = text.lower()
+    marker_start = lowered.rfind(_WEB_SEARCH_CITATION_PREFIX)
+    if marker_start >= 0 and "]]" not in text[marker_start:]:
+        return text[:marker_start], text[marker_start:]
+
+    # A provider can split even the marker prefix across token chunks (for
+    # example, "[[sou" + "rce:..."). Keep the longest possible prefix suffix.
+    max_prefix_length = min(len(text), len(_WEB_SEARCH_CITATION_PREFIX) - 1)
+    for prefix_length in range(max_prefix_length, 0, -1):
+        if lowered.endswith(_WEB_SEARCH_CITATION_PREFIX[:prefix_length]):
+            return text[:-prefix_length], text[-prefix_length:]
+    return text, ""
 
 
 # ストリーミング中の応答テキストから Artifact 等の UI パーツ情報をパースして更新用ペイロードを組み立てる
@@ -214,6 +233,7 @@ def _web_search_result_tool_payload(
         "source_count": len(result.sources),
         "sources": [
             {
+                "evidence_id": source.evidence_id,
                 "url": source.url,
                 "title": source.title,
                 "hostname": source.hostname,
@@ -551,6 +571,7 @@ class ChatGenerationJob:
         web_search_results: list[WebSearchResult] = []
         web_search_results_by_key: dict[tuple[str, str], WebSearchResult] = {}
         web_search_trace_steps: list[dict[str, str]] = []
+        streaming_citation_buffer = ""
         current_messages = [dict(m) for m in self._conversation_messages]
         # 過去ターンの検索結果を参照用コンテキストとして再注入する
         # Re-inject prior-turn search results as a reference context.
@@ -661,9 +682,44 @@ class ChatGenerationJob:
                             chunk = f"{trace_block}\n\n{chunk}"
 
                     chunks.append(chunk)
-                    self._publish("chunk", {"text": chunk})
+                    streaming_evidence = combine_web_search_results(
+                        [*web_search_results, *self._prior_web_search_results]
+                    )
+                    if streaming_evidence is None:
+                        stream_text = f"{streaming_citation_buffer}{chunk}"
+                        streaming_citation_buffer = ""
+                    else:
+                        complete_stream_text, streaming_citation_buffer = (
+                            _split_complete_streaming_citation_text(
+                                f"{streaming_citation_buffer}{chunk}"
+                            )
+                        )
+                        stream_text = resolve_web_search_citations(
+                            complete_stream_text,
+                            streaming_evidence,
+                        ).text
+                    if stream_text:
+                        self._publish("chunk", {"text": stream_text})
                     streaming_parts_update = _build_streaming_parts_update("".join(chunks))
                     if streaming_parts_update is not None:
+                        if streaming_evidence is not None:
+                            parts_resolution = resolve_web_search_citations(
+                                streaming_parts_update["response"],
+                                streaming_evidence,
+                            )
+                            resolved_parts_text = parts_resolution.text
+                            streaming_parts_update = {
+                                **streaming_parts_update,
+                                "response": resolved_parts_text,
+                                "parts": [
+                                    (
+                                        {**part, "text": resolved_parts_text}
+                                        if part.get("type") == "text"
+                                        else part
+                                    )
+                                    for part in streaming_parts_update["parts"]
+                                ],
+                            }
                         streaming_parts_signature = json.dumps(
                             streaming_parts_update,
                             ensure_ascii=False,
@@ -884,6 +940,21 @@ class ChatGenerationJob:
                             )
                         )
 
+            if streaming_citation_buffer:
+                streaming_evidence = combine_web_search_results(
+                    [*web_search_results, *self._prior_web_search_results]
+                )
+                buffered_text = (
+                    resolve_web_search_citations(
+                        streaming_citation_buffer,
+                        streaming_evidence,
+                    ).text
+                    if streaming_evidence is not None
+                    else streaming_citation_buffer
+                )
+                if buffered_text:
+                    self._publish("chunk", {"text": buffered_text})
+
         # エラーハンドリング
         # Error handling
         except LlmConfigurationError as exc:
@@ -980,12 +1051,47 @@ class ChatGenerationJob:
             )
         bot_reply = normalized_response.text
         message_parts = normalized_response.parts
+
+        # 現在ターンと過去ターンの検索根拠を照合し、モデルの引用markerを
+        # 検証済みソースへのMarkdownリンクへ変換する。UIパーツがある場合も
+        # 表示本文と保存本文が一致するよう、text partを同時に更新する。
+        # Resolve model citation markers against current and prior evidence, then
+        # keep the visible text part aligned with the persisted response.
+        citation_evidence = combine_web_search_results(
+            [*web_search_results, *self._prior_web_search_results]
+        )
+        resolved_citations = ()
+        if citation_evidence is not None:
+            citation_resolution = resolve_web_search_citations(
+                bot_reply,
+                citation_evidence,
+            )
+            if citation_resolution.invalid_markers:
+                logger.warning(
+                    "Removed invalid web search citation markers from generated response.",
+                    extra={
+                        "invalid_marker_count": len(citation_resolution.invalid_markers)
+                    },
+                )
+            bot_reply = citation_resolution.text
+            resolved_citations = citation_resolution.citations
+            if message_parts:
+                message_parts = [
+                    (
+                        {**part, "text": bot_reply}
+                        if part.get("type") == "text"
+                        else part
+                    )
+                    for part in message_parts
+                ]
         self.response = bot_reply
 
         # このターンで取得した検索結果を直列化し、後続ターンで参照できるよう永続化する
         # Serialize this turn's search results so later turns can reference them.
         serialized_web_search = [
-            serialize_web_search_result(result)
+            serialize_web_search_result(
+                with_web_search_citations(result, resolved_citations)
+            )
             for result in web_search_results
             if result.has_sources
         ]

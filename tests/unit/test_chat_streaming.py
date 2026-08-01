@@ -590,6 +590,92 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertIn('<span class="web-search-sources__count">4ステップ / 1件</span>', persisted_messages[0])
         self.assertIn("回答本文", persisted_messages[0])
 
+    # 日本語: Web検索回答の引用markerが実ソースへ解決され、根拠metadataとともに保存されることを検証します。
+    # English: Verify that a web-search citation marker resolves to its source and is persisted with evidence metadata.
+    def test_background_generation_job_resolves_and_persists_web_search_citations(self):
+        persisted_records = []
+        search_result = WebSearchResult(
+            query="Python release",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/python-release",
+                    title="Python Release",
+                    hostname="example.com",
+                    age="2026-08-02",
+                    snippets=("A release fact",),
+                ),
+            ),
+        )
+        marker = f"[[source:{search_result.sources[0].evidence_id}]]"
+
+        def persist_response(
+            response,
+            *,
+            message_parts=None,
+            web_search_context=None,
+        ):
+            persisted_records.append(
+                {
+                    "response": response,
+                    "message_parts": message_parts,
+                    "web_search_context": web_search_context,
+                }
+            )
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(
+                    [
+                        f"最新版です。[[sou",
+                        f"rce:{search_result.sources[0].evidence_id}]]",
+                    ]
+                ),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-citation:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                model="openai/gpt-oss-120b",
+                persist_response=persist_response,
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted_records), 1)
+        persisted = persisted_records[0]
+        self.assertNotIn(marker, persisted["response"])
+        self.assertIn(
+            "最新版です。[1](https://example.com/python-release)",
+            persisted["response"],
+        )
+        self.assertNotIn(marker, body)
+        self.assertIn("[1](https://example.com/python-release)", body)
+
+        context = persisted["web_search_context"]
+        self.assertEqual(len(context), 1)
+        self.assertEqual(
+            context[0]["sources"][0]["evidence_id"],
+            search_result.sources[0].evidence_id,
+        )
+        self.assertEqual(
+            context[0]["citations"][0]["evidence_id"],
+            search_result.sources[0].evidence_id,
+        )
+        citation = context[0]["citations"][0]
+        self.assertEqual(
+            persisted["response"][citation["start"] : citation["end"]],
+            "[1](https://example.com/python-release)",
+        )
+
     # 日本語: 生成ジョブがWeb検索結果を考慮した後に、必要に応じて追加の検索を実行できることを検証します。
     # English: Verify that the generation job can execute additional web searches after reviewing initial results.
     def test_background_generation_job_can_search_again_after_reviewing_results(self):
@@ -656,6 +742,18 @@ class ChatStreamingTestCase(unittest.TestCase):
                 )
                 return
             self.assertIsNotNone(tools)
+            tool_payloads = [
+                json.loads(message["content"])
+                for message in _messages
+                if message.get("role") == "tool"
+            ]
+            self.assertEqual(
+                [payload["sources"][0]["evidence_id"] for payload in tool_payloads],
+                [
+                    search_results["Python latest news"].sources[0].evidence_id,
+                    search_results["Python release details"].sources[0].evidence_id,
+                ],
+            )
             yield "検索結果を踏まえた回答"
 
         with (
