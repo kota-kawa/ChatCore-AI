@@ -36,14 +36,15 @@ test("mobile chat header and controls stay fully transparent", () => {
 });
 
 test("mobile chat messages fade as they approach the transparent header", () => {
+  const mobileChatMessagesCss = chatMessagesCss.slice(chatMessagesCss.indexOf("@media (max-width: 576px)"));
   assert.match(
-    chatMessagesCss,
-    /@media \(max-width: 576px\)[\s\S]*?\.chat-messages\s*\{[\s\S]*?-webkit-mask-image:\s*linear-gradient\([\s\S]*?transparent 0[\s\S]*?#000 4\.25rem/,
+    mobileChatMessagesCss,
+    /-webkit-mask-image:\s*linear-gradient\([\s\S]*?transparent 0[\s\S]*?#000 var\(--chat-fade-top\)/,
     "the mobile message scroller must include the WebKit-compatible top fade",
   );
   assert.match(
-    chatMessagesCss,
-    /\n\s+mask-image:\s*linear-gradient\([\s\S]*?transparent 0[\s\S]*?#000 4\.25rem/,
+    mobileChatMessagesCss,
+    /\n\s+mask-image:\s*linear-gradient\([\s\S]*?transparent 0[\s\S]*?#000 var\(--chat-fade-top\)/,
     "the mobile message scroller must include the standard top fade",
   );
 });
