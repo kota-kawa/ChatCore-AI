@@ -283,6 +283,10 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(len(result.sources), 1)
         self.assertEqual(result.sources[0].hostname, "example.com")
         self.assertEqual(result.sources[0].snippets, ("Snippet one", "Snippet two"))
+        self.assertEqual(
+            result.sources[0].evidence_id,
+            web_search.build_web_search_evidence_id("https://example.com/a"),
+        )
         # Important result pages are read and attached as page_text.
         self.assertEqual(result.sources[0].page_text, "Full article body")
         mock_fetch.assert_called_once_with("https://example.com/a")
@@ -371,6 +375,10 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(events[2].payload["sources"][0]["url"], "https://example.com/python")
         self.assertEqual(events[2].payload["sources"][0]["title"], "Python News")
         self.assertEqual(events[2].payload["sources"][0]["hostname"], "example.com")
+        self.assertEqual(
+            events[2].payload["sources"][0]["evidence_id"],
+            result.sources[0].evidence_id,
+        )
         self.assertIs(augmented.result, result)
         self.assertEqual(augmented.status, "completed")
         self.assertEqual(len(augmented.messages), 2)
@@ -379,6 +387,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("リアルタイム検索できない」とは言わないでください", augmented.messages[0]["content"])
         self.assertIn("追加質問で止まらず", augmented.messages[0]["content"])
         self.assertIn("https://example.com/python", augmented.messages[0]["content"])
+        self.assertIn(result.sources[0].evidence_id, augmented.messages[0]["content"])
+        self.assertIn("[[source:<evidence_id>]]", augmented.messages[0]["content"])
 
     # 日本語: maybeaugmentmessagesreportsmonthlyクォータ超過ことを検証します。
     # English: Verify that maybe augment messages reports monthly quota exceeded.
@@ -774,6 +784,220 @@ class WebSearchServiceTestCase(unittest.TestCase):
         )
         # Unrelated markup (e.g. code/HTML in page text) is left untouched.
         self.assertEqual(neutralize("use <div> and <b>bold</b>"), "use <div> and <b>bold</b>")
+
+
+# 日本語: URL由来Evidenceと回答内引用markerの解決を検証するテストクラスです。
+# English: Test URL-derived evidence and answer citation marker resolution.
+class WebSearchEvidenceTestCase(unittest.TestCase):
+    def _result(self):
+        return web_search.WebSearchResult(
+            query="evidence",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="https://example.com/a",
+                    title="Source A",
+                    hostname="example.com",
+                    age="",
+                    snippets=("A fact",),
+                ),
+                web_search.WebSearchSource(
+                    url="https://example.com/report_(final)",
+                    title="Source B",
+                    hostname="example.com",
+                    age="",
+                    snippets=("B fact",),
+                ),
+            ),
+        )
+
+    def test_evidence_id_is_stable_for_normalized_url(self):
+        first = web_search.build_web_search_evidence_id(
+            "HTTPS://EXAMPLE.COM/path?q=1#section-one"
+        )
+        second = web_search.build_web_search_evidence_id(
+            "https://example.com/path?q=1#section-two"
+        )
+        changed_query = web_search.build_web_search_evidence_id(
+            "https://example.com/path?q=2"
+        )
+
+        self.assertEqual(first, second)
+        self.assertRegex(first, r"^src_[0-9a-f]{20}$")
+        self.assertNotEqual(first, changed_query)
+
+    def test_source_replaces_forged_evidence_id_with_url_derived_id(self):
+        source = web_search.WebSearchSource(
+            url="https://example.com/a",
+            title="A",
+            hostname="example.com",
+            age="",
+            snippets=(),
+            evidence_id="src_forged",
+        )
+
+        self.assertEqual(
+            source.evidence_id,
+            web_search.build_web_search_evidence_id(source.url),
+        )
+
+    def test_build_system_message_includes_evidence_id_and_marker_contract(self):
+        result = self._result()
+
+        content = web_search.build_web_search_system_message(result)["content"]
+
+        self.assertIn(
+            f'evidence_id="{result.sources[0].evidence_id}"',
+            content,
+        )
+        self.assertIn("[[source:<evidence_id>]]", content)
+        self.assertIn("実在する evidence_id", content)
+
+    def test_resolve_citations_converts_only_known_markers_and_returns_offsets(self):
+        result = self._result()
+        first_id = result.sources[0].evidence_id
+        second_id = result.sources[1].evidence_id
+        answer = (
+            f"事実A [[source:{first_id}]] と"
+            f"事実B [[source:{second_id}]]。"
+            "不明 [[source:src_00000000000000000000]]。"
+        )
+
+        resolved = web_search.resolve_web_search_citations(answer, result)
+
+        self.assertEqual(
+            resolved.text,
+            "事実A [1](https://example.com/a) と"
+            "事実B [2](https://example.com/report_%28final%29)。不明 。",
+        )
+        self.assertEqual(len(resolved.citations), 2)
+        self.assertEqual(len(resolved.invalid_markers), 1)
+        for citation in resolved.citations:
+            rendered = resolved.text[citation.start : citation.end]
+            self.assertTrue(rendered.startswith(f"[{citation.ordinal}]("))
+            self.assertEqual(citation.url, result.sources[citation.ordinal - 1].url)
+            self.assertEqual(citation.title, result.sources[citation.ordinal - 1].title)
+
+    def test_resolve_citations_removes_malformed_marker_without_hiding_prose(self):
+        result = self._result()
+        resolved = web_search.resolve_web_search_citations(
+            "前 [[source:not-closed 後の文章", result
+        )
+
+        self.assertEqual(resolved.text, "前  後の文章")
+        self.assertEqual(resolved.citations, ())
+        self.assertEqual(resolved.invalid_markers, ("[[source:not-closed",))
+
+    def test_resolve_citations_does_not_render_non_http_source_url(self):
+        result = web_search.WebSearchResult(
+            query="unsafe",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                web_search.WebSearchSource(
+                    url="javascript:alert(1)",
+                    title="Unsafe",
+                    hostname="",
+                    age="",
+                    snippets=(),
+                ),
+            ),
+        )
+        marker = f"[[source:{result.sources[0].evidence_id}]]"
+
+        resolved = web_search.resolve_web_search_citations(f"前 {marker} 後", result)
+
+        self.assertEqual(resolved.text, "前  後")
+        self.assertEqual(resolved.citations, ())
+        self.assertEqual(resolved.invalid_markers, (marker,))
+
+    def test_with_citations_can_be_serialized_and_restored(self):
+        result = self._result()
+        evidence_id = result.sources[0].evidence_id
+        resolution = web_search.resolve_web_search_citations(
+            f"事実 [[source:{evidence_id}]]", result
+        )
+        cited_result = web_search.with_web_search_citations(
+            result, resolution.citations
+        )
+
+        serialized = web_search.serialize_web_search_result(cited_result)
+        restored = web_search.deserialize_web_search_result(serialized)
+
+        self.assertEqual(serialized["sources"][0]["evidence_id"], evidence_id)
+        self.assertEqual(serialized["citations"][0]["evidence_id"], evidence_id)
+        self.assertEqual(restored.sources[0].evidence_id, evidence_id)
+        self.assertEqual(restored.citations, cited_result.citations)
+
+    def test_with_citations_keeps_only_citations_owned_by_the_result(self):
+        result = self._result()
+        first_only = web_search.WebSearchResult(
+            query="first",
+            searched_at=result.searched_at,
+            sources=(result.sources[0],),
+        )
+        resolution = web_search.resolve_web_search_citations(
+            (
+                f"A [[source:{result.sources[0].evidence_id}]] "
+                f"B [[source:{result.sources[1].evidence_id}]]"
+            ),
+            result,
+        )
+
+        cited_result = web_search.with_web_search_citations(
+            first_only,
+            resolution.citations,
+        )
+
+        self.assertEqual(len(cited_result.citations), 1)
+        self.assertEqual(
+            cited_result.citations[0].evidence_id,
+            result.sources[0].evidence_id,
+        )
+
+    def test_serialization_preserves_combined_result_citation_ordinal(self):
+        result = self._result()
+        resolution = web_search.resolve_web_search_citations(
+            f"B [[source:{result.sources[1].evidence_id}]]",
+            result,
+        )
+        second_only = web_search.with_web_search_citations(
+            web_search.WebSearchResult(
+                query="second",
+                searched_at=result.searched_at,
+                sources=(result.sources[1],),
+            ),
+            resolution.citations,
+        )
+
+        restored = web_search.deserialize_web_search_result(
+            web_search.serialize_web_search_result(second_only)
+        )
+
+        self.assertEqual(restored.citations[0].ordinal, 2)
+
+    def test_deserialize_legacy_result_backfills_evidence_and_empty_citations(self):
+        legacy = {
+            "query": "legacy",
+            "searched_at": "2026-08-02T00:00:00+00:00",
+            "sources": [
+                {
+                    "url": "https://example.com/legacy",
+                    "title": "Legacy",
+                    "hostname": "example.com",
+                    "age": "",
+                    "snippets": ["old"],
+                    "page_text": "",
+                }
+            ],
+        }
+
+        restored = web_search.deserialize_web_search_result(legacy)
+
+        self.assertEqual(
+            restored.sources[0].evidence_id,
+            web_search.build_web_search_evidence_id("https://example.com/legacy"),
+        )
+        self.assertEqual(restored.citations, ())
 
 
 def _sample_result(query="Python news", url="https://example.com/python", *, page_text=""):

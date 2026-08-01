@@ -7,6 +7,14 @@ import re
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _WHITESPACE_PATTERN = re.compile(r"[ \t]+")
 _BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
+_REFERENCE_CONTEXT_START_PATTERN = re.compile(
+    r"\A<(?:fetched_urls|attached_files)(?:\s[^>]*)?>",
+    re.IGNORECASE,
+)
+_REFERENCE_CONTEXT_BOUNDARY_PATTERN = re.compile(
+    r"(?P<closing></(?:fetched_urls|attached_files)>)[ \t]*\n[ \t]*\n",
+    re.IGNORECASE,
+)
 
 CONTEXT_TOKEN_BUDGET = 6000
 SUMMARY_TOKEN_BUDGET = 900
@@ -87,6 +95,58 @@ def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
     if max_chars <= 3:
         return normalized[:max_chars]
     return normalized[: max_chars - 3].rstrip() + "..."
+
+
+def _split_leading_reference_context(text: str) -> tuple[str, str] | None:
+    """Split generated reference prefixes from the user's trailing request."""
+    normalized = normalize_message_text(text)
+    if not _REFERENCE_CONTEXT_START_PATTERN.match(normalized):
+        return None
+
+    # URL and attachment blocks are generated before the actual user request and
+    # separated from it by a blank line. Use the final generated block boundary so
+    # a turn containing both blocks keeps them together as reference context.
+    boundaries = list(_REFERENCE_CONTEXT_BOUNDARY_PATTERN.finditer(normalized))
+    if not boundaries:
+        return None
+    boundary = boundaries[-1]
+    reference_context = normalized[: boundary.end("closing")].strip()
+    user_request = normalized[boundary.end() :].strip()
+    if not reference_context or not user_request:
+        return None
+    return reference_context, user_request
+
+
+def _trim_latest_message_to_token_budget(
+    content: str,
+    role: str,
+    max_tokens: int,
+) -> str:
+    """Trim the newest message while preserving a trailing user request first."""
+    normalized_content = normalize_message_text(content)
+    if estimate_token_count(normalized_content) <= max_tokens:
+        return normalized_content
+    if role != "user":
+        return trim_text_to_token_budget(normalized_content, max_tokens)
+
+    split_content = _split_leading_reference_context(normalized_content)
+    if split_content is None:
+        return trim_text_to_token_budget(normalized_content, max_tokens)
+
+    reference_context, user_request = split_content
+    request_tokens = estimate_token_count(user_request)
+    if request_tokens >= max_tokens:
+        return trim_text_to_token_budget(user_request, max_tokens)
+
+    separator = "\n\n"
+    reference_budget = max_tokens - request_tokens - estimate_token_count(separator)
+    if reference_budget <= 0:
+        return user_request
+
+    trimmed_reference = trim_text_to_token_budget(reference_context, reference_budget)
+    if not trimmed_reference:
+        return user_request
+    return f"{trimmed_reference}{separator}{user_request}"
 
 
 # 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
@@ -180,15 +240,21 @@ def select_recent_messages(
         if not normalized_content:
             continue
 
+        role = str(message.get("role", "user"))
+
         # 最初のメッセージ（一番新しいもの）は、切り詰めてでも必ず含める
         # Always include the first message (most recent one) even if it needs trimming
         if not selected_reversed:
-            trimmed_content = trim_text_to_token_budget(normalized_content, remaining_tokens)
+            trimmed_content = _trim_latest_message_to_token_budget(
+                normalized_content,
+                role,
+                remaining_tokens,
+            )
             if not trimmed_content:
                 continue
             selected_reversed.append(
                 {
-                    "role": str(message.get("role", "user")),
+                    "role": role,
                     "content": trimmed_content,
                 }
             )
@@ -206,7 +272,7 @@ def select_recent_messages(
 
         selected_reversed.append(
             {
-                "role": str(message.get("role", "user")),
+                "role": role,
                 "content": normalized_content,
             }
         )

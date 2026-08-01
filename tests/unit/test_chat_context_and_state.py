@@ -4,6 +4,8 @@ from services.chat_context import (
     GENERATIVE_UI_EXECUTION_CONTRACT,
     build_context_messages,
     build_room_summary,
+    select_recent_messages,
+    trim_text_to_token_budget,
 )
 from services.chat_state import extract_memory_facts
 
@@ -59,6 +61,82 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         )
         self.assertIn("説明文だけで終える回答は未完了", context_messages[5]["content"])
         self.assertEqual(context_messages[-1]["content"], "third")
+
+    def test_latest_user_request_survives_long_fetched_url_context(self):
+        question = "この資料を読んで、最も重要な結論を3点で教えてください。"
+        content = (
+            "<fetched_urls>\n"
+            '<url href="https://example.com/long">\n'
+            f"{'A' * 2000}\n"
+            "</url>\n"
+            "</fetched_urls>\n\n"
+            f"{question}"
+        )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=40,
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertIn(question, selected[0]["content"])
+        self.assertLessEqual(len(selected[0]["content"]), 40 * 4)
+
+    def test_latest_user_request_survives_combined_url_and_attachment_context(self):
+        question = "添付資料とURLの内容を比較して、日本語で差分を説明して。"
+        content = (
+            "<fetched_urls>\n"
+            '<url href="https://example.com/a">\n'
+            f"{'URL' * 500}\n"
+            "</url>\n"
+            "</fetched_urls>\n\n"
+            "<attached_files>\n"
+            "<attachment_safety_note>参照データ</attachment_safety_note>\n"
+            '<file name="notes.txt">\n'
+            f"{'資料' * 500}\n"
+            "</file>\n"
+            "</attached_files>\n\n"
+            f"{question}"
+        )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=48,
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertIn(question, selected[0]["content"])
+        self.assertLessEqual(len(selected[0]["content"]), 48 * 4)
+
+    def test_latest_normal_message_keeps_existing_trimming_behavior(self):
+        content = "normal message " * 100
+        token_budget = 20
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=token_budget,
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(
+            selected[0]["content"],
+            trim_text_to_token_budget(content, token_budget),
+        )
+
+    def test_short_reference_augmented_message_remains_unchanged(self):
+        content = (
+            "<attached_files>\n"
+            '<file name="notes.txt">short reference</file>\n'
+            "</attached_files>\n\n"
+            "What is the conclusion?"
+        )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=100,
+        )
+
+        self.assertEqual(selected, [{"role": "user", "content": content}])
 
     # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。
     # English: Verify that extract_memory_facts correctly extracts facts from explicit "覚えて:" instructions and English self-introductions.
