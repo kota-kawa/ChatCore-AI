@@ -11,7 +11,6 @@ from services.chat_context import (
     select_recent_messages,
     trim_text_to_token_budget,
 )
-from services.chat_state import extract_memory_facts
 
 
 # 日本語: チャットのコンテキスト構築と状態管理ロジックをテストするクラス。
@@ -326,19 +325,6 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             normalize_message_text("語句    の   あいだ   \n次の行   "),
             "語句 の あいだ\n次の行",
         )
-
-    # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。
-    # English: Verify that extract_memory_facts correctly extracts facts from explicit "覚えて:" instructions and English self-introductions.
-    def test_extract_memory_facts_handles_explicit_and_structured_preferences(self):
-        facts = extract_memory_facts(
-            "覚えて: 箇条書きで短く答えて\nMy name is Kota.\nI prefer concise answers."
-        )
-
-        # 日本語: 各ソースから適切に事実が抽出されていることを確認
-        # English: Confirm facts are correctly extracted from each source
-        self.assertIn("箇条書きで短く答えて", facts)
-        self.assertIn("ユーザー名: Kota", facts)
-        self.assertIn("ユーザーの好み: concise answers", facts)
 
 
 if __name__ == "__main__":

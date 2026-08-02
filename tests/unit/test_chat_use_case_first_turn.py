@@ -179,9 +179,20 @@ class ChatUseCaseFirstTurnTestCase(unittest.TestCase):
             captured_context["recent_messages"],
             [{"role": "user", "content": user_message}],
         )
-        self.assertEqual(captured_context["memory_facts"], ["remembered fact"])
+        # 記憶抽出はLLM呼び出しのため応答経路から外れており、今ターンの文脈には
+        # 反映されない。今ターンの発話自体は recent_messages に入っている。
+        # Memory extraction costs an LLM call and now runs off the response path,
+        # so it does not feed this turn's context; the message itself is already
+        # present in recent_messages.
+        self.assertEqual(captured_context["memory_facts"], [])
         deps.should_extract_context.assert_called_once_with(42)
-        submitted_context_checks.assert_called_once()
+        # 記憶抽出と文脈候補抽出の2件がバックグラウンドへ回されること
+        # Both memory extraction and context-candidate extraction are backgrounded
+        self.assertEqual(submitted_context_checks.call_count, 2)
+        self.assertIs(
+            submitted_context_checks.call_args_list[0].args[0],
+            deps.remember_facts_from_message,
+        )
         deps.schedule_context_extraction.assert_called_once_with(
             42,
             room_id="room-1",

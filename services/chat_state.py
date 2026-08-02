@@ -1,66 +1,24 @@
 from __future__ import annotations
 
-import re
 import time
 from typing import Any
 
-from .chat_context import build_room_summary
+from .chat_summary import build_room_summary_text
 from .db import Error, get_db_connection, is_retryable_db_error, rollback_connection
 from .datetime_serialization import serialize_datetime_iso
+from .memory_extraction import extract_memory_facts
 
 DB_WRITE_MAX_ATTEMPTS = 3
 DB_RETRY_BACKOFF_SECONDS = 0.05
-MAX_MEMORY_FACT_LENGTH = 280
 MAX_MEMORY_FACTS_FOR_CONTEXT = 8
-_MULTISPACE_PATTERN = re.compile(r"\s+")
 
-_REMEMBER_PATTERN = re.compile(
-    r"(?i)(?:^|\n)\s*(?:remember(?: that)?|remember:|覚えて(?:おいて)?[:：]?)(.+)"
-)
-_NAME_PATTERN = re.compile(r"(?i)\bmy name is\s+([^\n.!?]{1,80})")
-_CALL_ME_PATTERN = re.compile(r"(?i)\bcall me\s+([^\n.!?]{1,80})")
-_PREFERENCE_PATTERN = re.compile(r"(?i)\bi prefer\s+([^\n.!?]{1,120})")
-_FORMAT_PATTERN = re.compile(
-    r"(?:今後は|これからは|以後は)([^\n。！？]{1,120})(?:で|を)?(?:お願いします|してください)?"
-)
-
-
-# 記憶事実のテキストを正規化（トリミング、連続スペースの置換、文字数制限）する
-# Normalize memory fact text (trimming, replacing multiple spaces, capping length)
-def _normalize_fact_text(text: str) -> str:
-    normalized = text if isinstance(text, str) else str(text)
-    normalized = normalized.strip().replace("\r\n", "\n").replace("\r", "\n")
-    normalized = _MULTISPACE_PATTERN.sub(" ", normalized)
-    return normalized[:MAX_MEMORY_FACT_LENGTH].strip(" .")
-
-
-# メッセージから記憶すべき事実（名前、呼び名、好み、回答スタイルなど）を抽出する
-# Extract memory facts (name, call-me name, preference, format preference, etc.) from the message
-def extract_memory_facts(message: str) -> list[str]:
-    normalized = message if isinstance(message, str) else str(message)
-    facts: list[str] = []
-
-    def _append_fact(value: str) -> None:
-        normalized_fact = _normalize_fact_text(value)
-        if normalized_fact and normalized_fact not in facts:
-            facts.append(normalized_fact)
-
-    for match in _REMEMBER_PATTERN.finditer(normalized):
-        _append_fact(match.group(1))
-
-    for match in _NAME_PATTERN.finditer(normalized):
-        _append_fact(f"ユーザー名: {match.group(1).strip()}")
-
-    for match in _CALL_ME_PATTERN.finditer(normalized):
-        _append_fact(f"希望する呼び名: {match.group(1).strip()}")
-
-    for match in _PREFERENCE_PATTERN.finditer(normalized):
-        _append_fact(f"ユーザーの好み: {match.group(1).strip()}")
-
-    for match in _FORMAT_PATTERN.finditer(normalized):
-        _append_fact(f"回答スタイルの希望: {match.group(1).strip()}")
-
-    return facts
+__all__ = [
+    "extract_memory_facts",
+    "get_room_summary",
+    "list_room_memory_facts",
+    "rebuild_room_summary",
+    "remember_facts_from_message",
+]
 
 
 # チャットルームに紐づくアクティブな記憶事実のテキストリストを取得する
@@ -206,8 +164,16 @@ def get_room_summary(chat_room_id: str) -> dict[str, Any] | None:
 
 # メッセージ履歴からチャットルームの要約を再構築してデータベースに保存（または削除）する
 # Rebuild the chat room summary from message history and save (or delete if empty) it in the database
-def rebuild_room_summary(chat_room_id: str, messages: list[dict[str, str]]) -> str:
-    summary_text, archived_count = build_room_summary(messages)
+def rebuild_room_summary(
+    chat_room_id: str,
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+) -> str:
+    # 要約は会話で選択中のモデルに任せる。model 未指定時は決定的な抜粋方式になる。
+    # Summarize with the conversation's own model; without one the deterministic
+    # excerpt summary is used instead.
+    summary_text, archived_count = build_room_summary_text(messages, model=model)
 
     for attempt in range(1, DB_WRITE_MAX_ATTEMPTS + 1):
         conn = None
