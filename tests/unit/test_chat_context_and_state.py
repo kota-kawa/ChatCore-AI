@@ -7,6 +7,7 @@ from services.chat_context import (
     build_context_messages,
     build_room_summary,
     estimate_token_count,
+    normalize_message_text,
     select_recent_messages,
 )
 from services.chat_state import extract_memory_facts
@@ -230,6 +231,53 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
         self.assertEqual(archived_count, 1)
         self.assertIn("最初の要件", summary)
+
+    # 日本語: 貼り付けられたコードの字下げが、モデルへ渡る直前まで保持されることを検証します。
+    # English: Verify that indentation in pasted code survives all the way to the model payload.
+    def test_recent_messages_preserve_code_indentation(self):
+        code_message = (
+            "このコードを直して\n"
+            "```python\n"
+            "def outer():\n"
+            "    if flag:\n"
+            "        return inner(\n"
+            "            value,\n"
+            "        )\n"
+            "    return None\n"
+            "```"
+        )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": code_message}],
+            token_budget=400,
+        )
+
+        content = selected[0]["content"]
+        self.assertIn("    if flag:", content)
+        self.assertIn("        return inner(", content)
+        self.assertIn("            value,", content)
+
+    # 日本語: ネストした Markdown 箇条書きの階層が保持されることを検証します。
+    # English: Verify that nested Markdown list levels are preserved.
+    def test_recent_messages_preserve_nested_markdown_list_levels(self):
+        list_message = "手順\n- 親項目\n  - 子項目\n    - 孫項目"
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": list_message}],
+            token_budget=400,
+        )
+
+        content = selected[0]["content"]
+        self.assertIn("\n  - 子項目", content)
+        self.assertIn("\n    - 孫項目", content)
+
+    # 日本語: 行中の余分な空白と行末の空白は従来どおり圧縮されることを検証します。
+    # English: Verify that redundant mid-line and trailing whitespace is still compacted.
+    def test_normalize_message_text_still_compacts_redundant_whitespace(self):
+        self.assertEqual(
+            normalize_message_text("語句    の   あいだ   \n次の行   "),
+            "語句 の あいだ\n次の行",
+        )
 
     # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。
     # English: Verify that extract_memory_facts correctly extracts facts from explicit "覚えて:" instructions and English self-introductions.

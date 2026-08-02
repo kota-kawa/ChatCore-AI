@@ -5,7 +5,14 @@ import math
 import re
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
-_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
+# 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
+# 以前は全ての空白を1つに潰していたため、貼り付けられた Python/YAML や
+# ネストした Markdown 箇条書きの階層がモデルに届く前に失われていた。
+# Preserve leading indentation and collapse only mid-line whitespace runs.
+# Collapsing every run flattened pasted Python/YAML and nested Markdown lists
+# before the model ever saw them.
+_INLINE_WHITESPACE_PATTERN = re.compile(r"(?<=\S)[ \t]+")
+_TRAILING_WHITESPACE_PATTERN = re.compile(r"[ \t]+$", re.MULTILINE)
 _BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
 _REFERENCE_CONTEXT_START_PATTERN = re.compile(
     r"\A<(?:fetched_urls|attached_files)(?:\s[^>]*)?>",
@@ -82,7 +89,8 @@ def normalize_message_text(text: str) -> str:
     normalized = html.unescape(normalized)
     normalized = _HTML_BR_PATTERN.sub("\n", normalized)
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
-    normalized = _WHITESPACE_PATTERN.sub(" ", normalized)
+    normalized = _TRAILING_WHITESPACE_PATTERN.sub("", normalized)
+    normalized = _INLINE_WHITESPACE_PATTERN.sub(" ", normalized)
     normalized = _BLANK_LINES_PATTERN.sub("\n\n", normalized)
     return normalized.strip()
 
