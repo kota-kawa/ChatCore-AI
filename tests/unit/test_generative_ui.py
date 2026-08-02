@@ -843,6 +843,37 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(normalized.text, "こちらが完成イメージです。")
         self.assertIsNone(normalized.parts)
 
+    def test_explicit_ui_request_recovers_separate_source_blocks(self):
+        """明示的な生成UI要求では、誤って分割されたソースを安全にArtifact化する。"""
+        raw = (
+            "生成しました。\n\n"
+            "```html\n<div id=\"app\"><button id=\"toggle\">切替</button><p id=\"state\">未選択</p></div>\n```\n"
+            "```css\n#app{padding:16px}button{font-weight:700}\n```\n"
+            "```javascript\ndocument.getElementById('toggle').addEventListener('click',()=>{document.getElementById('state').textContent='選択済み';});\n```"
+        )
+
+        normalized = normalize_response_with_artifacts(
+            raw,
+            artifact_intent_text="生成UIで選択できるカードを作って",
+        )
+
+        self.assertEqual(normalized.validation_errors, [])
+        self.assertIsNotNone(normalized.parts)
+        artifact = normalized.parts[1]["artifact"]
+        self.assertIn('id="app"', artifact["html"])
+        self.assertIn("addEventListener", artifact["js"])
+
+    def test_ordinary_code_blocks_are_not_recovered_without_ui_request(self):
+        """通常のコード相談を意図せず生成UIへ変換しない。"""
+        raw = "```html\n<div id=\"app\">sample</div>\n```"
+
+        normalized = normalize_response_with_artifacts(
+            raw,
+            artifact_intent_text="このHTMLの意味を説明して",
+        )
+
+        self.assertIsNone(normalized.parts)
+
     def test_explicit_text_only_request_does_not_create_fallback(self):
         """Request-aware recovery respects explicit UI opt-outs."""
         normalized = normalize_response_with_artifacts(

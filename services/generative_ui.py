@@ -793,6 +793,7 @@ def _extract_artifact_candidates(
     text: str,
     *,
     recover_truncated: bool = False,
+    recover_explicit_output_variants: bool = False,
 ) -> list[_ArtifactCandidate]:
     candidates: list[_ArtifactCandidate] = []
     occupied_spans: list[tuple[int, int]] = []
@@ -802,10 +803,33 @@ def _extract_artifact_candidates(
         candidates.append(candidate)
         occupied_spans.append(candidate.span)
 
+    # A requested generated UI occasionally arrives as an otherwise-valid JSON
+    # block or as separate HTML/CSS/JS blocks. Recover only those explicit UI
+    # requests: applying this to ordinary chat would turn code examples into UI.
+    if recover_explicit_output_variants:
+        for match in GENERIC_JSON_BLOCK_RE.finditer(text):
+            span = match.span()
+            if _span_overlaps_any(span, occupied_spans):
+                continue
+            raw_json = match.group("json")
+            if not _looks_like_artifact_json(raw_json):
+                continue
+            candidate = _ArtifactCandidate(raw_json=raw_json, span=span)
+            candidates.append(candidate)
+            occupied_spans.append(candidate.span)
+
+        source_candidates = _extract_source_code_artifact_candidates(text, occupied_spans)
+        candidates.extend(source_candidates)
+        occupied_spans.extend(candidate.span for candidate in source_candidates)
+
     if recover_truncated:
         truncated_candidates = _extract_truncated_artifact_candidates(text, occupied_spans)
         candidates.extend(truncated_candidates)
         occupied_spans.extend(candidate.span for candidate in truncated_candidates)
+
+    if recover_explicit_output_variants:
+        fenced_spans = [match.span() for match in FENCED_BLOCK_RE.finditer(text)]
+        candidates.extend(_find_raw_artifact_candidates(text, [*fenced_spans, *occupied_spans]))
     return sorted(candidates, key=lambda candidate: candidate.span)
 
 
@@ -1310,16 +1334,17 @@ def normalize_response_with_artifacts(
     allow_fallback: bool = True,
     artifact_intent_text: str | None = None,
 ) -> NormalizedGenerativeResponse:
-    """Extract only explicitly fenced sandbox artifacts from a model response.
-
-    ``allow_fallback`` remains a no-op for call-site compatibility. UI must never
-    be inferred from prose, ordinary code blocks, or generic JSON.
-    """
+    """Extract sandbox artifacts, recovering format variants only for explicit UI requests."""
     # Kept as a public keyword for older callers. Fallback UI synthesis was
     # intentionally removed, so its value no longer changes behavior.
     _ = allow_fallback
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
-    candidates = _extract_artifact_candidates(text, recover_truncated=recover_truncated)
+    requested_artifact = _has_requested_artifact_intent(artifact_intent_text or "")
+    candidates = _extract_artifact_candidates(
+        text,
+        recover_truncated=recover_truncated,
+        recover_explicit_output_variants=requested_artifact,
+    )
     
     button_candidates: list[_ArtifactCandidate] = []
     for match in INTERACTIVE_BUTTONS_BLOCK_RE.finditer(text):
