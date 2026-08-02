@@ -16,7 +16,10 @@ from fastapi import Request
 
 from .background_executor import submit_background_task
 from services.cache import get_redis_client
-from services.generative_ui import normalize_response_with_artifacts
+from services.generative_ui import (
+    normalize_response_with_artifact_retry,
+    normalize_response_with_artifacts,
+)
 
 from .llm import (
     LlmAuthenticationError,
@@ -24,6 +27,7 @@ from .llm import (
     LlmRateLimitError,
     LlmRetryableProviderError,
     LlmServiceError,
+    get_llm_response,
     get_llm_response_stream,
     is_retryable_llm_error,
 )
@@ -1092,10 +1096,13 @@ class ChatGenerationJob:
             if trace_block:
                 separator = "" if not bot_reply or trace_block.endswith("\n\n") else "\n\n"
                 bot_reply = f"{trace_block}{separator}{bot_reply}"
-        normalized_response = normalize_response_with_artifacts(
+        latest_user_message = _latest_user_message_text(self._conversation_messages)
+        normalized_response = normalize_response_with_artifact_retry(
             bot_reply,
-            recover_truncated=True,
-            artifact_intent_text=_latest_user_message_text(self._conversation_messages),
+            conversation_messages=current_messages,
+            model=self._model,
+            generate_response=get_llm_response,
+            artifact_intent_text=latest_user_message,
         )
         if normalized_response.validation_errors:
             logger.warning(

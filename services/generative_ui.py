@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from html import escape as escape_html, unescape as unescape_html
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+
+logger = logging.getLogger(__name__)
 
 ARTIFACT_BLOCK_RE = re.compile(
     r"```chatcore-artifact(?:\s+json)?\s*"
@@ -155,9 +158,11 @@ _STRONG_ARTIFACT_INTENT_RE = re.compile(
 # "check the tables and charts"). Only treat them as intent for short announcements.
 _WEAK_ARTIFACT_INTENT_RE = re.compile(
     r"(可視化|図解|インフォグラフィック|ダッシュボード|チャート|グラフ|"
-    r"タイムライン|フローチャート|比較表|カードビュー)",
+    r"タイムライン|フローチャート|比較表|カードビュー|"
+    r"visuali[sz]ation|diagram|infographic|dashboard|chart|flowchart|timeline|interactive demo)",
     re.IGNORECASE,
 )
+_UI_TERM_RE = re.compile(r"(?<![A-Za-z0-9_])ui(?![A-Za-z0-9_])", re.IGNORECASE)
 _DISPLAY_ONLY_INTENT_RE = re.compile(
     r"(表示します|表示しました|作成します|作成しました|用意しました|以下に示します)",
     re.IGNORECASE,
@@ -165,6 +170,11 @@ _DISPLAY_ONLY_INTENT_RE = re.compile(
 # 弱いシグナルや表示宣言から生成UIを補完するのは、本文が短い宣言文のときに限る。
 # Only synthesize a fallback from weak/display-only intent when the prose is short.
 _SHORT_INTENT_CHAR_LIMIT = 180
+_UI_REQUEST_ACTION_RE = re.compile(
+    r"(?:作(?:って|成)|生成|描(?:いて|画)|表示(?:して)?|見せて|可視化(?:して)?|"
+    r"create|make|build|generate|draw|render|show|visuali[sz]e)",
+    re.IGNORECASE,
+)
 # Web検索結果は <details class="web-search-sources …">…</details> として本文へ差し込まれる。
 # fallback生成やintent判定では本文だけを見たいので、このブロックを除去する。
 # Web search results are injected as <details class="web-search-sources …">…</details>
@@ -536,16 +546,28 @@ def _has_requested_artifact_intent(text: str) -> bool:
     stripped = _strip_web_search_sources_html(text or "").strip()
     if not stripped or _NO_ARTIFACT_REQUEST_RE.search(stripped):
         return False
-    return bool(
-        _STRONG_ARTIFACT_INTENT_RE.search(stripped)
-        or _WEAK_ARTIFACT_INTENT_RE.search(stripped)
-        or _THREE_INTENT_RE.search(stripped)
+    if _STRONG_ARTIFACT_INTENT_RE.search(stripped):
+        return True
+    has_action = bool(_UI_REQUEST_ACTION_RE.search(stripped))
+    weak_visual_request = bool(
+        _WEAK_ARTIFACT_INTENT_RE.search(stripped)
+        and (has_action or len(stripped) <= 24)
     )
+    explicit_ui_request = bool(_UI_TERM_RE.search(stripped) and has_action)
+    explicit_three_request = bool(_THREE_INTENT_RE.search(stripped) and has_action)
+    return weak_visual_request or explicit_ui_request or explicit_three_request
 
 
 def _has_three_intent(text: str) -> bool:
     stripped = _strip_web_search_sources_html(text or "")
     return bool(stripped and _THREE_INTENT_RE.search(stripped))
+
+
+def requested_generative_ui_mode(text: str) -> Literal["2D", "3D"] | None:
+    """Return the explicitly requested UI mode without treating 3D discussion as generation."""
+    if not _has_requested_artifact_intent(text):
+        return None
+    return "3D" if _has_three_intent(text) else "2D"
 
 
 # 開き括弧 { に対応する閉じ括弧 } のペアをパースし、JSONオブジェクトの終端インデックスを返します。
@@ -1403,3 +1425,165 @@ def normalize_response_with_artifacts(
         parts=parts,
         validation_errors=validation_errors,
     )
+
+
+def requested_artifact_quality_issues(
+    normalized: NormalizedGenerativeResponse,
+    mode: Literal["2D", "3D"],
+) -> list[str]:
+    """Return severe completeness/quality issues that justify one model repair pass."""
+    artifacts = [
+        part.get("artifact")
+        for part in (normalized.parts or [])
+        if part.get("type") == "sandbox_artifact" and isinstance(part.get("artifact"), dict)
+    ]
+    issues = list(normalized.validation_errors)
+    if len(artifacts) != 1:
+        issues.append(f"expected exactly one artifact, received {len(artifacts)}")
+        return issues
+
+    artifact = artifacts[0]
+    html = _coerce_string(artifact.get("html"))
+    css = _coerce_string(artifact.get("css"))
+    js = _coerce_string(artifact.get("js"))
+    visible_text = re.sub(r"<[^>]+>", " ", html)
+    visible_text = re.sub(r"\s+", " ", unescape_html(visible_text)).strip()
+
+    if "id=\"app\"" not in html and "id='app'" not in html:
+        issues.append("html is missing the app root")
+
+    if mode == "3D":
+        libraries = artifact.get("libraries")
+        if not isinstance(libraries, list) or "three" not in libraries:
+            issues.append("3D artifact is missing the three library")
+        for label, pattern in (
+            ("renderer", r"\bTHREE\.WebGLRenderer\s*\("),
+            ("scene", r"\bTHREE\.Scene\s*\("),
+            ("camera", r"\bTHREE\.(?:Perspective|Orthographic)Camera\s*\("),
+            ("visible geometry", r"\bTHREE\.(?:Mesh|Line|Points|Sprite)\s*\("),
+            ("render call", r"\brenderer\.render\s*\("),
+        ):
+            if not re.search(pattern, js):
+                issues.append(f"3D artifact is missing a {label}")
+        if len(js) < 500:
+            issues.append("3D implementation is too small to be a polished scene")
+        if len(css) < 80:
+            issues.append("3D presentation styling is too sparse")
+    else:
+        tag_count = len(re.findall(r"<[A-Za-z][^>]*>", html))
+        if tag_count < 4 or len(visible_text) < 12:
+            issues.append("2D initial content is too sparse")
+        if len(css) < 160:
+            issues.append("2D presentation styling is too sparse")
+        if len(html) + len(css) + len(js) < 500:
+            issues.append("2D implementation is too small to be a polished UI")
+    return issues
+
+
+def _build_artifact_repair_messages(
+    conversation_messages: list[dict[str, Any]],
+    raw_text: str,
+    intent_text: str,
+    mode: Literal["2D", "3D"],
+    issues: list[str],
+) -> list[dict[str, Any]]:
+    issue_lines = "\n".join(f"- {issue}" for issue in issues[:8])
+    mode_requirements = (
+        "Include libraries:[\"three\"] and use the existing global THREE. Build a complete "
+        "scene with renderer, camera, lighting, visible geometry, polished materials, a fitted "
+        "composition, capped pixel ratio, resize handling, and useful pointer interaction."
+        if mode == "3D"
+        else "Build a complete responsive product-style UI with meaningful initial content, clear "
+        "visual hierarchy, deliberate spacing and typography, strong contrast, and interaction "
+        "when it helps the requested task. Do not return a prose card or a lightly styled table."
+    )
+    repair_prompt = (
+        "Your previous generated-UI answer failed the application's completion or quality gate. "
+        "Regenerate the user's requested result now. Preserve the user's subject, data, language, "
+        "and intent; improve only the implementation.\n\n"
+        f"Required mode: {mode}\n"
+        f"Detected problems:\n{issue_lines}\n\n"
+        f"{mode_requirements}\n"
+        "Return exactly one complete ```chatcore-artifact fenced block and no separate HTML, CSS, "
+        "JavaScript, JSON, explanation, or UI_MODE text. The JSON must contain version, title, "
+        "description, height, html, css, and js. The html must contain id=\"app\". Use no network, "
+        "external resources, imports, storage, or parent-page access. Keep the result compact enough "
+        "to finish, validate JSON escaping, and include the closing brace and closing fence."
+    )
+    messages = [dict(message) for message in conversation_messages]
+    if raw_text.strip():
+        messages.append({"role": "assistant", "content": raw_text[-16000:]})
+    messages.append({"role": "system", "content": repair_prompt})
+    # Repeat the original request last so provider language selection and subject
+    # grounding are based on the user, not on the English repair instruction.
+    messages.append({"role": "user", "content": intent_text[-8000:]})
+    return messages
+
+
+def normalize_response_with_artifact_retry(
+    raw_text: str | None,
+    *,
+    conversation_messages: list[dict[str, Any]],
+    model: str,
+    generate_response: Callable[[list[dict[str, Any]], str], str | None],
+    artifact_intent_text: str | None = None,
+) -> NormalizedGenerativeResponse:
+    """Normalize a response and make one targeted repair attempt for requested low-quality UI."""
+    source_text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
+    intent_text = artifact_intent_text or ""
+    normalized = normalize_response_with_artifacts(
+        source_text,
+        recover_truncated=True,
+        artifact_intent_text=intent_text,
+    )
+    mode = requested_generative_ui_mode(intent_text)
+    if mode is None:
+        return normalized
+
+    issues = requested_artifact_quality_issues(normalized, mode)
+    if not issues:
+        return normalized
+
+    repair_messages = _build_artifact_repair_messages(
+        conversation_messages,
+        source_text,
+        intent_text,
+        mode,
+        issues,
+    )
+    try:
+        repaired_text = generate_response(repair_messages, model)
+    except Exception:
+        logger.warning(
+            "Generated UI repair request failed; keeping the original response.",
+            exc_info=True,
+        )
+        return normalized
+    if not repaired_text:
+        return normalized
+
+    repaired = normalize_response_with_artifacts(
+        repaired_text,
+        recover_truncated=True,
+        artifact_intent_text=intent_text,
+    )
+    repaired_issues = requested_artifact_quality_issues(repaired, mode)
+    if not repaired_issues:
+        logger.info("Repaired a requested %s generative UI response.", mode)
+        return repaired
+
+    logger.warning(
+        "Generated UI repair did not pass the quality gate.",
+        extra={"quality_issues": repaired_issues},
+    )
+    # Prefer a valid repaired artifact over an original response with no artifact,
+    # even when it still misses a polish heuristic. This keeps repair monotonic.
+    repaired_has_artifact = any(
+        part.get("type") == "sandbox_artifact" for part in (repaired.parts or [])
+    )
+    original_has_artifact = any(
+        part.get("type") == "sandbox_artifact" for part in (normalized.parts or [])
+    )
+    if repaired_has_artifact and not original_has_artifact:
+        return repaired
+    return normalized

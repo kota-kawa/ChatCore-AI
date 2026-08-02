@@ -539,6 +539,61 @@ class ChatStreamingTestCase(unittest.TestCase):
         self.assertEqual(persisted_messages[0][0], "説明します。")
         self.assertEqual(persisted_messages[0][1][1]["type"], "sandbox_artifact")
 
+    def test_background_generation_job_repairs_missing_requested_generative_ui(self):
+        repaired_artifact = {
+            "version": 1,
+            "title": "比較マップ",
+            "description": "2案の違いを視覚的に比較します",
+            "height": 400,
+            "html": (
+                '<div id="app"><header><span>Comparison</span><h2>2案の特徴</h2></header>'
+                '<main><article><strong>A案</strong><p>速度を優先する構成です。</p></article>'
+                '<article><strong>B案</strong><p>品質を優先する構成です。</p></article></main></div>'
+            ),
+            "css": (
+                "#app{padding:24px;border-radius:18px;background:linear-gradient(135deg,#f8fafc,#eef2ff);"
+                "color:#172033;font:14px/1.6 system-ui,sans-serif}header{margin-bottom:18px}header span{"
+                "color:#4f46e5;font-weight:700}h2{margin:4px 0;font-size:22px}main{display:grid;"
+                "grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}article{padding:18px;border:1px solid #cbd5e1;"
+                "border-radius:14px;background:#fff;box-shadow:0 12px 28px #1e3a8a14}article p{color:#475569}"
+            ),
+            "js": "document.getElementById('app').dataset.ready='true';",
+        }
+        repaired_block = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(repaired_artifact, ensure_ascii=False)}\n"
+            "```"
+        )
+        persisted_messages = []
+
+        with (
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(["比較結果を文章で説明します。"]),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response",
+                return_value=repaired_block,
+            ) as mock_repair,
+        ):
+            job = start_generation_job(
+                "guest:sid-ui-repair:default",
+                conversation_messages=[
+                    {"role": "user", "content": "2案の比較を生成UIで見せて"}
+                ],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, message_parts=None: persisted_messages.append(
+                    (response, message_parts)
+                ),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        mock_repair.assert_called_once()
+        self.assertIn("event: done", body)
+        self.assertIn('"type": "sandbox_artifact"', body)
+        self.assertEqual(persisted_messages[0][1][1]["artifact"]["title"], "比較マップ")
+
     # 日本語: Web検索拡張を行った際、バックグラウンド生成ジョブが検索ソース情報を応答文末に追加することを検証します。
     # English: Verify that the background generation job appends web search sources to the end of the reply.
     def test_background_generation_job_appends_web_search_sources_to_reply(self):
