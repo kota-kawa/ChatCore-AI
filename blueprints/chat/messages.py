@@ -38,7 +38,10 @@ from services.web_search import (
     inject_prior_web_search_context,
 )
 from services.project_service import get_project_context
-from services.generative_ui import build_message_parts_context, normalize_response_with_artifacts
+from services.generative_ui import (
+    build_message_parts_context,
+    normalize_response_with_artifact_retry,
+)
 from services.chat_state import (
     get_room_summary,
     list_room_memory_facts,
@@ -345,6 +348,8 @@ You are the user's conversation partner and an AI assistant that supports their 
 - A request for text only, no UI, no diagram, or ordinary code/JSON means UI_MODE is NONE. Do not turn comparisons, procedures, calculations, classifications, explanations, code examples, or JSON examples into an Artifact unless the user explicitly requested visual or interactive output.
 - When UI_MODE is 2D or 3D, output exactly one complete ```chatcore-artifact fenced block after a short introduction. Its JSON must contain version, title, html, css, and js; html must include an element with id="app". Put no alternative HTML, CSS, JavaScript, or JSON code blocks beside it.
 - Keep artifacts small, self-contained, and safe for the sandbox. Use HTML for the initial visible structure, CSS for styling, and JavaScript only for behavior. Use no external resources, network calls, storage, module imports, or browser add-ons.
+- Before coding, privately choose the single visual relationship and composition that best communicate the user's subject. Make the result feel purpose-built rather than a generic stack of cards: use clear hierarchy, deliberate spacing, responsive layout, readable typography, accessible contrast, and meaningful initial content. Do not output the planning notes.
+- A requested Artifact must be useful on first render. Avoid empty shells, prose pasted into one card, barely styled tables, placeholder controls, decorative animation without information value, and repeated dashboard layouts unrelated to the subject.
 - For 3D, add `"libraries":["three"]`. Use the already available global `THREE`: create a renderer, append its canvas to `document.getElementById("app")`, then create a scene, camera, light, and at least one geometry. Use `app.clientWidth || 560` for the width, a fixed visible height, and core Three.js only. Do not import Three.js, OrbitControls, loaders, textures, or models from a URL.
 - Before sending a requested Artifact, check that its JSON has one opening and closing object, all embedded newlines and quotes are JSON-escaped, the closing ``` fence is present, and the initial render is visibly non-empty. Prefer a compact complete result over a detailed result that might be cut off.
 
@@ -1372,17 +1377,23 @@ async def chat_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    normalized_response = normalize_response_with_artifacts(
-        bot_reply,
-        recover_truncated=True,
-        artifact_intent_text=next(
-            (
-                str(message.get("content") or "")
-                for message in reversed(conversation_messages)
-                if message.get("role") == "user"
-            ),
-            "",
+    latest_user_message = next(
+        (
+            str(message.get("content") or "")
+            for message in reversed(conversation_messages)
+            if message.get("role") == "user"
         ),
+        "",
+    )
+    normalized_response = await run_blocking(
+        partial(
+            normalize_response_with_artifact_retry,
+            conversation_messages=conversation_messages,
+            model=model,
+            generate_response=get_llm_response,
+            artifact_intent_text=latest_user_message,
+        ),
+        bot_reply,
     )
     if normalized_response.validation_errors:
         logger.warning(
@@ -1771,17 +1782,23 @@ async def chat_edit_and_regenerate(
     except (LlmInvalidModelError, LlmRateLimitError, LlmAuthenticationError, LlmServiceError) as exc:
         return jsonify({"error": str(exc)}, status_code=500)
 
-    normalized_response = normalize_response_with_artifacts(
-        bot_reply,
-        recover_truncated=True,
-        artifact_intent_text=next(
-            (
-                str(message.get("content") or "")
-                for message in reversed(conversation_messages)
-                if message.get("role") == "user"
-            ),
-            "",
+    latest_user_message = next(
+        (
+            str(message.get("content") or "")
+            for message in reversed(conversation_messages)
+            if message.get("role") == "user"
         ),
+        "",
+    )
+    normalized_response = await run_blocking(
+        partial(
+            normalize_response_with_artifact_retry,
+            conversation_messages=conversation_messages,
+            model=model,
+            generate_response=get_llm_response,
+            artifact_intent_text=latest_user_message,
+        ),
+        bot_reply,
     )
     if normalized_response.validation_errors:
         logger.warning(

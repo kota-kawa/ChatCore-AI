@@ -6,7 +6,10 @@ from services.generative_ui import (
     GenerativeUiValidationError,
     build_message_parts_context,
     decode_message_parts,
+    normalize_response_with_artifact_retry,
     normalize_response_with_artifacts,
+    requested_artifact_quality_issues,
+    requested_generative_ui_mode,
     validate_artifact_payload,
 )
 
@@ -20,6 +23,31 @@ VALID_ARTIFACT = {
     "html": '<div id="app"></div>',
     "css": "#app{padding:16px;border-radius:8px;background:#f8fafc;}",
     "js": "document.getElementById('app').textContent = 'ready';",
+}
+
+POLISHED_2D_ARTIFACT = {
+    "version": 1,
+    "title": "優先度マップ",
+    "description": "項目を選択して詳細を確認できます",
+    "height": 420,
+    "html": (
+        '<div id="app"><header><span>Priority map</span><h2>今週の重点項目</h2></header>'
+        '<main><button class="item active">品質改善</button><button class="item">速度改善</button>'
+        '<section><strong>品質改善</strong><p>失敗率を下げて初回表示を安定させます。</p></section></main></div>'
+    ),
+    "css": (
+        "#app{padding:24px;border-radius:18px;background:linear-gradient(135deg,#f8fafc,#eef2ff);"
+        "color:#172033;font:14px/1.6 system-ui,sans-serif;box-shadow:0 16px 36px #1e3a8a1a}"
+        "header{margin-bottom:18px}header span{color:#4f46e5;font-weight:700}h2{margin:4px 0;font-size:22px}"
+        "main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.item,section{padding:14px;"
+        "border:1px solid #cbd5e1;border-radius:12px;background:#fff}.active{color:#fff;background:#4f46e5}"
+        "section{grid-column:1/-1}section p{margin:6px 0 0;color:#475569}"
+    ),
+    "js": (
+        "const app=document.getElementById('app');app.querySelectorAll('.item').forEach((button)=>"
+        "button.addEventListener('click',()=>{app.querySelectorAll('.item').forEach((item)=>"
+        "item.classList.remove('active'));button.classList.add('active');}));"
+    ),
 }
 
 
@@ -873,6 +901,93 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         )
 
         self.assertIsNone(normalized.parts)
+
+    def test_requested_mode_does_not_treat_three_discussion_as_generation(self):
+        self.assertIsNone(requested_generative_ui_mode("Three.jsの仕組みを説明して"))
+        self.assertEqual(
+            requested_generative_ui_mode("Three.jsで回転する3D生成UIを作って"),
+            "3D",
+        )
+        self.assertEqual(requested_generative_ui_mode("比較を図解して"), "2D")
+        self.assertEqual(requested_generative_ui_mode("UIを生成して"), "2D")
+
+    def test_quality_gate_accepts_a_complete_polished_2d_artifact(self):
+        raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(POLISHED_2D_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+        normalized = normalize_response_with_artifacts(
+            raw,
+            artifact_intent_text="生成UIで見せて",
+        )
+
+        self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
+
+    def test_requested_ui_retries_missing_artifact_once(self):
+        calls = []
+
+        def generate_response(messages, model):
+            calls.append((messages, model))
+            return (
+                "```chatcore-artifact\n"
+                f"{json.dumps(POLISHED_2D_ARTIFACT, ensure_ascii=False)}\n"
+                "```"
+            )
+
+        normalized = normalize_response_with_artifact_retry(
+            "比較結果を文章で説明します。",
+            conversation_messages=[{"role": "user", "content": "比較を生成UIで見せて"}],
+            model="test-model",
+            generate_response=generate_response,
+            artifact_intent_text="比較を生成UIで見せて",
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], "test-model")
+        self.assertIn("quality gate", calls[0][0][-2]["content"])
+        self.assertEqual(calls[0][0][-1]["content"], "比較を生成UIで見せて")
+        self.assertIsNotNone(normalized.parts)
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], "優先度マップ")
+
+    def test_requested_ui_retries_a_valid_but_severely_sparse_artifact(self):
+        sparse_raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+        repaired_raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(POLISHED_2D_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifact_retry(
+            sparse_raw,
+            conversation_messages=[{"role": "user", "content": "生成UIで見せて"}],
+            model="test-model",
+            generate_response=lambda *_args: repaired_raw,
+            artifact_intent_text="生成UIで見せて",
+        )
+
+        self.assertEqual(normalized.parts[1]["artifact"]["title"], "優先度マップ")
+
+    def test_complete_requested_ui_does_not_retry(self):
+        raw = (
+            "```chatcore-artifact\n"
+            f"{json.dumps(POLISHED_2D_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifact_retry(
+            raw,
+            conversation_messages=[{"role": "user", "content": "生成UIで見せて"}],
+            model="test-model",
+            generate_response=lambda *_args: self.fail("complete UI must not be retried"),
+            artifact_intent_text="生成UIで見せて",
+        )
+
+        self.assertEqual(requested_artifact_quality_issues(normalized, "2D"), [])
 
     def test_explicit_text_only_request_does_not_create_fallback(self):
         """Request-aware recovery respects explicit UI opt-outs."""

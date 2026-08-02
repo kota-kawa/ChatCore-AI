@@ -17,7 +17,7 @@ from services.attached_files import (
 )
 from services.async_utils import run_blocking
 from services.chat_generation import ChatGenerationAlreadyRunningError
-from services.generative_ui import normalize_response_with_artifacts
+from services.generative_ui import normalize_response_with_artifact_retry
 from services.llm import (
     LlmAuthenticationError,
     LlmInvalidModelError,
@@ -754,10 +754,15 @@ class ChatPostUseCase:
             separator = "" if not bot_reply else "\n\n"
             bot_reply = f"{trace_block}{separator}{bot_reply}"
 
-        normalized_response = normalize_response_with_artifacts(
+        normalized_response = await run_blocking(
+            partial(
+                normalize_response_with_artifact_retry,
+                conversation_messages=response_messages,
+                model=model,
+                generate_response=deps.get_llm_response,
+                artifact_intent_text=user_message,
+            ),
             bot_reply,
-            recover_truncated=True,
-            artifact_intent_text=user_message,
         )
         if normalized_response.validation_errors:
             deps.logger.warning(
