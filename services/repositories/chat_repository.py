@@ -553,7 +553,7 @@ class ChatRepository:
                     cursor.close()
         raise RuntimeError("Failed to switch chat branch after retry attempts.")
 
-    def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, str]]:
+    def get_room_messages_for_llm(self, chat_room_id: str) -> list[dict[str, Any]]:
         # LLMに入力するための形式でアクティブパスの全メッセージを取得する
         # Get all messages on the active path in a format suitable for the LLM.
         with self._connection_getter() as conn:
@@ -565,7 +565,14 @@ class ChatRepository:
                 messages = []
                 for node in path:
                     role = "user" if node["sender"] == "user" else "assistant"
-                    messages.append({"role": role, "content": node["message"]})
+                    message: dict[str, Any] = {"role": role, "content": node["message"]}
+                    # Keep structured display metadata available to the context
+                    # projection layer without putting artifact source in the
+                    # persisted prose field.
+                    message_parts = decode_message_parts(node.get("message_parts"))
+                    if message_parts:
+                        message["message_parts"] = message_parts
+                    messages.append(message)
                 return messages
             finally:
                 cursor.close()

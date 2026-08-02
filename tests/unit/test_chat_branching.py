@@ -316,6 +316,34 @@ class ChatBranchingTestCase(unittest.TestCase):
             ],
         )
 
+    def test_llm_context_keeps_generated_ui_metadata_for_projection(self):
+        user_id = self._save("図を作って", "user")
+        self.repo.save_message(
+            "room-1",
+            "図を作成しました。",
+            "assistant",
+            None,
+            user_id,
+            [
+                {"type": "text", "text": "図を作成しました。"},
+                {
+                    "type": "sandbox_artifact",
+                    "artifact": {
+                        "version": 1,
+                        "title": "売上グラフ",
+                        "html": '<div id="app"></div>',
+                        "css": "",
+                        "js": "",
+                    },
+                },
+            ],
+        )
+
+        messages = self.repo.get_room_messages_for_llm("room-1")
+
+        self.assertEqual(messages[-1]["content"], "図を作成しました。")
+        self.assertEqual(messages[-1]["message_parts"][1]["artifact"]["title"], "売上グラフ")
+
     # 添付ファイルのコンテンツが、明示的に取得フラグを指定した場合のみ読み込まれ、通常は除外されることを検証します。
     # Verify that attached file contents are only loaded when explicitly requested, otherwise excluded from the path metadata.
     def test_attachment_contents_are_internal_to_explicit_active_path_load(self):

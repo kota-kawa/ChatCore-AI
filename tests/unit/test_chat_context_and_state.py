@@ -1,9 +1,12 @@
 import unittest
 
+from blueprints.chat.messages import _build_base_system_prompt
 from services.chat_context import (
+    CONTEXT_TOKEN_BUDGET,
     GENERATIVE_UI_EXECUTION_CONTRACT,
     build_context_messages,
     build_room_summary,
+    estimate_token_count,
     select_recent_messages,
     trim_text_to_token_budget,
 )
@@ -140,6 +143,77 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         )
 
         self.assertEqual(selected, [{"role": "user", "content": content}])
+
+    def test_recent_message_guarantee_respects_max_messages(self):
+        selected = select_recent_messages(
+            [
+                {"role": "user", "content": "first"},
+                {"role": "assistant", "content": "second"},
+                {"role": "user", "content": "third"},
+            ],
+            token_budget=100,
+            max_messages=1,
+        )
+
+        self.assertEqual(selected, [{"role": "user", "content": "third"}])
+
+    def test_long_previous_answer_keeps_the_complete_recent_turn(self):
+        previous_user = "私の名前はKotaで、日本語で回答してください。"
+        previous_assistant = "確認しました。" + "詳細な説明です。" * 2500
+        latest_user = "私の名前と希望する回答言語を教えてください。"
+
+        context_messages = build_context_messages(
+            base_system_prompt=_build_base_system_prompt(),
+            user_profile_prompt=None,
+            task_prompt=None,
+            room_summary="",
+            memory_facts=[],
+            recent_messages=[
+                {"role": "user", "content": previous_user},
+                {"role": "assistant", "content": previous_assistant},
+                {"role": "user", "content": latest_user},
+            ],
+        )
+
+        history = [message for message in context_messages if message["role"] != "system"]
+        self.assertEqual([message["role"] for message in history], ["user", "assistant", "user"])
+        self.assertEqual(history[0]["content"], previous_user)
+        self.assertEqual(history[-1]["content"], latest_user)
+        self.assertLess(len(history[1]["content"]), len(previous_assistant))
+
+    def test_optional_system_context_cannot_consume_recent_history_reservation(self):
+        messages = [
+            {"role": "user", "content": "最初の要件: 日本語で回答する"},
+            {"role": "assistant", "content": "承知しました。" + "説明" * 1600},
+            {"role": "user", "content": "前の要件を踏まえて続けてください。"},
+        ]
+        context_messages = build_context_messages(
+            base_system_prompt=_build_base_system_prompt(),
+            user_profile_prompt="profile " * 3000,
+            task_prompt="task " * 3000,
+            room_summary="summary " * 3000,
+            memory_facts=["memory " * 1000],
+            project_instructions="project " * 3000,
+            recent_messages=messages,
+        )
+
+        total_tokens = sum(estimate_token_count(message["content"]) for message in context_messages)
+        history = [message for message in context_messages if message["role"] != "system"]
+        self.assertLessEqual(total_tokens, CONTEXT_TOKEN_BUDGET)
+        self.assertEqual([message["role"] for message in history], ["user", "assistant", "user"])
+        self.assertEqual(history[0]["content"], messages[0]["content"])
+
+    def test_long_history_is_summarized_before_twelve_messages(self):
+        messages = [
+            {"role": "user", "content": "最初の要件: 日本語で回答"},
+            {"role": "assistant", "content": "長い回答" * 4000},
+            {"role": "user", "content": "続きの質問"},
+        ]
+
+        summary, archived_count = build_room_summary(messages)
+
+        self.assertEqual(archived_count, 1)
+        self.assertIn("最初の要件", summary)
 
     # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。
     # English: Verify that extract_memory_facts correctly extracts facts from explicit "覚えて:" instructions and English self-introductions.

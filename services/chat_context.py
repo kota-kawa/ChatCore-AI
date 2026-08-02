@@ -16,13 +16,21 @@ _REFERENCE_CONTEXT_BOUNDARY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-CONTEXT_TOKEN_BUDGET = 6000
+# This is an application input budget, not an LLM provider context-window limit.
+# It deliberately leaves sufficient room for the fixed product prompt and a
+# complete recent turn. Provider-specific APIs remain the final authority on
+# their full request-window limits.
+CONTEXT_TOKEN_BUDGET = 12000
 SUMMARY_TOKEN_BUDGET = 900
 MEMORY_TOKEN_BUDGET = 500
 RECENT_HISTORY_TOKEN_BUDGET = 3400
 PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 1200
+USER_PROFILE_TOKEN_BUDGET = 1000
+TASK_PROMPT_TOKEN_BUDGET = 1200
 RECENT_HISTORY_MAX_MESSAGES = 16
+GUARANTEED_RECENT_MESSAGE_COUNT = 3
 ARCHIVE_RECENT_MESSAGE_COUNT = 12
+ARCHIVE_RECENT_TOKEN_BUDGET = RECENT_HISTORY_TOKEN_BUDGET
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
 ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 
@@ -153,12 +161,33 @@ def _trim_latest_message_to_token_budget(
 # 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
 # Build a summary (XML format) from the older messages in the conversation history
 def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
-    # 直近のメッセージ数以下の場合は要約を行わない
-    # Do not summarize if history size is below the recent message count threshold
-    if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT:
+    # Keep a recent window by both message count and token size. A generated UI
+    # or other long answer can exhaust the history budget in only a few turns,
+    # so message count alone is not sufficient to decide when to summarize.
+    if len(messages) <= 2:
         return "", 0
 
-    archived_messages = messages[:-ARCHIVE_RECENT_MESSAGE_COUNT]
+    total_tokens = sum(estimate_token_count(message.get("content", "")) for message in messages)
+    if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT and total_tokens <= ARCHIVE_RECENT_TOKEN_BUDGET:
+        return "", 0
+
+    recent_start = len(messages)
+    recent_count = 0
+    recent_tokens = 0
+    for index in range(len(messages) - 1, -1, -1):
+        message_tokens = estimate_token_count(messages[index].get("content", ""))
+        # Always retain the latest pair. Older messages are retained only while
+        # they fit the rolling token window.
+        if recent_count >= 2 and (
+            recent_count >= ARCHIVE_RECENT_MESSAGE_COUNT
+            or recent_tokens + message_tokens > ARCHIVE_RECENT_TOKEN_BUDGET
+        ):
+            break
+        recent_start = index
+        recent_count += 1
+        recent_tokens += message_tokens
+
+    archived_messages = messages[:recent_start]
     if not archived_messages:
         return "", 0
 
@@ -230,56 +259,63 @@ def select_recent_messages(
     *,
     max_messages: int = RECENT_HISTORY_MAX_MESSAGES,
 ) -> list[dict[str, str]]:
-    if token_budget <= 0:
+    if token_budget <= 0 or max_messages <= 0:
+        return []
+
+    normalized_messages = [
+        {
+            "role": str(message.get("role", "user")),
+            "content": normalize_message_text(message.get("content", "")),
+        }
+        for message in messages
+    ]
+    normalized_messages = [message for message in normalized_messages if message["content"]]
+    if not normalized_messages:
         return []
 
     selected_reversed: list[dict[str, str]] = []
     remaining_tokens = token_budget
 
-    # メッセージ履歴を後ろから前に向かって走査する
-    # Iterate through the message history backwards from the end
-    for message in reversed(messages):
-        normalized_content = normalize_message_text(message.get("content", ""))
-        if not normalized_content:
+    # Include the newest message first and retain a compact representation of
+    # the two preceding messages. Allocating that window up front prevents one
+    # long assistant answer from dropping the user instruction that it answers.
+    newest = normalized_messages[-1]
+    newest_content = _trim_latest_message_to_token_budget(
+        newest["content"], newest["role"], remaining_tokens
+    )
+    if not newest_content:
+        return []
+    selected_reversed.append({"role": newest["role"], "content": newest_content})
+    remaining_tokens -= estimate_token_count(newest_content)
+
+    guaranteed_count = min(
+        GUARANTEED_RECENT_MESSAGE_COUNT,
+        max_messages,
+        len(normalized_messages),
+    )
+    guaranteed_messages = list(reversed(normalized_messages[-guaranteed_count:-1]))
+    for offset, message in enumerate(guaranteed_messages):
+        if remaining_tokens <= 0:
+            break
+        slots_remaining = len(guaranteed_messages) - offset
+        allocation = max(1, math.ceil(remaining_tokens / slots_remaining))
+        content = trim_text_to_token_budget(message["content"], allocation)
+        if not content:
             continue
+        selected_reversed.append({"role": message["role"], "content": content})
+        remaining_tokens -= estimate_token_count(content)
 
-        role = str(message.get("role", "user"))
-
-        # 最初のメッセージ（一番新しいもの）は、切り詰めてでも必ず含める
-        # Always include the first message (most recent one) even if it needs trimming
-        if not selected_reversed:
-            trimmed_content = _trim_latest_message_to_token_budget(
-                normalized_content,
-                role,
-                remaining_tokens,
-            )
-            if not trimmed_content:
-                continue
-            selected_reversed.append(
-                {
-                    "role": role,
-                    "content": trimmed_content,
-                }
-            )
-            remaining_tokens -= estimate_token_count(trimmed_content)
-            continue
-
-        # メッセージ数制限またはトークン制限に達した場合は走査を終了する
-        # Terminate traversal if limits on message count or token budget are met
+    # Fill the remaining capacity with older history. If a message is too large,
+    # preserve a bounded version and keep walking instead of terminating early.
+    older_end = max(0, len(normalized_messages) - guaranteed_count)
+    for message in reversed(normalized_messages[:older_end]):
         if len(selected_reversed) >= max_messages or remaining_tokens <= 0:
             break
-
-        message_tokens = estimate_token_count(normalized_content)
-        if message_tokens > remaining_tokens:
-            break
-
-        selected_reversed.append(
-            {
-                "role": role,
-                "content": normalized_content,
-            }
-        )
-        remaining_tokens -= message_tokens
+        content = trim_text_to_token_budget(message["content"], remaining_tokens)
+        if not content:
+            continue
+        selected_reversed.append({"role": message["role"], "content": content})
+        remaining_tokens -= estimate_token_count(content)
 
     return list(reversed(selected_reversed))
 
@@ -367,35 +403,64 @@ def build_context_messages(
     recent_messages: list[dict[str, str]],
     project_instructions: str | None = None,
 ) -> list[dict[str, str]]:
-    messages = [{"role": "system", "content": base_system_prompt}]
+    mandatory_messages = [
+        {"role": "system", "content": base_system_prompt},
+        {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT},
+    ]
+    mandatory_tokens = sum(
+        estimate_token_count(str(message.get("content", "")))
+        for message in mandatory_messages
+    )
+    # Reserve the recent-history window before optional system context. This
+    # keeps prior turns available even when a project or task has long guidance.
+    reserved_history_tokens = min(
+        RECENT_HISTORY_TOKEN_BUDGET,
+        max(CONTEXT_TOKEN_BUDGET - mandatory_tokens, 0),
+    )
+    optional_tokens_remaining = max(
+        CONTEXT_TOKEN_BUDGET - mandatory_tokens - reserved_history_tokens,
+        0,
+    )
+    optional_messages: list[dict[str, str]] = []
+
+    def append_optional_system_message(content: str | None, limit: int) -> None:
+        nonlocal optional_tokens_remaining
+        if not content or optional_tokens_remaining <= 0:
+            return
+        allowed_tokens = min(limit, optional_tokens_remaining)
+        trimmed = trim_text_to_token_budget(content, allowed_tokens)
+        if not trimmed:
+            return
+        optional_messages.append({"role": "system", "content": trimmed})
+        optional_tokens_remaining -= estimate_token_count(trimmed)
 
     # ユーザープロフィールプロンプトを追加
     # Add user profile prompt if specified
-    if user_profile_prompt:
-        messages.append({"role": "system", "content": user_profile_prompt})
+    append_optional_system_message(user_profile_prompt, USER_PROFILE_TOKEN_BUDGET)
 
     # プロジェクト固有のカスタム指示を追加（タスク指示より前に置き全会話で優先）
     # Add project custom instructions (before task prompt; applies to all chats in the project)
     project_instructions_message = build_project_instructions_message(project_instructions)
     if project_instructions_message is not None:
-        messages.append(project_instructions_message)
+        append_optional_system_message(
+            project_instructions_message["content"], PROJECT_INSTRUCTIONS_TOKEN_BUDGET
+        )
 
     # タスクテンプレートプロンプトを追加
     # Add task template prompt if specified
-    if task_prompt:
-        messages.append({"role": "system", "content": task_prompt})
+    append_optional_system_message(task_prompt, TASK_PROMPT_TOKEN_BUDGET)
 
     # 履歴要約メッセージを追加
     # Add history summary message if it exists
     summary_message = build_summary_system_message(room_summary)
     if summary_message is not None:
-        messages.append(summary_message)
+        append_optional_system_message(summary_message["content"], SUMMARY_TOKEN_BUDGET)
 
     # 永続メモリファクトメッセージを追加
     # Add persistent memory facts message if it exists
     memory_message = build_memory_system_message(memory_facts)
     if memory_message is not None:
-        messages.append(memory_message)
+        append_optional_system_message(memory_message["content"], MEMORY_TOKEN_BUDGET)
 
     # タスク・プロフィール・プロジェクト指示などの可変システム文脈を読んだ後に、
     # 生成UIの完了条件を短く再提示する。OpenAI Responses APIでは developer
@@ -403,9 +468,7 @@ def build_context_messages(
     # Re-state the generative UI completion criteria after variable system
     # context. This becomes a developer message for OpenAI Responses and remains
     # a system prompt for the Claude API.
-    messages.append(
-        {"role": "system", "content": GENERATIVE_UI_EXECUTION_CONTRACT}
-    )
+    messages = [mandatory_messages[0], *optional_messages, mandatory_messages[1]]
 
     # システムメッセージ群で使用されたトークン数を算出して直近履歴に使えるトークン予算を決定する
     # Calculate tokens used by system messages to determine the remaining budget for recent history
@@ -413,10 +476,7 @@ def build_context_messages(
         estimate_token_count(str(message.get("content", "")))
         for message in messages
     )
-    remaining_tokens = min(
-        CONTEXT_TOKEN_BUDGET - reserved_tokens,
-        RECENT_HISTORY_TOKEN_BUDGET,
-    )
+    remaining_tokens = min(CONTEXT_TOKEN_BUDGET - reserved_tokens, reserved_history_tokens)
     if remaining_tokens < 0:
         remaining_tokens = 0
 
