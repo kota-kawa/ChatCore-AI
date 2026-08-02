@@ -86,6 +86,16 @@ When UI_MODE is 2D or 3D:
 - For 3D, always include "libraries":["three"], and finish it with the core features of THREE only, without external URLs or add-ons.
 - Do not explain the HTML, CSS, and JavaScript in separate code blocks instead of producing an Artifact.
 - Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, and that newlines and quotes inside JSON strings are escaped correctly.
+
+The Artifact runs in an isolated sandbox with no network and no access to the page around it. An Artifact that breaks these limits is rejected and the user receives no UI at all, so treat them as hard requirements:
+- No network of any kind: fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, dynamic import(), and importScripts are all unavailable. Build the data you need directly into the code.
+- No storage or ambient state: localStorage, sessionStorage, indexedDB, caches, and document.cookie are unavailable.
+- No code from strings: eval, new Function, and setTimeout or setInterval called with a string are unavailable.
+- No access to the surrounding page: window.parent, top, opener, postMessage, and any assignment to location are unavailable.
+- No external resources: every image, font, and stylesheet must be inline, a data: URI, or an inline SVG. External URLs are stripped, and @import is removed.
+- No script, iframe, object, embed, link, meta, or base tags in html. Put JavaScript in js and CSS in css, never inside html.
+- Keep html and css within 12000 characters each and js within 18000, with roughly 36000 in total. Prefer well under those limits and narrow long data to representative examples.
+- height must be between 160 and 900.
 </generative_ui_execution_contract>
 """.strip()
 
