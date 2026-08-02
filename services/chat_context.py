@@ -260,16 +260,17 @@ def _trim_latest_message_to_token_budget(
 
 # 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
 # Build a summary (XML format) from the older messages in the conversation history
-def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
+def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """要約対象となる古いメッセージを切り出す / Split off the older messages to summarize."""
     # Keep a recent window by both message count and token size. A generated UI
     # or other long answer can exhaust the history budget in only a few turns,
     # so message count alone is not sufficient to decide when to summarize.
     if len(messages) <= 2:
-        return "", 0
+        return []
 
     total_tokens = sum(estimate_token_count(message.get("content", "")) for message in messages)
     if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT and total_tokens <= ARCHIVE_RECENT_TOKEN_BUDGET:
-        return "", 0
+        return []
 
     recent_start = len(messages)
     recent_count = 0
@@ -287,7 +288,27 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
         recent_count += 1
         recent_tokens += message_tokens
 
-    archived_messages = messages[:recent_start]
+    return messages[:recent_start]
+
+
+# 要約本文を、モデルへ渡す <conversation_summary> 形式へ包む
+# Wrap summary content in the <conversation_summary> envelope sent to the model
+def render_summary_context(body_sections: list[str], archived_count: int) -> str:
+    sections: list[str] = ["<conversation_summary>"]
+    sections.append(f"<archived_message_count>{archived_count}</archived_message_count>")
+    sections.extend(body_sections)
+    sections.append(
+        "<summary_instruction>The summary above is compressed information from older history. "
+        "When it conflicts with the most recent messages, prioritize the recent messages."
+        "</summary_instruction>"
+    )
+    sections.append("</conversation_summary>")
+    summary = "\n".join(section for section in sections if section).strip()
+    return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET)
+
+
+def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
+    archived_messages = select_archived_messages(messages)
     if not archived_messages:
         return "", 0
 
@@ -319,10 +340,7 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
 
     # XML形式で要約コンテキストを構築する
     # Build the summary context in XML format
-    sections: list[str] = ["<conversation_summary>"]
-    sections.append(
-        f"<archived_message_count>{len(archived_messages)}</archived_message_count>"
-    )
+    sections: list[str] = []
     if first_user_message:
         sections.extend(
             [
@@ -341,14 +359,7 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
         for point in assistant_points:
             sections.append(f"- {point}")
         sections.append("</assistant_points>")
-    sections.append(
-        "<summary_instruction>The summary above is compressed information from older history. "
-        "When it conflicts with the most recent messages, prioritize the recent messages."
-        "</summary_instruction>"
-    )
-    sections.append("</conversation_summary>")
-    summary = "\n".join(section for section in sections if section).strip()
-    return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET), len(archived_messages)
+    return render_summary_context(sections, len(archived_messages)), len(archived_messages)
 
 
 # トークン予算と上限メッセージ数に収まる範囲で、直近のメッセージを後ろから順に選択する
