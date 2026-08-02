@@ -96,6 +96,20 @@ class AiAgentCapabilitiesTestCase(unittest.TestCase):
             "rephrase them in the words shown on screen", messages[0]["content"]
         )
 
+    # 日本語: 操作計画にも混在言語入力の共通判定順序が渡されることを検証します。
+    # English: Verify the shared mixed-language decision order is included for action plans.
+    def test_action_prompt_includes_shared_response_language_policy(self):
+        messages = build_action_messages(
+            "[Interactive elements currently visible in the browser]",
+            [{"role": "user", "content": "Open settings and 日本語で説明して"}],
+            locale="en",
+        )
+
+        system_content = messages[0]["content"]
+        self.assertIn("the part that states the user's request or instruction", system_content)
+        self.assertIn("larger share", system_content)
+        self.assertIn("saved interface language (English)", system_content)
+
     # 日本語: アプリケーションの型定義アクション(app_action)を含むJSON応答が正しくオブジェクトとしてパースされることを検証します。
     # English: Verify that JSON responses containing typed app_actions are correctly parsed.
     def test_parse_action_response_accepts_typed_app_action_steps(self):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextvars import ContextVar
 from typing import Any, Literal
 
@@ -12,6 +13,14 @@ DEFAULT_LOCALE: Locale = "ja"
 LOCALE_COOKIE_NAME = "chatcore_locale"
 PREFERRED_LOCALE_SESSION_KEY = "preferred_locale"
 PREFERRED_LOCALE_LOADED_SESSION_KEY = "_preferred_locale_loaded"
+_JAPANESE_REQUEST_PATTERN = re.compile(
+    r"(?:して|ください|お願い|作成|提案|改善|修正|要約|翻訳|教えて|書いて|作って)"
+)
+_ENGLISH_REQUEST_PATTERN = re.compile(
+    r"\b(?:please|create|write|make|summarize|translate|improve|revise|help|"
+    r"can you|could you)\b",
+    re.IGNORECASE,
+)
 
 _current_locale: ContextVar[Locale] = ContextVar(
     "chatcore_current_locale",
@@ -165,6 +174,32 @@ def build_response_language_policy(locale: Any = None) -> str:
             "Do not translate user-authored content unless the user asks you to.",
         ]
     )
+
+
+# 日本語: 非LLMの短いフォールバック文言用に、依頼部分を優先してユーザー入力の主な言語を推定します。
+# English: Infer the main language of user text for short non-LLM fallback messages, prioritizing the request portion.
+def infer_response_language(text: Any, locale: Any = None) -> Locale:
+    normalized = str(text or "")
+    request_lines = [
+        line for line in normalized.splitlines() if _JAPANESE_REQUEST_PATTERN.search(line)
+    ]
+    if not request_lines:
+        request_lines = [
+            line for line in normalized.splitlines() if _ENGLISH_REQUEST_PATTERN.search(line)
+        ]
+    if request_lines:
+        normalized = request_lines[0]
+    japanese_characters = sum(
+        1
+        for character in normalized
+        if "\u3040" <= character <= "\u30ff" or "\u3400" <= character <= "\u9fff"
+    )
+    english_characters = sum(character.isascii() and character.isalpha() for character in normalized)
+    if japanese_characters > english_characters:
+        return "ja"
+    if english_characters > japanese_characters:
+        return "en"
+    return normalize_locale(locale, default=DEFAULT_LOCALE) or DEFAULT_LOCALE
 
 
 def translate(message_key: str, locale: Any = None, **params: Any) -> str:

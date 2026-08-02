@@ -16,6 +16,20 @@ class MemoAiTestCase(unittest.TestCase):
         self.assertEqual(result, {"title": "会議メモ"})
         self.assertEqual(mock_response.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
 
+    # 日本語: メモタイトル提案にも混在言語入力の共通判定順序が渡されることを検証します。
+    # English: Verify the shared mixed-language decision order is included for memo title suggestions.
+    def test_suggest_title_includes_shared_response_language_policy(self):
+        with patch(
+            "services.memo_ai.get_llm_response",
+            return_value='{"title": "Meeting notes"}',
+        ) as mock_response:
+            suggest_title("English notes with 日本語の要望", locale="en")
+
+        system_content = mock_response.call_args.args[0][0]["content"]
+        self.assertIn("the part that states the user's request or instruction", system_content)
+        self.assertIn("larger share", system_content)
+        self.assertIn("saved interface language (English)", system_content)
+
 
 if __name__ == "__main__":
     unittest.main()

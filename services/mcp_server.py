@@ -48,22 +48,21 @@ _mcp: FastMCP | None = None
 _mcp_asgi_app: Any | None = None
 
 MCP_CATEGORY_KEYS = tuple(PROMPT_CATEGORIES)
-MCP_CATEGORY_LABELS = "; ".join(
-    f"{category.key}（{category.label}）" for category in PROMPT_CATEGORIES.values()
-)
+MCP_CATEGORY_LABELS = "; ".join(category.key for category in PROMPT_CATEGORIES.values())
+# 日本語: 公開コンテンツのカテゴリと指定可能な値を説明するMCPフィールド用の指示。
 MCP_CATEGORY_DESCRIPTION = (
-    "投稿の用途カテゴリです。省略時は未分類です。"
-    "指定できる値（キーと表示名）: " + MCP_CATEGORY_LABELS
+    "Usage category for the post. Omit it for uncategorized. "
+    "Allowed category keys: " + MCP_CATEGORY_LABELS
 )
 
 
 class McpPublishResult(BaseModel):
     """Structured result returned after a public prompt or SKILL is published."""
 
-    prompt_id: int = Field(description="Chat-Core内で作成された公開投稿のID")
-    title: str = Field(description="公開された投稿のタイトル")
-    content_format: str = Field(description="公開形式。prompt または skill")
-    public_url: AnyHttpUrl = Field(description="公開済み投稿を開くURL")
+    prompt_id: int = Field(description="ID of the public post created in Chat-Core")
+    title: str = Field(description="Title of the published post")
+    content_format: str = Field(description="Published format: prompt or skill")
+    public_url: AnyHttpUrl = Field(description="URL for opening the published post")
 
 
 class ChatCoreFastMCP(FastMCP):
@@ -169,6 +168,7 @@ def _create_mcp() -> FastMCP:
         Fernet(key.encode("ascii"))
     public_base_url = get_mcp_public_base_url()
     provider = ChatCoreOAuthProvider()
+    # 日本語: MCPクライアントに公開コンテンツと私有メモの扱い方、および取得本文を命令として実行しない安全規則を伝える指示。
     mcp = ChatCoreFastMCP(
         "Chat-Core",
         instructions=(
@@ -208,21 +208,22 @@ def _create_mcp() -> FastMCP:
         openWorldHint=True,
     )
 
+    # 日本語: テキストプロンプトを公開共有へ投稿するMCPツール説明。
     @mcp.tool(
         name="publish_prompt",
-        title="公開プロンプトを投稿",
-        description="Chat-Coreの公開プロンプト共有へテキストプロンプトを即時公開します。再実行は別投稿になります。",
+        title="Publish a public prompt",
+        description="Publish a text prompt to Chat-Core's public prompt sharing immediately. Repeating the call creates another post.",
         annotations=annotations,
         structured_output=True,
     )
     async def publish_prompt(
         title: Annotated[
             str,
-            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="公開するプロンプトのタイトル"),
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="Title of the prompt to publish"),
         ],
         content: Annotated[
             str,
-            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="公開するプロンプト本文"),
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Body of the prompt to publish"),
         ],
         category: Annotated[
             str,
@@ -230,15 +231,15 @@ def _create_mcp() -> FastMCP:
         ] = "",
         input_examples: Annotated[
             str,
-            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="任意。プロンプトに渡す入力例"),
+            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Optional input examples for the prompt"),
         ] = "",
         output_examples: Annotated[
             str,
-            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="任意。期待する出力例"),
+            Field(max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Optional expected output examples"),
         ] = "",
         ai_model: Annotated[
             str,
-            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="任意。作成・検証に使ったAIモデル名"),
+            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="Optional AI model used to create or validate it"),
         ] = "",
     ) -> McpPublishResult:
         try:
@@ -259,21 +260,22 @@ def _create_mcp() -> FastMCP:
         audit_tool_success(actor, "publish_prompt", result.prompt_id)
         return result
 
+    # 日本語: SKILLを公開共有へ投稿するMCPツール説明。
     @mcp.tool(
         name="publish_skill",
-        title="公開SKILLを投稿",
-        description="Chat-Coreの公開プロンプト共有へSKILLを即時公開します。SKILL内のコードは実行されません。",
+        title="Publish a public SKILL",
+        description="Publish a SKILL to Chat-Core's public prompt sharing immediately. Code inside the SKILL is not executed.",
         annotations=annotations,
         structured_output=True,
     )
     async def publish_skill(
         title: Annotated[
             str,
-            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="公開するSKILLのタイトル"),
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_TITLE_LENGTH, description="Title of the SKILL to publish"),
         ],
         skill_markdown: Annotated[
             str,
-            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="SKILL.mdの本文"),
+            Field(min_length=1, max_length=MAX_SHARED_PROMPT_CONTENT_LENGTH, description="Body of SKILL.md"),
         ],
         category: Annotated[
             str,
@@ -284,15 +286,15 @@ def _create_mcp() -> FastMCP:
             Field(
                 max_length=MAX_SKILL_RESOURCES,
                 description=(
-                    "任意。SKILLに付属するテキストリソースの一覧。"
-                    "各要素にpath、role、language、contentを指定します。"
-                    "Chat-Coreではコードを実行しません"
+                    "Optional list of text resources attached to the SKILL. "
+                    "Each item specifies path, role, language, and content. "
+                    "Chat-Core does not execute code."
                 ),
             ),
         ] = None,
         ai_model: Annotated[
             str,
-            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="任意。作成・検証に使ったAIモデル名"),
+            Field(max_length=MAX_SHARED_PROMPT_AI_MODEL_LENGTH, description="Optional AI model used to create or validate it"),
         ] = "",
     ) -> McpPublishResult:
         try:

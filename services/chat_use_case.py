@@ -107,9 +107,11 @@ class ChatPostUseCase:
         dependencies: ChatPostUseCaseDependencies,
         *,
         default_model: str,
+        locale: str = "ja",
     ) -> None:
         self.deps = dependencies
         self.default_model = default_model
+        self.locale = locale
 
     def _maybe_schedule_context_extraction(
         self,
@@ -562,6 +564,7 @@ class ChatPostUseCase:
                         assistant_response=response,
                         allowed_current_titles=title_candidates,
                         conditional_rename=deps.rename_chat_room_if_current_title_in,
+                        locale=self.locale,
                     )
                     if generated_title:
                         return {"room_title": generated_title}
@@ -801,6 +804,7 @@ class ChatPostUseCase:
                     assistant_response=bot_reply,
                     allowed_current_titles=title_candidates,
                     conditional_rename=deps.rename_chat_room_if_current_title_in,
+                    locale=self.locale,
                 )
         else:
             sid = sid or deps.get_session_id(session)

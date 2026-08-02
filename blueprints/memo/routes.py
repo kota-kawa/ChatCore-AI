@@ -15,6 +15,7 @@ from services.error_messages import (
     ERROR_LOGIN_REQUIRED,
     ERROR_TOKEN_REQUIRED,
 )
+from services.i18n import get_request_locale
 from services.request_models import (
     MemoBulkActionRequest,
     MemoCollectionCreateRequest,
@@ -253,6 +254,7 @@ async def api_suggest_memo(request: Request):
         result = await run_blocking(
             _memo_attr("suggest_title"),
             payload.ai_response,
+            locale=get_request_locale(request),
         )
         return jsonify({"status": "success", **result})
     except Exception:

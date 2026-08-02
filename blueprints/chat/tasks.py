@@ -356,7 +356,7 @@ def _build_ai_agent_memo_context(user_id: int | None, memo_id: int) -> str:
     # DBからメモ詳細を取得
     # Fetch memo from database
     memo = fetch_memo_detail(user_id, memo_id)
-    title = (memo.get("title") or "保存したメモ").strip()
+    title = (memo.get("title") or "Saved memo").strip()
     memo_text = parse_memo_text(memo.get("ai_response") or "").strip()
     
     # メモが上限サイズを超えている場合は切り捨て
@@ -1229,7 +1229,7 @@ async def ai_agent(
             rag_context = ""
             dom_context = ""
             if payload.current_dom:
-                dom_context = f"【現在ブラウザで見えている操作可能要素】\n{payload.current_dom}"
+                dom_context = f"[Interactive elements currently visible in the browser]\n{payload.current_dom}"
 
             # メモIDが指定されている場合、メモの内容を背景コンテキストとして編集提案または直接回答を生成する
             # Handle memo-focused requests: propose an edit plan or answer questions using the memo as context
@@ -1252,6 +1252,7 @@ async def ai_agent(
                     edit_messages = build_memo_edit_messages(
                         rag_context,
                         [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                        locale=locale,
                     )
                     response_text = await run_blocking(
                         get_llm_response, edit_messages, GPT_OSS_120B_MODEL
@@ -1283,18 +1284,15 @@ async def ai_agent(
             if intent == "action":
                 yield _ai_agent_sse("progress", {"message": "ページを解析中..."})
                 page_ctx = await run_blocking(get_page_context, current_page)
-                language_context = (
-                    "Response language policy: follow an explicit request, otherwise use the latest "
-                    f"user-message language; if ambiguous use {'English' if locale == 'en' else 'Japanese'}."
-                )
                 action_context = "\n\n".join(
-                    part for part in (language_context, dom_context, page_ctx, build_capability_context(current_page)) if part
+                    part for part in (dom_context, page_ctx, build_capability_context(current_page)) if part
                 )
                 if action_context:
                     yield _ai_agent_sse("progress", {"message": "操作手順を生成中..."})
                     action_messages = build_action_messages(
                         action_context,
                         [{"role": m.role, "content": m.content} for m in payload.messages[-6:]],
+                        locale=locale,
                     )
                     response_text = await run_blocking(
                         get_llm_response, action_messages, GPT_OSS_120B_MODEL

@@ -167,6 +167,35 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertEqual(normalized["warnings"], ["注意1", "注意2", "注意3"])
         self.assertEqual(normalized["summary"], PROMPT_ASSIST_DEFAULT_SUMMARY)
 
+    # 日本語: 英語ロケールでは要約が欠落した際のフォールバックも英語になることを検証します。
+    # English: Verify the missing-summary fallback is English for the English locale.
+    def test_normalize_prompt_assist_response_uses_english_summary_fallback(self):
+        current_fields = {"title": "", "content": ""}
+        parsed_response = {"suggested_fields": {"title": "A clear title"}}
+
+        normalized = _normalize_prompt_assist_response(
+            "task_modal",
+            parsed_response,
+            current_fields,
+            locale="en",
+            user_input="Create a clear task prompt",
+        )
+
+        self.assertEqual(normalized["summary"], "AI suggested a draft based on your input.")
+
+    # 日本語: 英語UIでも日本語入力ならフォールバック要約は日本語になることを検証します。
+    # English: Verify the fallback summary follows Japanese input even in the English UI.
+    def test_normalize_prompt_assist_response_prefers_input_language_for_summary_fallback(self):
+        normalized = _normalize_prompt_assist_response(
+            "task_modal",
+            {"suggested_fields": {"title": "分かりやすい題名"}},
+            {"title": "", "content": ""},
+            locale="en",
+            user_input="会議用のプロンプトを作って",
+        )
+
+        self.assertEqual(normalized["summary"], PROMPT_ASSIST_DEFAULT_SUMMARY)
+
     # 日本語: なしusablesuggestionsのとき、normalizeプロンプトアシストレスポンス送出することを検証します。
     # English: Verify that normalize prompt assist response raises when no usable suggestions.
     def test_normalize_prompt_assist_response_raises_when_no_usable_suggestions(self):

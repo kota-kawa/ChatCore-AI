@@ -292,6 +292,7 @@ def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
     trimmed = trim_text_to_token_budget(summary_text, SUMMARY_TOKEN_BUDGET)
     if not trimmed:
         return None
+    # 日本語: 古い会話の要約を最新ターンより優先しない参照用文脈として渡すシステムプロンプト。
     return {
         "role": "system",
         "content": (
@@ -315,6 +316,7 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     if not normalized_facts:
         return None
 
+    # 日本語: ユーザーの情報・好みを会話を通じて尊重するよう渡すシステムプロンプト。
     sections = [
         "<memory_facts>",
         "The following is user information or preferences you must keep honoring throughout this "
@@ -340,6 +342,7 @@ def build_project_instructions_message(instructions: str | None) -> dict[str, st
     trimmed = trim_text_to_token_budget(instructions, PROJECT_INSTRUCTIONS_TOKEN_BUDGET)
     if not trimmed:
         return None
+    # 日本語: プロジェクト固有の指示を当該プロジェクト内の会話で優先するよう渡すシステムプロンプト。
     return {
         "role": "system",
         "content": (

@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from services.llm import LlmProviderError, get_llm_response
-from services.i18n import build_response_language_policy
+from services.i18n import build_response_language_policy, infer_response_language
 from services.prompt_categories import category_label
 
 PROMPT_ASSIST_MODEL = "openai/gpt-oss-120b"
@@ -55,6 +55,7 @@ PROMPT_ASSIST_FIELD_LABELS = {
     "ai_model": "AI model used",
 }
 PROMPT_ASSIST_DEFAULT_SUMMARY = "AIが入力内容をもとに下書きを提案しました。"
+PROMPT_ASSIST_DEFAULT_SUMMARY_EN = "AI suggested a draft based on your input."
 # 日本語: ユーザー意図を保ちながら、許可されたフォーム項目だけを使って実用的なプロンプト案をJSONで生成するシステムプロンプト。
 PROMPT_ASSIST_SYSTEM_PROMPT = (
     "You are an assistant that helps people write prompts."
@@ -287,6 +288,9 @@ def _normalize_prompt_assist_response(
     target: str,
     parsed_response: dict[str, Any],
     current_fields: dict[str, str],
+    *,
+    locale: str = "ja",
+    user_input: str = "",
 ) -> dict[str, Any]:
     # 日本語: 提案されたフィールドの中から許可されている項目のみを抽出し、提案モード（作成・改善）や警告などを整理して返します。
     # English: Filter and retain only allowed suggested fields, organizing proposal modes (create/refine) and warnings.
@@ -319,7 +323,12 @@ def _normalize_prompt_assist_response(
             if normalized_item:
                 warnings.append(normalized_item)
 
-    summary = _normalize_field_value(parsed_response.get("summary")) or PROMPT_ASSIST_DEFAULT_SUMMARY
+    summary_language = infer_response_language(user_input, locale)
+    summary = _normalize_field_value(parsed_response.get("summary")) or (
+        PROMPT_ASSIST_DEFAULT_SUMMARY_EN
+        if summary_language == "en"
+        else PROMPT_ASSIST_DEFAULT_SUMMARY
+    )
 
     return {
         "summary": summary,
@@ -361,4 +370,6 @@ def create_prompt_assist_payload(
         target,
         _parse_prompt_assist_response(raw_response or ""),
         normalized_fields,
+        locale=locale,
+        user_input=normalized_instruction or "\n".join(normalized_fields.values()),
     )

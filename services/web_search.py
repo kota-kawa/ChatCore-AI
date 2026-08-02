@@ -1731,6 +1731,7 @@ def maybe_augment_messages_with_web_search(
                 conversation_messages,
                 {
                     "role": "system",
+                    # 日本語: 検索APIキー未設定により現在性の検証ができないことを、必要に応じて回答で伝えるシステムプロンプト。
                     "content": (
                         "<web_search_status>"
                         "A web search was judged necessary, but the Brave Search API key is not configured."
@@ -1774,6 +1775,7 @@ def maybe_augment_messages_with_web_search(
                 conversation_messages,
                 {
                     "role": "system",
+                    # 日本語: 月間検索上限に達して現在性の検証ができないことを、必要に応じて回答で伝えるシステムプロンプト。
                     "content": (
                         "<web_search_status>"
                         f"The monthly limit for Brave web search ({exc.limit} searches) has been reached."
@@ -1800,6 +1802,7 @@ def maybe_augment_messages_with_web_search(
                 conversation_messages,
                 {
                     "role": "system",
+                    # 日本語: 検索リクエスト失敗により現在性の検証ができないことを、必要に応じて回答で伝えるシステムプロンプト。
                     "content": (
                         "<web_search_status>"
                         "A web search was judged necessary, but the Brave Search request failed."
@@ -1829,6 +1832,7 @@ def maybe_augment_messages_with_web_search(
                 conversation_messages,
                 {
                     "role": "system",
+                    # 日本語: 検索結果に利用可能な根拠がないことを、必要に応じて回答で伝えるシステムプロンプト。
                     "content": (
                         "<web_search_status>"
                         f'Brave Search found nothing usable as evidence for the query "{result.query}".'

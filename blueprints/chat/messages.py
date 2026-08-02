@@ -1051,6 +1051,7 @@ def _build_chat_post_use_case(locale: str = "ja") -> ChatPostUseCase:
             logger=logger,
         ),
         default_model=CLAUDE_DEFAULT_MODEL,
+        locale=locale,
     )
 
 

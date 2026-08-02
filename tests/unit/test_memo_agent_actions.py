@@ -191,6 +191,20 @@ class BuildMemoEditMessagesTestCase(unittest.TestCase):
         self.assertIn("テスト本文", messages[0]["content"])
         self.assertEqual(messages[-1], {"role": "user", "content": "誤字を直して"})
 
+    # 日本語: メモ編集計画にも混在言語入力の共通判定順序が渡されることを検証します。
+    # English: Verify the shared mixed-language decision order is included for memo edit plans.
+    def test_system_message_includes_shared_response_language_policy(self):
+        messages = build_memo_edit_messages(
+            "[Memo currently open]\nBody:\nExample",
+            [{"role": "user", "content": "英語ログを見て、要約は日本語で追記して"}],
+            locale="en",
+        )
+
+        system_content = messages[0]["content"]
+        self.assertIn("the part that states the user's request or instruction", system_content)
+        self.assertIn("larger share", system_content)
+        self.assertIn("saved interface language (English)", system_content)
+
 
 if __name__ == "__main__":
     unittest.main()
