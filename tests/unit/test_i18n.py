@@ -4,6 +4,7 @@ import unittest
 from services.i18n import (
     build_response_language_policy,
     get_current_locale,
+    infer_response_language,
     normalize_locale,
     parse_accept_language,
     reset_current_locale,
@@ -65,6 +66,13 @@ class I18nTestCase(unittest.TestCase):
                 self.assertFalse(
                     re.search(r"[぀-ヿ一-鿿]", build_response_language_policy(locale))
                 )
+
+    # 日本語: 長い貼り付け文より依頼部分の言語を非LLMフォールバックでも優先することを検証します。
+    # English: Verify non-LLM fallbacks prioritize the request language over a long pasted body.
+    def test_infer_response_language_prefers_request_portion(self):
+        text = "以下の内容を要約して\n" + ("This is a long pasted English document. " * 50)
+
+        self.assertEqual(infer_response_language(text, "en"), "ja")
 
 
 if __name__ == "__main__":
