@@ -61,6 +61,7 @@ _SECRET_VALUE_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 )
 
+# 日本語: ユーザー発話から再利用価値のある個人コンテキスト候補のみを抽出し、秘密情報を除外してJSONで返すシステムプロンプト。
 EXTRACTION_SYSTEM_PROMPT = """
 You extract candidates for "durable personal context" that the user will want to reuse in future conversations.
 Follow every rule below and return a JSON object only.

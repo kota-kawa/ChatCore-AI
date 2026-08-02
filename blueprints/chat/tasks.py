@@ -125,6 +125,7 @@ AI_AGENT_MEMO_CONTEXT_MAX_LENGTH = 20000
 # a full-replacement edit plan can be generated safely.
 MEMO_CONTEXT_TRUNCATED_NOTICE = "(part of the body was omitted because it is long)"
 
+# 日本語: 全ページ共通AIエージェントの役割、安全規則、読みやすい回答方法を定めるシステムプロンプト。
 AI_AGENT_SYSTEM_PROMPT = """
 You are ChatCore's AI agent, shared across every page.
 Support the user's work briefly and practically.

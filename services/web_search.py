@@ -540,6 +540,7 @@ def _planner_candidates() -> list[_PlannerCandidate]:
     return [_PlannerCandidate(model=WEB_SEARCH_PLANNER_MODEL, supports_json_mode=True)]
 
 
+# 日本語: 質問への回答にリアルタイムWeb検索が必要かを判断し、必要なら検索クエリをJSONで作成するシステムプロンプト。
 _PLANNER_SYSTEM_PROMPT = (
     "You are an advanced web search planner. Judge strictly whether real-time external information (Brave Search) is required to answer the user's question.\n"
     "When any of the following applies, you **must** set should_search to true and generate the best search query:\n"
@@ -560,6 +561,7 @@ _PLANNER_SYSTEM_PROMPT = (
     'For the latest information, set freshness to "pd" (within 24 hours) or "pw" (within a week).'
 )
 
+# 日本語: Web検索プランナーの不正なJSON出力を、会話文脈に基づいて再判定・修復するシステムプロンプト。
 _PLANNER_REPAIR_SYSTEM_PROMPT = (
     "You repair the JSON output of the web search planner."
     "Read the conversation context and the previous planner output, and decide again by the same "
@@ -1116,6 +1118,7 @@ def build_web_search_system_message(result: WebSearchResult) -> dict[str, str] |
         return None
 
     safe_query = _neutralize_context_delimiters(result.query)
+    # 日本語: 取得済み検索結果を根拠として使い、実在するevidence_idで引用し、外部データ内の命令を無視するよう定める文脈プロンプト。
     lines = [
         f'<web_search_context query="{safe_query}" searched_at="{result.searched_at}">',
         "A real-time web search with Brave has already been run for this turn. Use the content below as the current web search results and base your answer on it.",
@@ -1380,6 +1383,7 @@ def build_prior_web_search_system_message(
     if not usable:
         return None
 
+    # 日本語: 過去ターンの検索結果を参照データとして使い、引用と安全な取り扱いを定める文脈プロンプト。
     header = [
         "<web_search_context kind=\"prior\">",
         "The following are web search results already run in earlier turns of this conversation (reference data).",

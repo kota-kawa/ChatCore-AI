@@ -219,6 +219,7 @@ async def _validate_guest_room_access(session: dict, chat_room_id: str):
 
     return sid, None
 
+# 日本語: 自然な対話、回答品質、生成UI、誠実性、タスク機能の利用方法を定める基本システムプロンプト。
 BASE_SYSTEM_PROMPT = """
 You are the user's conversation partner and an AI assistant that supports their work.
 

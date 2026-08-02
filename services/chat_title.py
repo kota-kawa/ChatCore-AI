@@ -82,6 +82,7 @@ def generate_chat_room_title(
     if not user_text:
         return ""
 
+    # 日本語: 会話の依頼部分の言語に合わせ、短いスレッドタイトルだけをJSONで生成させるシステムプロンプト。
     messages = [
         {
             "role": "system",

@@ -33,6 +33,7 @@ ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 # reliably make the UI decision and finish the structured output. Detailed rules
 # and few-shot examples remain in the base prompt; this repeats only execution
 # and completion criteria.
+# 日本語: 生成UIの出力要否、Artifact形式、完了条件だけを最終出力前に再確認させる実行契約プロンプト。
 GENERATIVE_UI_EXECUTION_CONTRACT = """
 <generative_ui_execution_contract>
 This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.

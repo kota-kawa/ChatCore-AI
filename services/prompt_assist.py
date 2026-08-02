@@ -55,6 +55,7 @@ PROMPT_ASSIST_FIELD_LABELS = {
     "ai_model": "AI model used",
 }
 PROMPT_ASSIST_DEFAULT_SUMMARY = "AIが入力内容をもとに下書きを提案しました。"
+# 日本語: ユーザー意図を保ちながら、許可されたフォーム項目だけを使って実用的なプロンプト案をJSONで生成するシステムプロンプト。
 PROMPT_ASSIST_SYSTEM_PROMPT = (
     "You are an assistant that helps people write prompts."
     "Keep the user's intent, and shape the text into something clear and practical "

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 Intent = Literal["action", "page_info", "search", "direct"]
 
+# 日本語: ユーザー発話を画面操作・ページ情報・検索・直接回答のいずれかへJSONで分類するシステムプロンプト。
 _CLASSIFIER_SYSTEM = """
 Classify the intent of the user message into exactly one of the four types below and return JSON only. No explanation is needed.
 

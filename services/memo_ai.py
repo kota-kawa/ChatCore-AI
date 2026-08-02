@@ -63,6 +63,7 @@ def suggest_title(ai_response: str) -> dict[str, Any]:
     """
     response_sample = (ai_response or "").strip()[:SUGGEST_RESPONSE_SAMPLE_CHARS]
 
+    # 日本語: 保存するメモ本文の言語に合わせた簡潔なタイトルをJSONで提案させるシステムプロンプト。
     messages = [
         {
             "role": "system",
