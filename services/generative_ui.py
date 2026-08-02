@@ -1315,6 +1315,9 @@ def normalize_response_with_artifacts(
     ``allow_fallback`` remains a no-op for call-site compatibility. UI must never
     be inferred from prose, ordinary code blocks, or generic JSON.
     """
+    # Kept as a public keyword for older callers. Fallback UI synthesis was
+    # intentionally removed, so its value no longer changes behavior.
+    _ = allow_fallback
     text = raw_text if isinstance(raw_text, str) else str(raw_text or "")
     candidates = _extract_artifact_candidates(text, recover_truncated=recover_truncated)
     

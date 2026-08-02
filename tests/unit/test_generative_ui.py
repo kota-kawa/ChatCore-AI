@@ -1,5 +1,4 @@
 import json
-import re
 import unittest
 
 from blueprints.chat.messages import BASE_SYSTEM_PROMPT
