@@ -512,7 +512,7 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
   outline-offset: 2px;
 }
 
-/* ２列レイアウトの設定（.task-wrapper にサイズ指定） */
+/* タブレット以上は2列（.task-wrapper にサイズ指定）。スマホは 576px 以下で1列に切り替える */
 :where(body.chat-page, .chat-page-shell) .task-selection {
   position: relative;
   display: flex;
@@ -1228,13 +1228,33 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     flex-shrink: 0;
   }
 
+  /* スマホでは1列。カード幅いっぱいを使えるためタスク名が折り返さず読める
+     Single column on phones so the full card width is available for the task name */
   :where(body.chat-page, .chat-page-shell) .task-selection .task-wrapper,
 :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection .task-wrapper,
 :where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection .task-wrapper {
-    flex: 0 1 calc(50% - 0.35rem);
-    max-width: calc(50% - 0.35rem);
+    flex: 1 1 100%;
+    max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+  }
+
+  /* 行間は列間より詰めて、縦に積んだカードをひとつのリストとして読ませる
+     Tighter row gap than the column gap so stacked cards read as one list */
+  :where(body.chat-page, .chat-page-shell) .task-selection,
+:where(body.chat-page, .chat-page-shell) .task-overflow-inner {
+    row-gap: 0.5rem;
+  }
+
+  /* 折りたたみ分の先頭カードも同じ行間で続ける / Keep the same rhythm across the collapse boundary */
+  :where(body.chat-page, .chat-page-shell) .task-overflow-inner {
+    padding-top: 0.5rem;
+  }
+
+  /* 1列では左右に隣接カードが無いため、並び替えボタンのはみ出しを抑える必要がない
+     No horizontal neighbours in a single column, so the reorder buttons can overhang fully */
+  :where(body.chat-page, .chat-page-shell) .task-card-action-container {
+    --task-card-action-overhang: 10px;
   }
 
   :where(body.chat-page, .chat-page-shell) .prompt-card {
@@ -1317,15 +1337,6 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     font-size: var(--text-md, 1rem);
     max-height: 185px;
     overflow-y: auto;
-  }
-}
-
-@media (max-width: 360px) {
-  :where(body.chat-page, .chat-page-shell) .task-selection .task-wrapper,
-:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-compact .task-selection .task-wrapper,
-:where(body.chat-page, .chat-page-shell) #setup-container.setup-fit-tight .task-selection .task-wrapper {
-    flex: 1 1 100%;
-    max-width: 100%;
   }
 }
 
