@@ -14,7 +14,12 @@ const EMPTY_TASK_EDIT_FORM: TaskEditFormState = {
 };
 
 const DESKTOP_TASK_COLLAPSE_LIMIT = 6;
-const MOBILE_TASK_COLLAPSE_LIMIT = 4;
+// スマホは1列表示のため1件あたりの縦幅が2列時の倍になる。4件のままだとセットアップ画面が
+// 1画面に収まらず密度調整クラス（setup-fit-compact/tight）が常時発動してフォーム全体が縮むため3件に抑える。
+// Phones render the task list in a single column, so each task costs twice the vertical space it did
+// in the two-column layout. Keeping 4 pushed the setup screen past the viewport and permanently
+// triggered the density fallbacks, shrinking the whole form; 3 keeps it on one screen.
+const MOBILE_TASK_COLLAPSE_LIMIT = 3;
 const MOBILE_TASK_COLLAPSE_QUERY = "(max-width: 576px)";
 
 export function useHomePageTaskState() {
