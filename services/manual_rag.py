@@ -361,8 +361,7 @@ def search_manual(query: str, top_k: int = TOP_K, *, locale: str = "ja") -> str:
     chunks = get_manual_rag_index(normalized_locale).search(query, top_k=top_k)
     if not chunks:
         return ""
-    title = "Operation manual (reference)" if normalized_locale == "en" else "操作マニュアル（参考情報）"
-    parts = [f"【{title}】"]
+    parts = ["[Operation manual (reference)]"]
     for chunk in chunks:
         parts.append(f"\n### {chunk.heading}\n{chunk.content}")
     return "\n".join(parts)

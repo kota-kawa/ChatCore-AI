@@ -24,8 +24,8 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             "en",
         )
 
-        self.assertIn("主要な入力言語", messages[1]["content"])
-        self.assertIn("フォールバック）は English", messages[1]["content"])
+        self.assertIn("language of the user's own input", messages[1]["content"])
+        self.assertIn("saved interface language (English)", messages[1]["content"])
 
     # 日本語: sharedプロンプトmodalに対して、normalizefieldscoercesプロンプトtypeことを検証します。
     # English: Verify that normalize fields coerces prompt type for shared prompt modal.
@@ -100,7 +100,7 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         self.assertIn("<prompt_assist_request>", messages[1]["content"])
         self.assertIn("<current_values>", messages[1]["content"])
         self.assertIn("<output_schema>", messages[1]["content"])
-        self.assertIn("上書きしない", messages[1]["content"])
+        self.assertIn("do not override these request rules", messages[1]["content"])
 
     # 日本語: generateexamples要求するgenericexamplesに対して、ビルドプロンプトアシストmessagesことを検証します。
     # English: Verify that build prompt assist messages for generate examples requires generic examples.
@@ -116,9 +116,15 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             },
         )
 
-        self.assertIn("汎用テンプレート", messages[0]["content"])
-        self.assertIn("固有名詞、日時、商品名、人名、具体的な題材", messages[1]["content"])
-        self.assertIn("見出し、箇条書き、表の列名、ステップ名", messages[1]["content"])
+        self.assertIn("prefer generic templates", messages[0]["content"])
+        self.assertIn(
+            "keep proper nouns, dates, product names, personal names, and concrete subjects out",
+            messages[1]["content"],
+        )
+        self.assertIn(
+            "a skeleton of headings, bullet points, table column names, and step names",
+            messages[1]["content"],
+        )
 
     # 日本語: および制限warnings、normalizeプロンプトアシストレスポンスfiltersfieldsことを検証します。
     # English: Verify that normalize prompt assist response filters fields and limits warnings.
@@ -159,6 +165,35 @@ class PromptAssistLogicTestCase(unittest.TestCase):
             {"content": "refine", "input_examples": "create"},
         )
         self.assertEqual(normalized["warnings"], ["注意1", "注意2", "注意3"])
+        self.assertEqual(normalized["summary"], PROMPT_ASSIST_DEFAULT_SUMMARY)
+
+    # 日本語: 英語ロケールでは要約が欠落した際のフォールバックも英語になることを検証します。
+    # English: Verify the missing-summary fallback is English for the English locale.
+    def test_normalize_prompt_assist_response_uses_english_summary_fallback(self):
+        current_fields = {"title": "", "content": ""}
+        parsed_response = {"suggested_fields": {"title": "A clear title"}}
+
+        normalized = _normalize_prompt_assist_response(
+            "task_modal",
+            parsed_response,
+            current_fields,
+            locale="en",
+            user_input="Create a clear task prompt",
+        )
+
+        self.assertEqual(normalized["summary"], "AI suggested a draft based on your input.")
+
+    # 日本語: 英語UIでも日本語入力ならフォールバック要約は日本語になることを検証します。
+    # English: Verify the fallback summary follows Japanese input even in the English UI.
+    def test_normalize_prompt_assist_response_prefers_input_language_for_summary_fallback(self):
+        normalized = _normalize_prompt_assist_response(
+            "task_modal",
+            {"suggested_fields": {"title": "分かりやすい題名"}},
+            {"title": "", "content": ""},
+            locale="en",
+            user_input="会議用のプロンプトを作って",
+        )
+
         self.assertEqual(normalized["summary"], PROMPT_ASSIST_DEFAULT_SUMMARY)
 
     # 日本語: なしusablesuggestionsのとき、normalizeプロンプトアシストレスポンス送出することを検証します。
@@ -242,7 +277,7 @@ class PromptAssistLogicTestCase(unittest.TestCase):
         )
         user_content = messages[1]["content"]
         self.assertIn("skill_markdown", user_content)
-        self.assertIn("SKILL定義", user_content)
+        self.assertIn("SKILL definition", user_content)
         allowed_fields = user_content.split("<allowed_fields>")[1].split("</allowed_fields>")[0]
         self.assertNotIn('"content"', allowed_fields)
         self.assertNotIn("skill_python_script", allowed_fields)

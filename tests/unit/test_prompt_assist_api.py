@@ -75,10 +75,19 @@ class PromptAssistApiTestCase(unittest.TestCase):
     # 日本語: aiagentシステムプロンプト要求するplainユーザー向けのlanguageことを検証します。
     # English: Verify that ai agent system prompt requires plain user facing language.
     def test_ai_agent_system_prompt_requires_plain_user_facing_language(self):
-        self.assertIn("子供から高齢者まで分かる", AI_AGENT_SYSTEM_PROMPT)
-        self.assertIn("変数名、関数名、クラス名", AI_AGENT_SYSTEM_PROMPT)
-        self.assertIn("コード由来の名前は回答に出さない", AI_AGENT_SYSTEM_PROMPT)
-        self.assertIn("画面上の言葉を優先", AI_AGENT_SYSTEM_PROMPT)
+        self.assertIn(
+            "plain, easy words that everyone from children to older adults can understand",
+            AI_AGENT_SYSTEM_PROMPT,
+        )
+        self.assertIn(
+            "code-derived names such as variable names, function names, class names",
+            AI_AGENT_SYSTEM_PROMPT,
+        )
+        self.assertIn(
+            "do not copy them as-is; rephrase them in words for the user",
+            AI_AGENT_SYSTEM_PROMPT,
+        )
+        self.assertIn("Prefer the words shown on screen", AI_AGENT_SYSTEM_PROMPT)
 
     # 日本語: プロンプトアシスト要求するログインことを検証します。
     # English: Verify that prompt assist requires login.
@@ -386,7 +395,8 @@ class PromptAssistApiTestCase(unittest.TestCase):
                     with patch(
                         "blueprints.chat.tasks._build_ai_agent_memo_context",
                         return_value=(
-                            "【現在開いているメモ】\n本文:\n長い本文の先頭部分\n\n（本文が長いため一部を省略）"
+                            "[Memo currently open]\n本文:\n長い本文の先頭部分\n\n"
+                            "(part of the body was omitted because it is long)"
                         ),
                     ):
                         with patch("blueprints.chat.tasks.classify_memo_intent", return_value="edit"):

@@ -27,6 +27,23 @@ class ChatTitleTestCase(unittest.TestCase):
         self.assertEqual(title, "Python学習計画")
         self.assertEqual(llm_response_getter.call_args.args[1], LIGHTWEIGHT_TASK_MODEL)
 
+    # 日本語: タイトル生成にも混在言語入力の共通判定順序が渡されることを検証します。
+    # English: Verify the shared mixed-language decision order is included for title generation.
+    def test_generate_chat_room_title_includes_shared_response_language_policy(self):
+        llm_response_getter = MagicMock(return_value='{"title": "Project plan"}')
+
+        generate_chat_room_title(
+            "Please review this. 要点は日本語で",
+            "承知しました。",
+            locale="en",
+            llm_response_getter=llm_response_getter,
+        )
+
+        system_content = llm_response_getter.call_args.args[0][0]["content"]
+        self.assertIn("the part that states the user's request or instruction", system_content)
+        self.assertIn("larger share", system_content)
+        self.assertIn("saved interface language (English)", system_content)
+
     # 日本語: タスク起動リクエストのセットアップ情報（タスク名・状況）が初期タイトル候補リストに含まれることを検証します。
     # English: Verify that task setup info (task name and context) is included in the initial title candidates list.
     def test_build_initial_title_candidates_includes_task_setup(self):
@@ -70,6 +87,21 @@ class ChatTitleTestCase(unittest.TestCase):
         # English: Confirm the returned title is correct and rename was called with expected arguments
         self.assertEqual(title, "相談の整理")
         self.assertEqual(calls, [("room-1", "相談の整理", ["新規チャット", "相談したい"])])
+
+    # 日本語: 自動タイトル生成がUIロケールをタイトル用LLMプロンプトへ転送することを検証します。
+    # English: Verify automatic title generation forwards the UI locale to the title LLM prompt.
+    def test_maybe_auto_title_forwards_locale(self):
+        with patch("services.chat_title.generate_chat_room_title", return_value="Project plan") as mock_generate:
+            maybe_auto_title_chat_room(
+                chat_room_id="room-1",
+                user_message="Review this",
+                assistant_response="Sure",
+                allowed_current_titles=["New chat"],
+                conditional_rename=lambda *_args: True,
+                locale="en",
+            )
+
+        mock_generate.assert_called_once_with("Review this", "Sure", locale="en")
 
 
 if __name__ == "__main__":

@@ -105,7 +105,9 @@ class LlmServiceTestCase(unittest.TestCase):
             prepared[1]["content"].startswith(f"{llm.OPENAI_MARKDOWN_REENABLE_PREFIX}\n")
         )
         self.assertEqual(prepared[1]["content"], GENERATIVE_UI_EXECUTION_CONTRACT)
-        self.assertIn("説明文だけで終える回答は未完了", prepared[1]["content"])
+        self.assertIn(
+            "An answer that ends with explanation alone is incomplete", prepared[1]["content"]
+        )
         self.assertEqual(prepared[2]["role"], "user")
 
     def test_prepare_claude_messages_converts_system_and_tool_history(self):

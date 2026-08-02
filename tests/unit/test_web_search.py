@@ -207,7 +207,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
 
         planner_context = mock_llm.call_args.args[0][1]["content"]
         self.assertTrue(decision.should_search)
-        self.assertIn("実行中タスクシステム", planner_context)
+        self.assertIn("Running-task system", planner_context)
         self.assertIn("最新情報を調べて競合比較", planner_context)
 
     # 日本語: purewritingタスクに対して、decideWeb検索usesplannerことを検証します。
@@ -383,9 +383,18 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(augmented.status, "completed")
         self.assertEqual(len(augmented.messages), 2)
         self.assertIn("<web_search_context", augmented.messages[0]["content"])
-        self.assertIn("すでにBraveによるリアルタイムWeb検索を実行済み", augmented.messages[0]["content"])
-        self.assertIn("リアルタイム検索できない」とは言わないでください", augmented.messages[0]["content"])
-        self.assertIn("追加質問で止まらず", augmented.messages[0]["content"])
+        self.assertIn(
+            "A real-time web search with Brave has already been run for this turn",
+            augmented.messages[0]["content"],
+        )
+        self.assertIn(
+            "never say that you cannot browse or cannot search in real time",
+            augmented.messages[0]["content"],
+        )
+        self.assertIn(
+            "do not stop to ask follow-up questions",
+            augmented.messages[0]["content"],
+        )
         self.assertIn("https://example.com/python", augmented.messages[0]["content"])
         self.assertIn(result.sources[0].evidence_id, augmented.messages[0]["content"])
         self.assertIn("[[source:<evidence_id>]]", augmented.messages[0]["content"])
@@ -424,8 +433,8 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("月間上限", events[2].payload["message"])
         self.assertIsNone(augmented.result)
         self.assertEqual(augmented.status, "failed")
-        self.assertIn("月間上限", augmented.messages[0]["content"])
-        self.assertIn("リアルタイム確認ができない", augmented.messages[0]["content"])
+        self.assertIn("The monthly limit for Brave web search", augmented.messages[0]["content"])
+        self.assertIn("real-time verification is unavailable", augmented.messages[0]["content"])
 
     # 日本語: required検索に対して、maybeaugmentmessagesreportsmissingbraveAPIkeyことを検証します。
     # English: Verify that maybe augment messages reports missing brave api key for required search.
@@ -453,7 +462,10 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertIn("APIキーが未設定", events[1].payload["message"])
         self.assertIsNone(augmented.result)
         self.assertEqual(augmented.status, "failed")
-        self.assertIn("Brave Search APIキーが未設定", augmented.messages[0]["content"])
+        self.assertIn(
+            "the Brave Search API key is not configured",
+            augmented.messages[0]["content"],
+        )
 
     # 日本語: ビルドWeb検索sourcesMarkdown返却するcollapsibleblockことを検証します。
     # English: Verify that build web search sources markdown returns collapsible block.
@@ -734,7 +746,7 @@ class WebSearchServiceTestCase(unittest.TestCase):
         message = web_search.build_web_search_system_message(result)
 
         self.assertIsNotNone(message)
-        self.assertIn("本文抜粋: The full article body text.", message["content"])
+        self.assertIn("Page extract: The full article body text.", message["content"])
 
     # 日本語: ビルドシステムmessageneutralizesinjectedコンテキストtagsことを検証します。
     # English: Verify that build system message neutralizes injected context tags.
@@ -851,7 +863,7 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
             content,
         )
         self.assertIn("[[source:<evidence_id>]]", content)
-        self.assertIn("実在する evidence_id", content)
+        self.assertIn("Use only evidence_id values that actually appear below", content)
 
     def test_resolve_citations_converts_only_known_markers_and_returns_offsets(self):
         result = self._result()
@@ -1048,7 +1060,7 @@ class PriorWebSearchContextTestCase(unittest.TestCase):
         self.assertIsNotNone(message)
         content = message["content"]
         self.assertIn('kind="prior"', content)
-        self.assertIn("過去のターンで実行済み", content)
+        self.assertIn("already run in earlier turns of this conversation", content)
         self.assertIn("https://example.com/python", content)
         self.assertIn("<prior_search", content)
 

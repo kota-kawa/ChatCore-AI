@@ -8,6 +8,7 @@ import logging
 import re
 from typing import Any
 
+from .i18n import build_response_language_policy
 from .llm import LIGHTWEIGHT_TASK_MODEL, LlmProviderError, groq_client, get_llm_response
 
 MEMO_SUGGEST_MODEL = LIGHTWEIGHT_TASK_MODEL
@@ -55,7 +56,7 @@ def _fallback_suggest(ai_response: str) -> dict[str, Any]:
 
 # メモの本文テキストをもとに、LLMを呼び出して適切なタイトルを提案させます。不全時はヒューリスティクスにフォールバックします。
 # Call LLM to suggest a concise title for a memo, falling back to heuristics on failure.
-def suggest_title(ai_response: str) -> dict[str, Any]:
+def suggest_title(ai_response: str, *, locale: str = "ja") -> dict[str, Any]:
     """Use LLM to suggest a title for a memo.
 
     Returns a dict with key ``title`` (str).
@@ -63,22 +64,25 @@ def suggest_title(ai_response: str) -> dict[str, Any]:
     """
     response_sample = (ai_response or "").strip()[:SUGGEST_RESPONSE_SAMPLE_CHARS]
 
+    # 日本語: 保存するメモ本文の言語に合わせた簡潔なタイトルをJSONで提案させるシステムプロンプト。
     messages = [
         {
             "role": "system",
             "content": (
-                "あなたはメモ整理アシスタントです。"
-                "ユーザーが保存したいメモの内容から、適切なタイトルを提案してください。"
-                "必ず JSON オブジェクトのみを返してください。Markdown、コードフェンス、前置きは使わないでください。"
-                '形式: {"title": "タイトル（30文字以内）"}'
+                "You are a memo organizing assistant."
+                "Propose a fitting title from the content of the memo the user wants to save."
+                "Always return a JSON object only. Do not use Markdown, code fences, or a preamble."
+                "Write the title using this response-language policy:\n"
+                f"{build_response_language_policy(locale)}\n"
+                'Format: {"title": "the title, 30 characters or fewer"}'
             ),
         },
         {
             "role": "user",
             "content": (
-                f"【メモ本文】\n{response_sample}\n\n"
-                "このメモに適切なタイトル（30文字以内）を提案してください。"
-                '必ずJSONのみで回答: {"title": "..."}'
+                f"[Memo body]\n{response_sample}\n\n"
+                "Propose a fitting title for this memo (30 characters or fewer)."
+                'Answer with JSON only: {"title": "..."}'
             ),
         },
     ]

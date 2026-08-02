@@ -33,22 +33,23 @@ ARCHIVE_SUMMARY_ITEM_TOKENS = 120
 # reliably make the UI decision and finish the structured output. Detailed rules
 # and few-shot examples remain in the base prompt; this repeats only execution
 # and completion criteria.
+# 日本語: 生成UIの出力要否、Artifact形式、完了条件だけを最終出力前に再確認させる実行契約プロンプト。
 GENERATIVE_UI_EXECUTION_CONTRACT = """
 <generative_ui_execution_contract>
-これは回答直前に適用する最終出力契約です。内部で UI_MODE を NONE / 2D / 3D から1つ選び、UI_MODE 自体は出力しないでください。
+This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
 
-判定順序:
-1. ユーザーが「テキストだけ」「UI不要」「図は不要」と指定した場合は NONE。
-2. ユーザーが3D、立体、空間モデル、軌道、回転デモを明示的に求めた場合は 3D。
-3. ユーザーが生成UI、可視化、図解、チャート、フロー、タイムライン、操作可能なデモを明示的に求めた場合は 2D（空間理解が中心なら3D）。
-4. 明示がなくても、比較・流れ・階層・位置関係・割合・優先度・状態・因果・入力による変化をUIにすると理解が明確になる場合は 2D または 3D。それ以外は NONE。
+Decision order:
+1. NONE when the user asked for "text only", "no UI", or "no diagrams".
+2. 3D when the user explicitly asked for 3D, solid shapes, spatial models, orbits, or a rotation demo.
+3. 2D when the user explicitly asked for generative UI, a visualization, a diagram, a chart, a flow, a timeline, or an interactive demo (3D when spatial understanding is central).
+4. Even without an explicit request, 2D or 3D when turning a comparison, flow, hierarchy, spatial relationship, proportion, priority, state, causality, or input-driven change into UI makes it clearer. Otherwise NONE.
 
-UI_MODE が 2D または 3D の場合:
-- 短い導入文の直後に、完全な ```chatcore-artifact fenced block を必ず1つ出力してください。説明文だけで終える回答は未完了です。
-- JSONは version、title、html、css、js を含む有効な1オブジェクトとし、htmlには id="app" の要素を含めてください。
-- 3Dでは必ず "libraries":["three"] を含め、外部URLやアドオンを使わず THREE のコア機能だけで完成させてください。
-- Artifactの代わりにHTML・CSS・JavaScriptを別々のコードブロックで説明しないでください。
-- 送信前に、閉じ波括弧と閉じフェンスまで存在し、初期表示が空でなく、JSON文字列の改行・引用符が正しくエスケープされていることを確認してください。
+When UI_MODE is 2D or 3D:
+- Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
+- The JSON must be one valid object containing version, title, html, css, and js, and the html must contain an element with id="app".
+- For 3D, always include "libraries":["three"], and finish it with the core features of THREE only, without external URLs or add-ons.
+- Do not explain the HTML, CSS, and JavaScript in separate code blocks instead of producing an Artifact.
+- Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, and that newlines and quotes inside JSON strings are escaped correctly.
 </generative_ui_execution_contract>
 """.strip()
 
@@ -212,7 +213,9 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
             sections.append(f"- {point}")
         sections.append("</assistant_points>")
     sections.append(
-        "<summary_instruction>上の要約は古い履歴の圧縮情報です。直近メッセージと矛盾する場合は直近メッセージを優先してください。</summary_instruction>"
+        "<summary_instruction>The summary above is compressed information from older history. "
+        "When it conflicts with the most recent messages, prioritize the recent messages."
+        "</summary_instruction>"
     )
     sections.append("</conversation_summary>")
     summary = "\n".join(section for section in sections if section).strip()
@@ -289,11 +292,13 @@ def build_summary_system_message(summary_text: str) -> dict[str, str] | None:
     trimmed = trim_text_to_token_budget(summary_text, SUMMARY_TOKEN_BUDGET)
     if not trimmed:
         return None
+    # 日本語: 古い会話の要約を最新ターンより優先しない参照用文脈として渡すシステムプロンプト。
     return {
         "role": "system",
         "content": (
             "<archived_context>\n"
-            "以下は古い会話履歴の圧縮要約です。事実・制約の引き継ぎに使い、直近ターンより優先しないでください。\n"
+            "The following is a compressed summary of older conversation history. Use it to carry "
+            "over facts and constraints, and do not prioritize it over the most recent turns.\n"
             f"{trimmed}\n"
             "</archived_context>"
         ),
@@ -311,9 +316,11 @@ def build_memory_system_message(memory_facts: list[str]) -> dict[str, str] | Non
     if not normalized_facts:
         return None
 
+    # 日本語: ユーザーの情報・好みを会話を通じて尊重するよう渡すシステムプロンプト。
     sections = [
         "<memory_facts>",
-        "以下はこの会話で継続的に守るべきユーザー情報または設定です。",
+        "The following is user information or preferences you must keep honoring throughout this "
+        "conversation.",
     ]
     # ファクト項目を箇条書きで追加する
     # Append fact entries as bullet points
@@ -335,11 +342,13 @@ def build_project_instructions_message(instructions: str | None) -> dict[str, st
     trimmed = trim_text_to_token_budget(instructions, PROJECT_INSTRUCTIONS_TOKEN_BUDGET)
     if not trimmed:
         return None
+    # 日本語: プロジェクト固有の指示を当該プロジェクト内の会話で優先するよう渡すシステムプロンプト。
     return {
         "role": "system",
         "content": (
             "<project_instructions>\n"
-            "以下はこのプロジェクト固有の指示です。プロジェクト内の全会話で優先して従ってください。\n"
+            "The following are instructions specific to this project. Follow them with priority in "
+            "every conversation inside the project.\n"
             f"{trimmed}\n"
             "</project_instructions>"
         ),

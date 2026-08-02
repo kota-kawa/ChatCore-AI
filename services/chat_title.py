@@ -5,6 +5,7 @@ import logging
 import re
 from collections.abc import Callable
 
+from .i18n import build_response_language_policy
 from .llm import LIGHTWEIGHT_TASK_MODEL, LlmServiceError, get_llm_response
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ def generate_chat_room_title(
     user_message: str,
     assistant_response: str,
     *,
+    locale: str = "ja",
     llm_response_getter: Callable[..., str] = get_llm_response,
 ) -> str:
     user_text = _plain_text(user_message)
@@ -82,13 +84,15 @@ def generate_chat_room_title(
     if not user_text:
         return ""
 
+    # 日本語: 会話の依頼部分の言語に合わせ、短いスレッドタイトルだけをJSONで生成させるシステムプロンプト。
     messages = [
         {
             "role": "system",
             "content": (
                 "You generate concise chat thread titles. "
                 "Return JSON only in the form {\"title\":\"...\"}. "
-                "Use the same language as the conversation when possible. "
+                "Write the title using this response-language policy:\n"
+                f"{build_response_language_policy(locale)}\n"
                 f"Keep the title under {CHAT_ROOM_TITLE_MAX_CHARS} characters. "
                 "Do not include quotation marks, emojis, markdown, or trailing punctuation."
             ),
@@ -127,8 +131,9 @@ def maybe_auto_title_chat_room(
     assistant_response: str,
     allowed_current_titles: list[str],
     conditional_rename: Callable[[str, str, list[str]], bool],
+    locale: str = "ja",
 ) -> str | None:
-    title = generate_chat_room_title(user_message, assistant_response)
+    title = generate_chat_room_title(user_message, assistant_response, locale=locale)
     if not title:
         return None
     if title in allowed_current_titles:

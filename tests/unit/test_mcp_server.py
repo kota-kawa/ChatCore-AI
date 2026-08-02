@@ -91,7 +91,7 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(string_variant["maxLength"], 128)
         self.assertEqual(save_input["properties"]["importance"]["default"], 50)
 
-        self.assertIn("Markdown形式", server.instructions)
+        self.assertIn("Write in Markdown", server.instructions)
         markdown_inputs = {
             "create_memo": "content",
             "update_memo": "content",
@@ -99,9 +99,9 @@ class McpServerTestCase(unittest.TestCase):
         }
         for tool_name, input_name in markdown_inputs.items():
             definition = by_name[tool_name].model_dump(by_alias=True)
-            self.assertIn("Markdown形式", definition["description"])
+            self.assertIn("Markdown", definition["description"])
             self.assertIn(
-                "Markdown形式",
+                "Markdown",
                 definition["inputSchema"]["properties"][input_name]["description"],
             )
 
@@ -120,10 +120,10 @@ class McpServerTestCase(unittest.TestCase):
             definition = tool.model_dump(by_alias=True)
             category = definition["inputSchema"]["properties"]["category"]
             self.assertIn("coding", category["enum"])
-            self.assertIn("指定できる値", category["description"])
+            self.assertIn("Allowed category keys", category["description"])
             for expected_category in mcp_server.PROMPT_CATEGORIES.values():
                 self.assertIn(
-                    f"{expected_category.key}（{expected_category.label}）",
+                    expected_category.key,
                     category["description"],
                 )
             output = definition["outputSchema"]
@@ -137,7 +137,7 @@ class McpServerTestCase(unittest.TestCase):
         skill_properties = skill_definition["inputSchema"]["properties"]
         self.assertIn("resources", skill_properties)
         self.assertNotIn("skill_python_script", skill_properties)
-        self.assertIn("実行しません", skill_properties["resources"]["description"])
+        self.assertIn("does not execute code", skill_properties["resources"]["description"])
 
     def test_invalid_category_error_includes_allowed_values(self):
         with self.assertRaises(ValidationError) as context:

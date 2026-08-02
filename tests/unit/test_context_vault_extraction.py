@@ -74,8 +74,11 @@ class ContextVaultExtractionTestCase(unittest.TestCase):
             json.loads(messages[1]["content"])["assistant_response"],
             "I will remember that you like Vim.",
         )
-        self.assertIn("ユーザー本人が明言", EXTRACTION_SYSTEM_PROMPT)
-        self.assertIn("AIが新しく提示・推測・推薦した情報は抽出しません", EXTRACTION_SYSTEM_PROMPT)
+        self.assertIn("what the user themselves stated in user_message", EXTRACTION_SYSTEM_PROMPT)
+        self.assertIn(
+            "do not extract information the AI newly presented, guessed, or recommended",
+            EXTRACTION_SYSTEM_PROMPT,
+        )
 
     def test_bounds_source_text_before_calling_the_extraction_model(self):
         llm = Mock(return_value='{"candidates": []}')

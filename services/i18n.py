@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextvars import ContextVar
 from typing import Any, Literal
 
@@ -12,6 +13,14 @@ DEFAULT_LOCALE: Locale = "ja"
 LOCALE_COOKIE_NAME = "chatcore_locale"
 PREFERRED_LOCALE_SESSION_KEY = "preferred_locale"
 PREFERRED_LOCALE_LOADED_SESSION_KEY = "_preferred_locale_loaded"
+_JAPANESE_REQUEST_PATTERN = re.compile(
+    r"(?:して|ください|お願い|作成|提案|改善|修正|要約|翻訳|教えて|書いて|作って)"
+)
+_ENGLISH_REQUEST_PATTERN = re.compile(
+    r"\b(?:please|create|write|make|summarize|translate|improve|revise|help|"
+    r"can you|could you)\b",
+    re.IGNORECASE,
+)
 
 _current_locale: ContextVar[Locale] = ContextVar(
     "chatcore_current_locale",
@@ -133,6 +142,64 @@ def get_request_locale(request: Request) -> Locale:
     if cookie_locale is not None:
         return cookie_locale
     return parse_accept_language(request.headers.get("accept-language"))
+
+
+# 日本語: 応答言語をユーザーの入力言語へ合わせるための共通ルールを組み立てます。
+# English: Build the shared rules that bind the reply language to the user's input language.
+def build_response_language_policy(locale: Any = None) -> str:
+    """Return the response-language rules, including how to resolve mixed-language input.
+
+    The saved interface locale is only the last-resort fallback: the reply language is
+    decided from the user's own text first.
+    """
+    resolved_locale = normalize_locale(locale, default=DEFAULT_LOCALE) or DEFAULT_LOCALE
+    fallback_language = "English" if resolved_locale == "en" else "Japanese"
+    return "\n".join(
+        [
+            "Match the reply to the language of the user's input text: write the whole reply in "
+            "the language of the user's latest substantive message.",
+            "An explicit language request from the user takes priority over everything else, even "
+            "when that request is written in another language.",
+            "When a single message mixes languages (Japanese and English, for example), decide the "
+            "reply language in this order:",
+            "1. Use the language of the part that states the user's request or instruction - what "
+            "they are asking you to do. It outweighs quoted text, pasted logs, code, error "
+            "messages, file contents, and proper nouns.",
+            "2. If the request itself is mixed, use the language that accounts for the larger share "
+            "of the text the user wrote.",
+            "3. If it is still ambiguous, follow the language the user used earlier in this "
+            f"conversation, and only then fall back to the saved interface language ({fallback_language}).",
+            "Keep one language throughout a single reply. Technical terms, product names, and code "
+            "identifiers may stay in their original form and do not count as a language switch.",
+            "Do not translate user-authored content unless the user asks you to.",
+        ]
+    )
+
+
+# 日本語: 非LLMの短いフォールバック文言用に、依頼部分を優先してユーザー入力の主な言語を推定します。
+# English: Infer the main language of user text for short non-LLM fallback messages, prioritizing the request portion.
+def infer_response_language(text: Any, locale: Any = None) -> Locale:
+    normalized = str(text or "")
+    request_lines = [
+        line for line in normalized.splitlines() if _JAPANESE_REQUEST_PATTERN.search(line)
+    ]
+    if not request_lines:
+        request_lines = [
+            line for line in normalized.splitlines() if _ENGLISH_REQUEST_PATTERN.search(line)
+        ]
+    if request_lines:
+        normalized = request_lines[0]
+    japanese_characters = sum(
+        1
+        for character in normalized
+        if "\u3040" <= character <= "\u30ff" or "\u3400" <= character <= "\u9fff"
+    )
+    english_characters = sum(character.isascii() and character.isalpha() for character in normalized)
+    if japanese_characters > english_characters:
+        return "ja"
+    if english_characters > japanese_characters:
+        return "en"
+    return normalize_locale(locale, default=DEFAULT_LOCALE) or DEFAULT_LOCALE
 
 
 def translate(message_key: str, locale: Any = None, **params: Any) -> str:
