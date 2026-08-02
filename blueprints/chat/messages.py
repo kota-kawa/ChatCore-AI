@@ -38,7 +38,7 @@ from services.web_search import (
     inject_prior_web_search_context,
 )
 from services.project_service import get_project_context
-from services.generative_ui import normalize_response_with_artifacts
+from services.generative_ui import build_message_parts_context, normalize_response_with_artifacts
 from services.chat_state import (
     get_room_summary,
     list_room_memory_facts,
@@ -705,6 +705,12 @@ def _normalize_messages_for_llm(messages: list[dict[str, Any]]) -> list[dict[str
             "role": role,
             "content": _normalize_message_content_for_llm(message.get("content", ""), role),
         }
+        # Artifact source is intentionally not replayed to the model. A compact
+        # description keeps follow-up requests such as "edit that chart" grounded
+        # without consuming the context window with HTML/CSS/JavaScript.
+        message_parts_context = build_message_parts_context(message.get("message_parts"))
+        if message_parts_context:
+            normalized_message["content"] += message_parts_context
         attached_file_contents = message.get("attached_file_contents")
         if attached_file_contents:
             normalized_message["attached_file_contents"] = attached_file_contents
@@ -1164,6 +1170,8 @@ async def chat_regenerate(
                 }
                 if node.get("attached_file_contents"):
                     entry["attached_file_contents"] = node["attached_file_contents"]
+                if node.get("message_parts"):
+                    entry["message_parts"] = node["message_parts"]
                 all_messages.append(entry)
     else:
         sid, guest_error = await _validate_guest_room_access(session, chat_room_id)
@@ -1515,6 +1523,11 @@ async def chat_edit_and_regenerate(
                     **(
                         {"attached_file_contents": node["attached_file_contents"]}
                         if node.get("attached_file_contents")
+                        else {}
+                    ),
+                    **(
+                        {"message_parts": node["message_parts"]}
+                        if node.get("message_parts")
                         else {}
                     ),
                 }

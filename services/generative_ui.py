@@ -1237,6 +1237,45 @@ def decode_message_parts(raw_parts: Any) -> list[dict[str, Any]] | None:
     return _decode_message_parts(raw_parts)
 
 
+def build_message_parts_context(raw_parts: Any) -> str:
+    """Return a compact, code-free description of generated UI message parts.
+
+    The visible response deliberately stores artifacts separately from prose.
+    Reintroducing only their title, description, and capabilities lets later
+    turns refer to "the chart" or "the artifact" without spending context on
+    HTML, CSS, and JavaScript source.
+    """
+    parts = _decode_message_parts(raw_parts)
+    if not parts:
+        return ""
+
+    context_lines: list[str] = []
+    for part in parts:
+        if part.get("type") == "sandbox_artifact":
+            artifact = part.get("artifact")
+            if not isinstance(artifact, dict):
+                continue
+            title = _coerce_string(artifact.get("title")).strip() or "Untitled artifact"
+            description = _coerce_string(artifact.get("description")).strip()
+            libraries = artifact.get("libraries")
+            capabilities = ""
+            if isinstance(libraries, list) and "three" in libraries:
+                capabilities = " Includes a Three.js 3D view."
+            detail = f" — {description}" if description else ""
+            context_lines.append(f"- Generated UI artifact: {title}{detail}.{capabilities}")
+        elif part.get("type") == "interactive_buttons":
+            buttons = part.get("buttons")
+            if not isinstance(buttons, dict):
+                continue
+            question = _coerce_string(buttons.get("question")).strip()
+            if question:
+                context_lines.append(f"- Interactive buttons were shown for: {question}")
+
+    if not context_lines:
+        return ""
+    return "\n\n<generated_ui_context>\n" + "\n".join(context_lines) + "\n</generated_ui_context>"
+
+
 # メッセージパーツのリストをJSON文字列にシリアライズします。
 # Serialize the list of message parts to a JSON string.
 def encode_message_parts(parts: list[dict[str, Any]] | None) -> str | None:

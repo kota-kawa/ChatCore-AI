@@ -5,6 +5,7 @@ import unittest
 from blueprints.chat.messages import BASE_SYSTEM_PROMPT
 from services.generative_ui import (
     GenerativeUiValidationError,
+    build_message_parts_context,
     decode_message_parts,
     normalize_response_with_artifacts,
     validate_artifact_payload,
@@ -55,6 +56,19 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertEqual(normalized.parts[0], {"type": "text", "text": "以下の図で整理しました。"})
         self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
         self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
+
+    def test_message_parts_context_describes_artifact_without_source_code(self):
+        parts = [
+            {"type": "text", "text": "図を用意しました。"},
+            {"type": "sandbox_artifact", "artifact": VALID_ARTIFACT},
+        ]
+
+        context = build_message_parts_context(parts)
+
+        self.assertIn("構成図", context)
+        self.assertIn("クリックできる簡易図解", context)
+        self.assertNotIn(VALID_ARTIFACT["html"], context)
+        self.assertNotIn(VALID_ARTIFACT["js"], context)
 
     def test_normalize_response_hides_malformed_artifact_fence_beside_valid_artifact(self):
         """
