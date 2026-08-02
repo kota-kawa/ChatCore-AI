@@ -118,9 +118,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         self.assertEqual(decision.query, "React 19 latest information")
         self.assertEqual(mock_llm.call_count, 2)
 
-    # 日本語: planner失敗するのとき、decideWeb検索does〜しない検索ことを検証します。
-    # English: Verify that decide web search does not search when planner fails.
-    def test_decide_web_search_does_not_search_when_planner_fails(self):
+    # 日本語: プランナー障害時でも明示的な最新情報検索要求を捨てないことを検証します。
+    # English: Verify that an explicit current-information search request survives planner failure.
+    def test_decide_web_search_falls_back_to_explicit_search_when_planner_fails(self):
         messages = [{"role": "user", "content": "React 19の最新情報を検索して"}]
 
         # 日本語: 依存関係やコンテキストをモック化してテスト環境を構成します。
@@ -128,8 +128,9 @@ class WebSearchServiceTestCase(unittest.TestCase):
         with patch.object(web_search, "get_llm_json_response", side_effect=RuntimeError("down")):
             decision = web_search.decide_web_search(messages, "claude-haiku-4-5-20251001")
 
-        self.assertFalse(decision.should_search)
-        self.assertEqual(decision.reason, "web search planner unavailable")
+        self.assertTrue(decision.should_search)
+        self.assertEqual(decision.query, "React 19の最新情報を検索して")
+        self.assertIn("planner unavailable", decision.reason)
 
     # 日本語: newsリクエストに対して、decideWeb検索usesllmことを検証します。
     # English: Verify that decide web search uses llm for news request.

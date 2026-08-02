@@ -66,16 +66,14 @@ test("getStreamingGenerativeUiDisplayText hides incomplete artifact JSON while s
   assert.equal(getStreamingGenerativeUiDisplayText(text), "説明します。");
 });
 
-test("getStreamingGenerativeUiDisplayText returns empty text for alias-only artifact output", () => {
-  // 進行表示は静的テキストではなく GenerativeUiLoader が担うため、本文は空になる。
-  // The GenerativeUiLoader (not static text) now indicates progress, so the prose stays empty.
+test("legacy artifact aliases are hidden without activating the UI loader", () => {
   const text = [
     "```ui_artifact",
     '{"version":1,"title":"UI"',
   ].join("\n");
 
   assert.equal(getStreamingGenerativeUiDisplayText(text), "");
-  assert.equal(isGenerativeUiPending(text), true);
+  assert.equal(isGenerativeUiPending(text), false);
 });
 
 test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only output", () => {
@@ -89,8 +87,9 @@ test("getStreamingGenerativeUiDisplayText returns empty text for artifact-only o
 });
 
 test("hasGenerativeUiFenceStart detects fence starts and ignores plain code fences", () => {
-  assert.equal(hasGenerativeUiFenceStart("説明\n```generative-ui json\n{"), true);
-  assert.equal(hasGenerativeUiFenceStart("```chatcore-buttons\n"), true);
+  assert.equal(hasGenerativeUiFenceStart("説明\n```chatcore-artifact json\n{"), true);
+  assert.equal(hasGenerativeUiFenceStart("説明\n```generative-ui json\n{"), false);
+  assert.equal(hasGenerativeUiFenceStart("```chatcore-buttons\n"), false);
   assert.equal(hasGenerativeUiFenceStart("```python\nprint(1)\n```"), false);
   assert.equal(hasGenerativeUiFenceStart("ただのテキストです。"), false);
 });

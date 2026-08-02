@@ -1,6 +1,10 @@
 import type { ChatMessagePart } from "./types";
 
-const GENERATIVE_UI_FENCE_NAMES = [
+// Only this exact fence can start the generative-UI loading state. Legacy aliases
+// are still hidden from streamed prose below so malformed model output does not
+// expose its raw payload, but they are never treated as a UI being generated.
+const ARTIFACT_FENCE_NAME = "chatcore-artifact";
+const HIDDEN_GENERATIVE_UI_FENCE_NAMES = [
   "chatcore[\\s_-]*artifact",
   "generative[\\s_-]*ui",
   "ui[\\s_-]*artifact",
@@ -8,21 +12,25 @@ const GENERATIVE_UI_FENCE_NAMES = [
   "interactive[\\s_-]*buttons",
 ].join("|");
 const COMPLETE_GENERATIVE_UI_FENCE_RE = new RegExp(
-  "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
+  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*\\n[\\s\\S]*?```",
   "gi",
 );
-const GENERATIVE_UI_FENCE_START_RE = new RegExp(
-  "```[ \\t]*(?:" + GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
+const HIDDEN_GENERATIVE_UI_FENCE_START_RE = new RegExp(
+  "```[ \\t]*(?:" + HIDDEN_GENERATIVE_UI_FENCE_NAMES + ")\\b[^\\n]*(?:\\n|$)",
   "gi",
+);
+const ARTIFACT_FENCE_START_RE = new RegExp(
+  "```[ \\t]*" + ARTIFACT_FENCE_NAME + "(?:\\s+json)?[ \\t]*(?:\\n|$)",
+  "i",
 );
 export function stripGenerativeUiFencesForStreaming(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
   let stripped = normalized.replace(COMPLETE_GENERATIVE_UI_FENCE_RE, "\n\n");
 
   let incompleteFenceStart = -1;
-  GENERATIVE_UI_FENCE_START_RE.lastIndex = 0;
+  HIDDEN_GENERATIVE_UI_FENCE_START_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = GENERATIVE_UI_FENCE_START_RE.exec(stripped)) !== null) {
+  while ((match = HIDDEN_GENERATIVE_UI_FENCE_START_RE.exec(stripped)) !== null) {
     incompleteFenceStart = match.index;
   }
 
@@ -45,8 +53,7 @@ export function getStreamingGenerativeUiDisplayText(text: string) {
 // Detect whether the streamed text contains the start of a generative UI fence
 export function hasGenerativeUiFenceStart(text: string) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n");
-  GENERATIVE_UI_FENCE_START_RE.lastIndex = 0;
-  return GENERATIVE_UI_FENCE_START_RE.test(normalized);
+  return ARTIFACT_FENCE_START_RE.test(normalized);
 }
 
 // 生成UIの作成中（フェンスは始まったが、描画可能なパーツがまだ届いていない）かを判定する

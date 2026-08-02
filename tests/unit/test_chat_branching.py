@@ -367,6 +367,26 @@ class ChatBranchingTestCase(unittest.TestCase):
             [{"name": "sample.pdf", "content": "[page 1]\nHello PDF"}],
         )
 
+    def test_llm_context_restores_attachment_contents_for_later_follow_ups(self):
+        user_id = self.repo.save_message(
+            "room-1",
+            "この資料を覚えてください",
+            "user",
+            ["notes.txt"],
+            None,
+            None,
+            [PreparedAttachedFile(name="notes.txt", content="重要な結論はAです")],
+        )
+        self._save("承知しました", "assistant", user_id)
+        self._save("その資料の結論を詳しく", "user", user_id + 1)
+
+        messages = self.repo.get_room_messages_for_llm("room-1")
+
+        self.assertEqual(
+            messages[0]["attached_file_contents"],
+            [{"name": "notes.txt", "content": "重要な結論はAです"}],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

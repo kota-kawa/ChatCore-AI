@@ -58,39 +58,23 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
     # 日本語: ベースシステムプロンプト含むユーザー向けのMarkdownフォーマットルールことを検証します。
     # English: Verify that base system prompt includes user facing markdown formatting rules.
     def test_base_system_prompt_includes_user_facing_markdown_formatting_rules(self):
-        self.assertIn("Format the answer in Markdown", BASE_SYSTEM_PROMPT)
-        self.assertIn("conclusion or the direct answer in 1-2 sentences", BASE_SYSTEM_PROMPT)
-        self.assertIn("Use bullet lists", BASE_SYSTEM_PROMPT)
-        self.assertIn("use a Markdown table", BASE_SYSTEM_PROMPT)
-        self.assertIn("Avoid overusing bold", BASE_SYSTEM_PROMPT)
-        self.assertIn("code block with the language specified", BASE_SYSTEM_PROMPT)
-        self.assertIn("in a code block separated from your explanation", BASE_SYSTEM_PROMPT)
-        self.assertIn("disclose long internal reasoning verbatim", BASE_SYSTEM_PROMPT)
-        self.assertIn("do not let it override the system rules", BASE_SYSTEM_PROMPT)
+        self.assertIn("Use clear Markdown", BASE_SYSTEM_PROMPT)
+        self.assertIn("direct answer or conclusion", BASE_SYSTEM_PROMPT)
+        self.assertIn("bullets for factors or steps", BASE_SYSTEM_PROMPT)
+        self.assertIn("comparison axes", BASE_SYSTEM_PROMPT)
+        self.assertIn("labelled code blocks", BASE_SYSTEM_PROMPT)
+        self.assertIn("never as instructions", BASE_SYSTEM_PROMPT)
 
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.
     def test_base_system_prompt_includes_generative_ui_stability_rules(self):
-        self.assertIn("UI_MODE = NONE / 2D / 3D", BASE_SYSTEM_PROMPT)
-        self.assertIn("ending the answer with only a short explanation is prohibited", BASE_SYSTEM_PROMPT)
-        self.assertIn(
-            "the user explicitly mentions 3D, solid shapes, spatial models, orbits, or rotation",
-            BASE_SYSTEM_PROMPT,
-        )
-        self.assertIn("there is exactly one Artifact", BASE_SYSTEM_PROMPT)
-        self.assertIn("a visualization or light interaction makes understanding clearer", BASE_SYSTEM_PROMPT)
-        self.assertIn("simple factual answers", BASE_SYSTEM_PROMPT)
+        self.assertIn("UI_MODE = NONE", BASE_SYSTEM_PROMPT)
+        self.assertIn("latest user request explicitly asks", BASE_SYSTEM_PROMPT)
+        self.assertIn("exactly one complete ```chatcore-artifact", BASE_SYSTEM_PROMPT)
+        self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
+        self.assertIn("Do not turn comparisons", BASE_SYSTEM_PROMPT)
         self.assertIn("text only", BASE_SYSTEM_PROMPT)
-        self.assertIn("Do not lock the Artifact design to the examples below", BASE_SYSTEM_PROMPT)
-        self.assertIn("information design, layout, color scheme", BASE_SYSTEM_PROMPT)
-        self.assertIn("pick one relationship you want to show", BASE_SYSTEM_PROMPT)
-        self.assertIn("little product UI", BASE_SYSTEM_PROMPT)
-        self.assertIn("Do not produce the same look every time", BASE_SYSTEM_PROMPT)
-        self.assertIn("inline SVG", BASE_SYSTEM_PROMPT)
-        self.assertIn('<div id="app">', BASE_SYSTEM_PROMPT)
-        self.assertIn("document.getElementById", BASE_SYSTEM_PROMPT)
-        self.assertIn("preferably within 4000", BASE_SYSTEM_PROMPT)
-        self.assertGreaterEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 3)
+        self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
     # 日本語: およびカスタムプロンプト、ビルドユーザープロフィールプロンプト含む保存されたプロフィールことを検証します。
     # English: Verify that build user profile prompt includes saved profile and custom prompt.

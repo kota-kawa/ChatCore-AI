@@ -307,6 +307,11 @@ _CITATION_MARKER_RE = re.compile(
     r"\[\[source:([^\]\r\n]{1,200})\]\]|\[\[source:[^\s\]\r\n]{0,200}\]{0,2}",
     re.IGNORECASE,
 )
+_FALLBACK_SEARCH_REQUEST_RE = re.compile(
+    r"(?:検索|調べ(?:て|る)|探して|最新|今日|現在|今(?:の|日)|ニュース|天気|株価|為替|価格|"
+    r"\b(?:search|look\s*up|latest|current|today|news|weather|stock|price)\b)",
+    re.IGNORECASE,
+)
 
 
 def _neutralize_context_delimiters(value: str) -> str:
@@ -390,6 +395,15 @@ def _fallback_decision(user_message: str) -> WebSearchDecision:
     # Return default decision when the planner is unavailable.
     if not user_message.strip():
         return WebSearchDecision(False)
+    if _FALLBACK_SEARCH_REQUEST_RE.search(user_message):
+        return WebSearchDecision(
+            True,
+            query=_normalize_text(
+                _redact_secretish_text(user_message),
+                max_chars=WEB_SEARCH_MAX_QUERY_CHARS,
+            ),
+            reason="planner unavailable; request requires or explicitly asks for current web information",
+        )
     return WebSearchDecision(False, reason="web search planner unavailable")
 
 

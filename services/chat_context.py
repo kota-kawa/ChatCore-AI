@@ -47,10 +47,10 @@ GENERATIVE_UI_EXECUTION_CONTRACT = """
 This is the final output contract to apply right before you answer. Internally choose one UI_MODE from NONE / 2D / 3D, and never output UI_MODE itself.
 
 Decision order:
-1. NONE when the user asked for "text only", "no UI", or "no diagrams".
-2. 3D when the user explicitly asked for 3D, solid shapes, spatial models, orbits, or a rotation demo.
-3. 2D when the user explicitly asked for generative UI, a visualization, a diagram, a chart, a flow, a timeline, or an interactive demo (3D when spatial understanding is central).
-4. Even without an explicit request, 2D or 3D when turning a comparison, flow, hierarchy, spatial relationship, proportion, priority, state, causality, or input-driven change into UI makes it clearer. Otherwise NONE.
+1. NONE by default, including comparisons, flows, hierarchies, calculations, procedures, and explanations.
+2. NONE when the user asked for "text only", "no UI", or "no diagrams".
+3. 3D only when the latest user request explicitly asks for 3D, solid shapes, spatial models, orbits, or a rotation demo.
+4. 2D only when the latest user request explicitly asks for generative UI, a visualization, a diagram, a chart, a flow, a timeline, or an interactive demo.
 
 When UI_MODE is 2D or 3D:
 - Always output exactly one complete ```chatcore-artifact fenced block right after a short introduction. An answer that ends with explanation alone is incomplete.
@@ -106,6 +106,31 @@ def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
+def _trim_user_text_preserving_trailing_request(text: str, max_tokens: int) -> str:
+    """Keep both the subject and trailing constraints in an oversized user turn."""
+    normalized = normalize_message_text(text)
+    if estimate_token_count(normalized) <= max_tokens:
+        return normalized
+
+    max_chars = max_tokens * 4
+    if max_chars <= 6:
+        return normalized[-max_chars:]
+
+    # Long pasted material often ends with the actual question, requested
+    # format, or an exception. Preserve that tail while keeping a small leading
+    # slice so the request still has a subject.
+    omission_marker = "\n…\n"
+    tail_chars = max(1, int((max_chars - len(omission_marker)) * 0.7))
+    head_chars = max_chars - len(omission_marker) - tail_chars
+    if head_chars <= 0:
+        return normalized[-max_chars:]
+    return (
+        normalized[:head_chars].rstrip()
+        + omission_marker
+        + normalized[-tail_chars:].lstrip()
+    )
+
+
 def _split_leading_reference_context(text: str) -> tuple[str, str] | None:
     """Split generated reference prefixes from the user's trailing request."""
     normalized = normalize_message_text(text)
@@ -140,12 +165,12 @@ def _trim_latest_message_to_token_budget(
 
     split_content = _split_leading_reference_context(normalized_content)
     if split_content is None:
-        return trim_text_to_token_budget(normalized_content, max_tokens)
+        return _trim_user_text_preserving_trailing_request(normalized_content, max_tokens)
 
     reference_context, user_request = split_content
     request_tokens = estimate_token_count(user_request)
     if request_tokens >= max_tokens:
-        return trim_text_to_token_budget(user_request, max_tokens)
+        return _trim_user_text_preserving_trailing_request(user_request, max_tokens)
 
     separator = "\n\n"
     reference_budget = max_tokens - request_tokens - estimate_token_count(separator)

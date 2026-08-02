@@ -70,6 +70,22 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertNotIn(VALID_ARTIFACT["html"], context)
         self.assertNotIn(VALID_ARTIFACT["js"], context)
 
+    def test_message_parts_context_includes_safe_rendered_labels_for_follow_up_edits(self):
+        artifact = {
+            **VALID_ARTIFACT,
+            "html": (
+                '<section id="app"><h2>月別売上</h2><button>4月</button>'
+                '<article>3番目のカード: 予測</article></section>'
+            ),
+        }
+
+        context = build_message_parts_context([{"type": "sandbox_artifact", "artifact": artifact}])
+
+        self.assertIn("<rendered_text>月別売上 4月 3番目のカード: 予測</rendered_text>", context)
+        self.assertIn("untrusted, code-free metadata", context)
+        self.assertNotIn(artifact["html"], context)
+        self.assertNotIn(artifact["js"], context)
+
     def test_normalize_response_hides_malformed_artifact_fence_beside_valid_artifact(self):
         """
         正常な生成UIと一緒に、形式が崩れたArtifactフェンスが返っても、
@@ -126,11 +142,8 @@ class GenerativeUiTestCase(unittest.TestCase):
         self.assertEqual(normalized.text, "通常の回答です。")
         self.assertIsNone(normalized.parts)
 
-    def test_normalize_response_extracts_bare_json_artifact(self):
-        """
-        マークダウンフェンスで囲まれていない、生JSONのアーティファクトが正しく抽出されることを検証します。
-        Verify that a bare JSON artifact (not enclosed in markdown fences) is correctly extracted.
-        """
+    def test_normalize_response_keeps_bare_json_as_plain_text(self):
+        """生JSONは明示Artifactとして採用しない。"""
         # 生のJSONを含むテキストを作成
         # Create text containing a bare JSON string
         raw = (
@@ -142,17 +155,11 @@ class GenerativeUiTestCase(unittest.TestCase):
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 結果の検証：正しくパーツとして抽出されていること
-        # Assert the results: correctly extracted as a sandbox_artifact part
-        self.assertEqual(normalized.text, "表示します。")
-        self.assertIsNotNone(normalized.parts)
-        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
+        self.assertEqual(normalized.text, raw)
+        self.assertIsNone(normalized.parts)
 
-    def test_normalize_response_extracts_generic_json_fence_artifact(self):
-        """
-        ```json フェンスで囲まれたアーティファクトが正しく抽出されることを検証します。
-        Verify that an artifact enclosed in ```json fences is correctly extracted.
-        """
+    def test_normalize_response_keeps_generic_json_fence_as_plain_text(self):
+        """通常のJSONコードブロックは明示Artifactとして採用しない。"""
         # jsonフェンスで囲まれたテキストを作成
         # Create text enclosed in a generic json markdown fence
         raw = (
@@ -166,17 +173,25 @@ class GenerativeUiTestCase(unittest.TestCase):
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 結果の検証：正しくアーティファクトとして抽出されていること
-        # Assert the results: correctly extracted as an artifact
-        self.assertEqual(normalized.text, "表示します。")
-        self.assertIsNotNone(normalized.parts)
-        self.assertEqual(normalized.parts[1]["artifact"]["title"], "構成図")
+        self.assertEqual(normalized.text, raw)
+        self.assertIsNone(normalized.parts)
 
-    def test_normalize_response_extracts_split_source_code_blocks(self):
-        """
-        html, css, js それぞれの独立したコードブロックからアーティファクトが再構成されることを検証します。
-        Verify that an artifact is reconstructed from split code blocks of html, css, and js.
-        """
+    def test_normalize_response_does_not_adopt_legacy_artifact_alias(self):
+        """旧フェンス名は実行せず、壊れた定義として本文から安全に除去する。"""
+        raw = (
+            "説明です。\n\n"
+            "```generative-ui\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(raw)
+
+        self.assertEqual(normalized.text, "説明です。")
+        self.assertIsNone(normalized.parts)
+
+    def test_normalize_response_keeps_split_source_code_blocks_as_plain_text(self):
+        """通常のHTML/CSS/JSコードブロックはUIへ変換しない。"""
         # html, css, js 各ブロックに分かれたマークダウンテキスト
         # Markdown text split into html, css, and js blocks
         raw = """表示します。
@@ -198,69 +213,29 @@ document.getElementById('app').textContent = 'ready';
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 結果の検証：個別のブロックが1つのアーティファクトに統合されていること
-        # Assert the results: individual blocks are combined into one artifact
-        self.assertEqual(normalized.text, "表示します。")
+        self.assertEqual(normalized.text, raw)
         self.assertEqual(normalized.validation_errors, [])
-        self.assertIsNotNone(normalized.parts)
-        artifact = normalized.parts[1]["artifact"]
-        self.assertIn('<div id="app"></div>', artifact["html"])
-        self.assertIn("#app{padding", artifact["css"])
-        self.assertIn("textContent", artifact["js"])
+        self.assertIsNone(normalized.parts)
 
-    def test_base_prompt_few_shot_artifacts_are_valid_and_compact(self):
-        """
-        ベースとなるシステムプロンプトに含まれる Few-shot アーティファクト定義が有効であり、サイズ制限を満たしていることを検証します。
-        Verify that few-shot artifacts defined in the base system prompt are valid and within size limits.
-        """
-        # システムプロンプトからアーティファクトブロックをすべて抽出
-        # Extract all artifact blocks from the system prompt
-        artifact_blocks = re.findall(
-            r"```chatcore-artifact\s*(\{[\s\S]*?\})\s*```",
-            BASE_SYSTEM_PROMPT,
-        )
+    def test_base_prompt_keeps_ui_contract_compact_and_explicit(self):
+        """通常回答をUI化せず、明示依頼だけで専用フェンスを使う契約を検証する。"""
+        self.assertIn("UI_MODE = NONE` by default", BASE_SYSTEM_PROMPT)
+        self.assertIn("latest user request explicitly asks", BASE_SYSTEM_PROMPT)
+        self.assertIn("ordinary code/JSON means UI_MODE is NONE", BASE_SYSTEM_PROMPT)
+        self.assertIn("exactly one complete ```chatcore-artifact", BASE_SYSTEM_PROMPT)
+        self.assertEqual(BASE_SYSTEM_PROMPT.count("```chatcore-artifact"), 1)
 
-        # 少なくとも3つ以上のFew-shot例が存在することを検証
-        # Verify that there are at least 3 few-shot examples
-        self.assertGreaterEqual(len(artifact_blocks), 3)
-        
-        # 各アーティファクトブロックのパースと安全性の確認
-        # Parse and validate safety for each artifact block
-        for raw_payload in artifact_blocks:
-            payload = json.loads(raw_payload)
-            artifact = validate_artifact_payload(payload)
-
-            # HTML内にapp IDが存在し、コード合計文字数が8000以下、高さが720以下であることを検証
-            # Assert that app ID exists in HTML, total code length <= 8000, and height <= 720
-            self.assertRegex(artifact["html"], r"id=[\"']app[\"']")
-            self.assertLessEqual(
-                len(artifact["html"]) + len(artifact["css"]) + len(artifact["js"]),
-                8000,
-            )
-            self.assertLessEqual(artifact.get("height", 0), 720)
-
-    def test_normalize_response_creates_fallback_for_short_display_intent(self):
-        """
-        JSONを含まない短い表示意図のテキストに対し、フォールバックUIが自動生成されることを検証します。
-        Verify that a fallback UI is created for a short text expressing display intent without JSON.
-        """
+    def test_normalize_response_does_not_create_fallback_for_short_display_intent(self):
+        """短い表示宣言だけではUIを自動生成しない。"""
         # 表示意図のみの短いテキストで正規化を実行
         # Run normalization with a short text expressing intent to display
         normalized = normalize_response_with_artifacts("表示します。")
 
-        # 結果の検証：フォールバックUIが生成され、タイトルに元のテキストが含まれること
-        # Assert the results: a fallback UI is generated, using the original text as the title
         self.assertEqual(normalized.text, "表示します。")
-        self.assertIsNotNone(normalized.parts)
-        artifact = normalized.parts[1]["artifact"]
-        self.assertEqual(artifact["title"], "表示します。")
-        self.assertIn("fallback-ui", artifact["html"])
+        self.assertIsNone(normalized.parts)
 
-    def test_normalize_response_accepts_line_continuation_jsonish_artifact(self):
-        """
-        JSON内にバックスラッシュによる行継続(line continuation)が含まれていても、正しくデコードして抽出できることを検証します。
-        Verify that a JSON-like payload with line continuation backslashes is accepted and normalized.
-        """
+    def test_normalize_response_keeps_jsonish_prose_as_plain_text(self):
+        """専用フェンス外のJSON風テキストはUIとして実行しない。"""
         # 行継続のバックスラッシュを含むJSON風テキスト
         # JSON-like text containing line continuation backslashes
         raw = r'''表示します。
@@ -288,16 +263,9 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 各要素が正しくデコード・格納されていることを検証
-        # Verify that all elements are correctly decoded and populated
-        self.assertEqual(normalized.text, "表示します。")
+        self.assertEqual(normalized.text, raw)
         self.assertEqual(normalized.validation_errors, [])
-        self.assertIsNotNone(normalized.parts)
-        artifact = normalized.parts[1]["artifact"]
-        self.assertEqual(artifact["title"], "Queue と Worker の流れ")
-        self.assertIn(".box", artifact["css"])
-        self.assertIn("const steps", artifact["js"])
-        self.assertIn("style='font-family:sans-serif;padding:10px;'", artifact["html"])
+        self.assertIsNone(normalized.parts)
 
     def test_validate_artifact_rejects_network_javascript(self):
         """
@@ -495,11 +463,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIn("#app{color:red;}", normalized["css"])
         self.assertIn("textContent='ok'", normalized["js"])
 
-    def test_normalize_response_uses_fallback_when_artifact_validation_fails(self):
-        """
-        アーティファクトのバリデーションに失敗した場合に、自動的にフォールバックUIが適用されることを検証します。
-        Verify that the normalizer uses a fallback UI when artifact validation fails.
-        """
+    def test_normalize_response_drops_invalid_artifact_without_fallback(self):
+        """安全検証に失敗した明示Artifactは補完せず除去する。"""
         # JSにfetchを含む不正なアーティファクトブロックを設定
         # Set raw text containing an invalid artifact block with 'fetch'
         raw = (
@@ -513,12 +478,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 結果の検証：フォールバックUIが適用され、バリデーションエラーが記録されること
-        # Assert the results: fallback UI is applied and validation errors are recorded
         self.assertEqual(normalized.text, "短い説明です。")
-        self.assertIsNotNone(normalized.parts)
-        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
-        self.assertIn("fallback-ui", normalized.parts[1]["artifact"]["html"])
+        self.assertIsNone(normalized.parts)
         self.assertNotIn("安全検証", normalized.text)
         self.assertTrue(normalized.validation_errors)
 
@@ -661,11 +622,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertEqual(normalized.text, raw)
         self.assertIsNone(normalized.parts)
 
-    def test_web_search_trace_block_is_not_dumped_into_fallback(self):
-        """
-        Web検索時の進捗/トレース表示ブロックが、フォールバックUIの生成ロジックに巻き込まれて除去されないことを検証します。
-        Verify that web search progress/trace block is preserved and not swallowed by fallback UI logic.
-        """
+    def test_web_search_trace_block_stays_plain_text_without_artifact(self):
+        """検索トレースと短文だけではUIを補完しない。"""
         # Web検索時のトレースブロックを含むテキストを作成
         # Create text containing a web search trace block
         trace_block = (
@@ -685,15 +643,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         # Run normalization
         normalized = normalize_response_with_artifacts(raw)
 
-        # 結果の検証：フォールバックUIは生成されつつ、トレース部分はテキストに保持されていること
-        # Assert the results: fallback UI is created, and the trace block remains in the text
-        self.assertIsNotNone(normalized.parts)
-        self.assertEqual(normalized.parts[1]["type"], "sandbox_artifact")
-        artifact = normalized.parts[1]["artifact"]
-        self.assertIn("fallback-ui", artifact["html"])
-        self.assertNotIn("web-search-sources", artifact["html"])
-        self.assertNotIn("回答までのステップ", artifact["html"])
-        self.assertTrue(normalized.text.startswith(trace_block))
+        self.assertEqual(normalized.text, raw)
+        self.assertIsNone(normalized.parts)
 
     def test_decode_message_parts_drops_invalid_artifacts(self):
         """
@@ -860,8 +811,8 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         self.assertIn("new OrbitControls", artifact["js"])
         self.assertEqual(artifact["libraries"], ["three"])
 
-    def test_unsupported_three_addon_uses_renderable_3d_fallback(self):
-        """Unsupported module addons fail closed into a local, renderable Three.js fallback."""
+    def test_unsupported_three_addon_is_dropped_without_fallback(self):
+        """Unsupported module addons fail closed without creating replacement UI."""
         raw = (
             "3Dモデルを表示します。\n```chatcore-artifact\n"
             + json.dumps(
@@ -880,20 +831,18 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
         normalized = normalize_response_with_artifacts(raw)
 
         self.assertTrue(normalized.validation_errors)
-        artifact = normalized.parts[1]["artifact"]
-        self.assertEqual(artifact["libraries"], ["three"])
-        self.assertIn("TorusKnotGeometry", artifact["js"])
+        self.assertEqual(normalized.text, "3Dモデルを表示します。")
+        self.assertIsNone(normalized.parts)
 
-    def test_explicit_three_request_recovers_plain_model_response(self):
-        """A model that omits its artifact still yields a working 3D card for an explicit request."""
+    def test_explicit_three_request_does_not_recover_plain_model_response(self):
+        """ユーザーがUIを求めても、モデルの明示Artifactなしでは補完しない。"""
         normalized = normalize_response_with_artifacts(
             "こちらが完成イメージです。",
             artifact_intent_text="Three.jsを使った3Dの回転デモを生成UIで見せて",
         )
 
-        artifact = normalized.parts[1]["artifact"]
-        self.assertEqual(artifact["libraries"], ["three"])
-        self.assertIn("WebGLRenderer", artifact["js"])
+        self.assertEqual(normalized.text, "こちらが完成イメージです。")
+        self.assertIsNone(normalized.parts)
 
     def test_explicit_text_only_request_does_not_create_fallback(self):
         """Request-aware recovery respects explicit UI opt-outs."""
@@ -902,6 +851,23 @@ steps.forEach((s,i)=>{const b=document.createElement('div');b.className='box';b.
             artifact_intent_text="Three.jsについてテキストだけで説明して。UIは不要。",
         )
 
+        self.assertIsNone(normalized.parts)
+
+    def test_latest_text_only_request_suppresses_explicit_artifact(self):
+        """最新ユーザーがUI不要を指定した場合、明示Artifactも採用しない。"""
+        raw = (
+            "文章で説明します。\n\n"
+            "```chatcore-artifact\n"
+            f"{json.dumps(VALID_ARTIFACT, ensure_ascii=False)}\n"
+            "```"
+        )
+
+        normalized = normalize_response_with_artifacts(
+            raw,
+            artifact_intent_text="text-onlyで。UI不要、図不要。",
+        )
+
+        self.assertEqual(normalized.text, "文章で説明します。")
         self.assertIsNone(normalized.parts)
 
 

@@ -11,6 +11,7 @@ from fastapi import Request
 from services.api_errors import ApiServiceError
 from services.attached_files import (
     AttachedFileValidationError,
+    decode_attached_files_from_storage,
     format_attached_files_for_prompt,
     prepare_attached_files,
 )
@@ -348,6 +349,37 @@ class ChatPostUseCase:
         # Normalize message history for LLM compatibility
         normalized_all_messages = deps.normalize_messages_for_llm(all_messages)
 
+        # 過去ターンの添付も、そのメッセージに紐づく参照資料として再投入する。
+        # 最新ターンの添付は下の prefix_blocks で追加するため、ここでは重複を避ける。
+        # Reintroduce earlier uploads with the turn they belong to. The newest
+        # upload is added below through prefix_blocks, so it is not duplicated.
+        latest_user_index = next(
+            (
+                index
+                for index in range(len(normalized_all_messages) - 1, -1, -1)
+                if normalized_all_messages[index].get("role") == "user"
+            ),
+            None,
+        )
+        if latest_user_index is not None:
+            updated_messages = list(normalized_all_messages)
+            for index, message in enumerate(normalized_all_messages):
+                if index == latest_user_index or message.get("role") != "user":
+                    continue
+                attached_files = decode_attached_files_from_storage(
+                    message.get("attached_file_contents")
+                )
+                if not attached_files:
+                    continue
+                updated_messages[index] = {
+                    **message,
+                    "content": (
+                        f"{format_attached_files_for_prompt(attached_files)}\n\n"
+                        f"{message.get('content', '')}"
+                    ),
+                }
+            normalized_all_messages = updated_messages
+
         # Build context blocks to prepend to the last user message.
         # Order: fetched URL content → attached file content → user message text.
         prefix_blocks: list[str] = []
@@ -365,6 +397,14 @@ class ChatPostUseCase:
                     for url, content in fetched_urls.items()
                 )
                 prefix_blocks.append(f"<fetched_urls>\n{url_xml}\n</fetched_urls>")
+            else:
+                prefix_blocks.append(
+                    "<fetched_urls_status>\n"
+                    "The linked page content could not be retrieved. Do not summarize or infer details "
+                    "from the URL alone; ask the user for the page text or another accessible source if "
+                    "the request depends on it.\n"
+                    "</fetched_urls_status>"
+                )
 
         if prepared_attached_files:
             prefix_blocks.append(format_attached_files_for_prompt(prepared_attached_files))
