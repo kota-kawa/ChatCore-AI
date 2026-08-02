@@ -135,6 +135,38 @@ def get_request_locale(request: Request) -> Locale:
     return parse_accept_language(request.headers.get("accept-language"))
 
 
+# 日本語: 応答言語をユーザーの入力言語へ合わせるための共通ルールを組み立てます。
+# English: Build the shared rules that bind the reply language to the user's input language.
+def build_response_language_policy(locale: Any = None) -> str:
+    """Return the response-language rules, including how to resolve mixed-language input.
+
+    The saved interface locale is only the last-resort fallback: the reply language is
+    decided from the user's own text first.
+    """
+    resolved_locale = normalize_locale(locale, default=DEFAULT_LOCALE) or DEFAULT_LOCALE
+    fallback_language = "English" if resolved_locale == "en" else "Japanese"
+    return "\n".join(
+        [
+            "Match the reply to the language of the user's input text: write the whole reply in "
+            "the language of the user's latest substantive message.",
+            "An explicit language request from the user takes priority over everything else, even "
+            "when that request is written in another language.",
+            "When a single message mixes languages (Japanese and English, for example), decide the "
+            "reply language in this order:",
+            "1. Use the language of the part that states the user's request or instruction - what "
+            "they are asking you to do. It outweighs quoted text, pasted logs, code, error "
+            "messages, file contents, and proper nouns.",
+            "2. If the request itself is mixed, use the language that accounts for the larger share "
+            "of the text the user wrote.",
+            "3. If it is still ambiguous, follow the language the user used earlier in this "
+            f"conversation, and only then fall back to the saved interface language ({fallback_language}).",
+            "Keep one language throughout a single reply. Technical terms, product names, and code "
+            "identifiers may stay in their original form and do not count as a language switch.",
+            "Do not translate user-authored content unless the user asks you to.",
+        ]
+    )
+
+
 def translate(message_key: str, locale: Any = None, **params: Any) -> str:
     resolved_locale = normalize_locale(locale, default=get_current_locale())
     template = _MESSAGES.get(resolved_locale, {}).get(message_key)
