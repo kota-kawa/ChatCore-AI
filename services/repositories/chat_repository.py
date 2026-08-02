@@ -572,6 +572,17 @@ class ChatRepository:
                     message_parts = decode_message_parts(node.get("message_parts"))
                     if message_parts:
                         message["message_parts"] = message_parts
+                    # Attachments are private context data, not display data.
+                    # Include them only on this LLM-specific projection so a
+                    # later follow-up can still refer to an earlier upload.
+                    attached_file_contents = decode_attached_files_from_storage(
+                        node.get("attached_file_contents")
+                    )
+                    if attached_file_contents:
+                        message["attached_file_contents"] = [
+                            {"name": attached_file.name, "content": attached_file.content}
+                            for attached_file in attached_file_contents
+                        ]
                     messages.append(message)
                 return messages
             finally:

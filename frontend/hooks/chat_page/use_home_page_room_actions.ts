@@ -494,6 +494,19 @@ export function useHomePageRoomActions({
       // Project association applies to normal rooms only (temporary chats are not persisted).
       const projectId = roomMode === "normal" ? pendingProjectIdRef.current : null;
       const currentSetupInfo = setupInfo.trim();
+      if (!currentSetupInfo && attachedFiles.length === 0) {
+        showToast(
+          localize(
+            "タスクを始める前に、目的・対象・条件などを入力してください。",
+            "Before starting a task, enter its goal, subject, or key conditions.",
+          ),
+          { variant: "error" },
+        );
+        taskLaunchInProgressRef.current = false;
+        setLaunchingTaskName(null);
+        setLaunchingTaskId(null);
+        return;
+      }
       const roomTitle = (currentSetupInfo || localize("新規チャット", "New chat")).slice(0, 255);
       const taskHeader = [
         `【タスク】${task.name}`,

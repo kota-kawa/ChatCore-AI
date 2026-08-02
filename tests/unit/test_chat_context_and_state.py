@@ -8,7 +8,6 @@ from services.chat_context import (
     build_room_summary,
     estimate_token_count,
     select_recent_messages,
-    trim_text_to_token_budget,
 )
 from services.chat_state import extract_memory_facts
 
@@ -114,8 +113,9 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertIn(question, selected[0]["content"])
         self.assertLessEqual(len(selected[0]["content"]), 48 * 4)
 
-    def test_latest_normal_message_keeps_existing_trimming_behavior(self):
-        content = "normal message " * 100
+    def test_latest_normal_message_preserves_trailing_constraints_when_trimmed(self):
+        trailing_request = "最後に、結論は日本語の箇条書き3点だけで回答してください。"
+        content = "資料の本文です。" * 100 + trailing_request
         token_budget = 20
 
         selected = select_recent_messages(
@@ -124,10 +124,26 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         )
 
         self.assertEqual(len(selected), 1)
-        self.assertEqual(
-            selected[0]["content"],
-            trim_text_to_token_budget(content, token_budget),
+        self.assertIn("資料の本文", selected[0]["content"])
+        self.assertIn(trailing_request, selected[0]["content"])
+        self.assertLessEqual(len(selected[0]["content"]), token_budget * 4)
+
+    def test_long_reference_request_preserves_trailing_constraints_when_request_is_oversized(self):
+        trailing_request = "出力はJSONではなく日本語の文章だけにしてください。"
+        content = (
+            "<attached_files>\n<file name=\"notes.txt\">資料</file>\n</attached_files>\n\n"
+            + "詳細な依頼です。" * 100
+            + trailing_request
         )
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": content}],
+            token_budget=24,
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertIn(trailing_request, selected[0]["content"])
+        self.assertLessEqual(len(selected[0]["content"]), 24 * 4)
 
     def test_short_reference_augmented_message_remains_unchanged(self):
         content = (
