@@ -1322,7 +1322,7 @@ async def chat_regenerate(
             def on_finished() -> None:
                 try:
                     updated_messages = get_chat_room_messages(chat_room_id)
-                    rebuild_room_summary(chat_room_id, updated_messages)
+                    rebuild_room_summary(chat_room_id, updated_messages, model=model)
                 except Exception:
                     logger.warning(
                         "Failed to rebuild room summary after regeneration for %s.", chat_room_id
@@ -1721,7 +1721,7 @@ async def chat_edit_and_regenerate(
             def on_finished() -> None:
                 try:
                     updated_messages = get_chat_room_messages(chat_room_id)
-                    rebuild_room_summary(chat_room_id, updated_messages)
+                    rebuild_room_summary(chat_room_id, updated_messages, model=model)
                 except Exception:
                     logger.warning(
                         "Failed to rebuild room summary after edit_and_regenerate for %s.", chat_room_id

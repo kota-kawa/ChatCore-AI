@@ -7,9 +7,10 @@ from services.chat_context import (
     build_context_messages,
     build_room_summary,
     estimate_token_count,
+    normalize_message_text,
     select_recent_messages,
+    trim_text_to_token_budget,
 )
-from services.chat_state import extract_memory_facts
 
 
 # 日本語: チャットのコンテキスト構築と状態管理ロジックをテストするクラス。
@@ -85,7 +86,7 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
         self.assertEqual(len(selected), 1)
         self.assertIn(question, selected[0]["content"])
-        self.assertLessEqual(len(selected[0]["content"]), 40 * 4)
+        self.assertLessEqual(estimate_token_count(selected[0]["content"]), 40)
 
     def test_latest_user_request_survives_combined_url_and_attachment_context(self):
         question = "添付資料とURLの内容を比較して、日本語で差分を説明して。"
@@ -111,12 +112,16 @@ class ChatContextAndStateTestCase(unittest.TestCase):
 
         self.assertEqual(len(selected), 1)
         self.assertIn(question, selected[0]["content"])
-        self.assertLessEqual(len(selected[0]["content"]), 48 * 4)
+        self.assertLessEqual(estimate_token_count(selected[0]["content"]), 48)
 
     def test_latest_normal_message_preserves_trailing_constraints_when_trimmed(self):
         trailing_request = "最後に、結論は日本語の箇条書き3点だけで回答してください。"
         content = "資料の本文です。" * 100 + trailing_request
-        token_budget = 20
+        # 予算は実トークン基準。末尾要求だけで約19トークンあるため、主題と
+        # 末尾要求の両方を残すにはそれを上回る予算が要る。
+        # Budgets are in real tokens. The trailing request alone costs about 19,
+        # so keeping both the subject and the request needs more than that.
+        token_budget = 56
 
         selected = select_recent_messages(
             [{"role": "user", "content": content}],
@@ -126,7 +131,7 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertIn("資料の本文", selected[0]["content"])
         self.assertIn(trailing_request, selected[0]["content"])
-        self.assertLessEqual(len(selected[0]["content"]), token_budget * 4)
+        self.assertLessEqual(estimate_token_count(selected[0]["content"]), token_budget)
 
     def test_long_reference_request_preserves_trailing_constraints_when_request_is_oversized(self):
         trailing_request = "出力はJSONではなく日本語の文章だけにしてください。"
@@ -136,14 +141,16 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             + trailing_request
         )
 
+        token_budget = 66
+
         selected = select_recent_messages(
             [{"role": "user", "content": content}],
-            token_budget=24,
+            token_budget=token_budget,
         )
 
         self.assertEqual(len(selected), 1)
         self.assertIn(trailing_request, selected[0]["content"])
-        self.assertLessEqual(len(selected[0]["content"]), 24 * 4)
+        self.assertLessEqual(estimate_token_count(selected[0]["content"]), token_budget)
 
     def test_short_reference_augmented_message_remains_unchanged(self):
         content = (
@@ -231,18 +238,93 @@ class ChatContextAndStateTestCase(unittest.TestCase):
         self.assertEqual(archived_count, 1)
         self.assertIn("最初の要件", summary)
 
-    # 日本語: extract_memory_facts が「覚えて:」の指示や英語の自己紹介から記憶すべき事実を抽出することを検証します。
-    # English: Verify that extract_memory_facts correctly extracts facts from explicit "覚えて:" instructions and English self-introductions.
-    def test_extract_memory_facts_handles_explicit_and_structured_preferences(self):
-        facts = extract_memory_facts(
-            "覚えて: 箇条書きで短く答えて\nMy name is Kota.\nI prefer concise answers."
+    # 日本語: 日本語テキストが英語より多くのトークンとして見積もられることを検証します。
+    # English: Verify that Japanese text is estimated to cost more tokens than Latin text.
+    def test_estimate_token_count_is_script_aware(self):
+        japanese = "あ" * 120
+        latin = "a" * 120
+
+        self.assertGreater(estimate_token_count(japanese), estimate_token_count(latin))
+        # 4文字=1トークンの旧見積もり(30)より大幅に多く見積もられること
+        # Must be far above the old 4-characters-per-token estimate of 30
+        self.assertGreaterEqual(estimate_token_count(japanese), 70)
+        self.assertEqual(estimate_token_count(latin), 30)
+
+    # 日本語: 切り詰め結果が、日本語でも英語でも必ず予算内に収まることを検証します。
+    # English: Verify that trimmed text always fits the budget for both Japanese and Latin input.
+    def test_trim_text_to_token_budget_never_exceeds_budget(self):
+        samples = [
+            "これは日本語の長い文章です。" * 200,
+            "This is a long English sentence. " * 200,
+            ("混在テキスト mixed content " * 200),
+        ]
+
+        for sample in samples:
+            for budget in (1, 5, 40, 300):
+                with self.subTest(budget=budget, sample=sample[:12]):
+                    trimmed = trim_text_to_token_budget(sample, budget)
+                    self.assertLessEqual(estimate_token_count(trimmed), budget)
+
+    # 日本語: 長文ユーザー発話の末尾要求を残す切り詰めも、予算を超えないことを検証します。
+    # English: Verify the trailing-request-preserving trim also stays within budget.
+    def test_recent_message_selection_stays_within_budget_for_japanese(self):
+        messages = [
+            {"role": "user", "content": "最初の依頼です。" * 300},
+            {"role": "assistant", "content": "詳しい回答です。" * 300},
+            {"role": "user", "content": "続きをお願いします。" * 300},
+        ]
+
+        selected = select_recent_messages(messages, token_budget=200)
+
+        total = sum(estimate_token_count(message["content"]) for message in selected)
+        self.assertLessEqual(total, 200)
+
+    # 日本語: 貼り付けられたコードの字下げが、モデルへ渡る直前まで保持されることを検証します。
+    # English: Verify that indentation in pasted code survives all the way to the model payload.
+    def test_recent_messages_preserve_code_indentation(self):
+        code_message = (
+            "このコードを直して\n"
+            "```python\n"
+            "def outer():\n"
+            "    if flag:\n"
+            "        return inner(\n"
+            "            value,\n"
+            "        )\n"
+            "    return None\n"
+            "```"
         )
 
-        # 日本語: 各ソースから適切に事実が抽出されていることを確認
-        # English: Confirm facts are correctly extracted from each source
-        self.assertIn("箇条書きで短く答えて", facts)
-        self.assertIn("ユーザー名: Kota", facts)
-        self.assertIn("ユーザーの好み: concise answers", facts)
+        selected = select_recent_messages(
+            [{"role": "user", "content": code_message}],
+            token_budget=400,
+        )
+
+        content = selected[0]["content"]
+        self.assertIn("    if flag:", content)
+        self.assertIn("        return inner(", content)
+        self.assertIn("            value,", content)
+
+    # 日本語: ネストした Markdown 箇条書きの階層が保持されることを検証します。
+    # English: Verify that nested Markdown list levels are preserved.
+    def test_recent_messages_preserve_nested_markdown_list_levels(self):
+        list_message = "手順\n- 親項目\n  - 子項目\n    - 孫項目"
+
+        selected = select_recent_messages(
+            [{"role": "user", "content": list_message}],
+            token_budget=400,
+        )
+
+        content = selected[0]["content"]
+        self.assertIn("\n  - 子項目", content)
+        self.assertIn("\n    - 孫項目", content)
+
+    # 日本語: 行中の余分な空白と行末の空白は従来どおり圧縮されることを検証します。
+    # English: Verify that redundant mid-line and trailing whitespace is still compacted.
+    def test_normalize_message_text_still_compacts_redundant_whitespace(self):
+        self.assertEqual(
+            normalize_message_text("語句    の   あいだ   \n次の行   "),
+            "語句 の あいだ\n次の行",
+        )
 
 
 if __name__ == "__main__":

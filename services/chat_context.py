@@ -5,7 +5,14 @@ import math
 import re
 
 _HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
-_WHITESPACE_PATTERN = re.compile(r"[ \t]+")
+# 行頭のインデントは意味を持つため保持し、行の途中の連続スペース/タブだけを畳む。
+# 以前は全ての空白を1つに潰していたため、貼り付けられた Python/YAML や
+# ネストした Markdown 箇条書きの階層がモデルに届く前に失われていた。
+# Preserve leading indentation and collapse only mid-line whitespace runs.
+# Collapsing every run flattened pasted Python/YAML and nested Markdown lists
+# before the model ever saw them.
+_INLINE_WHITESPACE_PATTERN = re.compile(r"(?<=\S)[ \t]+")
+_TRAILING_WHITESPACE_PATTERN = re.compile(r"[ \t]+$", re.MULTILINE)
 _BLANK_LINES_PATTERN = re.compile(r"\n{3,}")
 _REFERENCE_CONTEXT_START_PATTERN = re.compile(
     r"\A<(?:fetched_urls|attached_files)(?:\s[^>]*)?>",
@@ -16,23 +23,44 @@ _REFERENCE_CONTEXT_BOUNDARY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 日本語/中国語などの表意文字は1文字あたりのトークン数がラテン文字より多い。
+# 全体を「4文字=1トークン」で数えると日本語の会話を2〜3倍過小評価してしまい、
+# 予算に基づく打ち切り判断が設計どおりに働かなくなる。
+# CJK text costs far more tokens per character than Latin text. Counting the
+# whole string at 4 characters per token underestimated Japanese conversations
+# by roughly 2-3x, so every budget-based trimming decision was miscalibrated.
+_CJK_PATTERN = re.compile(
+    r"[　-〿぀-ゟ゠-ヿ㐀-䶿"
+    r"一-鿿豈-﫿＀-￯]"
+)
+_CJK_CHARS_PER_TOKEN = 1.5
+_LATIN_CHARS_PER_TOKEN = 4.0
+
 # This is an application input budget, not an LLM provider context-window limit.
 # It deliberately leaves sufficient room for the fixed product prompt and a
 # complete recent turn. Provider-specific APIs remain the final authority on
 # their full request-window limits.
-CONTEXT_TOKEN_BUDGET = 12000
-SUMMARY_TOKEN_BUDGET = 900
-MEMORY_TOKEN_BUDGET = 500
-RECENT_HISTORY_TOKEN_BUDGET = 3400
-PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 1200
-USER_PROFILE_TOKEN_BUDGET = 1000
-TASK_PROMPT_TOKEN_BUDGET = 1200
+#
+# 予算値は、トークン見積もりを CJK 対応へ修正した際に再較正した。旧見積もりでは
+# 日本語 12000「トークン」が実質 3 万トークン超だったため、単位だけ直すと日本語の
+# 履歴が約 1/3 に縮んでしまう。実測に近い単位のまま従来と同程度の文脈量を保つ値にしている。
+# These budgets were recalibrated when the estimator became CJK-aware. Under the
+# old estimator 12000 "tokens" of Japanese was really 30k+ tokens, so fixing only
+# the unit would have shrunk Japanese history to about a third. These values keep
+# a comparable amount of context while being expressed in realistic tokens.
+CONTEXT_TOKEN_BUDGET = 26000
+SUMMARY_TOKEN_BUDGET = 2000
+MEMORY_TOKEN_BUDGET = 1100
+RECENT_HISTORY_TOKEN_BUDGET = 7400
+PROJECT_INSTRUCTIONS_TOKEN_BUDGET = 2600
+USER_PROFILE_TOKEN_BUDGET = 2200
+TASK_PROMPT_TOKEN_BUDGET = 2600
 RECENT_HISTORY_MAX_MESSAGES = 16
 GUARANTEED_RECENT_MESSAGE_COUNT = 3
 ARCHIVE_RECENT_MESSAGE_COUNT = 12
 ARCHIVE_RECENT_TOKEN_BUDGET = RECENT_HISTORY_TOKEN_BUDGET
 ARCHIVE_SUMMARY_MAX_ITEMS = 4
-ARCHIVE_SUMMARY_ITEM_TOKENS = 120
+ARCHIVE_SUMMARY_ITEM_TOKENS = 260
 
 # 小型モデルでも生成UIの要否判定と構造化出力を最後まで実行できるよう、
 # 可変コンテキストの後ろに置く短い最終契約。詳細仕様と few-shot はベース
@@ -58,6 +86,16 @@ When UI_MODE is 2D or 3D:
 - For 3D, always include "libraries":["three"], and finish it with the core features of THREE only, without external URLs or add-ons.
 - Do not explain the HTML, CSS, and JavaScript in separate code blocks instead of producing an Artifact.
 - Before sending, confirm that the closing brace and closing fence are present, that the initial render is not empty, and that newlines and quotes inside JSON strings are escaped correctly.
+
+The Artifact runs in an isolated sandbox with no network and no access to the page around it. An Artifact that breaks these limits is rejected and the user receives no UI at all, so treat them as hard requirements:
+- No network of any kind: fetch, XMLHttpRequest, WebSocket, EventSource, sendBeacon, dynamic import(), and importScripts are all unavailable. Build the data you need directly into the code.
+- No storage or ambient state: localStorage, sessionStorage, indexedDB, caches, and document.cookie are unavailable.
+- No code from strings: eval, new Function, and setTimeout or setInterval called with a string are unavailable.
+- No access to the surrounding page: window.parent, top, opener, postMessage, and any assignment to location are unavailable.
+- No external resources: every image, font, and stylesheet must be inline, a data: URI, or an inline SVG. External URLs are stripped, and @import is removed.
+- No script, iframe, object, embed, link, meta, or base tags in html. Put JavaScript in js and CSS in css, never inside html.
+- Keep html and css within 12000 characters each and js within 18000, with roughly 36000 in total. Prefer well under those limits and narrow long data to representative examples.
+- height must be between 160 and 900.
 </generative_ui_execution_contract>
 """.strip()
 
@@ -68,9 +106,17 @@ def estimate_token_count(text: str) -> int:
     normalized = text if isinstance(text, str) else str(text)
     if not normalized:
         return 0
-    # 4文字あたり約1トークンとして計算
-    # Calculate roughly as 1 token per 4 characters
-    return max(1, math.ceil(len(normalized) / 4))
+    # CJK文字は約1.5文字=1トークン、それ以外は約4文字=1トークンとして概算する
+    # Estimate CJK at ~1.5 characters per token and other scripts at ~4
+    cjk_characters = len(_CJK_PATTERN.findall(normalized))
+    other_characters = len(normalized) - cjk_characters
+    return max(
+        1,
+        math.ceil(
+            cjk_characters / _CJK_CHARS_PER_TOKEN
+            + other_characters / _LATIN_CHARS_PER_TOKEN
+        ),
+    )
 
 
 # メッセージテキストをクレンジングして正規化する
@@ -82,9 +128,33 @@ def normalize_message_text(text: str) -> str:
     normalized = html.unescape(normalized)
     normalized = _HTML_BR_PATTERN.sub("\n", normalized)
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
-    normalized = _WHITESPACE_PATTERN.sub(" ", normalized)
+    normalized = _TRAILING_WHITESPACE_PATTERN.sub("", normalized)
+    normalized = _INLINE_WHITESPACE_PATTERN.sub(" ", normalized)
     normalized = _BLANK_LINES_PATTERN.sub("\n\n", normalized)
     return normalized.strip()
+
+
+# トークン予算に対応する文字数を、対象テキストの実際の文字構成から見積もる
+# Estimate the character allowance for a token budget from the text's own script mix
+def _char_budget_for_token_budget(text: str, max_tokens: int) -> int:
+    if not text or max_tokens <= 0:
+        return 0
+    chars_per_token = len(text) / max(estimate_token_count(text), 1)
+    return max(1, int(max_tokens * chars_per_token))
+
+
+# 予算超過が残らなくなるまでテキストを縮める（keep="head" は先頭、"tail" は末尾を残す）
+# Shrink text until it fits the budget (keep="head" keeps the start, "tail" the end)
+def _shrink_to_token_budget(text: str, max_tokens: int, *, keep: str = "head") -> str:
+    if max_tokens <= 0:
+        return ""
+    candidate = text
+    while candidate and estimate_token_count(candidate) > max_tokens:
+        current_tokens = estimate_token_count(candidate)
+        chars_per_token = len(candidate) / max(current_tokens, 1)
+        drop = max(1, int((current_tokens - max_tokens) * chars_per_token))
+        candidate = candidate[:-drop] if keep == "head" else candidate[drop:]
+    return candidate
 
 
 # トークン上限に収まるようにテキストを切り詰める
@@ -98,12 +168,19 @@ def trim_text_to_token_budget(text: str, max_tokens: int) -> str:
     if estimate_token_count(normalized) <= max_tokens:
         return normalized
 
-    # 切り詰め後の文字数を算出して末尾に省略記号を付与する
-    # Calculate truncated character count and append ellipsis
-    max_chars = max_tokens * 4
-    if max_chars <= 3:
-        return normalized[:max_chars]
-    return normalized[: max_chars - 3].rstrip() + "..."
+    # 省略記号の分を予算から差し引き、残りに収まるところまで切り詰める
+    # Reserve the ellipsis cost, then truncate the body into the remaining budget
+    ellipsis = "..."
+    ellipsis_tokens = estimate_token_count(ellipsis)
+    if max_tokens <= ellipsis_tokens:
+        return _shrink_to_token_budget(normalized, max_tokens)
+
+    body_budget = max_tokens - ellipsis_tokens
+    max_chars = _char_budget_for_token_budget(normalized, body_budget)
+    body = _shrink_to_token_budget(normalized[:max_chars], body_budget)
+    if not body:
+        return _shrink_to_token_budget(normalized, max_tokens)
+    return body.rstrip() + ellipsis
 
 
 def _trim_user_text_preserving_trailing_request(text: str, max_tokens: int) -> str:
@@ -112,23 +189,31 @@ def _trim_user_text_preserving_trailing_request(text: str, max_tokens: int) -> s
     if estimate_token_count(normalized) <= max_tokens:
         return normalized
 
-    max_chars = max_tokens * 4
-    if max_chars <= 6:
-        return normalized[-max_chars:]
-
     # Long pasted material often ends with the actual question, requested
     # format, or an exception. Preserve that tail while keeping a small leading
     # slice so the request still has a subject.
     omission_marker = "\n…\n"
-    tail_chars = max(1, int((max_chars - len(omission_marker)) * 0.7))
-    head_chars = max_chars - len(omission_marker) - tail_chars
-    if head_chars <= 0:
-        return normalized[-max_chars:]
-    return (
-        normalized[:head_chars].rstrip()
-        + omission_marker
-        + normalized[-tail_chars:].lstrip()
-    )
+    usable_tokens = max_tokens - estimate_token_count(omission_marker)
+    if usable_tokens <= 1:
+        return _shrink_to_token_budget(normalized, max_tokens, keep="tail")
+
+    tail_tokens = max(1, int(usable_tokens * 0.7))
+    head_tokens = usable_tokens - tail_tokens
+    if head_tokens <= 0:
+        return _shrink_to_token_budget(normalized, max_tokens, keep="tail")
+
+    head = _shrink_to_token_budget(
+        normalized[: _char_budget_for_token_budget(normalized, head_tokens)],
+        head_tokens,
+    ).rstrip()
+    tail = _shrink_to_token_budget(
+        normalized[-_char_budget_for_token_budget(normalized, tail_tokens) :],
+        tail_tokens,
+        keep="tail",
+    ).lstrip()
+    if not head:
+        return tail
+    return f"{head}{omission_marker}{tail}"
 
 
 def _split_leading_reference_context(text: str) -> tuple[str, str] | None:
@@ -185,16 +270,17 @@ def _trim_latest_message_to_token_budget(
 
 # 会話履歴の古いメッセージから、要約情報（XML形式）を作成する
 # Build a summary (XML format) from the older messages in the conversation history
-def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
+def select_archived_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    """要約対象となる古いメッセージを切り出す / Split off the older messages to summarize."""
     # Keep a recent window by both message count and token size. A generated UI
     # or other long answer can exhaust the history budget in only a few turns,
     # so message count alone is not sufficient to decide when to summarize.
     if len(messages) <= 2:
-        return "", 0
+        return []
 
     total_tokens = sum(estimate_token_count(message.get("content", "")) for message in messages)
     if len(messages) <= ARCHIVE_RECENT_MESSAGE_COUNT and total_tokens <= ARCHIVE_RECENT_TOKEN_BUDGET:
-        return "", 0
+        return []
 
     recent_start = len(messages)
     recent_count = 0
@@ -212,7 +298,27 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
         recent_count += 1
         recent_tokens += message_tokens
 
-    archived_messages = messages[:recent_start]
+    return messages[:recent_start]
+
+
+# 要約本文を、モデルへ渡す <conversation_summary> 形式へ包む
+# Wrap summary content in the <conversation_summary> envelope sent to the model
+def render_summary_context(body_sections: list[str], archived_count: int) -> str:
+    sections: list[str] = ["<conversation_summary>"]
+    sections.append(f"<archived_message_count>{archived_count}</archived_message_count>")
+    sections.extend(body_sections)
+    sections.append(
+        "<summary_instruction>The summary above is compressed information from older history. "
+        "When it conflicts with the most recent messages, prioritize the recent messages."
+        "</summary_instruction>"
+    )
+    sections.append("</conversation_summary>")
+    summary = "\n".join(section for section in sections if section).strip()
+    return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET)
+
+
+def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
+    archived_messages = select_archived_messages(messages)
     if not archived_messages:
         return "", 0
 
@@ -244,10 +350,7 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
 
     # XML形式で要約コンテキストを構築する
     # Build the summary context in XML format
-    sections: list[str] = ["<conversation_summary>"]
-    sections.append(
-        f"<archived_message_count>{len(archived_messages)}</archived_message_count>"
-    )
+    sections: list[str] = []
     if first_user_message:
         sections.extend(
             [
@@ -266,14 +369,7 @@ def build_room_summary(messages: list[dict[str, str]]) -> tuple[str, int]:
         for point in assistant_points:
             sections.append(f"- {point}")
         sections.append("</assistant_points>")
-    sections.append(
-        "<summary_instruction>The summary above is compressed information from older history. "
-        "When it conflicts with the most recent messages, prioritize the recent messages."
-        "</summary_instruction>"
-    )
-    sections.append("</conversation_summary>")
-    summary = "\n".join(section for section in sections if section).strip()
-    return trim_text_to_token_budget(summary, SUMMARY_TOKEN_BUDGET), len(archived_messages)
+    return render_summary_context(sections, len(archived_messages)), len(archived_messages)
 
 
 # トークン予算と上限メッセージ数に収まる範囲で、直近のメッセージを後ろから順に選択する

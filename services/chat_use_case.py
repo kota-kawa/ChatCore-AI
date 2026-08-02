@@ -468,22 +468,24 @@ class ChatPostUseCase:
                 except Exception:
                     deps.logger.warning("Failed to load memory facts; proceeding without them.")
             if saved_user_message_id is not None:
+                # 記憶抽出は元メッセージIDと結びつけて保存する。抽出自体がLLM呼び出しに
+                # なったため応答経路から外す。今ターンの発話は履歴としてそのまま文脈に
+                # 入っているので、抽出結果が要るのは次ターン以降であり遅延は問題ない。
+                # Memory extraction is tied to the source message id. It now costs an
+                # LLM call, so it runs off the response path: this turn already carries
+                # the user's message verbatim, and the extracted facts are only needed
+                # from the next turn onward.
                 try:
-                    # 記憶抽出は元メッセージIDと結びつけて保存する。失敗しても応答生成は継続し、
-                    # 次回以降のパーソナル文脈だけが欠ける扱いにする。
-                    remembered_facts = await run_blocking(
+                    deps.submit_background_task(
                         deps.remember_facts_from_message,
                         chat_room_id,
                         user_id,
                         user_message,
                         source_message_id=saved_user_message_id,
                     )
-                    for fact in remembered_facts:
-                        if fact not in memory_facts:
-                            memory_facts.insert(0, fact)
                 except Exception:
                     deps.logger.warning(
-                        "Failed to update memory facts for chat room %s.",
+                        "Failed to schedule memory fact update for chat room %s.",
                         chat_room_id,
                     )
 
@@ -615,7 +617,9 @@ class ChatPostUseCase:
                         updated_messages = deps.get_chat_room_messages(chat_room_id)
                         # 要約はストリーミング完了後に一度だけ更新する。
                         # chunk 単位で更新すると未完成の応答が要約へ混ざり、DB 書き込みも増える。
-                        deps.rebuild_room_summary(chat_room_id, updated_messages)
+                        deps.rebuild_room_summary(
+                            chat_room_id, updated_messages, model=model
+                        )
                     except Exception:
                         deps.logger.warning(
                             "Failed to rebuild room summary after streaming response for %s.",
@@ -866,7 +870,11 @@ class ChatPostUseCase:
         ):
             try:
                 all_messages = await run_blocking(deps.get_chat_room_messages, chat_room_id)
-                await run_blocking(deps.rebuild_room_summary, chat_room_id, all_messages)
+                await run_blocking(
+                    partial(deps.rebuild_room_summary, model=model),
+                    chat_room_id,
+                    all_messages,
+                )
             except Exception:
                 deps.logger.warning(
                     "Failed to rebuild room summary for chat room %s.",
