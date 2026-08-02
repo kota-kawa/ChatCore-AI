@@ -59,7 +59,10 @@ class ChatContextAndStateTestCase(unittest.TestCase):
             context_messages[5]["content"],
             GENERATIVE_UI_EXECUTION_CONTRACT,
         )
-        self.assertIn("説明文だけで終える回答は未完了", context_messages[5]["content"])
+        self.assertIn(
+            "An answer that ends with explanation alone is incomplete",
+            context_messages[5]["content"],
+        )
         self.assertEqual(context_messages[-1]["content"], "third")
 
     def test_latest_user_request_survives_long_fetched_url_context(self):

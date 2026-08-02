@@ -187,7 +187,7 @@ class BuildMemoEditMessagesTestCase(unittest.TestCase):
 
         self.assertEqual(messages[0]["role"], "system")
         self.assertIn("memo_edit", messages[0]["content"])
-        self.assertIn("参照情報ここから", messages[0]["content"])
+        self.assertIn("START OF REFERENCE MATERIAL", messages[0]["content"])
         self.assertIn("テスト本文", messages[0]["content"])
         self.assertEqual(messages[-1], {"role": "user", "content": "誤字を直して"})
 

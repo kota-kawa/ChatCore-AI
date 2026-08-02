@@ -88,7 +88,9 @@ def generate_chat_room_title(
             "content": (
                 "You generate concise chat thread titles. "
                 "Return JSON only in the form {\"title\":\"...\"}. "
-                "Use the same language as the conversation when possible. "
+                "Write the title in the language the user wrote in. When the conversation mixes "
+                "languages, follow the language of the user's request rather than the language of "
+                "quoted text, code, or logs. "
                 f"Keep the title under {CHAT_ROOM_TITLE_MAX_CHARS} characters. "
                 "Do not include quotation marks, emojis, markdown, or trailing punctuation."
             ),

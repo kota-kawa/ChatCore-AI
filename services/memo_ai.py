@@ -67,18 +67,19 @@ def suggest_title(ai_response: str) -> dict[str, Any]:
         {
             "role": "system",
             "content": (
-                "あなたはメモ整理アシスタントです。"
-                "ユーザーが保存したいメモの内容から、適切なタイトルを提案してください。"
-                "必ず JSON オブジェクトのみを返してください。Markdown、コードフェンス、前置きは使わないでください。"
-                '形式: {"title": "タイトル（30文字以内）"}'
+                "You are a memo organizing assistant."
+                "Propose a fitting title from the content of the memo the user wants to save."
+                "Always return a JSON object only. Do not use Markdown, code fences, or a preamble."
+                "Write the title in the same language as the memo body."
+                'Format: {"title": "the title, 30 characters or fewer"}'
             ),
         },
         {
             "role": "user",
             "content": (
-                f"【メモ本文】\n{response_sample}\n\n"
-                "このメモに適切なタイトル（30文字以内）を提案してください。"
-                '必ずJSONのみで回答: {"title": "..."}'
+                f"[Memo body]\n{response_sample}\n\n"
+                "Propose a fitting title for this memo (30 characters or fewer)."
+                'Answer with JSON only: {"title": "..."}'
             ),
         },
     ]

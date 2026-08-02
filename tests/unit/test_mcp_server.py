@@ -91,7 +91,7 @@ class McpServerTestCase(unittest.TestCase):
         self.assertEqual(string_variant["maxLength"], 128)
         self.assertEqual(save_input["properties"]["importance"]["default"], 50)
 
-        self.assertIn("Markdown形式", server.instructions)
+        self.assertIn("Write in Markdown", server.instructions)
         markdown_inputs = {
             "create_memo": "content",
             "update_memo": "content",

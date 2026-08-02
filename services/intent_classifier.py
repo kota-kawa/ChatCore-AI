@@ -13,20 +13,20 @@ logger = logging.getLogger(__name__)
 Intent = Literal["action", "page_info", "search", "direct"]
 
 _CLASSIFIER_SYSTEM = """
-ユーザーメッセージの意図を以下の4種類のうち1つに分類し、JSONのみを返してください。説明文は不要です。
+Classify the intent of the user message into exactly one of the four types below and return JSON only. No explanation is needed.
 
-- "action": 現在のページ上でクリック・入力・スクロールなど、具体的な操作を代わりに実行してほしい
-- "page_info": 現在のページの使い方・操作方法・画面構成・要素について知りたい
-- "search": アプリの機能・設定・手順など、ドキュメントを調べる必要がある質問
-- "direct": 挨拶・雑談・翻訳・文章生成・要約など、検索不要で直接回答できるもの
+- "action": the user wants you to carry out a concrete operation on the current page for them, such as clicking, typing, or scrolling
+- "page_info": the user wants to know how to use the current page, how to operate it, how it is laid out, or what its elements are
+- "search": a question about the app's features, settings, or procedures that requires looking through the documentation
+- "direct": greetings, small talk, translation, writing, summarization, and anything else you can answer directly without a search
 
-判断ルール:
-- 画面を開く、移動する、クリックする、入力する、検索する、設定を切り替える、共有リンクをコピーする等の依頼は "action"
-- 「この画面で何ができる」「どこにある」「どう使う」は "page_info"
-- アプリ全体の機能説明、手順、仕様確認は "search"
-- プロンプト改善、文章作成、要約、翻訳などページ操作を伴わない生成依頼は "direct"
+Decision rules:
+- Requests to open a screen, navigate, click, type, search, toggle a setting, copy a share link, and the like are "action"
+- "What can I do on this screen", "where is it", and "how do I use it" are "page_info"
+- Explanations of the app's overall features, procedures, and specifications are "search"
+- Generation requests that involve no page operation, such as improving a prompt, writing text, summarizing, or translating, are "direct"
 
-返答形式:
+Response format:
 {"intent": "action" | "page_info" | "search" | "direct"}
 """.strip()
 
@@ -99,13 +99,15 @@ def classify_intent(message: str, current_page: str = "") -> Intent:
 
     # ユーザーメッセージとコンテキスト情報（現在のページ、エージェント機能等）を元に、LLMへ送信するプロンプトを構築します。
     # Construct prompt messages to send to the LLM, including user message and context details (current page, capabilities).
-    page_line = f"現在のページURL: {current_page}" if current_page else "現在のページ: 不明"
+    page_line = (
+        f"Current page URL: {current_page}" if current_page else "Current page: unknown"
+    )
     capability_context = build_capability_context(current_page)
     messages = [
         {"role": "system", "content": _CLASSIFIER_SYSTEM},
         {
             "role": "user",
-            "content": f"{page_line}\n\n{capability_context}\n\nメッセージ: {message}",
+            "content": f"{page_line}\n\n{capability_context}\n\nMessage: {message}",
         },
     ]
     # LLMにリクエストを送信し、応答テキストをパースして意図を抽出します。
