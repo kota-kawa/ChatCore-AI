@@ -54,11 +54,33 @@ CHAT_AGENT_MAX_STEPS_LIMIT = 10
 DEFAULT_LLM_STREAM_MAX_RETRIES = 2
 LLM_STREAM_RETRY_BASE_DELAY_SECONDS = 0.5
 LLM_STREAM_RETRY_MAX_DELAY_SECONDS = 8.0
+# 停止要求が別ワーカーへ届いた場合に、所有ワーカーの応答を待つ上限と再確認間隔。
+# Bounds for waiting on the owning worker after a stop request lands on another worker.
+DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS = 5.0
+REMOTE_CANCEL_POLL_INTERVAL_SECONDS = 0.05
+# 停止要求マーカーの保持時間と、生成ジョブ側がそれを再確認する間隔。
+# Lifetime of the stop-request marker and how often a running job re-checks it.
+REMOTE_CANCEL_REQUEST_TTL_SECONDS = 60
+REMOTE_CANCEL_CHECK_INTERVAL_SECONDS = 1.0
 _ACTIVE_JOB_LOCK_KEY_PREFIX = "chat_generation:active"
+_CANCEL_REQUEST_KEY_PREFIX = "chat_generation:cancel"
+_CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
 _WEB_SEARCH_CITATION_PREFIX = "[[source:"
+
+
+def _decode_redis_text(raw: Any) -> str | None:
+    """Return Redis payloads as text regardless of the client's decode settings."""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, bytes):
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return None
+    return None
 
 
 def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
@@ -289,6 +311,7 @@ class ChatGenerationJob:
         on_event: Callable[[ChatGenerationEvent], None] | None = None,
         on_error: Callable[[], None] | None = None,
         prior_web_search_results: list[WebSearchResult] | None = None,
+        is_cancel_requested: Callable[[], bool] | None = None,
     ) -> None:
         self._conversation_messages = [dict(message) for message in conversation_messages]
         self._model = model
@@ -298,6 +321,12 @@ class ChatGenerationJob:
         self._on_finished_called = False
         self._on_event = on_event
         self._on_error = on_error
+        # 他プロセスからの停止要求を拾うためのフック。Pub/Sub 通知を取りこぼしても
+        # このポーリングで最終的に停止できるようにしておく。
+        # Hook for stop requests raised by another process. Polling here guarantees the job
+        # still stops even if the pub/sub notification is missed.
+        self._is_cancel_requested = is_cancel_requested
+        self._next_cancel_check_at = 0.0
         self._events: list[ChatGenerationEvent] = []
         self._next_sequence_id = 1
         self._condition = threading.Condition()
@@ -408,6 +437,30 @@ class ChatGenerationJob:
         if isinstance(persist_metadata, dict):
             aborted_payload.update(persist_metadata)
         self._publish("aborted", aborted_payload, done=True)
+
+    # 自プロセス・他プロセスのいずれかから停止が要求されたかを判定する
+    # Report whether a stop was requested from this process or from another one
+    def _should_stop(self) -> bool:
+        if self._cancelled:
+            return True
+        if self._is_cancel_requested is None:
+            return False
+
+        # 停止要求の確認は外部ストア参照になるため、一定間隔に間引く。
+        # Checking the stop request hits an external store, so throttle it.
+        now = time.monotonic()
+        if now < self._next_cancel_check_at:
+            return False
+        self._next_cancel_check_at = now + REMOTE_CANCEL_CHECK_INTERVAL_SECONDS
+
+        try:
+            requested = bool(self._is_cancel_requested())
+        except Exception:
+            logger.exception("Failed to check remote chat generation cancel request.")
+            return False
+        if requested:
+            self.cancel()
+        return self._cancelled
 
     # ジョブスレッドの完了を待機する
     # Wait for the job thread to complete
@@ -629,7 +682,7 @@ class ChatGenerationJob:
                 )
             suppress_next_generation_started = augmentation.status == "failed"
 
-            if self._cancelled:
+            if self._should_stop():
                 return
 
             web_search_tool = get_web_search_tool_definition()
@@ -637,7 +690,7 @@ class ChatGenerationJob:
             # 生成ループ（エージェントステップ）
             # Generation loop (agent steps)
             while step_count < max_steps:
-                if self._cancelled:
+                if self._should_stop():
                     return
 
                 remaining_steps = max_steps - step_count
@@ -655,7 +708,7 @@ class ChatGenerationJob:
 
                 tool_calls_buffer: list[dict[str, Any]] = []
                 for chunk in self._iter_llm_stream_with_retry(current_messages, tools=tools):
-                    if self._cancelled:
+                    if self._should_stop():
                         return
                     if not chunk:
                         continue
@@ -1019,7 +1072,7 @@ class ChatGenerationJob:
             )
             return
 
-        if self._cancelled:
+        if self._should_stop():
             return
 
         bot_reply = "".join(chunks)
@@ -1157,6 +1210,7 @@ class ChatGenerationService:
         distributed_stream_idle_timeout_seconds: float = (
             DEFAULT_DISTRIBUTED_STREAM_IDLE_TIMEOUT_SECONDS
         ),
+        remote_cancel_timeout_seconds: float = DEFAULT_REMOTE_CANCEL_TIMEOUT_SECONDS,
         redis_client_getter: Callable[[], Any | None] | None = None,
     ) -> None:
         self._job_retention_seconds = job_retention_seconds
@@ -1165,9 +1219,12 @@ class ChatGenerationService:
             float(distributed_stream_idle_timeout_seconds),
             0.0,
         )
+        self._remote_cancel_timeout_seconds = max(float(remote_cancel_timeout_seconds), 0.0)
         self._redis_client_getter = redis_client_getter
         self._jobs: dict[str, ChatGenerationJob] = {}
         self._jobs_lock = threading.Lock()
+        self._cancel_listener_thread: threading.Thread | None = None
+        self._cancel_listener_lock = threading.Lock()
 
     # Redis クライアントを取得する
     # Retrieve the Redis client
@@ -1180,6 +1237,11 @@ class ChatGenerationService:
     # Generate the Redis lock key for the active job
     def _active_lock_key(self, job_key: str) -> str:
         return f"{_ACTIVE_JOB_LOCK_KEY_PREFIX}:{job_key}"
+
+    # 停止要求マーカーの Redis キーを生成する
+    # Generate the Redis key for the stop-request marker
+    def _cancel_request_key(self, job_key: str) -> str:
+        return f"{_CANCEL_REQUEST_KEY_PREFIX}:{job_key}"
 
     # Redis に保存するイベントストリームのキーを生成する
     # Generate the Redis event stream key
@@ -1349,6 +1411,170 @@ return 0
             logger.exception("Redis chat generation lock existence check failed.")
             return False
 
+    # 所有プロセス以外が取得したロックを強制的に削除する（応答不能なワーカー対策）
+    # Force-delete an active lock held by an unresponsive worker
+    def _force_release_active_job_lock(self, job_key: str) -> None:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return
+        try:
+            redis_client.delete(self._active_lock_key(job_key))
+        except Exception:
+            logger.exception("Redis chat generation lock force release failed.")
+
+    # 指定ジョブに対する停止要求マーカーが立っているかを確認する
+    # Check whether a stop-request marker is set for the specified job
+    def _is_remote_cancel_requested(self, job_key: str) -> bool:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return False
+        try:
+            return bool(redis_client.exists(self._cancel_request_key(job_key)))
+        except Exception:
+            logger.exception("Redis chat generation cancel-request check failed.")
+            return False
+
+    # 停止要求マーカーを削除する（新しい生成ジョブが古い要求で止まらないようにする）
+    # Clear the stop-request marker so a new job is not aborted by a stale request
+    def _clear_remote_cancel_request(self, job_key: str) -> None:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return
+        try:
+            redis_client.delete(self._cancel_request_key(job_key))
+        except Exception:
+            logger.exception("Redis chat generation cancel-request clear failed.")
+
+    # プロセス内に実行中のジョブが残っているかを確認する
+    # Check whether this process still holds a running job
+    def _has_running_local_jobs(self) -> bool:
+        with self._jobs_lock:
+            return any(not job.is_done for job in self._jobs.values())
+
+    # ローカルに保持しているジョブだけをキャンセルする
+    # Cancel only the job held in this process
+    def _cancel_local_job(self, job_key: str) -> bool:
+        with self._jobs_lock:
+            job = self._jobs.get(job_key)
+        if job is None or job.is_done:
+            return False
+        job.cancel()
+        return True
+
+    # 停止要求を Pub/Sub で配信し、ジョブを所有するワーカーの停止完了を待つ
+    # Broadcast the stop request and wait for the owning worker to release the lock
+    def _request_remote_cancel(self, job_key: str) -> bool:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            return False
+        if not self._has_distributed_active_lock(job_key):
+            return False
+
+        # マーカーは Pub/Sub 通知を取りこぼしたワーカーへの保険。
+        # 生成ジョブ側が定期的に参照して自力で停止できるようにする。
+        # The marker backs up the pub/sub notification: a worker that missed the message
+        # still sees it while polling and stops on its own.
+        try:
+            redis_client.set(
+                self._cancel_request_key(job_key),
+                "1",
+                ex=REMOTE_CANCEL_REQUEST_TTL_SECONDS,
+            )
+        except Exception:
+            logger.exception("Redis chat generation cancel-request publish failed.")
+
+        try:
+            redis_client.publish(_CANCEL_CHANNEL_NAME, job_key)
+        except Exception:
+            logger.exception("Redis chat generation cancel broadcast failed.")
+            return False
+
+        deadline = time.monotonic() + self._remote_cancel_timeout_seconds
+        while True:
+            if not self._has_distributed_active_lock(job_key):
+                return True
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(REMOTE_CANCEL_POLL_INTERVAL_SECONDS)
+
+        # 所有ワーカーが応答しない場合でも、ロックを残すとルームが TTL 切れまで
+        # 新規生成を拒否し続ける。マーカーは残すので、生きていれば後から自力停止する。
+        # If the owning worker never answers, leaving the lock would reject new generations
+        # until it expires. Drop it; the marker stays so a live owner still stops itself.
+        logger.warning(
+            "Timed out waiting for the owning worker to cancel a chat generation job.",
+            extra={"job_key": job_key},
+        )
+        self._force_release_active_job_lock(job_key)
+        return True
+
+    # 他ワーカーからの停止要求を購読し、自プロセスのジョブをキャンセルするループ
+    # Subscribe to stop requests from other workers and cancel this process's jobs
+    def _run_cancel_listener(self) -> None:
+        redis_client = self._get_redis_client()
+        if redis_client is None:
+            self._release_cancel_listener_slot()
+            return
+
+        pubsub = None
+        try:
+            pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(_CANCEL_CHANNEL_NAME)
+            while True:
+                message = pubsub.get_message(timeout=1.0)
+                if message and message.get("type") == "message":
+                    job_key = _decode_redis_text(message.get("data"))
+                    if job_key:
+                        self._cancel_local_job(job_key)
+                # 実行中ジョブが無くなったら購読を畳み、次の生成開始時に再購読する。
+                # Stop subscribing once no job is running; the next job restarts the listener.
+                if self._release_cancel_listener_slot_if_idle():
+                    return
+        except Exception:
+            logger.exception("Chat generation cancel listener stopped unexpectedly.")
+            self._release_cancel_listener_slot()
+        finally:
+            if pubsub is not None:
+                try:
+                    pubsub.close()
+                except Exception:
+                    logger.exception("Failed to close the chat generation cancel listener.")
+
+    # 購読スレッドの登録を解除する
+    # Deregister the listener thread slot
+    def _release_cancel_listener_slot(self) -> None:
+        with self._cancel_listener_lock:
+            if self._cancel_listener_thread is threading.current_thread():
+                self._cancel_listener_thread = None
+
+    # 実行中ジョブが無い場合にだけ購読スレッドの登録を解除する
+    # Deregister the listener thread slot only while no job is running
+    def _release_cancel_listener_slot_if_idle(self) -> bool:
+        with self._cancel_listener_lock:
+            if self._has_running_local_jobs():
+                return False
+            if self._cancel_listener_thread is threading.current_thread():
+                self._cancel_listener_thread = None
+            return True
+
+    # 停止要求を購読するスレッドが起動していることを保証する
+    # Ensure the thread subscribing to stop requests is running
+    def _ensure_cancel_listener(self) -> None:
+        redis_client = self._get_redis_client()
+        if redis_client is None or not hasattr(redis_client, "pubsub"):
+            return
+        with self._cancel_listener_lock:
+            thread = self._cancel_listener_thread
+            if thread is not None and thread.is_alive():
+                return
+            thread = threading.Thread(
+                target=self._run_cancel_listener,
+                name="chat-generation-cancel-listener",
+                daemon=True,
+            )
+            self._cancel_listener_thread = thread
+            thread.start()
+
     # Redis が有効で分散ストリーミングに対応しているかを確認する
     # Check if Redis is enabled and supports distributed streaming
     def supports_distributed_streaming(self) -> bool:
@@ -1410,12 +1636,13 @@ return 0
     # 指定ジョブをキャンセルし、キャンセルできたか否かを返す
     # Cancel the specified job and return whether the cancellation succeeded
     def cancel_generation_job(self, job_key: str) -> bool:
-        with self._jobs_lock:
-            job = self._jobs.get(job_key)
-        if job is None or job.is_done:
-            return False
-        job.cancel()
-        return True
+        if self._cancel_local_job(job_key):
+            return True
+        # 複数ワーカー構成では停止リクエストがジョブ非所有のワーカーに届くことがある。
+        # その場合でもロックを解放しないと、ルームが生成中のまま再生成を拒否し続ける。
+        # Under multiple workers the stop request can land on a worker that does not own the
+        # job. Without this the lock survives and the room keeps rejecting regeneration.
+        return self._request_remote_cancel(job_key)
 
     # 指定したジョブキーで現在生成処理が実行中であるか確認する
     # Check if a generation process is currently running for the specified job key
@@ -1505,13 +1732,8 @@ return 0
             while True:
                 message = pubsub.get_message(timeout=1.0)
                 if message and message.get("type") == "message":
-                    raw_data = message.get("data")
-                    if isinstance(raw_data, bytes):
-                        try:
-                            raw_data = raw_data.decode("utf-8")
-                        except Exception:
-                            raw_data = None
-                    if isinstance(raw_data, str):
+                    raw_data = _decode_redis_text(message.get("data"))
+                    if raw_data is not None:
                         event = self._deserialize_event(raw_data)
                         if event is not None and event.sequence_id > cursor:
                             cursor = event.sequence_id
@@ -1572,6 +1794,10 @@ return 0
         if not acquired_lock:
             raise ChatGenerationAlreadyRunningError(job_key)
 
+        # 直前のジョブに対する停止要求が残っていると新しいジョブが即座に止まるため消す。
+        # Drop any leftover stop request so the new job is not aborted by the previous one.
+        self._clear_remote_cancel_request(job_key)
+
         # Redis ロックを先に取り、次にプロセス内の `_jobs` を確認する。
         # 逆順だと別プロセスとの競合を検出できず、同じ room で二重生成が走りうる。
         with self._jobs_lock:
@@ -1592,8 +1818,13 @@ return 0
                 on_event=lambda event: self._publish_distributed_event(job_key, event),
                 on_error=on_error,
                 prior_web_search_results=prior_web_search_results,
+                is_cancel_requested=lambda: self._is_remote_cancel_requested(job_key),
             )
             self._jobs[job_key] = job
+
+        # 購読スレッドは `_jobs_lock` の外で起動する（ロック順序を固定して待ち合わせを避ける）。
+        # Start the listener outside `_jobs_lock` to keep the lock ordering consistent.
+        self._ensure_cancel_listener()
 
         try:
             job.start()
