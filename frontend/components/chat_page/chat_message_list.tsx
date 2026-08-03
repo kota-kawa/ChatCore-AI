@@ -336,7 +336,7 @@ function ChatMessageRow({
         className={`message-wrapper bot-message-wrapper ${isActivelyStreaming ? "message-wrapper--streaming" : ""}`.trim()}
       >
         <div className={`bot-message ${isActivelyStreaming ? "bot-message--streaming" : ""}`.trim()}>
-          <BotMessageParts fallbackText={message.text} parts={message.parts} />
+          <BotMessageParts fallbackText={message.text} parts={message.parts} streaming={isActivelyStreaming} />
           {/* 生成UIのフェンスをストリーミング中は、無表示にならないよう組み立てローダーを見せる。 */}
           {/* While a generative UI fence is streaming, show the assembly loader so the screen never looks stalled. */}
           {isActivelyStreaming && message.generativeUiPending ? <GenerativeUiLoader /> : null}

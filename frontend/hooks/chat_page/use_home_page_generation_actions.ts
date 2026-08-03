@@ -18,6 +18,7 @@ import {
   clampToCodePointBoundary,
   nextSmoothedLength,
 } from "../../lib/chat_page/stream_smoothing";
+import { clampToWordBoundary } from "../../lib/chat_page/streaming_word_reveal";
 import {
   getStreamingGenerativeUiDisplayText,
   isGenerativeUiPending,
@@ -424,7 +425,16 @@ export function useHomePageGenerationActions({
           fullDisplayText,
           nextSmoothedLength(smoothedLength, fullDisplayText.length),
         );
-        const displayText = fullDisplayText.slice(0, smoothedLength);
+        // 表示は語境界まで巻き戻す。英単語が途中で切れて見えるのを防ぎ、語単位で
+        // 現れるChatGPT / Claudeと同じ粒度にする（日本語は1文字が1語のため影響しない）。
+        // Show text only up to a word boundary so Latin words never appear
+        // half-typed, matching the word-at-a-time granularity of ChatGPT /
+        // Claude. Japanese is unaffected since each character is its own word.
+        const displayLength = clampToCodePointBoundary(
+          fullDisplayText,
+          clampToWordBoundary(fullDisplayText, smoothedLength),
+        );
+        const displayText = fullDisplayText.slice(0, displayLength);
         const displayParts = updateStreamingTextPart(streamingParts, displayText);
         const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 

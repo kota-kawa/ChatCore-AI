@@ -2,6 +2,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { formatLLMOutput } from "../../scripts/chat/chat_ui";
 import { renderSanitizedHTML } from "../../scripts/chat/message_utils";
+import { applyStreamingWordReveal } from "../../lib/chat_page/streaming_word_dom";
+import { WordRevealTimeline } from "../../lib/chat_page/streaming_word_reveal";
 
 // SSR環境ではuseEffect、クライアント環境ではuseLayoutEffectを使用する（ハイドレーション互換）
 // Use useEffect on SSR and useLayoutEffect on client for hydration compatibility
@@ -21,6 +23,9 @@ const WEB_SEARCH_SOURCES_REVEAL_PADDING = 16;
 // Props type definition for the bot message HTML component
 type BotMessageHtmlProps = {
   text: string;
+  // 生成中のテキストパートのみtrue。末尾の語をフェードインさせるかを決める。
+  // True only for the text part being generated; gates the word fade-in.
+  streaming?: boolean;
 };
 
 // ユーザーのprefers-reduced-motionメディアクエリが有効かどうかを確認する
@@ -254,8 +259,11 @@ function bindWebSearchSourcesAccordions(container: HTMLElement) {
 
 // LLMのボットメッセージをサニタイズされたHTMLとしてレンダリングするコンポーネント
 // Component that renders LLM bot messages as sanitized HTML
-function BotMessageHtmlComponent({ text }: BotMessageHtmlProps) {
+function BotMessageHtmlComponent({ text, streaming = false }: BotMessageHtmlProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // 語ごとの初出時刻。再描画でアニメーションが巻き戻らないように保持する
+  // Per-word first-seen times, kept so re-renders do not restart the animation
+  const revealTimelineRef = useRef<WordRevealTimeline | null>(null);
   // テキストが変わった場合のみフォーマット済みHTMLを再計算する
   // Recompute formatted HTML only when text changes
   const formatted = useMemo(() => formatLLMOutput(text), [text]);
@@ -263,10 +271,19 @@ function BotMessageHtmlComponent({ text }: BotMessageHtmlProps) {
   // DOMへの書き込みはレイアウト計算前に行う必要があるためuseIsomorphicLayoutEffectを使用する
   // Use useIsomorphicLayoutEffect as DOM writes must occur before layout calculations
   useIsomorphicLayoutEffect(() => {
-    if (!containerRef.current) return;
-    renderSanitizedHTML(containerRef.current, formatted);
-    return bindWebSearchSourcesAccordions(containerRef.current);
-  }, [formatted]);
+    const container = containerRef.current;
+    if (!container) return;
+    renderSanitizedHTML(container, formatted);
+    // 生成が終わった描画ではspanを付けないため、完成後のDOMに残骸は残らない
+    // The finished render adds no spans, so completed messages keep a clean DOM
+    if (streaming && !prefersReducedMotion()) {
+      if (!revealTimelineRef.current) revealTimelineRef.current = new WordRevealTimeline();
+      applyStreamingWordReveal(container, revealTimelineRef.current);
+    } else {
+      revealTimelineRef.current = null;
+    }
+    return bindWebSearchSourcesAccordions(container);
+  }, [formatted, streaming]);
 
   return <div ref={containerRef}></div>;
 }
