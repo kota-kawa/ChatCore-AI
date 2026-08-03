@@ -19,6 +19,7 @@ import {
   clampToCodePointBoundary,
   createStreamPace,
 } from "../../lib/chat_page/stream_smoothing";
+import { splitStreamDisplayText } from "../../lib/chat_page/stream_display_text";
 import {
   WORD_REVEAL_DURATION_MS,
   WORD_REVEAL_MAX_LAG_MS,
@@ -402,10 +403,11 @@ export function useHomePageGenerationActions({
       // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
       // Constant-pace state. Restored text shows instantly instead of being
       // replayed.
-      const streamPace = createStreamPace(
-        getStreamingGenerativeUiDisplayText(streamedText).length,
-        performance.now(),
+      const initialDisplayText = splitStreamDisplayText(
+        getStreamingGenerativeUiDisplayText(streamedText),
       );
+      const streamPace = createStreamPace(initialDisplayText.pacedText.length, performance.now());
+      let hasSeparatedInstantPrefix = Boolean(initialDisplayText.instantPrefix);
 
       // localStorage への進行状態書き込みをスロットルするための保留値とタイマー。
       // Pending values and timer used to throttle progress writes to localStorage.
@@ -451,9 +453,21 @@ export function useHomePageGenerationActions({
         const streamId = streamingMessageId;
         if (!streamId) return;
         const fullDisplayText = getStreamingGenerativeUiDisplayText(streamedText);
+        const separatedDisplayText = splitStreamDisplayText(fullDisplayText);
+        const frameNow = performance.now();
+        if (!hasSeparatedInstantPrefix && separatedDisplayText.instantPrefix) {
+          // 不完全だった検索トレースが閉じた瞬間、そこまでHTMLへ費やしていた進捗を
+          // 本文へ持ち越さない。本文は先頭から通常のテンポで表示する。
+          // When an incomplete trace becomes complete, do not carry progress
+          // spent on its raw HTML into the answer body. Pace the body from zero.
+          streamPace.length = 0;
+          streamPace.rate = 0;
+          streamPace.lastTime = frameNow;
+          hasSeparatedInstantPrefix = true;
+        }
         const smoothedLength = clampToCodePointBoundary(
-          fullDisplayText,
-          advanceStreamPace(streamPace, fullDisplayText.length, performance.now()),
+          separatedDisplayText.pacedText,
+          advanceStreamPace(streamPace, separatedDisplayText.pacedText.length, frameNow),
         );
         // 表示は語境界まで巻き戻す。英単語が途中で切れて見えるのを防ぎ、語単位で
         // 現れるChatGPT / Claudeと同じ粒度にする（日本語は1文字が1語のため影響しない）。
@@ -461,10 +475,13 @@ export function useHomePageGenerationActions({
         // half-typed, matching the word-at-a-time granularity of ChatGPT /
         // Claude. Japanese is unaffected since each character is its own word.
         const displayLength = clampToCodePointBoundary(
-          fullDisplayText,
-          clampToWordBoundary(fullDisplayText, smoothedLength),
+          separatedDisplayText.pacedText,
+          clampToWordBoundary(separatedDisplayText.pacedText, smoothedLength),
         );
-        const displayText = fullDisplayText.slice(0, displayLength);
+        const displayText = [
+          separatedDisplayText.instantPrefix,
+          separatedDisplayText.pacedText.slice(0, displayLength),
+        ].join("");
         const displayParts = updateStreamingTextPart(streamingParts, displayText);
         const generativeUiPending = isGenerativeUiPending(streamedText, streamingParts);
 
@@ -482,7 +499,7 @@ export function useHomePageGenerationActions({
           });
         });
         scheduleAutoScrollIfNeeded();
-        if (smoothedLength < fullDisplayText.length) {
+        if (smoothedLength < separatedDisplayText.pacedText.length) {
           scheduleStreamedChunkRender();
           return;
         }
@@ -700,7 +717,9 @@ export function useHomePageGenerationActions({
           const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
           // パーツ更新はテキストの書き換えを伴うため、ペーシングせず全文を出す。
           // Parts updates rewrite the text, so show it in full without pacing.
-          streamPace.length = displayText.length;
+          const separatedDisplayText = splitStreamDisplayText(displayText);
+          streamPace.length = separatedDisplayText.pacedText.length;
+          hasSeparatedInstantPrefix ||= Boolean(separatedDisplayText.instantPrefix);
           if (updatePayload.parts?.length) {
             streamingParts = updateStreamingTextPart(updatePayload.parts, displayText);
           }
