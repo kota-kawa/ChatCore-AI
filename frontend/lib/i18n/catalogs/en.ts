@@ -33,6 +33,7 @@ export const enMessages = {
   "chat.modelStandard": "balanced, high-quality answers", "chat.modelReasoning": "high quality, for work that needs reasoning",
   "chat.modelLightweight": "for lightweight tasks",
   "home.tasks": "Choose a task to run it now",
+  "home.reorderHint": "Press and hold a card to pick it up and reorder (a plain swipe still scrolls)",
   "chat.new": "New chat", "chat.search": "Search chats", "chat.inputPlaceholder": "Type a message",
   "chat.stop": "Stop generating", "chat.regenerate": "Regenerate response", "chat.copy": "Copy response",
   "chat.edit": "Edit message", "chat.saveMemo": "Save as memo", "chat.share": "Share chat", "chat.thinking": "Thinking…",

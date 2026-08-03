@@ -20,6 +20,28 @@
 }
 
 
+/* 並び替えモード中の操作ヒント */
+/* Gesture hint shown while reorder mode is active */
+:where(body.chat-page, .chat-page-shell) .task-reorder-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: var(--text-xs, 0.8125rem);
+  line-height: 1.45;
+  color: var(--text-secondary, #6b7280);
+}
+
+:where(body.chat-page, .chat-page-shell) .task-reorder-hint i {
+  flex-shrink: 0;
+  margin-top: 0.1em;
+  color: #0f766e;
+}
+
+[data-theme="dark"] :where(body.chat-page, .chat-page-shell) .task-reorder-hint i {
+  color: rgba(94, 234, 212, 0.9);
+}
+
 /* 編集状態のカード揺れ（iOS の並び替え編集に近いテンポ） */
 :where(body.chat-page, .chat-page-shell) .task-wrapper.editable .prompt-card {
   animation: ios-jiggle 180ms ease-in-out infinite alternate;
@@ -47,11 +69,14 @@
   padding-top: 12px;
   will-change: transform;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  /* 縦方向の指移動をブラウザのスクロール処理に奪われないようにする */
-  /* Keep vertical touch movement in the pointer drag instead of browser panning */
-  touch-action: none;
+  /* 縦スワイプは通常どおりページのスクロールに使い、並び替えは長押しで開始する */
+  /* Plain vertical swipes keep scrolling the page; a long press starts the reorder drag instead */
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  /* 長押し時に iOS のリンク・画像メニューが出るのを防ぐ */
+  /* Stop iOS from opening its long-press callout menu mid-gesture */
+  -webkit-touch-callout: none;
 }
 
 
@@ -60,6 +85,9 @@
   transition: none;
   z-index: 40;
   pointer-events: none;
+  /* 掴んだ後は指の動きをすべて並び替えに割り当てる */
+  /* Once the card is picked up, every bit of finger movement belongs to the drag */
+  touch-action: none;
 }
 
 :where(body.chat-page, .chat-page-shell) .task-wrapper.editable.dragging .prompt-card {
