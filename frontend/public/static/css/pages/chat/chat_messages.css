@@ -432,7 +432,15 @@
   box-shadow: none;
   overflow-wrap: anywhere;
   word-break: break-word;
-  text-wrap: pretty;
+  /* text-wrap: pretty にしてはいけない。pretty は段落の後ろ数行をまとめて組み直す
+     ため、生成中に文字が1つ足されるたび、すでに読んでいる行の折り返しが変わる。
+     狭い画面ほど1行の文字数が少なく、読んでいる最中の文字が横へ動いたり次の行へ
+     飛んだりして見える。greedy な wrap なら、追記で先に置かれた文字は動かない。
+     Never use text-wrap: pretty here. It re-breaks the last lines of a paragraph
+     as a group, so every character appended while streaming can re-wrap lines the
+     reader is already on — worst on narrow screens, where a character can jump to
+     the next line. Greedy wrapping never moves text that is already placed. */
+  text-wrap: wrap;
   width: 100%;
   padding: 0.25rem 0;
   animation: botMessageAppear 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);

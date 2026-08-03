@@ -53,6 +53,37 @@ test("the streaming text stylesheet is loaded by the app entry point", () => {
   assert.match(appEntry, /import "\.\.\/public\/static\/css\/components\/streaming_text\.css";/);
 });
 
+test("bot messages never re-break earlier lines while text streams in", () => {
+  // pretty/balance は段落の後ろ数行をまとめて組み直すため、追記のたびに
+  // すでに表示済みの文字の折り返しが変わり、狭い画面で文字がズレて見える。
+  // pretty/balance re-break the last lines of a paragraph as a group, so an
+  // append can move text the reader is already on. Narrow screens show it worst.
+  // 同じセレクタの宣言ブロックは複数あるため、すべてまとめて確認する。
+  // The selector has more than one rule block, so check every one of them.
+  const declarations = chatMessagesCss
+    .split(":where(body.chat-page, .chat-page-shell) .bot-message {")
+    .slice(1)
+    // コメント内の説明文を宣言と誤検出しないよう先に取り除く。
+    // Strip comments first so the explanation is not read as a declaration.
+    .map((block) => {
+      const withoutComments = block.replace(/\/\*[\s\S]*?\*\//g, "");
+      return withoutComments.slice(0, withoutComments.indexOf("}"));
+    });
+  assert.ok(declarations.length > 0, "the bot message rule must exist");
+
+  declarations.forEach((block) => {
+    assert.doesNotMatch(
+      block,
+      /text-wrap:\s*(pretty|balance)/,
+      "streamed bot text must use greedy wrapping so appended characters never move placed text",
+    );
+  });
+  assert.ok(
+    declarations.some((block) => /text-wrap:\s*wrap\s*;/.test(block)),
+    "greedy wrapping must be declared explicitly so pretty is not reintroduced by inheritance",
+  );
+});
+
 test("no trailing cursor dot runs ahead of the fading words", () => {
   // 透明のまま開始待ちの語がある間、ドットだけが先行して見えてしまうため廃止。
   // Removed: with queued transparent words a dot would run ahead of the text.
