@@ -19,7 +19,11 @@ import {
   clampToCodePointBoundary,
   createStreamPace,
 } from "../../lib/chat_page/stream_smoothing";
-import { clampToWordBoundary } from "../../lib/chat_page/streaming_word_reveal";
+import {
+  WORD_REVEAL_DURATION_MS,
+  WORD_REVEAL_MAX_LAG_MS,
+  clampToWordBoundary,
+} from "../../lib/chat_page/streaming_word_reveal";
 import {
   getStreamingGenerativeUiDisplayText,
   isGenerativeUiPending,
@@ -73,6 +77,13 @@ const GENERATION_STREAM_RECONNECT_DELAYS_MS = [300, 900];
 // localStorage. Writing the whole accumulated text on every chunk blocks the
 // main thread more as the reply grows; recovery data tolerates this cadence.
 const STORED_GENERATION_STATE_SYNC_INTERVAL_MS = 250;
+
+// 最後に表示した語の開始待ちとフェードが終わるまで、完成メッセージへの切り替えを
+// 待つ。先に streaming=false にすると、その語の span が即座に外れて演出が消える。
+// Keep the message in streaming mode until the final queued word has started
+// and finished fading. Switching to streaming=false earlier removes its span
+// and makes the last part of a fast response snap into view.
+const STREAM_REVEAL_SETTLE_MS = WORD_REVEAL_MAX_LAG_MS + WORD_REVEAL_DURATION_MS;
 
 function waitForDuration(ms: number) {
   return new Promise<void>((resolve) => {
@@ -378,6 +389,15 @@ export function useHomePageGenerationActions({
       let streamingMessageId: string | null = null;
       let streamedText = storedGeneration?.streamedText ?? "";
       let streamingParts: ChatMessagePart[] | undefined;
+      type PendingFinalization = {
+        finalText: string;
+        persist: boolean;
+        parts?: ChatMessagePart[];
+      };
+      let pendingFinalization: PendingFinalization | null = null;
+      let revealCompletionPromise: Promise<void> | null = null;
+      let resolveRevealCompletion: (() => void) | null = null;
+      let finalRevealTimerId: number | null = null;
 
       // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
       // Constant-pace state. Restored text shows instantly instead of being
@@ -412,14 +432,20 @@ export function useHomePageGenerationActions({
       };
 
       // チャンク描画を 1 フレーム 1 回へ間引くための rAF ハンドル。あわせて
-      // 表示文字数を残量に比例したステップで進め（適応型タイプライター）、
-      // チャンクが塊のまま現れず文字が流れるように見せる。排出しきるまで
-      // フレーム毎に自身を再スケジュールする。
+      // 表示文字数を上限付きの等速ペースで進め、チャンクが塊のまま現れず文字が
+      // 流れるように見せる。排出しきるまでフレーム毎に自身を再スケジュールする。
       // rAF handle that coalesces chunk rendering to once per frame. It also
-      // advances the visible length by a backlog-proportional step (adaptive
-      // typewriter) so chunks read as flowing text instead of blocks, and it
-      // reschedules itself each frame until the backlog is drained.
+      // advances the visible length at a capped, steady pace so chunks read as
+      // flowing text instead of blocks, and reschedules until the backlog drains.
       let chunkRenderRafId: number | null = null;
+      const finishPendingFinalization = () => {
+        const pending = pendingFinalization;
+        if (!pending) return;
+        pendingFinalization = null;
+        finalizeStreamingMessage(pending.finalText, pending.persist, pending.parts);
+        resolveRevealCompletion?.();
+        resolveRevealCompletion = null;
+      };
       const flushStreamedChunkRender = () => {
         chunkRenderRafId = null;
         const streamId = streamingMessageId;
@@ -458,6 +484,18 @@ export function useHomePageGenerationActions({
         scheduleAutoScrollIfNeeded();
         if (smoothedLength < fullDisplayText.length) {
           scheduleStreamedChunkRender();
+          return;
+        }
+        if (pendingFinalization && finalRevealTimerId === null) {
+          // 最終文字を streaming=true のDOMへ一度描画した後、そのCSSアニメーションが
+          // 完了する時間を確保してから完成状態へ切り替える。
+          // Render the final characters into the streaming DOM once, then give
+          // their CSS animation time to finish before switching to the clean
+          // completed markup.
+          finalRevealTimerId = window.setTimeout(() => {
+            finalRevealTimerId = null;
+            finishPendingFinalization();
+          }, STREAM_REVEAL_SETTLE_MS);
         }
       };
       const scheduleStreamedChunkRender = () => {
@@ -469,6 +507,20 @@ export function useHomePageGenerationActions({
           window.cancelAnimationFrame(chunkRenderRafId);
           chunkRenderRafId = null;
         }
+      };
+
+      const queueStreamingMessageFinalization = (
+        finalText: string,
+        persist = true,
+        parts?: ChatMessagePart[],
+      ) => {
+        pendingFinalization = { finalText, persist, parts };
+        if (!revealCompletionPromise) {
+          revealCompletionPromise = new Promise<void>((resolve) => {
+            resolveRevealCompletion = resolve;
+          });
+        }
+        scheduleStreamedChunkRender();
       };
 
       const ensureStreamingMessage = () => {
@@ -710,7 +762,13 @@ export function useHomePageGenerationActions({
           const donePayload = normalizeChatResponsePayload(parsed.data);
           const responseText = donePayload.response ?? streamedText;
           applyRoomTitleUpdate(roomId, parsed.data.room_title);
-          finalizeStreamingMessage(responseText, true, donePayload.parts);
+          // 最終応答を表示キューへ渡し、未表示分と最後のフェードが完了してから
+          // streaming=false にする。高速応答でも末尾が一括表示されなくなる。
+          // Feed the final response through the display queue and only mark it
+          // complete after the remaining text and fade have drained.
+          ensureStreamingMessage();
+          streamedText = responseText;
+          queueStreamingMessageFinalization(responseText, true, donePayload.parts);
           streamLastEventIdByRoomRef.current.delete(roomId);
           return;
         }
@@ -790,6 +848,7 @@ export function useHomePageGenerationActions({
           if (!isGenerationActive(generation)) return false;
 
           if (result === "completed") {
+            if (revealCompletionPromise) await revealCompletionPromise;
             return true;
           }
 
@@ -833,6 +892,10 @@ export function useHomePageGenerationActions({
         // On any exit, settle pending work. If the stored state was already
         // cleared, updateStoredGenerationState is a no-op, so nothing revives.
         cancelStreamedChunkRender();
+        if (finalRevealTimerId !== null) {
+          window.clearTimeout(finalRevealTimerId);
+          finalRevealTimerId = null;
+        }
         if (storedStateSyncTimerId !== null) {
           window.clearTimeout(storedStateSyncTimerId);
         }
