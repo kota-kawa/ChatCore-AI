@@ -221,6 +221,44 @@ describe("useTaskReorderDrag", () => {
     expect(onDragStart).toHaveBeenCalledWith(0);
   });
 
+  // パソコン版はカード一覧の祖先がページ自身なので、こちらの経路でも端で自動スクロールする必要がある
+  // On desktop the list's scroller is the page itself, so the edge must auto-scroll there too
+  it("auto-scrolls the page when no ancestor element is the scroller", () => {
+    const container = screen.getByTestId("scroll-container");
+    // コンテナ自身はスクロールできない状態にして、ページスクロールの経路を通す
+    // Make the container unscrollable so the page-scrolling branch is exercised
+    Object.defineProperty(container, "scrollHeight", { value: CONTAINER_HEIGHT, configurable: true });
+
+    const documentElement = document.documentElement;
+    documentElement.style.overflowY = "auto";
+    Object.defineProperty(documentElement, "scrollHeight", { value: 4000, configurable: true });
+    Object.defineProperty(documentElement, "clientHeight", { value: window.innerHeight, configurable: true });
+    // <html> の矩形は文書全体の高さになるため、これを画面端の判定に使ってはいけない
+    // The root element's rect spans the whole document, so it must not drive the edge test
+    stubRect(documentElement, 0, 4000);
+
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", { value: scrollTo, configurable: true, writable: true });
+
+    pressCard(0, "mouse");
+    movePointer(window.innerHeight - 10, "mouse");
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(scrollTo).toHaveBeenCalled();
+    const [, scrolledY] = scrollTo.mock.calls.at(-1) ?? [];
+    expect(scrolledY).toBeGreaterThan(0);
+
+    fireEvent.pointerUp(window, {
+      pointerId: 1,
+      pointerType: "mouse",
+      clientX: 160,
+      clientY: window.innerHeight - 10,
+    });
+    documentElement.style.overflowY = "";
+  });
+
   it("ignores a second finger while a card is being dragged", () => {
     pressCard(0, "touch");
     act(() => {

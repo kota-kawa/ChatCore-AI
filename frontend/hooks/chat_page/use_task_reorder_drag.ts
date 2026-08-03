@@ -55,6 +55,12 @@ function resolveScrollContainer(element: HTMLElement | null): HTMLElement | null
   let node = element?.parentElement ?? null;
 
   while (node) {
+    // ルート要素（html / body）は要素として扱わない。矩形が文書全体の高さになり
+    // 「画面端に近いか」の判定が壊れるため、ページスクロール側の経路に任せる。
+    // Stop at the root elements: their rect spans the whole document rather than the
+    // viewport, which would break the edge test, so page scrolling handles them.
+    if (node === document.body || node === document.documentElement) return null;
+
     const { overflowY } = window.getComputedStyle(node);
     const isScrollable = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
     if (isScrollable && node.scrollHeight > node.clientHeight + 1) return node;
