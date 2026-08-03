@@ -731,6 +731,61 @@ class ChatStreamingTestCase(unittest.TestCase):
             "[1](https://example.com/python-release)",
         )
 
+    # 日本語: 省略された内部引用markerが分割配信されても画面表示や保存内容に漏れないことを検証します。
+    # English: Verify that a split shortened internal citation marker never leaks into streamed or persisted text.
+    def test_background_generation_job_removes_split_shortened_source_marker(self):
+        persisted_messages = []
+        search_result = WebSearchResult(
+            query="Python release",
+            searched_at="2026-08-02T00:00:00+00:00",
+            sources=(
+                WebSearchSource(
+                    url="https://example.com/python-release",
+                    title="Python Release",
+                    hostname="example.com",
+                    age="2026-08-02",
+                    snippets=("A release fact",),
+                ),
+            ),
+        )
+        shortened_marker = f"[[{search_result.sources[0].evidence_id}]]"
+
+        with (
+            patch(
+                "services.chat_generation.maybe_augment_messages_with_web_search",
+                return_value=WebSearchAugmentation(
+                    messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                    result=search_result,
+                ),
+            ),
+            patch(
+                "services.chat_generation.get_llm_response_stream",
+                return_value=iter(
+                    [
+                        "最新版です。[[sr",
+                        f"c_{search_result.sources[0].evidence_id.removeprefix('src_')}]]",
+                        " 詳細です。",
+                    ]
+                ),
+            ),
+        ):
+            job = start_generation_job(
+                "guest:sid-short-citation:default",
+                conversation_messages=[{"role": "user", "content": "Pythonの最新情報"}],
+                model="openai/gpt-oss-120b",
+                persist_response=lambda response, **_kwargs: persisted_messages.append(response),
+            )
+
+            body = b"".join(_iter_llm_stream_events(job)).decode("utf-8")
+
+        self.assertEqual(len(persisted_messages), 1)
+        self.assertNotIn(shortened_marker, body)
+        self.assertNotIn(shortened_marker, persisted_messages[0])
+        self.assertNotIn("src_", body)
+        self.assertNotIn("src_", persisted_messages[0])
+        self.assertIn("最新版です。 詳細です。", body)
+        self.assertIn("最新版です。 詳細です。", persisted_messages[0])
+
     # 日本語: 生成ジョブがWeb検索結果を考慮した後に、必要に応じて追加の検索を実行できることを検証します。
     # English: Verify that the generation job can execute additional web searches after reviewing initial results.
     def test_background_generation_job_can_search_again_after_reviewing_results(self):

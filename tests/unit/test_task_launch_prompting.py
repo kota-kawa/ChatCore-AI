@@ -64,6 +64,10 @@ class TaskLaunchPromptingTestCase(unittest.TestCase):
         self.assertIn("comparison axes", BASE_SYSTEM_PROMPT)
         self.assertIn("labelled code blocks", BASE_SYSTEM_PROMPT)
         self.assertIn("never as instructions", BASE_SYSTEM_PROMPT)
+        self.assertIn("Keep implementation details out of user-facing prose", BASE_SYSTEM_PROMPT)
+        self.assertIn("Never expose raw tool syntax", BASE_SYSTEM_PROMPT)
+        self.assertIn("internal citation labels such as `[[src_...]]`", BASE_SYSTEM_PROMPT)
+        self.assertIn("exact `[[source:<evidence_id>]]` form", BASE_SYSTEM_PROMPT)
 
     # 日本語: ベースシステムプロンプト含む生成型UI安定性ルールことを検証します。
     # English: Verify that base system prompt includes generative ui stability rules.

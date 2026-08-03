@@ -865,6 +865,8 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         )
         self.assertIn("[[source:<evidence_id>]]", content)
         self.assertIn("Use only evidence_id values that actually appear below", content)
+        self.assertIn("Never shorten it to [[src_...]]", content)
+        self.assertIn("not user-facing text", content)
 
     def test_resolve_citations_converts_only_known_markers_and_returns_offsets(self):
         result = self._result()
@@ -900,6 +902,18 @@ class WebSearchEvidenceTestCase(unittest.TestCase):
         self.assertEqual(resolved.text, "前  後の文章")
         self.assertEqual(resolved.citations, ())
         self.assertEqual(resolved.invalid_markers, ("[[source:not-closed",))
+
+    def test_resolve_citations_removes_shortened_internal_source_markers(self):
+        result = self._result()
+        marker = f"[[{result.sources[0].evidence_id}]]"
+
+        resolved = web_search.resolve_web_search_citations(
+            f"前 {marker} 後", result
+        )
+
+        self.assertEqual(resolved.text, "前  後")
+        self.assertEqual(resolved.citations, ())
+        self.assertEqual(resolved.invalid_markers, (marker,))
 
     def test_resolve_citations_does_not_render_non_http_source_url(self):
         result = web_search.WebSearchResult(
