@@ -12,6 +12,7 @@ import {
 } from "../../lib/chat_page/file_attachments";
 import { useChatAttachmentDropzone } from "../../hooks/chat_page/use_chat_attachment_dropzone";
 import { useChatFooterHeight } from "../../hooks/chat_page/use_chat_footer_height";
+import { isNearBottom } from "../../lib/chat_page/dom";
 import { extractUrlsFromText, getUrlDomain } from "../../lib/chat_page/url_utils";
 import { useTranslation } from "../../contexts/locale_context";
 
@@ -274,11 +275,17 @@ function ChatMainSectionComponent() {
   const handleChatInputFocus = () => {
     const list = chatMessagesRef.current;
     if (!list) return;
+    // ユーザーが下端付近を見ているときだけ再アンカーする。過去のメッセージを
+    // 読んでいる途中でフォーカスした場合はスクロール位置を変えない。
+    // Only re-anchor when the user is already near the bottom. If they focus
+    // the input while reading older messages, leave the scroll position alone.
+    if (!isNearBottom(list)) return;
     // visualViewport.resize が走るまでわずかに待ってからスクロール位置を補正する。
     // Wait briefly for visualViewport resize to complete before correcting scroll position.
     window.setTimeout(() => {
       const node = chatMessagesRef.current;
       if (!node) return;
+      if (!isNearBottom(node)) return;
       node.scrollTop = node.scrollHeight;
     }, 220);
   };
