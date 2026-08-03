@@ -101,7 +101,10 @@ function wrapWordsInTextNode(
     }
     const span = document_.createElement("span");
     span.className = REVEAL_WORD_CLASS;
-    span.style.animationDelay = `-${Math.round(elapsed)}ms`;
+    // 負のdelayは再生途中から再開、正のdelayは開始待ち（fill:bothで透明のまま）。
+    // A negative delay resumes mid-play; a positive one waits to start
+    // (fill: both keeps the word transparent until then).
+    span.style.animationDelay = `${Math.round(-elapsed)}ms`;
     span.textContent = text.slice(word.start, word.end);
     fragment.appendChild(span);
     cursor = word.end;
