@@ -21,25 +21,31 @@ function revealedWords(container: HTMLElement) {
 }
 
 describe("applyStreamingWordReveal", () => {
-  it("wraps each newly revealed word without changing the rendered text", () => {
+  it("wraps each newly revealed chunk without changing the rendered text", () => {
     const container = renderContainer("<p>Hello brave world</p>");
     const timeline = new WordRevealTimeline();
 
     applyStreamingWordReveal(container, timeline, 1000);
 
-    expect(revealedWords(container)).toEqual(["Hello", "brave", "world"]);
+    // 1語ずつではなく、数語をまとめたかたまりが1回のフェード単位になる。
+    // A few words at a time form one fade unit instead of one word each.
+    expect(revealedWords(container)).toEqual(["Hello brave", "world"]);
     expect(container.textContent).toBe("Hello brave world");
   });
 
-  it("splits Japanese text into per-character words", () => {
-    const container = renderContainer("<p>こんにちは</p>");
+  it("groups Japanese text into chunks that break at punctuation", () => {
+    const container = renderContainer("<p>こんにちは、今日はいい天気ですね</p>");
 
     applyStreamingWordReveal(container, new WordRevealTimeline(), 1000);
 
-    expect(revealedWords(container)).toEqual(["こ", "ん", "に", "ち", "は"]);
+    // 1文字ずつだと生成が速いときタイプライターに見えるため、読点までや刻み幅
+    // ぶんをひとかたまりにする。
+    // One character at a time reads as a typewriter when generation is fast, so
+    // the text up to the comma — or up to the step grid — becomes one chunk.
+    expect(revealedWords(container)).toEqual(["こんにちは、", "今日はい", "い天気ですね"]);
   });
 
-  it("staggers the start of words that appear in the same frame", () => {
+  it("staggers the start of chunks that appear in the same frame", () => {
     const container = renderContainer("<p>Hello brave world</p>");
 
     applyStreamingWordReveal(container, new WordRevealTimeline(), 1000);
@@ -47,25 +53,44 @@ describe("applyStreamingWordReveal", () => {
     const delays = Array.from(container.querySelectorAll<HTMLElement>("span.streaming-word")).map(
       (span) => span.style.animationDelay,
     );
-    // 正のdelayは開始待ちを意味し、語が左から順に立ち上がるカスケードになる。
-    // Positive delays mean "not started yet": the words cascade left to right.
-    expect(delays).toEqual(["0ms", `${WORD_REVEAL_STAGGER_MS}ms`, `${WORD_REVEAL_STAGGER_MS * 2}ms`]);
+    // 正のdelayは開始待ちを意味し、かたまりが左から順に立ち上がるカスケードになる。
+    // Positive delays mean "not started yet": the chunks cascade left to right.
+    expect(delays).toEqual(["0ms", `${WORD_REVEAL_STAGGER_MS}ms`]);
   });
 
   it("resumes the animation with a negative delay instead of restarting it", () => {
     const timeline = new WordRevealTimeline();
-    const first = renderContainer("<p>Hello world</p>");
+    const first = renderContainer("<p>Hello brave world</p>");
     applyStreamingWordReveal(first, timeline, 1000);
 
     // ストリーミング中はHTMLごと再描画されるため、同じ内容を描き直して再適用する。
     // Streaming re-renders the whole HTML, so redraw the same content and reapply.
-    const second = renderContainer("<p>Hello world</p>");
+    const second = renderContainer("<p>Hello brave world</p>");
     applyStreamingWordReveal(second, timeline, 1120);
 
     const delays = Array.from(second.querySelectorAll<HTMLElement>("span.streaming-word")).map(
       (span) => span.style.animationDelay,
     );
     expect(delays).toEqual(["-120ms", `${WORD_REVEAL_STAGGER_MS - 120}ms`]);
+  });
+
+  it("fades in only the newly appended part of a chunk that keeps growing", () => {
+    const timeline = new WordRevealTimeline();
+    const first = renderContainer("<p>これは</p>");
+    applyStreamingWordReveal(first, timeline, 1000);
+
+    // 同じチャンクに文字が足されたフレーム。表示済みの「これは」は巻き戻さず、
+    // 追記された「テスト」だけが新しくフェードインする。
+    // A frame where the same chunk grew: the visible part must not rewind and
+    // only the appended part starts a new fade.
+    const second = renderContainer("<p>これはテスト</p>");
+    applyStreamingWordReveal(second, timeline, 1100);
+
+    expect(revealedWords(second)).toEqual(["これは", "テスト"]);
+    const delays = Array.from(second.querySelectorAll<HTMLElement>("span.streaming-word")).map(
+      (span) => span.style.animationDelay,
+    );
+    expect(delays).toEqual(["-100ms", "0ms"]);
   });
 
   it("does not replay visible words when markdown finalizes mid-stream", () => {
@@ -127,9 +152,9 @@ describe("applyStreamingWordReveal", () => {
     const second = renderContainer(`<p>${head}fresh tail</p>`);
     applyStreamingWordReveal(second, timeline, 1050);
 
-    const words = revealedWords(second);
-    expect(words.length).toBeLessThan(120);
-    expect(words.slice(-2)).toEqual(["fresh", "tail"]);
+    // 末尾の追記ぶんだけがアニメーションし、既に描画済みの本文には触れない。
+    // Only the appended tail animates; the body already on screen is untouched.
+    expect(revealedWords(second)).toEqual([" fresh", "tail"]);
   });
 
   it("shows a bulk first render instantly instead of fading it afterwards", () => {
@@ -168,7 +193,9 @@ describe("applyStreamingWordReveal", () => {
     applyStreamingWordReveal(container, new WordRevealTimeline(), 1000);
 
     expect(container.querySelector("strong")?.textContent).toBe("bold text");
-    expect(container.querySelectorAll("strong span.streaming-word")).toHaveLength(2);
+    // チャンクはテキストノードをまたがないので、<strong> の中身が1単位になる。
+    // A chunk never spans text nodes, so the <strong> body is one unit.
+    expect(container.querySelectorAll("strong span.streaming-word")).toHaveLength(1);
     expect(container.textContent).toBe("See bold text here");
   });
 });

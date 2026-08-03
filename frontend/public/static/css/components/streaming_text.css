@@ -1,18 +1,27 @@
-/* ストリーミング出力の単語フェードイン
-   生成中に新しく現れた語だけをぼかしから立ち上げ、チャンクが「ドン」と
-   出るのではなくテキストが流れ込むように見せる（ChatGPT / Claude と同系統の演出）。
+/* ストリーミング出力のチャンク単位フェードイン
+   生成中に新しく現れたひとかたまり（数語ぶん）をぼかしから立ち上げ、テキストが
+   流れ込むように見せる。1文字ずつだと生成が速いときタイプライターに見えるため、
+   表示側（clampToRevealChunkBoundary）と揃えてかたまり単位で見せる。
    再生時間は JS 側の WORD_REVEAL_DURATION_MS がカスタムプロパティで渡す。
-   Per-word fade-in for streamed output. Only words that just appeared rise out
-   of a slight blur, so a chunk flows in instead of snapping in as a block. The
-   duration comes from WORD_REVEAL_DURATION_MS via the custom property. */
+   Per-chunk fade-in for streamed output. A few words at a time rise out of a
+   slight blur so text flows in; one character at a time reads as a typewriter
+   when generation is fast, so this matches the chunked reveal of
+   clampToRevealChunkBoundary. The duration comes from WORD_REVEAL_DURATION_MS
+   via the custom property. */
 
 .streaming-word {
-  /* 開始時刻はJS側が語ごとにずらす（stagger）。fill:both により開始前の語は
-     透明のまま待機し、カスケードとして順に立ち上がる。
-     JS staggers each word's start time; fill: both keeps queued words
-     transparent until their turn, so the cascade reads word by word. */
-  animation: streamingWordReveal var(--streaming-word-duration, 360ms) ease-out both;
-  /* 合成レイヤーを使い回し、末尾の語が増えてもフレーム落ちしないようにする。
+  /* 開始時刻はJS側がチャンクごとにずらす（stagger）。fill:both により開始前の
+     チャンクは透明のまま待機し、カスケードとして順に立ち上がる。
+     JS staggers each chunk's start time; fill: both keeps queued chunks
+     transparent until their turn, so the cascade reads chunk by chunk. */
+  /* 動かすのは opacity と filter だけ。transform はインライン要素に効かず、
+     inline-block にするとかたまりが途中で折り返せなくなって、狭い画面でかえって
+     行が跳ねてしまう。
+     Only opacity and filter animate. transform has no effect on an inline
+     element, and inline-block would stop the chunk from wrapping mid-way,
+     which makes lines jump on narrow screens instead. */
+  animation: streamingWordReveal var(--streaming-word-duration, 420ms) ease-out both;
+  /* 合成レイヤーを使い回し、末尾のかたまりが増えてもフレーム落ちしないようにする。
      Reuse the compositing layer so a growing tail keeps a steady frame rate. */
   will-change: opacity, filter;
 }
@@ -20,15 +29,14 @@
 @keyframes streamingWordReveal {
   from {
     opacity: 0;
-    filter: blur(8px);
+    filter: blur(6px);
   }
 
-  /* 前半で透明に近い時間を長めに取り、速い生成でもフェードが知覚できるようにする。
-     Spend the first stretch near-transparent so the fade stays visible even
-     when generation is fast. */
-  35% {
-    opacity: 0.35;
-    filter: blur(4px);
+  /* 中盤までぼかしを残し、かたまりが「浮かび上がる」時間を確保する。
+     Hold some blur through the middle so the chunk visibly surfaces. */
+  45% {
+    opacity: 0.55;
+    filter: blur(2px);
   }
 
   to {

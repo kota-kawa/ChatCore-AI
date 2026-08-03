@@ -3,11 +3,15 @@ import test from "node:test";
 
 import {
   MAX_ANIMATED_APPEND_CHARS,
+  REVEAL_CHUNK_MAX_CHARS,
+  REVEAL_CHUNK_STEP_CHARS,
   WORD_REVEAL_DURATION_MS,
   WORD_REVEAL_MAX_LAG_MS,
   WORD_REVEAL_STAGGER_MS,
   WordRevealTimeline,
+  clampToRevealChunkBoundary,
   clampToWordBoundary,
+  segmentRevealChunks,
   segmentRevealWords,
 } from "../lib/chat_page/streaming_word_reveal";
 
@@ -40,6 +44,94 @@ test("segmentRevealWords keeps offsets aligned with the source text", () => {
     { start: 2, end: 4 },
     { start: 6, end: 8 },
   ]);
+});
+
+test("segmentRevealChunks gathers several words into one reveal unit", () => {
+  const text = "Hello brave world";
+  const chunks = segmentRevealChunks(text).map((chunk) => text.slice(chunk.start, chunk.end));
+
+  assert.deepEqual(chunks, ["Hello brave", "world"]);
+});
+
+test("segmentRevealChunks groups CJK characters instead of revealing them one by one", () => {
+  const text = "こんにちは、今日はいい天気ですね";
+  const chunks = segmentRevealChunks(text).map((chunk) => text.slice(chunk.start, chunk.end));
+
+  // 読点で閉じ、その後は表示側と同じ刻みのグリッドで閉じる。かたまりの境目は
+  // 表示が伸びる境目と同じなので、1回の伸びが1回のフェードになる。
+  // The comma closes a chunk; after that the same step grid the visible length
+  // uses closes them. Chunk edges therefore coincide with the reveal steps, so
+  // one step of growth is one fade.
+  assert.deepEqual(chunks, ["こんにちは、", "今日はい", "い天気ですね"]);
+});
+
+test("segmentRevealChunks keeps a chunk within the maximum length", () => {
+  const text = "アルファベータガンマデルタイプシロン";
+  const chunks = segmentRevealChunks(text);
+
+  chunks.forEach((chunk) => {
+    assert.ok(chunk.end - chunk.start <= REVEAL_CHUNK_MAX_CHARS);
+  });
+  assert.equal(chunks.map((chunk) => text.slice(chunk.start, chunk.end)).join(""), text);
+});
+
+test("segmentRevealChunks does not merge across a line break", () => {
+  const text = "first line\nsecond";
+  const chunks = segmentRevealChunks(text).map((chunk) => text.slice(chunk.start, chunk.end));
+
+  assert.deepEqual(chunks, ["first line", "second"]);
+});
+
+test("segmentRevealChunks keeps a long token as a single chunk", () => {
+  const text = "https://example.com/very/long/path";
+  const chunks = segmentRevealChunks(text).map((chunk) => text.slice(chunk.start, chunk.end));
+
+  assert.deepEqual(chunks, [text]);
+});
+
+test("segmentRevealChunks keeps offsets aligned with the source text", () => {
+  const text = "  ab  cd ";
+
+  assert.deepEqual(segmentRevealChunks(text), [{ start: 2, end: 8 }]);
+});
+
+test("clampToRevealChunkBoundary advances the reveal in chunk-sized steps", () => {
+  const text = "あ".repeat(50);
+
+  // 刻みの途中では表示を伸ばさない。折り返しが毎フレーム変わるのを防ぐ要。
+  // Inside a step the visible length does not grow; this is what stops the
+  // line from re-wrapping on every frame.
+  assert.equal(clampToRevealChunkBoundary(text, REVEAL_CHUNK_STEP_CHARS * 2), REVEAL_CHUNK_STEP_CHARS * 2);
+  assert.equal(clampToRevealChunkBoundary(text, REVEAL_CHUNK_STEP_CHARS * 2 + 3), REVEAL_CHUNK_STEP_CHARS * 2);
+  assert.equal(clampToRevealChunkBoundary(text, REVEAL_CHUNK_STEP_CHARS * 3 - 1), REVEAL_CHUNK_STEP_CHARS * 2);
+});
+
+test("clampToRevealChunkBoundary reveals up to a nearby clause break", () => {
+  const text = "こんにちは、世界のみなさん";
+
+  // 読点まで届いていれば刻みを待たずに見せる。区切りの良い位置で止まる。
+  // Once the comma is reached it shows without waiting for the next step.
+  assert.equal(clampToRevealChunkBoundary(text, 9), 6);
+});
+
+test("clampToRevealChunkBoundary never holds back the finished text", () => {
+  const text = "done";
+
+  assert.equal(clampToRevealChunkBoundary(text, 4), 4);
+  assert.equal(clampToRevealChunkBoundary(text, 9), 4);
+  assert.equal(clampToRevealChunkBoundary(text, 0), 0);
+});
+
+test("clampToRevealChunkBoundary never moves the reveal backwards", () => {
+  const text = "これはテストです。長い文章を少しずつ表示します、そして折り返します。";
+
+  let previous = 0;
+  for (let length = 0; length <= text.length; length += 1) {
+    const boundary = clampToRevealChunkBoundary(text, length);
+    assert.ok(boundary >= previous, `boundary went backwards at ${length}`);
+    assert.ok(boundary <= length);
+    previous = boundary;
+  }
 });
 
 test("clampToWordBoundary hides a half-typed Latin word", () => {
@@ -176,6 +268,28 @@ test("WordRevealTimeline treats known words without a schedule as already visibl
   // 新しく追記された語は通常どおりアニメーションする。
   // Freshly appended words still animate.
   assert.equal(timeline.elapsedFor(12, 1000), 0);
+});
+
+test("WordRevealTimeline exposes the boundary of already rendered content", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("hello");
+  timeline.sync("hello world");
+
+  // 伸長中のチャンクを「表示済み」と「今フレームで現れた分」に分ける境界。
+  // The split between what is on screen and what arrived in this frame.
+  assert.equal(timeline.knownBoundary, 5);
+});
+
+test("WordRevealTimeline lists the schedules inside a range", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("a".repeat(100));
+  timeline.elapsedFor(30, 1000);
+  timeline.elapsedFor(10, 1000);
+  timeline.elapsedFor(60, 1000);
+
+  // 昇順で返るので、伸びたチャンクを再生中の単位のまま切り出せる。
+  // Ascending order lets the DOM pass cut a grown chunk on its live units.
+  assert.deepEqual(timeline.scheduledStartsWithin(10, 60), [10, 30]);
 });
 
 test("WordRevealTimeline shows a bulk append instantly instead of replaying it", () => {

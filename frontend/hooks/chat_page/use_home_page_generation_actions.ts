@@ -23,6 +23,7 @@ import { splitStreamDisplayText } from "../../lib/chat_page/stream_display_text"
 import {
   WORD_REVEAL_DURATION_MS,
   WORD_REVEAL_MAX_LAG_MS,
+  clampToRevealChunkBoundary,
   clampToWordBoundary,
 } from "../../lib/chat_page/streaming_word_reveal";
 import {
@@ -469,14 +470,20 @@ export function useHomePageGenerationActions({
           separatedDisplayText.pacedText,
           advanceStreamPace(streamPace, separatedDisplayText.pacedText.length, frameNow),
         );
-        // 表示は語境界まで巻き戻す。英単語が途中で切れて見えるのを防ぎ、語単位で
-        // 現れるChatGPT / Claudeと同じ粒度にする（日本語は1文字が1語のため影響しない）。
-        // Show text only up to a word boundary so Latin words never appear
-        // half-typed, matching the word-at-a-time granularity of ChatGPT /
-        // Claude. Japanese is unaffected since each character is its own word.
+        // 表示はチャンク境界まで巻き戻し、さらに語境界へ合わせる。文字単位で
+        // 伸ばすと生成中の行が毎フレーム折り返し直しになり、読んでいる文字が
+        // 動いてしまう（スマホで顕著）。かたまり単位で伸ばせば折り返しの変化が
+        // まばらになり、フェードインも1かたまりずつはっきり見える。
+        // Pull the visible length back to a chunk boundary, then to a word
+        // boundary. Growing character by character re-wraps the streaming line
+        // every frame and shifts the characters being read (worst on phones);
+        // growing in chunks makes re-wraps rare and each fade-in legible.
         const displayLength = clampToCodePointBoundary(
           separatedDisplayText.pacedText,
-          clampToWordBoundary(separatedDisplayText.pacedText, smoothedLength),
+          clampToWordBoundary(
+            separatedDisplayText.pacedText,
+            clampToRevealChunkBoundary(separatedDisplayText.pacedText, smoothedLength),
+          ),
         );
         const displayText = [
           separatedDisplayText.instantPrefix,
