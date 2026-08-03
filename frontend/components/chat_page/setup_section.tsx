@@ -302,8 +302,8 @@ function SetupSectionComponent() {
   const [saveModeFeedbackVisible, setSaveModeFeedbackVisible] = useState(false);
   const [activeModelOptionIndex, setActiveModelOptionIndex] = useState(selectedModelIndex);
 
-  // タスクカードの並び替えドラッグは専用フックが担当する
-  // The pointer-driven reorder drag lives in its own hook
+  // タスクカードの並び替えドラッグ（長押し起動・自動スクロール）は専用フックが担当する
+  // The reorder drag gesture (hold to pick up, edge auto-scroll) lives in its own hook
   const {
     getTaskDomKey,
     setTaskWrapperRef,
@@ -761,6 +761,15 @@ function SetupSectionComponent() {
             </>
           )}
         </div>
+
+        {/* 長押しで掴む操作は見た目に現れないため、編集モード中だけ操作方法を明示する */}
+        {/* The hold-to-grab gesture is invisible, so spell it out while reorder mode is on */}
+        {isTaskOrderEditing && (
+          <p className="task-reorder-hint" role="status">
+            <i className="bi bi-hand-index" aria-hidden="true"></i>
+            <span>{t("home.reorderHint")}</span>
+          </p>
+        )}
 
         <div
           className={`task-selection ${isTaskOrderEditing ? "task-selection--reordering" : ""}`.trim()}

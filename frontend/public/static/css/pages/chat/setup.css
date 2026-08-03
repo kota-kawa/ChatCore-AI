@@ -1301,7 +1301,15 @@ body.chat-page #setup-info::-webkit-scrollbar-thumb:active {
     font-size: 1rem;
   }
 
+  /* スマホは1列でカードが画面幅を覆うため、カード上からでも普通にスクロールできる必要がある。
+     縦スワイプはブラウザに任せ、長押しで掴んでから並び替えへ切り替える。
+     Phones stack the cards full width, so scrolling must still work when the finger starts on a
+     card: vertical swipes stay with the browser and only a long press switches to reordering. */
   :where(body.chat-page, .chat-page-shell) .task-wrapper.editable {
+    touch-action: pan-y;
+  }
+
+  :where(body.chat-page, .chat-page-shell) .task-wrapper.editable.dragging {
     touch-action: none;
   }
 
