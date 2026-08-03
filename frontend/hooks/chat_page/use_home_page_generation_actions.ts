@@ -15,8 +15,9 @@ import {
 import { nextMessageId } from "../../lib/chat_page/message_ids";
 import { parseStreamEventBlock } from "../../lib/chat_page/streaming";
 import {
+  advanceStreamPace,
   clampToCodePointBoundary,
-  nextSmoothedLength,
+  createStreamPace,
 } from "../../lib/chat_page/stream_smoothing";
 import { clampToWordBoundary } from "../../lib/chat_page/streaming_word_reveal";
 import {
@@ -378,10 +379,13 @@ export function useHomePageGenerationActions({
       let streamedText = storedGeneration?.streamedText ?? "";
       let streamingParts: ChatMessagePart[] | undefined;
 
-      // スムージング済みの表示文字数。復元テキストはリプレイせず即時表示する。
-      // Visible length after smoothing. Restored text shows instantly instead
-      // of being replayed.
-      let smoothedLength = getStreamingGenerativeUiDisplayText(streamedText).length;
+      // 等速ペーシングの状態。復元テキストはリプレイせず即時表示する。
+      // Constant-pace state. Restored text shows instantly instead of being
+      // replayed.
+      const streamPace = createStreamPace(
+        getStreamingGenerativeUiDisplayText(streamedText).length,
+        performance.now(),
+      );
 
       // localStorage への進行状態書き込みをスロットルするための保留値とタイマー。
       // Pending values and timer used to throttle progress writes to localStorage.
@@ -421,9 +425,9 @@ export function useHomePageGenerationActions({
         const streamId = streamingMessageId;
         if (!streamId) return;
         const fullDisplayText = getStreamingGenerativeUiDisplayText(streamedText);
-        smoothedLength = clampToCodePointBoundary(
+        const smoothedLength = clampToCodePointBoundary(
           fullDisplayText,
-          nextSmoothedLength(smoothedLength, fullDisplayText.length),
+          advanceStreamPace(streamPace, fullDisplayText.length, performance.now()),
         );
         // 表示は語境界まで巻き戻す。英単語が途中で切れて見えるのを防ぎ、語単位で
         // 現れるChatGPT / Claudeと同じ粒度にする（日本語は1文字が1語のため影響しない）。
@@ -642,9 +646,9 @@ export function useHomePageGenerationActions({
           cancelStreamedChunkRender();
           const updatePayload = normalizeChatResponsePayload(parsed.data);
           const displayText = updatePayload.response ?? getStreamingGenerativeUiDisplayText(streamedText);
-          // パーツ更新はテキストの書き換えを伴うため、スムージングせず全文を出す。
-          // Parts updates rewrite the text, so show it in full without smoothing.
-          smoothedLength = displayText.length;
+          // パーツ更新はテキストの書き換えを伴うため、ペーシングせず全文を出す。
+          // Parts updates rewrite the text, so show it in full without pacing.
+          streamPace.length = displayText.length;
           if (updatePayload.parts?.length) {
             streamingParts = updateStreamingTextPart(updatePayload.parts, displayText);
           }

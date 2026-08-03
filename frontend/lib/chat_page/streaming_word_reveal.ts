@@ -121,18 +121,41 @@ export function clampToWordBoundary(text: string, length: number): number {
 export class WordRevealTimeline {
   private readonly scheduledAt = new Map<number, number>();
 
-  private lastTextLength = 0;
+  private lastText = "";
 
   private lastScheduledAt = Number.NEGATIVE_INFINITY;
 
-  // テキストが縮んだ場合はオフセットの意味が変わるため記録を破棄する。
-  // Drop the schedule when the text shrinks: offsets no longer line up.
-  sync(textLength: number) {
-    if (textLength < this.lastTextLength) {
-      this.scheduledAt.clear();
-      this.lastScheduledAt = Number.NEGATIVE_INFINITY;
+  // 表示テキストの変化に予約を追従させる。純粋な追記なら何もしない。Markdownの
+  // 整形確定（例: `**強調` が `<strong>` になり `**` が消える）ではテキストが
+  // 途中から差し替わるため、共通接頭辞より後ろの予約を長さ差分だけずらして
+  // 引き継ぐ。以前はここで全予約を破棄していたため、表示済みの語まで透明に
+  // 戻ってもう一度フェードしていた。
+  // Keep the schedule aligned with the rendered text. A pure append needs
+  // nothing. When markdown finalizes (e.g. `**bold` collapses into <strong>
+  // and the `**` disappears) the text changes mid-way, so entries past the
+  // common prefix shift by the length delta. Clearing everything here — the
+  // old behaviour — made already-visible words go transparent and fade again.
+  sync(text: string) {
+    const previous = this.lastText;
+    this.lastText = text;
+    if (previous === text || text.startsWith(previous)) return;
+
+    let divergence = 0;
+    const comparable = Math.min(previous.length, text.length);
+    while (divergence < comparable && previous.charCodeAt(divergence) === text.charCodeAt(divergence)) {
+      divergence += 1;
     }
-    this.lastTextLength = textLength;
+
+    const delta = text.length - previous.length;
+    const remapped: Array<[number, number]> = [];
+    this.scheduledAt.forEach((scheduled, offset) => {
+      const nextOffset = offset < divergence ? offset : offset + delta;
+      if (nextOffset >= 0 && nextOffset < text.length) remapped.push([nextOffset, scheduled]);
+    });
+    this.scheduledAt.clear();
+    remapped.forEach(([offset, scheduled]) => {
+      this.scheduledAt.set(offset, scheduled);
+    });
   }
 
   // 語の開始時刻からの経過時間（ms）。開始前の語は負値を返し、再生済みの語は

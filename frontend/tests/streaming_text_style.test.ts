@@ -8,6 +8,10 @@ const streamingTextCss = readFileSync(
   new URL("../public/static/css/components/streaming_text.css", import.meta.url),
   "utf8",
 );
+const chatMessagesCss = readFileSync(
+  new URL("../public/static/css/pages/chat/chat_messages.css", import.meta.url),
+  "utf8",
+);
 const appEntry = readFileSync(new URL("../pages/_app.tsx", import.meta.url), "utf8");
 
 test("streamed words fade in from a blur", () => {
@@ -47,4 +51,15 @@ test("reduced motion turns the streamed word animation off", () => {
 
 test("the streaming text stylesheet is loaded by the app entry point", () => {
   assert.match(appEntry, /import "\.\.\/public\/static\/css\/components\/streaming_text\.css";/);
+});
+
+test("no trailing cursor dot runs ahead of the fading words", () => {
+  // 透明のまま開始待ちの語がある間、ドットだけが先行して見えてしまうため廃止。
+  // Removed: with queued transparent words a dot would run ahead of the text.
+  assert.doesNotMatch(chatMessagesCss, /streamCursorBreathe/);
+  assert.doesNotMatch(
+    chatMessagesCss,
+    /\.bot-message--streaming[^{]*::after\s*\{[\s\S]*?border-radius:\s*50%/,
+    "the breathing dot after the streamed text must stay removed",
+  );
 });
