@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { formatLLMOutput } from "../scripts/chat/chat_ui";
+import { renderSanitizedHTML } from "../scripts/chat/message_utils";
 import {
   advanceStreamPace,
   clampToCodePointBoundary,
@@ -22,11 +24,25 @@ const SOURCE =
   "今日はいい天気ですね、散歩に出かけましょう。近くの公園では桜が咲いていて、" +
   "写真を撮る人でにぎわっています。帰りにコーヒーでも買って、ゆっくり歩きませんか。";
 
+// 見出し・強調・リストを含む、実際の回答に近いMarkdown。
+// Markdown close to a real reply: heading, emphasis and a list.
+const MARKDOWN_SOURCE = `## 天気について
+
+今日は**いい天気**ですね、散歩に出かけましょう。
+
+- 近くの公園では桜が咲いています
+- 写真を撮る人でにぎわっています
+
+帰りにコーヒーでも買って、ゆっくり歩きませんか。`;
+
 type FrameState = {
   displayLength: number;
   // 文字位置ごとの状態。opaque は表示中、queued は開始待ち（=透明）。
   // Per-character state: opaque is on screen, queued is waiting (transparent).
   queued: Set<number>;
+  // そのフレームでアニメーション中の文字数。0ならフェードが途切れている。
+  // Characters animating in this frame; zero means the fade wave broke.
+  animatedChars: number;
 };
 
 function readCharacterStates(container: HTMLElement): Set<number> {
@@ -47,7 +63,12 @@ function readCharacterStates(container: HTMLElement): Set<number> {
   return queued;
 }
 
-function runStreamingFrames(): FrameState[] {
+function runStreamingFrames(
+  source = SOURCE,
+  render: (container: HTMLElement, text: string) => void = (container, text) => {
+    container.innerHTML = `<p>${text}</p>`;
+  },
+): FrameState[] {
   const pace = createStreamPace(0, 0);
   const timeline = new WordRevealTimeline();
   const container = document.createElement("div");
@@ -56,8 +77,8 @@ function runStreamingFrames(): FrameState[] {
 
   for (let frame = 0; frame * FRAME_MS < 6000; frame += 1) {
     const now = frame * FRAME_MS;
-    const arrived = Math.min(SOURCE.length, Math.floor(now * GENERATION_CHARS_PER_MS));
-    const pacedText = SOURCE.slice(0, arrived);
+    const arrived = Math.min(source.length, Math.floor(now * GENERATION_CHARS_PER_MS));
+    const pacedText = source.slice(0, arrived);
     const smoothed = clampToCodePointBoundary(
       pacedText,
       advanceStreamPace(pace, pacedText.length, now),
@@ -67,10 +88,17 @@ function runStreamingFrames(): FrameState[] {
       clampToWordBoundary(pacedText, clampToRevealChunkBoundary(pacedText, smoothed)),
     );
 
-    container.innerHTML = `<p>${pacedText.slice(0, displayLength)}</p>`;
+    render(container, pacedText.slice(0, displayLength));
     applyStreamingWordReveal(container, timeline, now);
-    frames.push({ displayLength, queued: readCharacterStates(container) });
-    if (displayLength >= SOURCE.length) break;
+    frames.push({
+      displayLength,
+      queued: readCharacterStates(container),
+      animatedChars: Array.from(container.querySelectorAll("span.streaming-word")).reduce(
+        (total, span) => total + (span.textContent ?? "").length,
+        0,
+      ),
+    });
+    if (displayLength >= source.length) break;
   }
 
   return frames;
@@ -105,5 +133,26 @@ describe("streamed reveal, end to end", () => {
     });
 
     expect(frames.at(-1)?.displayLength).toBe(SOURCE.length);
+  });
+
+  it("keeps fading in through a markdown reply, not only at the start", () => {
+    // Markdownを通すと、描画済みテキストは毎フレーム書き換わったように見える
+    // （見出し・リスト・強調の確定、末尾の改行ノード）。以前はそのフレームの
+    // 新しいテキストがフェードを飛ばしてしまい、最初の一瞬しかアニメーション
+    // しなかった。全フレームでフェードが続くことを確認する。
+    // Through markdown the rendered text looks rewritten on nearly every frame
+    // (headings, lists, emphasis finalizing, the trailing newline node). New
+    // text used to skip its fade on those frames, so only the first moment
+    // animated. Assert the fade keeps running for the whole reply.
+    const frames = runStreamingFrames(MARKDOWN_SOURCE, (container, text) => {
+      renderSanitizedHTML(container, formatLLMOutput(text));
+    });
+
+    const growing = frames.filter(
+      (frame, index) => index > 0 && frame.displayLength > frames[index - 1].displayLength,
+    );
+    expect(growing.length).toBeGreaterThan(10);
+    expect(growing.filter((frame) => frame.animatedChars === 0)).toEqual([]);
+    expect(frames.at(-1)?.displayLength).toBe(MARKDOWN_SOURCE.length);
   });
 });

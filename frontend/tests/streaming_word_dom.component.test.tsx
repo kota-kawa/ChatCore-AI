@@ -93,6 +93,27 @@ describe("applyStreamingWordReveal", () => {
     expect(delays).toEqual(["-100ms", "0ms"]);
   });
 
+  it("keeps fading in new text when the markup ends with a newline node", () => {
+    const timeline = new WordRevealTimeline();
+    // Markdownの描画は本文の後ろに改行のテキストノードを残す。そのため追記しても
+    // テキスト全体は「純粋な追記」に見えず、以前はこのフレームで新しい文字が
+    // フェードインしなくなっていた（生成中ほぼ全フレームが該当する）。
+    // Markdown rendering leaves a newline text node after the body, so an
+    // append does not look like a pure append and new characters used to skip
+    // their fade — which was nearly every frame of a streaming reply.
+    const first = renderContainer("<p>これは</p>\n");
+    applyStreamingWordReveal(first, timeline, 1000);
+
+    const second = renderContainer("<p>これはテスト</p>\n");
+    applyStreamingWordReveal(second, timeline, 1100);
+
+    expect(revealedWords(second)).toEqual(["これは", "テスト"]);
+    const delays = Array.from(second.querySelectorAll<HTMLElement>("span.streaming-word")).map(
+      (span) => span.style.animationDelay,
+    );
+    expect(delays).toEqual(["-100ms", "0ms"]);
+  });
+
   it("does not replay visible words when markdown finalizes mid-stream", () => {
     const timeline = new WordRevealTimeline();
     const first = renderContainer("<p>Streaming **bold</p>");

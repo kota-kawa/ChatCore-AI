@@ -29,13 +29,13 @@ export const WORD_REVEAL_DURATION_MS = 420;
 // かたまりが現れる場合でも、同時に光らず順に立ち上がるようにする。
 // Start-time offset between units that arrive in the same frame, so several
 // chunks landing together still light up one after another.
-export const WORD_REVEAL_STAGGER_MS = 45;
+export const WORD_REVEAL_STAGGER_MS = 30;
 
 // カスケードがテキスト到達より遅れてよい上限。これを超える単位は上限位置へ
 // まとめて畳むので、出力速度自体は落ちない。
 // Cap on how far the cascade may trail the text. Units beyond it collapse onto
 // the cap, so the output speed itself never slows down.
-export const WORD_REVEAL_MAX_LAG_MS = 320;
+export const WORD_REVEAL_MAX_LAG_MS = 200;
 
 // 1つの表示単位（チャンク）に入れる最大文字数。1文字ずつのタイプライター表示に
 // 見えないよう、語をこの長さまでまとめてから1回のフェードで見せる。
@@ -257,6 +257,14 @@ export class WordRevealTimeline {
   // fence finalizes, the animatable text shrinks and the tail window recedes.
   private knownEnd = 0;
 
+  // 新規コンテンツの終端。これ以降のオフセットも描画済み扱いにする。差し替えを
+  // 伴うフレームでは、末尾（共通接尾辞）は前フレームにもあった内容なので、
+  // 予約を失っていても新規として再登録してはいけない。
+  // End of the new content; offsets at or past it count as already rendered.
+  // On a reflow frame the common suffix existed in the previous frame too, so
+  // it must not be re-registered as new even when its schedule was lost.
+  private newEnd = Number.POSITIVE_INFINITY;
+
   // 表示テキストの変化に予約を追従させる。純粋な追記なら何もしない。Markdownの
   // 整形確定（例: `**強調` が `<strong>` になり `**` が消える）ではテキストが
   // 途中から差し替わるため、共通接頭辞より後ろの予約を長さ差分だけずらして
@@ -271,6 +279,7 @@ export class WordRevealTimeline {
     const previous = this.lastText;
     this.lastText = text;
     if (previous === text) return;
+    this.newEnd = text.length;
     if (text.startsWith(previous)) {
       // 純粋な追記: 前フレームまでの内容が既知コンテンツになる。一括追記は
       // アニメーションさせず全文を既知にする（後追いフェードの防止）。
@@ -287,6 +296,22 @@ export class WordRevealTimeline {
       divergence += 1;
     }
 
+    // 末尾側の共通部分。Markdownの描画では本文の後ろに改行のテキストノードが
+    // 付くため、1文字追記しただけでも「純粋な追記」に見えない。接頭辞だけでなく
+    // 接尾辞も見ることで、実際に差し替わった範囲を本文の途中へ限定できる。
+    // Common tail. Markdown rendering leaves a newline text node after the
+    // body, so even a one character append does not look like a pure append.
+    // Matching the suffix as well as the prefix narrows the changed region down
+    // to the part of the body that really moved.
+    let suffix = 0;
+    const maxSuffix = comparable - divergence;
+    while (
+      suffix < maxSuffix &&
+      previous.charCodeAt(previous.length - 1 - suffix) === text.charCodeAt(text.length - 1 - suffix)
+    ) {
+      suffix += 1;
+    }
+
     const delta = text.length - previous.length;
     const remapped: Array<[number, number]> = [];
     this.scheduledAt.forEach((scheduled, offset) => {
@@ -298,13 +323,23 @@ export class WordRevealTimeline {
       this.scheduledAt.set(offset, scheduled);
     });
 
-    // 差し替え後の既知境界は「前フレームの内容が新テキスト内で占める範囲」。
-    // 差し替えと同時に追記された分だけが新規扱いになる。一括追記は即時表示。
-    // After a reflow the known boundary is the extent the previous content
-    // occupies in the new text; only what was appended alongside stays new,
-    // and a bulk append still shows instantly.
-    this.knownEnd = Math.max(0, Math.min(previous.length + delta, text.length));
-    if (text.length - this.knownEnd > MAX_ANIMATED_APPEND_CHARS) this.knownEnd = text.length;
+    // 差し替わった範囲のうち、前フレームより伸びたぶんだけが新規コンテンツ。
+    // 以前はここで全文を既知にしていたため、Markdown描画では毎フレームが
+    // 差し替え扱いになり、新しく現れたテキストが一度もフェードしなかった。
+    // 縮んだ場合（コードフェンスの確定など）は新規なしとして全文を既知にする。
+    // Only the growth of the changed region is new content. This used to mark
+    // the whole text known, which — since markdown rendering makes every frame
+    // look like a reflow — meant newly revealed text never faded in at all.
+    // When the region shrank (a code fence finalizing, say) nothing is new.
+    const previousMiddle = previous.length - divergence - suffix;
+    const nextMiddle = text.length - divergence - suffix;
+    if (nextMiddle > previousMiddle) {
+      this.knownEnd = divergence + previousMiddle;
+      this.newEnd = text.length - suffix;
+    } else {
+      this.knownEnd = text.length;
+    }
+    if (this.newEnd - this.knownEnd > MAX_ANIMATED_APPEND_CHARS) this.knownEnd = text.length;
   }
 
   // 既に描画済みとみなす範囲の終端。伸長中のチャンクを「表示済みの部分」と
@@ -338,9 +373,11 @@ export class WordRevealTimeline {
     if (scheduled === undefined) {
       // 既知コンテンツ内で予約が見つからない語は表示済み扱いにして素通しする。
       // ここで新規予約すると、表示済みの語が透明へ戻って点滅・再フェードする。
+      // 新規コンテンツより後ろ（差し替えフレームの共通接尾辞）も同じ扱い。
       // A known-content word without a schedule is treated as already shown.
-      // Scheduling it afresh would turn visible text transparent again.
-      if (wordStart < this.knownEnd) return null;
+      // Scheduling it afresh would turn visible text transparent again. The
+      // same holds past the new content — the common suffix of a reflow frame.
+      if (wordStart < this.knownEnd || wordStart >= this.newEnd) return null;
       scheduled = Math.min(
         Math.max(now, this.lastScheduledAt + WORD_REVEAL_STAGGER_MS),
         now + WORD_REVEAL_MAX_LAG_MS,
