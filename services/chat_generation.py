@@ -72,7 +72,7 @@ _CANCEL_CHANNEL_NAME = "chat_generation:cancel:channel"
 _EVENT_STREAM_KEY_PREFIX = "chat_generation:events"
 _EVENT_CHANNEL_KEY_PREFIX = "chat_generation:events:channel"
 _TERMINAL_EVENTS = {"done", "error", "aborted"}
-_WEB_SEARCH_CITATION_PREFIX = "[[source:"
+_WEB_SEARCH_CITATION_PREFIXES = ("[[source:", "[[src_")
 
 
 def _decode_redis_text(raw: Any) -> str | None:
@@ -99,16 +99,25 @@ def _latest_user_message_text(messages: list[dict[str, Any]]) -> str:
 def _split_complete_streaming_citation_text(text: str) -> tuple[str, str]:
     """Hold a trailing partial citation marker until a later stream chunk."""
     lowered = text.lower()
-    marker_start = lowered.rfind(_WEB_SEARCH_CITATION_PREFIX)
+    marker_start = max(
+        lowered.rfind(prefix) for prefix in _WEB_SEARCH_CITATION_PREFIXES
+    )
     if marker_start >= 0 and "]]" not in text[marker_start:]:
         return text[:marker_start], text[marker_start:]
 
     # A provider can split even the marker prefix across token chunks (for
     # example, "[[sou" + "rce:..."). Keep the longest possible prefix suffix.
-    max_prefix_length = min(len(text), len(_WEB_SEARCH_CITATION_PREFIX) - 1)
-    for prefix_length in range(max_prefix_length, 0, -1):
-        if lowered.endswith(_WEB_SEARCH_CITATION_PREFIX[:prefix_length]):
-            return text[:-prefix_length], text[-prefix_length:]
+    partial_prefix_length = max(
+        (
+            prefix_length
+            for prefix in _WEB_SEARCH_CITATION_PREFIXES
+            for prefix_length in range(1, min(len(text), len(prefix) - 1) + 1)
+            if lowered.endswith(prefix[:prefix_length])
+        ),
+        default=0,
+    )
+    if partial_prefix_length:
+        return text[:-partial_prefix_length], text[-partial_prefix_length:]
     return text, ""
 
 
