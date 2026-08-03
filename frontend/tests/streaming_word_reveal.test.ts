@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MAX_ANIMATED_APPEND_CHARS,
   WORD_REVEAL_DURATION_MS,
   WORD_REVEAL_MAX_LAG_MS,
   WORD_REVEAL_STAGGER_MS,
@@ -134,10 +135,10 @@ test("WordRevealTimeline staggers words that arrive in the same frame", () => {
 
 test("WordRevealTimeline caps how far the cascade may trail the text", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync("a".repeat(10000));
+  timeline.sync("a".repeat(200));
 
   let last: number | null = 0;
-  for (let word = 0; word < 200; word += 1) {
+  for (let word = 0; word * 6 < 200; word += 1) {
     last = timeline.elapsedFor(word * 6, 1000);
   }
 
@@ -146,16 +147,43 @@ test("WordRevealTimeline caps how far the cascade may trail the text", () => {
   assert.equal(last, -WORD_REVEAL_MAX_LAG_MS);
 });
 
-test("WordRevealTimeline prunes only records outside the animated tail", () => {
+test("WordRevealTimeline never replays a word whose schedule was pruned", () => {
   const timeline = new WordRevealTimeline();
-  timeline.sync("a".repeat(500));
+  timeline.sync("a".repeat(100));
   timeline.elapsedFor(10, 1000);
+  timeline.sync("a".repeat(300));
+  timeline.sync("a".repeat(500));
   assert.equal(timeline.elapsedFor(400, 1000), -WORD_REVEAL_STAGGER_MS);
 
   timeline.prune(300);
 
-  // 末尾から外れた語だけが捨てられ、画面に残っている語は再登録されない。
-  // Only the word that left the tail is dropped; the on-screen one is kept.
-  assert.equal(timeline.elapsedFor(10, 1100), 0);
+  // 予約を失った表示済みの語は「新規」へ戻さず即表示扱いにする。以前は未来の
+  // 開始時刻で再登録され、表示済みテキストが点滅してもう一度フェードしていた。
+  // A visible word whose record was pruned counts as already shown. It used to
+  // be re-scheduled in the future, blinking and fading in again.
+  assert.equal(timeline.elapsedFor(10, 1100), null);
   assert.equal(timeline.elapsedFor(400, 1100), 100 - WORD_REVEAL_STAGGER_MS);
+});
+
+test("WordRevealTimeline treats known words without a schedule as already visible", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("hello world");
+  timeline.sync("hello world again");
+
+  // 既知コンテンツ内で予約が無い語（追跡漏れ）は透明に戻さない。
+  // An untracked word inside known content must never turn transparent.
+  assert.equal(timeline.elapsedFor(6, 1000), null);
+  // 新しく追記された語は通常どおりアニメーションする。
+  // Freshly appended words still animate.
+  assert.equal(timeline.elapsedFor(12, 1000), 0);
+});
+
+test("WordRevealTimeline shows a bulk append instantly instead of replaying it", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync("a".repeat(MAX_ANIMATED_APPEND_CHARS + 100));
+
+  // パーツ更新や復元で一括到着したテキストは、後からまとめてフェードさせない。
+  // Text that lands in bulk (parts update, restore) must not fade afterwards.
+  assert.equal(timeline.elapsedFor(0, 1000), null);
+  assert.equal(timeline.elapsedFor(300, 1000), null);
 });

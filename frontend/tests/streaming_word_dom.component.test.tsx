@@ -118,15 +118,48 @@ describe("applyStreamingWordReveal", () => {
     expect(container.querySelector("table span.streaming-word")).toBeNull();
   });
 
-  it("only animates the tail of a long response", () => {
+  it("only animates the newly appended tail of a long response", () => {
+    const timeline = new WordRevealTimeline();
     const head = "old ".repeat(200);
-    const container = renderContainer(`<p>${head}fresh tail</p>`);
+    const first = renderContainer(`<p>${head.trim()}</p>`);
+    applyStreamingWordReveal(first, timeline, 1000);
+
+    const second = renderContainer(`<p>${head}fresh tail</p>`);
+    applyStreamingWordReveal(second, timeline, 1050);
+
+    const words = revealedWords(second);
+    expect(words.length).toBeLessThan(120);
+    expect(words.slice(-2)).toEqual(["fresh", "tail"]);
+  });
+
+  it("shows a bulk first render instantly instead of fading it afterwards", () => {
+    // パーツ更新や復元では大量のテキストが一括で届く。後追いフェードさせない。
+    // Parts updates / restores land lots of text at once; no after-the-fact fade.
+    const container = renderContainer(`<p>${"word ".repeat(120)}</p>`);
 
     applyStreamingWordReveal(container, new WordRevealTimeline(), 1000);
 
-    const words = revealedWords(container);
-    expect(words.length).toBeLessThan(120);
-    expect(words.slice(-2)).toEqual(["fresh", "tail"]);
+    expect(revealedWords(container)).toEqual([]);
+  });
+
+  it("never turns previously rendered words transparent when the text reflows", () => {
+    const timeline = new WordRevealTimeline();
+    const first = renderContainer("<p>alpha beta gamma delta epsilon</p>");
+    applyStreamingWordReveal(first, timeline, 1000);
+
+    // 先頭がコードブロックへ確定し、アニメ対象テキストが途中から差し替わるフレーム。
+    // The frame where the head finalizes into a code block and the animatable
+    // text shifts mid-way.
+    const second = renderContainer("<pre>alpha beta</pre><p>gamma delta epsilon zeta</p>");
+    applyStreamingWordReveal(second, timeline, 1050);
+
+    // 表示済みの語が開始待ち（正のdelay=透明）へ戻ることはない。
+    // No already-rendered word may return to a queued (transparent) state.
+    const delays = Array.from(second.querySelectorAll<HTMLElement>("span.streaming-word")).map(
+      (span) => Number.parseInt(span.style.animationDelay, 10),
+    );
+    expect(delays.every((delay) => delay <= 0)).toBe(true);
+    expect(second.textContent).toBe("alpha betagamma delta epsilon zeta");
   });
 
   it("keeps inline markup intact while animating its text", () => {
