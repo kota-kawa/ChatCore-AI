@@ -7,7 +7,11 @@
    duration comes from WORD_REVEAL_DURATION_MS via the custom property. */
 
 .streaming-word {
-  animation: streamingWordReveal var(--streaming-word-duration, 280ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* 開始時刻はJS側が語ごとにずらす（stagger）。fill:both により開始前の語は
+     透明のまま待機し、カスケードとして順に立ち上がる。
+     JS staggers each word's start time; fill: both keeps queued words
+     transparent until their turn, so the cascade reads word by word. */
+  animation: streamingWordReveal var(--streaming-word-duration, 360ms) ease-out both;
   /* 合成レイヤーを使い回し、末尾の語が増えてもフレーム落ちしないようにする。
      Reuse the compositing layer so a growing tail keeps a steady frame rate. */
   will-change: opacity, filter;
@@ -16,6 +20,14 @@
 @keyframes streamingWordReveal {
   from {
     opacity: 0;
+    filter: blur(8px);
+  }
+
+  /* 前半で透明に近い時間を長めに取り、速い生成でもフェードが知覚できるようにする。
+     Spend the first stretch near-transparent so the fade stays visible even
+     when generation is fast. */
+  35% {
+    opacity: 0.35;
     filter: blur(4px);
   }
 

@@ -21,7 +21,21 @@ const MAX_WORD_BOUNDARY_LOOKBACK = 40;
 
 // 単語のフェードイン時間。CSS 側の再生時間もこの値を用いる。
 // Fade-in duration for one word; the CSS animation is driven by this value too.
-export const WORD_REVEAL_DURATION_MS = 280;
+export const WORD_REVEAL_DURATION_MS = 360;
+
+// 同じフレームで届いた語同士の開始時刻をずらす間隔。生成が速いとチャンク内の
+// 全語が同時初出になり「末尾が一瞬ぼやけるだけ」に見えるため、開始をこの間隔で
+// カスケードさせて語が順に立ち上がるようにする。
+// Start-time offset between words that arrive in the same frame. A fast stream
+// makes every word of a chunk first-seen at once, which reads as "the tail
+// blurs for an instant"; cascading the starts makes words light up in order.
+export const WORD_REVEAL_STAGGER_MS = 14;
+
+// カスケードがテキスト到達より遅れてよい上限。これを超える語は上限位置へ
+// まとめて畳むので、出力速度自体は落ちない。
+// Cap on how far the cascade may trail the text. Words beyond it collapse onto
+// the cap, so the output speed itself never slows down.
+export const WORD_REVEAL_MAX_LAG_MS = 240;
 
 // 1文字で1語として扱うCJK文字かどうか。
 // Whether the character is CJK and therefore a word on its own.
@@ -93,34 +107,50 @@ export function clampToWordBoundary(text: string, length: number): number {
   return index <= 0 ? length : index;
 }
 
-// 語ごとの初出時刻を覚え、再描画のたびにアニメーションが先頭へ巻き戻るのを防ぐ。
-// ボットメッセージは毎フレームHTMLごと差し替わるため、経過時間を負の
-// animation-delay として与えて再生位置を復元する必要がある。
-// Remembers when each word first appeared so a re-render does not restart its
-// animation. The bot message is re-rendered from HTML every frame, so the
-// elapsed time is replayed as a negative animation-delay.
+// 語ごとの再生開始時刻を管理し、再描画のたびにアニメーションが先頭へ巻き戻る
+// のを防ぐ。初出の語には直前の語から WORD_REVEAL_STAGGER_MS ずらした開始時刻を
+// 予約し（遅れ上限は WORD_REVEAL_MAX_LAG_MS）、同時に届いた語もカスケードして
+// 現れるようにする。ボットメッセージは毎フレームHTMLごと差し替わるため、
+// 経過時間を animation-delay（負=再生途中、正=開始待ち）として復元する。
+// Tracks each word's scheduled start so a re-render does not restart its
+// animation. A newly seen word is scheduled WORD_REVEAL_STAGGER_MS after the
+// previous one (trailing at most WORD_REVEAL_MAX_LAG_MS), so words that arrive
+// together still cascade. The bot message is re-rendered from HTML every
+// frame, so elapsed time is replayed via animation-delay (negative = mid-play,
+// positive = not started yet).
 export class WordRevealTimeline {
-  private readonly firstSeenAt = new Map<number, number>();
+  private readonly scheduledAt = new Map<number, number>();
 
   private lastTextLength = 0;
 
+  private lastScheduledAt = Number.NEGATIVE_INFINITY;
+
   // テキストが縮んだ場合はオフセットの意味が変わるため記録を破棄する。
-  // Drop the timestamps when the text shrinks: offsets no longer line up.
+  // Drop the schedule when the text shrinks: offsets no longer line up.
   sync(textLength: number) {
-    if (textLength < this.lastTextLength) this.firstSeenAt.clear();
+    if (textLength < this.lastTextLength) {
+      this.scheduledAt.clear();
+      this.lastScheduledAt = Number.NEGATIVE_INFINITY;
+    }
     this.lastTextLength = textLength;
   }
 
-  // 語の初出からの経過時間（ms）。再生済みの語は null を返す。
-  // Elapsed ms since the word first appeared, or null once it finished playing.
+  // 語の開始時刻からの経過時間（ms）。開始前の語は負値を返し、再生済みの語は
+  // null を返す。初出の語はここで開始時刻を予約する。
+  // Elapsed ms since the word's scheduled start: negative before it starts,
+  // null once it finished. A first-seen word gets its slot reserved here.
   elapsedFor(wordStart: number, now: number): number | null {
-    const seenAt = this.firstSeenAt.get(wordStart);
-    if (seenAt === undefined) {
-      this.firstSeenAt.set(wordStart, now);
-      return 0;
+    let scheduled = this.scheduledAt.get(wordStart);
+    if (scheduled === undefined) {
+      scheduled = Math.min(
+        Math.max(now, this.lastScheduledAt + WORD_REVEAL_STAGGER_MS),
+        now + WORD_REVEAL_MAX_LAG_MS,
+      );
+      this.lastScheduledAt = scheduled;
+      this.scheduledAt.set(wordStart, scheduled);
     }
-    const elapsed = now - seenAt;
-    return elapsed >= WORD_REVEAL_DURATION_MS ? null : Math.max(0, elapsed);
+    const elapsed = now - scheduled;
+    return elapsed >= WORD_REVEAL_DURATION_MS ? null : elapsed;
   }
 
   // アニメーション対象範囲から外れた記録を捨てる。時間ではなく位置で捨てるのは、
@@ -129,8 +159,8 @@ export class WordRevealTimeline {
   // than by age keeps a slow stream from re-registering — and re-animating — a
   // word that is still on screen.
   prune(minWordStart: number) {
-    this.firstSeenAt.forEach((_seenAt, wordStart) => {
-      if (wordStart < minWordStart) this.firstSeenAt.delete(wordStart);
+    this.scheduledAt.forEach((_scheduledAt, wordStart) => {
+      if (wordStart < minWordStart) this.scheduledAt.delete(wordStart);
     });
   }
 }

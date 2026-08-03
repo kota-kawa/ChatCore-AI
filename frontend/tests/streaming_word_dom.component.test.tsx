@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { applyStreamingWordReveal } from "../lib/chat_page/streaming_word_dom";
-import { WORD_REVEAL_DURATION_MS, WordRevealTimeline } from "../lib/chat_page/streaming_word_reveal";
+import {
+  WORD_REVEAL_DURATION_MS,
+  WORD_REVEAL_STAGGER_MS,
+  WordRevealTimeline,
+} from "../lib/chat_page/streaming_word_reveal";
 
 function renderContainer(html: string) {
   const container = document.createElement("div");
@@ -35,6 +39,19 @@ describe("applyStreamingWordReveal", () => {
     expect(revealedWords(container)).toEqual(["こ", "ん", "に", "ち", "は"]);
   });
 
+  it("staggers the start of words that appear in the same frame", () => {
+    const container = renderContainer("<p>Hello brave world</p>");
+
+    applyStreamingWordReveal(container, new WordRevealTimeline(), 1000);
+
+    const delays = Array.from(container.querySelectorAll<HTMLElement>("span.streaming-word")).map(
+      (span) => span.style.animationDelay,
+    );
+    // 正のdelayは開始待ちを意味し、語が左から順に立ち上がるカスケードになる。
+    // Positive delays mean "not started yet": the words cascade left to right.
+    expect(delays).toEqual(["0ms", `${WORD_REVEAL_STAGGER_MS}ms`, `${WORD_REVEAL_STAGGER_MS * 2}ms`]);
+  });
+
   it("resumes the animation with a negative delay instead of restarting it", () => {
     const timeline = new WordRevealTimeline();
     const first = renderContainer("<p>Hello world</p>");
@@ -48,7 +65,7 @@ describe("applyStreamingWordReveal", () => {
     const delays = Array.from(second.querySelectorAll<HTMLElement>("span.streaming-word")).map(
       (span) => span.style.animationDelay,
     );
-    expect(delays).toEqual(["-120ms", "-120ms"]);
+    expect(delays).toEqual(["-120ms", `${WORD_REVEAL_STAGGER_MS - 120}ms`]);
   });
 
   it("stops wrapping a word once its animation finished", () => {
@@ -57,7 +74,7 @@ describe("applyStreamingWordReveal", () => {
     applyStreamingWordReveal(first, timeline, 1000);
 
     const second = renderContainer("<p>Hello world</p>");
-    applyStreamingWordReveal(second, timeline, 1000 + WORD_REVEAL_DURATION_MS);
+    applyStreamingWordReveal(second, timeline, 1000 + WORD_REVEAL_DURATION_MS + WORD_REVEAL_STAGGER_MS);
 
     expect(revealedWords(second)).toEqual([]);
     expect(second.textContent).toBe("Hello world");

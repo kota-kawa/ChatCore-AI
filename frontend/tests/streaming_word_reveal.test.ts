@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   WORD_REVEAL_DURATION_MS,
+  WORD_REVEAL_MAX_LAG_MS,
+  WORD_REVEAL_STAGGER_MS,
   WordRevealTimeline,
   clampToWordBoundary,
   segmentRevealWords,
@@ -101,16 +103,41 @@ test("WordRevealTimeline keeps offsets while the text only grows", () => {
   assert.equal(timeline.elapsedFor(10, 1100), 100);
 });
 
+test("WordRevealTimeline staggers words that arrive in the same frame", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync(100);
+
+  // 同時に届いた語でも開始時刻が1語ずつ後ろへずれ、カスケードになる。
+  // Words seen at the same instant still start one stagger step apart.
+  assert.equal(timeline.elapsedFor(0, 1000), 0);
+  assert.equal(timeline.elapsedFor(6, 1000), -WORD_REVEAL_STAGGER_MS);
+  assert.equal(timeline.elapsedFor(12, 1000), -WORD_REVEAL_STAGGER_MS * 2);
+});
+
+test("WordRevealTimeline caps how far the cascade may trail the text", () => {
+  const timeline = new WordRevealTimeline();
+  timeline.sync(10000);
+
+  let last: number | null = 0;
+  for (let word = 0; word < 200; word += 1) {
+    last = timeline.elapsedFor(word * 6, 1000);
+  }
+
+  // 上限を超えた語は上限位置へ畳まれ、表示が生成へ遅れ続けない。
+  // Words past the cap collapse onto it, so the reveal never falls behind.
+  assert.equal(last, -WORD_REVEAL_MAX_LAG_MS);
+});
+
 test("WordRevealTimeline prunes only records outside the animated tail", () => {
   const timeline = new WordRevealTimeline();
   timeline.sync(500);
   timeline.elapsedFor(10, 1000);
-  timeline.elapsedFor(400, 1000);
+  assert.equal(timeline.elapsedFor(400, 1000), -WORD_REVEAL_STAGGER_MS);
 
   timeline.prune(300);
 
   // 末尾から外れた語だけが捨てられ、画面に残っている語は再登録されない。
   // Only the word that left the tail is dropped; the on-screen one is kept.
   assert.equal(timeline.elapsedFor(10, 1100), 0);
-  assert.equal(timeline.elapsedFor(400, 1100), 100);
+  assert.equal(timeline.elapsedFor(400, 1100), 100 - WORD_REVEAL_STAGGER_MS);
 });

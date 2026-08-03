@@ -21,6 +21,11 @@ test("streamed words fade in from a blur", () => {
     /@keyframes streamingWordReveal\s*\{[\s\S]*?from\s*\{[\s\S]*?opacity:\s*0\s*;[\s\S]*?filter:\s*blur\([^)]+\)\s*;[\s\S]*?to\s*\{[\s\S]*?opacity:\s*1\s*;[\s\S]*?filter:\s*blur\(0\)\s*;/,
     "the reveal must animate opacity together with the blur so words materialize",
   );
+  assert.match(
+    streamingTextCss,
+    /\d+%\s*\{[\s\S]*?opacity:\s*0\.\d+\s*;/,
+    "an early keyframe must hold the word near-transparent so the fade stays visible at speed",
+  );
 });
 
 test("the CSS fallback duration matches the JavaScript reveal duration", () => {
