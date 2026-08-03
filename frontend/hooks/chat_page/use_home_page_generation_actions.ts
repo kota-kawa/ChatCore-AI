@@ -629,7 +629,7 @@ export function useHomePageGenerationActions({
             }));
           }
           clearStoredGenerationState(roomId);
-          scheduleAutoScrollIfNeeded(true);
+          scheduleAutoScrollIfNeeded();
           return;
         }
 
@@ -656,7 +656,7 @@ export function useHomePageGenerationActions({
           }));
         }
         clearStoredGenerationState(roomId);
-        scheduleAutoScrollIfNeeded(true);
+        scheduleAutoScrollIfNeeded();
       };
 
       const persistInterruptedStream = (message: string) => {
